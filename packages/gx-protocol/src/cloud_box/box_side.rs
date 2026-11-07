@@ -218,6 +218,13 @@ pub struct BoxPrepareSessionRequest {
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub worktree: bool,
     pub agent_id: String,
+    /// The model the session starts on (`createAgentSession`'s `agentModel`): what the home
+    /// draft's model pill showed, so Claude or Codex on the box runs the model picked for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_model: Option<String>,
+    /// The effort the session starts on (`agentEffort`), like [`Self::agent_model`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_effort: Option<String>,
     /// [`BoxInjectedAccount::account_id`] the session runs on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_id: Option<String>,

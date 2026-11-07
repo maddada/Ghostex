@@ -224,7 +224,7 @@ fn at_limit(account: &DiscoveredAccount, model: &str, now: DateTime<Utc>) -> boo
 }
 
 /// The model the saved command launches with (`--model`, Codex's `-m`), which decides the usage windows that apply.
-fn command_model(command: &str, agent: &str) -> Option<String> {
+pub(crate) fn command_model(command: &str, agent: &str) -> Option<String> {
     let mut offset = 0;
     let mut take_value = false;
     let mut skip_value = false;

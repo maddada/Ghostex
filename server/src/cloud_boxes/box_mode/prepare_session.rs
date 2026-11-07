@@ -320,6 +320,24 @@ fn wait_for_agent_session_id(project_id: &str, session_id: &str, flags: &Flags) 
     }
 }
 
+/// The home draft's model and effort, as the box's `createAgentSession` takes them: it launches
+/// Claude with `--model`/`--effort` and Codex with `-m`/`model_reasoning_effort`, like a local
+/// create, and the session's pill reads them from that command.
+fn session_model_params(request: &BoxPrepareSessionRequest, params: &mut Value) {
+    for (key, value) in [
+        ("agentModel", &request.agent_model),
+        ("agentEffort", &request.agent_effort),
+    ] {
+        if let Some(value) = value
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            params[key] = json!(value);
+        }
+    }
+}
+
 pub(crate) fn run_prepare_session(
     request_path: Option<&str>,
 ) -> Result<BoxPrepareSessionResult, String> {
@@ -395,6 +413,7 @@ pub(crate) fn run_prepare_session(
         "projectId": project_id,
         "runtimeSettings": Value::Object(runtime),
     });
+    session_model_params(&request, &mut params);
     if let Some(title) = request
         .title
         .as_deref()
@@ -452,4 +471,114 @@ pub(crate) fn run_prepare_session(
         branch,
         agent_session_id,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_session_is_created_on_the_drafts_model_and_effort() {
+        let mut params = json!({"agentId": "claude", "projectId": "P1"});
+        let request = BoxPrepareSessionRequest {
+            agent_id: "claude".to_string(),
+            agent_model: Some("claude-opus-5-5".to_string()),
+            agent_effort: Some("high".to_string()),
+            ..BoxPrepareSessionRequest::default()
+        };
+        session_model_params(&request, &mut params);
+        assert_eq!(params["agentModel"], "claude-opus-5-5");
+        assert_eq!(params["agentEffort"], "high");
+
+        // Nothing picked: the box's own default, and no empty flag.
+        let mut params = json!({"agentId": "codex"});
+        let request = BoxPrepareSessionRequest {
+            agent_id: "codex".to_string(),
+            agent_effort: Some("  ".to_string()),
+            ..BoxPrepareSessionRequest::default()
+        };
+        session_model_params(&request, &mut params);
+        assert!(params.get("agentModel").is_none());
+        assert!(params.get("agentEffort").is_none());
+    }
+
+    /// On the box, `createAgentSession` launches Claude and Codex on the request's model and
+    /// effort, and the session's pill shows them before the agent reports anything.
+    #[test]
+    fn the_box_session_runs_and_shows_the_requested_model() {
+        use crate::domain::DomainRepository;
+        use crate::session_chat_options::{
+            read_session_chat_launch_selection, SessionChatOptionAgent,
+        };
+        let home = tempfile::tempdir().unwrap();
+        let paths = crate::paths::get_gxserver_paths(Some(home.path().join("ghostex")));
+        crate::storage::initialize_gxserver_storage(&paths).unwrap();
+        let db = crate::storage::open_gxserver_database(&paths).unwrap();
+        let repository = DomainRepository::new(&db, "box-session-model-test");
+        let project = repository
+            .create_project(
+                json!({"path": home.path(), "name": "Box"})
+                    .as_object()
+                    .unwrap(),
+            )
+            .unwrap();
+        for (agent, option_agent, model, effort, flags) in [
+            (
+                "claude",
+                SessionChatOptionAgent::Claude,
+                "claude-opus-5-5",
+                "high",
+                ["--model claude-opus-5-5", "--effort high"],
+            ),
+            (
+                "codex",
+                SessionChatOptionAgent::Codex,
+                "gpt-6.1-sol",
+                "xhigh",
+                ["gpt-6.1-sol", "model_reasoning_effort=xhigh"],
+            ),
+        ] {
+            let request = BoxPrepareSessionRequest {
+                agent_id: agent.to_string(),
+                agent_model: Some(model.to_string()),
+                agent_effort: Some(effort.to_string()),
+                ..BoxPrepareSessionRequest::default()
+            };
+            let mut params = json!({"agentId": agent, "projectId": project["projectId"]});
+            session_model_params(&request, &mut params);
+            let resolved = crate::agents::create_agent_session_params_for_project(
+                &db,
+                &project,
+                params.as_object().unwrap(),
+            )
+            .unwrap();
+            let session = repository.create_session(&resolved, false).unwrap();
+            let command = session
+                .pointer("/launchSettings/agentLaunchPlan/command")
+                .or_else(|| session.pointer("/runtimeSettings/agentCommand"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            for flag in flags {
+                assert!(command.contains(flag), "{agent}: {command}");
+            }
+            let shown = read_session_chat_launch_selection(
+                &repository,
+                project["projectId"].as_str().unwrap(),
+                session["sessionId"].as_str().unwrap(),
+                Some(option_agent),
+            )
+            .unwrap();
+            assert!(shown.model.is_some(), "{agent}: no model in the pill");
+            assert_eq!(shown.effort.unwrap().value, effort);
+            if agent == "claude" {
+                assert!(
+                    shown.model.unwrap().label.contains("Opus"),
+                    "the pill names the model the box runs"
+                );
+            } else {
+                assert_eq!(shown.model.unwrap().value, model);
+            }
+        }
+    }
 }
