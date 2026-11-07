@@ -2,6 +2,120 @@
 
 ## Unreleased
 
+## 11.0.0 - 2026-11-07
+
+**Ghostex 11.0.0 is out.** Share a chat with anyone through a link with Ghostex Collab, let Autopilot keep your sessions moving while you are away, build your own bots on Claude Code and Codex with GBots, dictate with Hex, sync accounts, agents and skills between your computers, and annotate pages with screenshots; the iPhone gets a Live Activity, Home Screen widgets, the iPhone Duo two-pane layout, terminal themes and a Files browser.
+
+### 🤝 Ghostex Collab
+
+- **Share one chat through a link:** turn it on in Settings > Collab, press Share in a chat's header and send the link and its six-digit code; the other person follows the chat live in their browser, with no app and no account, and sees who is watching and typing.
+- **You decide what a guest's message does,** per chat: Ask me (the default) holds it as a "Message from <name>" card with Decline, Edit and Send, Send passes it straight to the agent, and View only turns their chat box off.
+- **A guest only ever reaches that one chat:** they can't answer the agent's questions or permission prompts, stop it, change its model, or see any other chat, file, terminal or setting.
+- **Links end after 24 hours by default** (1 hour, 7 days or never in Settings > Collab), Stop sharing ends one at once, Remove keeps a guest out, and the Guest messages log lists every message and who joined or left.
+- **The link's traffic is locked end to end** with the key in the link, so Ghostex's share relay can't read the chat; the chat itself runs on your computer.
+- **The phone has the same Share sheet,** the guest message cards and Settings › Collab for each computer.
+
+### 🛟 Autopilot
+
+- **Autopilot keeps your sessions moving while you are away:** turn it on in Settings > Autopilot, from the Autopilot pill in a coordinator's chat, on the phone, or with `ghostex autopilot on`.
+- **It carries on sessions that stopped too early,** interrupts a hung command after 8 minutes, reloads a session that shows nothing, restarts a terminal that ended, and moves a session at a usage limit to the account with the most room.
+- **It can answer questions and approval cards for you** (both off by default): unanswered questions get their recommended choice after 5, 10 or 15 minutes, and approvals follow the Heal, Heal and decide or Everything tier you pick.
+- **Hard limits stay yours:** pushing, merging, releasing, deleting outside the project and posting publicly are each a switch that is off until you turn it on, and sign-ins, 2FA and payments are always declined.
+- **A supervisor agent wakes only for judgment calls,** in an Autopilot project in your sidebar where you can read why it did each thing, and every decision is in the Log at the bottom of Settings > Autopilot.
+- **Pick which sessions it covers:** every session, the projects you pick, or the sessions you pick; each chat's Autopilot pill takes that session out or puts it back.
+
+### 🤖 GBots
+
+- **GBots are long-lived bots on your own Claude Code or Codex** that can start, message and steer agent sessions on any of your computers. Turn them on in Settings > Extensions, under Planning and automation (off by default; macOS and Linux).
+- **Make a bot from the Bots space** with a name, Claude Code or Codex, and its instructions; each conversation opens in the chat like any session, on the phone too.
+- **Bots run on the Claude and Codex accounts in Settings > Accounts,** so a bot moves to another account when one reaches its limit, and the sessions a bot starts show in your sidebar with a card naming the bot.
+
+### 🎙️ Dictation
+
+- **Hex is now a Dictate engine:** pick Hex in Settings > Voice to transcribe with Hex 3, the free local dictation app (macOS on Apple silicon, Windows and Linux), and your recording never leaves the computer. Install Hex installs it for you, and the phone can pick it per computer.
+
+### 🧭 Coordinators
+
+- **Make a connected computer's session a coordinator** from the sidebar's Advanced > Make Coordinator, or with `ghostex coordinator promote --computer <name>`.
+- **A thread on another computer is watched like one here:** it is nudged after 8 minutes with no new output and reported finished from its transcript, so it never sits at "Working" with no report.
+- **DeepSeek Harness can run a coordinator,** on the desktop and the phone (#480).
+- **A thread's and a coordinator's agent start with `GHOSTEX_COORDINATOR_ROLE`** in their environment, so a launch wrapper can tell them apart, for example to start threads with fewer MCP servers (#463).
+- **The board's Moving group is now called In progress.**
+
+### 🔄 Sync
+
+- **Accounts, Agents and Skills can sync between your paired computers** (Settings > Sync, each off by default): the Claude and Codex account list without the logins, which agents are on with their commands and order, and your own skills in `~/.agents/skills`.
+
+### 🖍️ Browser and Files
+
+- **Annotate captures a picture of each spot you pick,** and Send puts your notes and their pictures into the agent session you last clicked: its chat box, its terminal, or the clipboard. HTML files in the Files view get the same.
+- **A file link in a remote chat opens in Files** for any file in the project, and a text file outside it (an agent's log, say) opens read-only (#462).
+- **The Files page's fonts load again,** and a drawing opened during a project switch no longer shows "Files request timed out."
+
+### 📱 On the phone
+
+- **iPhone: a Live Activity lists your working and waiting agents** on the Lock Screen and in the Dynamic Island, and tapping a question row opens its question card, thanks to @cagatay-io.
+- **iPhone: small, medium and large Home Screen widgets** show the agents that are working or waiting, thanks to @cagatay-io.
+- **iPhone Duo: two panes side by side** (sessions, chat, Web Preview, Files, Git Changes, Agents, Usage and Attention), a wall of session tiles, the sessions waiting for you folded above the list, and a laptop mode that keeps everything off the fold, thanks to @cagatay-io.
+- **The phone gets the desktop's theme presets and colour controls,** terminal palettes for every terminal, and Ghostty theme file import, thanks to @cagatay-io.
+- **Files is a browser of the whole project** with search, a type filter, previews, Copy full path, Share and Add to session context, thanks to @cagatay-io.
+- **iPhone: a movable command pad** with nine keys, an Upload key and its own text editor, thanks to @cagatay-io.
+- **An attention list and agent notifications on the phone,** including a red "not sent" row for a message the computer couldn't send, thanks to @cagatay-io.
+- **Actions… lists the computer's Global Actions** after the project's, also from a Unified session's long-press menu, thanks to @cagatay-io.
+- **The chat shows held messages with a Pick model button,** OMP's advisor notes, and a bottom sheet closes when you drag its grabber down, thanks to @cagatay-io.
+- **Edit machine shows whether an Easy Connect link is direct or relayed** beside "connected now".
+- **A pasted image is one chip in the phone's chat box,** as on the computer, and tapping anywhere on a switch row toggles it.
+- **Settings › Licences lists the third-party notices,** and text keeps its contrast across the phone's screens, thanks to @cagatay-io.
+- **Android: a terminal fling no longer crashes the app** when the session reconnects mid-scroll (#477).
+
+### 🔔 Notifications
+
+- **Alert me for: Needs you only** (Settings > Notifications) plays the sound and shows the notification only when an agent asks you something, waits for approval, or ends with a Blocked or Needs you section (on the phone too), thanks to @gittyforthehub.
+- **A failed agent run is its own red row** in the Notifications bell, thanks to @cagatay-io.
+- **An open question card counts as a question** in the sidebar, thanks to @cagatay-io.
+
+### 🎨 Look and feel
+
+- **Twenty theme presets** in Settings > Interface > Presets (Catppuccin, Dracula, Solarized, Tokyo Night, Nord, Kanagawa, Everforest and Gruvbox Material) set the whole app, chat and terminals to a theme in one click, with light-mode Full colour, thanks to @cagatay-io.
+- **macOS: the floating sidebar shows the window's traffic lights** while the sidebar is hidden, thanks to @zxcvbinz.
+- **A switch row toggles from a click anywhere on it,** not only on the switch.
+- **Pinned order (Manual or Most recently updated) is also in both sidebars' Sort & Filter menu,** and pinned sessions can be dragged again when Pinned mixes several projects.
+- **The tool card's stacked icons follow the theme** on window glass instead of drawing solid black or white circles.
+
+### 🌐 Remote computers and Cloud Boxes
+
+- **A computer without the agents' hooks still shows sessions going from working to finished:** Ghostex follows Claude Code, Codex and OpenCode from their own files, and `ghostex settings set` works on a computer that runs only Ghostex's server (#475).
+- **Session resume hooks reach a computer that runs only Ghostex's server,** from Settings > Agents with that computer picked or `ghostex agent-hooks install --all --computer <name>` (#431).
+- **Setting up a Mac that runs the Ghostex app as a remote computer keeps the app's own server running** (#476).
+- **Cloud Boxes on Instabox's free plan start,** a failed box never blocks the next one, and Claude and Codex logins reach boxes again.
+- **Instabox boxes run as their own user,** with your logins and secrets in a private folder only that user can read (#433).
+
+### 🪟 Windows
+
+- **Windows: Ghostex uses Codex's and Claude Code's own folders** when a global HOME is set (Git Bash, MSYS), so hooks, folder trust, logins and transcripts land where the agents read them. If you have a global HOME, press Install hooks once in Settings > Agents after updating (#458).
+- **Windows: starting from Git Bash no longer fails** while unpacking the VS Code view.
+
+### 🩹 Fixes and polish
+
+- **Fast Computer & Browser Use installs from GitHub** when cua.ai does not answer, on Mac, Linux and Windows.
+- **Ask Ghostex opens its chat within about a second** instead of waiting on the skill install.
+- **A Claude question with previews is answered from the chat,** and a message you send while a question is open waits for your answer (#479).
+- **A dialog card whose answer was refused can be dismissed,** and a Codex dialog card's pick is no longer refused when Codex only redrew the dialog (#458).
+- **Codex's hook trust matches what Codex 0.167 reads** (#458).
+- **A resume the agent can't find is never retried forever:** OMP starts fresh with your held message, and Claude and Codex mark it Not sent with Retry (#456).
+- **The not-moving watch leaves a session with an open question or approval alone** (#459).
+- **Projects that share a git remote on one computer stay separate** in the merged sidebar, while two clones of one repository still merge (#461).
+- **A custom agent that runs `wally codex` or `wally claude-code` keeps its own login,** thanks to @sanchitmonga22 (#478).
+- **Pi on Linux gets its chat** when only your shell's startup puts it on PATH (nvm, fnm, bun, pnpm), and a Pi or OMP chat that can't see its conversation says why and offers Install and restart.
+- **OMP: inline approvals answer through the permission picker,** Allow answers only its own card, subagent rows open their transcript, and approvals and questions notify, thanks to @cagatay-io.
+- **macOS: a dead key followed by a consonant no longer types a second apostrophe** (U.S. International), thanks to @sebastianarena.
+- **A pill strip menu opens under its pill** wherever the chat window stands, thanks to @cagatay-io.
+- **OpenCode no longer sits at "Waiting…" in Updates,** or offers an update mise won't install.
+- **`zmx` in a Ghostex session runs Ghostex's own zmx first.**
+- **The Gemini usage meter stacks its 5h and 7d on two lines** like Claude and Codex.
+- **A question tag answered on any copy is answered on every copy.**
+- **A new session in another project opens in Chat right away,** and a Codex boot no longer swallows a new chat's draft.
+
 ## 10.49.0 - 2026-11-06
 
 **Ghostex 10.49.0 is out.** A long chat no longer slows the app down, worktree sessions show under their project, coordinators get a How to use pill and a board you can click, tag and drag, Ghostex pages, forms and visuals get their names, Windows installs from PowerShell, and Ghostty 1.4, VS Code 1.145 and a newer GPUI arrive under the hood.
