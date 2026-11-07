@@ -513,6 +513,18 @@ before where it stopped unchanged) and the pending rewind it started from is
 unchanged; otherwise the pass starts over. A last line without its newline yet
 is read into a copy, never into the kept state, exactly as a pass from the start
 would read it.
+
+CDXC:SessionChat 2026-11-07 WHY:
+That kept state only served a page asked for again. The NEXT older page has a
+new boundary, so it still read from itself to the end of the file: on the main
+coordinator's 890 MB transcript every page a client loaded while scrolling up
+(or jumping to an old question) re-parsed everything newer than it, about
+1.3 s of a full core per page 800 MB deep, which kept gxserver near one core
+while the user scrolled (measured 2026-11-07, backlog-1107). A pass over the
+rows above a boundary is the pass over the rows down to the next kept boundary
+followed by that boundary's own pass, so a new boundary now reads only the rows
+between itself and the nearest kept one above it (`followed_by`), and takes
+over that kept state instead of copying it.
 */
 #[derive(Clone)]
 struct BoundaryScan {
@@ -534,8 +546,9 @@ struct BoundaryScan {
     pending_retired: bool,
 }
 
-/// Scans kept, most recently used last; each holds the ids above one page, so only a few.
-const BOUNDARY_SCANS_KEPT: usize = 4;
+/// Scans kept, most recently used last; each holds the ids above one page, so only a few. Tests
+/// share the list across threads, so they keep more and never lose a scan to another test.
+const BOUNDARY_SCANS_KEPT: usize = if cfg!(test) { 256 } else { 4 };
 const BOUNDARY_SCAN_TAIL_BYTES: usize = 64;
 
 fn boundary_scans() -> &'static Mutex<Vec<BoundaryScan>> {
@@ -643,6 +656,45 @@ impl BoundaryScan {
         }
     }
 
+    /// This pass over the rows from `end_offset` to `later.end_offset`, followed by `later`, the
+    /// pass from there on: the state a single pass from `end_offset` reaches.
+    fn followed_by(self, later: BoundaryScan) -> BoundaryScan {
+        // Only a tree row clears a marker and every tree row lands in `ids_seen`, so a later pass
+        // that saw neither a marker nor a tree row leaves this pass's marker in force.
+        let marker_in_force = if later.marker_in_force.is_some() || !later.ids_seen.is_empty() {
+            later.marker_in_force
+        } else {
+            self.marker_in_force
+        };
+        // The first prompt written after the rewind retires it, and this pass's rows come first.
+        let (pending, pending_retired) = if self.pending_retired {
+            (self.pending, true)
+        } else {
+            (later.pending, later.pending_retired)
+        };
+        let mut ids_seen = later.ids_seen;
+        ids_seen.extend(self.ids_seen);
+        let mut prompt_parents = later.prompt_parents;
+        prompt_parents.extend(self.prompt_parents);
+        let mut head = self.head;
+        let room = BOUNDARY_SCAN_TAIL_BYTES.saturating_sub(head.len());
+        head.extend_from_slice(&later.head[..later.head.len().min(room)]);
+        BoundaryScan {
+            path: later.path,
+            identity: later.identity,
+            end_offset: self.end_offset,
+            pending_input: later.pending_input,
+            scanned_to: later.scanned_to,
+            tail: later.tail,
+            head,
+            ids_seen,
+            prompt_parents,
+            marker_in_force,
+            pending,
+            pending_retired,
+        }
+    }
+
     /// Whether this kept scan can continue for `version` of the file it was made from.
     fn continues(&self, file: &mut std::fs::File, version: &TranscriptFileVersion) -> bool {
         if self.identity != version.identity || self.scanned_to > version.size {
@@ -668,57 +720,109 @@ fn scan_session_chat_branch_boundary(
 ) -> std::io::Result<SessionChatBranchBoundary> {
     let mut file = std::fs::File::open(file_path)?;
     let pending_input = session_chat_pending_rewind(file_path);
+    // The kept pass for this boundary, else the one for the nearest boundary above it.
     let kept = boundary_scans().lock().ok().and_then(|mut scans| {
-        let at = scans.iter().position(|scan| {
-            scan.path == file_path
-                && scan.end_offset == end_offset
-                && scan.pending_input == pending_input
-        })?;
+        let at = scans
+            .iter()
+            .enumerate()
+            .filter(|(_, scan)| {
+                scan.path == file_path
+                    && scan.end_offset >= end_offset
+                    && scan.pending_input == pending_input
+            })
+            .min_by_key(|(_, scan)| scan.end_offset)?
+            .0;
         Some(scans.remove(at))
     });
-    let mut scan = match kept {
-        Some(scan) if scan.continues(&mut file, version) => scan,
-        _ => BoundaryScan::new(file_path, &version.identity, end_offset, pending_input),
+    let new_scan = || {
+        BoundaryScan::new(
+            file_path,
+            &version.identity,
+            end_offset,
+            pending_input.clone(),
+        )
     };
-    file.seek(SeekFrom::Start(scan.scanned_to))?;
-    let mut reader = BufReader::new(file);
-    let mut offset = scan.scanned_to;
-    let mut unfinished: Option<BoundaryScan> = None;
-    loop {
-        let line_offset = offset;
-        let mut bytes = Vec::new();
-        let read = reader.read_until(b'\n', &mut bytes)?;
-        if read == 0 {
-            break;
-        }
-        offset += read as u64;
-        if bytes.last() == Some(&b'\n') {
-            bytes.pop();
-            scan.apply(file_path, line_offset, &bytes, decode);
-            scan.scanned_to = offset;
-            bytes.push(b'\n');
-            scan.tail.extend_from_slice(&bytes);
-            let excess = scan.tail.len().saturating_sub(BOUNDARY_SCAN_TAIL_BYTES);
-            scan.tail.drain(..excess);
-            if scan.head.len() < BOUNDARY_SCAN_TAIL_BYTES {
-                let room = BOUNDARY_SCAN_TAIL_BYTES - scan.head.len();
-                scan.head.extend_from_slice(&bytes[..bytes.len().min(room)]);
-            }
+    let mut resumed = None;
+    if let Some(mut above) = kept.filter(|scan| scan.continues(&mut file, version)) {
+        let unfinished = scan_forward(&file, file_path, &mut above, None, decode)?;
+        if above.end_offset == end_offset {
+            resumed = Some((above, unfinished));
         } else {
-            // A last line still being written: read into a copy, as a pass from the start would.
-            let mut copy = scan.clone();
-            copy.apply(file_path, line_offset, &bytes, decode);
-            unfinished = Some(copy);
-            break;
+            let mut rows_between = new_scan();
+            let cut = scan_forward(
+                &file,
+                file_path,
+                &mut rows_between,
+                Some(above.end_offset),
+                decode,
+            )?;
+            // A kept boundary that is not on a line of this file is dropped and the pass starts over.
+            if cut.is_none() && rows_between.scanned_to == above.end_offset {
+                resumed = Some((rows_between.followed_by(above), unfinished));
+            }
         }
     }
-    let boundary = unfinished.as_ref().unwrap_or(&scan).boundary();
+    let (scan, unfinished) = match resumed {
+        Some(resumed) => resumed,
+        None => {
+            let mut scan = new_scan();
+            let unfinished = scan_forward(&file, file_path, &mut scan, None, decode)?;
+            (scan, unfinished)
+        }
+    };
+    let boundary = match unfinished {
+        // A last line still being written: read into a copy, as a pass from the start would.
+        Some((line_offset, bytes)) => {
+            let mut copy = scan.clone();
+            copy.apply(file_path, line_offset, &bytes, decode);
+            copy.boundary()
+        }
+        None => scan.boundary(),
+    };
     if let Ok(mut scans) = boundary_scans().lock() {
         scans.push(scan);
         let excess = scans.len().saturating_sub(BOUNDARY_SCANS_KEPT);
         scans.drain(..excess);
     }
     Ok(boundary)
+}
+
+/// Applies every complete line from where `scan` stopped up to `until` (the end of the file when
+/// `None`), and returns a last line that has no newline yet with its offset.
+fn scan_forward(
+    mut file: &std::fs::File,
+    file_path: &Path,
+    scan: &mut BoundaryScan,
+    until: Option<u64>,
+    decode: SessionChatLineDecoder,
+) -> std::io::Result<Option<(u64, Vec<u8>)>> {
+    file.seek(SeekFrom::Start(scan.scanned_to))?;
+    let limit = until.map_or(u64::MAX, |until| until.saturating_sub(scan.scanned_to));
+    let mut reader = BufReader::new(std::io::Read::take(file, limit));
+    let mut offset = scan.scanned_to;
+    loop {
+        let line_offset = offset;
+        let mut bytes = Vec::new();
+        let read = reader.read_until(b'\n', &mut bytes)?;
+        if read == 0 {
+            return Ok(None);
+        }
+        offset += read as u64;
+        if bytes.last() != Some(&b'\n') {
+            return Ok(Some((line_offset, bytes)));
+        }
+        bytes.pop();
+        scan.apply(file_path, line_offset, &bytes, decode);
+        scan.scanned_to = offset;
+        bytes.push(b'\n');
+        scan.tail.extend_from_slice(&bytes);
+        let excess = scan.tail.len().saturating_sub(BOUNDARY_SCAN_TAIL_BYTES);
+        scan.tail.drain(..excess);
+        if scan.head.len() < BOUNDARY_SCAN_TAIL_BYTES {
+            let room = BOUNDARY_SCAN_TAIL_BYTES - scan.head.len();
+            scan.head.extend_from_slice(&bytes[..bytes.len().min(room)]);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -963,5 +1067,171 @@ mod boundary_scan_tests {
         file.write_all(rewritten.as_bytes()).unwrap();
         drop(file);
         check(&path, "rewritten in place");
+    }
+
+    /// An older page's boundary taken from the kept pass of a newer page's boundary, plus the
+    /// rows between the two, matches a pass from the start: for every pair of boundaries, with
+    /// rows appended in between, through leaf markers, a retracted prompt and a pending rewind.
+    #[test]
+    fn a_boundary_derived_from_a_newer_one_matches_a_scan_from_the_start() {
+        let explicit_marker = |leaf: &str| {
+            serde_json::json!({ "type": "last-prompt", "leafUuid": leaf, "explicit": true })
+                .to_string()
+        };
+        let lines = [
+            prompt("p1", None, "one"),
+            reply("a1", "p1"),
+            prompt("p2", Some("a1"), "two"),
+            reply("a2", "p2"),
+            explicit_marker("a1"),
+            reply("a2b", "a2"),
+            explicit_marker("a2"),
+            prompt("p3", Some("a1"), "three, retracting two"),
+            reply("a3", "p3"),
+            prompt("p4", Some("a3"), "four"),
+            reply("a4", "p4"),
+            explicit_marker("a3"),
+        ];
+        let appended = [
+            prompt("p5", Some("a3"), "five, after the marker"),
+            reply("a5", "p5"),
+            prompt("p6", Some("a1"), "six"),
+        ];
+        let starts: Vec<u64> = lines
+            .iter()
+            .scan(0u64, |offset, line| {
+                let start = *offset;
+                *offset += line.len() as u64 + 1;
+                Some(start)
+            })
+            .collect();
+        let dir = tempfile::tempdir().unwrap();
+        for pending in [false, true] {
+            for newer in 1..lines.len() {
+                for older in 0..newer {
+                    let path = dir
+                        .path()
+                        .join(format!("t-{pending}-{older}-{newer}.jsonl"));
+                    std::fs::write(&path, lines.join("\n") + "\n").unwrap();
+                    if pending {
+                        crate::session_chat_rewind_state::set_session_chat_pending_rewind(
+                            &path,
+                            crate::session_chat_rewind_state::SessionChatPendingRewind {
+                                leaf_id: Some("a1".to_string()),
+                                cutoff_offset: starts[5],
+                                set_at_ms: 0,
+                            },
+                        );
+                    }
+                    let step = format!("pending {pending}, older {older}, newer {newer}");
+                    // The newer page's pass is kept, then the chat grows before the older page.
+                    fresh(&path, starts[newer]);
+                    append(&path, &(appended.join("\n") + "\n"));
+                    let derived = resumed(&path, starts[older]);
+                    assert!(
+                        boundary_scans()
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .any(|scan| scan.path == path && scan.end_offset == starts[older]),
+                        "{step}: the older boundary's pass is kept"
+                    );
+                    assert_eq!(derived, fresh(&path, starts[older]), "{step}");
+                    boundary_scans()
+                        .lock()
+                        .unwrap()
+                        .retain(|scan| scan.path != path);
+                }
+            }
+        }
+        // The older page really starts from the newer page's kept pass: a parent planted in that
+        // pass shows up in the older boundary.
+        let path = dir.path().join("planted.jsonl");
+        std::fs::write(&path, lines.join("\n") + "\n").unwrap();
+        fresh(&path, starts[8]);
+        for scan in boundary_scans().lock().unwrap().iter_mut() {
+            if scan.path == path {
+                scan.prompt_parents.insert("planted".to_string());
+            }
+        }
+        assert!(resumed(&path, starts[3]).prompt_parents.contains("planted"));
+    }
+
+    /// A client paging back through a long Claude chat that is still being written: one row is
+    /// appended before every page, as a working coordinator does. Measures the history reads
+    /// alone. Run on a disposable copy of a real transcript (rows are appended to it, then cut
+    /// off again):
+    /// `GX_BRANCH_BENCH_TRANSCRIPT=<copy.jsonl> [GX_BRANCH_BENCH_PAGES=20]
+    /// [GX_BRANCH_BENCH_START=0.5] cargo test --lib paging_back_through_a_growing_transcript
+    /// -- --ignored --nocapture`
+    #[test]
+    #[ignore = "benchmark: needs GX_BRANCH_BENCH_TRANSCRIPT, a disposable copy of a long Claude transcript"]
+    fn paging_back_through_a_growing_transcript() {
+        let path = PathBuf::from(std::env::var("GX_BRANCH_BENCH_TRANSCRIPT").unwrap());
+        let pages: usize = std::env::var("GX_BRANCH_BENCH_PAGES")
+            .ok()
+            .and_then(|pages| pages.parse().ok())
+            .unwrap_or(20);
+        let start: f64 = std::env::var("GX_BRANCH_BENCH_START")
+            .ok()
+            .and_then(|start| start.parse().ok())
+            .unwrap_or(1.0);
+        let original_size = std::fs::metadata(&path).unwrap().len();
+        // The first page starts on a line, `start` of the way into the file.
+        let mut cursor = {
+            let at = (original_size as f64 * start) as u64;
+            if at >= original_size {
+                original_size
+            } else {
+                let mut reader = BufReader::new(std::fs::File::open(&path).unwrap());
+                reader.seek(SeekFrom::Start(at)).unwrap();
+                let mut skipped = Vec::new();
+                at + reader.read_until(b'\n', &mut skipped).unwrap() as u64
+            }
+        };
+        let started = std::time::Instant::now();
+        let mut slowest = std::time::Duration::ZERO;
+        for page in 0..pages {
+            append(
+                &path,
+                &(reply(&format!("bench-{page}"), "bench-parent") + "\n"),
+            );
+            let read_started = std::time::Instant::now();
+            let value = crate::session_chat_history::read_history(
+                crate::session_chat::SessionChatTranscriptAgent::Claude,
+                &path,
+                cursor,
+                200,
+                false,
+                false,
+                "bench-project",
+                "bench-session",
+            )
+            .unwrap();
+            let took = read_started.elapsed();
+            slowest = slowest.max(took);
+            let next = value["beforeOffset"].as_u64().unwrap();
+            let rows = value["messages"].as_array().map_or(0, Vec::len);
+            eprintln!(
+                "page {page:>3}: {:>8.1} ms, {rows:>4} rows, cursor {cursor} -> {next} ({:.1} MB from the end)",
+                took.as_secs_f64() * 1000.0,
+                (original_size - next) as f64 / 1_048_576.0,
+            );
+            if next == cursor || value["hasMore"] != true {
+                break;
+            }
+            cursor = next;
+        }
+        eprintln!(
+            "total {:.1} ms, slowest page {:.1} ms",
+            started.elapsed().as_secs_f64() * 1000.0,
+            slowest.as_secs_f64() * 1000.0
+        );
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_len(original_size)
+            .unwrap();
     }
 }
