@@ -2,7 +2,7 @@
 //! Install, installed and latest versions, and Update, Reinstall and Uninstall run here so every
 //! client (desktop, web, a remote computer's Settings) gets the same answer.
 
-use super::{claude_swap_switch, claude_swap_windows, helpers, model::Provider};
+use super::{claude_swap_build, claude_swap_switch, helpers, model::Provider};
 use crate::{domain::DomainStateError, managed_tools, server::AppState};
 use serde_json::{json, Map, Value};
 use std::{
@@ -59,13 +59,14 @@ enum Work {
     Remove(Vec<PathBuf>),
     /// Ghostex installs uv first, then runs `uv tool install claude-swap`.
     UvInstall,
-    /// Ghostex's Windows build of Claude Swap, checked and installed from its pinned wheel
-    /// (claude_swap_windows.rs) by the tool that owns the install; an installed one is replaced
-    /// (or uninstalled) only once nothing uses it (claude_swap_switch.rs).
-    WindowsBuild(WheelInstaller, Action),
+    /// The Claude Swap claude_swap_build.rs names (Ghostex's checked wheel, or PyPI's release),
+    /// installed by the tool that owns the install. On Windows an installed one is replaced (or
+    /// uninstalled) only once nothing uses it (claude_swap_switch.rs); macOS and Linux replace
+    /// files under a running cswap, so there it installs straight over it.
+    Wanted(WheelInstaller, Action),
 }
 
-/// What installs the Windows build's wheel: the uv that owns the install (Ghostex installs uv
+/// What installs the wanted Claude Swap: the uv that owns the install (Ghostex installs uv
 /// first when there is none) or pipx.
 enum WheelInstaller {
     Uv(Option<PathBuf>),
@@ -111,31 +112,23 @@ impl InstallMethod {
         };
         match (self, action) {
             (_, Action::Install) => None,
-            // PyPI's release would bring back a cswap that refuses to share history on Windows.
             // Running sessions hold the installed files open on Windows, so Uninstall waits too.
-            (Self::Uv(uv), action) if claude_swap_windows::applies() => Some(Work::WindowsBuild(
-                WheelInstaller::Uv(Some(uv.clone())),
-                action,
-            )),
-            (Self::Pipx(pipx), action) if claude_swap_windows::applies() => Some(
-                Work::WindowsBuild(WheelInstaller::Pipx(pipx.clone()), action),
-            ),
-            (Self::Uv(uv), Action::Update) => Some(Work::Program(
-                uv.clone(),
-                args(&["tool", "upgrade", "claude-swap"]),
-            )),
-            (Self::Uv(uv), Action::Reinstall) => Some(Work::Program(
-                uv.clone(),
-                args(&["tool", "install", "--force", "--reinstall", "claude-swap"]),
-            )),
-            (Self::Uv(uv), Action::Uninstall) => Some(Work::Program(
+            (Self::Uv(uv), Action::Uninstall) if !cfg!(windows) => Some(Work::Program(
                 uv.clone(),
                 args(&["tool", "uninstall", "claude-swap"]),
             )),
-            (Self::Pipx(pipx), action) => Some(Work::Program(
+            (Self::Pipx(pipx), Action::Uninstall) if !cfg!(windows) => Some(Work::Program(
                 pipx.clone(),
-                args(&[verb(action), "claude-swap"]),
+                args(&["uninstall", "claude-swap"]),
             )),
+            // `uv tool upgrade` keeps a tool on the source it came from, so an update always
+            // installs the wanted Claude Swap over the installed one (PyPI's or a wheel).
+            (Self::Uv(uv), action) => {
+                Some(Work::Wanted(WheelInstaller::Uv(Some(uv.clone())), action))
+            }
+            (Self::Pipx(pipx), action) => {
+                Some(Work::Wanted(WheelInstaller::Pipx(pipx.clone()), action))
+            }
             (Self::Homebrew(brew), action) => Some(Work::Program(
                 brew.clone(),
                 args(&[verb(action), CODEX_SWAP_FORMULA]),
@@ -292,8 +285,8 @@ fn windows_installer(xswap: &Path) -> InstallMethod {
 /// How Install sets up the helper on this computer: tooltip text, and why it cannot when so.
 fn install_plan(home: &Path, provider: Provider) -> (String, Option<String>) {
     match provider {
-        Provider::Claude if claude_swap_windows::applies() => (
-            format!("Downloads Ghostex's Windows build of Claude Swap ({}: the current release plus history sharing on Windows) from GitHub, checks its checksum and installs it with uv, which Ghostex installs first when needed. No password needed.", claude_swap_windows::VERSION),
+        Provider::Claude if claude_swap_build::pinned().is_some() => (
+            format!("Downloads Ghostex's build of Claude Swap ({}: claude-swap 1.0.0 plus two fixes waiting upstream) from GitHub, checks its checksum and installs it with uv, which Ghostex installs first when needed. No password needed.", claude_swap_build::pinned().unwrap_or_default()),
             managed_tools::platform::arch()
                 .is_none()
                 .then(managed_tools::platform::unsupported_cpu_reason),
@@ -375,8 +368,8 @@ static LATEST: Mutex<Option<HashMap<&'static str, (Instant, Result<String, Strin
 /// for xswap. Cached for six hours; `fresh` is the Settings "check again" click.
 fn latest_version(provider: Provider, fresh: bool) -> Result<String, String> {
     let key = provider.helper();
-    if provider == Provider::Claude && claude_swap_windows::applies() {
-        return Ok(claude_swap_windows::VERSION.to_string());
+    if let Some(pinned) = claude_swap_build::pinned().filter(|_| provider == Provider::Claude) {
+        return Ok(pinned.to_string());
     }
     if !fresh {
         let cache = LATEST.lock().unwrap_or_else(|e| e.into_inner());
@@ -456,12 +449,9 @@ fn tool_view(home: &Path, provider: Provider, fresh: bool) -> Value {
     let version = (!running).then(|| installed_version(&executable)).flatten();
     let latest = latest_version(provider, fresh);
     let update_available = match (&version, &latest) {
-        // Any other version than Ghostex's Windows build (PyPI's, which refuses to share history
-        // there) is one to replace; `newer` reads only the numbers before `.post1+ghostex`.
-        (Some(current), Ok(latest))
-            if provider == Provider::Claude && claude_swap_windows::applies() =>
-        {
-            Some(current != latest)
+        // Any other version than the pinned build is one to replace (claude_swap_build.rs).
+        (Some(current), Ok(latest)) if provider == Provider::Claude => {
+            Some(claude_swap_build::outdated(current, latest))
         }
         (Some(current), Ok(latest)) => Some(managed_tools::tools::newer(latest, current)),
         _ => None,
@@ -538,8 +528,8 @@ pub(crate) fn dispatch(
                         return Err(DomainStateError::bad_request(reason));
                     }
                     match provider {
-                        Provider::Claude if claude_swap_windows::applies() => {
-                            Work::WindowsBuild(WheelInstaller::Uv(None), Action::Install)
+                        Provider::Claude if claude_swap_build::pinned().is_some() => {
+                            Work::Wanted(WheelInstaller::Uv(None), Action::Install)
                         }
                         Provider::Claude => Work::UvInstall,
                         Provider::Codex if cfg!(windows) => Work::Script(
@@ -606,19 +596,22 @@ fn start_job(
     Ok(())
 }
 
-/// Replaces a Windows cswap that refuses to share history with Ghostex's Windows build, in the
+/// Installs the Claude Swap Ghostex wants (claude_swap_build.rs) over the installed one, in the
 /// background, as the Update button in Settings > Accounts would (`Ok` while one already runs).
 /// `Err` says why Ghostex cannot place it.
-pub(super) fn install_windows_build_in_background(home: &Path) -> Result<(), String> {
-    // A switch to this build already waits for the installed one to be free.
+pub(super) fn install_wanted_in_background(home: &Path) -> Result<(), String> {
+    // A switch to it already waits for the installed one to be free.
     if claude_swap_switch::pending().is_some() {
         return Ok(());
     }
     let work = match helpers::executable(home, Provider::Claude.helper()) {
-        None => Work::WindowsBuild(WheelInstaller::Uv(None), Action::Install),
+        None if claude_swap_build::pinned().is_some() => {
+            Work::Wanted(WheelInstaller::Uv(None), Action::Install)
+        }
+        None => Work::UvInstall,
         Some(executable) => install_method(home, Provider::Claude, &executable)
             .work(Action::Update)
-            .filter(|work| matches!(work, Work::WindowsBuild(..)))
+            .filter(|work| matches!(work, Work::Wanted(..)))
             .ok_or_else(|| {
                 format!(
                     "Ghostex can't replace the Claude Swap at {}. Uninstall it with the tool you installed it with, then click Install next to Claude Swap in Settings > Accounts.",
@@ -634,18 +627,23 @@ pub(super) fn install_windows_build_in_background(home: &Path) -> Result<(), Str
     start_job(&runtime, home, Provider::Claude, Action::Update, work)
 }
 
-/// Moves an installed Windows cswap that is not Ghostex's pinned build, or no longer starts, to
-/// that build in the background (claude_swap_switch.rs asks once an hour).
+/// Moves an installed cswap that is not the one Ghostex wants (`must_replace` in
+/// claude_swap_build.rs), or on Windows no longer starts, to it in the background
+/// (claude_swap_switch.rs asks once an hour, on every OS).
 pub(super) fn update_outdated(home: &Path) {
-    if !claude_swap_windows::applies() || claude_swap_switch::pending().is_some() {
+    if claude_swap_switch::pending().is_some() {
         return;
     }
     let Some(executable) = helpers::executable(home, Provider::Claude.helper()) else {
         return;
     };
-    if installed_version(&executable).as_deref() != Some(claude_swap_windows::VERSION) {
+    let replace = match installed_version(&executable) {
+        Some(version) => claude_swap_build::must_replace(&version),
+        None => cfg!(windows) && claude_swap_build::pinned().is_some(),
+    };
+    if replace {
         // An install Ghostex cannot place stays as it is; Settings > Accounts says so.
-        let _ = install_windows_build_in_background(home);
+        let _ = install_wanted_in_background(home);
     }
 }
 
@@ -659,7 +657,7 @@ async fn run_work(
     let installs_into_local_bin = matches!(
         &work,
         Work::UvInstall
-            | Work::WindowsBuild(
+            | Work::Wanted(
                 WheelInstaller::Uv(_),
                 Action::Install | Action::Update | Action::Reinstall
             )
@@ -681,16 +679,15 @@ async fn run_work(
             .await
             .map_err(|error| error.to_string())??;
         }
-        Work::WindowsBuild(WheelInstaller::Uv(None), _) => {
+        Work::Wanted(WheelInstaller::Uv(None), _) => {
             // Nothing is installed, so nothing can be in use: install straight into place.
             let uv = managed_tools::ensure_uv(home, log).await?;
             let owned_log = log.clone();
             tokio::task::spawn_blocking(move || {
-                let wheel = claude_swap_windows::wheel(&owned_log)?;
-                let wheel = wheel.to_string_lossy().into_owned();
+                let spec = claude_swap_build::install_spec(&owned_log)?;
                 managed_tools::run::run(
                     &uv,
-                    &["tool", "install", "--force", &wheel],
+                    &claude_swap_build::uv_install_args(&spec),
                     &[],
                     &[],
                     &owned_log,
@@ -700,7 +697,29 @@ async fn run_work(
             .await
             .map_err(|error| error.to_string())??;
         }
-        Work::WindowsBuild(installer, action) => {
+        // macOS and Linux replace files under a running cswap: install straight over it.
+        Work::Wanted(installer, action) if !cfg!(windows) => {
+            let owned_log = log.clone();
+            tokio::task::spawn_blocking(move || {
+                let spec = claude_swap_build::install_spec(&owned_log)?;
+                let (program, args) = match &installer {
+                    WheelInstaller::Uv(uv) => {
+                        let mut args = claude_swap_build::uv_install_args(&spec);
+                        if action == Action::Reinstall {
+                            args.insert(3, "--reinstall");
+                        }
+                        (uv.clone().unwrap_or_default(), args)
+                    }
+                    WheelInstaller::Pipx(pipx) => {
+                        (pipx.clone(), vec!["install", "--force", spec.as_str()])
+                    }
+                };
+                managed_tools::run::run(&program, &args, &[], &[], &owned_log, timeout)
+            })
+            .await
+            .map_err(|error| error.to_string())??;
+        }
+        Work::Wanted(installer, action) => {
             let (program, owner) = match installer {
                 WheelInstaller::Uv(uv) => (uv.unwrap_or_default(), claude_swap_switch::Owner::Uv),
                 WheelInstaller::Pipx(pipx) => (pipx, claude_swap_switch::Owner::Pipx),
@@ -769,4 +788,41 @@ async fn run_work(
     }
     crate::agent_hooks::probing::refresh_cli_environment(home);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// How each button runs for a uv-installed cswap: Update and Reinstall install the wanted
+    /// Claude Swap (claude_swap_build.rs) over it, through the side-by-side switch on Windows.
+    #[test]
+    fn a_uv_install_is_moved_to_the_wanted_claude_swap() {
+        let uv = InstallMethod::Uv(PathBuf::from("/bin/uv"));
+        for action in [Action::Update, Action::Reinstall] {
+            assert!(matches!(
+                uv.work(action),
+                Some(Work::Wanted(WheelInstaller::Uv(Some(_)), a)) if a == action
+            ));
+        }
+        let pipx = InstallMethod::Pipx(PathBuf::from("/bin/pipx"));
+        assert!(matches!(
+            pipx.work(Action::Update),
+            Some(Work::Wanted(WheelInstaller::Pipx(_), Action::Update))
+        ));
+        // Running sessions hold cswap's files open only on Windows, so only there does
+        // Uninstall wait for the switch.
+        let uninstall = uv.work(Action::Uninstall);
+        if cfg!(windows) {
+            assert!(matches!(
+                uninstall,
+                Some(Work::Wanted(_, Action::Uninstall))
+            ));
+        } else {
+            assert!(
+                matches!(uninstall, Some(Work::Program(_, args)) if args == ["tool", "uninstall", "claude-swap"])
+            );
+        }
+        assert!(uv.work(Action::Install).is_none());
+    }
 }

@@ -1,9 +1,9 @@
 //! Replacing the installed Claude Swap on Windows only once no running cswap uses its files.
 //!
 //! CDXC:AgentProviders 2026-10-18 DECISION:
-//! User: "Fix Ghostex to switch safely": Ghostex's Windows Claude Swap update installs side by side and switches the moment nothing holds cswap.exe, retrying on its own, so this computer switches itself and so does every Windows user. Every live Claude session holds the installed cswap open (uv's `cswap.exe` launcher, the tool venv's `python.exe`, and the base Python that opens the launcher as a zipapp), and `uv tool install --force` over it deleted the old venv's packages, then failed on `Scripts` with "Access is denied" and left every new cswap with "No module named 'claude_swap'" (2026-10-18). So on Windows, Update, Reinstall, Uninstall, the launch-time replacement (launch.rs) and the automatic move to the pinned build (`update_outdated` in helper_tools.rs) first install the new build into Ghostex's own `side-by-side/<version>` folder and check that it starts, then switch only when no process runs from the installed venv or launchers and no program holds a launcher open. The switch renames the old launchers, then the venv, aside before the owning tool (uv or pipx) installs into the real place, so nothing is deleted under a running cswap: a held launcher refuses the rename and leaves the install as it was, and a failed install puts the old one back. A waiting switch is retried every 30 seconds and when gxserver starts, and old copies are deleted once nothing uses them. New sessions keep launching the installed cswap until the switch, because a session saves that path and every later resume runs it. macOS and Linux replace files under a running process and keep PyPI's claude-swap.
+//! User: "Fix Ghostex to switch safely": Ghostex's Windows Claude Swap update installs side by side and switches the moment nothing holds cswap.exe, retrying on its own, so this computer switches itself and so does every Windows user. Since 2026-11-07 the switch installs whatever claude_swap_build.rs names (Ghostex's build on upstream 1.0.0 for now, PyPI's claude-swap once upstream has the two fixes), and it stays for every Windows update whatever the source. Every live Claude session holds the installed cswap open (uv's `cswap.exe` launcher, the tool venv's `python.exe`, and the base Python that opens the launcher as a zipapp), and `uv tool install --force` over it deleted the old venv's packages, then failed on `Scripts` with "Access is denied" and left every new cswap with "No module named 'claude_swap'" (2026-10-18). So on Windows, Update, Reinstall, Uninstall, the launch-time replacement (launch.rs) and the automatic move to the pinned build (`update_outdated` in helper_tools.rs) first install the new build into Ghostex's own `side-by-side/<version>` folder and check that it starts, then switch only when no process runs from the installed venv or launchers and no program holds a launcher open. The switch renames the old launchers, then the venv, aside before the owning tool (uv or pipx) installs into the real place, so nothing is deleted under a running cswap: a held launcher refuses the rename and leaves the install as it was, and a failed install puts the old one back. A waiting switch is retried every 30 seconds and when gxserver starts, and old copies are deleted once nothing uses them. New sessions keep launching the installed cswap until the switch, because a session saves that path and every later resume runs it. macOS and Linux replace files under a running process and keep PyPI's claude-swap.
 
-use super::claude_swap_windows;
+use super::claude_swap_build;
 use crate::{managed_tools, server::AppState};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -14,7 +14,7 @@ use std::{
 };
 
 const RETRY: Duration = Duration::from_secs(30);
-/// How often an installed cswap other than the pinned build is looked for.
+/// How often an installed cswap older than the wanted one is looked for (every OS).
 const OUTDATED_CHECK: Duration = Duration::from_secs(60 * 60);
 const TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
@@ -68,7 +68,7 @@ fn side_by_side_root() -> PathBuf {
 }
 
 fn staged_dir() -> PathBuf {
-    side_by_side_root().join(claude_swap_windows::VERSION)
+    side_by_side_root().join(claude_swap_build::pinned().unwrap_or("latest"))
 }
 
 fn read_state() -> State {
@@ -96,14 +96,14 @@ fn write_state(state: &State) -> Result<(), String> {
 
 /// The switch waiting on this computer, if any.
 pub(crate) fn pending() -> Option<Pending> {
-    claude_swap_windows::applies()
+    cfg!(windows)
         .then(read_state)
         .and_then(|state| state.pending)
 }
 
 /// Returns once no switch is moving files (helpers::executable calls it before handing out cswap).
 pub(crate) fn wait_for_switch() {
-    if claude_swap_windows::applies() {
+    if cfg!(windows) {
         drop(SWITCHING.lock().unwrap_or_else(|error| error.into_inner()));
     }
 }
@@ -241,9 +241,9 @@ fn opened_elsewhere(file: &Path) -> bool {
     }
 }
 
-/// Installs Ghostex's build into its own side-by-side folder and checks that it starts. The
-/// installed cswap is not touched.
-fn stage(uv: &Path, wheel: &Path, log: &managed_tools::Log) -> Result<(), String> {
+/// Installs `spec` (claude_swap_build.rs) into Ghostex's own side-by-side folder and checks that
+/// it starts. The installed cswap is not touched.
+fn stage(uv: &Path, spec: &str, log: &managed_tools::Log) -> Result<(), String> {
     let staged = staged_dir();
     if staged.exists() && user_of(std::slice::from_ref(&staged)).is_none() {
         let _ = std::fs::remove_dir_all(&staged);
@@ -251,13 +251,13 @@ fn stage(uv: &Path, wheel: &Path, log: &managed_tools::Log) -> Result<(), String
     let tools = staged.join("tools");
     let bin = staged.join("bin");
     log.line(&format!(
-        "Installing Claude Swap {} side by side in {}; the installed Claude Swap stays as it is until nothing uses it.",
-        claude_swap_windows::VERSION,
+        "Installing {} side by side in {}; the installed Claude Swap stays as it is until nothing uses it.",
+        target_label(),
         staged.display()
     ));
     managed_tools::run::run(
         uv,
-        &["tool", "install", "--force", &wheel.to_string_lossy()],
+        &claude_swap_build::uv_install_args(spec),
         &[
             ("UV_TOOL_DIR", tools.as_os_str()),
             ("UV_TOOL_BIN_DIR", bin.as_os_str()),
@@ -267,14 +267,26 @@ fn stage(uv: &Path, wheel: &Path, log: &managed_tools::Log) -> Result<(), String
         TIMEOUT,
     )?;
     let version = managed_tools::tools::version_of(&bin.join("cswap.exe"), &["--version"]);
-    if version.as_deref() != Some(claude_swap_windows::VERSION) {
+    let started = match claude_swap_build::pinned() {
+        Some(pinned) => version.as_deref() == Some(pinned),
+        None => version.is_some(),
+    };
+    if !started {
         return Err(format!(
-            "Claude Swap {} installed side by side but did not start (it reported {}).",
-            claude_swap_windows::VERSION,
+            "{} installed side by side but did not start (it reported {}).",
+            target_label(),
             version.as_deref().unwrap_or("no version")
         ));
     }
     Ok(())
+}
+
+/// "Claude Swap 1.0.0.post1+ghostex", or "the latest Claude Swap" when Ghostex follows PyPI.
+fn target_label() -> String {
+    claude_swap_build::pinned().map_or_else(
+        || "the latest Claude Swap".to_string(),
+        |version| format!("Claude Swap {version}"),
+    )
 }
 
 /// Update, Reinstall or Uninstall of the cswap `owner` installed: stages the new build (not for
@@ -290,8 +302,8 @@ pub(crate) fn replace(
 ) -> Result<(), String> {
     let holds = installed_paths(owner, program)?;
     if action != "uninstall" {
-        let wheel = claude_swap_windows::wheel(log)?;
-        stage(uv, &wheel, log)?;
+        let spec = claude_swap_build::install_spec(log)?;
+        stage(uv, &spec, log)?;
     }
     let pending = Pending {
         action: action.to_string(),
@@ -325,7 +337,10 @@ pub(crate) fn waiting_message(pending: &Pending) -> String {
     let what = match pending.action.as_str() {
         "uninstall" => "Uninstall is waiting".to_string(),
         "reinstall" => "Reinstall is ready".to_string(),
-        _ => format!("Update to {} is ready", claude_swap_windows::VERSION),
+        _ => claude_swap_build::pinned().map_or_else(
+            || "Update is ready".to_string(),
+            |version| format!("Update to {version} is ready"),
+        ),
     };
     if pending.last_error.is_some() {
         format!("{what}; Ghostex is retrying the switch on its own")
@@ -354,10 +369,10 @@ pub(crate) fn switch(home: &Path, log: &managed_tools::Log) -> Result<Option<Str
         write_state(&state)?;
         return Ok(Some(user));
     }
-    let wheel = if pending.action == "uninstall" {
+    let spec = if pending.action == "uninstall" {
         None
     } else {
-        Some(claude_swap_windows::wheel(log)?)
+        Some(claude_swap_build::install_spec(log)?)
     };
     // A held launcher refuses the rename (Windows lets a venv folder with running files be
     // renamed), so the launchers go aside first and a refusal leaves the install as it was.
@@ -376,13 +391,12 @@ pub(crate) fn switch(home: &Path, log: &managed_tools::Log) -> Result<Option<Str
         }
         moved.push((hold.clone(), aside));
     }
-    let installed = match &wheel {
+    let installed = match &spec {
         None => Ok(()),
-        Some(wheel) => {
-            let wheel = wheel.to_string_lossy();
+        Some(spec) => {
             let args: Vec<&str> = match pending.owner {
-                Owner::Uv => vec!["tool", "install", "--force", &wheel],
-                Owner::Pipx => vec!["install", "--force", &wheel],
+                Owner::Uv => claude_swap_build::uv_install_args(spec),
+                Owner::Pipx => vec!["install", "--force", spec],
             };
             managed_tools::run::run(&pending.program, &args, &[], &[], log, TIMEOUT)
         }
@@ -406,8 +420,8 @@ pub(crate) fn switch(home: &Path, log: &managed_tools::Log) -> Result<Option<Str
     cleanup(&mut state);
     write_state(&state)?;
     crate::agent_hooks::probing::refresh_cli_environment(home);
-    log.line(&match wheel {
-        Some(_) => format!("Switched to Claude Swap {}.", claude_swap_windows::VERSION),
+    log.line(&match spec {
+        Some(_) => format!("Switched to {}.", target_label()),
         None => "Removed Claude Swap.".to_string(),
     });
     Ok(None)
@@ -450,19 +464,16 @@ fn cleanup(state: &mut State) {
     });
 }
 
-/// Retries a waiting switch every 30 seconds (the first pass runs as gxserver starts), deletes
-/// old copies once free, and once an hour moves an installed cswap that is not the pinned build
-/// to it.
+/// On Windows, retries a waiting switch every 30 seconds (the first pass runs as gxserver starts)
+/// and deletes old copies once free; on every OS, once an hour moves an installed cswap that is
+/// not the one Ghostex wants (claude_swap_build.rs) to it.
 pub(crate) fn start(state: Arc<AppState>) {
-    if !claude_swap_windows::applies() {
-        return;
-    }
     let mut shutdown = state.shutdown_tx.subscribe();
     let home = state.paths.home_dir.clone();
     tokio::spawn(async move {
         let mut checked: Option<Instant> = None;
         loop {
-            if state_path().exists() || side_by_side_root().exists() {
+            if cfg!(windows) && (state_path().exists() || side_by_side_root().exists()) {
                 // A running install job makes its own attempt; this pass waits for the next tick.
                 if let Ok(_turn) = managed_tools::INSTALL_LOCK.try_lock() {
                     let pass_home = home.clone();

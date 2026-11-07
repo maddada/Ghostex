@@ -304,28 +304,28 @@ pub(crate) fn launch_command(
         .and_then(|executable| share_history_support(&executable));
     let refusal = match support {
         None | Some(ShareHistory::Supported) => return Ok(command),
-        // CDXC:AgentProviders 2026-10-16 DECISION in claude_swap_windows.rs: Windows gets Ghostex's own build, which shares history.
-        Some(_) if super::claude_swap_windows::applies() => {
+        // CDXC:AgentProviders 2026-11-07 DECISION in claude_swap_build.rs: a Claude Swap that shares history on Windows replaces one that refuses.
+        Some(ShareHistory::RefusedOnWindows) => {
             if super::claude_swap_switch::pending().is_some() {
-                return Err(DomainStateError::bad_request("Claude Swap on this computer can't share conversation history on Windows. Ghostex's Windows build of Claude Swap is ready and replaces it as soon as no program uses the installed one; Settings > Accounts shows when. Start the session again then."));
+                return Err(DomainStateError::bad_request("Claude Swap on this computer can't share conversation history on Windows. A newer Claude Swap that can is ready and replaces it as soon as no program uses the installed one; Settings > Accounts shows when. Start the session again then."));
             }
-            match super::helper_tools::install_windows_build_in_background(home) {
-                Ok(()) => "Claude Swap on this computer can't share conversation history on Windows, so Ghostex is installing its own Windows build of Claude Swap now (Settings > Accounts shows the progress). Start the session again in a minute.".to_string(),
+            match super::helper_tools::install_wanted_in_background(home) {
+                Ok(()) => "Claude Swap on this computer can't share conversation history on Windows, so Ghostex is updating it now (Settings > Accounts shows the progress). Start the session again in a minute.".to_string(),
                 Err(reason) => format!("Claude Swap on this computer can't share conversation history on Windows, so this account's conversations would never reach the chat. {reason}"),
             }
         }
-        Some(_) => "Claude Swap on this computer is too old to share conversation history between accounts. Update it in Settings > Accounts, then try again.".to_string(),
+        Some(ShareHistory::Missing) => "Claude Swap on this computer is too old to share conversation history between accounts. Update it in Settings > Accounts, then try again.".to_string(),
     };
     Err(DomainStateError::bad_request(refusal))
 }
 
 /// Whether a cswap can start an account with `--share-history` here, from its `run --help`.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ShareHistory {
     Supported,
     /// The flag does not exist (before 0.16.0).
     Missing,
-    /// Every released cswap refuses the flag on Windows.
+    /// Every release from 0.16.0 through 0.30.0 refuses the flag on Windows.
     RefusedOnWindows,
 }
 
@@ -336,7 +336,8 @@ static SHARE_HISTORY_HELP: std::sync::LazyLock<std::sync::Mutex<ShareHistoryRead
     std::sync::LazyLock::new(Default::default);
 
 /// CDXC:AgentProviders 2026-10-16 WHY:
-/// Ghostex starts every Claude account as `cswap run <N> --share-history`, and without the flag the account's conversations fork into its own profile where the chat never looks, so the flag is never dropped. No released Claude Swap (0.16.0, which added the flag, through 0.29.0) runs it on Windows: `cswap run` printed "--share-history is not supported on Windows yet", PowerShell stayed open, and a customer's chat sat at "starting" with "hello" queued for good (2026-10-16). Ghostex's Windows build (claude_swap_windows.rs) and any cswap built from realiti4/claude-swap#429 can, and the version number cannot tell them apart, but cswap's own `run --help` can: every refusing release ends the flag's help with "Not supported on Windows.", and the PR removes that sentence. `None` when the help could not be read, which refuses nothing.
+/// Ghostex starts every Claude account as `cswap run <N> --share-history`, and without the flag the account's conversations fork into its own profile where the chat never looks, so the flag is never dropped. No released Claude Swap (0.16.0, which added the flag, through 0.29.0) runs it on Windows: `cswap run` printed "--share-history is not supported on Windows yet", PowerShell stayed open, and a customer's chat sat at "starting" with "hello" queued for good (2026-10-16). Ghostex's Windows build (claude_swap_build.rs) and any cswap built from realiti4/claude-swap#429 can, and the version number cannot tell them apart, but cswap's own `run --help` can: every refusing release ends the flag's help with "Not supported on Windows.", and the PR removes that sentence. `None` when the help could not be read, which refuses nothing.
+/// CDXC:AgentProviders 2026-11-07 WHY: claude-swap 1.0.0 shares history on Windows itself (realiti4/claude-swap#559) and its help says how ("On Windows, projects/ is shared either way…") without that sentence, so the same reading accepts it and every later release.
 fn share_history_support(executable: &Path) -> Option<ShareHistory> {
     let modified = std::fs::metadata(executable)
         .and_then(|metadata| metadata.modified())
@@ -356,20 +357,22 @@ fn share_history_support(executable: &Path) -> Option<ShareHistory> {
         .output()
         .ok()
         .filter(|output| output.status.success())?;
+    let support = share_history_in_help(&String::from_utf8_lossy(&output.stdout), cfg!(windows));
+    cache.insert(executable.to_path_buf(), (modified, support));
+    Some(support)
+}
+
+/// What `cswap run --help` says about `--share-history` on Windows (`windows`) or elsewhere.
+fn share_history_in_help(help: &str, windows: bool) -> ShareHistory {
     // argparse wraps help text at the terminal width, so a sentence can span lines.
-    let help = String::from_utf8_lossy(&output.stdout)
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    let support = if !help.contains("--share-history") {
+    let help = help.split_whitespace().collect::<Vec<_>>().join(" ");
+    if !help.contains("--share-history") {
         ShareHistory::Missing
-    } else if cfg!(windows) && help.contains("Not supported on Windows") {
+    } else if windows && help.contains("Not supported on Windows") {
         ShareHistory::RefusedOnWindows
     } else {
         ShareHistory::Supported
-    };
-    cache.insert(executable.to_path_buf(), (modified, support));
-    Some(support)
+    }
 }
 
 pub(crate) fn assign(
@@ -692,6 +695,29 @@ pub(crate) fn effective_policy(registry: &Registry, provider: Provider, session:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn share_history_is_read_from_cswap_run_help() {
+        // `cswap run --help` at COLUMNS=200, as claude-swap 0.29.0 and 1.0.0 print it.
+        let refusing = "  --share-history, --no-share-history\n                        Share conversation history (projects/ and history.jsonl) from ~/.claude into the session profile, so every account sees one unified history. History the profile already\n                        accumulated is merged into ~/.claude first. --no-share-history restores per-account history (the default, unless `cswap config set run.shareHistory true`). Not supported on\n                        Windows.\n";
+        let upstream_one = "  --share-history, --no-share-history\n                        Share conversation history (projects/ and history.jsonl) from ~/.claude into the session profile, so every account sees one unified history. This is the default; history the\n                        profile already accumulated is merged into ~/.claude first. --no-share-history keeps this account's history separate for this launch, `cswap config set run.shareHistory\n                        false` for every launch. On Windows, projects/ is shared either way and history.jsonl only when symlinks are allowed (Developer Mode, or an elevated terminal).\n";
+        assert_eq!(
+            share_history_in_help(refusing, true),
+            ShareHistory::RefusedOnWindows
+        );
+        assert_eq!(
+            share_history_in_help(refusing, false),
+            ShareHistory::Supported
+        );
+        assert_eq!(
+            share_history_in_help(upstream_one, true),
+            ShareHistory::Supported
+        );
+        assert_eq!(
+            share_history_in_help("usage: cswap run [-h] [NUM|EMAIL]", true),
+            ShareHistory::Missing
+        );
+    }
 
     #[test]
     fn an_account_refusal_names_the_session_agent_and_account() {

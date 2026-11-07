@@ -27,12 +27,8 @@ impl Provider {
     /// SEE-ALSO: packages/shared/ghostex-settings/types.ts (deleted 2026-10-01) (windowsTerminalBackend), apps/desktop/src/windows_terminal_backend/platform/.
     pub(crate) fn install_command(self, home: &std::path::Path) -> String {
         match self {
-            // CDXC:AgentProviders 2026-10-16 DECISION in claude_swap_windows.rs: Ghostex's own build on Windows.
-            Self::Claude if super::claude_swap_windows::applies() => format!(
-                "uv tool install --force {}",
-                super::claude_swap_windows::URL
-            ),
-            Self::Claude => "uv tool install claude-swap".to_string(),
+            // CDXC:AgentProviders 2026-11-07 DECISION in claude_swap_build.rs: Ghostex's own build for now.
+            Self::Claude => super::claude_swap_build::install_command(),
             Self::Codex if cfg!(windows) => {
                 "irm https://github.com/maddada/codex-swap/releases/latest/download/install.ps1 | iex"
                     .to_string()
