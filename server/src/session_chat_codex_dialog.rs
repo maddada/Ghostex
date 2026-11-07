@@ -500,6 +500,45 @@ fn centered_dialog_text(text: &str) -> Option<String> {
         .then(|| inner.join("\n"))
 }
 
+/*
+CDXC:AgentScreenDetection 2026-11-07 WHY:
+A Codex dialog's id was the SHA-256 of its raw screen lines: indentation, blank padding, where its wrapped lines broke and which row carried the `›` highlight. The card and the answer each read the screen once, and the answer is refused unless both reads give the same id, so any change in layout between them (Codex redrawing at another width, the highlight moving, a different stretch of blank rows above) refused every pick on an unchanged dialog with "Codex's dialog changed" and nothing in the chat could close the card (GitHub #458, Codex's "Hooks need review" on Windows). The id now names what the dialog says: its title, the words of its body and footer, each row's number and words, and its input. The highlight is left out because an answer always moves from the highlight it captured itself (`payload`).
+SEE-ALSO: `update_prompt_dialog` (the same rule for the update prompt, 2026-09-23); packages/gx-chat-core/src/questions/actions.rs (`dismiss_notice`, the card's way out when an answer is refused anyway).
+*/
+fn layout_free_id(
+    title: &str,
+    body: &str,
+    rows: &[TerminalDialogRow],
+    input: Option<&str>,
+    input_value: &str,
+    footer: &str,
+) -> String {
+    let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let rows: Vec<_> = rows
+        .iter()
+        .map(|row| {
+            (
+                row.number,
+                words(&format!(
+                    "{} {}",
+                    row.label,
+                    row.description.as_deref().unwrap_or_default()
+                )),
+            )
+        })
+        .collect();
+    let identity = json!([
+        words(title),
+        words(body),
+        rows,
+        input,
+        input_value,
+        words(footer)
+    ])
+    .to_string();
+    hex::encode(Sha256::digest(identity.as_bytes()))
+}
+
 /// CDXC:AgentScreenDetection 2026-09-05 DECISION:
 /// User: expose the "Implement this plan?" picker in chat so switching to the terminal is unnecessary.
 /// User: audit every Codex command and make its messages and interactions usable in chat, using the existing UX and improving it where needed.
@@ -933,12 +972,19 @@ fn detect_codex_dialog_as_drawn(text: &str) -> Option<TerminalDialog> {
         actions.push("confirm".to_string());
     }
     actions.push("cancel".to_string());
-    let identity = content.join("\n") + &footer;
-    let id = hex::encode(Sha256::digest(identity.as_bytes()));
+    let body = body.trim().to_string();
+    let id = layout_free_id(
+        &title,
+        &body,
+        &rows,
+        input.as_deref(),
+        &input_value,
+        &footer,
+    );
     let mut dialog = TerminalDialog {
         id,
         title,
-        body: body.trim().to_string(),
+        body,
         footer,
         rows,
         input,

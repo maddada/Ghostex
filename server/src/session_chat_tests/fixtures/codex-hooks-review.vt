@@ -1,0 +1,50 @@
+[?25l[?1000h[?1002h[?1003h[?1004h[?1006h[?1007l[?1049h[?2004h 
+  [0m[1mHooks need review[0m
+  [0m[38;5;3m2 hooks are new or changed.[0m
+ [1C[0m[2mHooks can run outside the sandbox after you trust them.[0m
+ 
+ 
+[0m[1m[7m› 1. Review hooks                                                                                                                                                                                       [0m
+ [1C2.[1CTrust[1Call[1Cand[1Ccontinue
+ [1C3.[1CContinue[1Cwithout[1Ctrusting[1C(hooks[1Cwon't[1Crun)
+ 
+ [1C[0m[1menter[0m[2m confirm · [0m[1mesc[0m[2m skip                                                                                                                                                                              [0m
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ [47;2H[0m[=5;1u

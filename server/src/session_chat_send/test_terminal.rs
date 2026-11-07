@@ -25,6 +25,8 @@ pub(crate) struct TestTerminal {
     pub(crate) transcript: Option<(std::path::PathBuf, Vec<String>)>,
     /// Every write, in order.
     pub(crate) writes: Vec<String>,
+    /// The screen the first write leaves behind: an agent's dialog closing on its answer.
+    pub(crate) screen_after_write: Option<String>,
 }
 
 thread_local! {
@@ -71,6 +73,9 @@ pub(super) fn write(name: &str, payload: &str) -> Option<Result<(), String>> {
         let mut terminals = terminals.borrow_mut();
         let terminal = terminals.get_mut(name)?;
         terminal.writes.push(payload.to_string());
+        if let Some(screen) = terminal.screen_after_write.take() {
+            terminal.screen = Some(Some(screen));
+        }
         if let Some(text) = payload
             .strip_prefix(BRACKETED_PASTE_START)
             .and_then(|rest| rest.strip_suffix(BRACKETED_PASTE_END))
