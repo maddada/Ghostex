@@ -26,7 +26,7 @@ they ask for one.
 
    ```bash
    ghostex guide             # what Ghostex is, its views, and where things live
-   ghostex guide features    # every feature: views, sidebar, sessions, chat, agents, remote, board
+   ghostex guide features    # every feature: views, sidebar, sessions, chat, agents, coordinators, remote, board
    ghostex guide settings    # every setting: key, type, allowed values, default, what it does
    ghostex guide hotkeys     # every shortcut and its default binding
    ```
@@ -87,10 +87,24 @@ they ask for one.
    ghostex settings open <key>
    ```
 
-6. For anything beyond settings (start or steer agents, sessions, automations,
+6. For a question about coordinators (their threads, the board, threads on
+   another computer, goal and memory), answer from the Coordinators section of
+   `ghostex guide features`; `ghostex coordinator --help` has every verb and
+   flag. When the user asks what a coordinator knows or will do, read the
+   playbook it actually follows, `ghostex coordinator guide` (add
+   `--project-id <id>` for another project), since the user can edit it in
+   Settings > Chat > Coordinator playbook. If something the guide promises is
+   missing from the playbook, say so: a coordinator only learns it from there.
+   Threads on another computer need that computer connected in Settings >
+   Remote > Remote machines with Agent access on (`ghostex computers` lists
+   them) and Ghostex 10.44 or later on both computers.
+
+7. For anything beyond settings (start or steer agents, sessions, automations,
    the project board, prompt history, servers, diagnostics), route to the
-   `$ghostex-cli` skill and its `ghostex --help` catalog. Use `$ghostex-help`
-   to explain, `$ghostex-cli` to operate.
+   ghostex-cli skill and its `ghostex --help` catalog. Use ghostex-help to
+   explain, ghostex-cli to operate. Name a skill the way the user's agent runs
+   it: `/ghostex-cli` in Claude Code and Copilot, `$ghostex-cli` in Codex and
+   the other agents.
 
 ## Rules
 

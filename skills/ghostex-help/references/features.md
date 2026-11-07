@@ -5975,6 +5975,10 @@ terminalViewWidthMode match-chat`.
   `ghostex agent-cli update <agent-id>`.
 - "Use Ghostex from my phone or another computer": see Remote machines, web,
   and mobile, then `ghostex settings open --tab remote`.
+- "Have my coordinator run work on my other computer": connect that computer
+  (Settings > Remote > Remote machines, Agent access on), then tell the
+  coordinator "run this on <computer name>"; see Coordinators, Threads on
+  another computer.
 - "Run an agent on a schedule": see Automations; open the Automate view or
   drive `ghostex automation-save`.
 - "Play a sound and notify me when an agent finishes": `completionSound`

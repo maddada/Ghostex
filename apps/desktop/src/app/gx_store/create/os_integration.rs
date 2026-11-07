@@ -17,11 +17,13 @@
 //! SEE-ALSO: apps/desktop/src/app/sidebar_dispatch/folder_pickers_and_os_integration.rs (`dispatch_gpui_os_integration_command_message`),
 //! apps/desktop/src/app/titlebar/help_menu.rs.
 
+use ghostex_gx_chat_core::composer::skill_invocation::skill_invocation;
 use ghostex_gx_core::{
-    AgentRecordOptions, ProjectKey, agent_record_params, check_startup_prompt_receipt,
-    created_session, first_prompt_title_runtime_settings, normalize_project_path,
-    os_integration_command_params, project_name_from_path, queue_startup_prompt_params,
-    resolve_sidebar_agent, start_provider_params, terminal_create_params,
+    AgentRecordOptions, ProjectKey, SidebarAgent, agent_record_params,
+    check_startup_prompt_receipt, created_session, default_agent_id_for_icon,
+    first_prompt_title_runtime_settings, normalize_project_path, os_integration_command_params,
+    project_name_from_path, queue_startup_prompt_params, resolve_sidebar_agent,
+    start_provider_params, terminal_create_params,
 };
 use serde_json::{Value, json};
 
@@ -267,7 +269,9 @@ impl GhostexGpuiApp {
     /// `createGhostexHelpChat(question, projectPath)`.
     ///
     /// CDXC:Onboarding 2026-09-09 DECISION:
-    /// User: picking a Help menu row must not send the prompt. The Quick agent chat opens with `$ghostex-help <question>` staged as an editable draft, a toast says "Edit the prompt and press Enter to learn more about Ghostex.", and only the user's Enter submits it, because they may want to reword the question.
+    /// User: picking a Help menu row must not send the prompt. The Quick agent chat opens with the ghostex-help skill mention and the question staged as an editable draft, a toast says "Edit the prompt and press Enter to learn more about Ghostex.", and only the user's Enter submits it, because they may want to reword the question.
+    /// CDXC:Onboarding 2026-11-07 DECISION:
+    /// User: "when i click 'Ask anything about Ghostex' we should mention the skill like /ghostex-help not like $ghostex-help". The mention is spelled for the Help chat's agent (`/ghostex-help` for Claude Code and Copilot, `$ghostex-help` for the rest), the way the New Coordinator line is; a Claude agent handed `$ghostex-help` does not load the skill. This supersedes the fixed `$ghostex-help` draft.
     /// User: do not create a new Quick project per question. Every Help chat lives in one project rooted at the Ghostex config folder (the OS-specific directory Rust resolves through ghostex_paths and passes as projectPath), registered on first use and reused after that.
     /// Rust owns the menu and the skill install; this owns the project lookup, the default prompt agent, and focusing the new session, so the chat takes the same draft launch path as Export transcript.
     fn gx_store_create_ghostex_help_chat(
@@ -276,12 +280,6 @@ impl GhostexGpuiApp {
         project_path: Option<String>,
         cx: &mut gpui::Context<Self>,
     ) {
-        // The open-ended row stages `$ghostex-help ` with its trailing space so the user types
-        // straight after the skill mention; only the leading whitespace goes.
-        let draft = question.trim_start().to_string();
-        if draft.trim().is_empty() {
-            return;
-        }
         let hud = self.gx_store_launch_hud();
         let agent_id = hud
             .as_deref()
@@ -303,6 +301,7 @@ impl GhostexGpuiApp {
             );
             return;
         };
+        let draft = ghostex_help_draft(&agent, &question);
         let Some(project_path) = project_path else {
             self.gx_store_create_toast(
                 "error",
@@ -574,6 +573,20 @@ Steps:
 7. Codex in boxes: boxes on this computer reuse my Codex sign-in. If the status from step 1 says Codex is not signed in for boxes and I picked a cloud provider, run `agentbox codex login` in a Ghostex terminal and finish the device sign-in in my browser.
 8. Ask whether I want box web apps at https://<box>.localhost addresses. If yes, run `agentbox install portless`.
 9. Finish with `ghostex agentbox status` and a short summary: which places are ready, what still needs me, and a reminder that cloud boxes keep billing until I stop or destroy them in Ghostex Settings > Cloud Boxes.";
+
+/// The Help chat's draft: the ghostex-help skill mention in the agent's own spelling, then the
+/// question. The open-ended row has no question, so the draft keeps a trailing space for the user
+/// to type straight after the mention.
+fn ghostex_help_draft(agent: &SidebarAgent, question: &str) -> String {
+    let family = default_agent_id_for_icon(agent.icon.as_deref())
+        .or_else(|| default_agent_id_for_icon(Some(agent.agent_id.as_str())))
+        .unwrap_or(agent.agent_id.as_str());
+    let mention = skill_invocation("ghostex-help", Some(family));
+    match question.trim() {
+        "" => format!("{mention} "),
+        question => format!("{mention} {question}"),
+    }
+}
 
 /// `response.project.projectId`.
 fn project_id_of(response: &Value) -> Option<String> {

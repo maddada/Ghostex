@@ -56,7 +56,7 @@ compacted, and whenever you are unsure what is running.
 
 ```
 ghostex coordinator start-thread --title "<its task, 3 to 6 words>" --task "<brief>" [--worktree]
-    [--agent <agent id>] [--model <model>] [--effort <level>]
+    [--agent <agent id>] [--model <model>] [--effort <level>] [--computer <name>]
 ```
 
 - Name a thread after its task in 3 to 6 words ("Accounts page redesign", "Sidebar drag and
@@ -86,6 +86,19 @@ ghostex coordinator start-thread --title "<its task, 3 to 6 words>" --task "<bri
 - When the work lives in another folder or repository, still start the thread in your own project
   (no `--project-id`) and put that folder's absolute path in the brief, so the thread shows under
   you in the sidebar.
+- When the user names another computer ("run this on Windows"), or the work needs that
+  computer's own system, files, apps or hardware, start the thread there with
+  `--computer <name>` (`ghostex computers` lists the connected ones). The thread opens in that
+  computer's project with your project's name; when its project there has another name, add
+  `--project-id <id>` with its `projectId` from `ghostex sessions --computer <name> --json`. It runs that
+  computer's agents and models, so pick `--agent` and `--model` from what that computer has. It
+  sits under you like any thread: its ref names the computer, so `agents send`,
+  `read-session-chat`, `resolve`, `reopen` and `unlink` take it unchanged, and its reports
+  arrive with the computer's name after its title. Its approval cards are answered in the thread
+  itself, not from your chat, so send the user there. While that computer is not connected, its
+  reports wait and `status` says so: tell the user the thread is waiting on that computer, and do
+  not treat it as stuck or start the same work here. Both computers need Ghostex 10.44 or later;
+  when `start-thread` refuses `--computer`, tell the user which one to update.
 - When the user asks for a separate session they chat to directly (not a thread), create it with
   `ghostex agents create <agent-id> --title "<name>" --standalone`: it is not linked, so it sits in
   the sidebar on its own and reports to nobody. `ghostex coordinator unlink <thread-ref>` turns an

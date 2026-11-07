@@ -79,22 +79,18 @@ const GPUI_TITLEBAR_HELP_ASK_ANYTHING_LABEL: &str = "Ask anything about Ghostex"
 const GPUI_TITLEBAR_HELP_ASK_ANYTHING_ICON: &str = "titlebar/sparkles.svg";
 const GPUI_TITLEBAR_HELP_HEADER_SUMMARY: &str = "Explain Ghostex or change a setting for you.";
 
-/// The bundled skill every Help chat invokes in its first message; the skill
-/// itself is installed by `ghostex guide install-skill`.
-const GHOSTEX_HELP_SKILL_INVOCATION: &str = "$ghostex-help";
-
-/// The draft staged in the new chat's composer for a Help menu row: the bare
-/// skill mention plus a trailing space for the open-ended row (the user types
-/// the question after it), otherwise the full sample question after the
-/// mention. Nothing is submitted; the user edits and presses Enter.
+/// The question a Help menu row asks: empty for the open-ended row (the user
+/// types their own), otherwise the full sample question. The store puts the
+/// ghostex-help skill mention in front of it, spelled for the Help chat's
+/// agent (`gx_store_create_ghostex_help_chat`), since only it knows the agent.
 pub(crate) fn gpui_titlebar_help_question_prompt(question_index: usize) -> Option<String> {
     if question_index == GPUI_TITLEBAR_HELP_ASK_ANYTHING_INDEX {
-        return Some(format!("{GHOSTEX_HELP_SKILL_INVOCATION} "));
+        return Some(String::new());
     }
     let question = GPUI_TITLEBAR_HELP_QUESTIONS
         .get(question_index - 1)?
         .question;
-    Some(format!("{GHOSTEX_HELP_SKILL_INVOCATION} {question}"))
+    Some(question.to_string())
 }
 
 pub(crate) fn titlebar_help_popup_content_height() -> f32 {
