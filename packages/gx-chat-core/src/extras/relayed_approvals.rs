@@ -289,6 +289,20 @@ fn body(card: &Value) -> (String, String, String, String, String, Value) {
     }
 }
 
+/// How the thread's "waiting for an answer" report row draws with this card: `full` (the report,
+/// the card under it) while it waits, `line` (the card's one line in place of both) once the user
+/// answered it here, `hidden` once it ended anywhere else.
+///
+/// CDXC:Coordinators 2026-11-08 DECISION:
+/// User (Q1708 "Yes, remove them"): a relayed approval card disappears from the coordinator's chat (and the Approvals pill, its menu and the board) once it is answered or blocked anywhere other than here, and leaves no "Message from <thread>" row behind; one the user answered here collapses to one small line saying what they chose. The report row only carried the approval, so it goes with the card.
+fn report_look(status: &str) -> &'static str {
+    match status {
+        "open" => "full",
+        "answeredHere" => "line",
+        _ => "hidden",
+    }
+}
+
 /// How an ended card reads: `(tone, bold lead, rest)`.
 fn settled_words(card: &Value) -> (&'static str, String, String) {
     let answer = text(card, "answer");
@@ -401,8 +415,7 @@ pub fn project(state: &ChatState) -> Value {
             shown["status"] = json!(status);
             shown["answer"] = json!(answer);
             let (header, title, source, code, code_label, reason) = body(card);
-            let lines: Vec<&str> = code.lines().collect();
-            let more = lines.len().saturating_sub(CODE_PREVIEW_LINES);
+            let folded = crate::questions::permission_card::fold_code(&code, CODE_PREVIEW_LINES);
             let busy = local.calls.values().any(|(pending, _)| pending == key);
             let (settled_tone, settled_lead, settled_text) = if status == "open" {
                 ("", String::new(), String::new())
@@ -422,11 +435,9 @@ pub fn project(state: &ChatState) -> Value {
                 "title": title,
                 "source": source,
                 "code": code,
-                "codePreview": (more > 0).then(|| lines[..CODE_PREVIEW_LINES].join("\n")),
-                "codeMore": (more > 0).then(|| match more {
-                    1 => "1 more line".to_string(),
-                    more => format!("{more} more lines"),
-                }),
+                "codePreview": folded.as_ref().map(|(preview, _)| preview.clone()),
+                "codeMore": folded.map(|(_, more)| more),
+                "report": report_look(&status),
                 "codeLabel": code_label,
                 "reason": reason,
                 "choices": choices(card)
@@ -755,6 +766,18 @@ mod tests {
             .unwrap()
             .starts_with("Always allow"));
         assert!(pill(&project(&state)).is_none());
+        // Answered anywhere but here: the card and its report row leave the chat.
+        assert_eq!(card["report"], "hidden");
+
+        let mut here = connector_card();
+        here["status"] = json!("answeredHere");
+        here["answer"] = json!("Approve");
+        let card = &project(&state_with(json!([here])))[0];
+        assert_eq!(card["report"], "line");
+        assert_eq!(
+            project(&state_with(json!([connector_card()])))[0]["report"],
+            "full"
+        );
 
         let mut state = state_with(json!([connector_card()]));
         answer(&mut state, &click("k1", 0), 5);

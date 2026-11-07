@@ -183,8 +183,14 @@ impl NativeChatView {
             cx,
         );
         // A thread's "waiting for an answer" report carries its relayed approval card under it
-        // (relayed_approval.rs).
+        // (relayed_approval.rs). Once the card ended the report goes with it: answered here, the
+        // card's one line stands in for both; ended anywhere else, neither shows (gx-chat-core
+        // `report_look`, which holds the user's decision).
         match self.relayed_card_for_report(id) {
+            Some(relayed) if relayed["report"] == "hidden" => gpui::div().into_any_element(),
+            Some(relayed) if relayed["report"] == "line" => {
+                self.relayed_approval_card(&relayed, "report", p, cx)
+            }
             Some(relayed) => gpui::div()
                 .flex()
                 .flex_col()

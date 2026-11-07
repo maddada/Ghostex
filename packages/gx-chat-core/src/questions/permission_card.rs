@@ -8,6 +8,50 @@ use serde_json::{json, Value};
 
 /// Code lines a folded card shows.
 const FOLDED_CODE_LINES: usize = 4;
+/// The characters one row of a card's command box holds at its narrowest common width (the
+/// Approvals menu, a phone), for counting the rows a long line wraps to.
+pub const CODE_ROW_CHARS: usize = 48;
+
+/// The rows `line` wraps to in a command box.
+pub fn wrapped_rows(line: &str) -> usize {
+    line.chars().count().div_ceil(CODE_ROW_CHARS).max(1)
+}
+
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// A folded command keeps its first `rows` wrapped rows, not its first lines: a one-line command
+/// hundreds of characters long passed the line count whole, filled the Approvals menu and pushed
+/// its Allow and Deny out of reach (2026-11-08, "i can't approve when i click on approvals").
+/// `(preview, "N more lines")`, or `None` when the whole command fits.
+pub fn fold_code(code: &str, rows: usize) -> Option<(String, String)> {
+    let total: usize = code.lines().map(wrapped_rows).sum();
+    if total <= rows {
+        return None;
+    }
+    let mut preview = Vec::new();
+    let mut left = rows;
+    for line in code.lines() {
+        if left == 0 {
+            break;
+        }
+        let used = wrapped_rows(line);
+        if used <= left {
+            preview.push(line.to_string());
+            left -= used;
+        } else {
+            let cut: String = line.chars().take(left * CODE_ROW_CHARS - 1).collect();
+            preview.push(format!("{}\u{2026}", cut.trim_end()));
+            left = 0;
+        }
+    }
+    let more = total - rows;
+    Some((
+        preview.join("\n"),
+        match more {
+            1 => "1 more line".to_string(),
+            more => format!("{more} more lines"),
+        },
+    ))
+}
 
 const GENERIC_QUESTION: &str = "Do you want to proceed?";
 
@@ -40,15 +84,13 @@ pub fn presentation(request: &Value, notice_title: &str) -> Option<Value> {
         _ => notice_title.to_string(),
     };
     let content = text(request, "content");
-    let lines: Vec<&str> = content
-        .as_deref()
-        .map(|c| c.lines().collect())
-        .unwrap_or_default();
     let hidden_by_server = request
         .get("contentHiddenLines")
         .and_then(Value::as_u64)
         .unwrap_or(0);
-    let folded_more = lines.len().saturating_sub(FOLDED_CODE_LINES);
+    let folded = content
+        .as_deref()
+        .and_then(|content| fold_code(content, FOLDED_CODE_LINES));
     let note = text(request, "note");
     let reason = note.map(|note| {
         let label = text(request, "noteLabel");
@@ -63,13 +105,32 @@ pub fn presentation(request: &Value, notice_title: &str) -> Option<Value> {
         "source": source,
         "path": path,
         "code": content,
-        "codePreview": (folded_more > 0).then(|| lines[..FOLDED_CODE_LINES].join("\n")),
-        "codeMore": (folded_more > 0).then(|| match folded_more {
-            1 => "1 more line".to_string(),
-            more => format!("{more} more lines"),
-        }),
+        "codePreview": folded.as_ref().map(|(preview, _)| preview.clone()),
+        "codeMore": folded.map(|(_, more)| more),
         "codeCut": (hidden_by_server > 0)
             .then(|| format!("{hidden_by_server} more lines in the terminal")),
         "reason": reason,
     }))
+}
+
+#[cfg(test)]
+mod fold_tests {
+    use super::*;
+
+    #[test]
+    fn a_long_one_line_command_folds_to_its_first_wrapped_rows() {
+        let command = "pkill -f gaploop.sh; ".repeat(30);
+        let (preview, more) = fold_code(&command, 4).expect("folds");
+        assert!(preview.chars().count() <= 4 * CODE_ROW_CHARS);
+        assert!(preview.ends_with('\u{2026}'));
+        assert!(more.ends_with("more lines"));
+    }
+
+    #[test]
+    fn short_commands_stay_whole_and_many_lines_fold_by_line() {
+        assert!(fold_code("ls -la", 4).is_none());
+        let (preview, more) = fold_code("a\nb\nc\nd\ne\nf", 4).unwrap();
+        assert_eq!(preview, "a\nb\nc\nd");
+        assert_eq!(more, "2 more lines");
+    }
 }

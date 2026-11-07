@@ -261,6 +261,10 @@ pub(super) fn pill_menu_column(
         .role(gpui::Role::Group)
         .aria_label(label)
         .w_full()
+        // Fills the menu's fixed height and lets a list that marks itself `flex_1().min_h_0()`
+        // shrink and scroll when the content outgrows the window.
+        .flex_1()
+        .min_h_0()
         .flex()
         .flex_col()
         .gap(px(MENU_SECTION_GAP * p.scale))

@@ -52,6 +52,10 @@ fn row_opens_key_window(command: &Value) -> bool {
     command["type"] == "replyToSelection"
 }
 
+/// The least room above its trigger (unscaled) a composer menu opens into; with less it opens
+/// below.
+const MIN_ROOM_ABOVE: f32 = 160.0;
+
 /// Which edge of its trigger a composer menu lines up with. Either way it opens 4px above the
 /// trigger (below it only when there is no room above) and stays inside the chat.
 ///
@@ -171,6 +175,14 @@ impl ChatOptionMenu {
         let scale = self.appearance.scale;
         let available = self.source_bounds;
         let height = height.min(available.size.height - px(24.0 * scale));
+        // A menu above its trigger stays above it, as `open_panel_at` placed it.
+        let room_above = anchor.top() - px(4.0 * scale) - (available.top() + px(12.0 * scale));
+        let above = depth == 0 && self.side.is_some() && room_above >= px(MIN_ROOM_ABOVE * scale);
+        let height = if above {
+            height.min(room_above)
+        } else {
+            height
+        };
         let (source, parent) = (self.source, self.parent);
         let menu = cx.entity();
         cx.defer(move |cx| {
@@ -463,6 +475,15 @@ impl ChatOptionMenu {
             * scale)
         .min(available.size.height - px(24.0 * scale));
         let margin = px(12.0 * scale);
+        // A composer menu that opens upward keeps to the room above its trigger, so a tall one
+        // (the Approvals menu with a long command) scrolls inside instead of dropping over the
+        // chat box and its pills. Only when that room is too small does it open below.
+        let room_above = anchor.top() - px(4.0 * scale) - (available.top() + margin);
+        let height = if side.is_some() && room_above >= px(MIN_ROOM_ABOVE * scale) {
+            height.min(room_above)
+        } else {
+            height
+        };
         let x = if below && right_aligned {
             anchor.right() - width
         } else if let Some(MenuSide::Pill(within)) = side {
@@ -477,7 +498,7 @@ impl ChatOptionMenu {
             anchor.left() - width - px(4.0 * scale)
         };
         let y = if side.is_some()
-            && anchor.top() - px(4.0 * scale) - height > available.top() + margin
+            && anchor.top() - px(4.0 * scale) - height >= available.top() + margin
         {
             anchor.top() - height - px(4.0 * scale)
         } else if depth == 0 || below {
