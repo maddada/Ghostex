@@ -19,6 +19,7 @@ name = "ghostex-find"
 path = "src/bin/ghostex-find.rs"
 
 [dependencies]
+ghostex-paths = { path = "../paths" }
 libc = "0.2"
 rusqlite = { version = "0.40", features = ["hooks"] }
 serde = { version = "1", features = ["derive"] }

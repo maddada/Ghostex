@@ -104,7 +104,8 @@ pub(super) fn probe_claude_agent_liveness(
 /// `cswap run <N> --share-history` shares `projects/` and `history.jsonl` but gives every account its own `CLAUDE_CONFIG_DIR` (`<swap root>/sessions/<N>-<email>/`), so its live record is in that folder's `sessions/`. Reading only `~/.claude/sessions` found the other sessions' records but never this one, and every send whose transcript stayed quiet for 10 seconds showed "Claude Code is no longer running in this terminal" for a Claude that was running (50 such cards on one Windows machine by 2026-10-09).
 fn claude_session_registry_dirs() -> Vec<PathBuf> {
     let home = crate::resume_lookup::home_dir();
-    let mut directories = vec![home.join(".claude").join("sessions")];
+    let mut directories =
+        vec![ghostex_paths::agent_homes::claude_default_home(&home).join("sessions")];
     for parent in [
         home.join(".claude-profiles"),
         crate::accounts::claude_resets::swap_root(&home).join("sessions"),

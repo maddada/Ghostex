@@ -205,7 +205,7 @@ fn agent_sign_ins(home: &Path) -> Value {
     json!({
         "claude": claude_signed_in_for_boxes(home),
         "codex": file_has_content(&home.join(".agentbox/codex-credentials.json"))
-            || file_has_content(&home.join(".codex/auth.json")),
+            || file_has_content(&ghostex_paths::agent_homes::codex_default_home(home).join("auth.json")),
     })
 }
 

@@ -111,7 +111,9 @@ pub(crate) fn claude_config_directory(agent_session_path: Option<&str>) -> PathB
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .map(|value| crate::resume_lookup::expand_home(&value))
-        .unwrap_or_else(|| crate::resume_lookup::home_dir().join(".claude"))
+        .unwrap_or_else(|| {
+            ghostex_paths::agent_homes::claude_default_home(&crate::resume_lookup::home_dir())
+        })
 }
 
 /// The task store of one Claude session, or `None` when it has no tasks.

@@ -1264,7 +1264,7 @@ pub(crate) fn get_codex_session_index_candidate_paths(
     if let Some(root) = get_codex_root_from_session_path(agent_session_path) {
         roots.push(root);
     }
-    let home_root = home_dir.join(".codex");
+    let home_root = ghostex_paths::agent_homes::codex_default_home(home_dir);
     if !roots.iter().any(|root| root == &home_root) {
         roots.push(home_root);
     }

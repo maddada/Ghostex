@@ -41,9 +41,6 @@ use crate::paths::GxserverPaths;
 /// product that hashes the same account ids.
 const DISTINCT_ID_SALT_PREFIX: &str = "ghostex-analytics-v1:";
 
-const CODEX_AUTH_RELATIVE_PATH: &str = ".codex/auth.json";
-const CLAUDE_CONFIG_RELATIVE_PATH: &str = ".claude.json";
-
 /// Which link of the chain produced the id. Reported as the `identity_source`
 /// property so we can tell how much of the user count is actually deduplicated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -124,13 +121,16 @@ fn hash_with_salt(raw: &str) -> String {
 
 fn read_codex_account_id(home: &Path) -> Option<String> {
     read_json_string_field(
-        &home.join(CODEX_AUTH_RELATIVE_PATH),
+        &ghostex_paths::agent_homes::codex_default_home(home).join("auth.json"),
         &["tokens", "account_id"],
     )
 }
 
 fn read_claude_user_id(home: &Path) -> Option<String> {
-    read_json_string_field(&home.join(CLAUDE_CONFIG_RELATIVE_PATH), &["userID"])
+    read_json_string_field(
+        &ghostex_paths::agent_homes::claude_json_path(home),
+        &["userID"],
+    )
 }
 
 /*

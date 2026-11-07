@@ -107,13 +107,19 @@ fn should_scan(options: &ScanOptions, agent: Agent) -> bool {
 
 fn scan_codex(home: &Path) -> Vec<Session> {
     let mut titles = HashMap::new();
-    load_codex_titles(&home.join(".codex"), &mut titles);
+    load_codex_titles(
+        &ghostex_paths::agent_homes::codex_default_home(home),
+        &mut titles,
+    );
     for profile in read_dirs(&home.join(".codex-profiles")) {
         load_codex_titles(&profile, &mut titles);
     }
 
     let mut files = Vec::new();
-    collect_jsonl_files(&home.join(".codex/sessions"), &mut files);
+    collect_jsonl_files(
+        &ghostex_paths::agent_homes::codex_default_home(home).join("sessions"),
+        &mut files,
+    );
     for profile in read_dirs(&home.join(".codex-profiles")) {
         collect_jsonl_files(&profile.join("sessions"), &mut files);
     }
@@ -245,9 +251,18 @@ fn parse_codex_response_item(value: &Value, ts: Option<i64>, blocks: &mut Vec<Tr
 
 fn scan_claude(home: &Path) -> Vec<Session> {
     let mut files = Vec::new();
-    collect_jsonl_files(&home.join(".claude/transcripts"), &mut files);
-    collect_jsonl_files(&home.join(".claude/projects"), &mut files);
-    collect_jsonl_files(&home.join(".claude/projects2"), &mut files);
+    collect_jsonl_files(
+        &ghostex_paths::agent_homes::claude_default_home(home).join("transcripts"),
+        &mut files,
+    );
+    collect_jsonl_files(
+        &ghostex_paths::agent_homes::claude_default_home(home).join("projects"),
+        &mut files,
+    );
+    collect_jsonl_files(
+        &ghostex_paths::agent_homes::claude_default_home(home).join("projects2"),
+        &mut files,
+    );
     for profile in read_dirs(&home.join(".claude-profiles")) {
         collect_jsonl_files(&profile.join("projects"), &mut files);
         collect_jsonl_files(&profile.join("projects2"), &mut files);

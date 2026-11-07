@@ -112,8 +112,8 @@ pub(crate) fn resolve_session_transcript_path(
 pub(crate) fn claude_project_roots() -> Vec<PathBuf> {
     let home = home_dir();
     let mut roots = vec![
-        home.join(".claude").join("projects"),
-        home.join(".claude").join("projects2"),
+        ghostex_paths::agent_homes::claude_default_home(&home).join("projects"),
+        ghostex_paths::agent_homes::claude_default_home(&home).join("projects2"),
     ];
     if let Ok(profiles) = fs::read_dir(home.join(".claude-profiles")) {
         for profile in profiles.flatten() {

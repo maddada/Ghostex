@@ -492,7 +492,7 @@ pub(super) fn read_codex_details(
         .iter()
         .find(|(name, _)| name == "CODEX_HOME")
         .map(|(_, value)| PathBuf::from(value))
-        .unwrap_or_else(|| home.join(".codex"));
+        .unwrap_or_else(|| ghostex_paths::agent_homes::codex_default_home(&home));
 
     let workspace = super::connectors::workspace_group(state, project_id, session_id);
     let servers = codex_program(live.as_ref(), &home)

@@ -35,7 +35,7 @@ pub(crate) fn bring_claude_conversation(
     // CDXC:AgentProviders 2026-11-04 WHY:
     // A profile with no `projects/` yet gets cswap's link to `~/.claude/projects` the next time `cswap run --share-history` starts it, so the conversation goes there. Creating the folder instead made it a private one cswap then had to merge before it could link it: on 2026-11-03 account 2's profile held nothing but such a folder, and its later conversations stayed out of the shared history until a quiet moment for that merge.
     let profile_projects = PathBuf::from(slot.session_dir()).join("projects");
-    let shared = home.join(".claude/projects");
+    let shared = ghostex_paths::agent_homes::claude_default_home(&home).join("projects");
     let mut targets = vec![if std::fs::symlink_metadata(&profile_projects).is_ok() {
         profile_projects
     } else {
@@ -69,7 +69,7 @@ fn is_conversation_id(id: &str) -> bool {
 
 /// `~/.claude/projects` and the projects folder of every claude-swap profile.
 fn projects_roots(home: &Path) -> Vec<PathBuf> {
-    let mut roots = vec![home.join(".claude/projects")];
+    let mut roots = vec![ghostex_paths::agent_homes::claude_default_home(home).join("projects")];
     if let Ok(profiles) = std::fs::read_dir(claude_resets::swap_root(home).join("sessions")) {
         roots.extend(
             profiles

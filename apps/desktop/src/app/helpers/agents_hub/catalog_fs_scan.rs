@@ -154,11 +154,11 @@ pub(crate) fn gpui_agents_hub_allowed_roots(home: &Path) -> Vec<PathBuf> {
     [
         home.join(".agents"),
         home.join("agents"),
-        home.join(".claude"),
+        ghostex_paths::agent_homes::claude_default_home(&home),
         home.join(".claude-profiles"),
         home.join(".codebuddy"),
         home.join(".config").join("agents"),
-        home.join(".codex"),
+        ghostex_paths::agent_homes::codex_default_home(&home),
         home.join(".codex-profiles"),
         home.join(".copilot"),
         home.join(".cursor"),
@@ -178,7 +178,7 @@ pub(crate) fn gpui_agents_hub_allowed_roots(home: &Path) -> Vec<PathBuf> {
 }
 
 pub(crate) fn gpui_agents_hub_allowed_files(home: &Path) -> Vec<PathBuf> {
-    [home.join(".claude.json")]
+    [ghostex_paths::agent_homes::claude_json_path(&home)]
         .into_iter()
         .filter_map(|path| fs::canonicalize(path).ok())
         .collect()

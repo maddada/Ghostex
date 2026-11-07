@@ -211,7 +211,7 @@ fn lookup_claude(project_path: &str, title: &str, first_prompt: &str) -> Option<
     }
 
     let home = home_dir();
-    let mut roots = vec![home.join(".claude").join("projects")];
+    let mut roots = vec![ghostex_paths::agent_homes::claude_default_home(&home).join("projects")];
     if let Ok(entries) = fs::read_dir(home.join(".claude-profiles")) {
         for entry in entries.flatten() {
             if entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
@@ -542,7 +542,7 @@ pub(crate) fn codex_homes() -> Vec<PathBuf> {
     }
     candidates.push(home.join(".codex-profiles").join("personal"));
     candidates.push(home.join(".codex-profiles").join("work"));
-    candidates.push(home.join(".codex"));
+    candidates.push(ghostex_paths::agent_homes::codex_default_home(&home));
 
     let mut seen: HashSet<PathBuf> = HashSet::new();
     let mut homes: Vec<PathBuf> = Vec::new();

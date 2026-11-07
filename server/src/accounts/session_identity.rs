@@ -41,7 +41,9 @@ pub(crate) fn display_account_id<'a>(
 pub(crate) fn login_identity(provider: Provider, root: &Path, home: &Path) -> Option<String> {
     let path = match provider {
         Provider::Codex => root.join("auth.json"),
-        Provider::Claude if root == home.join(".claude") => home.join(".claude.json"),
+        Provider::Claude if root == ghostex_paths::agent_homes::claude_default_home(&home) => {
+            ghostex_paths::agent_homes::claude_json_path(&home)
+        }
         Provider::Claude => root.join(".claude.json"),
     };
     let data: Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;

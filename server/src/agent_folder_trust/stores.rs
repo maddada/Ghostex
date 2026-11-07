@@ -229,12 +229,17 @@ fn add_to_json_list(file: &Path, list_key: &str, folder: &str) -> io::Result<()>
 /// profile. An account switch restarts Claude under another profile, so the folder is trusted in
 /// all of them.
 fn claude_config_files(home: &Path) -> Vec<PathBuf> {
-    let default_root = env_folder_or("CLAUDE_CONFIG_DIR", home.join(".claude"));
-    let mut files = vec![if default_root == home.join(".claude") {
-        home.join(".claude.json")
-    } else {
-        default_root.join(".claude.json")
-    }];
+    let default_root = env_folder_or(
+        "CLAUDE_CONFIG_DIR",
+        ghostex_paths::agent_homes::claude_default_home(&home),
+    );
+    let mut files = vec![
+        if default_root == ghostex_paths::agent_homes::claude_default_home(&home) {
+            ghostex_paths::agent_homes::claude_json_path(&home)
+        } else {
+            default_root.join(".claude.json")
+        },
+    ];
     files.extend(existing_files_in_subfolders(
         &crate::accounts::claude_resets::swap_root(home).join("sessions"),
         ".claude.json",
@@ -267,7 +272,10 @@ fn trust_in_claude_config(file: &Path, key: &str) -> io::Result<()> {
 /// `~/.codex-profiles` profile. xswap links its accounts' `config.toml` to the default one, so the
 /// shared file is written once.
 fn codex_config_files(home: &Path) -> Vec<PathBuf> {
-    let default_home = env_folder_or("CODEX_HOME", home.join(".codex"));
+    let default_home = env_folder_or(
+        "CODEX_HOME",
+        ghostex_paths::agent_homes::codex_default_home(home),
+    );
     let mut files = Vec::new();
     if default_home.is_dir() {
         files.push(default_home.join("config.toml"));

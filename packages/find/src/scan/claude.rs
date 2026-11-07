@@ -14,15 +14,15 @@ impl Scanner {
 
     pub(super) fn scan_claude(&mut self) {
         self.load_claude_session_titles();
-        let p = self.path(".claude/history.jsonl");
+        let p = self.claude_path("history.jsonl");
         if let Some(data) = read_all(&p) {
             self.parse_claude_history(&data);
         }
     }
 
     fn load_claude_session_titles(&mut self) {
-        self.load_claude_project_session_indexes(&self.path(".claude/projects"));
-        self.load_claude_project_session_indexes(&self.path(".claude/projects2"));
+        self.load_claude_project_session_indexes(&self.claude_path("projects"));
+        self.load_claude_project_session_indexes(&self.claude_path("projects2"));
         self.load_claude_profile_session_indexes();
     }
 
@@ -105,7 +105,7 @@ impl Scanner {
 
     /// Parse `~/.claude/history.jsonl` content.
     pub fn parse_claude_history(&mut self, data: &[u8]) {
-        let paste_cache = self.path(".claude/paste-cache");
+        let paste_cache = self.claude_path("paste-cache");
         for line in data.split(|&b| b == b'\n') {
             let Some(v) = parse_line(line) else { continue };
             let Some(disp) = string_field(&v, "display") else {

@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub mod agent_homes;
 pub mod durable_file;
 pub mod loopback_owner;
 pub mod portable;

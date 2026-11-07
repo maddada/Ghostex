@@ -75,7 +75,7 @@ pub(super) struct ClaudeObserver {
 }
 
 pub(super) fn session_dirs(home: &Path) -> Vec<PathBuf> {
-    let mut dirs = vec![home.join(".claude").join("sessions")];
+    let mut dirs = vec![ghostex_paths::agent_homes::claude_default_home(&home).join("sessions")];
     let profiles = crate::accounts::claude_resets::swap_root(home).join("sessions");
     if let Ok(entries) = std::fs::read_dir(profiles) {
         dirs.extend(entries.flatten().map(|entry| entry.path().join("sessions")));

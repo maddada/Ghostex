@@ -301,8 +301,12 @@ pub fn agent_skill_global_dir(home_dir: &Path, agent_id: &str) -> Option<PathBuf
         "universal" | "agent-skills" | "amp" | "cursor" | "opencode" => {
             return Some(home_dir.join(CANONICAL_AGENT_SKILLS_DIR));
         }
-        "claude-code" => ".claude/skills",
-        "codex" => ".codex/skills",
+        "claude-code" => {
+            return Some(ghostex_paths::agent_homes::claude_default_home(home_dir).join("skills"))
+        }
+        "codex" => {
+            return Some(ghostex_paths::agent_homes::codex_default_home(home_dir).join("skills"))
+        }
         "gemini-cli" => ".gemini/skills",
         "pi" => ".pi/agent/skills",
         "antigravity" => ".gemini/antigravity/skills",
@@ -605,7 +609,8 @@ pub fn create_gxserver_agent_skill_discovery_sources(
 ) -> Vec<AgentSkillDiscoveryRoot> {
     let mut sources = vec![
         AgentSkillDiscoveryRoot {
-            path: paths.agent_config_home_dir().join(".codex").join("skills"),
+            path: ghostex_paths::agent_homes::codex_default_home(paths.agent_config_home_dir())
+                .join("skills"),
             providers: vec!["codex".to_string()],
             source_kind: "global",
         },
@@ -615,14 +620,13 @@ pub fn create_gxserver_agent_skill_discovery_sources(
             source_kind: "global",
         },
         AgentSkillDiscoveryRoot {
-            path: paths.agent_config_home_dir().join(".claude").join("skills"),
+            path: ghostex_paths::agent_homes::claude_default_home(&paths.agent_config_home_dir())
+                .join("skills"),
             providers: vec!["claude".to_string()],
             source_kind: "global",
         },
         AgentSkillDiscoveryRoot {
-            path: paths
-                .agent_config_home_dir()
-                .join(".codex")
+            path: ghostex_paths::agent_homes::codex_default_home(paths.agent_config_home_dir())
                 .join("plugins")
                 .join("cache"),
             providers: vec!["codex".to_string(), "agent-skills".to_string()],

@@ -279,9 +279,9 @@ fn scan(
     use_environment: bool,
     cache: &mut ScanCache,
 ) -> Result<Vec<Conversation>, DomainStateError> {
-    let mut claude_roots = vec![home.join(".claude")];
+    let mut claude_roots = vec![ghostex_paths::agent_homes::claude_default_home(home)];
     claude_roots.extend(directories(&home.join(".claude-profiles")));
-    let mut codex_roots = vec![home.join(".codex")];
+    let mut codex_roots = vec![ghostex_paths::agent_homes::codex_default_home(home)];
     codex_roots.extend(directories(&home.join(".codex-profiles")));
     if use_environment {
         if let Some(root) = std::env::var_os("CLAUDE_CONFIG_DIR") {

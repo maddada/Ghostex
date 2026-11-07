@@ -637,6 +637,20 @@ fn resolve(home: &Path, xdg_config: &Path, spec: &str) -> PathBuf {
             None => base,
         };
     }
+    // Codex's own folder: on Windows the Profile folder's, whatever HOME says.
+    if spec == ".codex" {
+        return ghostex_paths::agent_homes::codex_default_home(home);
+    }
+    if let Some(rest) = spec.strip_prefix(".codex/") {
+        return ghostex_paths::agent_homes::codex_default_home(home).join(rest);
+    }
+    // Claude Code's own folder: on Windows USERPROFILE's, whatever HOME says.
+    if spec == ".claude" {
+        return ghostex_paths::agent_homes::claude_default_home(home);
+    }
+    if let Some(rest) = spec.strip_prefix(".claude/") {
+        return ghostex_paths::agent_homes::claude_default_home(home).join(rest);
+    }
     home.join(spec)
 }
 

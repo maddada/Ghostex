@@ -22,7 +22,7 @@ impl Scanner {
 
     pub(super) fn scan_codex(&mut self) {
         self.load_codex_session_index_titles();
-        if let Some(data) = read_all(&self.path(".codex/history.jsonl")) {
+        if let Some(data) = read_all(&self.codex_path("history.jsonl")) {
             self.parse_codex_history(&data);
         }
         self.scan_codex_sessions();
@@ -30,7 +30,7 @@ impl Scanner {
     }
 
     fn load_codex_session_index_titles(&mut self) {
-        let Some(data) = read_all(&self.path(".codex/session_index.jsonl")) else {
+        let Some(data) = read_all(&self.codex_path("session_index.jsonl")) else {
             return;
         };
         for line in data.split(|&b| b == b'\n') {
@@ -93,7 +93,7 @@ impl Scanner {
     }
 
     fn scan_codex_sessions(&mut self) {
-        let base = self.path(".codex/sessions");
+        let base = self.codex_path("sessions");
         let mut files: Vec<PathBuf> = Vec::new();
         for year in read_dir_sorted(&base) {
             for month in read_dir_sorted(&year) {

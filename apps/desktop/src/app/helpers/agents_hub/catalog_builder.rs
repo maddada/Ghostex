@@ -59,7 +59,18 @@ impl GpuiAgentsHubCatalogBuilder {
     }
 
     pub(crate) fn home_path(&self, parts: &[&str]) -> PathBuf {
-        let mut path = self.home.clone();
+        // Codex's own folder: on Windows the Profile folder's, whatever HOME says.
+        let (mut path, parts) = match parts.split_first() {
+            Some((&".codex", rest)) => (
+                ghostex_paths::agent_homes::codex_default_home(&self.home),
+                rest,
+            ),
+            Some((&".claude", rest)) => (
+                ghostex_paths::agent_homes::claude_default_home(&self.home),
+                rest,
+            ),
+            _ => (self.home.clone(), parts),
+        };
         for part in parts {
             path.push(part);
         }

@@ -195,8 +195,10 @@ fn signed_out_default_profile(home: &Path, slot: &str) -> Option<String> {
 
 /// Whether the default login certainly holds no working credential: no credential material at all, read the way Claude Swap reads a profile's (no non-empty `~/.claude/.credentials.json` and, on macOS, a Keychain miss), or material Claude itself reports signed out. A Keychain or a Claude that cannot answer counts as signed in, which leaves cswap's own choice alone.
 fn default_login_signed_out(home: &Path) -> bool {
-    let file = std::fs::read_to_string(home.join(".claude/.credentials.json"))
-        .is_ok_and(|text| !text.trim().is_empty());
+    let file = std::fs::read_to_string(
+        ghostex_paths::agent_homes::claude_default_home(home).join(".credentials.json"),
+    )
+    .is_ok_and(|text| !text.trim().is_empty());
     #[cfg(target_os = "macos")]
     if !file && keychain_item_missing("Claude Code-credentials") {
         return true;

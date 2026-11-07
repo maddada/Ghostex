@@ -137,8 +137,10 @@ impl ClaudeSlot {
 /// The access tokens and organization of the default Claude login (`~/.claude`), for a Claude
 /// cloud session that runs on the current CLI login rather than a saved account.
 pub(crate) fn default_login_tokens(home: &Path) -> Option<(Vec<String>, String)> {
-    let config: Value =
-        serde_json::from_slice(&std::fs::read(home.join(".claude.json")).ok()?).ok()?;
+    let config: Value = serde_json::from_slice(
+        &std::fs::read(ghostex_paths::agent_homes::claude_json_path(&home)).ok()?,
+    )
+    .ok()?;
     let organization = config["oauthAccount"]["organizationUuid"]
         .as_str()
         .filter(|value| !value.is_empty())?
@@ -185,7 +187,7 @@ fn usable_tokens(sources: Vec<Option<String>>) -> Vec<String> {
 }
 
 fn default_login_matches(home: &Path, email: &str, organization: &str) -> bool {
-    std::fs::read(home.join(".claude.json"))
+    std::fs::read(ghostex_paths::agent_homes::claude_json_path(&home))
         .ok()
         .and_then(|raw| serde_json::from_slice::<Value>(&raw).ok())
         .is_some_and(|config| {

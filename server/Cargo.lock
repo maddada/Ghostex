@@ -1372,6 +1372,7 @@ dependencies = [
 name = "ghostex-find"
 version = "0.1.0"
 dependencies = [
+ "ghostex-paths",
  "libc",
  "rusqlite",
  "serde",

@@ -606,7 +606,12 @@ pub(crate) fn settings_snapshot(family: &str) -> Value {
             })
         }
         "codex" => {
-            let config = dir("CODEX_HOME", ".codex")
+            let config = std::env::var_os("CODEX_HOME")
+                .map(PathBuf::from)
+                .or_else(|| {
+                    home.as_ref()
+                        .map(|home| ghostex_paths::agent_homes::codex_default_home(home))
+                })
                 .and_then(|dir| fs::read_to_string(dir.join("config.toml")).ok())
                 .and_then(|text| text.parse::<toml_edit::DocumentMut>().ok());
             let text = |table: &toml_edit::Item, key: &str| {

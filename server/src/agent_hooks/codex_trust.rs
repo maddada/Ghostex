@@ -219,7 +219,9 @@ fn codex_hook_key_source_with(
     let Some(codex_home) = hooks_path.parent() else {
         return path_string(hooks_path);
     };
-    let explicit = codex_home != hook_paths.home_dir.join(".codex") || codex_home_set;
+    let explicit = codex_home
+        != ghostex_paths::agent_homes::codex_default_home(&hook_paths.home_dir)
+        || codex_home_set;
     let canonical = explicit.then(|| canonicalize(codex_home)).flatten();
     let file_name = hooks_path
         .file_name()

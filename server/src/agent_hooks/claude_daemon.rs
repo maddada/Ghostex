@@ -77,8 +77,9 @@ pub(crate) fn terminal_is_parked(agent_key: &str) -> bool {
 fn claude_config_dir() -> PathBuf {
     env_string("CLAUDE_CONFIG_DIR")
         .map(PathBuf::from)
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".claude")))
-        .unwrap_or_else(|| PathBuf::from(".claude"))
+        .unwrap_or_else(|| {
+            ghostex_paths::agent_homes::claude_default_home(&crate::resume_lookup::home_dir())
+        })
 }
 
 /// The live interactive `claude` whose session record says it shows daemon job `job`, newest

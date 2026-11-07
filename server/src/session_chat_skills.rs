@@ -84,7 +84,7 @@ pub fn read_session_chat_skills(
 
     for relative in provider_skill_roots(&agent_id) {
         roots.push((
-            join_relative(&paths.home_dir, relative),
+            home_relative(&paths.home_dir, relative),
             SkillRootSpec {
                 source_kind: "global",
             },
@@ -92,7 +92,9 @@ pub fn read_session_chat_skills(
     }
     if agent_id == "codex" {
         roots.push((
-            paths.home_dir.join(".codex").join("plugins").join("cache"),
+            ghostex_paths::agent_homes::codex_default_home(&paths.home_dir)
+                .join("plugins")
+                .join("cache"),
             SkillRootSpec {
                 source_kind: "pluginCache",
             },
@@ -105,8 +107,10 @@ pub fn read_session_chat_skills(
         discover_root_skills(&root, spec, &mut seen_skill_paths, &mut skills);
     }
     let installed_plugin_roots = if agent_id == "claude" {
-        let claude_home =
-            claude_config_dir.map_or_else(|| paths.home_dir.join(".claude"), Path::to_path_buf);
+        let claude_home = claude_config_dir.map_or_else(
+            || ghostex_paths::agent_homes::claude_default_home(&paths.home_dir),
+            Path::to_path_buf,
+        );
         let plugins = enabled_claude_plugins(&claude_home, project_path);
         for (plugin, install) in &plugins {
             discover_claude_plugin_skills(plugin, install, &mut skills);
@@ -490,6 +494,21 @@ fn project_skill_folders(start: &Path, walk: ProjectSkillWalk, home_dir: &Path) 
         }
     }
     folders
+}
+
+/// A folder under the user's home, where `.codex` and `.claude` are the folders Codex and Claude
+/// Code themselves use (on Windows under the Profile folder and USERPROFILE, whatever HOME says;
+/// `ghostex_paths::agent_homes`).
+fn home_relative(home: &Path, parts: &[&str]) -> PathBuf {
+    match parts.split_first() {
+        Some((&".codex", rest)) => {
+            join_relative(&ghostex_paths::agent_homes::codex_default_home(home), rest)
+        }
+        Some((&".claude", rest)) => {
+            join_relative(&ghostex_paths::agent_homes::claude_default_home(home), rest)
+        }
+        _ => join_relative(home, parts),
+    }
 }
 
 fn join_relative(root: &Path, parts: &[&str]) -> PathBuf {

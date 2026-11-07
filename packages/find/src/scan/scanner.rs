@@ -32,6 +32,18 @@ impl Scanner {
         self.home.join(suffix)
     }
 
+    /// A file in Codex's own folder, which on Windows sits in the Profile folder whatever HOME
+    /// says (`ghostex_paths::agent_homes`).
+    pub(super) fn codex_path(&self, suffix: &str) -> PathBuf {
+        ghostex_paths::agent_homes::codex_default_home(&self.home).join(suffix)
+    }
+
+    /// A file in Claude Code's own folder, which on Windows sits under USERPROFILE whatever HOME
+    /// says (`ghostex_paths::agent_homes`).
+    pub(super) fn claude_path(&self, suffix: &str) -> PathBuf {
+        ghostex_paths::agent_homes::claude_default_home(&self.home).join(suffix)
+    }
+
     pub fn scan_all(&mut self) {
         self.scan_claude();
         self.scan_codex();

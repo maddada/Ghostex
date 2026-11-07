@@ -10,7 +10,7 @@ use super::config::{
     PI_EXTENSION_MARKER,
 };
 use super::install::read_json_object;
-use super::probing::{list_profile_hook_paths, read_file_text};
+use super::probing::{list_profile_hook_paths, normalize_environment_path, read_file_text};
 
 #[derive(Clone, Debug)]
 pub(crate) struct CodexHookSessionIdentity {
@@ -142,17 +142,22 @@ pub(crate) fn read_claude_hook_surface_records(
     records
 }
 
+/// The folder Codex uses: CODEX_HOME (when this profile reads the environment), else its default
+/// `.codex`, which on Windows sits in the Profile folder whatever HOME says
+/// (`ghostex_paths::agent_homes`).
+pub(crate) fn codex_home(hook_paths: &HookPaths) -> PathBuf {
+    hook_paths
+        .respect_config_environment
+        .then(|| std::env::var("CODEX_HOME").ok())
+        .flatten()
+        .and_then(|value| normalize_environment_path(Some(&value), &hook_paths.home_dir))
+        .unwrap_or_else(|| ghostex_paths::agent_homes::codex_default_home(&hook_paths.home_dir))
+}
+
 pub(crate) fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec<PathBuf> {
     match agent_id {
         "codex" => {
-            let mut paths = vec![resolve_config_directory(
-                &hook_paths.home_dir,
-                hook_paths.respect_config_environment,
-                "CODEX_HOME",
-                ".codex",
-                None,
-            )
-            .join("hooks.json")];
+            let mut paths = vec![codex_home(hook_paths).join("hooks.json")];
             paths.extend(list_profile_hook_paths(
                 &hook_paths.home_dir,
                 ".codex-profiles",
@@ -161,7 +166,11 @@ pub(crate) fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec
             paths
         }
         "claude" => {
-            let mut paths = vec![hook_paths.home_dir.join(".claude").join("settings.json")];
+            let mut paths =
+                vec![
+                    ghostex_paths::agent_homes::claude_default_home(&hook_paths.home_dir)
+                        .join("settings.json"),
+                ];
             paths.extend(list_profile_hook_paths(
                 &hook_paths.home_dir,
                 ".claude-profiles",

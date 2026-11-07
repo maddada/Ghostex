@@ -97,7 +97,7 @@ fn installed_plugins(claude_home: &Path) -> Vec<(String, PathBuf)> {
 }
 
 fn build_index(home: &Path, folder: Option<&Path>) -> Index {
-    let claude_home = home.join(".claude");
+    let claude_home = ghostex_paths::agent_homes::claude_default_home(&home);
     let mut index = Index::new();
     // Claude reads the project's skills from the session's folder and the folders above it.
     if let Some(folder) = folder {

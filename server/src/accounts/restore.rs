@@ -208,7 +208,10 @@ pub(super) fn saved_copy_newer_than_default(home: &Path, slot: &ClaudeSlot) -> b
     let Ok(backup) = saved_copy(home, slot) else {
         return false;
     };
-    let Ok(default) = profile_login(&home.join(".claude"), Some("Claude Code-credentials")) else {
+    let Ok(default) = profile_login(
+        &ghostex_paths::agent_homes::claude_default_home(&home),
+        Some("Claude Code-credentials"),
+    ) else {
         return false;
     };
     saved_copy_ahead_of_default(backup.as_ref(), default.as_ref())

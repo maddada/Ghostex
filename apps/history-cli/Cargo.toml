@@ -6,6 +6,7 @@ description = "Alt-screen terminal history viewer for local agent transcripts"
 license = "MIT"
 
 [dependencies]
+ghostex-paths = { path = "../../packages/paths" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 crossterm = "0.29"
 ratatui = "0.30"

@@ -5,8 +5,16 @@ use std::path::{Path, PathBuf};
 /// A process without the config variable runs on the provider's default login: cswap launches plain `claude` when the selected account is already the default, so treating a missing variable as unverifiable failed every switch to that account. Only an environment that cannot be read stays unverified.
 pub(crate) fn identity(process_id: i64, agent: &str, home: &Path) -> Option<String> {
     let (provider, key, default_root) = match agent {
-        "claude" => (Provider::Claude, "CLAUDE_CONFIG_DIR", home.join(".claude")),
-        "codex" => (Provider::Codex, "CODEX_HOME", home.join(".codex")),
+        "claude" => (
+            Provider::Claude,
+            "CLAUDE_CONFIG_DIR",
+            ghostex_paths::agent_homes::claude_default_home(&home),
+        ),
+        "codex" => (
+            Provider::Codex,
+            "CODEX_HOME",
+            ghostex_paths::agent_homes::codex_default_home(home),
+        ),
         _ => return None,
     };
     let root = match environment_value(process_id, key)? {
