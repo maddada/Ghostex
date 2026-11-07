@@ -1,11 +1,11 @@
-//! The Project sidebar as one list for every machine: a project that is on several machines is
-//! one entry, with the sessions of every copy in it.
+//! The Project sidebar as one list for every machine: a project that is on several machines (or
+//! cloned twice on one) is one entry, with the sessions of every copy in it.
 //!
 //! CDXC:RemoteMachines 2026-11-05 DECISION:
-//! User: "i wanna switch to showing the projects from all my machines without a machine picker basically as much as possible ... if same project is on both machines then should just have 1 entry in my sidebar for that project". Unless Settings › Sidebar's Separate by machine is on, this computer's list takes every connected machine's projects: a project matches another by git remote, then by folder name, with the Unified sidebar's rule (`unified_sidebar::repo`, Q1351); two clones of one repository on the same machine were one entry too (Q1352, replaced by the 2026-11-07 decision below); the sessions of every copy are mixed in one list, each one from another machine carrying that machine's name (Q1350); and the header's creating actions (New Terminal, Create Agent, the ⋯ menu's Add Worktree, History and the rest) go to the copy a session of the project last started in (Q1353). A worktree project and a bot are never merged: a worktree is its own entry under its parent, and bots stay in Bots. While Worktree sessions show in their project is on, a worktree's sessions are listed in its parent's entry instead, on every machine (CDXC:Worktrees 2026-11-06 in worktree_fold.rs).
+//! User: "i wanna switch to showing the projects from all my machines without a machine picker basically as much as possible ... if same project is on both machines then should just have 1 entry in my sidebar for that project". Unless Settings › Sidebar's Separate by machine is on, this computer's list takes every connected machine's projects: a project matches another by git remote, then by folder name, with the Unified sidebar's rule (`unified_sidebar::repo`, Q1351); two clones of one repository on the same machine are one entry too (Q1352); the sessions of every copy are mixed in one list, each one from another machine carrying that machine's name (Q1350); and the header's creating actions (New Terminal, Create Agent, the ⋯ menu's Add Worktree, History and the rest) go to the copy a session of the project last started in (Q1353). A worktree project and a bot are never merged: a worktree is its own entry under its parent, and bots stay in Bots. While Worktree sessions show in their project is on, a worktree's sessions are listed in its parent's entry instead, on every machine (CDXC:Worktrees 2026-11-06 in worktree_fold.rs).
 //!
 //! CDXC:RemoteMachines 2026-11-07 DECISION:
-//! Issue #461 (one computer, 15 projects that are subfolders of one monorepo, in 6 Spaces): the merge only ever joins the same project seen on different computers. Two projects of one machine are never one entry, whatever their remote: subfolders of one repository and two clones of it each keep their own entry, their own Space and their own sessions (this replaces Q1352's "two clones on the same machine are one entry"). The key a project matches by is its repository and its folder inside that repository (the path below `gitRepositoryRootPath`), so `monorepo/trading` on one computer joins `monorepo/trading` on another and never `monorepo/` or `monorepo/product-x`. Keying by the remote alone put the Product Space's sessions in the Trading project's entry, so the Trading Space drew them and its Space switch restored one of them.
+//! Issue #461 (one computer, 15 projects that are subfolders of one monorepo, in 6 Spaces): a project's key is its repository AND its folder inside that repository (the path below `gitRepositoryRootPath`), not the repository alone. Different folders of one repository (`monorepo/`, `monorepo/trading`, `monorepo/product-x`) are always separate entries, on one computer and across computers, each with its own Space and sessions. Copies at the same folder of the repository still merge: on another computer, and, per Q1352, a second clone on the same computer (both at the root, or both at `trading`). Keying by the remote alone put every subfolder's sessions in the first subfolder's entry, so the Trading Space drew the Product Space's sessions and its Space switch restored one of them.
 //!
 //! CDXC:RemoteMachines 2026-11-05 WHY:
 //! A copy merged into another entry gives it its sessions only: its user-made session groups are listed with the entry's own sessions rather than as groups, because a session group is drawn inside the project that owns its id (`owner_project_group_id`), and that project is not drawn. A project only another machine has keeps its session groups, exactly as that machine's tab drew them.
@@ -61,8 +61,8 @@ pub(super) struct MergeInput<'a> {
 /// What the list needs from the merge besides the plans it rewrote.
 #[derive(Default)]
 pub(super) struct MergeOutcome {
-    /// The group ids no longer drawn (another machine's copy and its session groups), each with
-    /// the entry that now lists its sessions: the focus follows them there.
+    /// The group ids no longer drawn (another machine's copy, a second clone, and their session
+    /// groups), each with the entry that now lists its sessions: the focus follows them there.
     pub(super) merged_into: BTreeMap<String, String>,
 }
 
@@ -166,7 +166,8 @@ pub(super) fn merge_machines(
         let key = canonical
             .get(&identity.key)
             .map_or(identity.key, |merged| merged.key.clone());
-        // A folder with no origin is keyed by its own folder name already.
+        // Each folder of a repository is its own project (#461). A folder with no origin is
+        // keyed by its own folder name already.
         match folder_in_repository(project).filter(|_| from_origin) {
             Some(folder) => format!("{key}#{folder}"),
             None => key,
@@ -179,18 +180,15 @@ pub(super) fn merge_machines(
         .flat_map(|plan| plan.rows.iter())
         .filter_map(|row| row.row.key.clone())
         .collect();
-    // The entries each project key is drawn as, by their index in `plans`, in list order. A key
-    // has several when one machine has that project more than once (two clones of a repository),
-    // and each of those stays its own entry (`entry_for`).
-    let mut entries_of_key: HashMap<String, Vec<usize>> = HashMap::new();
-    // The entry each copy is listed in, for a worktree to find its parent's.
-    let mut entry_of_copy: HashMap<ProjectKey, usize> = HashMap::new();
+    // The entry each repository is drawn as, by its index in `plans`.
+    let mut entry_of_key: HashMap<String, usize> = HashMap::new();
     let mut copies: BTreeMap<usize, Vec<Copy>> = BTreeMap::new();
     let mut names: BTreeMap<usize, Vec<MachineChip>> = BTreeMap::new();
+    let mut dropped: BTreeSet<usize> = BTreeSet::new();
     let local_chip = machine_chip(input.inputs, LOCAL_MACHINE_ID);
 
-    // This computer's projects first, in its own order, each its own entry: two projects of one
-    // machine are never merged, whatever remote they share.
+    // This computer's projects first, in its own order: a second clone (at the same folder of the
+    // repository) joins the first.
     let mut index = 0;
     while index < plans.len() {
         let Some(project) = mergeable(plans[index].kind, plans[index].project.as_deref()) else {
@@ -200,13 +198,6 @@ pub(super) fn merge_machines(
         let project = Arc::new(project.clone());
         let key = key_of(&project);
         let subgroups = subgroups_after(plans, index);
-        entry_of_copy.insert(
-            ProjectKey {
-                machine: MachineId::Local,
-                project_id: project.project_id.clone(),
-            },
-            index,
-        );
         let copy = Copy {
             machine: MachineId::Local,
             project_id: project.project_id.clone(),
@@ -214,9 +205,27 @@ pub(super) fn merge_machines(
             project,
             remote_machine: None,
         };
-        entries_of_key.entry(key).or_default().push(index);
-        copies.insert(index, vec![copy]);
-        names.insert(index, vec![local_chip.clone()]);
+        match entry_of_key.get(&key).copied() {
+            None => {
+                entry_of_key.insert(key, index);
+                copies.insert(index, vec![copy]);
+                names.insert(index, vec![local_chip.clone()]);
+            }
+            Some(entry) => {
+                let entry_id = plans[entry].group_id.clone();
+                for merged in std::iter::once(index).chain(subgroups.clone()) {
+                    let rows = std::mem::take(&mut plans[merged].rows);
+                    plans[entry].rows.extend(rows);
+                    let folded = std::mem::take(&mut plans[merged].folded_worktrees);
+                    plans[entry].folded_worktrees.extend(folded);
+                    outcome
+                        .merged_into
+                        .insert(plans[merged].group_id.clone(), entry_id.clone());
+                    dropped.insert(merged);
+                }
+                copies.entry(entry).or_default().push(copy);
+            }
+        }
         index = subgroups.end;
     }
 
@@ -278,21 +287,9 @@ pub(super) fn merge_machines(
                 .worktree
                 .as_ref()
                 .filter(|_| fold_worktrees)
-                .and_then(|worktree| {
-                    let parent = ProjectKey {
-                        machine: guest.machine.clone(),
-                        project_id: worktree.parent_project_id.clone(),
-                    };
-                    entry_of_copy.get(&parent).copied().or_else(|| {
-                        machine
-                            .contexts
-                            .get(&worktree.parent_project_id)
-                            .and_then(|parent| mergeable(GroupKind::Project, Some(parent)))
-                            .and_then(|parent| {
-                                entry_for(&entries_of_key, &copies, &key_of(parent), &guest.machine)
-                            })
-                    })
-                });
+                .and_then(|worktree| machine.contexts.get(&worktree.parent_project_id))
+                .and_then(|parent| mergeable(GroupKind::Project, Some(parent)))
+                .and_then(|parent| entry_of_key.get(&key_of(parent)).copied());
             if let Some(entry) = parent_entry {
                 let entry_id = plans[entry].group_id.clone();
                 let worktree = row_worktree(&group_id, project);
@@ -328,9 +325,8 @@ pub(super) fn merge_machines(
                 });
                 continue;
             }
-            let entry = mergeable(GroupKind::Project, Some(project)).and_then(|project| {
-                entry_for(&entries_of_key, &copies, &key_of(project), &guest.machine)
-            });
+            let entry = mergeable(GroupKind::Project, Some(project))
+                .and_then(|project| entry_of_key.get(&key_of(project)).copied());
             let copy = Copy {
                 machine: guest.machine.clone(),
                 project_id: project_id.clone(),
@@ -358,7 +354,6 @@ pub(super) fn merge_machines(
                         .insert(subgroup.sidebar_group_id.clone(), entry_id.clone());
                 }
                 copies.entry(entry).or_default().push(copy);
-                entry_of_copy.insert(project_key.clone(), entry);
                 let entry_names = names.entry(entry).or_default();
                 if !entry_names.contains(&guest.chip) {
                     entry_names.push(guest.chip.clone());
@@ -412,12 +407,8 @@ pub(super) fn merge_machines(
                 });
             }
             if let Some(project) = mergeable(GroupKind::Project, Some(project)) {
-                entries_of_key
-                    .entry(key_of(project))
-                    .or_default()
-                    .push(entry);
+                entry_of_key.insert(key_of(project), entry);
             }
-            entry_of_copy.insert(project_key, entry);
             copies.insert(entry, vec![copy]);
             names.insert(entry, vec![guest.chip.clone()]);
         }
@@ -433,6 +424,14 @@ pub(super) fn merge_machines(
         if entry_copies.len() > 1 {
             plans[*entry].action_target = last_used_copy(&plans[*entry], entry_copies);
         }
+    }
+    if !dropped.is_empty() {
+        let mut index = 0;
+        plans.retain(|_| {
+            let keep = !dropped.contains(&index);
+            index += 1;
+            keep
+        });
     }
     (cache, outcome)
 }
@@ -604,22 +603,6 @@ fn identity_of(project: &ProjectContextInput) -> RepoIdentity {
         None,
         &project.title,
     )
-}
-
-/// The entry a copy on `machine` joins: the first drawn for its key that holds no copy from that
-/// machine yet, so only copies on different machines share one, and a machine's second clone of a
-/// repository joins the other machine's second clone, if it has one.
-fn entry_for(
-    entries_of_key: &HashMap<String, Vec<usize>>,
-    copies: &BTreeMap<usize, Vec<Copy>>,
-    key: &str,
-    machine: &MachineId,
-) -> Option<usize> {
-    entries_of_key.get(key)?.iter().copied().find(|entry| {
-        copies
-            .get(entry)
-            .is_none_or(|copies| copies.iter().all(|copy| copy.machine != *machine))
-    })
 }
 
 /// Where a project's folder is inside its repository (`product-x`, `company/sub-co`), lowercase,

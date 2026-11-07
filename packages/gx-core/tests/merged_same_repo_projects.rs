@@ -1,7 +1,8 @@
-//! Issue #461: with Separate by machine off, the one-list sidebar merges a project only with the
-//! same project on another computer. On one computer, folders that share a git remote (subfolders
-//! of one monorepo, or two clones of it) stay separate projects, each in its own Space with its own
-//! sessions, and a Space switch restores a session of that Space's own projects.
+//! Issue #461: with Separate by machine off, the one-list sidebar keys a project by its repository
+//! and its folder inside it. Different folders of one repository (subfolders of a monorepo) stay
+//! separate projects, each in its own Space with its own sessions, and a Space switch restores a
+//! session of that Space's own projects. Copies at the same folder still merge: on another
+//! computer, and a second clone on the same computer (Q1352).
 
 use ghostex_gx_core::protocol::SidebarSpacesState;
 use ghostex_gx_core::{
@@ -16,6 +17,7 @@ const REMOTE: &str = "remote-hp";
 const ORIGIN: &str = "git@github.com:me/monorepo.git";
 
 /// One project with one Active group: (id, path, repository root, session ids).
+#[derive(Clone, Copy)]
 struct Project<'a> {
     id: &'a str,
     path: &'a str,
@@ -23,8 +25,8 @@ struct Project<'a> {
     sessions: &'a [&'a str],
 }
 
-/// This computer: the reporter's monorepo, three of its subfolders, and a second clone of it.
-const LOCAL_PROJECTS: [Project<'static>; 5] = [
+/// This computer, as the reporter had it: a monorepo and three of its subfolders.
+const LOCAL_PROJECTS: [Project<'static>; 4] = [
     Project {
         id: "MONO",
         path: "/Users/me/dev/monorepo",
@@ -49,21 +51,30 @@ const LOCAL_PROJECTS: [Project<'static>; 5] = [
         root: "/Users/me/dev/monorepo",
         sessions: &["SUB1"],
     },
+];
+
+/// A second clone of the same repository on this computer, at its root and at `trading`.
+const SECOND_CLONE: [Project<'static>; 2] = [
     Project {
         id: "CL",
         path: "/Users/me/dev/monorepo-2",
         root: "/Users/me/dev/monorepo-2",
         sessions: &["CL1"],
     },
+    Project {
+        id: "CL-TR",
+        path: "/Users/me/dev/monorepo-2/trading",
+        root: "/Users/me/dev/monorepo-2",
+        sessions: &["CT1"],
+    },
 ];
 
 /// The Space each local project is in.
-const SPACES: [(&str, &str, &str); 5] = [
+const SPACES: [(&str, &str, &str); 4] = [
     ("space-a", "A", "MONO"),
     ("space-product", "Product", "PX"),
     ("space-trading", "Trading", "TR"),
     ("space-startup", "Startup", "SUB"),
-    ("space-clone", "Clone", "CL"),
 ];
 
 fn frame(server_id: &str, origin: &str, projects: &[Project<'_>]) -> String {
@@ -150,13 +161,13 @@ fn spaces_document() -> SidebarSpacesState {
 
 /// This computer alone, as the reporter had it: one gxserver, its Spaces document applied.
 fn one_computer() -> Core {
+    computer_with(&LOCAL_PROJECTS)
+}
+
+fn computer_with(projects: &[Project<'_>]) -> Core {
     let mut core = Core::new();
-    core.handle_raw_frame(
-        MachineId::Local,
-        &frame("S9l", ORIGIN, &LOCAL_PROJECTS),
-        NOW_MS,
-    )
-    .expect("the local frame parses");
+    core.handle_raw_frame(MachineId::Local, &frame("S9l", ORIGIN, projects), NOW_MS)
+        .expect("the local frame parses");
     core.handle(
         Event::Intent(Intent::SetSideState {
             machine: MachineId::Local,
@@ -246,8 +257,6 @@ fn folders_of_one_repository_on_one_computer_stay_separate_projects() {
             local("PX", &["PX1", "PX2"]),
             local("TR", &["TR1"]),
             local("SUB", &["SUB1"]),
-            // A second clone of the same repository is a different folder too.
-            local("CL", &["CL1"]),
         ]
     );
     // None of them is "on several computers".
@@ -255,6 +264,34 @@ fn folders_of_one_repository_on_one_computer_stay_separate_projects() {
         .groups
         .iter()
         .all(|group| group.core.machine_names.is_empty()));
+}
+
+/// Q1352: the same repository cloned twice on one computer, opened at the same folder of it, is
+/// one entry; a different folder of either clone is not.
+#[test]
+fn two_clones_at_the_same_folder_on_one_computer_are_one_entry() {
+    let projects: Vec<Project<'_>> = LOCAL_PROJECTS
+        .iter()
+        .chain(SECOND_CLONE.iter())
+        .copied()
+        .collect();
+    let core = computer_with(&projects);
+    let view = SidebarViewModel::build_from_scratch(&core, &inputs(&["local"], None), NOW_MS);
+    assert_eq!(
+        entries(&view),
+        vec![
+            (
+                "MONO".to_string(),
+                vec!["local/MONO/MONO1".to_string(), "local/CL/CL1".to_string()]
+            ),
+            local("PX", &["PX1", "PX2"]),
+            (
+                "TR".to_string(),
+                vec!["local/TR/TR1".to_string(), "local/CL-TR/CT1".to_string()]
+            ),
+            local("SUB", &["SUB1"]),
+        ]
+    );
 }
 
 #[test]
@@ -325,7 +362,7 @@ fn the_same_project_on_another_computer_still_merges_into_its_own_entry() {
             root: "/home/me/monorepo",
             sessions: &["RT1"],
         },
-        // Two clones there too: the second joins this computer's second clone.
+        // A second clone of the repository there is the same project too (Q1352).
         Project {
             id: "R-CL",
             path: "/home/me/monorepo-copy",
@@ -355,7 +392,11 @@ fn the_same_project_on_another_computer_still_merges_into_its_own_entry() {
         vec![
             (
                 "MONO".to_string(),
-                vec!["local/MONO/MONO1".to_string(), remote("R-MONO", "RM1")]
+                vec![
+                    "local/MONO/MONO1".to_string(),
+                    remote("R-MONO", "RM1"),
+                    remote("R-CL", "RC1"),
+                ]
             ),
             local("PX", &["PX1", "PX2"]),
             (
@@ -363,10 +404,6 @@ fn the_same_project_on_another_computer_still_merges_into_its_own_entry() {
                 vec!["local/TR/TR1".to_string(), remote("R-TR", "RT1")]
             ),
             local("SUB", &["SUB1"]),
-            (
-                "CL".to_string(),
-                vec!["local/CL/CL1".to_string(), remote("R-CL", "RC1")]
-            ),
             ("R-HEALTH".to_string(), vec![remote("R-HEALTH", "RH1")]),
         ]
     );
