@@ -2609,7 +2609,8 @@ used first. Picking a model or a reasoning level (Low, Medium, or High) types
 Hermes' own `/model <model> --reasoning <level>` into the session, with
 `--provider` added for a model from another provider. Every Hermes
 pick applies to that session only and never changes the bot's config. If Hermes
-refuses the model, the picker shows its reason. A new Hermes chat gets the
+refuses the model, the picker shows its reason under Not applied; hover a long
+reason to read all of it. A new Hermes chat gets the
 picker once its first message is sent; until then the pill shows the model with
 Change it in the CLI, and you switch by typing `/model` in the terminal.
 
@@ -2621,7 +2622,8 @@ up as `openai-codex`); new models appear in the picker within a couple of minute
 Picking a model or a level types Pi's own `/model <provider>/<id>` and
 `/thinking <level>`, or OMP's `/switch <provider>/<id>:<level>`, into the
 session. Every Pi and OMP pick applies to that session only and leaves the
-agent's default alone. If the agent refuses a level, the picker shows its reason.
+agent's default alone. If the agent refuses a level, the picker shows its reason
+under Not applied; hover a long reason to read all of it.
 Until Ghostex has read the agent's model list, the pill shows the model with
 Change it in the CLI.
 
