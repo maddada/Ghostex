@@ -139,6 +139,7 @@ pub(crate) fn wake_for_retried_message(
     let project_id = project_id.to_string();
     let session_id = session_id.to_string();
     let prompt_id = prompt_id.to_string();
+    crate::session_chat_queue_runtime::forget_repeated_restarts(&project_id, &session_id);
     tokio::spawn(async move {
         if !provider_missing(&state, &project_id, &session_id).await {
             return;
@@ -285,12 +286,25 @@ pub(crate) fn wake_session_holding_startup_send(
             if prompt_id.as_deref().is_some_and(|prompt_id| {
                 held_message_young_enough(&state, &project_id, &session_id, prompt_id)
             }) {
-                crate::session_chat_agent_restart::heal_failed_start(
+                if let Some(reason) = crate::session_chat_agent_restart::heal_failed_start(
                     &state,
                     &project_id,
                     &session_id,
                 )
-                .await;
+                .await
+                {
+                    // GitHub #456: no later check could start it, so the message stops waiting.
+                    fail_held_message(
+                        &state,
+                        &project_id,
+                        &session_id,
+                        prompt_id.as_deref().unwrap_or_default(),
+                        &crate::session_chat_send_failure::send_failure_reason(
+                            "The agent in this session could not start again, so the message was not sent.",
+                            Some(reason),
+                        ),
+                    );
+                }
             }
             return;
         }

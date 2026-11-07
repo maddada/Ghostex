@@ -231,6 +231,8 @@ pub(crate) struct AgentResumeInput {
     agent_session_path: Option<String>,
     first_user_message: Option<String>,
     project_path: Option<String>,
+    /// References the agent said it could not find (`agentResumeRejected`, GitHub #456).
+    rejected_references: Vec<String>,
     stored_command_candidates: Vec<String>,
     title: Option<String>,
     title_source: Option<String>,
@@ -375,6 +377,9 @@ pub(crate) fn to_agent_resume_input(
         first_user_message: read_text_from_map(&runtime_settings, "firstUserMessage")
             .or_else(|| read_text_from_map(&launch_settings, "firstUserMessage")),
         project_path: read_text_value(session, "cwd").or_else(|| read_text_value(project, "path")),
+        rejected_references: crate::session_chat_queue_runtime::rejected_resume_references(
+            &runtime_settings,
+        ),
         stored_command_candidates: collect_stored_agent_resume_command_candidates(session),
         title: read_text_value(session, "title"),
         title_source: read_text_from_map(&runtime_settings, "titleSource")
@@ -588,14 +593,14 @@ pub(crate) fn build_agent_resume_command(
         }),
         // CDXC:AgentProviders 2026-10-06 DECISION: "Resume. `empryo --session <id>`. The process-identity scan reads `--session` from argv." SEE-ALSO: extract_agent_process_session_id in server/src/zmx/process_identity.rs.
         // A session with no written folder: see `get_empryo_session_reference`.
-        "omp" | "empryo" => exact_reference
-            .map(|reference| {
-                format!(
-                    "{agent_command} --session {}",
-                    quote_shell_double_arg(&reference)
-                )
-            })
-            .or_else(|| (agent_id == "empryo").then(|| agent_command.to_string())),
+        "omp" | "empryo" => match omp_wake_reference(input, exact_reference) {
+            OmpWakeReference::Resume(reference) => Some(format!(
+                "{agent_command} --session {}",
+                quote_shell_double_arg(&reference)
+            )),
+            OmpWakeReference::Fresh => Some(agent_command.to_string()),
+            OmpWakeReference::None => (agent_id == "empryo").then(|| agent_command.to_string()),
+        },
         "codex" => {
             let reference = codex_reference?;
             // See `codex_rollout_written`: a thread Codex never saved starts fresh.
@@ -1010,6 +1015,48 @@ fn build_pi_resume_command(agent_command: &str, input: &AgentResumeInput) -> Opt
     }
 }
 
+enum OmpWakeReference {
+    Resume(String),
+    /// Every reference this session had was refused by the agent: start it fresh.
+    Fresh,
+    None,
+}
+
+/// What an OMP or Empryo wake resumes. A reference the agent already answered with `Session
+/// "<ref>" not found.` is never run again (GitHub #456, session_chat_queue_runtime/resume_missing.rs):
+/// the saved conversation file is tried by path when the id was refused, and once nothing is left
+/// the agent starts fresh in the same session.
+fn omp_wake_reference(input: &AgentResumeInput, exact: Option<String>) -> OmpWakeReference {
+    let refused = |reference: &str| {
+        input
+            .rejected_references
+            .iter()
+            .any(|seen| seen == reference)
+    };
+    match exact {
+        Some(reference) if !refused(&reference) => OmpWakeReference::Resume(reference),
+        Some(_) => input
+            .agent_session_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|path| !path.is_empty() && !refused(path))
+            .filter(|path| crate::resume_lookup::expand_home(path).is_file())
+            .map_or(OmpWakeReference::Fresh, |path| {
+                OmpWakeReference::Resume(path.to_string())
+            }),
+        // A session whose only reference was refused (its saved file was gone, so the id no
+        // longer passes `get_omp_session_reference`) has nothing left to reopen either.
+        None if input
+            .agent_session_id
+            .as_deref()
+            .is_some_and(|id| refused(id)) =>
+        {
+            OmpWakeReference::Fresh
+        }
+        None => OmpWakeReference::None,
+    }
+}
+
 /// CDXC:SessionIdentity 2026-09-14 WHY:
 /// Older live scans could stamp a recycled TTY's foreign OMP transcript into a new session. Refuse that stored identity at wake time so restarting does not turn the bad observation into a real cross-project resume.
 fn get_omp_session_reference(input: &AgentResumeInput) -> Option<String> {
@@ -1074,6 +1121,51 @@ mod omp_resume_tests {
                 assert_eq!(plan["startupTextDisposition"], "none");
             }
         }
+    }
+
+    /// GitHub #456: a reference OMP answered with "Session not found" is never resumed again.
+    #[test]
+    fn omp_wake_skips_refused_references_then_starts_fresh() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("session.jsonl");
+        std::fs::write(
+            &path,
+            format!(
+                "{}\n",
+                json!({"type": "session", "id": "omp-id", "cwd": temp.path()})
+            ),
+        )
+        .unwrap();
+        let path = path.to_str().unwrap().to_string();
+        let project = json!({"path": temp.path(), "customAgents": [], "launchSettings": {}});
+        let settings = normalize_agent_settings(None);
+        let plan_for = |runtime: serde_json::Value| {
+            let session = json!({"agentId": "omp", "runtimeSettings": runtime});
+            build_agent_resume_plan(&project, &session, &settings)["primaryCommand"].clone()
+        };
+        let with_path = |rejected: serde_json::Value| {
+            json!({"agentCommand": "omp", "agentSessionId": "omp-id",
+                "agentSessionPath": path, "agentResumeRejected": rejected})
+        };
+        assert_eq!(plan_for(with_path(json!([]))), "omp --session \"omp-id\"");
+        // The id was refused: the saved file is tried by path.
+        assert_eq!(
+            plan_for(with_path(json!(["omp-id"]))),
+            format!("omp --session \"{path}\"")
+        );
+        // The file was refused too: OMP starts fresh, with no `--session`.
+        assert_eq!(plan_for(with_path(json!(["omp-id", path]))), "omp");
+        // Only an id, refused: fresh. An id nobody refused still resumes.
+        assert_eq!(
+            plan_for(json!({"agentCommand": "omp", "agentSessionId": "omp-id",
+                "agentResumeRejected": ["omp-id"]})),
+            "omp"
+        );
+        assert_eq!(
+            plan_for(json!({"agentCommand": "omp", "agentSessionId": "new-id",
+                "agentResumeRejected": ["omp-id"]})),
+            "omp --session \"new-id\""
+        );
     }
 }
 

@@ -20,6 +20,33 @@ const SEND_HEAL_RESTART_COOLDOWN: StdDuration = StdDuration::from_secs(10 * 60);
 const SEND_HEAL_REPAINT_WAIT_MS: u64 = 4_000;
 
 static SEND_HEAL_RESTARTS: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+/// How many automatic restarts in a row may run the same wake on an agent that is gone, with its
+/// conversation unchanged in between, before the next one is refused for good.
+const MAX_SAME_DEAD_RESTARTS: u32 = 3;
+/// Per session: what the last automatic restart ran (`wake_fingerprint`) and how many restarts in
+/// a row ran it on an agent that was gone again.
+static SEND_HEAL_SAME_RESTARTS: OnceLock<Mutex<HashMap<String, (String, u32)>>> = OnceLock::new();
+
+/// A refused restart that waiting cannot change: the held message is marked Not sent with Retry.
+pub(crate) const RESTART_SAME_RESUME_FAILED: &str =
+    "the agent could not find its conversation, and restarting it the same way would fail again";
+/// See `RESTART_SAME_RESUME_FAILED`.
+pub(crate) const RESTART_REPEATED_WITHOUT_AGENT: &str =
+    "restarting the agent the same way did not bring it back after 3 tries";
+
+/// Whether `reason` (from `restart_agent_for_send`) means no later automatic restart will run.
+pub(crate) fn restart_refusal_is_final(reason: &str) -> bool {
+    reason == RESTART_SAME_RESUME_FAILED || reason == RESTART_REPEATED_WITHOUT_AGENT
+}
+
+/// The user's Retry on a Not sent row gives the automatic restart a fresh count.
+pub(crate) fn forget_repeated_restarts(project_id: &str, session_id: &str) {
+    if let Some(restarts) = SEND_HEAL_SAME_RESTARTS.get() {
+        if let Ok(mut restarts) = restarts.lock() {
+            restarts.remove(&format!("{project_id}:{session_id}"));
+        }
+    }
+}
 
 /// How a refused send ended after gxserver tried to recover it.
 pub(crate) enum SendHeal {
@@ -261,6 +288,19 @@ pub(crate) async fn restart_agent_for_send(
     let session = resolve_session_chat_send_target(state, &params, "sendHeal")
         .map(|current| current.session)
         .map_err(|_| "the session could not be read")?;
+    // GitHub #456: the last wake's resume could not find its conversation (resume_missing.rs).
+    let rejected = if agent_running {
+        None
+    } else {
+        match missing_resume_restart(state, target, &session).await {
+            Some(MissingResumeRestart::GiveUp) => return Err(RESTART_SAME_RESUME_FAILED),
+            Some(MissingResumeRestart::Reject(reference)) => Some(reference),
+            Some(MissingResumeRestart::Restart) | None => None,
+        }
+    };
+    if let Some(reference) = rejected {
+        return restart_without_missing_resume(state, target, &reference).await;
+    }
     if !can_start_on_its_conversation(state, &session).await {
         return Err("the agent has no conversation to resume");
     }
@@ -273,6 +313,11 @@ pub(crate) async fn restart_agent_for_send(
         }
     }
     let key = format!("{}:{}", target.project_id, target.session_id);
+    let fingerprint = if agent_running {
+        None
+    } else {
+        wake_fingerprint(state, &session).await
+    };
     {
         let restarts = SEND_HEAL_RESTARTS.get_or_init(|| Mutex::new(HashMap::new()));
         let Ok(mut restarts) = restarts.lock() else {
@@ -281,6 +326,9 @@ pub(crate) async fn restart_agent_for_send(
         restarts.retain(|_, at| at.elapsed() < SEND_HEAL_RESTART_COOLDOWN);
         if restarts.contains_key(&key) {
             return Err("the agent was already restarted automatically a few minutes ago");
+        }
+        if !count_same_restart(&key, fingerprint) {
+            return Err(RESTART_REPEATED_WITHOUT_AGENT);
         }
         restarts.insert(key, Instant::now());
     }
@@ -294,6 +342,187 @@ pub(crate) async fn restart_agent_for_send(
         } else {
             "The agent was no longer running; restarted it on its own conversation."
         },
+    );
+    Ok(())
+}
+
+/// CDXC:SessionChat 2026-11-07 WHY:
+/// GitHub #456 asked that no restart loop run forever. A restart whose agent never came up (it
+/// failed in a way no screen rule names) was retried every ten minutes for as long as a message
+/// waited. Each automatic restart of an agent that is gone records what the wake will run and how
+/// big the conversation is; the fourth one in a row with both unchanged (so no message got
+/// through in between) is refused for good and the message is marked Not sent with Retry. A
+/// restart of a live agent, a different wake command, a conversation that grew, or the user's
+/// Retry starts the count again. Returns false when the restart must not run.
+fn count_same_restart(key: &str, fingerprint: Option<String>) -> bool {
+    let restarts = SEND_HEAL_SAME_RESTARTS.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut restarts) = restarts.lock() else {
+        return true;
+    };
+    let Some(fingerprint) = fingerprint else {
+        restarts.remove(key);
+        return true;
+    };
+    let count = match restarts.get(key) {
+        Some((last, count)) if *last == fingerprint => count + 1,
+        _ => 1,
+    };
+    if count > MAX_SAME_DEAD_RESTARTS {
+        return false;
+    }
+    restarts.insert(key.to_string(), (fingerprint, count));
+    true
+}
+
+/// What a wake of `session` runs, and how big its conversation is: two restarts with the same
+/// fingerprint ran the same command and nothing reached the agent in between.
+async fn wake_fingerprint(state: &AppState, session: &Value) -> Option<String> {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let session = session.clone();
+    tokio::task::spawn_blocking(move || {
+        let project_id = session.get("projectId").and_then(Value::as_str)?;
+        let db = open_gxserver_database(&paths).ok()?;
+        let settings = crate::agents::read_agent_settings(&db)
+            .unwrap_or_else(|_| crate::agents::normalize_agent_settings(None));
+        let project = DomainRepository::new(&db, server_id.as_str())
+            .get_project(project_id)
+            .ok()??;
+        let plan = crate::agents::build_agent_resume_plan(&project, &session, &settings);
+        let command = plan
+            .get("primaryCommand")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let agent = session_chat_agent_for_session(&session);
+        let size = resolve_session_chat_transcript_agent(agent.as_deref())
+            .and_then(|transcript_agent| {
+                resolve_session_chat_transcript_path(
+                    transcript_agent,
+                    read_runtime_text(&session, "agentSessionId").as_deref(),
+                    read_runtime_text(&session, "agentSessionPath").as_deref(),
+                )
+            })
+            .and_then(|path| std::fs::metadata(path).ok())
+            .map_or(0, |metadata| metadata.len());
+        Some(format!("{command}\u{0}{size}"))
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+/// What the screen of an agent that is gone says about the conversation its last wake tried to
+/// resume, and what a restart does about it (resume_missing.rs). `None` when it says nothing.
+async fn missing_resume_restart(
+    state: &AppState,
+    target: &crate::session_chat_send::SessionChatSendTarget,
+    session: &Value,
+) -> Option<MissingResumeRestart> {
+    let agent = session_chat_agent_for_session(session);
+    let screen = crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await?;
+    let missing = missing_resume_on_screen(agent.as_deref(), &screen)?;
+    let runtime = session
+        .get("runtimeSettings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let rejected = rejected_resume_references(&runtime);
+    let id = read_runtime_text(session, "agentSessionId");
+    let path = read_runtime_text(session, "agentSessionPath");
+    let stored: Vec<&str> = [id.as_deref(), path.as_deref()]
+        .into_iter()
+        .flatten()
+        .collect();
+    let written = conversation_written(state, session).await;
+    let decision =
+        restart_after_missing_resume(agent.as_deref(), &missing, &stored, &rejected, written);
+    record(
+        state,
+        target,
+        "sessionChatResumeMissing",
+        &format!(
+            "The agent could not find the conversation it was asked to resume ({}); {}.",
+            missing.reference.as_deref().unwrap_or("no reference named"),
+            match &decision {
+                MissingResumeRestart::Reject(_) =>
+                    "it is set aside and the agent starts without it",
+                MissingResumeRestart::Restart => "the next start does not use it",
+                MissingResumeRestart::GiveUp =>
+                    "the same restart would fail again, so it was not run",
+            }
+        ),
+    );
+    Some(decision)
+}
+
+/// The wake's own transcript rule for Claude and Codex (`agent_conversation_written`).
+async fn conversation_written(state: &AppState, session: &Value) -> Option<bool> {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let session = session.clone();
+    tokio::task::spawn_blocking(move || {
+        let project_id = session.get("projectId").and_then(Value::as_str)?;
+        let db = open_gxserver_database(&paths).ok()?;
+        let settings = crate::agents::read_agent_settings(&db)
+            .unwrap_or_else(|_| crate::agents::normalize_agent_settings(None));
+        let project = DomainRepository::new(&db, server_id.as_str())
+            .get_project(project_id)
+            .ok()??;
+        crate::agents::agent_conversation_written(&project, &session, &settings)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+/// Sets `reference` aside on the session (`agentResumeRejected`) and restarts it, so the wake
+/// reopens the conversation another way or starts the agent fresh. It is a different command
+/// from the one that failed, so the ten-minute cooldown does not hold it back; each reference is
+/// set aside once, so this cannot loop.
+async fn restart_without_missing_resume(
+    state: &AppState,
+    target: &crate::session_chat_send::SessionChatSendTarget,
+    reference: &str,
+) -> Result<(), &'static str> {
+    let paths = state.paths.clone();
+    let server_id = state.metadata.server_id.clone();
+    let (project_id, session_id) = (target.project_id.clone(), target.session_id.clone());
+    let reference_owned = reference.to_string();
+    tokio::task::spawn_blocking(move || -> Option<()> {
+        let db = open_gxserver_database(&paths).ok()?;
+        let repository = DomainRepository::new(&db, server_id.as_str());
+        let session = repository.get_session(&project_id, &session_id).ok()??;
+        let mut runtime = session
+            .get("runtimeSettings")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        with_rejected_resume_reference(&mut runtime, &reference_owned);
+        let mut update = Map::new();
+        update.insert("projectId".to_string(), json!(project_id));
+        update.insert("sessionId".to_string(), json!(session_id));
+        update.insert("runtimeSettings".to_string(), Value::Object(runtime));
+        repository.update_session(&update).ok().map(|_| ())
+    })
+    .await
+    .ok()
+    .flatten()
+    .ok_or("the session could not be updated")?;
+    let key = format!("{}:{}", target.project_id, target.session_id);
+    if let Ok(mut restarts) = SEND_HEAL_RESTARTS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+    {
+        restarts.insert(key.clone(), Instant::now());
+    }
+    forget_repeated_restarts(&target.project_id, &target.session_id);
+    cycle_session(state, &target.project_id, &target.session_id).await?;
+    record(
+        state,
+        target,
+        "sessionChatSendRestartedAgent",
+        "The agent could not find its conversation; restarted it without that conversation, so the message goes to its next start.",
     );
     Ok(())
 }
@@ -679,4 +908,35 @@ pub(super) fn exited_agent_healer(
             queue_restart_startup_send(&state, &target, &text, &[]).is_ok()
         })
     })
+}
+
+#[cfg(test)]
+mod repeated_restart_tests {
+    use super::*;
+
+    /// GitHub #456: the same wake on an agent that stays gone runs three times, never a fourth.
+    #[test]
+    fn the_same_failing_restart_runs_three_times_at_most() {
+        let key = "test-project:repeated-restart";
+        forget_repeated_restarts("test-project", "repeated-restart");
+        let same = || Some("omp --session \"x\"\u{0}120".to_string());
+        assert!(count_same_restart(key, same()));
+        assert!(count_same_restart(key, same()));
+        assert!(count_same_restart(key, same()));
+        assert!(!count_same_restart(key, same()));
+        assert!(!count_same_restart(key, same()));
+        // A different command (a reference set aside) or a conversation that grew starts over.
+        assert!(count_same_restart(key, Some("omp\u{0}120".to_string())));
+        assert!(count_same_restart(key, Some("omp\u{0}480".to_string())));
+        // A live agent's restart, and the user's Retry, clear the count.
+        for _ in 0..3 {
+            count_same_restart(key, same());
+        }
+        assert!(count_same_restart(key, None));
+        for _ in 0..3 {
+            assert!(count_same_restart(key, same()));
+        }
+        forget_repeated_restarts("test-project", "repeated-restart");
+        assert!(count_same_restart(key, same()));
+    }
 }

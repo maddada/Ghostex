@@ -311,15 +311,19 @@ fn claim_start_retry(project_id: &str, session_id: &str) -> bool {
 /// CDXC:SessionChat 2026-10-14 DECISION:
 /// User: a chat message queued for a session whose agent cannot start must not sit "queued" forever with no explanation; "failures time can fix retry on their own; a missing login can't, so it must be shown, never silently retried forever". While a session holds a message the user sent (a startup send) and its daemon is up but no input box appears, the queue scheduler calls this on the startup send's wake backoff (every 10 s, settling at every 60 s). An agent that exited to the shell is restarted on its own conversation (at most once in ten minutes, `restart_agent_for_send`). An agent that could not start because its account has no saved login shows its card (session_chat_notice/start_failure.rs) and is restarted only when that can now work: the login was saved meanwhile (Settings > Accounts, the card's Sign in, or `ghostex account-login`), or the wake may move the session to an account that works (accounts/wake_account.rs). The message stays held through all of it and goes out once the input box appears.
 /// SEE-ALSO: session_chat_send_wake.rs (`wake_session_holding_startup_send` calls this), session_chat_queue_runtime/scheduler.rs.
-pub(crate) async fn heal_failed_start(state: &AppState, project_id: &str, session_id: &str) {
+pub(crate) async fn heal_failed_start(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Option<&'static str> {
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("sessionId".to_string(), json!(session_id));
     let Ok(target) = resolve_session_chat_send_target(state, &params, "startHeal") else {
-        return;
+        return None;
     };
     if crate::agentbox::is_agentbox_session(&target.session) {
-        return;
+        return None;
     }
     let notice = crate::session_chat_options::cached_session_chat_terminal_notice(
         state, project_id, session_id,
@@ -336,7 +340,7 @@ pub(crate) async fn heal_failed_start(state: &AppState, project_id: &str, sessio
         .await
         .unwrap_or(false);
         if !fixable || !claim_start_retry(project_id, session_id) {
-            return;
+            return None;
         }
         if crate::session_chat_queue_runtime::cycle_session(state, project_id, session_id)
             .await
@@ -351,7 +355,7 @@ pub(crate) async fn heal_failed_start(state: &AppState, project_id: &str, sessio
                 &[],
             );
         }
-        return;
+        return None;
     }
     let composer = crate::session_chat_options::cached_session_chat_composer_readiness(
         state, project_id, session_id,
@@ -367,11 +371,14 @@ pub(crate) async fn heal_failed_start(state: &AppState, project_id: &str, sessio
         )
         .await
     {
-        return;
+        return None;
     }
     // Records its own outcome; a refusal (restarted a few minutes ago, nothing to resume) waits
-    // for the next check.
-    let _ = crate::session_chat_queue_runtime::restart_agent_for_send(state, &target, false).await;
+    // for the next check, unless no later check could restart it either (GitHub #456).
+    crate::session_chat_queue_runtime::restart_agent_for_send(state, &target, false)
+        .await
+        .err()
+        .filter(|reason| crate::session_chat_queue_runtime::restart_refusal_is_final(reason))
 }
 
 /// Whether claude-swap now holds a usable login for `slot`.
