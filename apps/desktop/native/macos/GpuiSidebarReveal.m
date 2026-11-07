@@ -250,9 +250,13 @@ static double GhostexGpuiRevealEaseOut(double t) {
   CGPathAddArcToPoint(path, NULL, maxX, bottomY, minX, bottomY, bottomRight);
   CGPathAddArcToPoint(path, NULL, minX, bottomY, minX, topY, bottom);
   CGPathCloseSubpath(path);
-  // A hole over each of the window's lights, one device pixel inside its edge (AppKit draws the
-  // light across its whole 14pt frame), so the hole's own anti-aliased edge falls on the light and
-  // nothing the window draws around it shows through.
+  // A hole over each of the window's lights, half a point wider than its 14pt frame, so the light
+  // keeps its whole anti-aliased rim over the window's own background, as it does docked. What the
+  // window draws under the lights is only the header's background: its toggles there draw nothing
+  // while the lights are lent (`window_lights_over_header` in app/floating_reveal/model.rs). A hole
+  // inside the frame covered the rim and made each light look smaller beside the window's own, and
+  // one exactly on it still dimmed the rim's outer device pixel (compared at 2x with the docked
+  // lights, 2026-11-07).
   NSWindow *owner = self.windowLightsOwner;
   if (self.windowLightsOpen && owner) {
     for (size_t i = 0; i < 3; i++) {
@@ -260,7 +264,7 @@ static double GhostexGpuiRevealEaseOut(double t) {
       if (!button || button.hidden) continue;
       NSRect rect = [owner convertRectToScreen:[button convertRect:button.bounds toView:nil]];
       rect = [content convertRect:[self.panel convertRectFromScreen:rect] fromView:nil];
-      CGPathAddEllipseInRect(path, NULL, NSRectToCGRect(NSInsetRect(rect, 0.5, 0.5)));
+      CGPathAddEllipseInRect(path, NULL, NSRectToCGRect(NSInsetRect(rect, -0.5, -0.5)));
     }
   }
   [CATransaction begin];
