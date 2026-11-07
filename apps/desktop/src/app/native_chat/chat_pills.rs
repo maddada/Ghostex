@@ -583,7 +583,9 @@ impl NativeChatView {
         match at {
             Some(at) => self.show_chat_menu_at(rows, at, AUTOPILOT_MENU_WIDTH, window, cx),
             None => {
-                let (anchor, side) = self.pills_strip.menu_anchor(self.pill_bounds.cell(id).get());
+                let (anchor, side) = self
+                    .pills_strip
+                    .menu_anchor(self.pill_bounds.cell(id).get());
                 self.menu_side = Some(side);
                 self.show_chat_menu(rows, anchor, AUTOPILOT_MENU_WIDTH, window, cx);
             }
