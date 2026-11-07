@@ -116,37 +116,44 @@ fn lineup_command(
 /// The model pill's OpenCode tab lists what OpenCode itself lists (issue #390), which depends on the providers and keys set up on that computer (about 400 models with OpenRouter). OpenCode 2's `/api/model` answers it; its background service is asked when it is running, so nothing starts. Otherwise `opencode api --standalone` answers from a private server that exits with the command, so reading the lineup never leaves an OpenCode service running, and no OpenCode 2 installed means no read at all. Both read the home folder's configuration; a thread running OpenCode replaces it with its own folder's lineup (`session_chat_opencode::model_catalog`).
 fn opencode_lineup() -> Option<Value> {
     let home = crate::resume_lookup::home_dir();
-    let response = opencode_service_models(&home).or_else(|| {
-        let program = crate::agent_cli::opencode::opencode2_program(&home)?;
+    let response = opencode_get(&home, "/api/model")?;
+    // Provider names are only read when two providers list a model under one name (issue #482).
+    crate::session_chat_opencode::lineup_entry(&response, || opencode_get(&home, "/api/provider"))
+        .filter(|entry| {
+            entry["models"]
+                .as_array()
+                .is_some_and(|models| !models.is_empty())
+        })
+}
+
+/// One `GET` of OpenCode 2's API for the home folder: its running service, else a standalone one.
+fn opencode_get(home: &std::path::Path, path: &str) -> Option<Value> {
+    opencode_service_get(home, path).or_else(|| {
+        let program = crate::agent_cli::opencode::opencode2_program(home)?;
         let mut process = Command::new(program);
         process
-            .args(["api", "--standalone", "GET", "/api/model"])
-            .current_dir(&home)
+            .args(["api", "--standalone", "GET", path])
+            .current_dir(home)
             .env(
                 "PATH",
                 crate::agent_hooks::probing::normalize_gxserver_process_path(
                     std::env::var("PATH").ok().as_deref(),
-                    &home,
+                    home,
                 ),
             )
             // The Ghostex plugin only reports for a terminal Ghostex started.
             .env_remove("GHOSTEX_SESSION_ID")
             .env("NO_COLOR", "1");
         serde_json::from_str(&run_to_end(process)?).ok()
-    })?;
-    crate::session_chat_opencode::lineup_entry(&response).filter(|entry| {
-        entry["models"]
-            .as_array()
-            .is_some_and(|models| !models.is_empty())
     })
 }
 
-fn opencode_service_models(home: &std::path::Path) -> Option<Value> {
+fn opencode_service_get(home: &std::path::Path, path: &str) -> Option<Value> {
     let client = crate::session_chat_opencode::Client::discover().ok()?;
     let encoded: String =
         url::form_urlencoded::byte_serialize(home.to_string_lossy().as_bytes()).collect();
     client
-        .request("GET", &format!("/api/model?directory={encoded}"), None)
+        .request("GET", &format!("{path}?directory={encoded}"), None)
         .ok()
 }
 

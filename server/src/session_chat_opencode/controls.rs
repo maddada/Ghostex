@@ -75,7 +75,12 @@ pub(crate) fn model_catalog(client: &Client, info: &Value) -> Result<Value, Doma
         .ok_or_else(|| error("OpenCode session has no directory."))?;
     let encoded: String = url::form_urlencoded::byte_serialize(directory.as_bytes()).collect();
     let response = client.request("GET", &format!("/api/model?directory={encoded}"), None)?;
-    let entry = lineup_entry(&response).ok_or_else(|| error("Invalid OpenCode model catalog."))?;
+    let entry = lineup_entry(&response, || {
+        client
+            .request("GET", &format!("/api/provider?directory={encoded}"), None)
+            .ok()
+    })
+    .ok_or_else(|| error("Invalid OpenCode model catalog."))?;
     Ok(
         json!({"schemaVersion":1,"updatedAt":"2026-09-25","effortLabels":{},"agents":{"opencode":entry}}),
     )
@@ -84,15 +89,76 @@ pub(crate) fn model_catalog(client: &Client, info: &Value) -> Result<Value, Doma
 /// The catalog agent entry for an answer of OpenCode's `/api/model`: one row per model, keyed
 /// `provider/model` as `select` sends it, with the variants it offers as its efforts. Shared by a
 /// thread's own lineup and the one gxserver serves to every thread (`agent_model_lineups.rs`).
-pub(crate) fn lineup_entry(response: &Value) -> Option<Value> {
+///
+/// CDXC:AgentProviders 2026-11-07 WHY:
+/// Issue #482: OpenCode Console (`opencode`) and OpenCode Go (`opencode-go`) list 17 models under the same name, so the picker showed identical rows and the pill could not say whether a thread bills per token or uses the Go subscription. A name more than one provider uses gets that provider's own display name (`/api/provider`, asked through `providers` only when such a clash exists, else the provider id): "DeepSeek V4.1 Flash · OpenCode Go". The row label carries it, so the picker rows, the pill and the search all read it on the desktop and the phone alike; a name only one provider uses stays bare.
+pub(crate) fn lineup_entry(
+    response: &Value,
+    providers: impl FnOnce() -> Option<Value>,
+) -> Option<Value> {
     let models = response["data"].as_array()?;
-    let rows: Vec<Value> = models.iter().filter_map(|model| {
-        let provider = model["providerID"].as_str()?;
-        let name = model["id"].as_str()?;
-        let variants: Vec<_> = model["variants"].as_array().into_iter().flatten()
-            .filter_map(|v| v["id"].as_str()).collect();
-        Some(json!({"value":format!("{provider}/{name}"),"label":model["name"].as_str().filter(|label| !label.trim().is_empty()).unwrap_or(name),"efforts":variants,"contextWindow":model["limit"]["context"]}))
-    }).collect();
+    let named: Vec<(&str, &str, String, &Value)> = models
+        .iter()
+        .filter_map(|model| {
+            let provider = model["providerID"].as_str()?;
+            let name = model["id"].as_str()?;
+            let label = model["name"]
+                .as_str()
+                .map(str::trim)
+                .filter(|label| !label.is_empty())
+                .unwrap_or(name);
+            Some((provider, name, label.to_string(), model))
+        })
+        .collect();
+    let mut providers_of_label: std::collections::HashMap<String, std::collections::HashSet<&str>> =
+        std::collections::HashMap::new();
+    for (provider, _, label, _) in &named {
+        providers_of_label
+            .entry(label.to_lowercase())
+            .or_default()
+            .insert(provider);
+    }
+    let shared = |label: &str| {
+        providers_of_label
+            .get(&label.to_lowercase())
+            .is_some_and(|providers| providers.len() > 1)
+    };
+    let provider_names: std::collections::HashMap<String, String> =
+        if named.iter().any(|(_, _, label, _)| shared(label)) {
+            providers()
+                .and_then(|answer| answer["data"].as_array().cloned())
+                .into_iter()
+                .flatten()
+                .filter_map(|provider| {
+                    let id = provider["id"].as_str()?;
+                    let name = provider["name"].as_str().map(str::trim)?;
+                    (!name.is_empty()).then(|| (id.to_string(), name.to_string()))
+                })
+                .collect()
+        } else {
+            Default::default()
+        };
+    let rows: Vec<Value> = named
+        .iter()
+        .map(|(provider, name, label, model)| {
+            let variants: Vec<_> = model["variants"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v["id"].as_str())
+                .collect();
+            let label = if shared(label) {
+                let provider_name = provider_names
+                    .get(*provider)
+                    .map(String::as_str)
+                    .unwrap_or(provider);
+                format!("{label} \u{b7} {provider_name}")
+            } else {
+                label.clone()
+            };
+            json!({"value":format!("{provider}/{name}"),"label":label,"efforts":variants,"contextWindow":model["limit"]["context"]})
+        })
+        .collect();
     let efforts: std::collections::BTreeSet<&str> = rows
         .iter()
         .flat_map(|row| row["efforts"].as_array().into_iter().flatten())

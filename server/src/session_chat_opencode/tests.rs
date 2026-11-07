@@ -504,7 +504,7 @@ fn lineup_entry_keys_rows_by_provider_and_keeps_their_variants() {
     let entry = lineup_entry(&json!({"location":{"directory":"/home"},"data":[
         {"id":"particle-ai/particle-1","providerID":"openrouter","name":"Particle-1","variants":[{"id":"low"},{"id":"high"}],"limit":{"context":200000}},
         {"id":"big-pickle","providerID":"opencode","name":" ","variants":[]}
-    ]}))
+    ]}), || panic!("no name is shared, so provider names are not read"))
     .unwrap();
     assert_eq!(entry["name"], "OpenCode");
     assert_eq!(
@@ -517,5 +517,81 @@ fn lineup_entry_keys_rows_by_provider_and_keeps_their_variants() {
     // A model OpenCode names with a blank string is labelled by its id, so the catalog stays valid.
     assert_eq!(entry["models"][1]["label"], "big-pickle");
     assert_eq!(entry["efforts"], json!(["high", "low"]));
-    assert!(lineup_entry(&json!({"data": null})).is_none());
+    assert!(lineup_entry(&json!({"data": null}), || None).is_none());
+}
+
+/// Issue #482: OpenCode Console and OpenCode Go list the same models under the same names. Each
+/// shared name says its provider, by OpenCode's own provider name (else its id), so the rows, the
+/// pill (which shows the row label) and the search tell them apart; a name only one provider
+/// uses stays bare.
+#[test]
+fn lineup_entry_names_the_provider_of_a_model_name_two_providers_share() {
+    let models = json!({"location":{"directory":"/home"},"data":[
+        {"id":"deepseek-v4.1-flash","providerID":"opencode","name":"DeepSeek V4.1 Flash","variants":[]},
+        {"id":"deepseek-v4.1-flash","providerID":"opencode-go","name":"DeepSeek V4.1 Flash","variants":[]},
+        {"id":"kimi-k3","providerID":"opencode","name":"Kimi K3","variants":[]},
+        {"id":"kimi-k3","providerID":"opencode-go","name":"Kimi K3","variants":[]},
+        {"id":"moonshotai/kimi-k3","providerID":"openrouter","name":"Kimi K3","variants":[]},
+        {"id":"glm-5.3","providerID":"opencode-go","name":"GLM-5.3","variants":[]},
+        {"id":"glm-5.3","providerID":"zai","name":"GLM-5.3","variants":[]},
+        {"id":"iceman-free","providerID":"opencode","name":"Iceman Free","variants":[]}
+    ]});
+    let mut asked = 0;
+    let entry = lineup_entry(&models, || {
+        asked += 1;
+        Some(json!({"data":[
+            {"id":"opencode","name":"OpenCode Console"},
+            {"id":"opencode-go","name":"OpenCode Go"},
+            {"id":"openrouter","name":"OpenRouter"}
+        ]}))
+    })
+    .unwrap();
+    assert_eq!(asked, 1);
+    let rows: Vec<(&str, &str)> = entry["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            (
+                row["value"].as_str().unwrap(),
+                row["label"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (
+                "opencode/deepseek-v4.1-flash",
+                "DeepSeek V4.1 Flash \u{b7} OpenCode Console"
+            ),
+            (
+                "opencode-go/deepseek-v4.1-flash",
+                "DeepSeek V4.1 Flash \u{b7} OpenCode Go"
+            ),
+            ("opencode/kimi-k3", "Kimi K3 \u{b7} OpenCode Console"),
+            ("opencode-go/kimi-k3", "Kimi K3 \u{b7} OpenCode Go"),
+            ("openrouter/moonshotai/kimi-k3", "Kimi K3 \u{b7} OpenRouter"),
+            ("opencode-go/glm-5.3", "GLM-5.3 \u{b7} OpenCode Go"),
+            // A provider OpenCode's provider list does not name shows its id.
+            ("zai/glm-5.3", "GLM-5.3 \u{b7} zai"),
+            ("opencode/iceman-free", "Iceman Free"),
+        ]
+    );
+    // Without a provider list every shared name still says which provider it is.
+    let entry = lineup_entry(&models, || None).unwrap();
+    assert_eq!(
+        entry["models"][1]["label"],
+        "DeepSeek V4.1 Flash \u{b7} opencode-go"
+    );
+
+    // The pill names the thread's model by that row label, so it says the provider too.
+    let catalog = json!({"agents":{"opencode":entry}});
+    let model = detected_model(
+        &json!({"model":{"providerID":"opencode-go","id":"kimi-k3"}}),
+        &[],
+        Some(&catalog),
+    )
+    .unwrap();
+    assert_eq!(model.label, "Kimi K3 \u{b7} opencode-go");
 }

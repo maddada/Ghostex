@@ -157,3 +157,56 @@ fn favorites_tab_is_alphabetical() {
     );
     assert_eq!(rows, ["Grok 5", "Opus", "Sonnet"].map(String::from));
 }
+
+/// Issue #482: gxserver labels a model name two OpenCode providers share with each provider's
+/// name ("DeepSeek V4.1 Flash · OpenCode Go"), so the rows differ and the search finds a
+/// provider by its display name, not only by the id in the value.
+#[test]
+fn search_finds_shared_model_names_by_provider_name() {
+    let mut catalogs = ModelMenuCatalogs::new();
+    catalogs.insert(
+        "opencode".into(),
+        catalog(&[
+            (
+                "opencode/deepseek-v4.1-flash",
+                "DeepSeek V4.1 Flash \u{b7} OpenCode Console",
+            ),
+            (
+                "opencode-go/deepseek-v4.1-flash",
+                "DeepSeek V4.1 Flash \u{b7} OpenCode Go",
+            ),
+            ("opencode/kimi-k3", "Kimi K3 \u{b7} OpenCode Console"),
+            ("opencode-go/kimi-k3", "Kimi K3 \u{b7} OpenCode Go"),
+            ("opencode/iceman-free", "Iceman Free"),
+        ]),
+    );
+    let entries = model_menu_entries(&catalogs);
+    let search = |query: &str| -> Vec<String> {
+        model_menu_rows(
+            &entries,
+            OPENCODE,
+            query,
+            &[],
+            &ModelMenuCurrent::default(),
+            false,
+        )
+        .into_iter()
+        .map(|row| row.entry.label)
+        .collect()
+    };
+    assert_eq!(
+        search("deepseek flash"),
+        [
+            "DeepSeek V4.1 Flash \u{b7} OpenCode Console",
+            "DeepSeek V4.1 Flash \u{b7} OpenCode Go"
+        ]
+    );
+    assert_eq!(
+        search("console"),
+        [
+            "DeepSeek V4.1 Flash \u{b7} OpenCode Console",
+            "Kimi K3 \u{b7} OpenCode Console"
+        ]
+    );
+    assert_eq!(search("kimi opencode go"), ["Kimi K3 \u{b7} OpenCode Go"]);
+}
