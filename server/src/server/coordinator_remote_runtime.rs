@@ -210,6 +210,9 @@ pub(crate) fn start_coordinator_remote_runtime(state: Arc<AppState>) {
 }
 
 pub(super) fn remote_rpc(computer: &ConnectedComputer, path: &str, params: Value) -> Option<Value> {
+    // The grant goes only to a listener of this account: once the tunnel drops, its port could be
+    // someone else's (ghostex_paths::loopback_owner, as relay.rs and settings_sync do).
+    ghostex_paths::loopback_owner::check_url(&computer.base_url).ok()?;
     let body = json!({ "params": params, "protocolVersion": GXSERVER_PROTOCOL_VERSION });
     let response = crate::http_agent::answering_agent()
         .post(format!("{}{path}", computer.base_url))
