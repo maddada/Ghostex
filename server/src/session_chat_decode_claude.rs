@@ -277,6 +277,86 @@ pub(crate) fn claude_transcript_lineage_record(
     })
 }
 
+/*
+CDXC:SessionChat 2026-11-07 WHY:
+The branch scan reads every row above a history page for its lineage alone, and
+parsed each one into a whole `Value` to do it, tool payloads included: most of
+the CPU of re-reading the coordinator's 890 MB transcript (backlog-1107). Only
+the top-level fields below are read by `claude_transcript_lineage_record` and
+`claude_record_type_can_be_prompt`, and only a `user` row also needs its
+`message`, so every other row keeps just these fields and skips the rest
+without building it. A `user` row, a line that is not an object, a repeated
+key and a line that does not parse all take the full parse, so the result is
+the same map, field for field, that `parse_json_object` gives.
+*/
+#[derive(serde::Deserialize)]
+struct ClaudeLineageFields {
+    #[serde(rename = "type", default, deserialize_with = "present")]
+    record_type: Option<Value>,
+    #[serde(rename = "isSidechain", default, deserialize_with = "present")]
+    is_sidechain: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
+    explicit: Option<Value>,
+    #[serde(rename = "leafUuid", default, deserialize_with = "present")]
+    leaf_uuid: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
+    uuid: Option<Value>,
+    #[serde(rename = "parentUuid", default, deserialize_with = "present")]
+    parent_uuid: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
+    content: Option<Value>,
+    #[serde(rename = "isMeta", default, deserialize_with = "present")]
+    is_meta: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
+    operation: Option<Value>,
+    #[serde(default, deserialize_with = "present")]
+    text: Option<Value>,
+    #[serde(rename = "promptSource", default, deserialize_with = "present")]
+    prompt_source: Option<Value>,
+    #[serde(rename = "queueSkipAttachments", default, deserialize_with = "present")]
+    queue_skip_attachments: Option<Value>,
+}
+
+/// A field that is there, `null` included (a plain `Option` would read `null` as missing).
+fn present<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<Value>, D::Error> {
+    serde::Deserialize::deserialize(deserializer).map(Some)
+}
+
+/// The fields of a transcript line that its lineage and prompt check read; `None` when the line
+/// is not a JSON object.
+pub(crate) fn claude_lineage_fields(line: &str) -> Option<Map<String, Value>> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('{') {
+        return parse_json_object(line);
+    }
+    let Ok(fields) = serde_json::from_str::<ClaudeLineageFields>(trimmed) else {
+        return parse_json_object(line);
+    };
+    if fields.record_type.as_ref().and_then(Value::as_str) == Some("user") {
+        return parse_json_object(line);
+    }
+    let mut record = Map::new();
+    for (key, value) in [
+        ("type", fields.record_type),
+        ("isSidechain", fields.is_sidechain),
+        ("explicit", fields.explicit),
+        ("leafUuid", fields.leaf_uuid),
+        ("uuid", fields.uuid),
+        ("parentUuid", fields.parent_uuid),
+        ("content", fields.content),
+        ("isMeta", fields.is_meta),
+        ("operation", fields.operation),
+        ("text", fields.text),
+        ("promptSource", fields.prompt_source),
+        ("queueSkipAttachments", fields.queue_skip_attachments),
+    ] {
+        if let Some(value) = value {
+            record.insert(key.to_string(), value);
+        }
+    }
+    Some(record)
+}
+
 /// A Claude row can only decode to a `User` message when it is one of these
 /// types, so the branch scanner skips the decode for every other row instead of
 /// paying for one on assistant rows that carry whole tool payloads.

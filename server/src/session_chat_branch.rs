@@ -56,7 +56,7 @@ use crate::session_chat::{
     TranscriptLineage,
 };
 use crate::session_chat_decode_claude::{
-    claude_record_type_can_be_prompt, claude_transcript_lineage_record,
+    claude_lineage_fields, claude_record_type_can_be_prompt, claude_transcript_lineage_record,
 };
 use crate::session_chat_rewind_state::{
     clear_session_chat_pending_rewind, session_chat_pending_rewind,
@@ -598,7 +598,7 @@ impl BoundaryScan {
             return;
         }
         let line = String::from_utf8_lossy(bytes).into_owned();
-        let Some(record) = parse_json_object(&line) else {
+        let Some(record) = claude_lineage_fields(&line) else {
             return;
         };
         let fallback_id = transcript_fallback_id(file_path, line_offset);
@@ -968,6 +968,7 @@ fn rows_after_leaf(
 mod boundary_scan_tests {
     use super::*;
     use crate::session_chat_decode_claude::decode_claude_transcript_line;
+    use serde_json::{Map, Value};
     use std::io::Write;
 
     fn prompt(id: &str, parent: Option<&str>, text: &str) -> String {
@@ -1155,6 +1156,71 @@ mod boundary_scan_tests {
             }
         }
         assert!(resumed(&path, starts[3]).prompt_parents.contains("planted"));
+    }
+
+    /// What the branch scan reads from a line: its lineage and whether it can be a prompt.
+    fn lineage_of(record: &Map<String, Value>) -> (Option<String>, bool) {
+        (
+            claude_transcript_lineage_record(record, "fallback").map(|row| format!("{row:?}")),
+            claude_record_type_can_be_prompt(record),
+        )
+    }
+
+    fn assert_fields_read_as_full(line: &str) {
+        let full = parse_json_object(line);
+        let fields = claude_lineage_fields(line);
+        assert_eq!(full.is_some(), fields.is_some(), "{line}");
+        if let (Some(full), Some(fields)) = (full, fields) {
+            assert_eq!(lineage_of(&fields), lineage_of(&full), "{line}");
+        }
+    }
+
+    /// The field-only read of a line gives the branch scan what the full parse gives it.
+    #[test]
+    fn the_lineage_fields_read_like_the_whole_line() {
+        let lines = [
+            reply("a1", "p1"),
+            prompt("p1", None, "one"),
+            prompt("p2", Some("a1"), "two"),
+            r#"{"type":"assistant","uuid":"a2","parentUuid":null,"message":{"content":[{"type":"tool_use","input":{"x":[1,2,{"y":"z"}]}}]}}"#.to_string(),
+            r#"{"type":"last-prompt","leafUuid":"a1","explicit":true}"#.to_string(),
+            r#"{"type":"last-prompt","leafUuid":null,"explicit":true}"#.to_string(),
+            r#"{"type":"last-prompt","leafUuid":"a1"}"#.to_string(),
+            r#"{"type":"queue-operation","operation":"enqueue","content":"do  it\nnow"}"#.to_string(),
+            r#"{"type":"queue-operation","operation":"remove","content":"do it now"}"#.to_string(),
+            r#"{"type":"queue-operation","operation":"popAll"}"#.to_string(),
+            r#"{"type":"attachment","uuid":"t1","parentUuid":"a1","attachment":{"type":"queued_command","prompt":"x"}}"#.to_string(),
+            r#"{"type":"user","uuid":"u9","parentUuid":"a1","promptSource":"queued","message":{"role":"user","content":"queued words"}}"#.to_string(),
+            r#"{"type":"user","uuid":"u8","parentUuid":"a1","message":{"role":"user","content":"<bash-input>ls</bash-input>"}}"#.to_string(),
+            r#"{"type":"assistant","uuid":"s1","parentUuid":"a1","isSidechain":true}"#.to_string(),
+            r#"{"type":"system","uuid":"x1","parentUuid":"a1","uuid":"x2"}"#.to_string(),
+            r#"{"type":"summary","summary":"no uuid"}"#.to_string(),
+            r#"{"uuid":"no-type","parentUuid":"a1"}"#.to_string(),
+            r#"  {"type":"assistant","uuid":"sp","parentUuid":"a1"}  "#.to_string(),
+            r#"["not","an","object"]"#.to_string(),
+            r#"{"type":"assistant","uuid":"cut"#.to_string(),
+            "".to_string(),
+            "null".to_string(),
+        ];
+        for line in &lines {
+            assert_fields_read_as_full(line);
+        }
+    }
+
+    /// [`the_lineage_fields_read_like_the_whole_line`] over every line of a real transcript:
+    /// `GX_BRANCH_BENCH_TRANSCRIPT=<file.jsonl> cargo test --lib
+    /// the_lineage_fields_read_like_a_real_transcript -- --ignored`
+    #[test]
+    #[ignore = "needs GX_BRANCH_BENCH_TRANSCRIPT, a Claude transcript"]
+    fn the_lineage_fields_read_like_a_real_transcript() {
+        let path = PathBuf::from(std::env::var("GX_BRANCH_BENCH_TRANSCRIPT").unwrap());
+        let reader = BufReader::new(std::fs::File::open(path).unwrap());
+        let mut lines = 0;
+        for line in reader.split(b'\n') {
+            assert_fields_read_as_full(&String::from_utf8_lossy(&line.unwrap()));
+            lines += 1;
+        }
+        eprintln!("{lines} lines read alike");
     }
 
     /// A client paging back through a long Claude chat that is still being written: one row is
