@@ -242,8 +242,8 @@
     },
     {
       "key": "orchestratorPlaybook",
-      "title": "Coordinator playbook",
-      "subtitle": "How every coordinator works: the playbook it follows. Edit it for all projects here, or for one project and its worktrees in Settings > Projects. Coordinators, existing ones too, follow the edited playbook from their next guide read, and a switch turns an edited playbook off without losing it.",
+      "title": "Playbook overrides",
+      "subtitle": "Your own instructions for every coordinator, such as \"Never push without asking\". Coordinators read them after Ghostex's playbook and follow them over it, and Ghostex's playbook keeps getting its updates. Existing coordinators follow them from their next message.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -12296,7 +12296,7 @@
     {
       "key": "syncCoordinator",
       "title": "Coordinator",
-      "subtitle": "Keep coordinator settings and your edited playbooks (the one for all projects and each project's own, matched by repository) the same on your computers. Off by default.",
+      "subtitle": "Keep coordinator settings and your playbook overrides the same on your computers. Off by default.",
       "tab": "sync",
       "tabTitle": "Sync",
       "section": "whatSyncs",
