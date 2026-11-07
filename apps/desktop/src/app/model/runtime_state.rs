@@ -61,6 +61,8 @@ pub(crate) struct GpuiRemoteGxserverCapabilities {
     /// The daemon keeps a handed-off orchestrator's staged draft for its Chat box instead of typing
     /// it into the terminal while `/ghostex-orchestrator` starts (`coordinatorHandoffDraft`).
     pub(crate) coordinator_handoff_draft: bool,
+    /// The `protocolVersion` the daemon answers health with, `None` when it does not say.
+    pub(crate) protocol_version: Option<u64>,
 }
 
 pub(crate) struct GpuiRemoteGxserverConnection {

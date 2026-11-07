@@ -246,6 +246,9 @@ pub(crate) fn gpui_remote_gxserver_capabilities_from_health_response(
         code_server_prompt_editor: advertises(GPUI_GXSERVER_CODE_SERVER_PROMPT_EDITOR_CAPABILITY),
         browser_tcp_websocket_v1: advertises("browserTcpWebSocketV1"),
         coordinator_handoff_draft: advertises("coordinatorHandoffDraft"),
+        protocol_version: value
+            .get("protocolVersion")
+            .and_then(serde_json::Value::as_u64),
         zmx_missing: value
             .get("tools")
             .and_then(serde_json::Value::as_array)
@@ -294,6 +297,15 @@ mod zmx_health_tests {
         );
         assert!(!capabilities(r#"{"capabilities":["health"]}"#).coordinator_handoff_draft);
         assert!(!capabilities("{}").coordinator_handoff_draft);
+    }
+
+    #[test]
+    fn a_health_answer_carries_its_protocol_version() {
+        assert_eq!(
+            capabilities(r#"{"protocolVersion":1}"#).protocol_version,
+            Some(1)
+        );
+        assert_eq!(capabilities("{}").protocol_version, None);
     }
 }
 

@@ -363,6 +363,16 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
             )
         }
         Ok(mut connection) => {
+            if let Some(message) =
+                gpui_remote_protocol_mismatch_message(connection.capabilities.protocol_version)
+            {
+                connection.terminate();
+                let _ = connection.child.wait();
+                return GpuiRemoteGxserverConnectResult::without_connection(
+                    GpuiRemoteGxserverConnectState::Unsupported,
+                    message.as_str(),
+                );
+            }
             connection.this_computer = this_computer;
             GpuiRemoteGxserverConnectResult::connected(connection)
         }
@@ -371,6 +381,35 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
             message.as_str(),
         ),
     }
+}
+
+/// CDXC:RemotePairing 2026-11-07 WHY: a Mac that runs the Ghostex app keeps the app's own gxserver when another computer connects, whatever its build (GitHub #476, `start_through_app_job` in server/src/cli.rs), so this connection can meet a gxserver this app did not install. Any gxserver of the same protocol works: features follow the capabilities it advertises and terminal attach runs the command it returns. One of another protocol cannot, and nothing on either side checked it, so the machine would read connected and fail request by request. The connection is refused with the Ghostex to update instead; the machine's own gxserver keeps running. A daemon that does not say its protocol predates the field and keeps connecting as before.
+pub(crate) fn gpui_remote_protocol_mismatch_message(
+    remote_protocol: Option<u64>,
+) -> Option<String> {
+    gpui_remote_protocol_mismatch_message_for(
+        remote_protocol,
+        GPUI_GXSERVER_PROTOCOL_VERSION,
+        env!("GHOSTEX_BUILD_MARKETING_VERSION"),
+    )
+}
+
+fn gpui_remote_protocol_mismatch_message_for(
+    remote_protocol: Option<u64>,
+    own_protocol: u64,
+    own_version: &str,
+) -> Option<String> {
+    let remote_protocol = remote_protocol?;
+    if remote_protocol == own_protocol {
+        return None;
+    }
+    Some(if remote_protocol < own_protocol {
+        format!(
+            "That machine runs an older Ghostex than this computer, and this Ghostex cannot work with its gxserver. Update Ghostex on that machine to {own_version} to connect."
+        )
+    } else {
+        "That machine runs a newer Ghostex than this computer, and this Ghostex cannot work with its gxserver. Update Ghostex on this computer to connect.".to_string()
+    })
 }
 
 pub(crate) fn gpui_remote_token_read_failure_state(
@@ -1088,5 +1127,28 @@ mod this_computer_tests {
         assert_eq!(gpui_remote_identity_server_id(""), None);
         assert!(!gpui_remote_is_this_computer(None, Some("S6s")));
         assert!(!gpui_remote_is_this_computer(Some("S6s"), None));
+    }
+}
+
+#[cfg(test)]
+mod protocol_mismatch_tests {
+    use super::gpui_remote_protocol_mismatch_message_for;
+
+    /// GitHub #476: a machine's own gxserver at another build connects; only another protocol is
+    /// refused, naming the Ghostex to update.
+    #[test]
+    fn only_another_protocol_is_refused_with_the_ghostex_to_update() {
+        assert_eq!(
+            gpui_remote_protocol_mismatch_message_for(Some(1), 1, "10.50.0"),
+            None
+        );
+        assert_eq!(
+            gpui_remote_protocol_mismatch_message_for(None, 1, "10.50.0"),
+            None
+        );
+        let older = gpui_remote_protocol_mismatch_message_for(Some(1), 2, "10.50.0").unwrap();
+        assert!(older.contains("Update Ghostex on that machine to 10.50.0 to connect."));
+        let newer = gpui_remote_protocol_mismatch_message_for(Some(3), 2, "10.50.0").unwrap();
+        assert!(newer.contains("Update Ghostex on this computer to connect."));
     }
 }

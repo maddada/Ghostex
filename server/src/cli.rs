@@ -287,6 +287,13 @@ pub(crate) async fn start_gxserver_background(
             ) && runs_in_background_session(status));
         same_build
     };
+    #[cfg(target_os = "macos")]
+    {
+        let current_exe = env::current_exe().with_context(|| "resolve current gxserver binary")?;
+        if let Some(job) = macos_app_launchd_job::find().filter(|job| !job.runs(&current_exe)) {
+            return start_through_app_job(&job, build_identity, version).await;
+        }
+    }
     let before = get_gxserver_status(build_identity, version).await?;
     if before.state == "running" {
         if reusable(&before) {
@@ -353,6 +360,113 @@ pub(crate) async fn start_gxserver_background(
             metadata: None,
             message: format!(
                 "gxserver start launched {launched} but health did not become ready on {GXSERVER_LOCAL_API_HOST}:{}.",
+                read_selected_local_api_port()?
+            ),
+            ok: false,
+            product: GXSERVER_PRODUCT.to_string(),
+            state: "starting".to_string(),
+        });
+    }
+    Ok(status)
+}
+
+/// What `gxserver start` does on a Mac whose Ghostex app has its own gxserver job running another program.
+#[cfg(any(target_os = "macos", test))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AppServerStart {
+    /// The app's job is the server: kept whatever its build.
+    Keep,
+    /// Another gxserver (or none) answers: stop it, then start the app's job (`kickstart -k`
+    /// with `restart`, when the job's process is alive but is not the server).
+    StopThenStartApp { restart: bool },
+}
+
+/// `running_pid`: the pid of the gxserver answering health, `None` when none answers.
+#[cfg(any(target_os = "macos", test))]
+fn app_server_start(running_pid: Option<u32>, app_job_pid: Option<u32>) -> AppServerStart {
+    match (running_pid, app_job_pid) {
+        (Some(running), Some(job)) if running == job => AppServerStart::Keep,
+        (Some(_), job) => AppServerStart::StopThenStartApp {
+            restart: job.is_some(),
+        },
+        (None, _) => AppServerStart::StopThenStartApp { restart: false },
+    }
+}
+
+/// How long the app's gxserver may take to answer after `launchctl kickstart`.
+#[cfg(target_os = "macos")]
+const APP_JOB_START_PATIENCE: Duration = Duration::from_secs(30);
+
+/// CDXC:RemotePairing 2026-11-07 WHY: on a Mac running the Ghostex app, `gxserver start` from the installed package (a remote client's connect runs it after every install and on every connect) found the app's gxserver at another build than its own, stopped it and started the package's program detached, so the remote setup's server ran the Mac instead of the one its app manages, outside the GUI session (GitHub #476). The Mac's own app, its phone and Easy Connect all use the app's server, and a remote client works with any gxserver of the same protocol: it reads features from the capabilities the server advertises, and terminal attach runs the `attachCommand` the server itself returns, so its own zmx. So the app's server is kept whatever its build; one that is not running is started through its launchd job, never as the package's program; and a gxserver that is not the app's (a package one an older connect left) is stopped and the app's started instead. A protocol mismatch fails before anything is stopped (`fetch_server_health`), and the client then says which Ghostex to update. A job that runs this very binary keeps the build-replacement rules below.
+/// SEE-ALSO: `server_handoff` in server/src/setup.rs (the same rule while installing), `gpui_remote_protocol_mismatch_message` in apps/desktop/src/app/helpers/remote/connect.rs.
+#[cfg(target_os = "macos")]
+async fn start_through_app_job(
+    job: &macos_app_launchd_job::AppJob,
+    build_identity: &str,
+    version: &str,
+) -> Result<StatusResponse> {
+    let mut before = get_gxserver_status(build_identity, version).await?;
+    if before.state == "starting" {
+        before = wait_for_status(build_identity, version, APP_JOB_START_PATIENCE, |status| {
+            status.state != "starting"
+        })
+        .await?;
+    }
+    let running_pid = (before.state == "running")
+        .then(|| before.health.as_ref().map(|health| health.pid))
+        .flatten();
+    let restart = match app_server_start(running_pid, job.pid) {
+        AppServerStart::Keep => {
+            let build = before
+                .health
+                .as_ref()
+                .map(|health| health.version.clone())
+                .unwrap_or_default();
+            return Ok(StatusResponse {
+                message: format!(
+                    "gxserver {build} is the Ghostex app's own ({}); it was left running.",
+                    job.label
+                ),
+                ..before
+            });
+        }
+        AppServerStart::StopThenStartApp { restart } => restart,
+    };
+    if running_pid.is_some() {
+        let paths = get_gxserver_paths(None);
+        let auth = read_gxserver_auth_token(&paths)?;
+        let _ = request_server_stop(auth.as_ref().map(|auth| auth.token.as_str()), 2_000)?;
+        let stopped = wait_for_status(
+            build_identity,
+            version,
+            Duration::from_millis(5_000),
+            |status| status.state != "running",
+        )
+        .await?;
+        if stopped.state == "running" {
+            return Ok(StatusResponse {
+                message: format!(
+                    "A gxserver that is not the Ghostex app's ({}) answers and its control plane did not stop. Stop it, then start gxserver again.",
+                    job.label
+                ),
+                ok: false,
+                state: "stopping".to_string(),
+                ..stopped
+            });
+        }
+    }
+    macos_app_launchd_job::start(job, restart).map_err(|error| anyhow!(error))?;
+    let status = wait_for_status(build_identity, version, APP_JOB_START_PATIENCE, |status| {
+        status.state == "running"
+    })
+    .await?;
+    if status.state != "running" {
+        return Ok(StatusResponse {
+            health: None,
+            metadata: None,
+            message: format!(
+                "gxserver start launched the Ghostex app's launchd job {} but health did not become ready on {GXSERVER_LOCAL_API_HOST}:{}.",
+                job.label,
                 read_selected_local_api_port()?
             ),
             ok: false,
@@ -851,40 +965,105 @@ pub(crate) mod macos_app_launchd_job {
 
     use anyhow::Result;
 
-    /// The job's label when it was kickstarted, `None` when there is no such job to use.
-    pub(super) fn kickstart_if_it_runs(binary: &Path) -> Result<Option<String>> {
-        let port = crate::config::read_selected_local_api_port()?;
-        let label = format!("{}gxserver", ghostex_paths::launchd_label_prefix(port));
-        let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
-            return Ok(None);
-        };
-        let plist = home
-            .join("Library/LaunchAgents")
-            .join(format!("{label}.plist"));
-        let uid = unsafe { libc::getuid() };
-        let domain = format!("gui/{uid}");
-        if !job_program_is(&plist, binary) || !launchctl(&["print", &domain]).0 {
-            return Ok(None);
-        }
-        let job = format!("{domain}/{label}");
-        if !launchctl(&["print", &job]).0 {
-            let (loaded, output) = launchctl(&["bootstrap", &domain, &plist.to_string_lossy()]);
-            if !loaded && !launchctl(&["print", &job]).0 {
-                // A refused job must not leave a remote client with no gxserver at all: fall back to
-                // the detached start (which may lack Keychain access) and say why.
-                eprintln!("launchctl could not load {label}: {output}; starting gxserver detached");
-                return Ok(None);
-            }
-        }
-        // Without -k: a job that is already running is left alone.
-        let (started, output) = launchctl(&["kickstart", &job]);
-        if !started {
-            eprintln!("launchctl could not start {label}: {output}; starting gxserver detached");
-            return Ok(None);
-        }
-        Ok(Some(label))
+    /// The Ghostex app's gxserver LaunchAgent, found when its plist names a program that runs and
+    /// the user's GUI session is there to run it.
+    #[derive(Clone, Debug)]
+    pub(crate) struct AppJob {
+        pub(crate) label: String,
+        /// `gui/<uid>/<label>`.
+        pub(crate) target: String,
+        /// `gui/<uid>`.
+        pub(crate) domain: String,
+        pub(crate) plist: PathBuf,
+        pub(crate) program: PathBuf,
+        /// The job's process, when launchd runs one.
+        pub(crate) pid: Option<u32>,
     }
 
+    impl AppJob {
+        pub(crate) fn runs(&self, binary: &Path) -> bool {
+            same_file(&self.program, binary)
+        }
+    }
+
+    pub(crate) fn find() -> Option<AppJob> {
+        let port = crate::config::read_selected_local_api_port().ok()?;
+        let label = format!("{}gxserver", ghostex_paths::launchd_label_prefix(port));
+        let plist = PathBuf::from(std::env::var_os("HOME")?)
+            .join("Library/LaunchAgents")
+            .join(format!("{label}.plist"));
+        let program = job_program(&plist)?;
+        if !is_executable(&program) {
+            return None;
+        }
+        let domain = format!("gui/{}", unsafe { libc::getuid() });
+        if !launchctl(&["print", &domain]).0 {
+            return None;
+        }
+        let target = format!("{domain}/{label}");
+        let (loaded, output) = launchctl(&["print", &target]);
+        Some(AppJob {
+            pid: loaded.then(|| launchctl_print_pid(&output)).flatten(),
+            label,
+            target,
+            domain,
+            plist,
+            program,
+        })
+    }
+
+    /// Loads the job if launchd does not have it, then `launchctl kickstart` (`-k` with `restart`,
+    /// which ends a running instance first; without it a running job is left alone).
+    pub(crate) fn start(job: &AppJob, restart: bool) -> std::result::Result<(), String> {
+        if !launchctl(&["print", &job.target]).0 {
+            let (loaded, output) =
+                launchctl(&["bootstrap", &job.domain, &job.plist.to_string_lossy()]);
+            if !loaded && !launchctl(&["print", &job.target]).0 {
+                return Err(format!("launchctl could not load {}: {output}", job.label));
+            }
+        }
+        let arguments: &[&str] = if restart {
+            &["kickstart", "-k", &job.target]
+        } else {
+            &["kickstart", &job.target]
+        };
+        let (started, output) = launchctl(arguments);
+        if started {
+            Ok(())
+        } else {
+            Err(format!("launchctl could not start {}: {output}", job.label))
+        }
+    }
+
+    /// The first `pid = N` line of `launchctl print` is the job's own (later ones are nested).
+    pub(crate) fn launchctl_print_pid(output: &str) -> Option<u32> {
+        output.lines().find_map(|line| {
+            let (key, value) = line.trim().split_once(" = ")?;
+            (key == "pid").then(|| value.trim().parse().ok()).flatten()
+        })
+    }
+
+    fn is_executable(path: &Path) -> bool {
+        use std::os::unix::fs::PermissionsExt;
+        path.metadata()
+            .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+    }
+
+    /// The job's label when it was kickstarted, `None` when there is no such job to use.
+    pub(super) fn kickstart_if_it_runs(binary: &Path) -> Result<Option<String>> {
+        let Some(job) = find().filter(|job| job.runs(binary)) else {
+            return Ok(None);
+        };
+        // A refused job must not leave a remote client with no gxserver at all: fall back to the
+        // detached start (which may lack Keychain access) and say why.
+        if let Err(error) = start(&job, false) {
+            eprintln!("{error}; starting gxserver detached");
+            return Ok(None);
+        }
+        Ok(Some(job.label))
+    }
+
+    #[cfg(test)]
     pub(super) fn job_program_is(plist: &Path, binary: &Path) -> bool {
         job_program(plist).is_some_and(|program| same_file(&program, binary))
     }
@@ -909,7 +1088,15 @@ pub(crate) mod macos_app_launchd_job {
 
     #[cfg(test)]
     mod tests {
-        use super::job_program_is;
+        use super::{job_program_is, launchctl_print_pid};
+
+        #[test]
+        fn launchctl_print_pid_reads_the_jobs_own_pid() {
+            let running = "gui/501/com.madda.ghostex.gxserver = {\n\tactive count = 1\n\tstate = running\n\tprogram = /Applications/Ghostex.app/Contents/Resources/Web/gxserver/bin/gxserver\n\tpid = 4242\n\tresource coalition = {\n\t\tpid = 1\n\t}\n}\n";
+            assert_eq!(launchctl_print_pid(running), Some(4242));
+            let stopped = "gui/501/com.madda.ghostex.gxserver = {\n\tstate = not running\n\tlast exit code = 0\n}\n";
+            assert_eq!(launchctl_print_pid(stopped), None);
+        }
 
         #[test]
         fn only_a_job_that_runs_this_binary_is_used() {
@@ -989,6 +1176,32 @@ fn _home_dir_for_tests(path: PathBuf) -> GxserverForegroundOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// GitHub #476: a remote client's `gxserver start` on a Mac running the Ghostex app keeps the
+    /// app's gxserver whatever its build, and otherwise starts the app's job, never the package.
+    #[test]
+    fn the_app_gxserver_is_kept_or_started_through_its_job() {
+        // The app's job answers: kept, even at another build than the package.
+        assert_eq!(app_server_start(Some(700), Some(700)), AppServerStart::Keep);
+        // Nothing answers: start the app's job (a live job process is left to finish starting).
+        assert_eq!(
+            app_server_start(None, None),
+            AppServerStart::StopThenStartApp { restart: false }
+        );
+        assert_eq!(
+            app_server_start(None, Some(700)),
+            AppServerStart::StopThenStartApp { restart: false }
+        );
+        // Another gxserver (a package one an older connect left) answers: stop it, start the app's.
+        assert_eq!(
+            app_server_start(Some(800), None),
+            AppServerStart::StopThenStartApp { restart: false }
+        );
+        assert_eq!(
+            app_server_start(Some(800), Some(700)),
+            AppServerStart::StopThenStartApp { restart: true }
+        );
+    }
 
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| value.to_string()).collect()
