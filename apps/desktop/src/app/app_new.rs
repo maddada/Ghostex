@@ -316,6 +316,7 @@ impl GhostexGpuiApp {
                 local_workspace_session_mappings: shell_layout_state
                     .local_workspace_session_mappings,
                 local_workspace_attach_pending: HashSet::new(),
+                local_workspace_attach_chat_previewed: HashSet::new(),
                 local_workspace_attach_refused: HashMap::new(),
                 agents_chat_mode_sessions: shell_layout_state.agents_chat_mode_sessions,
                 agents_chat_notice_admitted_sessions: HashSet::new(),

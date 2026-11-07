@@ -463,6 +463,9 @@ pub struct GhostexGpuiApp {
     pub(crate) local_workspace_session_mappings:
         HashMap<GpuiLocalWorkspaceSessionKey, TerminalSessionId>,
     pub(crate) local_workspace_attach_pending: HashSet<GpuiLocalWorkspaceSessionKey>,
+    /// Pending attaches whose early chat (the `attachSessionMetadata` preview) has started, so a
+    /// Chat intent armed while one runs starts it once (workspace_events.rs).
+    pub(crate) local_workspace_attach_chat_previewed: HashSet<GpuiLocalWorkspaceSessionKey>,
     /// Sessions whose attach gxserver refused because of their account (`accountUnavailable`),
     /// with the account id they were on then. See `local_workspace_attach_refused_still` in
     /// workspace_events.rs.
