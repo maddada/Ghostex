@@ -50,7 +50,11 @@ fn providers(state: &AppState) -> Vec<CloudKitProvider> {
                 return None;
             }
             let key = store::unseal(&state.paths, stored.key_sealed.as_deref()?).ok()?;
-            Some(CloudKitProvider { provider, key })
+            Some(CloudKitProvider {
+                provider,
+                key,
+                plan: stored.row.plan.clone(),
+            })
         })
         .collect()
 }

@@ -25,6 +25,10 @@ pub const CLOUD_KIT_VERSION: u64 = 1;
 pub struct CloudKitProvider {
     pub provider: CloudProviderId,
     pub key: String,
+    /// The provider's plan (`free`, `pro`), so a phone create follows the plan's rules (Instabox's
+    /// free plan refuses an idle pause of its own). Absent from an older computer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<String>,
 }
 
 /// A project's Default snapshot as a phone start needs it.

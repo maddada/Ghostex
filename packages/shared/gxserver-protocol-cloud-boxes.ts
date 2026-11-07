@@ -477,7 +477,8 @@ export interface GxserverCloudKit {
   homeMachineId: string;
   gxserverVersion: string;
   issuedAt: string;
-  providers: Array<{ provider: GxserverCloudProviderId; key: string }>;
+  /** `plan` (`free`, `pro`) is absent from an older computer. */
+  providers: Array<{ provider: GxserverCloudProviderId; key: string; plan?: string }>;
   accounts: GxserverBoxInjectedAccount[];
   allowDeviceKeys: string[];
   idleStopMinutes: number;
