@@ -107,6 +107,27 @@ fn insert_paired_device(state: &AppState, device_id: &str) {
         .expect("insert paired device");
 }
 
+/// Pairs `device_id` with its own API token, as `/api/pairDevice` stores it, and returns the token.
+fn insert_phone_with_api_token(state: &AppState, device_id: &str) -> String {
+    let token = format!("{}{}", crate::auth::DEVICE_API_TOKEN_PREFIX, "p".repeat(43));
+    let db = open_gxserver_database(&state.paths).expect("db");
+    RemotePairingRepository::new(&db)
+        .insert_device(&RemotePairedDeviceRecord {
+            id: device_id.to_string(),
+            name: format!("Phone {device_id}"),
+            platform: "ios".to_string(),
+            ssh_key_fingerprint: format!("SHA256:{device_id}"),
+            tailcat_client_key: None,
+            api_token_hash: Some(crate::auth::hash_device_api_token(&token)),
+            paired_at: "2026-11-07T10:00:00.000Z".to_string(),
+            last_seen_at: None,
+        })
+        .expect("insert paired device");
+    crate::remote_access::reload_device_api_tokens(&db, &state.device_api_tokens)
+        .expect("reload device tokens");
+    token
+}
+
 fn paired_device_exists(state: &AppState, device_id: &str) -> bool {
     let db = open_gxserver_database(&state.paths).expect("db");
     RemotePairingRepository::new(&db)
@@ -479,6 +500,56 @@ async fn push_token_store_rejects_takeover_of_a_held_id_or_token() {
     let (status, body) =
         post_push(&state, register_paired(TOKEN_B, "computer-Q", "device-one")).await;
     assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[tokio::test]
+async fn push_token_store_refuses_a_phone_removed_while_its_request_arrives() {
+    let (_temp, state) = push_fixture();
+    let phone_token = insert_phone_with_api_token(&state, "device-one");
+    let (body_polled, polled) = tokio::sync::oneshot::channel::<()>();
+    let (release_body, released) = tokio::sync::oneshot::channel::<()>();
+    let bytes = envelope(register(TOKEN_A, "computer-P", (true, true, true))).to_string();
+    let delayed_body = Body::from_stream(futures_util::stream::once(async move {
+        let _ = body_polled.send(());
+        let _ = released.await;
+        Ok::<_, std::io::Error>(bytes)
+    }));
+    let (parts, _) =
+        rpc_request(REGISTER_PUSH_TOKEN_ENDPOINT, &phone_token, json!({})).into_parts();
+    let request = Request::from_parts(parts, delayed_body);
+    let pending = tokio::spawn({
+        let state = state.clone();
+        async move { send(&state, request).await }
+    });
+
+    // The token passed the auth gate and the body is being read when the phone is removed.
+    tokio::time::timeout(Duration::from_secs(5), polled)
+        .await
+        .expect("body polled")
+        .expect("body polled");
+    let db = open_gxserver_database(&state.paths).expect("db");
+    let removed = remove_paired_device_using(
+        &state.paths,
+        &db,
+        &state.tailcat_runtime,
+        &state.device_api_tokens,
+        "device-one",
+        |_: &str| Ok(true),
+    )
+    .expect("unpair");
+    assert!(removed.is_some());
+    assert!(!state.device_api_tokens.accepts(&phone_token));
+    drop(db);
+    release_body.send(()).expect("release body");
+
+    // Refused as no longer paired, not stored as an unlinked registration of the main token.
+    let (status, body) = tokio::time::timeout(Duration::from_secs(5), pending)
+        .await
+        .expect("answered")
+        .expect("request task");
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["error"], json!("forbidden"));
+    assert_eq!(store_bytes(&state), None);
 }
 
 #[tokio::test]
