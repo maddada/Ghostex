@@ -448,7 +448,7 @@ async fn missing_resume_restart(
             missing.reference.as_deref().unwrap_or("no reference named"),
             match &decision {
                 MissingResumeRestart::Reject(_) =>
-                    "it is set aside and the agent starts without it",
+                    "it is set aside: the agent reopens its saved file if there is one, or starts fresh",
                 MissingResumeRestart::Restart => "the next start does not use it",
                 MissingResumeRestart::GiveUp =>
                     "the same restart would fail again, so it was not run",
@@ -524,7 +524,7 @@ async fn restart_without_missing_resume(
         state,
         target,
         "sessionChatSendRestartedAgent",
-        "The agent could not find its conversation; restarted it without that conversation, so the message goes to its next start.",
+        "The agent could not find its conversation by that reference; restarted it without it (its saved file if there is one, or fresh), so the message goes to its next start.",
     );
     Ok(())
 }
