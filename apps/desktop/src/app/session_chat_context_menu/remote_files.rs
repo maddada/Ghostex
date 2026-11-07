@@ -217,12 +217,24 @@ impl GhostexGpuiApp {
         } else {
             path
         };
-        let params = serde_json::json!({
+        /*
+        CDXC:Docs 2026-11-07 WHY: issue #462. The check asked about the Docs folders alone, while
+        the Files view it opens covers the whole project, so any project file outside them failed
+        too. It now asks with the Files view's project scope, and a path outside the project (an
+        agent's log in `/private/tmp/…`) goes with this chat's session: gxserver opens it, read-only,
+        only when this chat links to it, and only as plain text (server/src/project_docs/chat_file.rs).
+        */
+        let outside = gpui_remote_chat_file_is_outside(&relative, windows);
+        let mut params = serde_json::json!({
             "projectId": key.project_id,
             "action": "stat",
             "path": relative,
+            "scope": "project",
             "additionalDocsFolders": gpui_manage_additional_docs_folders_text(&self.sidebar_runtime_settings_snapshot),
         });
+        if outside {
+            params["sessionId"] = serde_json::json!(key.session_id);
+        }
         let key = key.clone();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
@@ -234,17 +246,42 @@ impl GhostexGpuiApp {
                 if this.active_sidebar_project_id().as_deref() != Some(active.as_str()) { return; }
                 match result {
                     Ok(value) if value.get("error").is_none() && value.get("file").is_some() => {
+                        if outside {
+                            this.native_docs.remote_chat_files.insert(
+                                relative.clone(),
+                                (active.clone(), key.session_id.clone()),
+                            );
+                        }
                         this.pending_docs_file_open = Some(relative);
                         this.switch_workarea_from_hotkey(TitlebarMode::Manage, window, cx);
                         this.mark_project_editor_mode_awake(TitlebarMode::Manage, cx);
                         this.focus_project_editor_surface(TitlebarMode::Manage, window, cx);
                         if !this.deliver_pending_docs_file_open(cx) { this.schedule_pending_docs_file_open_delivery(cx); }
                     }
-                    _ => this.report_session_chat_file_open_failure("This remote file is outside the project's Docs folders or is unavailable. Use Open in VS Code for other files.", cx),
+                    // gxserver's own reason (not linked by this chat, not text, too large) when
+                    // it gave one; an older gxserver without chat-linked files gives the old one.
+                    Ok(value) if value.get("error").and_then(serde_json::Value::as_str).is_some_and(|error| !error.is_empty() && error != "Paths must be project-relative.") => {
+                        let error = value["error"].as_str().unwrap_or_default().to_string();
+                        this.report_session_chat_file_open_failure(&error, cx);
+                    }
+                    _ => this.report_session_chat_file_open_failure(if outside {
+                        "This remote file is outside the project and the remote computer's Ghostex can't open it in Files yet. Use Open in VS Code for it."
+                    } else {
+                        "This remote file is unavailable. Use Open in VS Code for it."
+                    }, cx),
                 }
             });
         }).detach();
     }
+}
+
+/// A chat link's path that names a file outside the remote project: absolute (a drive path on a
+/// Windows remote) or from the home folder, after the project's own prefix was taken off.
+fn gpui_remote_chat_file_is_outside(path: &str, windows: bool) -> bool {
+    path.starts_with('/')
+        || path == "~"
+        || path.starts_with("~/")
+        || (windows && (gpui_terminal_link_is_windows_drive_path(path) || path.starts_with("//")))
 }
 
 /// CDXC:CodeEditor 2026-09-23 WHY:

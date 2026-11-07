@@ -113,13 +113,20 @@ impl GhostexGpuiApp {
         match event {
             EditorEvent::Changed => {
                 let text = editor.read(cx).text().to_string();
+                let read_only = self
+                    .native_docs
+                    .document(&path)
+                    .is_some_and(|document| document.read_only);
                 if let Some(document) = self.native_docs.document_mut(&path)
                     && document.review_session_title.is_none()
+                    && !read_only
                 {
                     document.dirty = document.saved_text != text;
                 }
                 self.native_docs_follow_edit(&path, editor, &text, cx);
-                self.native_docs_schedule_draft_write(&path, cx);
+                if !read_only {
+                    self.native_docs_schedule_draft_write(&path, cx);
+                }
                 self.native_docs_refresh_find(cx);
                 self.native_docs_keep_caret_visible(window, cx);
                 self.native_docs_notify(cx);

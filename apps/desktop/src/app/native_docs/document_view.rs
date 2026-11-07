@@ -723,6 +723,7 @@ impl GhostexGpuiApp {
         let Some(editor) = document.editor.clone() else {
             return notice("files-view/t-refresh-2.svg", "Loading file".to_string());
         };
+        let read_only = document.read_only;
         let find = self.render_native_docs_code_find(p, cx);
         div()
             .relative()
@@ -740,6 +741,7 @@ impl GhostexGpuiApp {
                         // `Editor` brings the theme's code font, size and row height; the text
                         // view keeps the Docs mono font at the input text size and rows.
                         Editor::new(&editor)
+                            .readonly(read_only)
                             .scrollbar_show(ScrollbarMode::Always)
                             .appearance(false)
                             // Under glass the Kit theme's opaque gutter and current-line

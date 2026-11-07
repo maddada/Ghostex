@@ -370,6 +370,9 @@ pub(crate) struct DocsDocument {
     /// Reopened from the last visit (`native_docs_restore_open_files`) rather than opened now, so
     /// a file deleted since then closes quietly (`native_docs_apply_read`).
     pub(crate) restored: bool,
+    /// Shown but never saved: a remote file a chat linked to outside the project (`readOnly` in
+    /// gxserver's answer, CDXC:Docs 2026-11-07 in server/src/project_docs/chat_file.rs).
+    pub(crate) read_only: bool,
 }
 
 impl DocsDocument {
@@ -422,6 +425,7 @@ impl DocsDocument {
             data_view_open,
             data_view: None,
             restored: false,
+            read_only: false,
         }
     }
 }
@@ -484,6 +488,10 @@ pub(crate) struct NativeDocsState {
     pub(crate) pending_origin: Option<crate::TerminalSessionId>,
     /// A file asked for before Docs synced to the current project.
     pub(crate) pending_open: Option<String>,
+    /// Remote files outside the project that a session's chat linked to, by their absolute path:
+    /// the remote project (its scoped id) and the session whose chat named them. Their reads carry
+    /// that `sessionId`, which gxserver checks against the chat (`remote_files.rs`).
+    pub(crate) remote_chat_files: std::collections::HashMap<String, (String, String)>,
     /// A published page asked for before Docs synced to the current project.
     pub(crate) pending_page: Option<super::published_page::DocsPendingPage>,
     /// Open File was asked for before Files drew; its next draw shows the search box.

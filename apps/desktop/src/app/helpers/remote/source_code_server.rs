@@ -511,7 +511,14 @@ pub(crate) fn run_remote_manage_files_bridge_request_for_project_snapshot(
             );
         }
         for key in [
-            "path", "newPath", "content", "revision", "query", "table", "sql",
+            "path",
+            "newPath",
+            "content",
+            "revision",
+            "query",
+            "table",
+            "sql",
+            "sessionId",
         ] {
             if let Some(value) = manage_request_string(&request, key) {
                 params.insert(key.to_string(), serde_json::Value::String(value));

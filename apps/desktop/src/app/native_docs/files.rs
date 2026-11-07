@@ -116,6 +116,14 @@ impl GhostexGpuiApp {
                 target.insert(key.clone(), value.clone());
             }
         }
+        // A remote file a chat linked to is read for that chat's session, which gxserver checks.
+        let linked = fields["path"].as_str().and_then(|path| {
+            let (project_id, session_id) = self.native_docs.remote_chat_files.get(path)?;
+            (request["projectId"].as_str() == Some(project_id.as_str())).then(|| session_id.clone())
+        });
+        if let (Some(session_id), Some(target)) = (linked, request.as_object_mut()) {
+            target.insert("sessionId".to_string(), json!(session_id));
+        }
         request
     }
 

@@ -257,6 +257,7 @@ impl GhostexGpuiApp {
             document.saved_text = text.clone();
             document.pending_text = Some(text);
             document.load = DocsDocumentLoad::Ready;
+            document.read_only = file["readOnly"] == true;
         }
         self.native_docs_notify(cx);
     }
@@ -337,6 +338,7 @@ impl GhostexGpuiApp {
                         let value = input.read(cx).value();
                         if let Some(document) = this.native_docs.document_mut(&watched_path)
                             && document.review_session_title.is_none()
+                            && !document.read_only
                         {
                             let dirty = value.as_ref() != document.saved_text;
                             if dirty != document.dirty {
@@ -426,6 +428,16 @@ impl GhostexGpuiApp {
             return;
         }
         if document.saving || document.review_session_title.is_some() {
+            return;
+        }
+        if document.read_only {
+            let title = format!("Couldn't save {}", document.name);
+            self.dispatch_gpui_workspace_action_toast(
+                "error",
+                &title,
+                "This file opened read-only from a chat link. Use Open in VS Code to edit it.",
+                cx,
+            );
             return;
         }
         // VS Code refuses to save over a file that changed on disk under unsaved edits; the
