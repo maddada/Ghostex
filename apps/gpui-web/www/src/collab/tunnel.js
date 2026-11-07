@@ -99,6 +99,19 @@ export class CollabTunnel {
     hello[0] = 1;
     hello.set(salt, 1);
     ws.send(hello);
+    // Reached only when the owner's computer answers with a frame this key opens; a relay that
+    // knows no such link closes the socket instead (CLOSE.offline / CLOSE.ended).
+    const ready = new Promise((resolve, reject) => {
+      const stop = this.onMessage((message) => {
+        if (message.t !== 'ready') return;
+        stop();
+        resolve();
+      });
+      ws.onclose = (event) => {
+        stop();
+        reject(Object.assign(new Error(event.reason || 'closed'), { code: event.code }));
+      };
+    });
     ws.onmessage = (event) => {
       const frame = new Uint8Array(event.data);
       this.recvChain = this.recvChain.then(async () => {
@@ -113,6 +126,7 @@ export class CollabTunnel {
         }
       });
     };
+    await ready;
     ws.onclose = (event) => {
       if (this.ws !== ws) return;
       this.ws = null;

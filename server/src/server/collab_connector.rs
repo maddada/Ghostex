@@ -8,7 +8,7 @@
 //! Guest frames (JSON, inside the lock):
 //! - guest → host: `{t:"hello"}`, `{t:"join", name, code}`, `{t:"http", id, path, body}`,
 //!   `{t:"ws-open", id, path}`, `{t:"ws", id, text}`, `{t:"ws-close", id}`.
-//! - host → guest: `{t:"intro", title, owner, needsCode, mode}`, `{t:"welcome", viewerId, name,
+//! - host → guest: `{t:"ready"}` (first, once the hello opened), `{t:"intro", title, owner, needsCode, mode}`, `{t:"welcome", viewerId, name,
 //!   projectId, sessionId, title, owner, mode}`, `{t:"denied", reason, triesLeft?}`,
 //!   `{t:"http", id, status, body}`, `{t:"ws-open", id}`, `{t:"ws", id, text}`, `{t:"ws-close", id}`.
 //!
@@ -273,7 +273,11 @@ fn relay_frame(
             };
             let Some(cipher) = conn.cipher.as_mut() else {
                 match HostCipher::from_hello(&conn.key, &bytes) {
-                    Some(cipher) => conn.cipher = Some(cipher),
+                    Some(cipher) => {
+                        conn.cipher = Some(cipher);
+                        // The page counts the chat as reached only once this opens with its key.
+                        let _ = guest_tx.send((conn_id, json!({"t": "ready"})));
+                    }
                     None => {
                         let _ = relay_tx.send(json!({"op": "close", "conn": conn_id}));
                         conns.remove(&conn_id);
