@@ -67,13 +67,13 @@ pub fn nudge_message() -> String {
     )
 }
 /// How often one session's transcript (and, once it is quiet, its screen) is looked at.
-const STALL_CHECK_EVERY_MS: i64 = 30_000;
+pub(super) const STALL_CHECK_EVERY_MS: i64 = 30_000;
 /// The screen is only fingerprinted once the session has been quiet this long: one that writes
 /// rows needs no capture.
-const SCREEN_SAMPLE_AFTER_MS: i64 = 60_000;
+pub(super) const SCREEN_SAMPLE_AFTER_MS: i64 = 60_000;
 /// After a nudge, what Ghostex's own message does (typed into the input box, queued on screen, a
 /// row in an agent that records a message it takes mid-turn) is not the thread moving.
-const NUDGE_GRACE_MS: i64 = 90_000;
+pub(super) const NUDGE_GRACE_MS: i64 = 90_000;
 /// Rows read to learn the newest row's time.
 const QUIET_TAIL_ROWS: usize = 4;
 /// Rows read back to find the last row worth naming in the report.
@@ -414,7 +414,7 @@ fn screen_fingerprint_of(session: &Value) -> Option<u64> {
 }
 
 /// A screen's text without what changes on its own while nothing happens.
-fn screen_fingerprint(text: &str) -> u64 {
+pub(super) fn screen_fingerprint(text: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     for line in text.lines() {
         let words = line
@@ -560,7 +560,7 @@ pub fn stall_last_row(
 }
 
 /// A message Ghostex typed into the thread itself (a stall or idle nudge).
-fn is_ghostex_nudge(message: &SessionChatMessage) -> bool {
+pub(super) fn is_ghostex_nudge(message: &SessionChatMessage) -> bool {
     message.role == SessionChatRole::User
         && message.blocks.iter().any(|block| {
             matches!(block, SessionChatBlock::Text { text } if text.trim_start().starts_with("Ghostex:"))
@@ -568,7 +568,7 @@ fn is_ghostex_nudge(message: &SessionChatMessage) -> bool {
 }
 
 /// One line naming a transcript row: the step it ran, what it said, or what a tool returned.
-fn describe_row(message: &SessionChatMessage) -> Option<String> {
+pub(super) fn describe_row(message: &SessionChatMessage) -> Option<String> {
     // A message to it (the brief, a follow-up, Ghostex's nudge) says nothing about where it is.
     if message.role == SessionChatRole::User {
         return None;

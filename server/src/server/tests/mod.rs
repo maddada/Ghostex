@@ -16,6 +16,7 @@ mod project_directories;
 mod protocol_and_routes;
 mod push;
 mod push_delivery;
+mod remote_thread_stall;
 mod renderer_and_titles;
 mod settings_sync_appearance;
 mod voice_remote_sessions;

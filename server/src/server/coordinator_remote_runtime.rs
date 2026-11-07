@@ -13,8 +13,10 @@ use std::collections::BTreeMap;
 use crate::connected_computers::ConnectedComputer;
 use crate::coordinators::{
     agent_message, list_remote_threads, prompt_summary, record_remote_thread_progress,
-    record_remote_thread_report, report_body, set_remote_thread_resolved, MessageSender,
-    RemoteThreadKey, RemoteThreadRecord, ThreadReport,
+    record_remote_thread_report, remote_chat_last_row, remote_chat_reading,
+    remote_screen_fingerprint, report_body, set_remote_thread_resolved, MessageSender,
+    RemoteStallDue, RemoteStallWatch, RemoteThreadKey, RemoteThreadRecord, StallNudge,
+    ThreadReport, REMOTE_STALL_CHAT_ROWS,
 };
 use crate::session_chat_interactive::SessionChatInteractivePrompt;
 
@@ -156,6 +158,8 @@ pub(super) fn waiting_prompt(chat: &Value) -> (String, String) {
 pub(super) struct RemoteSupervisorMemory {
     pub(super) not_working_since: HashMap<RemoteThreadKey, i64>,
     pub(super) in_flight: HashSet<RemoteThreadKey>,
+    /// Each working thread's output clock (coordinators/remote_stall.rs).
+    pub(super) stalls: HashMap<RemoteThreadKey, RemoteStallWatch>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -163,6 +167,16 @@ pub(super) enum RemoteReport {
     Finished,
     Waiting,
     Closed,
+    /// Working with no new output for a round, its transcript's turn still open: the first round
+    /// nudges the thread.
+    Stalled {
+        due: RemoteStallDue,
+    },
+    /// Working by its hooks, but no output for a round and its transcript's turn ended: a finished
+    /// turn the other computer's hooks never reported (issue #475).
+    TurnEnded {
+        due: RemoteStallDue,
+    },
 }
 
 pub(super) struct PendingRemoteReport {
@@ -225,6 +239,15 @@ pub(super) fn tick(
     state: &AppState,
     memory: &Mutex<RemoteSupervisorMemory>,
 ) -> Vec<PendingRemoteReport> {
+    tick_at(state, memory, now_ms())
+}
+
+/// One pass at `now` (ms): `tick`, with the clock a test can move.
+pub(super) fn tick_at(
+    state: &AppState,
+    memory: &Mutex<RemoteSupervisorMemory>,
+    now: i64,
+) -> Vec<PendingRemoteReport> {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return Vec::new();
     };
@@ -249,10 +272,9 @@ pub(super) fn tick(
             .or_default()
             .push(thread);
     }
-    let Ok(mut memory) = memory.lock() else {
+    let Ok(mut guard) = memory.lock() else {
         return Vec::new();
     };
-    let now = now_ms();
     let mut reports = Vec::new();
     for (server_id, threads) in by_computer {
         // A computer that is not connected (or whose Agent access is off) is skipped, not judged:
@@ -301,7 +323,7 @@ pub(super) fn tick(
             .unwrap_or_default();
         for thread in threads {
             let key = thread.key();
-            if memory.in_flight.contains(&key) {
+            if guard.in_flight.contains(&key) {
                 continue;
             }
             let session = sessions
@@ -330,6 +352,24 @@ pub(super) fn tick(
                     None => continue,
                 };
             }
+            // A working thread's output clock reads its chat and screen there; a turn its
+            // transcript ended and that was reported is finished until its rows move.
+            if observation == RemoteObservation::Working {
+                let mut watch = guard
+                    .stalls
+                    .remove(&key)
+                    .unwrap_or_else(|| RemoteStallWatch::new(now));
+                // The reads go over the network: deliveries may take the lock meanwhile.
+                drop(guard);
+                check_remote_stall(&computer, &thread, &mut watch, now);
+                guard = memory.lock().unwrap_or_else(|error| error.into_inner());
+                if watch.finished() {
+                    observation = RemoteObservation::Idle;
+                }
+                guard.stalls.insert(key.clone(), watch);
+            } else {
+                guard.stalls.remove(&key);
+            }
             let marker = session.as_ref().and_then(activity_marker_ms);
             // A thread linked as it was (or reported before 0053) has no time of the other
             // computer's yet: this pass sets one, from that computer's own clock.
@@ -344,17 +384,27 @@ pub(super) fn tick(
             let report = match observation {
                 RemoteObservation::Working => {
                     observed_working = true;
-                    memory.not_working_since.remove(&key);
-                    None
+                    guard.not_working_since.remove(&key);
+                    guard
+                        .stalls
+                        .get(&key)
+                        .and_then(|watch| watch.due(now))
+                        .map(|due| {
+                            if due.turn_ended {
+                                RemoteReport::TurnEnded { due }
+                            } else {
+                                RemoteReport::Stalled { due }
+                            }
+                        })
                 }
                 RemoteObservation::Waiting => {
-                    memory.not_working_since.remove(&key);
+                    guard.not_working_since.remove(&key);
                     Some(RemoteReport::Waiting)
                 }
                 RemoteObservation::Idle
                     if thread.observed_working || activity_moved_since_check(&thread, marker) =>
                 {
-                    let since = *memory.not_working_since.entry(key.clone()).or_insert(now);
+                    let since = *guard.not_working_since.entry(key.clone()).or_insert(now);
                     (now - since >= FINISH_STABILITY_MS).then_some(RemoteReport::Finished)
                 }
                 RemoteObservation::Closed => Some(RemoteReport::Closed),
@@ -378,8 +428,8 @@ pub(super) fn tick(
                 );
             }
             if let Some(kind) = report {
-                memory.in_flight.insert(key.clone());
-                memory.not_working_since.remove(&key);
+                guard.in_flight.insert(key.clone());
+                guard.not_working_since.remove(&key);
                 let mut thread = thread;
                 thread.observed_working = observed_working;
                 reports.push(PendingRemoteReport {
@@ -393,6 +443,53 @@ pub(super) fn tick(
         }
     }
     reports
+}
+
+/// BLOCKING (one or two reads of the other computer, at most every 30 seconds): feeds a working
+/// thread's output clock its chat there and, once quiet, its screen.
+fn check_remote_stall(
+    computer: &ConnectedComputer,
+    thread: &RemoteThreadRecord,
+    watch: &mut RemoteStallWatch,
+    now: i64,
+) {
+    if !watch.check_due(now) {
+        return;
+    }
+    let ids = json!({ "projectId": thread.project_id, "sessionId": thread.session_id });
+    let mut chat_params = ids.clone();
+    chat_params["limit"] = json!(REMOTE_STALL_CHAT_ROWS);
+    let chat = remote_rpc(computer, "/api/readSessionChat", chat_params);
+    let reading = remote_chat_reading(chat.as_ref());
+    let screen = if reading.rows.is_some() && watch.wants_screen(now) {
+        remote_rpc(computer, "/api/readSessionTerminalTail", ids)
+            .as_ref()
+            .and_then(remote_screen_fingerprint)
+    } else {
+        None
+    };
+    watch.record(now, reading, screen);
+}
+
+/// The message a quiet thread on another computer is nudged with, typed there under a send id
+/// that is the same for every try in one quiet stretch, so a retried report never types it twice.
+fn nudge_remote_thread(
+    computer: &ConnectedComputer,
+    thread: &RemoteThreadRecord,
+    due: &RemoteStallDue,
+) -> std::result::Result<(), String> {
+    let params = json!({
+        "projectId": thread.project_id,
+        "sessionId": thread.session_id,
+        "text": crate::coordinators::nudge_message(),
+        "sendRequestId": format!(
+            "remote-nudge:{}:{}:{}:{}",
+            thread.server_id, thread.project_id, thread.session_id, due.quiet_since
+        ),
+    });
+    remote_rpc(computer, "/api/sendSessionChatMessage", params)
+        .map(|_| ())
+        .ok_or_else(|| format!("{} did not take the message.", computer.name))
 }
 
 /// What a finished report carries: the new reply's id and text, `(None, None)` for a turn seen
@@ -491,7 +588,11 @@ async fn deliver(
     let chat_params = json!({
         "projectId": report.thread.project_id,
         "sessionId": report.thread.session_id,
-        "limit": 30,
+        // A round of quiet is checked against the same page its watch hashed.
+        "limit": match report.kind {
+            RemoteReport::Stalled { .. } | RemoteReport::TurnEnded { .. } => REMOTE_STALL_CHAT_ROWS,
+            _ => 30,
+        },
     });
     let chat = match report.kind {
         RemoteReport::Closed => None,
@@ -502,9 +603,66 @@ async fn deliver(
         .ok()
         .flatten(),
     };
+    // A round of quiet is dropped when the thread wrote a row since it was judged.
+    let stall_due = match &report.kind {
+        RemoteReport::Stalled { due } | RemoteReport::TurnEnded { due } => Some(*due),
+        _ => None,
+    };
+    if let Some(due) = stall_due {
+        if remote_chat_reading(chat.as_ref()).rows != due.rows {
+            if let Ok(mut memory) = memory.lock() {
+                memory.in_flight.remove(&key);
+            }
+            return;
+        }
+    }
     let mut message_id = None;
     let (body, prompt_key, excerpt) = match report.kind {
-        RemoteReport::Finished => {
+        RemoteReport::Stalled { due } => {
+            let nudge = if due.round == 1 {
+                let (computer, thread) = (report.computer.clone(), report.thread.clone());
+                let sent = tokio::task::spawn_blocking(move || {
+                    nudge_remote_thread(&computer, &thread, &due)
+                })
+                .await
+                .unwrap_or_else(|error| Err(error.to_string()));
+                if sent.is_ok() {
+                    if let Ok(mut memory) = memory.lock() {
+                        if let Some(watch) = memory.stalls.get_mut(&key) {
+                            watch.note_nudged(now_ms());
+                        }
+                    }
+                }
+                Some(sent)
+            } else {
+                None
+            };
+            let last_row = chat.as_ref().and_then(remote_chat_last_row);
+            (
+                report_body(
+                    &ThreadReport::Stalled {
+                        // Whole rounds, so a retried report is the same text (and send).
+                        quiet_minutes: crate::coordinators::minutes_of(
+                            i64::from(due.round) * crate::coordinators::quiet_round_ms(),
+                        ),
+                        quiet_since: &crate::coordinators::iso_from_ms(due.quiet_since)
+                            .unwrap_or_default(),
+                        last_row: last_row.as_deref(),
+                        nudge: match &nudge {
+                            Some(Ok(())) => StallNudge::Sent,
+                            Some(Err(error)) => StallNudge::Failed(error),
+                            None => StallNudge::Earlier,
+                        },
+                        // No red dot or notification here: its row is on the other computer.
+                        stuck: false,
+                    },
+                    &thread_ref,
+                ),
+                None,
+                String::new(),
+            )
+        }
+        RemoteReport::Finished | RemoteReport::TurnEnded { .. } => {
             // This activity time is covered now, reported or not: its chat is not read again.
             if let Some(marker) = report.marker {
                 let checked_state = state.clone();
@@ -532,16 +690,22 @@ async fn deliver(
             };
             message_id = reply.0;
             let message = reply.1;
-            (
-                report_body(
-                    &ThreadReport::Finished {
-                        message: message.as_deref(),
-                    },
-                    &thread_ref,
-                ),
-                None,
-                message.unwrap_or_default(),
-            )
+            let mut body = report_body(
+                &ThreadReport::Finished {
+                    message: message.as_deref(),
+                },
+                &thread_ref,
+            );
+            if let Some(due) = stall_due {
+                body.push_str(&format!(
+                    "\n\n(Its computer still showed it working: Ghostex read the end of this turn from its transcript after {} minutes without new output. Its hooks there may be missing; `ghostex agent-hooks status --computer {}` shows them.)",
+                    crate::coordinators::minutes_of(
+                        i64::from(due.round) * crate::coordinators::quiet_round_ms()
+                    ),
+                    report.computer.name
+                ));
+            }
+            (body, None, message.unwrap_or_default())
         }
         RemoteReport::Waiting => {
             let (prompt_key, summary) = chat
@@ -572,11 +736,15 @@ async fn deliver(
         key.0,
         key.1,
         key.2,
-        prompt_key
-            .clone()
-            .or_else(|| message_id.clone())
-            .or_else(|| report.thread.reported_at.clone())
-            .unwrap_or_else(|| "first".to_string())
+        match (&report.kind, stall_due) {
+            (RemoteReport::Stalled { .. }, Some(due)) =>
+                format!("stall:{}:{}", due.quiet_since, due.round),
+            _ => prompt_key
+                .clone()
+                .or_else(|| message_id.clone())
+                .or_else(|| report.thread.reported_at.clone())
+                .unwrap_or_else(|| "first".to_string()),
+        }
     );
     let sent = super::coordinator_runtime::send_to_coordinator(
         &state,
@@ -587,6 +755,17 @@ async fn deliver(
     .await
     .is_ok();
     let closed = matches!(report.kind, RemoteReport::Closed);
+    let stalled = matches!(report.kind, RemoteReport::Stalled { .. });
+    if sent {
+        if let (Some(due), Ok(mut memory)) = (stall_due, memory.lock()) {
+            if let Some(watch) = memory.stalls.get_mut(&key) {
+                watch.mark_reported(due.quiet_since, due.round);
+                if !stalled {
+                    watch.mark_finished(due.rows);
+                }
+            }
+        }
+    }
     let settle_state = state.clone();
     let coordinator = report.thread.coordinator_key();
     let _ = tokio::task::spawn_blocking(move || {
@@ -598,6 +777,8 @@ async fn deliver(
         };
         if closed {
             let _ = set_remote_thread_resolved(&db, &key, true);
+        } else if stalled {
+            // Still working: a stall report clears nothing the next finished report needs.
         } else {
             let _ = record_remote_thread_report(
                 &db,
