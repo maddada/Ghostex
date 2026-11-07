@@ -11,6 +11,7 @@ pub(crate) mod agent_hooks_required_modal;
 pub(crate) mod agents_hub;
 pub(crate) mod browser_history_modal;
 pub(crate) mod close_sessions_confirm_modal;
+pub(crate) mod collab_share;
 pub(crate) mod coordinator_details_modal;
 pub(crate) mod copied_indicator;
 pub(crate) mod create_linear_ticket_modal;

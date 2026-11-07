@@ -62,7 +62,7 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:SessionDetails 2026-10-25 DECISION:
     /// User: "when i click away from the chat session it hides the Show session details button. this shouldn't happen please, should keep it for the last focused chat session". Focus moving to the sidebar, Files, a terminal or another window keeps the button on the last focused chat; only another chat taking focus moves it, and it hides only while no chat has had focus (or that chat is gone).
-    fn session_details_target_session(&self) -> Option<TerminalSessionId> {
+    pub(crate) fn session_details_target_session(&self) -> Option<TerminalSessionId> {
         let shows_chat = |session_id: &TerminalSessionId| {
             self.agents_chat_mode_sessions.contains(session_id)
                 && self.native_chat_views.contains_key(session_id)

@@ -16,6 +16,8 @@ pub(crate) enum GpuiTitlebarPopupKind {
     Actions,
     BrowserActions(BrowserPaneId),
     BrowserDeviceView(BrowserPaneId),
+    /// The chat header's Share popover (Ghostex Collab, window/collab_share.rs).
+    CollabShare,
     ContextMenu,
     Extensions,
     Git,
@@ -37,6 +39,7 @@ impl GpuiTitlebarPopupKind {
             Self::Actions => "actions",
             Self::BrowserActions(_) => "browserActions",
             Self::BrowserDeviceView(_) => "browserDeviceView",
+            Self::CollabShare => "collabShare",
             Self::ContextMenu => "contextMenu",
             Self::Extensions => "extensions",
             Self::Git => "git",
@@ -70,6 +73,7 @@ pub(crate) enum GpuiTitlebarPopupContent {
     Menu(Entity<PopupMenu>),
     Reading(Entity<GpuiTitlebarReadingPanel>),
     RemoteSites(Entity<crate::app::window::remote_sites::RemoteSitesPanel>),
+    CollabShare(Entity<crate::app::window::collab_share::CollabSharePanel>),
     SessionLinks(Entity<crate::app::native_sidebar::links_list::SessionLinksList>),
 }
 
@@ -96,6 +100,7 @@ impl GpuiTitlebarPopupWindow {
             GpuiTitlebarPopupKind::Actions => "Ghostex Start",
             GpuiTitlebarPopupKind::BrowserActions(_) => "Ghostex Browser Actions",
             GpuiTitlebarPopupKind::BrowserDeviceView(_) => "Ghostex Browser Page Size",
+            GpuiTitlebarPopupKind::CollabShare => "Ghostex Collab",
             GpuiTitlebarPopupKind::ContextMenu => "Ghostex Menu",
             GpuiTitlebarPopupKind::Extensions => "Ghostex Extensions",
             GpuiTitlebarPopupKind::Git => "Ghostex Commit",
@@ -138,6 +143,7 @@ impl GpuiTitlebarPopupWindow {
                 )),
                 GpuiTitlebarPopupContent::Reading(_) => None,
                 GpuiTitlebarPopupContent::RemoteSites(_) => None,
+                GpuiTitlebarPopupContent::CollabShare(_) => None,
                 GpuiTitlebarPopupContent::SessionLinks(_) => None,
                 GpuiTitlebarPopupContent::AccountUsage(_) => None,
             };
@@ -509,6 +515,7 @@ impl Render for GpuiTitlebarPopupWindow {
                 GpuiTitlebarPopupContent::Menu(menu) => menu.clone().into_any_element(),
                 GpuiTitlebarPopupContent::Reading(panel) => panel.clone().into_any_element(),
                 GpuiTitlebarPopupContent::RemoteSites(panel) => panel.clone().into_any_element(),
+                GpuiTitlebarPopupContent::CollabShare(panel) => panel.clone().into_any_element(),
                 GpuiTitlebarPopupContent::SessionLinks(panel) => panel.clone().into_any_element(),
             })
     }

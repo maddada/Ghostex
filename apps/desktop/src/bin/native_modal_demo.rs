@@ -8,7 +8,7 @@ Environment:
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
     GHOSTEX_NATIVE_MODAL_DEMO_STATE=<per-modal state name>    (default: the opening state)
     GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND=1                    (open without taking focus, for screenshots)
-    GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT=<png>                  (updates-menu only, built with
+    GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT=<png>                  (any preview, built with
         --features modal-demo-snapshot: draw offscreen to <png> and quit;
         GHOSTEX_NATIVE_MODAL_DEMO_HOVER=<x>,<y> points at that spot first, for a tooltip)
     GHOSTEX_EXPORT_MODAL_DEMO_MODE=handoff|export             (Handoff / Export only)
@@ -188,13 +188,21 @@ fn open_modal_window<V: Render>(
     cx: &mut App,
 ) -> (WindowHandle<Root>, Entity<V>) {
     let window_size = size(px(width), px(initial_height));
-    let bounds = cx
-        .primary_display()
-        .map(|display| Bounds::centered_at(display.bounds().center(), window_size))
-        .unwrap_or_else(|| Bounds::new(point(px(240.0), px(160.0)), window_size));
+    // GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT=<png> (with --features modal-demo-snapshot) draws any
+    // preview in a window far off every screen, writes its frame after
+    // GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT_WAIT ms (2500) and quits, as updates_menu.rs does for its own.
+    let snapshot = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT").unwrap_or_default();
+    let snapshot = snapshot.trim().to_string();
+    let bounds = if !snapshot.is_empty() {
+        Bounds::new(point(px(-10000.0), px(-10000.0)), window_size)
+    } else {
+        cx.primary_display()
+            .map(|display| Bounds::centered_at(display.bounds().center(), window_size))
+            .unwrap_or_else(|| Bounds::new(point(px(240.0), px(160.0)), window_size))
+    };
     // GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND=1 opens the window without taking
     // focus, so an agent can screenshot it while the user keeps typing elsewhere.
-    let background = env("GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND") == "1";
+    let background = env("GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND") == "1" || !snapshot.is_empty();
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         focus: !background,
@@ -219,7 +227,42 @@ fn open_modal_window<V: Render>(
         })
         .expect("open the demo window");
     let view = slot.borrow_mut().take().expect("the demo view");
+    if !snapshot.is_empty() {
+        snapshot_after_wait(window, snapshot, cx);
+    }
     (window, view)
+}
+
+#[cfg(feature = "modal-demo-snapshot")]
+fn snapshot_after_wait(window: WindowHandle<Root>, path: String, cx: &mut App) {
+    let wait = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT_WAIT")
+        .ok()
+        .and_then(|ms| ms.trim().parse::<u64>().ok())
+        .unwrap_or(2500);
+    cx.spawn(async move |cx| {
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(wait))
+            .await;
+        let _ = window.update(cx, |_, window, _| window.refresh());
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(300))
+            .await;
+        let _ = window.update(cx, |_, window, _| match window.render_to_image() {
+            Ok(image) => match image.save(&path) {
+                Ok(()) => eprintln!("wrote {path}"),
+                Err(error) => eprintln!("couldn't write {path}: {error}"),
+            },
+            Err(error) => eprintln!("couldn't draw the snapshot: {error}"),
+        });
+        let _ = cx.update(|cx| cx.quit());
+    })
+    .detach();
+}
+
+#[cfg(not(feature = "modal-demo-snapshot"))]
+fn snapshot_after_wait(_window: WindowHandle<Root>, _path: String, cx: &mut App) {
+    eprintln!("snapshots need: cargo build --bin native-modal-demo --features modal-demo-snapshot");
+    cx.quit();
 }
 
 /// `open_modal_window` for the large panel modals (Settings, Agents Hub, Commit Changes, File

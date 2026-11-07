@@ -35,6 +35,7 @@ pub(crate) enum SettingsTabId {
     Agents,
     Accounts,
     Autopilot,
+    Collab,
     Secrets,
     Actions,
     OpenTargets,
@@ -75,7 +76,7 @@ impl SettingsTabId {
     /// (the catalog) at the rail's bottom with the pages that fold under it
     /// ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration, Connectors, Debugging,
     /// the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 27] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 28] = [
         SettingsTabId::Updates,
         SettingsTabId::Chat,
         SettingsTabId::Sidebar,
@@ -89,6 +90,7 @@ impl SettingsTabId {
         SettingsTabId::Agents,
         SettingsTabId::Accounts,
         SettingsTabId::Autopilot,
+        SettingsTabId::Collab,
         SettingsTabId::Secrets,
         SettingsTabId::Integrations,
         SettingsTabId::Remote,
@@ -142,6 +144,7 @@ impl SettingsTabId {
             SettingsTabId::Agents
             | SettingsTabId::Accounts
             | SettingsTabId::Autopilot
+            | SettingsTabId::Collab
             | SettingsTabId::Secrets
             | SettingsTabId::Integrations
             | SettingsTabId::Remote
@@ -198,6 +201,7 @@ impl SettingsTabId {
             SettingsTabId::Agents => "agents",
             SettingsTabId::Accounts => "accounts",
             SettingsTabId::Autopilot => "autopilot",
+            SettingsTabId::Collab => "collab",
             SettingsTabId::Secrets => "secrets",
             SettingsTabId::Actions => "actions",
             SettingsTabId::OpenTargets => "openTargets",
@@ -246,6 +250,7 @@ impl SettingsTabId {
             SettingsTabId::Agents => "Agents",
             SettingsTabId::Accounts => "Accounts",
             SettingsTabId::Autopilot => "Autopilot",
+            SettingsTabId::Collab => "Collab",
             SettingsTabId::Secrets => "Secrets",
             SettingsTabId::Actions => "Actions",
             SettingsTabId::OpenTargets => "Open In",
@@ -279,6 +284,7 @@ impl SettingsTabId {
             SettingsTabId::Agents => "modals/settings/code-dots.svg",
             SettingsTabId::Accounts => "modals/settings/users.svg",
             SettingsTabId::Autopilot => "modals/settings/plane.svg",
+            SettingsTabId::Collab => "modals/settings/users-group.svg",
             SettingsTabId::Secrets => "modals/settings/key.svg",
             SettingsTabId::Actions => "modals/settings/player-play.svg",
             SettingsTabId::OpenTargets => "modals/settings/external-link.svg",

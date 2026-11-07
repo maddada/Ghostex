@@ -112,6 +112,9 @@ impl GhostexGpuiApp {
             GpuiTitlebarPopupKind::More => self.titlebar_more_popup_content_height(),
             GpuiTitlebarPopupKind::OpenTargets => self.titlebar_open_targets_popup_content_height(),
             GpuiTitlebarPopupKind::Notifications => TITLEBAR_POPUP_NOTIFICATIONS_MAX_HEIGHT,
+            GpuiTitlebarPopupKind::CollabShare => {
+                crate::app::window::collab_share::COLLAB_SHARE_POPUP_HEIGHT
+            }
             GpuiTitlebarPopupKind::SessionLinks => {
                 let links = self
                     .native_sidebar

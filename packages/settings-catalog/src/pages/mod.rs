@@ -5,6 +5,7 @@ mod actions;
 mod agents;
 mod autopilot;
 mod cloud_boxes;
+mod collab;
 mod connectors;
 mod debugging;
 mod extensions;
@@ -30,6 +31,7 @@ pub fn pages(platform: Platform) -> Vec<Page> {
         actions::page(),
         accounts::page(),
         autopilot::page(),
+        collab::page(),
         agents::page(),
         integrations::page(),
         cloud_boxes::page(),

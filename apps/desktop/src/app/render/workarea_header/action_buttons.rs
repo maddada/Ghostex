@@ -450,6 +450,7 @@ impl GhostexGpuiApp {
             .when(shown(HeaderControl::SessionDetails), |this| {
                 this.children(self.render_workarea_header_session_details_button(cx))
             })
+            .children(self.render_workarea_header_share_button(cx))
             // Everything occasional lives behind the trailing ⋯ menu.
             .when(
                 self.titlebar_more_menu_visible() && shown(HeaderControl::MoreMenu),

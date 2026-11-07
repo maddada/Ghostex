@@ -31,7 +31,7 @@ use crate::workspace_groups::{SessionGroupOp, SessionGroupRequest};
 /// The tabs `ghostex settings open --tab` may name, each a `SettingsTabId` id
 /// (apps/desktop/src/app/window/settings_modal/model.rs). Keep in lockstep with
 /// `SETTINGS_MODAL_TABS` in server/src/ghostex_cli/settings.rs, which checks `--tab` first.
-pub const SETTINGS_MODAL_TABS: [&str; 27] = [
+pub const SETTINGS_MODAL_TABS: [&str; 28] = [
     "settings",
     "chat",
     "sidebar",
@@ -45,6 +45,7 @@ pub const SETTINGS_MODAL_TABS: [&str; 27] = [
     "voiceAgent",
     "voice",
     "connectors",
+    "collab",
     "workspaces",
     "cloudBoxes",
     "extensions",

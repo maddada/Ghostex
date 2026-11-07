@@ -386,6 +386,13 @@ impl GhostexGpuiApp {
                     )
                 }))
             }
+            GpuiTitlebarPopupKind::CollabShare => {
+                let key = crate::app::render::workarea_header::share_button::share_target()
+                    .expect("chat chosen before opening its Share popover");
+                GpuiTitlebarPopupContent::CollabShare(
+                    cx.new(|cx| crate::app::window::collab_share::CollabSharePanel::new(key, cx)),
+                )
+            }
             GpuiTitlebarPopupKind::RemoteSites => {
                 GpuiTitlebarPopupContent::RemoteSites(cx.new(|cx| {
                     crate::app::window::remote_sites::RemoteSitesPanel::new(main_app, cx)

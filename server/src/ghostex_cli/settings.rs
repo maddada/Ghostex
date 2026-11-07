@@ -43,6 +43,7 @@ const SETTINGS_MODAL_TABS: &[&str] = &[
     "voiceAgent",
     "voice",
     "connectors",
+    "collab",
     "workspaces",
     "cloudBoxes",
     "extensions",

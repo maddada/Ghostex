@@ -14,6 +14,7 @@ pub(crate) mod claude_cloud_button;
 pub(crate) mod overlap;
 pub(crate) mod session_details_button;
 pub(crate) mod session_links;
+pub(crate) mod share_button;
 pub(crate) mod shell;
 pub(crate) mod toggles;
 
