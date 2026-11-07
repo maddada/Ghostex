@@ -75,6 +75,41 @@ static void GhostexGpuiSetWindowLightsLent(NSWindow *window, BOOL lent) {
   GhostexGpuiApplyWindowLights(window);
 }
 
+static const void *GhostexGpuiRevealPanelNeverMainKey = &GhostexGpuiRevealPanelNeverMainKey;
+static IMP GhostexGpuiRevealPanelCanBecomeMainOriginal;
+
+static BOOL GhostexGpuiRevealPanelCanBecomeMain(NSWindow *window, SEL selector) {
+  if ([objc_getAssociatedObject(window, GhostexGpuiRevealPanelNeverMainKey) boolValue]) return NO;
+  return ((BOOL (*)(id, SEL))GhostexGpuiRevealPanelCanBecomeMainOriginal)(window, selector);
+}
+
+/// CDXC:Sidebar 2026-11-07 WHY:
+/// GPUI's window classes answer YES to `canBecomeMainWindow`, panels included, where a plain NSPanel
+/// answers NO. So a click into the floating sidebar made it the main window, the workspace window
+/// lost main, and the traffic lights the panel shows for it (GhostexGpuiSetWindowLightsLent) drew
+/// in their faint inactive style, through which the header's toggles under them showed (GitHub #432
+/// follow-up). The panel takes keys as before but never becomes main, as an NSPanel normally can't.
+/// Only this panel is marked: GPUI's other windows of the same class keep its answer. The method is
+/// replaced on GPUI's own class and the instance keeps its class; changing the class of a window
+/// AppKit observes with KVO made GPUI panic when it was freed (2026-11-06).
+static void GhostexGpuiRevealPanelNeverMain(NSWindow *panel) {
+  objc_setAssociatedObject(panel, GhostexGpuiRevealPanelNeverMainKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    Class owner = [panel class];
+    unsigned count = 0;
+    Method *methods = class_copyMethodList(owner, &count);
+    Method own = NULL;
+    for (unsigned i = 0; i < count; i++) {
+      if (method_getName(methods[i]) == @selector(canBecomeMainWindow)) own = methods[i];
+    }
+    free(methods);
+    // Only GPUI's own answer is replaced, never AppKit's NSPanel or NSWindow one.
+    if (own) GhostexGpuiRevealPanelCanBecomeMainOriginal = method_setImplementation(own, (IMP)GhostexGpuiRevealPanelCanBecomeMain);
+  });
+  if (panel.isMainWindow) [panel.parentWindow makeMainWindow];
+}
+
 @interface GhostexGpuiSidebarReveal : NSObject
 @property(nonatomic, weak) NSView *sidebar;
 @property(nonatomic, weak) NSView *root;
@@ -417,6 +452,7 @@ static bool GhostexGpuiNativeRevealUpdate(void *rootPtr, void *popupPtr, bool en
     state.targetFrame = frame;
     state.slideDuration = slideSeconds;
     objc_setAssociatedObject(popup, GhostexGpuiSidebarRevealKey, state, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    GhostexGpuiRevealPanelNeverMain(state.panel);
     [state wantWindowLights:windowControls];
     [state setLeftCornerRadiiTop:topLeftRadius bottom:bottomLeftRadius];
     if (sticky) {
