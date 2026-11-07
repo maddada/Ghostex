@@ -15,6 +15,7 @@ use super::rows::{ICON_CHECK, ICON_CHEVRON_DOWN, stat, status_badge};
 use super::style::{
     CODE_SIZE, CONTROL_HEIGHT, ChangesStyle, FILE_HEADER_HEIGHT, ICON_SIZE, SMALL_SIZE, UI_SIZE,
 };
+use super::test_files::hidden_tests_label;
 use super::view::{ChangesRequest, ChangesView, Confirm};
 use crate::app::window::native_modal_kit::{
     MODAL_UI_FONT, hsla, modal_icon, modal_spinner, rgba_of,
@@ -24,6 +25,8 @@ const ICON_UNIFIED: &str = "modals/git-commit/layout-rows.svg";
 const ICON_SPLIT: &str = "modals/git-commit/columns-2.svg";
 const ICON_WRAP: &str = "modals/git-commit/text-wrap.svg";
 const ICON_WHITESPACE: &str = "modals/git-commit/pilcrow.svg";
+const ICON_TESTS_SHOWN: &str = "modals/git-commit/flask.svg";
+const ICON_TESTS_HIDDEN: &str = "modals/git-commit/flask-off.svg";
 const ICON_REFRESH: &str = "titlebar/refresh.svg";
 const ICON_FOLD: &str = "titlebar/arrows-diagonal-minimize.svg";
 const ICON_UNFOLD: &str = "titlebar/arrows-diagonal-2.svg";
@@ -130,6 +133,7 @@ impl ChangesView {
                 ))
         };
         let all_collapsed = self.all_collapsed();
+        let hide_tests = self.hide_test_files;
         // CDXC:Changes 2026-10-25 DECISION: User: "please make the files dropdown on the 1st row"; the toolbar is one row, and the branch name gives way first when the panel is narrow.
         h_flex()
             .flex_none()
@@ -254,6 +258,26 @@ impl ChangesView {
                 .on_click(cx.listener(|this, _, _, cx| {
                     let hide = !this.hide_whitespace;
                     this.set_hide_whitespace(hide, cx);
+                })),
+            )
+            // CDXC:Changes 2026-11-07 DECISION: User asked for a "hide test files" toggle beside Wrap long lines and Collapse all, so an agent's change can be reviewed without its tests: a flask icon, crossed out while tests are hidden, with the tooltip "Hide test files" or "Show test files". The choice is a setting (`changesHideTestFiles`, off by default) and a line under the toolbar says how many are hidden, so nothing vanishes silently.
+            .child(
+                toggle(
+                    "changes-hide-tests",
+                    if hide_tests {
+                        ICON_TESTS_HIDDEN
+                    } else {
+                        ICON_TESTS_SHOWN
+                    },
+                    hide_tests,
+                    if hide_tests {
+                        "Show test files"
+                    } else {
+                        "Hide test files"
+                    },
+                )
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.set_hide_test_files(!hide_tests, window, cx)
                 })),
             )
             .child(
@@ -439,6 +463,23 @@ impl ChangesView {
                 .child(modal_spinner(s.muted))
                 .into_any_element();
         };
+        let hidden_tests = data.hidden_test_count();
+        if data.files.is_empty() && hidden_tests > 0 {
+            return v_flex()
+                .flex_1()
+                .items_center()
+                .justify_center()
+                .gap(px(6.0))
+                .p(px(24.0))
+                .child(
+                    div()
+                        .text_size(px(UI_SIZE))
+                        .text_color(hsla(s.text))
+                        .child("Only test files changed."),
+                )
+                .child(self.render_hidden_tests_line(s, hidden_tests, cx))
+                .into_any_element();
+        }
         if data.files.is_empty() {
             let text = match self.scope {
                 ChangesScope::AgainstMain if data.on_default_branch => "No uncommitted changes.",
@@ -464,7 +505,46 @@ impl ChangesView {
                         ),
                 )
             })
+            .when(hidden_tests > 0, |this| {
+                this.child(
+                    h_flex()
+                        .flex_none()
+                        .w_full()
+                        .px(px(12.0))
+                        .py(px(4.0))
+                        .border_b_1()
+                        .border_color(hsla(s.hairline))
+                        .child(self.render_hidden_tests_line(s, hidden_tests, cx)),
+                )
+            })
             .child(self.render_stream(s, cx))
+            .into_any_element()
+    }
+
+    /// "3 test files hidden · Show": the toolbar's Hide test files is on, and a click shows them.
+    fn render_hidden_tests_line(
+        &self,
+        s: &ChangesStyle,
+        count: usize,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        h_flex()
+            .id("changes-hidden-tests")
+            .gap(px(6.0))
+            .text_size(px(SMALL_SIZE))
+            .text_color(hsla(s.muted))
+            .cursor_pointer()
+            .on_click(
+                cx.listener(|this, _, window, cx| this.set_hide_test_files(false, window, cx)),
+            )
+            .child(modal_icon(ICON_TESTS_HIDDEN, ICON_SIZE - 2.0, s.muted))
+            .child(hidden_tests_label(count))
+            .child(
+                div()
+                    .text_color(hsla(s.accent))
+                    .hover(|this| this.underline())
+                    .child("Show"),
+            )
             .into_any_element()
     }
 

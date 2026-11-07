@@ -657,6 +657,15 @@ fn file_opening_section(
     rows.extend(page.toggle(
         g,
         s,
+        "changesHideTestFiles",
+        "Hide test files in Changes",
+        "Leave test files out of the Changes view to review an agent's change without its tests. The flask button in the Changes toolbar switches this too.",
+        false,
+        cx,
+    ));
+    rows.extend(page.toggle(
+        g,
+        s,
         "docsOpenFilesAsTabs",
         "Show open files as tabs",
         "Show the files open in Files as a row of tabs above the document instead of the Open Files list in the files sidebar.",

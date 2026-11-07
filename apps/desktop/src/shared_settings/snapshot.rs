@@ -493,6 +493,11 @@ impl SharedSidebarSettingsSnapshot {
             == Some("code")
     }
 
+    /// `changesHideTestFiles`: the Changes view leaves test files out of its list (off by default).
+    pub fn changes_hide_test_files(&self) -> bool {
+        strict_bool_field(&self.object, "changesHideTestFiles") == Some(true)
+    }
+
     /// Files shows its open files as tabs above the document instead of the Open Files list.
     pub fn docs_open_files_as_tabs(&self) -> bool {
         strict_bool_field(&self.object, "docsOpenFilesAsTabs").unwrap_or(true)

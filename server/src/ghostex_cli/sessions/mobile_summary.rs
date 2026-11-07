@@ -142,6 +142,14 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
     {
         map.insert("sidebarSessionLinks".to_string(), json!(display));
     }
+    // CDXC:Changes 2026-11-07 SEE-ALSO: the Changes toolbar's Hide test files (apps/desktop/src/app/native_changes/render.rs); the phone's Changes screen starts with test files hidden by the computer's `changesHideTestFiles` (apps/mobile/app/src/screens/ChangesScreen.tsx). Sent only when on (the default is off).
+    if settings
+        .get("changesHideTestFiles")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        map.insert("changesHideTestFiles".to_string(), json!(true));
+    }
     // CDXC:SessionSleep 2026-10-27 SEE-ALSO: the 2026-09-29 decision in apps/desktop/src/app/native_sidebar/sessions.rs; the phone's session list fades a sleeping row by the computer's Advanced > Dim sleeping sessions (apps/mobile/app/src/components/sessions/SessionRow.tsx). Sent only when on (the default is off).
     if settings.get("dimSleepingSessions").and_then(Value::as_bool) == Some(true) {
         map.insert("dimSleepingSessions".to_string(), json!(true));

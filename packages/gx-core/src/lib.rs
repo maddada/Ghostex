@@ -56,6 +56,7 @@ mod sidebar_drag;
 mod sidebar_menu;
 mod sidebar_ui;
 mod sidebar_view;
+pub mod test_files;
 pub mod unified_sidebar;
 mod workspace_groups;
 

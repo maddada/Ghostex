@@ -143,6 +143,9 @@ pub(crate) struct ChangesData {
     pub(crate) uncommitted_paths: Vec<String>,
     /// The patch text, to tell a refresh that changed nothing from one that did.
     pub(crate) fingerprint: u64,
+    /// Test files taken out of `files` while the view hides them, each with its place in the
+    /// full list (`test_files.rs`).
+    pub(crate) hidden_tests: Vec<(usize, ChangedFile)>,
 }
 
 impl ChangesData {
@@ -191,6 +194,7 @@ impl ChangesData {
             truncated: answer.get("truncated").and_then(serde_json::Value::as_bool) == Some(true),
             uncommitted_paths,
             fingerprint: fingerprint(patch),
+            hidden_tests: Vec::new(),
         }
     }
 

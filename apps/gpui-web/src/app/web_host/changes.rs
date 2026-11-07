@@ -42,6 +42,12 @@ impl GhostexGpuiApp {
             palette: self.gpui_native_modal_palette(),
             agents,
             default_agent_id,
+            // The page cannot save settings, so the toolbar's toggle lasts while the page is open.
+            hide_test_files: crate::shared_settings::shared_sidebar_settings_snapshot()
+                .object()
+                .get("changesHideTestFiles")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true),
         };
         let target = self.changes_target_for_active_project();
         let preset = self.native_changes_preset.take();
@@ -138,7 +144,9 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
-            ChangesRequest::AgentPicked(_) | ChangesRequest::Copied => {}
+            ChangesRequest::AgentPicked(_)
+            | ChangesRequest::Copied
+            | ChangesRequest::HideTestFiles(_) => {}
             ChangesRequest::Toast {
                 title,
                 description,

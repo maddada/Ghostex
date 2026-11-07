@@ -124,8 +124,7 @@ pub(crate) fn review_comment(
 pub(crate) fn auto_resolve(comments: &mut [ChangesComment], data: &ChangesData) {
     for comment in comments.iter_mut().filter(|comment| comment.is_open()) {
         let Some(file) = data
-            .files
-            .iter()
+            .all_files()
             .find(|file| file.path == comment.range.file)
         else {
             comment.state = CommentState::Resolved { auto: true };

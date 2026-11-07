@@ -273,8 +273,22 @@ pub(crate) async fn changes_diff(
         "truncated": truncated,
         "uncommittedPaths": uncommitted,
         "untrackedPaths": untracked,
+        "testPaths": test_paths(&patch, &too_large),
         "tooLargePaths": too_large,
     }))
+}
+
+/// The answer's files that are tests (gx-core's `is_test_file`), for a client that hides them and
+/// has no copy of the rule (the phone).
+fn test_paths(patch: &str, too_large: &[String]) -> Vec<String> {
+    patch
+        .lines()
+        .filter_map(|line| line.strip_prefix("diff --git "))
+        .filter_map(|rest| rest.find(" b/").map(|index| &rest[index + 3..]))
+        .chain(too_large.iter().map(String::as_str))
+        .filter(|path| ghostex_gx_core::test_files::is_test_file(path))
+        .map(str::to_string)
+        .collect()
 }
 
 /// A file patch's header (everything before its first hunk) and its hunks, each with its header
@@ -408,4 +422,21 @@ pub(crate) async fn changes_revert(
         }
     }
     Ok(json!({ "action": "changesRevert", "exitCode": 0, "deleted": false }))
+}
+
+#[cfg(test)]
+mod test_paths_tests {
+    use super::test_paths;
+
+    #[test]
+    fn the_answer_lists_its_test_files() {
+        let patch = "diff --git a/src/lib.rs b/src/lib.rs\n@@ -1 +1 @@\n-a\n+b\ndiff --git a/src/lib_test.go b/src/lib_test.go\n@@ -1 +1 @@\n-a\n+b\ndiff --git a/tests/it.rs b/tests/it.rs\n";
+        assert_eq!(
+            test_paths(
+                patch,
+                &["fixtures/big.json".to_string(), "big.bin".to_string()]
+            ),
+            ["src/lib_test.go", "tests/it.rs", "fixtures/big.json"]
+        );
+    }
 }

@@ -49,6 +49,8 @@ pub(crate) struct ChangesHostInfo {
     /// `(agent id, name)` of the agents that can write a commit message.
     pub(crate) agents: Vec<(String, String)>,
     pub(crate) default_agent_id: Option<String>,
+    /// The saved Hide test files choice (`changesHideTestFiles`).
+    pub(crate) hide_test_files: bool,
 }
 
 /// What an entry point asks the view to show when it opens it.
@@ -136,6 +138,8 @@ pub(crate) enum ChangesRequest {
         description: Option<String>,
         error: bool,
     },
+    /// The user turned Hide test files on or off (the app saves `changesHideTestFiles`).
+    HideTestFiles(bool),
     /// The working tree changed under the view (a revert): the app re-reads its Git numbers.
     WorkingTreeChanged {
         project_key: String,
@@ -177,6 +181,11 @@ pub(crate) struct ChangesView {
     pub(crate) split: bool,
     pub(crate) wrap: bool,
     pub(crate) hide_whitespace: bool,
+    /// Test files are left out of the list, the jump menu and the counts.
+    pub(crate) hide_test_files: bool,
+    /// The saved choice the host last handed over, so only a change to it (Settings, or this
+    /// view's own toggle once saved) moves `hide_test_files`.
+    saved_hide_test_files: Option<bool>,
     /// The file count's jump-to-file menu, and where its button is (window coordinates).
     pub(crate) jump_open: bool,
     pub(crate) jump_anchor: gpui::Bounds<gpui::Pixels>,
@@ -261,6 +270,8 @@ impl ChangesView {
             split: false,
             wrap: true,
             hide_whitespace: false,
+            hide_test_files: false,
+            saved_hide_test_files: None,
             jump_open: false,
             key_file: None,
             hovered_header: None,
@@ -334,6 +345,13 @@ impl ChangesView {
                 .default_agent_id
                 .clone()
                 .or_else(|| info.agents.first().map(|agent| agent.0.clone()));
+        }
+        if self.saved_hide_test_files != Some(info.hide_test_files) {
+            self.saved_hide_test_files = Some(info.hide_test_files);
+            if self.hide_test_files != info.hide_test_files {
+                self.apply_hide_test_files(info.hide_test_files);
+                changed = true;
+            }
         }
         self.info = Some(info);
         self.ensure_message_input(window, cx);
@@ -459,7 +477,7 @@ impl ChangesView {
                         this.rebuild_rows();
                     }
                     Ok(answer) => {
-                        let data = ChangesData::from_answer(&answer);
+                        let mut data = ChangesData::from_answer(&answer);
                         let same = this
                             .data
                             .as_ref()
@@ -470,6 +488,7 @@ impl ChangesView {
                             let live: HashSet<&str> =
                                 data.uncommitted_paths.iter().map(String::as_str).collect();
                             this.excluded.retain(|path| live.contains(path.as_str()));
+                            data.set_test_files_hidden(this.hide_test_files);
                             this.data = Some(data);
                             this.forget_stale_viewed();
                             this.rebuild_rows();
@@ -491,8 +510,7 @@ impl ChangesView {
             return;
         };
         let hashes: HashMap<&str, u64> = data
-            .files
-            .iter()
+            .all_files()
             .map(|file| (file.path.as_str(), file_hash(file)))
             .collect();
         self.viewed
@@ -565,6 +583,17 @@ impl ChangesView {
             return;
         }
         self.pending_reveal = None;
+        // A test file asked for by name shows the tests here, without changing the saved choice.
+        if data
+            .hidden_tests
+            .iter()
+            .any(|(_, file)| matches(&file.path))
+        {
+            self.apply_hide_test_files(false);
+        }
+        let Some(data) = &self.data else {
+            return;
+        };
         if let Some(path) = data
             .files
             .iter()
@@ -602,6 +631,38 @@ impl ChangesView {
         self.hide_whitespace = hide;
         self.load(false, cx);
         cx.notify();
+    }
+
+    /// The toolbar's Hide test files toggle and the "N test files hidden" line: switches the
+    /// view now and asks the app to remember the choice.
+    pub(crate) fn set_hide_test_files(
+        &mut self,
+        hide: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.apply_hide_test_files(hide);
+        (self.host)(ChangesRequest::HideTestFiles(hide), window, cx);
+        cx.notify();
+    }
+
+    fn apply_hide_test_files(&mut self, hide: bool) {
+        self.hide_test_files = hide;
+        let Some(data) = &mut self.data else {
+            return;
+        };
+        data.set_test_files_hidden(hide);
+        self.selection = None;
+        self.cursor = None;
+        if hide
+            && self
+                .editor
+                .as_ref()
+                .is_some_and(|editor| super::test_files::is_test_file(&editor.range.file))
+        {
+            self.editor = None;
+        }
+        self.rebuild_rows();
     }
 
     pub(crate) fn toggle_collapsed(&mut self, path: &str, cx: &mut Context<Self>) {

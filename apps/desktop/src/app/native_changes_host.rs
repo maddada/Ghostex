@@ -55,6 +55,8 @@ impl GhostexGpuiApp {
             palette: self.gpui_native_modal_palette(),
             agents,
             default_agent_id,
+            hide_test_files: shared_settings::shared_sidebar_settings_snapshot()
+                .changes_hide_test_files(),
         };
         let target = self.changes_target_for_active_project();
         let preset = self.native_changes_preset.take();
@@ -283,6 +285,16 @@ impl GhostexGpuiApp {
             ),
             ChangesRequest::WorkingTreeChanged { project_key } => {
                 self.git_refresh_scoped(&project_key, cx);
+            }
+            ChangesRequest::HideTestFiles(hide) => {
+                let mut settings = shared_settings::shared_sidebar_settings_snapshot()
+                    .object()
+                    .clone();
+                settings.insert(
+                    "changesHideTestFiles".to_string(),
+                    serde_json::Value::Bool(hide),
+                );
+                let _ = shared_settings::write_shared_sidebar_settings_object(settings);
             }
         }
     }

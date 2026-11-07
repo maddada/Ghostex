@@ -9,6 +9,7 @@ mod render;
 mod rows;
 mod static_diff;
 mod style;
+mod test_files;
 mod tokens;
 mod view;
 
