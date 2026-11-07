@@ -130,6 +130,10 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         },
     )
     .to_string();
+    // A Ghostex Collab guest has no files, skills, agents or queue to mention.
+    if crate::extras::collab::is_guest(state) {
+        into.composer_placeholder = "Write a message".to_string();
+    }
 
     into.history_active = composer.history.is_active();
     into.pending_attachments = composer.pending_attachments;

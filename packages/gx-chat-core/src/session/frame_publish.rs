@@ -101,6 +101,10 @@ pub fn side_state_moves(
             .as_ref()
             .is_some_and(|rows| session.secret_requests.as_ref() != Some(rows))
         || side
+            .collab
+            .as_ref()
+            .is_some_and(|collab| session.collab.as_ref() != Some(collab))
+        || side
             .agent_message_deliveries
             .as_ref()
             .is_some_and(|deliveries| session.agent_message_deliveries.as_ref() != Some(deliveries))

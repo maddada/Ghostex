@@ -312,6 +312,9 @@ impl GhostexGpuiApp {
 
 impl Render for GhostexGpuiApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if crate::app::collab_guest::guest().is_some() {
+            return self.render_collab_guest_shell(window, cx);
+        }
         self.web_sync_terminal_zmx_visibility(cx);
         self.web_report_chat_grid_claims(cx);
         let sidebar = (!self.sidebar_collapsed).then(|| self.render_native_sidebar(window, cx));
@@ -454,5 +457,6 @@ impl Render for GhostexGpuiApp {
             )
             .children(self.render_web_git_menu(cx))
             .children(self.render_web_toasts())
+            .into_any_element()
     }
 }

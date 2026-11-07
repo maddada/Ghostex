@@ -71,8 +71,10 @@ impl NativeChatView {
 
     pub(super) fn render_send_control(&self, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
         let has_draft = !self.draft.trim().is_empty();
-        let stop =
-            (self.snapshot["working"] == true || self.stop_cooldown_task.is_some()) && !has_draft;
+        // A Ghostex Collab guest never stops the owner's agent (gxserver refuses it too).
+        let stop = (self.snapshot["working"] == true || self.stop_cooldown_task.is_some())
+            && !has_draft
+            && !self.collab_guest();
         let disabled = if stop {
             self.stop_cooldown_task.is_some()
         } else {

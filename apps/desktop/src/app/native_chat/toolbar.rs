@@ -138,6 +138,27 @@ impl NativeChatView {
     }
 
     pub(super) fn render_toolbar(&self, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
+        // A Ghostex Collab guest's chat box: how their message is handled, and Send. Nothing the
+        // owner's chat box does to the agent, its model or this computer.
+        if self.collab_guest() {
+            return div()
+                .flex()
+                .flex_1()
+                .min_w_0()
+                .items_center()
+                .justify_between()
+                .gap(px(8.0 * p.scale))
+                .child(
+                    div()
+                        .min_w_0()
+                        .text_size(px(12.0 * p.scale))
+                        .text_color(p.muted)
+                        .truncate()
+                        .children(self.collab_guest_note()),
+                )
+                .child(self.render_send_control(p, cx))
+                .into_any_element();
+        }
         let mut toolbar = div()
             .flex()
             .flex_shrink_0()

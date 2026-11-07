@@ -88,6 +88,8 @@ action_kinds! {
     InsertBoardReference => "insertBoardReference",
     HideCoordinatorIntro => "hideCoordinatorIntro",
     ToggleAutopilot => "toggleAutopilot",
+    SetCollabGuest => "setCollabGuest",
+    ResolveCollabMessage => "resolveCollabMessage",
     UseCoordinatorIntroExample => "useCoordinatorIntroExample",
     ToggleBackgroundTasks => "toggleBackgroundTasks",
     OpenCoordinatorThread => "openCoordinatorThread",

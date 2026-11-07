@@ -65,6 +65,11 @@ pub enum ChatRpcMethod {
     CoordinatorBoard,
     /// Autopilot's choices (`/api/autopilot`, server/src/server/autopilot_http.rs): the pill.
     Autopilot,
+    /// Ghostex Collab's owner calls (`/api/collab`, server/src/server/collab_http.rs): the answer
+    /// to a guest's message.
+    Collab,
+    /// A shared chat's chat box is being typed into (`/api/collabTyping`).
+    CollabTyping,
     /// Forks the session into a side chat that starts with a question (server/src/side_chats/).
     StartSideChat,
     /// Sends what a side chat said to its main session.
@@ -128,6 +133,8 @@ impl ChatRpcMethod {
             Self::OpenCoordinatorThread => "openCoordinatorThread",
             Self::CoordinatorBoard => "coordinatorBoard",
             Self::Autopilot => "autopilot",
+            Self::Collab => "collab",
+            Self::CollabTyping => "collabTyping",
             Self::StartSideChat => "startSideChat",
             Self::BringBackSideChat => "bringBackSideChat",
             Self::DeleteSideChat => "deleteSideChat",
@@ -180,6 +187,8 @@ impl ChatRpcMethod {
             "openCoordinatorThread" => Self::OpenCoordinatorThread,
             "coordinatorBoard" => Self::CoordinatorBoard,
             "autopilot" => Self::Autopilot,
+            "collab" => Self::Collab,
+            "collabTyping" => Self::CollabTyping,
             "startSideChat" => Self::StartSideChat,
             "bringBackSideChat" => Self::BringBackSideChat,
             "deleteSideChat" => Self::DeleteSideChat,

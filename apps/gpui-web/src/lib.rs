@@ -209,7 +209,11 @@ pub fn run() -> Result<(), JsValue> {
             let shell = cx.new(|cx| {
                 let mut app = GhostexGpuiApp::new();
                 app.web_host.main_window = Some(window.window_handle());
-                app.gx_store_start(cx);
+                if crate::app::collab_guest::guest().is_some() {
+                    app.collab_guest_start(cx);
+                } else {
+                    app.gx_store_start(cx);
+                }
                 app
             });
             cx.new(|cx| Root::new(shell, window, cx))

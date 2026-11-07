@@ -118,6 +118,13 @@ pub struct PanelsState {
     /// The Autopilot pill's save in flight, and what it showed before it flipped
     /// (`extras::autopilot`).
     pub autopilot_request: Option<(u64, Option<serde_json::Value>)>,
+    /// The owner's answers to guest messages in flight, by RPC id, with the message's id
+    /// (`extras::collab`).
+    pub collab_requests: Vec<(u64, String)>,
+    /// The last typing signal this chat box sent, whether it said typing, and its call.
+    pub collab_typing_at: f64,
+    pub collab_typing_on: bool,
+    pub collab_typing_request: Option<u64>,
 }
 
 impl Default for PanelsState {
@@ -144,6 +151,10 @@ impl Default for PanelsState {
             intro_hidden: false,
             intro_hide_request: None,
             autopilot_request: None,
+            collab_requests: Vec::new(),
+            collab_typing_at: 0.0,
+            collab_typing_on: false,
+            collab_typing_request: None,
         }
     }
 }

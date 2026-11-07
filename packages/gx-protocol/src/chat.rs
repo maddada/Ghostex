@@ -343,6 +343,10 @@ pub struct ChatSideState {
     /// everything, and whether it covers this session. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub autopilot: Option<Value>,
+    /// Ghostex Collab for this chat (`{ shared: false }` or who watches, who types and the guest
+    /// messages waiting; server/src/collab/shares.rs). Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collab: Option<Value>,
     /// How the messages this session's agent sent with `ghostex agents send` and left waiting
     /// ended, by `sendRequestId` (`{ "<id>": { state: "delivered" | "failed", failure? } }`;
     /// server/src/agent_message_deliveries.rs). Absent means unchanged.

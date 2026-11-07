@@ -534,11 +534,14 @@ fn edit_draft(state: &mut ChatState, action: &UserAction, context: &ChatContext)
     if !state.core.cleared_error && !history_changed {
         state.core.skip_closing_publish = true;
     }
-    vec![Effect::WriteStorage {
+    let mut effects = vec![Effect::WriteStorage {
         key: draft_key(state),
         value: Some(crate::composer::storage::encode_stored_draft(&record)),
         durable: false,
-    }]
+    }];
+    // A shared chat shows who is typing (Ghostex Collab).
+    effects.extend(crate::extras::collab::typing(state, text, context));
+    effects
 }
 
 fn save_draft(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {

@@ -86,6 +86,10 @@ pub fn handle_with_ids(
             crate::extras::coordinator_intro::hide(state, next_request_id())
         }
         ActionKind::ToggleAutopilot => crate::extras::autopilot::toggle(state, next_request_id()),
+        ActionKind::SetCollabGuest => crate::extras::collab::set_guest(state, action),
+        ActionKind::ResolveCollabMessage => {
+            crate::extras::collab::resolve(state, action, next_request_id())
+        }
         ActionKind::UseCoordinatorIntroExample => {
             crate::extras::coordinator_intro::use_example(&action.params)
         }

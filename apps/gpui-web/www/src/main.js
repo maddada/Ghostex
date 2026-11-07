@@ -1,4 +1,5 @@
 import { initializeClientStorage, storageScope } from '@/packages/client-storage';
+import { isGuestPage, startGuest } from './collab/guest.js';
 
 // The chat host (src/app/gx_chat/storage_backend.rs) reads and writes the page's client storage through this: raw values under the catalog's own keys, one scope per store.
 function exposeChatStorage() {
@@ -22,6 +23,8 @@ function exposeChatStorage() {
 const loading = document.getElementById('loading');
 
 try {
+  // A Ghostex Collab link (`/s#<key>`): join the shared chat before the app starts.
+  if (isGuestPage()) await startGuest(loading);
   // Reads are synchronous once storage is hydrated, and the chat's first read is its drafts: hydrate before anything can open a chat.
   await initializeClientStorage();
   exposeChatStorage();

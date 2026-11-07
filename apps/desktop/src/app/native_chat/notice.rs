@@ -23,6 +23,30 @@ impl NativeChatView {
             self.terminal_picker_input = None;
             return None;
         }
+        // A Ghostex Collab guest sees what the agent asks, never its answers: only the owner
+        // answers a prompt (gxserver refuses a guest's answer too).
+        if self.collab_guest() {
+            let waiting = text(&snapshot["collab"], "waitingForOwner");
+            let title = [text(notice, "title"), text(notice, "label"), text(notice, "kind")]
+                .into_iter()
+                .find(|value| !value.is_empty())
+                .unwrap_or_else(|| "The agent is asking something".to_string());
+            return Some(self.tone_card(
+                ToneCardParts {
+                    look: tone_look("wait", p),
+                    title,
+                    detail: waiting,
+                    trailing: Vec::new(),
+                    body: Vec::new(),
+                    footer_start: Vec::new(),
+                    footer_note: None,
+                    footer_end: Vec::new(),
+                },
+                None,
+                None,
+                p,
+            ));
+        }
         if notice["dialog"]["presentation"]["picker"].is_object() {
             self.terminal_dialog_input = None;
             return Some(self.terminal_picker_card(notice, p, window, cx));

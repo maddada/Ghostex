@@ -1,0 +1,281 @@
+//! Ghostex Collab in the chat: who is watching a shared chat, who is typing, the owner's "Message
+//! from <guest>" cards with Decline / Edit / Send, and on a guest's page their own messages
+//! waiting for the owner and what their chat box may do.
+//!
+//! gxserver puts `collab` on every chat frame (server/src/collab/shares.rs): `{ shared: false }`,
+//! or `{ shared, shareId, mode, owner, ownerTyping, viewers: [{ id, name, typing }], held: [{ id,
+//! viewerId, name, text, atMs }] }`. A guest's page says it is one once, with `setCollabGuest`
+//! (`{ viewerId, name }`, apps/gpui-web/src/app/collab_guest.rs); every other client is the owner.
+//!
+//! CDXC:Collab 2026-11-07 DECISION:
+//! User (Q1614): a new share starts in "approve each message (the owner gets a "Message from <guest>" card with Decline / Edit / Send)"; the other modes (straight to the agent, view only) are per chat. A guest "can never answer permission prompts" (Q1617), so a guest's chat shows "Waiting for <owner>" where the owner would answer.
+//! SEE-ALSO: apps/desktop/src/app/native_chat/collab.rs (desktop and web drawing), server/src/server/collab_http.rs (the calls).
+
+use serde_json::{json, Value};
+
+use crate::action::UserAction;
+use crate::effect::Effect;
+use crate::state::{ChatContext, ChatState};
+use crate::wire::ChatRpcMethod;
+
+/// How often a typing chat box tells gxserver, which shows "is typing" for four seconds.
+const TYPING_EVERY_MS: f64 = 2_000.0;
+
+fn text<'a>(value: &'a Value, key: &str) -> &'a str {
+    value.get(key).and_then(Value::as_str).unwrap_or_default()
+}
+
+fn shared(state: &ChatState) -> Option<&Value> {
+    state
+        .session
+        .collab
+        .as_ref()
+        .filter(|collab| collab.get("shared").and_then(Value::as_bool) == Some(true))
+}
+
+/// This page is a guest's (`setCollabGuest`).
+pub fn is_guest(state: &ChatState) -> bool {
+    state.session.collab_guest.is_some()
+}
+
+fn guest_name(state: &ChatState) -> Option<&str> {
+    state
+        .session
+        .collab_guest
+        .as_ref()
+        .map(|guest| text(guest, "name"))
+}
+
+fn names_line(names: &[String], one: &str, many: &str) -> Option<String> {
+    match names {
+        [] => None,
+        [only] => Some(format!("{only} {one}")),
+        [first, second] => Some(format!("{first} and {second} {many}")),
+        [first, rest @ ..] => Some(format!("{first} and {} others {many}", rest.len())),
+    }
+}
+
+/// The document's `collab`: `null` while the chat is not shared, else what the renderers draw:
+/// `{ role, owner, mode, viewers: [name], watching, typing, cards, waiting, guestNote, viewOnly }`.
+pub fn project(state: &ChatState) -> Value {
+    let Some(collab) = shared(state) else {
+        return Value::Null;
+    };
+    let guest = is_guest(state);
+    let me = guest_name(state).unwrap_or_default();
+    let owner = text(collab, "owner");
+    let owner = if owner.is_empty() { "The owner" } else { owner };
+    let mode = text(collab, "mode");
+    let viewers: Vec<&Value> = collab
+        .get("viewers")
+        .and_then(Value::as_array)
+        .map(|rows| rows.iter().collect())
+        .unwrap_or_default();
+    let viewer_names: Vec<String> = viewers
+        .iter()
+        .map(|viewer| {
+            let name = text(viewer, "name");
+            if guest && name == me {
+                format!("{name} (you)")
+            } else {
+                name.to_string()
+            }
+        })
+        .collect();
+    let mut typing: Vec<String> = viewers
+        .iter()
+        .filter(|viewer| viewer.get("typing").and_then(Value::as_bool) == Some(true))
+        .map(|viewer| text(viewer, "name").to_string())
+        .filter(|name| !(guest && name == me))
+        .collect();
+    if guest && collab.get("ownerTyping").and_then(Value::as_bool) == Some(true) {
+        typing.insert(0, owner.to_string());
+    }
+    let held: Vec<&Value> = collab
+        .get("held")
+        .and_then(Value::as_array)
+        .map(|rows| rows.iter().collect())
+        .unwrap_or_default();
+    let busy: Vec<&str> = state
+        .extras
+        .panels
+        .collab_requests
+        .iter()
+        .map(|(_, held_id)| held_id.as_str())
+        .collect();
+    let cards: Vec<Value> = if guest {
+        Vec::new()
+    } else {
+        held.iter()
+            .map(|row| {
+                json!({
+                    "id": text(row, "id"),
+                    "title": format!("Message from {}", text(row, "name")),
+                    "text": text(row, "text"),
+                    "busy": busy.contains(&text(row, "id")),
+                })
+            })
+            .collect()
+    };
+    let waiting: Vec<Value> = if guest {
+        held.iter()
+            .map(|row| {
+                let name = text(row, "name");
+                json!({
+                    "id": text(row, "id"),
+                    "label": if name == me {
+                        format!("{name} (you) \u{b7} Waiting for {owner}")
+                    } else {
+                        format!("{name} \u{b7} Waiting for {owner}")
+                    },
+                    "text": text(row, "text"),
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let guest_note = guest.then(|| match mode {
+        "send" => format!("Message as {me}. It goes straight to the agent."),
+        "view" => format!("{owner} shared this chat to watch only."),
+        _ => format!("Message as {me}. {owner} approves each message."),
+    });
+    json!({
+        "role": if guest { "guest" } else { "owner" },
+        "owner": owner,
+        "mode": mode,
+        "viewers": viewer_names,
+        "viewerCount": viewers.len(),
+        "watching": names_line(&viewer_names, "is watching", "are watching"),
+        "typing": names_line(&typing, "is typing", "are typing"),
+        "cards": cards,
+        "waiting": waiting,
+        "guestNote": guest_note,
+        "viewOnly": guest && mode == "view",
+        "waitingForOwner": format!("Waiting for {owner}"),
+    })
+}
+
+/// `setCollabGuest`: this page is a Ghostex Collab guest's (`{ viewerId, name }`).
+pub fn set_guest(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
+    state.session.collab_guest = Some(json!({
+        "viewerId": action.param("viewerId").cloned().unwrap_or(Value::Null),
+        "name": action.param("name").cloned().unwrap_or(Value::Null),
+    }));
+    state.core.request_publish();
+    Vec::new()
+}
+
+/// `resolveCollabMessage`: the owner's Send, Edit or Decline on a guest's message.
+pub fn resolve(state: &mut ChatState, action: &UserAction, request_id: u64) -> Vec<Effect> {
+    if is_guest(state) {
+        return Vec::new();
+    }
+    let held_id = action
+        .param("heldId")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let choice = action
+        .param("action")
+        .and_then(Value::as_str)
+        .unwrap_or("decline")
+        .to_string();
+    if held_id.is_empty()
+        || state
+            .extras
+            .panels
+            .collab_requests
+            .iter()
+            .any(|(_, id)| *id == held_id)
+    {
+        return Vec::new();
+    }
+    state
+        .extras
+        .panels
+        .collab_requests
+        .push((request_id, held_id.clone()));
+    state.core.request_publish();
+    vec![Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::Collab,
+        params: Box::new(json!({
+            "op": "resolve",
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+            "heldId": held_id,
+            "action": choice,
+        })),
+    }]
+}
+
+/// gxserver's answer to [`resolve`]: Edit puts the guest's words into the chat box; a refusal
+/// says why. `None` when `request_id` is not one of these.
+pub fn settle(
+    state: &mut ChatState,
+    request_id: u64,
+    answer: Result<&Value, String>,
+) -> Option<Vec<Effect>> {
+    if state.extras.panels.collab_typing_request == Some(request_id) {
+        state.extras.panels.collab_typing_request = None;
+        return Some(Vec::new());
+    }
+    let index = state
+        .extras
+        .panels
+        .collab_requests
+        .iter()
+        .position(|(id, _)| *id == request_id)?;
+    state.extras.panels.collab_requests.remove(index);
+    state.core.request_publish();
+    Some(match answer {
+        Ok(result) => match result.get("composerText").and_then(Value::as_str) {
+            Some(words) => vec![Effect::SetComposerText {
+                content: words.to_string(),
+                caret: Some(words.chars().count()),
+                from_history: false,
+            }],
+            None => Vec::new(),
+        },
+        Err(message) => vec![Effect::Toast {
+            level: "error".to_string(),
+            message: if message.is_empty() {
+                "Couldn't answer that message.".to_string()
+            } else {
+                message
+            },
+        }],
+    })
+}
+
+/// While the chat is shared, a chat box being typed into tells gxserver every couple of seconds,
+/// and once more when it is emptied, so everyone sees "<name> is typing".
+pub fn typing(state: &mut ChatState, text_now: &str, context: &ChatContext) -> Vec<Effect> {
+    if shared(state).is_none() {
+        return Vec::new();
+    }
+    let typing = !text_now.trim().is_empty();
+    let panels = &mut state.extras.panels;
+    let due = if typing {
+        context.now_ms - panels.collab_typing_at >= TYPING_EVERY_MS
+    } else {
+        panels.collab_typing_on
+    };
+    if !due {
+        return Vec::new();
+    }
+    panels.collab_typing_at = if typing { context.now_ms } else { 0.0 };
+    panels.collab_typing_on = typing;
+    let request_id = state.core.allocate_request_id();
+    state.extras.panels.collab_typing_request = Some(request_id);
+    vec![Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::CollabTyping,
+        params: Box::new(json!({
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+            "typing": typing,
+        })),
+    }]
+}

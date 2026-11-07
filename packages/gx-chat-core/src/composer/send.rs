@@ -787,6 +787,22 @@ pub fn settle_request(
             {
                 effects.push(opened);
             }
+            // A Ghostex Collab guest's message reaches the agent labelled with their name, or
+            // waits for the owner as its own row, so the echo drawn at Enter never matches it.
+            if crate::extras::collab::is_guest(state)
+                && state.composer.submitting.as_ref().is_some_and(|submission| {
+                    submission.phases.first() == Some(&SendPhase::SendText)
+                })
+            {
+                if let Some(pending_id) = state
+                    .composer
+                    .submitting
+                    .as_ref()
+                    .and_then(|submission| submission.pending_id.clone())
+                {
+                    sends::drop_send(state, &pending_id);
+                }
+            }
             if let Some(submission) = state.composer.submitting.as_mut() {
                 let sent = submission.phases.first().copied();
                 submission.request = None;

@@ -84,6 +84,7 @@ mod runtime_worker;
 mod scroll_bottom;
 mod scrollbar;
 mod search;
+mod collab;
 mod secret_request;
 mod side_chats;
 mod side_question;

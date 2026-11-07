@@ -390,6 +390,9 @@ impl NativeChatView {
         if let Some(requests) = self.render_secret_requests(p, window, cx) {
             waiting.push(requests);
         }
+        if let Some(collab) = self.render_collab(p, cx) {
+            waiting.push(collab);
+        }
         if let Some(line) = self.render_relayed_answer_lines(p) {
             waiting.push(line);
         }
@@ -605,7 +608,7 @@ impl NativeChatView {
                         this.opacity(frame.controls_opacity)
                             .top(px(frame.controls_offset * s))
                     })
-                    .when(!collapsed, |this| {
+                    .when(!collapsed && !self.collab_guest(), |this| {
                         this.child(self.render_option_pills(&model, &effort, p, cx))
                     })
                     .child(self.render_toolbar(p, cx))
@@ -631,7 +634,7 @@ impl NativeChatView {
         // CDXC:SessionChat 2026-09-18 WHY: React's inline composer had a zero-height notification section before its field, contributing one grid gap even while idle. Reserve that same gap here when nothing stacks above the box.
         // The chat's pills ride in a strip along the box's top edge, inside its border
         // (pills_strip.rs); what the box holds under it is unchanged.
-        let pills_strip = if maximized {
+        let pills_strip = if maximized || self.collab_guest() {
             None
         } else {
             self.render_pills_strip(p, cx)
@@ -670,7 +673,7 @@ impl NativeChatView {
                         .children(self.render_dictation_pill(p, cx)),
                 ),
         );
-        if self.status_line_reserved() {
+        if self.status_line_reserved() && !self.collab_guest() {
             footer = footer.child(self.render_context_status(p, cx));
         }
         div()

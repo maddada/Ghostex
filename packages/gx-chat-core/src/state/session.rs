@@ -96,6 +96,10 @@ pub struct SessionState {
     /// Autopilot, as gxserver says (`{ on, covered }`, server/src/autopilot/mod.rs): its pill
     /// (`extras::autopilot`). Unchanged on omission.
     pub autopilot: Option<Value>,
+    /// Ghostex Collab, as gxserver says (`extras::collab`). Unchanged on omission.
+    pub collab: Option<Value>,
+    /// Set on a Ghostex Collab guest's page (`{ viewerId, name }`, `setCollabGuest`).
+    pub collab_guest: Option<Value>,
     /// How the messages this session sent other agents and left waiting ended, by send id.
     /// Unchanged on omission.
     pub agent_message_deliveries: Option<Value>,
@@ -179,6 +183,8 @@ impl Default for SessionState {
             secret_requests: None,
             relayed_answers: None,
             autopilot: None,
+            collab: None,
+            collab_guest: None,
             agent_message_deliveries: None,
             screen_probed: false,
             cloud_box_asleep: false,

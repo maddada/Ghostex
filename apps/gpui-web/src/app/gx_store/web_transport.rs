@@ -141,6 +141,16 @@ fn bootstrap_secret() -> Option<String> {
 
 /// Asks the page's own server (`ghostex web`, or the dev server proxying to it) for the daemon.
 pub(crate) async fn bootstrap() -> Result<GxserverEndpoint, String> {
+    // A Ghostex Collab guest has no token of any kind: its calls go to the guest endpoint, which
+    // the page carries to the owner's computer (`www/src/collab/tunnel.js`).
+    if let Some(guest) = crate::app::collab_guest::guest() {
+        let endpoint = GxserverEndpoint {
+            base_url: guest.base_url,
+            auth_token: "collab-guest".to_string(),
+        };
+        CURRENT_ENDPOINT.with(|current| *current.borrow_mut() = Some(endpoint.clone()));
+        return Ok(endpoint);
+    }
     let secret = bootstrap_secret().ok_or(
         "Open Ghostex Web with the link `ghostex web` printed; it carries this run's key.",
     )?;

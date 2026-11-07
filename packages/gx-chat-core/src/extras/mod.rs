@@ -10,6 +10,7 @@ pub mod agent_fleet;
 pub mod agent_tasks;
 pub mod agents;
 pub mod autopilot;
+pub mod collab;
 pub mod background_tasks;
 pub mod chat_pills;
 pub mod coordinator_board;

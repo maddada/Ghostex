@@ -104,6 +104,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.coordinator_threads_panel = Tri::Value(threads_panel);
     into.side_chats_panel = Tri::Value(side_chats_panel);
     into.secret_requests = Tri::Value(secret_requests::project(state));
+    into.collab = Tri::Value(crate::extras::collab::project(state));
     into.relayed_answer_lines = Tri::Value(relayed_approvals::audit_lines(state));
     into.side_chat_of = Tri::Value(side_chats::bar(
         state.session.side_chat_of.as_ref(),

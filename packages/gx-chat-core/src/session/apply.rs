@@ -121,6 +121,9 @@ pub fn apply_state_frame(
     if let Some(autopilot) = frame.state.autopilot.clone() {
         state.session.autopilot = Some(autopilot);
     }
+    if let Some(collab) = frame.state.collab.clone() {
+        state.session.collab = Some(collab);
+    }
     if let Some(deliveries) = frame.state.agent_message_deliveries.clone() {
         state.session.agent_message_deliveries = Some(deliveries);
     }
@@ -490,6 +493,9 @@ pub fn apply_authoritative(
     }
     if let Some(autopilot) = result.state.autopilot.clone() {
         state.session.autopilot = Some(autopilot);
+    }
+    if let Some(collab) = result.state.collab.clone() {
+        state.session.collab = Some(collab);
     }
     if let Some(deliveries) = result.state.agent_message_deliveries.clone() {
         state.session.agent_message_deliveries = Some(deliveries);

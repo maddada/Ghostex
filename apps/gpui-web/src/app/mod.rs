@@ -1,6 +1,8 @@
 //! CDXC:WebGpui 2026-09-22 WHY: the entries in this folder that are symlinks ARE the desktop app's source files, compiled here unchanged. Symlinks rather than `#[path]` attributes because rustc resolves the nested `mod` lines of a `#[path]`-loaded file as if it were a `mod.rs`, which breaks every desktop file that has a sibling directory (`consts.rs` + `consts/`). Real files in this folder are the web replacements for the desktop's native-only halves.
 mod agent_hooks_required_modal_lifecycle;
 pub(crate) mod chat_host;
+/// Ghostex Collab's guest mode: one shared chat, nothing else.
+pub(crate) mod collab_guest;
 /// The page has no full-window Claude; opening a session has nothing to turn off.
 pub(crate) mod claude_web;
 /// The desktop's constants, of which the page reads a subset.

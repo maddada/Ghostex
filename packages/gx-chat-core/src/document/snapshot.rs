@@ -252,6 +252,9 @@ pub struct Document {
     /// The private secret request cards above the composer (`extras::secret_requests::project`),
     /// an array, empty when none. Family f.
     pub secret_requests: Tri<Value>,
+    /// Ghostex Collab (`extras::collab::project`): who watches and types, the owner's "Message
+    /// from" cards, a guest's waiting rows and chat box note; `null` while not shared. Family f.
+    pub collab: Tri<Value>,
     /// A coordinator's relayed thread approval cards (`extras::relayed_approvals::project`), an
     /// array, empty when none: drawn under each thread's report, in the Approvals pill's menu and
     /// on the board's Needs you row. Family f.
