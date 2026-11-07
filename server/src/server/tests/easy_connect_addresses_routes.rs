@@ -44,3 +44,38 @@ async fn a_caller_without_a_token_is_refused() {
     let (status, _) = ask(&state, "gxdev_not-a-real-token").await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn a_phone_reports_the_dial_it_gave_up_on_and_the_log_keeps_its_reason() {
+    let (_temp, state) = temp_state();
+    let routed = route_http(
+        state.clone(),
+        rpc_request(
+            "/api/easyConnectAddresses",
+            &state.auth_token.clone(),
+            json!({ "params": { "failedDial": {
+                "relay": "relay-eu.ghostex.dev",
+                "kind": "ghostex",
+                "elapsedMs": 10_042,
+                "secondsAgo": 3,
+                "error": "tailcat: cannot reach paired machine: context deadline exceeded",
+            } } }),
+        ),
+        "addresses".to_string(),
+    )
+    .await;
+    assert_eq!(routed.response.status(), StatusCode::OK);
+
+    let log = std::fs::read_to_string(&state.paths.log_file).expect("gxserver log");
+    let record: Value = log
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .find(|record| record["event"] == "easyConnect.dialFailed")
+        .expect("a dialFailed record");
+    assert_eq!(record["details"]["lane"], "relay");
+    assert_eq!(record["details"]["elapsedMs"], 10_042);
+    assert_eq!(
+        record["error"],
+        "tailcat: cannot reach paired machine: context deadline exceeded"
+    );
+}

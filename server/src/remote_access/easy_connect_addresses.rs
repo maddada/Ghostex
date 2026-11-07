@@ -1,4 +1,5 @@
 use serde::Serialize;
+use serde_json::{json, Value};
 
 use crate::tailcat::{TailcatRelayMode, TailcatStatusPayload};
 
@@ -70,6 +71,93 @@ pub fn pairing_qr_address(status: &TailcatStatusPayload) -> Option<String> {
 /// The first address, which Copy as text and every computer use.
 pub fn public_pairing_address(status: &TailcatStatusPayload) -> Option<String> {
     status.token.clone().filter(|_| status.running)
+}
+
+/// The longest error text a phone's dial report keeps.
+const DIAL_ERROR_MAX_CHARS: usize = 400;
+
+/// One failed Easy Connect dial a phone reports with its next `/api/easyConnectAddresses` request
+/// (`params.failedDial`), as the `easyConnect.dialFailed` record keeps it: the record's details and
+/// its error text. `None` when the request carries no report, or one this computer cannot read.
+///
+/// CDXC:RemotePairing 2026-11-08 WHY:
+/// The link log (`server/src/tailcat/link_log.rs`) shows only what reached this computer: on
+/// 2026-11-07 it showed the phone's hello arrive on the relay lane and, half a second later, the
+/// phone on the public lane, with nothing to say why the phone gave up. The phone's reason was only
+/// in its own device log. The phone now sends the reason of the dial it gave up on with the address
+/// list request it makes right after connecting another way, so the next fallback names its cause
+/// here. The report never carries an address: any word that looks like one is replaced.
+/// SEE-ALSO: apps/mobile/app/src/machines/easyConnectDial.ts (`noteEasyConnectDial`).
+pub fn failed_dial_report(params: &Value) -> Option<(Value, String)> {
+    let report = params.get("failedDial")?.as_object()?;
+    let kind = match report.get("kind")?.as_str()? {
+        kind @ ("ghostex" | "custom" | "public" | "paired") => kind,
+        _ => return None,
+    };
+    let lane = if matches!(kind, "ghostex" | "custom") {
+        "relay"
+    } else {
+        "public"
+    };
+    let relay: String = report
+        .get("relay")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .chars()
+        .take(100)
+        .collect();
+    let elapsed_ms = report.get("elapsedMs").and_then(Value::as_u64);
+    let seconds_ago = report
+        .get("secondsAgo")
+        .and_then(Value::as_u64)
+        .map(|seconds| seconds.min(24 * 60 * 60));
+    let error: String = redact_addresses(
+        report
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    )
+    .chars()
+    .take(DIAL_ERROR_MAX_CHARS)
+    .collect();
+    let mut details = json!({
+        "lane": lane,
+        "kind": kind,
+        "relay": redact_addresses(&relay),
+    });
+    if let Some(elapsed_ms) = elapsed_ms {
+        details["elapsedMs"] = json!(elapsed_ms);
+    }
+    if let Some(seconds_ago) = seconds_ago {
+        details["secondsAgo"] = json!(seconds_ago);
+    }
+    Some((details, error))
+}
+
+/// Replaces every word that looks like a tailcat address (`tc` and a long base64url run) with
+/// `[address]`: an address is a secret and never belongs in a log.
+fn redact_addresses(text: &str) -> String {
+    let is_address_char = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_';
+    let mut out = String::with_capacity(text.len());
+    let mut word = String::new();
+    let flush = |word: &mut String, out: &mut String| {
+        if word.len() >= 24 && word.starts_with("tc") {
+            out.push_str("[address]");
+        } else {
+            out.push_str(word);
+        }
+        word.clear();
+    };
+    for c in text.chars() {
+        if is_address_char(c) {
+            word.push(c);
+        } else {
+            flush(&mut word, &mut out);
+            out.push(c);
+        }
+    }
+    flush(&mut word, &mut out);
+    out
 }
 
 #[cfg(test)]
@@ -161,5 +249,51 @@ mod tests {
             public_pairing_address(&status(true, Some(true))).as_deref(),
             Some("tcPUBLIC")
         );
+    }
+    #[test]
+    fn a_failed_dial_report_names_the_lane_and_keeps_no_address() {
+        let address = "tcpGFwWCCYxcM1Q0ZlBz4EnDMF-Vu30bAbIUHXRZAxadFFKjPLZWFrWCA";
+        let (details, error) = failed_dial_report(&json!({
+            "failedDial": {
+                "relay": "relay-eu.ghostex.dev",
+                "kind": "ghostex",
+                "elapsedMs": 10_042,
+                "secondsAgo": 4,
+                "error": format!("tailcat could not reach {address}: context deadline exceeded"),
+            }
+        }))
+        .expect("a report");
+        assert_eq!(
+            details,
+            json!({
+                "lane": "relay",
+                "kind": "ghostex",
+                "relay": "relay-eu.ghostex.dev",
+                "elapsedMs": 10_042,
+                "secondsAgo": 4,
+            })
+        );
+        assert_eq!(
+            error,
+            "tailcat could not reach [address]: context deadline exceeded"
+        );
+    }
+
+    #[test]
+    fn the_paired_address_counts_as_the_public_lane_and_long_errors_are_cut() {
+        let (details, error) = failed_dial_report(&json!({
+            "failedDial": { "relay": "paired", "kind": "paired", "error": "x".repeat(1000) }
+        }))
+        .expect("a report");
+        assert_eq!(details["lane"], "public");
+        assert!(details.get("elapsedMs").is_none());
+        assert_eq!(error.len(), DIAL_ERROR_MAX_CHARS);
+    }
+
+    #[test]
+    fn a_request_without_a_readable_report_logs_nothing() {
+        assert!(failed_dial_report(&json!({})).is_none());
+        assert!(failed_dial_report(&json!({ "failedDial": "relay" })).is_none());
+        assert!(failed_dial_report(&json!({ "failedDial": { "kind": "other" } })).is_none());
     }
 }

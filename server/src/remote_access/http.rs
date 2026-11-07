@@ -180,6 +180,9 @@ pub(crate) async fn handle_remote_access_http(
             .await
         }
         "/api/easyConnectAddresses" => {
+            if let Some((details, error)) = failed_dial_report(&params) {
+                log_failed_dial(&logger, details, error);
+            }
             tokio::task::spawn_blocking(move || {
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                 Ok(json!({ "addresses": easy_connect_addresses(&status) }))
@@ -317,4 +320,18 @@ impl From<PairDeviceError> for RemoteAccessHttpError {
             PairDeviceError::Internal(error) => error.into(),
         }
     }
+}
+
+/// The phone's own account of an Easy Connect dial it gave up on (`failed_dial_report`).
+fn log_failed_dial(logger: &crate::logging::GxserverLogger, details: Value, error: String) {
+    let _ = logger.log(crate::logging::GxserverLogInput {
+        level: crate::logging::LogLevel::Warn,
+        event: "easyConnect.dialFailed".to_string(),
+        server_id: None,
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: (!error.is_empty()).then_some(error),
+        details: Some(details),
+    });
 }
