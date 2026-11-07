@@ -23,7 +23,11 @@ use gpui::{
     Styled as _, canvas, div, point, px, relative, svg,
 };
 use serde_json::Value;
-use std::{cell::Cell, rc::Rc, time::Duration};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    time::Duration,
+};
 use web_time::Instant;
 
 /// The strip's height (unscaled): a pill's 22px with 5px above and below, and its 1px hairline.
@@ -34,6 +38,9 @@ pub(super) const PILLS_FADE: f32 = 24.0;
 
 /// The band's tint over the box's fill.
 const STRIP_TINT: f32 = 0.035;
+
+/// How much of itself a pill keeps while the strip's edge cuts it.
+const CUT_PILL_OPACITY: f32 = 0.35;
 
 /// The ramp over a sideways scroller's edge that hides more: `edge`'s colour at the edge, clear
 /// `width` in. The read-picture strips fade the same way (read_pictures.rs).
@@ -59,6 +66,10 @@ pub(super) struct PillsStripCells {
     scroll: ScrollHandle,
     /// Pills hide past the scroll's left and right edges.
     fades: Rc<Cell<(bool, bool)>>,
+    /// Each scrolling pill's border box at the last paint, in row order.
+    pill_bounds: Rc<RefCell<Vec<Bounds<Pixels>>>>,
+    /// Which scrolling pills (bit per row index) the scroll's edges cut at the last paint.
+    cut: Rc<Cell<u64>>,
     /// Whether the strip showed at the last render, and the last change: when it was first drawn,
     /// which way, and a counter naming its animation.
     shown: Cell<bool>,
@@ -270,18 +281,19 @@ impl NativeChatView {
         } else {
             (Vec::new(), Vec::new())
         };
+        // The ↓ at the left of the pills, so it appearing moves none of them.
+        let scrolling: Vec<AnyElement> = (shown && left_bottom)
+            .then(|| self.scroll_bottom_icon_pill(p, cx))
+            .flatten()
+            .into_iter()
+            .chain(pills)
+            .collect();
         let row = div()
             .flex()
             .items_center()
             .flex_shrink_0()
             .gap(px(6.0 * s))
-            // The ↓ at the left of the pills, so it appearing moves none of them.
-            .children(
-                (shown && left_bottom)
-                    .then(|| self.scroll_bottom_icon_pill(p, cx))
-                    .flatten(),
-            )
-            .children(pills);
+            .children(self.measured_strip_pills(scrolling));
         let tint = p.foreground.opacity(STRIP_TINT);
         let edge = p.composer_background.blend(tint);
         let measured = self.pills_strip.bounds.clone();
@@ -348,6 +360,48 @@ impl NativeChatView {
         })
     }
 
+    /// The scrolling pills, each measured for `cut`, and dimmed while the scroll's edge cuts it.
+    ///
+    /// CDXC:SessionChat 2026-11-07 WHY:
+    /// On window glass the box's fill is a 6% white wash, so the 24px fade into it hid nothing: with Saved draft and the ↓ showing, the last pill ended in a hard cut at the box's edge ("How to u…") and nothing said more pills (Stashed) sat past it. A fade can only ramp into a solid colour, so a pill the edge cuts is also drawn faint, which reads as fading out on glass too; opaque themes keep the colour fade over it. A vertical wheel turn still moves the strip sideways (GPUI's x-only scroller).
+    fn measured_strip_pills(&self, pills: Vec<AnyElement>) -> Vec<AnyElement> {
+        let measured = self.pills_strip.pill_bounds.clone();
+        {
+            let mut bounds = measured.borrow_mut();
+            bounds.clear();
+            bounds.resize(pills.len(), Bounds::default());
+        }
+        let cut = self.pills_strip.cut.get();
+        pills
+            .into_iter()
+            .enumerate()
+            .map(|(index, pill)| {
+                let measured = measured.clone();
+                div()
+                    .relative()
+                    .flex()
+                    .flex_shrink_0()
+                    .when(index < 64 && cut & (1 << index) != 0, |pill| {
+                        pill.opacity(CUT_PILL_OPACITY)
+                    })
+                    .child(pill)
+                    .child(
+                        canvas(
+                            move |bounds, _, _| {
+                                if let Some(slot) = measured.borrow_mut().get_mut(index) {
+                                    *slot = bounds;
+                                }
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .inset_0(),
+                    )
+                    .into_any_element()
+            })
+            .collect()
+    }
+
     /// The pills' scroll: right-aligned while they fit, scrolling sideways when they don't, with a
     /// fade into the band's colour at an edge that hides more of them.
     ///
@@ -363,6 +417,8 @@ impl NativeChatView {
         let s = p.scale;
         let scroll = self.pills_strip.scroll.clone();
         let fades = self.pills_strip.fades.clone();
+        let pill_bounds = self.pills_strip.pill_bounds.clone();
+        let cut = self.pills_strip.cut.clone();
         let (left, right) = fades.get();
         let chat = cx.entity_id();
         let fade = |toward_left: bool| edge_fade(toward_left, edge, PILLS_FADE * s);
@@ -393,11 +449,13 @@ impl NativeChatView {
             .when(right, |area| area.child(fade(false)))
             .child(
                 canvas(
-                    move |_, _, cx| {
+                    move |view, _, cx| {
                         let offset = -f32::from(scroll.offset().x);
                         let max = f32::from(scroll.max_offset().x);
                         let next = (offset > 0.5, max - offset > 0.5);
-                        if fades.replace(next) != next {
+                        let next_cut = cut_pills(&pill_bounds.borrow(), view);
+                        let fades_changed = fades.replace(next) != next;
+                        if cut.replace(next_cut) != next_cut || fades_changed {
                             cx.notify(chat);
                         }
                     },
@@ -410,9 +468,24 @@ impl NativeChatView {
     }
 }
 
+/// The pills (bit per index, the first 64) that `view`'s edges cut: partly in view, partly out.
+fn cut_pills(pills: &[Bounds<Pixels>], view: Bounds<Pixels>) -> u64 {
+    let slack = px(0.5);
+    pills
+        .iter()
+        .take(64)
+        .enumerate()
+        .filter(|(_, pill)| {
+            let inside = pill.right() > view.left() + slack && pill.left() < view.right() - slack;
+            let whole = pill.left() >= view.left() - slack && pill.right() <= view.right() + slack;
+            pill.size.width > px(0.0) && inside && !whole
+        })
+        .fold(0, |mask, (index, _)| mask | 1 << index)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::strip_menu_left;
+    use super::{cut_pills, strip_menu_left};
     use gpui::{Bounds, Pixels, point, px, size};
 
     fn rect(left: f32, width: f32) -> Bounds<Pixels> {
@@ -462,5 +535,18 @@ mod tests {
             strip_menu_left(rect(760.0, 80.0), chat_box(), px(1000.0)),
             px(100.0)
         );
+    }
+
+    #[test]
+    fn only_a_pill_the_edge_runs_through_counts_as_cut() {
+        let view = rect(100.0, 300.0);
+        let pills = [
+            rect(40.0, 50.0),  // wholly left of the view
+            rect(80.0, 50.0),  // cut by the left edge
+            rect(150.0, 80.0), // wholly inside
+            rect(360.0, 80.0), // cut by the right edge
+            rect(450.0, 80.0), // wholly right of the view
+        ];
+        assert_eq!(cut_pills(&pills, view), 0b01010);
     }
 }

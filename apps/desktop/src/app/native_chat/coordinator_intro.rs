@@ -31,7 +31,14 @@ const CARD_PAD: f32 = 14.0;
 const CARD_GAP: f32 = 8.0;
 /// The lede above the cards, and the footer under them (the checkbox line and its note).
 const LEDE_GAP: f32 = 10.0;
-const FOOTER_HEIGHT: f32 = 62.0;
+/// The footer's rule, top padding, "Don't show again" line and the gap under it; its note's lines
+/// come on top (`footer_height`).
+const FOOTER_FIXED: f32 = 1.0 + 10.0 + FOOTER_LABEL_LINE + 3.0;
+const FOOTER_LABEL_LINE: f32 = 18.0;
+const FOOTER_NOTE_LINE: f32 = 16.0;
+const FOOTER_NOTE_CHAR: f32 = 6.2;
+/// The note's width: the panel less the footer's 4px sides and the checkbox's 24px indent.
+const FOOTER_NOTE_WIDTH: f32 = INTRO_MENU_WIDTH - 16.0 - 8.0 - 24.0;
 /// Line heights, and the width the card texts wrap in with their average character widths.
 const TITLE_LINE: f32 = 19.0;
 const DETAIL_LINE: f32 = 18.0;
@@ -44,6 +51,18 @@ fn lines(text: &str, char_width: f32, width: f32) -> f32 {
     (text.chars().count() as f32 * char_width / width)
         .ceil()
         .max(1.0)
+}
+
+/// CDXC:CoordinatorIntro 2026-11-07 WHY:
+/// The panel's height comes from this estimate, and the footer used to count a fixed 62px while it drew about 67 (its label took GPUI's default 1.6 line height), so the note sat on the panel's bottom edge with none of its padding. The label now has a set line and the note's lines are counted, so the footer gets the panel's bottom padding like its top.
+fn footer_height(intro: &Value) -> f32 {
+    FOOTER_FIXED
+        + FOOTER_NOTE_LINE
+            * lines(
+                &text(intro, "dontShowAgainNote"),
+                FOOTER_NOTE_CHAR,
+                FOOTER_NOTE_WIDTH,
+            )
 }
 
 fn tips(intro: &Value) -> Vec<Value> {
@@ -76,8 +95,8 @@ impl NativeChatView {
                 + super::chat_pills::MENU_SECTION_GAP * 2.0
                 + lede
                 + cards
-                + FOOTER_HEIGHT)
-                .min(INTRO_MENU_MAX),
+                + footer_height(intro))
+            .min(INTRO_MENU_MAX),
         )
     }
 
@@ -113,7 +132,7 @@ impl NativeChatView {
             .max_h(px((INTRO_MENU_MAX
                 - super::chat_pills::MENU_HEADER_HEIGHT
                 - super::chat_pills::MENU_SECTION_GAP * 2.0
-                - FOOTER_HEIGHT)
+                - footer_height(&intro))
                 * s))
             .overflow_y_scroll()
             .child(
@@ -300,6 +319,7 @@ impl NativeChatView {
                     .child(
                         div()
                             .text_size(px(13.0 * s))
+                            .line_height(px(FOOTER_LABEL_LINE * s))
                             .text_color(p.foreground)
                             .child(label),
                     )
@@ -313,7 +333,7 @@ impl NativeChatView {
                 div()
                     .pl(px(24.0 * s))
                     .text_size(px(12.0 * s))
-                    .line_height(px(16.0 * s))
+                    .line_height(px(FOOTER_NOTE_LINE * s))
                     .text_color(p.muted)
                     .child(text(intro, "dontShowAgainNote")),
             )
