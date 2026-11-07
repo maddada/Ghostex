@@ -207,6 +207,16 @@ pub(super) fn agent_display_name(agent: SessionChatTranscriptAgent) -> &'static 
     }
 }
 
+/// The name of the CLI the session runs when it is not the one its transcript format is named
+/// after: "OMP" for an OMP session, whose transcript is Pi's. `None` keeps the family's name.
+pub(super) fn cli_name_beside_family(agent: Option<&str>) -> Option<&'static str> {
+    let agent = crate::agents::identity::normalize_agent_id(agent)?;
+    let family = crate::session_chat::session_chat_transcript_agent_id(Some(agent.as_str()))?;
+    (family != agent)
+        .then(|| crate::agents::default_agent_session_title_name(&agent))
+        .flatten()
+}
+
 fn load_transcript<'a>(
     request: &SessionTranscriptExportRequest<'a>,
 ) -> Result<LoadedTranscript<'a>, SessionTranscriptExportError> {
@@ -244,6 +254,7 @@ fn load_transcript<'a>(
     })?;
     let mut transcript = parse_transcript(agent, &source_path, &lines);
     transcript.meta.agent = agent;
+    transcript.meta.agent_name = cli_name_beside_family(request.agent);
     transcript.meta.source_path = source_path.clone();
     if transcript.meta.agent_session_id.is_none() {
         transcript.meta.agent_session_id = agent_session_id.map(str::to_string);
@@ -361,5 +372,20 @@ fn resolve_export_transcript_path(
     match find_claude_successor_transcript(session_id, &path, last_substantive_ms, &[]) {
         SessionChatSuccessorOutcome::Found(successor) => Some(successor.path),
         _ => Some(path),
+    }
+}
+
+#[cfg(test)]
+mod cli_name_tests {
+    use super::*;
+
+    /// An OMP session's export says OMP, though its transcript is in Pi's format.
+    #[test]
+    fn an_export_names_the_cli_not_its_transcript_family() {
+        assert_eq!(cli_name_beside_family(Some("omp")), Some("OMP"));
+        assert_eq!(cli_name_beside_family(Some("pi")), None);
+        assert_eq!(cli_name_beside_family(Some("claude")), None);
+        assert_eq!(cli_name_beside_family(Some("empryo")), None);
+        assert_eq!(cli_name_beside_family(None), None);
     }
 }

@@ -54,14 +54,7 @@ pub(crate) fn agent_start_failure(
 ) -> Option<SessionChatTerminalNotice> {
     let mut notice = agent_start_failure_notice(screen_text)?;
     let session = repository.get_session(project_id, session_id).ok()??;
-    // The card names the agent (Q1122): "Claude Code couldn't start", not "The agent couldn't start".
-    let agent = crate::session_chat_follower::session_chat_agent_for_session(&session);
-    let agent_name = match agent.as_deref() {
-        Some("claude") => Some("Claude Code"),
-        Some(agent) => crate::agents::default_agent_session_title_name(agent),
-        None => None,
-    };
-    if let Some(agent_name) = agent_name {
+    if let Some(agent_name) = card_agent_name(&session) {
         notice.title = format!("{agent_name} couldn't start");
     }
     // A box runs its agent where this computer's process table cannot see it.
@@ -80,6 +73,16 @@ pub(crate) fn agent_start_failure(
     // An unreadable snapshot proves nothing.
     .map_or(true, |identities| identities.contains_key(&zmx_name));
     (!running).then(|| with_missing_agent_command(notice))
+}
+
+/// The name the card gives the session's agent (Q1122): "Claude Code couldn't start", not "The
+/// agent couldn't start". It is the CLI the user picked, not its transcript family: an OMP session
+/// reads Pi's transcripts, and its card said "Pi couldn't start" (GitHub #456 follow-up).
+fn card_agent_name(session: &Value) -> Option<&'static str> {
+    match crate::session_chat_composer::session_chat_composer_agent_id(session)?.as_str() {
+        "claude" => Some("Claude Code"),
+        agent => crate::agents::default_agent_session_title_name(agent),
+    }
 }
 
 /// The failed-start card, reworded when what failed is an agent's own command not being found
@@ -159,5 +162,30 @@ fn conversation_on_disk(session: &Value) -> Transcript {
             Transcript::Written
         }
         Some(_) => Transcript::Unreadable,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn the_card_names_the_cli_the_user_picked() {
+        for (session, name) in [
+            (json!({"agentId": "omp"}), Some("OMP")),
+            (json!({"agentId": "pi"}), Some("Pi")),
+            (json!({"agentId": "empryo"}), Some("Empryo")),
+            (json!({"agentId": "claude"}), Some("Claude Code")),
+            (json!({"agentId": "codex"}), Some("Codex")),
+            // A sidebar agent configuration runs the CLI its icon names.
+            (
+                json!({"agentId": "custom-1", "launchSettings": {"icon": "omp"}}),
+                Some("OMP"),
+            ),
+            (json!({}), None),
+        ] {
+            assert_eq!(card_agent_name(&session), name, "{session}");
+        }
     }
 }

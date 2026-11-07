@@ -66,7 +66,9 @@ enum Cause {
 
 /// The agents whose chat learns its conversation only from Ghostex's extension inside the agent.
 fn extension_agent(session: &Value) -> Option<ExtensionAgent> {
-    match crate::session_chat_follower::session_chat_agent_for_session(session).as_deref() {
+    // The CLI in the terminal: the transcript family (`session_chat_agent_for_session`) is Pi for
+    // an OMP session too, which named the card "Pi" and pointed its fix at Pi's extension.
+    match crate::session_chat_composer::session_chat_composer_agent_id(session).as_deref() {
         Some("pi") => Some(ExtensionAgent {
             id: "pi",
             name: "Pi",
@@ -270,4 +272,20 @@ pub(crate) async fn answer(
     crate::session_chat_queue_runtime::cycle_session(state, &target.project_id, &target.session_id)
         .await
         .map_err(|reason| invalid(format!("The extension is installed, but {reason}.")))
+}
+
+#[cfg(test)]
+mod extension_agent_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// An OMP session reads Pi's transcripts, but its card and its fix are OMP's.
+    #[test]
+    fn an_omp_session_gets_omps_extension_not_pis() {
+        let omp = extension_agent(&json!({"agentId": "omp"})).expect("omp");
+        assert_eq!((omp.id, omp.name, omp.command), ("omp", "OMP", "omp"));
+        let pi = extension_agent(&json!({"agentId": "pi"})).expect("pi");
+        assert_eq!((pi.id, pi.name, pi.command), ("pi", "Pi", "pi"));
+        assert!(extension_agent(&json!({"agentId": "claude"})).is_none());
+    }
 }

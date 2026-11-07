@@ -368,7 +368,11 @@ fn max_line(open: Option<usize>, next: Option<usize>) -> Option<usize> {
 fn render_session_meta(title: &str, meta: &TranscriptMeta) -> String {
     let mut lines: Vec<String> = vec![
         format!("Title: {title}"),
-        format!("Agent: {}", agent_display_name(meta.agent)),
+        format!(
+            "Agent: {}",
+            meta.agent_name
+                .unwrap_or_else(|| agent_display_name(meta.agent))
+        ),
     ];
     if let Some(model) = &meta.model {
         lines.push(format!("Model: {model}"));
@@ -518,6 +522,7 @@ mod last_turns_tests {
             entries,
             meta: TranscriptMeta {
                 agent: SessionChatTranscriptAgent::Codex,
+                agent_name: None,
                 source_path: std::path::PathBuf::from("/tmp/t.jsonl"),
                 agent_session_id: None,
                 title: None,

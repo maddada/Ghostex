@@ -70,6 +70,8 @@ impl ExportEntry {
 #[derive(Clone, Debug)]
 pub(super) struct TranscriptMeta {
     pub(super) agent: SessionChatTranscriptAgent,
+    /// The CLI's own name when it differs from its transcript family's (OMP reads Pi's format).
+    pub(super) agent_name: Option<&'static str>,
     pub(super) source_path: PathBuf,
     pub(super) agent_session_id: Option<String>,
     pub(super) title: Option<String>,
@@ -82,6 +84,7 @@ impl TranscriptMeta {
     pub(super) fn new() -> Self {
         Self {
             agent: SessionChatTranscriptAgent::Claude,
+            agent_name: None,
             source_path: PathBuf::new(),
             agent_session_id: None,
             title: None,
