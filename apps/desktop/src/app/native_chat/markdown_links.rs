@@ -105,8 +105,12 @@ pub(super) fn secondary_click(
 /// CDXC:SessionChat 2026-09-26 DECISION:
 /// User: references in the transcript keep their shape (icon and coloured label, no chip) but take brighter, more saturated colours, because the muted ones read like normal text. The composer keeps its dimmer pills (`composer_color`).
 /// SEE-ALSO: `transcript` in `packages/gx-chat-core/visual/reference-visual.json`, and `link` in `apps/mobile/app/src/chat/native/transcript/theme.ts`, which the phone chat must keep equal.
+///
+/// `board` is the chat's `coordinatorBoard` document value (`null` on a chat without a board),
+/// which names the cards a board mention points at (`board_mention_link`).
 pub(super) fn presentations(
     references: &Value,
+    board: &Value,
     appearance: &ChatAppearance,
 ) -> HashMap<(String, String), InlineLink> {
     let palette = if appearance.light {
@@ -120,13 +124,22 @@ pub(super) fn presentations(
         .flatten()
         .filter_map(|reference| {
             let kind = reference["kind"].as_str()?;
-            if kind == "session" || kind == "board" {
+            if kind == "board" {
                 return Some((
                     (
                         reference["href"].as_str()?.to_owned(),
                         reference["sourceLabel"].as_str()?.to_owned(),
                     ),
-                    session_pill_link(reference, appearance),
+                    board_mention_link(reference, board, palette, appearance)?,
+                ));
+            }
+            if kind == "session" {
+                return Some((
+                    (
+                        reference["href"].as_str()?.to_owned(),
+                        reference["sourceLabel"].as_str()?.to_owned(),
+                    ),
+                    session_pill_link(reference, appearance, reference["missing"] == true),
                 ));
             }
             if kind == "question" {
@@ -193,24 +206,56 @@ pub(super) fn session_pill_icon(
     }
 }
 
+/// A board card named in a message (`board` references, gx-chat-core `board_reference`, where the
+/// user's decision lives): the session pill's shape with the Board pill's icon, tinted in the
+/// board's own colour (`board` in the shared reference palette) so it reads as a card and not as
+/// another session, and labelled with the card's title now. A card the board no longer has
+/// draws as a muted session pill does, with the link's own text. A click goes to the core, which
+/// shows the card on the board.
+fn board_mention_link(
+    reference: &Value,
+    board: &Value,
+    palette: &HashMap<String, String>,
+    appearance: &ChatAppearance,
+) -> Option<InlineLink> {
+    let titles = &board["itemTitles"];
+    let item = reference["item"].as_str().unwrap_or_default();
+    let current = titles[item].as_str().filter(|title| !title.is_empty());
+    let missing = titles.is_object() && current.is_none();
+    let mut link = session_pill_link(reference, appearance, missing);
+    link.icon = BOARD_ICON.into();
+    if let Some(title) = current {
+        link.label = title.to_owned().into();
+    }
+    if missing {
+        link.icon_color = Some(appearance.foreground.opacity(0.45));
+        if let Some(gone) = reference["goneTitle"].as_str() {
+            link.title = gone.to_owned().into();
+        }
+        return Some(link);
+    }
+    let tint = hex_color(palette.get("board")?)?;
+    link.icon_color = Some(tint);
+    if let Some(frame) = link.frame.as_mut() {
+        frame.border_color = tint.opacity(0.42);
+        frame.background = Some(tint.opacity(0.1));
+        frame.hover_background = Some(tint.opacity(0.18));
+    }
+    Some(link)
+}
+
 /// Another session named in a message (`session` references, gx-chat-core
 /// `transcript/session_mentions.rs`, where the user's decision lives): the working card's pill
 /// shape (a hairline rounded frame, chat_pills.rs) around the agent's logo and `+<title>`, muted
 /// when the session is gone. A click goes to the core as any link does, which switches to it.
-/// A board item (`board` references, gx-chat-core `extras/coordinator_board.rs`) takes the same
-/// pill with the Board pill's icon, and its click shows the item on the board.
-fn session_pill_link(reference: &Value, appearance: &ChatAppearance) -> InlineLink {
+/// A board card's chip (`board_mention_link`) starts from it.
+fn session_pill_link(reference: &Value, appearance: &ChatAppearance, missing: bool) -> InlineLink {
     let s = appearance.scale;
-    let missing = reference["missing"] == true;
-    let (icon, icon_color) = if reference["kind"] == "board" {
-        (BOARD_ICON, appearance.foreground)
-    } else {
-        session_pill_icon(
-            reference["agentIcon"].as_str().unwrap_or_default(),
-            reference["coordinator"] == true,
-            appearance,
-        )
-    };
+    let (icon, icon_color) = session_pill_icon(
+        reference["agentIcon"].as_str().unwrap_or_default(),
+        reference["coordinator"] == true,
+        appearance,
+    );
     let border = appearance.foreground.opacity(0.14);
     InlineLink {
         label: reference["label"]

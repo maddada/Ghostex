@@ -828,7 +828,20 @@ pub fn board_value(
             json!({ "id": group, "total": total, "rows": shown })
         })
         .collect();
-    json!({ "groups": groups })
+    // Every item on the board by its ref, whatever the cap leaves out of its group, so a chat can
+    // tell a `[title](board:B4)` mention of a card still on it from one that left it.
+    //
+    // CDXC:Coordinators 2026-11-08 DECISION:
+    // User, of `[Deploy guest page 0.1.2 to share.ghostex.dev](board:B43)` in a message: "please
+    // color this different so it's clear that it's a mention for a board item". A board mention is
+    // its own tinted chip with the card's current title, dimmed when the card has left the board;
+    // the capped groups cannot say that (a busy Done holds more than `SUMMARY_ROWS`), this can.
+    let items: Map<String, Value> = rows
+        .iter()
+        .filter(|row| row["kind"] == "item")
+        .map(|row| (text(row, "ref"), json!(text(row, "title"))))
+        .collect();
+    json!({ "groups": groups, "items": items })
 }
 
 fn param_text(params: &Map<String, Value>, key: &str) -> Option<String> {
@@ -1529,5 +1542,31 @@ mod tests {
         let moving = group_of(&board, "moving");
         assert_eq!(moving["total"], 20);
         assert_eq!(moving["rows"].as_array().unwrap().len(), SUMMARY_ROWS);
+    }
+
+    /// The copy's `items` names every item on the board, the ones the cap leaves out too, and
+    /// none that left it (dropped), so a chat can dim a mention of a card that is gone.
+    #[test]
+    fn the_chats_copy_indexes_every_item() {
+        let mut items: Vec<BoardItem> = (1..=20)
+            .map(|number| BoardItem {
+                number,
+                title: format!("Item {number}"),
+                group: "later".to_string(),
+                updated_at: now_iso(),
+                ..Default::default()
+            })
+            .collect();
+        items[19].group = "dropped".to_string();
+        let board = board_value(&[], &items, Some(SUMMARY_ROWS), now());
+        assert_eq!(
+            group_of(&board, "later")["rows"].as_array().unwrap().len(),
+            SUMMARY_ROWS
+        );
+        let index = board["items"].as_object().unwrap();
+        assert_eq!(index.len(), 19);
+        assert_eq!(index["B1"], "Item 1");
+        assert_eq!(index["B19"], "Item 19");
+        assert!(index.get("B20").is_none());
     }
 }

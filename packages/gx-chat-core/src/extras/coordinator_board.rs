@@ -234,6 +234,12 @@ pub struct CoordinatorBoard {
     /// The tags a card's Tags list offers, the sidebar's own (gxserver's `tagOptions`).
     #[serde(default)]
     pub tag_options: Vec<BoardTagOption>,
+    /// Every item on the board by its ref (`B4`) with its title now, the ones the folded and
+    /// capped groups leave out too (gxserver's `items`): a board mention in a message
+    /// ([`board_reference`]) reads the title from it, and draws dimmed when its ref is not in it.
+    /// `None` when gxserver sends no index, which dims nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_titles: Option<std::collections::BTreeMap<String, String>>,
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -961,6 +967,17 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             .cloned()
             .and_then(|options| serde_json::from_value(options).ok())
             .unwrap_or_default(),
+        item_titles: board.get("items").and_then(Value::as_object).map(|items| {
+            items
+                .iter()
+                .map(|(reference, title)| {
+                    let title = crate::transcript::session_mentions::pill_label(
+                        title.as_str().unwrap_or_default(),
+                    );
+                    (reference.clone(), title)
+                })
+                .collect()
+        }),
     })
 }
 
@@ -1143,6 +1160,9 @@ pub const BOARD_REFERENCE_KIND: &str = "board";
 /// What a board pill says on hover.
 pub const SHOW_ON_BOARD: &str = "Show on the board";
 
+/// What a board pill says on hover when its card has left the board (it draws dimmed).
+pub const BOARD_ITEM_GONE: &str = "No longer on the board";
+
 /// The item number of a board link's destination, `board:B4` (what a card's click puts in the chat
 /// box, [`insert_reference`]).
 pub fn board_item(href: &str) -> Option<u64> {
@@ -1158,6 +1178,13 @@ pub fn board_item(href: &str) -> Option<u64> {
 /// A Markdown link to a board item as a `board` reference: the board's icon and the link's text
 /// (the item's title when a card put it there) in a pill, which shows the item on the board.
 ///
+/// The renderers draw it as the board's own tinted chip, and on a chat with a board they read
+/// its label from the board's `itemTitles` under `item` (the card's title now), or draw it dimmed
+/// with `goneTitle` as its tooltip when the board no longer has it (CDXC:Coordinators 2026-11-08
+/// on `board_value` in server/src/coordinators/board.rs). The look is
+/// `board_mention_link` in apps/desktop/src/app/native_chat/markdown_links.rs and the phone's
+/// `SessionPill.tsx`.
+///
 /// CDXC:Coordinators 2026-11-05 DECISION:
 /// User, of a card click that left `[Release 10.47.0](board:B8)` as raw text in the chat box while
 /// a thread's card left a pill: "why does this not show as a pill?". A board item's link is a pill
@@ -1170,6 +1197,7 @@ pub fn board_reference(href: &str, label: &str) -> Option<Value> {
         "sourceLabel": label,
         "label": crate::transcript::session_mentions::pill_label(label),
         "title": SHOW_ON_BOARD,
+        "goneTitle": BOARD_ITEM_GONE,
         "kind": BOARD_REFERENCE_KIND,
         "item": format!("B{item}"),
     }))
@@ -1814,5 +1842,39 @@ mod tests {
             coordinator_board(&state, &context()).unwrap().focus["seq"],
             2
         );
+    }
+
+    /// A board mention reads its card's title now from the board's `itemTitles`, every item on the
+    /// board whatever its group's cap, and carries the tooltip of a card that left it; a gxserver
+    /// that sends no index gives no `itemTitles`, so nothing is drawn as gone.
+    #[test]
+    fn the_board_indexes_its_items_for_mentions() {
+        let reference = board_reference("board:B43", " Deploy guest page ").unwrap();
+        assert_eq!(reference["item"], "B43");
+        assert_eq!(reference["label"], "Deploy guest page");
+        assert_eq!(reference["goneTitle"], BOARD_ITEM_GONE);
+
+        let state = state_with(json!({
+            "groups": [{"id": "later", "total": 30, "rows": []}],
+            "items": {"B43": "  Deploy guest page 0.1.2 to share.ghostex.dev ", "B7": "Release"},
+        }));
+        let titles = coordinator_board(&state, &context())
+            .unwrap()
+            .item_titles
+            .unwrap();
+        assert_eq!(
+            titles.get("B43").map(String::as_str),
+            Some("Deploy guest page 0.1.2 to share.ghostex.dev")
+        );
+        assert!(titles.get("B44").is_none());
+        let document = project(&state, &context());
+        assert_eq!(document["itemTitles"]["B7"], "Release");
+
+        let old = state_with(json!({"groups": [{"id": "later", "total": 1, "rows": []}]}));
+        assert!(coordinator_board(&old, &context())
+            .unwrap()
+            .item_titles
+            .is_none());
+        assert!(project(&old, &context()).get("itemTitles").is_none());
     }
 }

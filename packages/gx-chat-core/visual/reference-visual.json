@@ -10,7 +10,7 @@
     "sideChat": "#8a7fc4",
     "comment": "#7f8fb8",
     "session": "#8d929b",
-    "board": "#8d929b"
+    "board": "#4a958e"
   },
   "transcript": {
     "dark": {
@@ -22,7 +22,7 @@
       "sideChat": "#bdb2f5",
       "comment": "#b4c3ef",
       "session": "#e4e4e7",
-      "board": "#e4e4e7"
+      "board": "#5ccfc4"
     },
     "light": {
       "file": "#3f6aa8",
@@ -33,7 +33,7 @@
       "sideChat": "#5a4ab0",
       "comment": "#4b5c99",
       "session": "#27272a",
-      "board": "#27272a"
+      "board": "#0f766e"
     }
   },
   "icons": {
