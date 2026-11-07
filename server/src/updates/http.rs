@@ -94,9 +94,13 @@ async fn dispatch(state: &AppState, params: &Map<String, Value>) -> Result<Value
         }
         _ => return Err("Unknown updates action.".to_string()),
     }
+    let items = items::list(state, fresh).await;
+    // A row its own Settings page is updating (an agent job queued behind another install) runs
+    // too, so the desktop keeps reading the list until it ends.
+    let running = store::any_running() || items.iter().any(|item| item["state"] == "updating");
     Ok(json!({
-        "items": items::list(state, fresh).await,
-        "running": store::any_running(),
+        "items": items,
+        "running": running,
         // Every switch that is on, also for the items only the desktop lists (updates/ there).
         "auto": store::auto_ids(&state.paths),
     }))

@@ -195,6 +195,15 @@ impl GhostexGpuiApp {
             return;
         }
         with_snapshot(|snapshot| snapshot.in_flight = true);
+        let install_ids: Option<Vec<String>> = (params["action"] == "install").then(|| {
+            params["ids"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        });
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let result = background
@@ -217,7 +226,27 @@ impl GhostexGpuiApp {
                         snapshot.error = None;
                         snapshot.checked_at_ms = Some(chrono::Utc::now().timestamp_millis());
                     }
-                    Err(message) => snapshot.error = Some(message.clone()),
+                    Err(message) => {
+                        snapshot.error = Some(message.clone());
+                        // CDXC:Updates 2026-11-07 FIX: User: "open code isn't updating pls fix"
+                        // (OpenCode sat at "Waiting…"). WHY: the rows Update marked "Waiting…"
+                        // before gxserver answered stayed that way when the request failed; they
+                        // now show the failure so the user can retry.
+                        if let Some(ids) = install_ids.as_ref() {
+                            for item in &mut snapshot.items {
+                                let waiting = item["state"] == "updating"
+                                    && item["id"]
+                                        .as_str()
+                                        .is_some_and(|id| ids.iter().any(|wanted| wanted == id));
+                                if waiting {
+                                    item["state"] = json!("failed");
+                                    item["error"] = json!(message);
+                                    item["counts"] = json!(true);
+                                }
+                            }
+                            snapshot.running = false;
+                        }
+                    }
                 }
             });
             let _ = this.update(cx, |this, cx| {

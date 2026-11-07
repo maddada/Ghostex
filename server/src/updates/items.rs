@@ -29,12 +29,16 @@ const RECENT_USE: chrono::Duration = chrono::Duration::days(7);
 
 static LIST: std::sync::Mutex<Option<(Instant, Vec<Value>)>> = std::sync::Mutex::new(None);
 static COLLECTING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// Bumped by `invalidate`, so a list collected while an update finished is not kept.
+static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static EXTENSION_CATALOG: std::sync::Mutex<Option<(Instant, HashMap<String, String>)>> =
     std::sync::Mutex::new(None);
 
 /// The next list reads every source again (after an update finished).
 pub(super) fn invalidate() {
-    *LIST.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    let mut list = LIST.lock().unwrap_or_else(|e| e.into_inner());
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    *list = None;
 }
 
 /// The list with what is running, how the last updates ended and the switches laid over it.
@@ -64,9 +68,19 @@ pub(super) async fn list(state: &AppState, fresh: bool) -> Vec<Value> {
             match again {
                 Some(items) => items,
                 None => {
+                    let generation = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
                     let items = collect(state, fresh).await;
-                    *LIST.lock().unwrap_or_else(|e| e.into_inner()) =
-                        Some((Instant::now(), items.clone()));
+                    /*
+                    CDXC:Updates 2026-11-07 FIX:
+                    User: "open code isn't updating pls fix": the top bar's Updates list kept OpenCode at "Waiting…" with a spinner long after its update had ended.
+                    WHY: Update's own answer collected the list while OpenCode's agent job was still queued; the job ended (and invalidated the list) during that collect, and the collect then cached the "Waiting…" row for 10 minutes while saying nothing was running, so the desktop stopped asking. A list collected across an invalidate, or showing a row mid-update, is not cached: those rows change within seconds.
+                    */
+                    let mut list = LIST.lock().unwrap_or_else(|e| e.into_inner());
+                    let settled = !items.iter().any(|item| item["state"] == "updating");
+                    if settled && GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation
+                    {
+                        *list = Some((Instant::now(), items.clone()));
+                    }
                     items
                 }
             }

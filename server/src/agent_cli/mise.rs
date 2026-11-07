@@ -266,21 +266,22 @@ pub(crate) async fn held_back(tool: &str, latest: &str, home: &Path) -> Option<H
     {
         return held;
     }
-    let held = dry_run_held_back(tool, home).await;
+    let held = dry_run_held_back(tool, latest, home).await;
     if let Ok(mut cache) = CACHE.lock() {
         cache.insert(key, (Instant::now(), held.clone()));
     }
     held
 }
 
-async fn dry_run_held_back(tool: &str, home: &Path) -> Option<HeldBack> {
+/// Runs `mise <args> <tool>` through the job shell (so mise's npm backend finds npm on the same PATH
+/// an update would use) and returns what it printed, stdout and stderr together.
+async fn mise_output(args: &str, tool: &str, home: &Path) -> Option<String> {
     let mise = process::resolve("mise", home)?;
     let output = std::sync::Arc::new(Mutex::new(String::new()));
     let capture = output.clone();
-    // Through the job shell, so mise's npm backend finds npm on the same PATH an update would use.
     let call = if cfg!(windows) { "& " } else { "" };
     let script = format!(
-        "{call}{} upgrade --dry-run --bump --yes {}",
+        "{call}{} {args} {}",
         process::quote(&mise),
         process::quote(tool)
     );
@@ -295,6 +296,11 @@ async fn dry_run_held_back(tool: &str, home: &Path) -> Option<HeldBack> {
     .await
     .ok()?;
     let text = output.lock().ok()?.clone();
+    Some(text)
+}
+
+async fn dry_run_held_back(tool: &str, latest: &str, home: &Path) -> Option<HeldBack> {
+    let text = mise_output("upgrade --dry-run --bump --yes", tool, home).await?;
     // "Would install claude@2.1.301": the eligible release this update installs.
     let installable = text
         .lines()
@@ -302,11 +308,35 @@ async fn dry_run_held_back(tool: &str, home: &Path) -> Option<HeldBack> {
         .and_then(|target| target.rsplit_once('@'))
         .map(|(_, version)| version.trim().to_string())
         .filter(|version| !version.is_empty());
-    let message = held_back_message(&text, installable.as_deref())?;
-    Some(HeldBack {
-        message,
-        installable,
+    if let Some(message) = held_back_message(&text, installable.as_deref()) {
+        return Some(HeldBack {
+            message,
+            installable,
+        });
+    }
+    if installable.is_some() {
+        return None;
+    }
+    /*
+    CDXC:Updates 2026-11-07 FIX:
+    User: "open code isn't updating pls fix" (the top bar's Updates list showed OpenCode at "Waiting…").
+    WHY: for an aqua tool (OpenCode is `aqua:anomalyco/opencode`) mise's dry run prints only "All tools are up to date" while minimum_release_age hides the newer release (2.2.6, a few hours old), with no "ignored by minimum_release_age" line, so OpenCode read as an update, Update ran `mise upgrade` that installed nothing, and the row came back with the same update. `mise ls-remote` still warns "1 newer opencode release hidden by minimum_release_age", so that warning holds it back too.
+    */
+    let listed = mise_output("ls-remote", tool, home).await?;
+    hidden_by_release_age(&listed).then(|| HeldBack {
+        message: format!(
+            "mise holds back {latest} because of your mise minimum_release_age setting. Update again after that; Ghostex does not change this setting."
+        ),
+        installable: None,
     })
+}
+
+/// Whether `mise ls-remote` warned that minimum_release_age hides newer releases ("1 newer
+/// opencode release hidden by minimum_release_age").
+pub(crate) fn hidden_by_release_age(output: &str) -> bool {
+    output
+        .lines()
+        .any(|line| line.contains("hidden by minimum_release_age") && line.contains("newer"))
 }
 
 /// The plain-words form of mise's "newer … release 18.11.3 (released …, eligible 2026-10-18 01:52 +04)
@@ -331,4 +361,17 @@ pub(crate) fn held_back_message(output: &str, installable: Option<&str>) -> Opti
             "mise holds back {release}{until} because of your mise minimum_release_age setting{age}. Update again after that; Ghostex does not change this setting."
         ),
     })
+}
+
+#[cfg(test)]
+mod release_age_tests {
+    use super::hidden_by_release_age;
+
+    #[test]
+    fn ls_remote_warning_counts_as_held_back() {
+        let output =
+            "2.2.4\n2.2.5\nmise WARN  1 newer opencode release hidden by minimum_release_age\n";
+        assert!(hidden_by_release_age(output));
+        assert!(!hidden_by_release_age("2.2.4\n2.2.5\n"));
+    }
 }
