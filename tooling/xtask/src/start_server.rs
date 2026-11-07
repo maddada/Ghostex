@@ -15,13 +15,17 @@ const INSTALLED_APP: &str = "/Applications/Ghostex.app";
 const BASE_URL: &str = "http://127.0.0.1:58744";
 const LAUNCHD_LABEL: &str = "com.madda.ghostex.gxserver";
 /// zmx (its bundle and its link) is left as installed: a changed zmx needs the full start.
-const INSTALL_RSYNC_ARGS: [&str; 6] = [
+/// The bundled skills are left as installed too: build-macos-app.sh stages them into the package
+/// (`Web/gxserver/skills`, which `CLI/skills` links to), and the gxserver-only build has none.
+const INSTALL_RSYNC_ARGS: [&str; 8] = [
     "-a",
     "--delete",
     "--exclude",
     "/bin/zmx",
     "--exclude",
     "/GhostexSessions.app",
+    "--exclude",
+    "/skills",
 ];
 
 /// CDXC:Build 2026-09-24 DECISION:
