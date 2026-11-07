@@ -456,6 +456,18 @@ pub(crate) fn gpui_remote_sanitized_process_failure(
     if stderr.contains(GPUI_REMOTE_PACKAGE_INCOMPLETE_MARKER) {
         return GPUI_REMOTE_PACKAGE_INCOMPLETE_MESSAGE.to_string();
     }
+    // The remote token read stops when `gxserver start` there met another account's listener, or
+    // one run as root (ghostex_paths::loopback_owner::REFUSAL_MARKER, lowercased like `stderr`).
+    if stderr.contains("so ghostex did not send it the access token") {
+        let who = if stderr.contains("running as root") {
+            "Ghostex's service on that machine runs as root (it was started with sudo)"
+        } else {
+            "Another account on that machine is listening where its Ghostex service should be"
+        };
+        return format!(
+            "{who}, so Ghostex did not send it the access token. Stop that program on the machine (an administrator can find it with `sudo lsof -nP -iTCP:58744 -sTCP:LISTEN`), then reconnect."
+        );
+    }
     if stderr.contains("netcat-openbsd") {
         return "SSH password authentication on Linux requires netcat-openbsd. Install it on this computer, then reconnect.".to_string();
     }
@@ -914,13 +926,19 @@ pub(crate) fn gpui_remote_token_read_command() -> &'static str {
         "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\" ]; then GHOSTEX_BIN=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\"; fi; ",
         "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$HOME/.local/bin/ghostex\" ]; then GHOSTEX_BIN=\"$HOME/.local/bin/ghostex\"; fi; ",
         "GHOSTEX_REMOTE_START_FAILED=0; ",
+        "GHOSTEX_REMOTE_START_LOG=\"$(mktemp 2>/dev/null || printf /dev/null)\"; ",
         "if [ -x \"$GXSERVER_BIN\" ]; then ",
         "GHOSTEX_REMOTE_COMMAND_BIN=\"$GXSERVER_BIN\"; ",
-        "\"$GXSERVER_BIN\" start --json >/dev/null 2>&1 || \"$GXSERVER_BIN\" start >/dev/null 2>&1 || GHOSTEX_REMOTE_START_FAILED=1; ",
+        "\"$GXSERVER_BIN\" start --json >\"$GHOSTEX_REMOTE_START_LOG\" 2>&1 || \"$GXSERVER_BIN\" start >>\"$GHOSTEX_REMOTE_START_LOG\" 2>&1 || GHOSTEX_REMOTE_START_FAILED=1; ",
         "elif [ -x \"$GHOSTEX_BIN\" ]; then ",
         "GHOSTEX_REMOTE_COMMAND_BIN=\"$GHOSTEX_BIN\"; ",
-        "\"$GHOSTEX_BIN\" server start --json >/dev/null 2>&1 || \"$GHOSTEX_BIN\" server start >/dev/null 2>&1 || GHOSTEX_REMOTE_START_FAILED=1; ",
+        "\"$GHOSTEX_BIN\" server start --json >\"$GHOSTEX_REMOTE_START_LOG\" 2>&1 || \"$GHOSTEX_BIN\" server start >>\"$GHOSTEX_REMOTE_START_LOG\" 2>&1 || GHOSTEX_REMOTE_START_FAILED=1; ",
         "else exit 127; fi; ",
+        // Another account (or root) holding gxserver's port there makes `start` refuse with words
+        // every refusal has (ghostex_paths::loopback_owner::REFUSAL_MARKER); the token must not
+        // go through the tunnel to that listener.
+        "if grep -q 'so Ghostex did not send it the access token' \"$GHOSTEX_REMOTE_START_LOG\" 2>/dev/null; then cat \"$GHOSTEX_REMOTE_START_LOG\" >&2; rm -f \"$GHOSTEX_REMOTE_START_LOG\"; exit 125; fi; ",
+        "[ \"$GHOSTEX_REMOTE_START_LOG\" = /dev/null ] || rm -f \"$GHOSTEX_REMOTE_START_LOG\"; ",
         "GHOSTEX_REMOTE_COMMAND_LINK=\"$(readlink \"$GHOSTEX_REMOTE_COMMAND_BIN\" 2>/dev/null || true)\"; ",
         "case \"$GHOSTEX_REMOTE_COMMAND_BIN|$GHOSTEX_REMOTE_COMMAND_LINK\" in *\"$GHOSTEX_REMOTE_LEGACY_ROOT/\"*) GHOSTEX_REMOTE_TOKEN_FILE=\"$GHOSTEX_REMOTE_LEGACY_ROOT/auth/token\";; esac; ",
         "if [ ! -r \"$GHOSTEX_REMOTE_TOKEN_FILE\" ]; then if [ \"$GHOSTEX_REMOTE_START_FAILED\" = \"1\" ]; then exit 127; fi; exit 126; fi; ",
