@@ -87,6 +87,101 @@ fn shared(state: &ChatState) -> Option<&Value> {
         .filter(|collab| collab.get("shared").and_then(Value::as_bool) == Some(true))
 }
 
+/// The chat owner's name as guests see it.
+pub fn owner_name(state: &ChatState) -> String {
+    let owner = shared(state)
+        .map(|collab| text(collab, "owner"))
+        .unwrap_or_default();
+    if owner.is_empty() {
+        "The owner".to_string()
+    } else {
+        owner.to_string()
+    }
+}
+
+/// A held message that carries a form's or page's answers, as the answers card the transcript
+/// draws for them (`pageAnswers`), with what else it says (`answersText`). `by` names who answered
+/// when it is not the reader.
+fn held_answers(state: &ChatState, row: &Value, by: Option<&str>) -> Option<(Value, String)> {
+    let (answers, rest) = crate::transcript::page_answers::split_page_answers(text(row, "text"))?;
+    let form = state
+        .transcript_view
+        .question_forms
+        .iter()
+        .find(|form| form.id == answers.page_id);
+    let mut card = crate::transcript::page_answers::project_page_answers(&answers, form);
+    if let (Some(by), Some(object)) = (by, card.as_object_mut()) {
+        object.insert("by".to_string(), json!(by));
+    }
+    Some((card, split_image_references(&rest).0))
+}
+
+/// On a guest's page, a form whose answers the owner held follows what the owner did with them
+/// (the chat frame's `collab.resolved`): sent, they go on to the agent like any answers; declined
+/// or taken to edit, the form opens again with the answers picked and says why.
+///
+/// CDXC:Collab 2026-11-07 WHY: a held answer is not on its way to the agent, so the form read "Sending…" and its echo kept the chat "working" until the owner acted. The form now reads "Waiting for <owner>" with no echo while held.
+pub fn settle_held_answers(state: &mut ChatState) {
+    let Some(collab) = shared(state) else {
+        return;
+    };
+    let resolved: Vec<(String, String)> = collab
+        .get("resolved")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|row| {
+            (
+                text(row, "id").to_string(),
+                text(row, "outcome").to_string(),
+            )
+        })
+        .collect();
+    if resolved.is_empty() {
+        return;
+    }
+    let owner = owner_name(state);
+    let mut changed = false;
+    for entry in state.questions.forms.values_mut() {
+        let Some(held_id) = entry.held_for_owner.as_deref() else {
+            continue;
+        };
+        let Some((_, outcome)) = resolved.iter().find(|(id, _)| id == held_id) else {
+            continue;
+        };
+        entry.held_for_owner = None;
+        changed = true;
+        if outcome == "sent" {
+            continue;
+        }
+        entry.sent = None;
+        entry.confirmation_boundary = None;
+        entry.error = Some(if outcome == "edited" {
+            format!("{owner} took your answers to edit them before sending.")
+        } else {
+            format!("{owner} declined your answers.")
+        });
+    }
+    if changed {
+        state.messages.new_composition_identity();
+        state.core.request_publish();
+    }
+}
+
+/// On a guest's page, the answers to form `form_id` this guest sent that still wait for the
+/// owner (their held messages, matched by name: a reloaded page joins again with a new viewer id).
+pub fn own_held_answers(state: &ChatState, form_id: &str) -> Option<Value> {
+    let me = guest_name(state)?;
+    shared(state)?
+        .get("held")
+        .and_then(Value::as_array)?
+        .iter()
+        .filter(|row| text(row, "name") == me)
+        .filter_map(|row| crate::transcript::page_answers::split_page_answers(text(row, "text")))
+        .find(|(answers, _)| answers.page_id == form_id)
+        .map(|(answers, _)| answers.answers)
+}
+
 /// This page is a guest's (`setCollabGuest`).
 pub fn is_guest(state: &ChatState) -> bool {
     state.session.collab_guest.is_some()
@@ -172,10 +267,12 @@ pub fn project(state: &ChatState) -> Value {
     } else {
         held.iter()
             .map(|row| {
+                let answers = held_answers(state, row, Some(text(row, "name")));
                 json!({
                     "id": text(row, "id"),
                     "title": format!("Message from {}", text(row, "name")),
-                    "text": held_text(row),
+                    "text": answers.as_ref().map_or_else(|| held_text(row), |(_, rest)| rest.clone()),
+                    "answers": answers.map(|(card, _)| card),
                     "images": held_images(row),
                     "busy": busy.contains(&text(row, "id")),
                 })
@@ -186,6 +283,7 @@ pub fn project(state: &ChatState) -> Value {
         held.iter()
             .map(|row| {
                 let name = text(row, "name");
+                let answers = held_answers(state, row, (name != me).then_some(name));
                 json!({
                     "id": text(row, "id"),
                     "label": if name == me {
@@ -193,7 +291,8 @@ pub fn project(state: &ChatState) -> Value {
                     } else {
                         format!("{name} \u{b7} Waiting for {owner}")
                     },
-                    "text": held_text(row),
+                    "text": answers.as_ref().map_or_else(|| held_text(row), |(_, rest)| rest.clone()),
+                    "answers": answers.map(|(card, _)| card),
                     "images": held_images(row),
                 })
             })
@@ -394,4 +493,38 @@ pub fn typing(state: &mut ChatState, text_now: &str, context: &ChatContext) -> V
             "typing": typing,
         })),
     }]
+}
+
+#[cfg(test)]
+mod held_answers_tests {
+    use super::*;
+
+    const ANSWERS: &str = "<ghostex-page-answers page=\"0123456789abcdef0123456789abcdef\" title=\"Receipt layout\">\n{\n  \"Which layout?\": \"compact\"\n}\n</ghostex-page-answers>";
+
+    /// Held answers wait as the answers card, not as the message that carries them.
+    #[test]
+    fn held_answers_show_as_an_answers_card() {
+        let mut state = ChatState::default();
+        state.session.collab_guest = Some(json!({"viewerId": "v1", "name": "Sam"}));
+        state.session.collab = Some(json!({
+            "shared": true, "owner": "Mohamad", "mode": "approve", "viewers": [],
+            "held": [
+                {"id": "held_1", "viewerId": "v1", "name": "Sam", "text": ANSWERS},
+                {"id": "held_2", "viewerId": "v2", "name": "Dana", "text": "Hello"},
+            ],
+        }));
+        let waiting = project(&state)["waiting"].clone();
+        assert_eq!(waiting[0]["answers"]["title"], "Receipt layout");
+        assert!(
+            waiting[0]["answers"].get("by").is_none(),
+            "the reader's own answers"
+        );
+        assert_eq!(waiting[0]["text"], "");
+        assert!(waiting[1]["answers"].is_null());
+        assert_eq!(waiting[1]["text"], "Hello");
+
+        state.session.collab_guest = None;
+        let cards = project(&state)["cards"].clone();
+        assert_eq!(cards[0]["answers"]["by"], "Sam");
+    }
 }

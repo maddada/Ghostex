@@ -452,8 +452,12 @@ impl NativeChatView {
         // Put off For later (gx-chat-core questions/later.rs): it says so in grey instead of the
         // amber Waiting, and stays answerable.
         let later = form["later"] == true;
+        let held_for = text(form, "heldFor");
+        let waiting_for = format!("Waiting for {held_for}");
         let (glyph, state) = match phase.as_str() {
             "sending" => (None, "Sending…"),
+            // A Ghostex Collab guest's answers the chat's owner has not approved yet.
+            "held" => (Some("titlebar/clock.svg"), waiting_for.as_str()),
             "queued" => (Some("titlebar/clock.svg"), "Queued"),
             "canceled" => (Some("titlebar/x.svg"), "Canceled"),
             // The agent withdrew it (shown in the Resources modal): it takes no answer.
@@ -488,6 +492,7 @@ impl NativeChatView {
         let status = match phase.as_str() {
             "answered" => "Sent to the agent.".to_string(),
             "queued" => "Queued: it goes to the agent after this turn ends.".to_string(),
+            "held" => format!("Sent. Waiting for {held_for} to approve your answers."),
             // gx-chat-core `questions/unreachable_retry.rs`: the answers wait for gxserver to come back.
             "sending" if form["reconnecting"] == true => {
                 "Reconnecting to Ghostex… your answers go out as soon as it's back.".to_string()
@@ -509,6 +514,7 @@ impl NativeChatView {
         let send_label = match phase.as_str() {
             "answered" => "Sent".to_string(),
             "queued" => "Queued".to_string(),
+            "held" => "Sent".to_string(),
             _ => text(form, "submit"),
         };
         let status_slot = div()

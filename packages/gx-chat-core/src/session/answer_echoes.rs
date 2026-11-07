@@ -91,6 +91,7 @@ pub fn waiting(state: &ChatState) -> bool {
         .any(|entry| answers_page_id(&entry.text).is_some())
         || state.questions.forms.values().any(|form| {
             !form.confirmed
+                && form.held_for_owner.is_none()
                 && (form.send.is_some() || (form.sent.is_some() && !form.sent_waiting_for_idle))
         })
 }
@@ -565,14 +566,16 @@ pub fn settle(state: &mut ChatState, context: &ChatContext, transcript: &[ChatMe
         match entry.id.strip_prefix(FORM_ECHO_PREFIX) {
             Some(form) if entry.queued_prompt_id.is_none() => {
                 state.questions.forms.get(form).is_some_and(|form| {
-                    !form.confirmed && (form.send.is_some() || form.sent.is_some())
+                    !form.confirmed
+                        && form.held_for_owner.is_none()
+                        && (form.send.is_some() || form.sent.is_some())
                 })
             }
             _ => true,
         }
     });
     for (id, form_state) in &state.questions.forms {
-        if form_state.confirmed {
+        if form_state.confirmed || form_state.held_for_owner.is_some() {
             continue;
         }
         let answers = if let Some(send) = form_state.send.as_ref() {

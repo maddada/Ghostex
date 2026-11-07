@@ -37,7 +37,12 @@ impl NativeChatView {
     ) -> AnyElement {
         let rows: Vec<Value> = answers["rows"].as_array().cloned().unwrap_or_default();
         let more = answers["more"].as_u64().unwrap_or(0) as usize;
-        let head = answered_ask_head(format!("You answered “{}”", text(answers, "title")), p)
+        // `by`: someone else's answers (a Ghostex Collab guest's, held for the owner).
+        let who = match text(answers, "by") {
+            by if by.is_empty() => "You".to_string(),
+            by => by,
+        };
+        let head = answered_ask_head(format!("{who} answered “{}”", text(answers, "title")), p)
             .into_any_element();
         let s = p.scale;
         let mut body = div().mt(px(-6.0 * s)).flex().flex_col().w_full().min_w_0();

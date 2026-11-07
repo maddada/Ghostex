@@ -5,7 +5,7 @@
 //!
 //! CDXC:SessionChat 2026-11-05 SEE-ALSO: The decision (Q1245 C, the segmented pill on the line under the question) is in packages/gx-chat-core/src/transcript/inline_answers.rs; the phone draws the same pill in apps/mobile/app/src/chat/native/transcript/markdown/InlineAnswers.tsx.
 
-use super::{appearance::ChatAppearance, state::NativeChatView};
+use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -32,7 +32,7 @@ impl NativeChatView {
         let changing = form["changing"] == true;
         let withdrawn = form["tagWithdrawn"] == true || matches!(phase, "withdrawn" | "canceled");
         let picked = form["drafts"][0]["indices"][0].as_u64();
-        let sent = matches!(phase, "sending" | "queued" | "answered");
+        let sent = matches!(phase, "sending" | "queued" | "held" | "answered");
         let clickable = !withdrawn && (phase == "open" || (changing && phase != "sending"));
         // A newer copy of this question sits further down; every copy answers it there.
         let asked_again = form["askedAgain"] == true && phase == "open" && !changing && !withdrawn;
@@ -117,7 +117,14 @@ impl NativeChatView {
                 .aria_label("Write your own answer")
                 .chat_cursor_pointer()
                 .hover(|style| style.bg(p.foreground.opacity(0.09)).text_color(ink))
-                .child("✎")
+                // The app's pencil icon, not "✎": the web build's fonts have no such glyph and drew
+                // a missing-character box there.
+                .child(
+                    gpui::svg()
+                        .path("titlebar/pencil.svg")
+                        .size(px(12.0 * s))
+                        .text_color(p.card_muted),
+                )
                 .tooltip(move |window, cx| {
                     gpui_component::tooltip::Tooltip::new("Write your own answer").build(window, cx)
                 })
@@ -151,6 +158,11 @@ impl NativeChatView {
             match phase {
                 "sending" => Some((format!("Sending{words}…"), None)),
                 "queued" => Some((format!("Queued{words} ·"), Some("Change"))),
+                // A Ghostex Collab guest's answer the chat's owner has not approved yet.
+                "held" => Some((
+                    format!("Waiting for {}{words}", text(form, "heldFor")),
+                    None,
+                )),
                 "answered" => Some((format!("Sent{words} ·"), Some("Change"))),
                 _ => None,
             }

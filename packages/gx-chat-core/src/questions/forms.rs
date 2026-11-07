@@ -482,6 +482,23 @@ pub fn rpc_settled(
     match outcome {
         // The saved picks stay until the transcript carries the answers (`sync`).
         RpcOutcome::Ok { result } => {
+            // A Ghostex Collab guest's answers wait for the chat's owner (Ask me): they are not on
+            // their way to the agent, so no echo stands for them and the chat is not working.
+            if let Some(held_id) = result
+                .pointer("/collab/heldId")
+                .and_then(Value::as_str)
+                .filter(|_| result.pointer("/collab/held") == Some(&Value::Bool(true)))
+            {
+                let echo = format!("answers:{id}");
+                state.pending.sends.retain(|entry| entry.id != echo);
+                state.messages.new_composition_identity();
+                if let Some(entry) = state.questions.forms.get_mut(&id) {
+                    entry.sent = Some(sent.answers);
+                    entry.sent_waiting_for_idle = false;
+                    entry.held_for_owner = Some(held_id.to_string());
+                }
+                return Some(Vec::new());
+            }
             let queued_prompt_id = result
                 .get("queuedPromptId")
                 .and_then(Value::as_str)
@@ -713,7 +730,11 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
             let entry = state.questions.forms.get(&form.id);
             let fallback = FormState::default();
             let entry = entry.unwrap_or(&fallback);
-            let sent = received_answers(state, &form.id).or(entry.sent.as_ref());
+            // A guest's answers the owner still holds, also after the page reloaded.
+            let held = crate::extras::collab::own_held_answers(state, &form.id);
+            let sent = received_answers(state, &form.id)
+                .or(entry.sent.as_ref())
+                .or(held.as_ref());
             let (phase, drafts, notes) = match (sent, entry.send.as_ref()) {
                 (Some(answers), _)
                     if received_answers(state, &form.id).is_some()
@@ -729,6 +750,10 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
                     // Recorded in the transcript where this client's confirmation missed it.
                     if crate::questions::resource_index::answered_in_transcript(index, &form.id) {
                         "answered"
+                    } else if entry.held_for_owner.is_some()
+                        || (entry.sent.is_none() && held.is_some())
+                    {
+                        "held"
                     } else if entry.sent_waiting_for_idle || queued_in_queue(state, &form.id) {
                         "queued"
                     } else {
@@ -815,6 +840,13 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
                     "sendError".to_string(),
                     json!(entry.error.clone().unwrap_or_default()),
                 );
+                // A guest's held answers say who they wait for (`extras::collab`).
+                if phase == "held" {
+                    object.insert(
+                        "heldFor".to_string(),
+                        json!(crate::extras::collab::owner_name(state)),
+                    );
+                }
                 object.insert(
                     "reconnecting".to_string(),
                     json!(entry
@@ -1099,6 +1131,80 @@ mod canceled_tests {
         crate::session::answer_echoes::settle(&mut state, &context, &[]);
         assert_eq!(state.pending.sends.len(), 1);
         assert_eq!(state.pending.sends[0].id, format!("answers:{id}"));
+    }
+
+    /// A Ghostex Collab guest's answers the owner holds: no echo, so the chat is not working, and
+    /// the form waits for the owner; then it follows what the owner did.
+    #[test]
+    fn a_guests_held_answers_wait_for_the_owner() {
+        for (outcome, phase) in [
+            ("sent", "sending"),
+            ("declined", "open"),
+            ("edited", "open"),
+        ] {
+            let (mut state, id) = state_with_form();
+            state.session.collab_guest = Some(json!({"viewerId": "v", "name": "Sam"}));
+            state.session.collab =
+                Some(json!({"shared": true, "owner": "Mohamad", "mode": "approve", "held": []}));
+            let context = ChatContext::default();
+            let effects = send(&mut state, &context, &id);
+            let request_id = match &effects[..] {
+                [Effect::SendRpc { request_id, .. }] => *request_id,
+                other => panic!("expected one send, got {other:?}"),
+            };
+            crate::session::answer_echoes::settle(&mut state, &context, &[]);
+            rpc_settled(
+                &mut state,
+                request_id,
+                &RpcOutcome::Ok {
+                    result: json!({"collab": {"held": true, "heldId": "held_1"}}),
+                },
+            );
+            crate::session::answer_echoes::settle(&mut state, &context, &[]);
+            assert!(state.pending.sends.is_empty(), "held answers draw no echo");
+            assert!(!crate::session::working::is_working(&state));
+            let form = &project(&state)[&id];
+            assert_eq!(form["state"], "held");
+            assert_eq!(form["heldFor"], "Mohamad");
+            assert_eq!(form["canSend"], false);
+
+            state.session.collab = Some(json!({
+                "shared": true, "owner": "Mohamad", "mode": "approve", "held": [],
+                "resolved": [{"id": "held_1", "outcome": outcome}],
+            }));
+            crate::extras::collab::settle_held_answers(&mut state);
+            let form = &project(&state)[&id];
+            assert_eq!(form["state"], phase, "after the owner {outcome} it");
+            if phase == "open" {
+                assert!(form["sendError"].as_str().unwrap().contains("Mohamad"));
+                assert_eq!(form["canSend"], true);
+            }
+        }
+    }
+
+    /// A reloaded guest page reads its held answers from the chat's held list.
+    #[test]
+    fn a_reloaded_guest_page_still_waits_for_the_owner() {
+        let (mut state, id) = state_with_form();
+        let form = state.transcript_view.question_forms[0].clone();
+        let text =
+            crate::transcript::question_forms::answers_message(&form, &json!({"Pick?": "Yes"}));
+        state.session.collab_guest = Some(json!({"viewerId": "v2", "name": "Sam"}));
+        state.session.collab = Some(json!({
+            "shared": true, "owner": "Mohamad", "mode": "approve",
+            "held": [{"id": "held_1", "viewerId": "v1", "name": "Sam", "text": text}],
+        }));
+        let projected = &project(&state)[&id];
+        assert_eq!(projected["state"], "held");
+        assert_eq!(projected["canSend"], false);
+        state.session.collab = Some(json!({
+            "shared": true, "owner": "Mohamad", "mode": "approve", "held": [],
+        }));
+        assert_eq!(
+            project(&state)[&id]["state"],
+            "open",
+            "declined: the form opens again"
+        );
     }
 
     #[test]

@@ -57,7 +57,7 @@ impl NativeChatView {
         }
         for row in collab["waiting"].as_array().into_iter().flatten() {
             let pictures = self.collab_pictures(row, p, cx);
-            column = column.child(self.collab_waiting_row(row, pictures, p));
+            column = column.child(self.collab_waiting_row(row, pictures, p, cx));
             any = true;
         }
         if let Some(typing) = collab["typing"].as_str().filter(|line| !line.is_empty()) {
@@ -137,6 +137,20 @@ impl NativeChatView {
                 trailing: Vec::new(),
                 body: vec![
                     div().children(pictures).into_any_element(),
+                    // A guest's answers to a form or page show as the answers card the
+                    // transcript draws for them, not as the message that carries them.
+                    div()
+                        .w_full()
+                        .min_w_0()
+                        .when(card["answers"].is_object(), |slot| {
+                            slot.child(self.page_answers_card(
+                                &card["answers"],
+                                &Value::Null,
+                                p,
+                                cx,
+                            ))
+                        })
+                        .into_any_element(),
                     div()
                         .w_full()
                         .min_w_0()
@@ -161,8 +175,10 @@ impl NativeChatView {
         row: &Value,
         pictures: Option<AnyElement>,
         p: &ChatAppearance,
+        cx: &Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
+        let words = text(row, "text");
         div()
             .id(gpui::SharedString::from(format!(
                 "collab-waiting:{}",
@@ -182,20 +198,31 @@ impl NativeChatView {
                     .child(text(row, "label")),
             )
             .children(pictures)
-            .child(
-                div()
-                    .max_w(relative_width())
-                    .px(px(12.0 * s))
-                    .py(px(8.0 * s))
-                    .rounded(px(12.0 * s))
-                    .border_1()
-                    .border_dashed()
-                    .border_color(p.muted.opacity(0.45))
-                    .text_size(px(13.5 * s))
-                    .text_color(p.foreground.opacity(0.85))
-                    .whitespace_normal()
-                    .child(text(row, "text")),
-            )
+            // Answers to a form or page wait as their answers card (gx-chat-core extras/collab.rs).
+            .when(row["answers"].is_object(), |column| {
+                column.child(div().w_full().child(self.page_answers_card(
+                    &row["answers"],
+                    &Value::Null,
+                    p,
+                    cx,
+                )))
+            })
+            .when(!words.is_empty(), |column| {
+                column.child(
+                    div()
+                        .max_w(relative_width())
+                        .px(px(12.0 * s))
+                        .py(px(8.0 * s))
+                        .rounded(px(12.0 * s))
+                        .border_1()
+                        .border_dashed()
+                        .border_color(p.muted.opacity(0.45))
+                        .text_size(px(13.5 * s))
+                        .text_color(p.foreground.opacity(0.85))
+                        .whitespace_normal()
+                        .child(words.clone()),
+                )
+            })
             .into_any_element()
     }
 }
