@@ -28,6 +28,8 @@ pub(crate) struct CreateHost {
     pub(super) created_attaches: super::focus_created::CreatedAttaches,
     /// The Project Board's link availability answers, kept for their TTL (board.rs).
     pub(super) board_link_checks: super::board::LinkChecks,
+    /// The Ask Ghostex open being timed (help_chat_timing.rs).
+    pub(super) help_chat_timing: super::help_chat_timing::HelpChatTiming,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

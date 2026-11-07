@@ -361,6 +361,11 @@ impl GhostexGpuiApp {
             .remove(&session_id)
         {
             view.update(cx, |view, cx| view.append_prompt(&content, cx));
+            self.help_chat_timing_tab_step(
+                session_id,
+                "draftInComposer",
+                serde_json::json!({ "held": true }),
+            );
         }
     }
 
@@ -460,6 +465,13 @@ impl GhostexGpuiApp {
         };
         cx.spawn(async move |this, cx| {
             let Ok(result) = request.await else {
+                let _ = this.update(cx, |this, _| {
+                    this.help_chat_timing_tab_step(
+                        session_id,
+                        "draftClaimUnanswered",
+                        serde_json::json!({}),
+                    )
+                });
                 return;
             };
             let content = result
@@ -467,6 +479,13 @@ impl GhostexGpuiApp {
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or_default()
                 .to_string();
+            let _ = this.update(cx, |this, _| {
+                this.help_chat_timing_tab_step(
+                    session_id,
+                    "draftClaimed",
+                    serde_json::json!({ "claimed": !content.is_empty() }),
+                )
+            });
             if content.is_empty() {
                 return;
             }

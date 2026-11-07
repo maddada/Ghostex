@@ -302,6 +302,7 @@ impl GhostexGpuiApp {
             return;
         };
         let draft = ghostex_help_draft(&agent, &question);
+        let interface = self.gx_store_preferred_interface(&agent.agent_id);
         let Some(project_path) = project_path else {
             self.gx_store_create_toast(
                 "error",
@@ -313,8 +314,16 @@ impl GhostexGpuiApp {
             );
             return;
         };
-        let preferred_interface = self.gx_store_preferred_interface(&agent.agent_id);
+        let preferred_interface = interface;
         let known_project = self.gx_store_local_project_at_path(&project_path);
+        self.help_chat_timing_step(
+            "storeStarted",
+            json!({
+                "agentId": agent.agent_id,
+                "interface": preferred_interface,
+                "projectKnown": known_project.is_some(),
+            }),
+        );
         let runtime_settings = first_prompt_title_runtime_settings(
             &self.gx_store_title_generation_settings(),
             hud.as_deref(),
@@ -327,11 +336,20 @@ impl GhostexGpuiApp {
         cx.spawn(async move |this, cx| {
             let project_id = match known_project {
                 Some(project_id) => Some(project_id),
-                None => gx_rpc(None, "/api/addProjectPath", add_params)
-                    .await
-                    .ok()
-                    .as_ref()
-                    .and_then(project_id_of),
+                None => {
+                    let added = gx_rpc(None, "/api/addProjectPath", add_params)
+                        .await
+                        .ok()
+                        .as_ref()
+                        .and_then(project_id_of);
+                    let _ = this.update(cx, |this, _| {
+                        this.help_chat_timing_step(
+                            "projectAddAnswered",
+                            json!({ "added": added.is_some() }),
+                        )
+                    });
+                    added
+                }
             };
             let Some(project_id) = project_id else {
                 let _ = this.update(cx, |this, cx| {
@@ -351,6 +369,9 @@ impl GhostexGpuiApp {
                 },
                 &ghostex_gx_core::agent_session_default_title(Some(&agent.name)),
             );
+            let _ = this.update(cx, |this, _| {
+                this.help_chat_timing_step("createSent", json!({}))
+            });
             let created = gx_rpc(None, "/api/createAgentSession", params).await;
             let _ = this.update(cx, |this, cx| {
                 let created = match created {
@@ -364,12 +385,19 @@ impl GhostexGpuiApp {
                     this.gx_store_help_chat_failed("Ghostex could not start the help chat.", cx);
                     return;
                 };
+                this.help_chat_timing_created(&project_id, &session_id);
                 this.gx_store_focus_created_session(
                     &project_id,
                     &session_id,
                     false,
                     (preferred_interface == "chat").then_some("chat"),
                     cx,
+                );
+                this.help_chat_timing_session_step(
+                    &project_id,
+                    &session_id,
+                    "focusRequested",
+                    json!({}),
                 );
                 this.gx_store_create_toast(
                     "info",
@@ -383,6 +411,7 @@ impl GhostexGpuiApp {
     }
 
     fn gx_store_help_chat_failed(&mut self, message: &str, cx: &mut gpui::Context<Self>) {
+        self.help_chat_timing_step("failed", json!({}));
         self.gx_store_create_toast("error", "Ghostex Help failed", Some(message), cx);
     }
 

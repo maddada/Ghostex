@@ -18,6 +18,7 @@ mod command_terminal;
 mod coordinator;
 mod focus_created;
 mod folder_pick;
+mod help_chat_timing;
 mod os_integration;
 mod projects;
 mod terminal;

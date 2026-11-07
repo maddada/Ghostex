@@ -73,6 +73,19 @@ impl GhostexGpuiApp {
         Some(key)
     }
 
+    /// `help_chat_timing_session_step` (gx_store/create/help_chat_timing.rs) for a step that knows
+    /// only the workspace tab.
+    pub(crate) fn help_chat_timing_tab_step(
+        &self,
+        session_id: TerminalSessionId,
+        step: &str,
+        details: serde_json::Value,
+    ) {
+        if let Some(key) = self.agents_chat_local_key_for_session(session_id) {
+            self.help_chat_timing_session_step(&key.project_id, &key.session_id, step, details);
+        }
+    }
+
     pub(crate) fn agents_chat_remote_key_for_session(
         &self,
         session_id: TerminalSessionId,
@@ -350,6 +363,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         if !self.agents_chat_mode_sessions.contains(&session_id) {
+            self.help_chat_timing_tab_step(session_id, "draftNotInChat", serde_json::json!({}));
             return;
         }
         if self
@@ -357,8 +371,14 @@ impl GhostexGpuiApp {
             .contains(&session_id)
             && self.insert_prompt_into_session_chat(session_id, &content, cx)
         {
+            self.help_chat_timing_tab_step(
+                session_id,
+                "draftInComposer",
+                serde_json::json!({ "held": false }),
+            );
             return;
         }
+        self.help_chat_timing_tab_step(session_id, "draftHeldForComposer", serde_json::json!({}));
         self.hold_for_session_chat_composer(session_id, &content);
     }
 
@@ -595,6 +615,7 @@ impl GhostexGpuiApp {
 
         self.pending_agents_chat_launch_intents.remove(&key);
         self.agents_chat_mode_sessions.insert(session_id);
+        self.help_chat_timing_tab_step(session_id, "chatActivated", serde_json::json!({}));
         self.request_keyboard_handoff_for_session(session_id);
         // A staged first-input draft (Handoff / Export's transcript mention)
         // belongs in the chat composer the user is about to see, not in the

@@ -257,6 +257,7 @@ impl GhostexGpuiApp {
         let Some(prompt) = gpui_titlebar_help_question_prompt(question_index) else {
             return;
         };
+        self.help_chat_timing_start(question_index);
         // Help chats live in one project rooted at the Ghostex config folder
         // (OS-specific, resolved by ghostex_paths), not in a fresh Quick
         // project per question.
@@ -275,6 +276,13 @@ impl GhostexGpuiApp {
                 _ = wait => None,
             };
             let _ = this.update(cx, |this, cx| {
+                this.help_chat_timing_step(
+                    match &finished {
+                        Some(_) => "skillInstallDone",
+                        None => "skillInstallWaitEnded",
+                    },
+                    serde_json::json!({ "installed": matches!(finished, Some(Ok(_))) }),
+                );
                 if let Some(Err(message)) = &finished {
                     this.report_help_skill_install_failure(message, cx);
                 }
@@ -297,11 +305,16 @@ impl GhostexGpuiApp {
             });
             // The open did not wait for a slow install; its failure still gets its toast.
             if finished.is_none() {
-                if let Err(message) = install.await {
-                    let _ = this.update(cx, |this, cx| {
-                        this.report_help_skill_install_failure(&message, cx)
-                    });
-                }
+                let result = install.await;
+                let _ = this.update(cx, |this, cx| {
+                    this.help_chat_timing_step(
+                        "skillInstallDoneLate",
+                        serde_json::json!({ "installed": result.is_ok() }),
+                    );
+                    if let Err(message) = &result {
+                        this.report_help_skill_install_failure(message, cx);
+                    }
+                });
             }
         })
         .detach();

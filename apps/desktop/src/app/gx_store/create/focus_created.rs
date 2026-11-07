@@ -103,6 +103,12 @@ impl GhostexGpuiApp {
         // exactly as the runtime's focus post did on arrival.
         self.adopt_agent_launch_placeholder(&message, cx);
         self.gx_store_take_created_session(&key, cx);
+        self.help_chat_timing_session_step(
+            project_id,
+            session_id,
+            "projectSwitched",
+            serde_json::json!({ "windowWorkspaceSwitched": switched }),
+        );
         // The store's selection above already gave the session its tab (session_chat_launch.rs).
         // A create that names no view follows its agent's Default Agent View
         // (`CDXC:SessionChat 2026-09-30 DECISION` in session_chat_launch.rs).

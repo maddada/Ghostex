@@ -232,6 +232,7 @@ impl GhostexGpuiApp {
             session.agent_icon = icon;
         }
         self.agents_workspace.select_tab(pane_id, session_id);
+        self.help_chat_timing_tab_step(session_id, "chatTabShown", serde_json::json!({}));
         let _ = keep_view;
         self.activate_preferred_agents_chat_launch_intent(session_id, cx);
         self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);

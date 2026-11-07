@@ -43,6 +43,7 @@ pub enum GpuiSupportLog {
     AppModal,
     CrashReports,
     Performance,
+    HelpChatTiming,
 }
 
 impl GpuiSupportLog {
@@ -57,6 +58,7 @@ impl GpuiSupportLog {
             Self::AppModal => "gpui-app-modal-debug.jsonl",
             Self::CrashReports => "gpui-crash-reports.log",
             Self::Performance => "gpui-performance.jsonl",
+            Self::HelpChatTiming => "gpui-help-chat-timing.log",
         }
     }
 
@@ -71,7 +73,8 @@ impl GpuiSupportLog {
             Self::AppModal => Some(GpuiDiagnosticScenario::AppModal),
             // Crash reports are always-on failure diagnostics, and `--profile` is the performance
             // log's own opt-in (`append_profile_sample`).
-            Self::CrashReports | Self::Performance => None,
+            // The Help chat's step timings are always on (`append_help_chat_timing`).
+            Self::CrashReports | Self::Performance | Self::HelpChatTiming => None,
         }
     }
 }
@@ -182,6 +185,12 @@ pub fn append_profile_sample(details: serde_json::Value) {
         "gpui.performance.sample",
         details,
     );
+}
+
+/// Appends one step of an Ask Ghostex open (gx_store/create/help_chat_timing.rs). A handful of
+/// lines per Help menu pick, so it needs no Settings switch.
+pub fn append_help_chat_timing(event: &str, details: serde_json::Value) {
+    append_unconditionally(GpuiSupportLog::HelpChatTiming, event, details);
 }
 
 fn debug_ui_controls_enabled() -> bool {
@@ -586,6 +595,7 @@ pub fn prune_gpui_support_logs() {
         GpuiSupportLog::ProjectBoard,
         GpuiSupportLog::AppModal,
         GpuiSupportLog::CrashReports,
+        GpuiSupportLog::HelpChatTiming,
     ] {
         let retained = logs_directory.join(log.file_name());
         for index in 1..=MAX_ROTATED_LOG_FILES {

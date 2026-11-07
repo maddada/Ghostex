@@ -33,3 +33,8 @@ pub(crate) enum GpuiDiagnosticScenario {
 pub(crate) fn scenario_enabled(_scenario: GpuiDiagnosticScenario) -> bool {
     false
 }
+
+/// The desktop's always-on `gpui-help-chat-timing.log`; the page logs the steps to the console.
+pub(crate) fn append_help_chat_timing(event: &str, details: Value) {
+    log::info!("help chat {event} {details}");
+}

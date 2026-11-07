@@ -925,6 +925,14 @@ impl GhostexGpuiApp {
                         )
                     })
                     .await;
+                let _ = this.update(cx, |this, _| {
+                    this.help_chat_timing_session_step(
+                        &key.project_id,
+                        &key.session_id,
+                        "attachMetadataAnswered",
+                        serde_json::json!({ "ok": preview.is_ok() }),
+                    )
+                });
                 if let Ok(metadata) = preview {
                     let _ = this.update(cx, |this, cx| {
                         if this.local_workspace_latest_focus_key.as_ref() == Some(&key) {
@@ -951,6 +959,12 @@ impl GhostexGpuiApp {
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
+                this.help_chat_timing_session_step(
+                    &key.project_id,
+                    &key.session_id,
+                    "attachPlanAnswered",
+                    serde_json::json!({ "ok": result.is_ok() }),
+                );
                 this.local_workspace_attach_pending.remove(&key);
                 match &result {
                     Err(error) if error.code.as_deref() == Some("accountUnavailable") => {
