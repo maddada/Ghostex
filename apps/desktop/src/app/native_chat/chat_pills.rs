@@ -122,6 +122,11 @@ pub(super) fn inline_dots(dots: &[(gpui::Hsla, String)], p: &ChatAppearance) -> 
 /// The dot of a switch pill that is on (Autopilot): green, apart from the status dots' tones.
 const AUTOPILOT_ON_COLOR: u32 = 0x22c55e;
 
+/// The Autopilot pill's menu-toggle key, and its menu's width (unscaled): a small row menu in the
+/// sidebar menu's style (`autopilot_menu`).
+const AUTOPILOT_TRIGGER: &str = "chat-pill-autopilot";
+const AUTOPILOT_MENU_WIDTH: f32 = 280.0;
+
 /// The Stashed pill's id (gx-chat-core extras/chat_pills.rs `stashed_pill`): it opens Saved Prompts
 /// rather than a menu of its own.
 const STASHED_PILL: &str = "stashed";
@@ -143,6 +148,7 @@ fn trigger_id(id: &str) -> &'static str {
         super::saved_draft_pill::SAVED_DRAFT_MENU => super::saved_draft_pill::SAVED_DRAFT_TRIGGER,
         super::relayed_approval::APPROVALS_MENU => super::relayed_approval::APPROVALS_TRIGGER,
         super::coordinator_intro::INTRO_MENU => super::coordinator_intro::INTRO_TRIGGER,
+        ghostex_gx_chat_core::extras::autopilot::AUTOPILOT_PILL => AUTOPILOT_TRIGGER,
         _ => "chat-pill-subagents",
     }
 }
@@ -438,7 +444,7 @@ impl NativeChatView {
         // A pill with no label (Blocked) is drawn like the ? pill: its icon and dot, its word in
         // the tooltip.
         let label = text(pill, "label");
-        // A switch pill (Autopilot) flips on a click; its words say what the click does.
+        // A switch pill (Autopilot) opens its small menu; its tooltip says where it stands.
         let switch = pill["switch"].as_bool();
         let tooltip = match switch {
             Some(_) => Some(text(pill, "ariaLabel")),
@@ -497,10 +503,21 @@ impl NativeChatView {
                         .child(count),
                 )
             })
+            .when(switch.is_some(), |pill| {
+                // A right-click opens the same menu, at the pointer.
+                let id = id.clone();
+                pill.on_mouse_down(
+                    gpui::MouseButton::Right,
+                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                        cx.stop_propagation();
+                        this.open_autopilot_menu(&id, Some(event.position), window, cx);
+                    }),
+                )
+            })
             .on_click(cx.listener(move |this, _, window, cx| {
                 cx.stop_propagation();
                 if switch.is_some() {
-                    this.invoke(json!({"type": "toggleAutopilot"}), cx);
+                    this.open_autopilot_menu(&id, None, window, cx);
                     return;
                 }
                 if id == "tasks" && this.show_session_details_for_tasks(cx) {
@@ -539,6 +556,38 @@ impl NativeChatView {
                     .inset(px(-s)),
             )
             .into_any_element()
+    }
+
+    /// The Autopilot pill's menu: the toggle that fits this chat and "Autopilot settings...", the
+    /// pill's own `menu` rows (gx-chat-core `extras/autopilot.rs` has the user's words), drawn as
+    /// the chat's other row menus are. A click lines it up with the pill above the chat box, a
+    /// right-click opens it at the pointer; the pill itself never toggles.
+    fn open_autopilot_menu(
+        &mut self,
+        id: &str,
+        at: Option<gpui::Point<Pixels>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let trigger = trigger_id(id);
+        if self.chat_menu_toggled_shut(trigger, cx) {
+            return;
+        }
+        let rows = self.snapshot["chatPills"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|pill| pill["id"] == id)
+            .and_then(|pill| pill["menu"].as_array().cloned())
+            .unwrap_or_default();
+        match at {
+            Some(at) => self.show_chat_menu_at(rows, at, AUTOPILOT_MENU_WIDTH, window, cx),
+            None => {
+                let (anchor, side) = self.pills_strip.menu_anchor(self.pill_bounds.cell(id).get());
+                self.menu_side = Some(side);
+                self.show_chat_menu(rows, anchor, AUTOPILOT_MENU_WIDTH, window, cx);
+            }
+        }
     }
 
     /// Opens `id`'s menu against its pill, painted at `pill`, or shuts it when it is the one on

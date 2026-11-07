@@ -390,6 +390,13 @@ impl NativeChatView {
                 open["initialAccountsReconnect"] = json!(account);
             }
             cx.emit(super::state::NativeChatEvent::Host(open));
+        } else if action.command["type"]
+            == ghostex_gx_chat_core::extras::autopilot::OPEN_SETTINGS_COMMAND
+        {
+            // The Autopilot pill's menu: Settings > Autopilot.
+            cx.emit(super::state::NativeChatEvent::Host(
+                json!({"type":"open","modal":"settings","initialTab":"autopilot"}),
+            ));
         } else if action.command["type"] == "openSkillsSettings" {
             cx.emit(super::state::NativeChatEvent::Host(json!({
                 "type":"open","modal":"settings","initialTab":"integrations","initialSection":"agentSkills",

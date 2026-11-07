@@ -985,6 +985,7 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
     let meta = text(board, "meta").to_string();
     Some(ChatPill {
         switch: None,
+        menu: Vec::new(),
         id: BOARD_PILL.to_string(),
         label: "Board".to_string(),
         count: String::new(),
@@ -1045,6 +1046,7 @@ pub fn blocked_pill(board: &Value) -> Option<ChatPill> {
         .filter(|count| *count > 0)?;
     Some(ChatPill {
         switch: None,
+        menu: Vec::new(),
         id: BLOCKED_PILL.to_string(),
         // An icon pill like the ? pill: no word, the word is its tooltip.
         label: String::new(),

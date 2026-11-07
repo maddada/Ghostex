@@ -3,10 +3,14 @@
 //! Autopilot's own switch (on or off for everything it covers); every other chat has it only while
 //! Autopilot is on, as that session's switch, so a session can be taken out of it (or put back).
 //! The desktop and the web build draw it as "Autopilot" with a green dot while on and as
-//! "Autopilot off" while off; a click flips it (native_chat/chat_pills.rs).
+//! "Autopilot off" while off; a click opens its small menu (native_chat/chat_pills.rs), whose rows
+//! are the pill's `menu`.
 //!
 //! CDXC:Autopilot 2026-11-07 DECISION:
-//! User: Autopilot lives "in the coordinator chat (a switch/pill there)", and "add the pills for all sessions when this feature is enabled so it can be disabled on a session". Clicking the pill flips it at once; gxserver saves it (`/api/autopilot`), and a refusal flips it back with a toast.
+//! User: Autopilot lives "in the coordinator chat (a switch/pill there)", and "add the pills for all sessions when this feature is enabled so it can be disabled on a session". The switch flips at once; gxserver saves it (`/api/autopilot`), and a refusal flips it back with a toast. (The click that flipped it is superseded by the next decision.)
+//!
+//! CDXC:Autopilot 2026-11-07 DECISION:
+//! User: "please make clicking on the autopilot button show a context menu to toggle it or go to settings so i can jump to its settings (clicking shouldn't toggle it like it does now)". A click (a right-click too) on the pill opens a menu in the sidebar menu's style with two rows: the toggle that fits where you are ("Turn Autopilot off for this session" / "Turn Autopilot on for this session" in a session's chat; "Turn Autopilot off" / "Turn Autopilot on" in a coordinator's) and "Autopilot settings...", which opens Settings > Autopilot. The pill itself never toggles. The phone's tap opens a sheet with the same rows (its settings row opens Settings > Autopilot). Supersedes the click-to-toggle one.
 
 use serde_json::{json, Value};
 
@@ -17,6 +21,9 @@ use crate::state::ChatState;
 /// The pill's id in `chatPills`.
 pub const AUTOPILOT_PILL: &str = "autopilot";
 const LABEL: &str = "Autopilot";
+/// The menu row that opens Settings > Autopilot: a renderer handles this command itself (the core
+/// has nothing to do for it).
+pub const OPEN_SETTINGS_COMMAND: &str = "openAutopilotSettings";
 
 fn flag(state: &ChatState, key: &str) -> Option<bool> {
     state
@@ -35,13 +42,18 @@ fn is_coordinator(state: &ChatState) -> bool {
 /// Autopilot is on. `None` before gxserver said anything, or on an older gxserver.
 pub fn pill(state: &ChatState) -> Option<ChatPill> {
     let on = flag(state, "on")?;
-    let (checked, aria_label) = if is_coordinator(state) {
+    let (checked, aria_label, toggle_label) = if is_coordinator(state) {
         (
             on,
             if on {
-                "Autopilot is on: it keeps every covered session going. Click to turn it off."
+                "Autopilot is on: it keeps every covered session going. Opens its menu."
             } else {
-                "Autopilot is off. Click to turn it on: it keeps sessions going while you are away."
+                "Autopilot is off: it keeps sessions going while you are away. Opens its menu."
+            },
+            if on {
+                "Turn Autopilot off"
+            } else {
+                "Turn Autopilot on"
             },
         )
     } else {
@@ -52,9 +64,14 @@ pub fn pill(state: &ChatState) -> Option<ChatPill> {
         (
             covered,
             if covered {
-                "Autopilot keeps this session going. Click to leave it out."
+                "Autopilot keeps this session going. Opens its menu."
             } else {
-                "Autopilot leaves this session alone. Click to put it back."
+                "Autopilot leaves this session alone. Opens its menu."
+            },
+            if covered {
+                "Turn Autopilot off for this session"
+            } else {
+                "Turn Autopilot on for this session"
             },
         )
     };
@@ -67,6 +84,19 @@ pub fn pill(state: &ChatState) -> Option<ChatPill> {
         },
         aria_label: aria_label.to_string(),
         switch: Some(checked),
+        menu: vec![
+            json!({
+                "label": toggle_label,
+                "iconPath": "titlebar/plane.svg",
+                "command": { "type": "toggleAutopilot" },
+            }),
+            json!({ "separator": true }),
+            json!({
+                "label": "Autopilot settings\u{2026}",
+                "iconPath": "titlebar/settings.svg",
+                "command": { "type": OPEN_SETTINGS_COMMAND },
+            }),
+        ],
         ..ChatPill::default()
     })
 }
@@ -129,4 +159,43 @@ pub fn settle_toggle(
             }]
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn labels(pill: &ChatPill) -> Vec<String> {
+        pill.menu
+            .iter()
+            .filter_map(|row| row["label"].as_str().map(str::to_owned))
+            .collect()
+    }
+
+    #[test]
+    fn a_session_s_menu_toggles_that_session_and_opens_settings() {
+        let mut state = ChatState::default();
+        state.session.autopilot = Some(json!({"on": true, "covered": true}));
+        let pill = pill(&state).expect("pill");
+        assert_eq!(
+            labels(&pill),
+            ["Turn Autopilot off for this session", "Autopilot settings\u{2026}"]
+        );
+        state.session.autopilot = Some(json!({"on": true, "covered": false}));
+        assert_eq!(
+            labels(&super::pill(&state).expect("pill"))[0],
+            "Turn Autopilot on for this session"
+        );
+        assert_eq!(pill.menu[2]["command"]["type"], OPEN_SETTINGS_COMMAND);
+    }
+
+    #[test]
+    fn a_coordinator_s_menu_turns_autopilot_on_or_off() {
+        let mut state = ChatState::default();
+        state.session.coordinator_threads = Some(json!({}));
+        state.session.autopilot = Some(json!({"on": false, "covered": false}));
+        assert_eq!(labels(&pill(&state).expect("pill"))[0], "Turn Autopilot on");
+        state.session.autopilot = Some(json!({"on": true, "covered": false}));
+        assert_eq!(labels(&pill(&state).expect("pill"))[0], "Turn Autopilot off");
+    }
 }

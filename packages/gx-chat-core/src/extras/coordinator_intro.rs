@@ -147,6 +147,7 @@ pub fn project(state: &ChatState) -> Value {
 pub fn pill(intro: &Value) -> Option<ChatPill> {
     intro.is_object().then(|| ChatPill {
         switch: None,
+        menu: Vec::new(),
         id: INTRO_PILL.to_string(),
         label: PILL_LABEL.to_string(),
         count: String::new(),

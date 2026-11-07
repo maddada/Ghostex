@@ -464,6 +464,7 @@ pub fn pill(projected: &Value) -> Option<crate::document::ChatPill> {
     let open = open_count(projected);
     (open > 0).then(|| crate::document::ChatPill {
         switch: None,
+        menu: Vec::new(),
         id: APPROVALS_PILL.to_string(),
         label: "Approvals".to_string(),
         count: open.to_string(),

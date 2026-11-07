@@ -85,6 +85,7 @@ pub fn chat_pills(
     if resources.total > 0 {
         pills.push(ChatPill {
             switch: None,
+            menu: Vec::new(),
             id: "resources".to_string(),
             label: "Resources".to_string(),
             count: resources.total.to_string(),
@@ -101,6 +102,7 @@ pub fn chat_pills(
         let meta = text(threads, "meta");
         pills.push(ChatPill {
             switch: None,
+            menu: Vec::new(),
             id: "threads".to_string(),
             label: "Workers".to_string(),
             count: if in_flight > 0 {
@@ -140,6 +142,7 @@ pub fn chat_pills(
         let meta = text(tasks, "meta");
         pills.push(ChatPill {
             switch: None,
+            menu: Vec::new(),
             id: "tasks".to_string(),
             label: "Tasks".to_string(),
             count: format!("{}/{}", count(tasks, "done"), count(tasks, "total")),
@@ -162,6 +165,7 @@ pub fn chat_pills(
         let meta = text(fleet, "countLabel");
         pills.push(ChatPill {
             switch: None,
+            menu: Vec::new(),
             id: "subagents".to_string(),
             label: "Subagents".to_string(),
             // The running ones while any run, every listed one once none do (Q452).
@@ -177,6 +181,7 @@ pub fn chat_pills(
         let meta = text(background, "meta");
         pills.push(ChatPill {
             switch: None,
+            menu: Vec::new(),
             id: "background".to_string(),
             label: "Background".to_string(),
             count: count(background, "count").to_string(),
@@ -198,6 +203,7 @@ pub fn chat_pills(
 pub fn stashed_pill(stashed: usize) -> Option<ChatPill> {
     (stashed > 0).then(|| ChatPill {
         switch: None,
+        menu: Vec::new(),
         id: STASHED_PILL.to_string(),
         label: "Stashed".to_string(),
         count: stashed.to_string(),
