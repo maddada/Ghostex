@@ -148,3 +148,26 @@ fn an_empty_prompt_means_the_built_in_one() {
         .expect("saved");
     assert_eq!(reset.polish.prompt, None);
 }
+
+#[test]
+fn hex_is_an_engine_with_its_own_model_choice() {
+    let settings = DictateSettings::first_run(false, false);
+    assert_eq!(settings.hex_model, None);
+    let next = settings
+        .patched(&patch(json!({"engine": "hex", "hexModel": "parakeet_v3"})))
+        .expect("valid");
+    assert_eq!(next.engine, Engine::Hex);
+    assert_eq!(next.hex_model.as_deref(), Some("parakeet_v3"));
+    let cleared = next
+        .patched(&patch(json!({"hexModel": null})))
+        .expect("valid");
+    assert_eq!(cleared.hex_model, None);
+    assert!(settings
+        .patched(&patch(json!({"hexModel": "a b&c"})))
+        .is_err());
+    assert!(settings.patched(&patch(json!({"hexModel": ""}))).is_err());
+    // Settings saved before Hex existed still read.
+    let old = r#"{"engine":"local","localModel":"parakeet-tdt-0.6b-v3","language":"auto","polish":{"enabled":true,"model":"claude-sonnet-5-5"}}"#;
+    let read: DictateSettings = serde_json::from_str(old).expect("old settings");
+    assert_eq!(read.hex_model, None);
+}

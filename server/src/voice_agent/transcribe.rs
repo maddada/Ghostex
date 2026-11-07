@@ -1,6 +1,6 @@
 //! The second half of Dictate: a saved recording (`recordings.rs`) turned into text by the engine
 //! Dictate's settings name (`speech/settings.rs`): a local model on this computer
-//! (`speech/engine.rs`), or a batch speech-to-text, xAI's (`POST /v1/stt`) or OpenAI's
+//! (`speech/engine.rs`), Hex 3's local API on this computer (`speech/hex.rs`), or a batch speech-to-text, xAI's (`POST /v1/stt`) or OpenAI's
 //! (`POST /v1/audio/transcriptions`), both of which take the `.m4a` or `.wav` as it is. The text
 //! then goes through the clean-up (`speech/cleanup.rs`: aliases, fillers, AI polish). A failure is kept on the recording with a sentence that says
 //! what went wrong and what to do; the audio stays whatever happens, so Transcribe again works once
@@ -208,6 +208,9 @@ async fn call_once(
         Engine::Local => {
             return transcribe_locally(paths, settings, &audio_path, language, words).await
         }
+        Engine::Hex => {
+            return transcribe_with_hex(paths, recording, settings, &audio_path, language).await
+        }
         Engine::Xai => Provider::Xai,
         Engine::OpenAi => Provider::OpenAi,
     };
@@ -338,6 +341,57 @@ async fn transcribe_locally(
             )
             .with_detail(Some(detail)),
         ),
+    }
+}
+
+/// Transcribes with Hex 3's local API (`speech/hex.rs`). Never falls back to another engine.
+async fn transcribe_with_hex(
+    paths: &crate::paths::GxserverPaths,
+    recording: &Recording,
+    settings: &DictateSettings,
+    audio_path: &std::path::Path,
+    language: Option<String>,
+) -> Outcome {
+    let home = paths.home_dir.clone();
+    let model = settings.hex_model.clone();
+    let audio = audio_path.to_path_buf();
+    // Hex runs on this computer; a minute of audio takes it seconds, long ones get longer.
+    let timeout = Duration::from_secs(60 + recording.duration_ms / 2_000);
+    let result = tokio::task::spawn_blocking(move || {
+        super::speech::hex::transcribe(
+            &home,
+            model.as_deref(),
+            &audio,
+            language.as_deref(),
+            timeout,
+        )
+    })
+    .await;
+    let failure = match result {
+        Ok(Ok(text)) => return Outcome::Text(text),
+        Ok(Err(failure)) => failure,
+        Err(error) => {
+            return Outcome::Transient(
+                problem(
+                    "hexUnavailable",
+                    None,
+                    "Ghostex couldn't reach Hex. Transcribe again.",
+                )
+                .with_detail(Some(error.to_string())),
+            )
+        }
+    };
+    let problem = Problem {
+        code: failure.code.to_string(),
+        message: failure.message,
+        provider: Some("hex".to_string()),
+        detail: None,
+    }
+    .with_detail(failure.detail);
+    if failure.transient {
+        Outcome::Transient(problem)
+    } else {
+        Outcome::Final(problem)
     }
 }
 

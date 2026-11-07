@@ -197,10 +197,27 @@ async fn update_helper(state: &AppState, provider: &str) -> Result<(), Outcome> 
 /// Settings > Integrations' Update of a tool (cua-driver, SpaceO, Node, uv...), followed until its
 /// job ends. SpaceO's own update restarts its daemon with the operator restart that waits for agents.
 async fn update_tool(state: &AppState, tool: &str) -> Result<(), Outcome> {
+    // A tool the list shows before it is installed (Hex, when Dictate uses it) is installed.
+    let mut read = Map::new();
+    read.insert("action".into(), json!("read"));
+    read.insert("tool".into(), json!(tool));
+    let current = crate::managed_tools::endpoint::dispatch(&state.paths, &read)
+        .await
+        .map_err(|error| failed(error.message))?;
+    let offers = |operation: &str| {
+        current["actions"]
+            .as_array()
+            .is_some_and(|actions| actions.iter().any(|action| action == operation))
+    };
+    let operation = if !offers("update") && offers("install") {
+        "install"
+    } else {
+        "update"
+    };
     let mut params = Map::new();
     params.insert("action".into(), json!("start"));
     params.insert("tool".into(), json!(tool));
-    params.insert("operation".into(), json!("update"));
+    params.insert("operation".into(), json!(operation));
     crate::managed_tools::endpoint::dispatch(&state.paths, &params)
         .await
         .map_err(|error| failed(error.message))?;

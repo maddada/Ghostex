@@ -183,7 +183,7 @@ pub(crate) fn read_audio(path: &Path) -> Result<Vec<f32>, String> {
     })
 }
 
-fn decode_m4a(path: &Path) -> Result<PathBuf, String> {
+pub(crate) fn decode_m4a(path: &Path) -> Result<PathBuf, String> {
     let afconvert = Path::new("/usr/bin/afconvert");
     if !afconvert.is_file() {
         return Err("This recording is AAC, which only macOS can decode here.".to_string());

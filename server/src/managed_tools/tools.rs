@@ -20,10 +20,12 @@ pub(crate) enum ToolId {
     /// Fast Computer & Browser Use (Trycua's cua-driver), desktop_control.rs.
     Trycua,
     Spaceo,
+    /// Hex 3, the local dictation app Dictate's Hex engine uses (hex.rs).
+    Hex,
 }
 
 impl ToolId {
-    pub(crate) const ALL: [ToolId; 10] = [
+    pub(crate) const ALL: [ToolId; 11] = [
         ToolId::Node,
         ToolId::Uv,
         ToolId::Homebrew,
@@ -34,6 +36,7 @@ impl ToolId {
         ToolId::PowerShell,
         ToolId::Trycua,
         ToolId::Spaceo,
+        ToolId::Hex,
     ];
 
     pub(crate) fn id(self) -> &'static str {
@@ -48,6 +51,7 @@ impl ToolId {
             ToolId::PowerShell => "powershell",
             ToolId::Trycua => "trycua",
             ToolId::Spaceo => "spaceo",
+            ToolId::Hex => "hex",
         }
     }
 
@@ -67,6 +71,7 @@ impl ToolId {
             ToolId::PowerShell => "PowerShell 7",
             ToolId::Trycua => "Fast Computer & Browser Use",
             ToolId::Spaceo => "SpaceO",
+            ToolId::Hex => "Hex",
         }
     }
 
@@ -93,6 +98,9 @@ impl ToolId {
             }
             ToolId::Spaceo => {
                 "Gives each agent its own virtual display on that Mac, so agents use apps without taking over the screen."
+            }
+            ToolId::Hex => {
+                "Local dictation app. Dictate can transcribe with Hex's models while Hex runs on this computer."
             }
         }
     }
@@ -297,6 +305,7 @@ pub(crate) fn latest_version(tool: ToolId, fresh: bool) -> Option<Result<String,
         ToolId::Uv => super::uv::latest_version(),
         ToolId::Beads | ToolId::Gh | ToolId::Glab => super::binaries::latest_version(tool),
         ToolId::Homebrew => super::homebrew::latest_homebrew_version(),
+        ToolId::Hex => super::hex::latest_version(),
         ToolId::SystemTools | ToolId::PowerShell => return None,
         ToolId::Trycua | ToolId::Spaceo => super::desktop_control::latest_version(
             tool,

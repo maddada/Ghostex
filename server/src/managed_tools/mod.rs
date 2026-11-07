@@ -6,6 +6,9 @@ pub(crate) mod desktop_control;
 pub(crate) mod download;
 pub(crate) mod endpoint;
 pub(crate) mod flight;
+pub(crate) mod hex;
+#[cfg(test)]
+mod hex_tests;
 pub(crate) mod homebrew;
 pub(crate) mod jobs;
 pub(crate) mod mise;

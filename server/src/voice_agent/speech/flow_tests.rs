@@ -102,7 +102,7 @@ fn the_tooltip_names_the_engine_and_model_and_what_is_missing() {
         "Local, Parakeet v3"
     );
     let (code, message) =
-        super::dictate::engine_problem(&paths, &settings).expect("not downloaded");
+        super::dictate::engine_problem(&paths, &settings, None).expect("not downloaded");
     assert_eq!(code, "modelMissing");
     assert_eq!(message, "Not downloaded yet. Click to download (0.72 GB)");
     settings.engine = super::settings::Engine::Xai;
@@ -111,7 +111,7 @@ fn the_tooltip_names_the_engine_and_model_and_what_is_missing() {
         "xAI speech to text"
     );
     assert_eq!(
-        super::dictate::engine_problem(&paths, &settings),
+        super::dictate::engine_problem(&paths, &settings, None),
         Some(("noKey", "Add your xAI API key in Settings.".to_string()))
     );
     settings.engine = super::settings::Engine::OpenAi;

@@ -22,6 +22,8 @@ pub(crate) enum Engine {
     #[serde(rename = "openai")]
     OpenAi,
     Xai,
+    /// Hex 3's local API on this computer (`hex.rs`).
+    Hex,
 }
 
 impl Engine {
@@ -30,6 +32,7 @@ impl Engine {
             Engine::Local => "local",
             Engine::OpenAi => "openai",
             Engine::Xai => "xai",
+            Engine::Hex => "hex",
         }
     }
 
@@ -38,6 +41,7 @@ impl Engine {
             "local" => Some(Engine::Local),
             "openai" => Some(Engine::OpenAi),
             "xai" => Some(Engine::Xai),
+            "hex" => Some(Engine::Hex),
             _ => None,
         }
     }
@@ -68,6 +72,9 @@ pub(crate) const POLISH_MODEL: &str = "claude-sonnet-5-5";
 pub(crate) struct DictateSettings {
     pub(crate) engine: Engine,
     pub(crate) local_model: String,
+    /// The Hex model id (`GET /models`); `None` uses Hex's first ready model.
+    #[serde(default)]
+    pub(crate) hex_model: Option<String>,
     pub(crate) language: String,
     #[serde(default)]
     pub(crate) dictionary: Vec<DictionaryWord>,
@@ -101,6 +108,7 @@ impl DictateSettings {
                 Engine::Local
             },
             local_model: catalog::PARAKEET_ID.to_string(),
+            hex_model: None,
             language: "auto".to_string(),
             dictionary: Vec::new(),
             add_project_names: true,
@@ -128,7 +136,7 @@ impl DictateSettings {
                     next.engine = value
                         .as_str()
                         .and_then(Engine::from_id)
-                        .ok_or("engine must be local, openai or xai.")?;
+                        .ok_or("engine must be local, openai, xai or hex.")?;
                 }
                 "localModel" => {
                     let id = value.as_str().unwrap_or_default();
@@ -136,6 +144,13 @@ impl DictateSettings {
                         return Err(format!("{id} is not a local model Dictate offers."));
                     }
                     next.local_model = id.to_string();
+                }
+                "hexModel" => {
+                    next.hex_model = match value {
+                        Value::Null => None,
+                        Value::String(id) if valid_hex_model(id) => Some(id.clone()),
+                        _ => return Err("hexModel must be a Hex model id, or null.".to_string()),
+                    };
                 }
                 "language" => {
                     let code = value
@@ -189,6 +204,15 @@ impl DictateSettings {
         }
         Ok(next)
     }
+}
+
+/// A Hex model id as Hex names them (`parakeet_v3`, `custom-…`): it is sent in a query string.
+fn valid_hex_model(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 128
+        && id.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b'@' | b'/')
+        })
 }
 
 fn flag(key: &str, value: &Value) -> Result<bool, String> {
@@ -249,6 +273,14 @@ pub(crate) fn file(paths: &GxserverPaths) -> PathBuf {
 fn lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: Mutex<()> = Mutex::new(());
     LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Whether the saved settings pick Hex, without writing a new install's settings.
+pub(crate) fn uses_hex(paths: &GxserverPaths) -> bool {
+    fs::read_to_string(file(paths))
+        .ok()
+        .and_then(|text| serde_json::from_str::<DictateSettings>(&text).ok())
+        .is_some_and(|settings| settings.engine == Engine::Hex)
 }
 
 /// The saved settings, or a new install's (written at once, so the first choice is kept).

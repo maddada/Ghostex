@@ -4,6 +4,7 @@
 use serde_json::{json, Value};
 
 use super::catalog;
+use super::hex;
 use super::models;
 use super::settings::{self, DictateSettings, Engine};
 use crate::paths::GxserverPaths;
@@ -79,7 +80,7 @@ pub(crate) fn alias_pairs(settings: &DictateSettings) -> Vec<(String, String)> {
 
 pub(crate) fn provider_of(engine: Engine) -> Option<Provider> {
     match engine {
-        Engine::Local => None,
+        Engine::Local | Engine::Hex => None,
         Engine::OpenAi => Some(Provider::OpenAi),
         Engine::Xai => Some(Provider::Xai),
     }
@@ -94,18 +95,53 @@ pub(crate) fn engine_label(settings: &DictateSettings) -> String {
         ),
         Engine::OpenAi => "OpenAI gpt-4o-transcribe".to_string(),
         Engine::Xai => "xAI speech to text".to_string(),
+        Engine::Hex => match &settings.hex_model {
+            Some(model) => format!("Hex, {model}"),
+            None => "Hex".to_string(),
+        },
     }
+}
+
+/// [`engine_label`], with the Hex model's own name when Hex answered.
+fn engine_label_with(settings: &DictateSettings, hex_state: Option<&hex::State>) -> String {
+    if let (Engine::Hex, Some(hex::State::Ready { models, .. })) = (settings.engine, hex_state) {
+        if let Ok(model) = hex::chosen_model(models, settings.hex_model.as_deref()) {
+            return format!("Hex, {}", model.name);
+        }
+    }
+    engine_label(settings)
+}
+
+/// Hex's state when the engine is Hex (a few local requests: call it off the async runtime).
+pub(crate) fn hex_state_for(
+    paths: &GxserverPaths,
+    settings: &DictateSettings,
+) -> Option<hex::State> {
+    (settings.engine == Engine::Hex).then(|| hex::state(&paths.home_dir))
 }
 
 fn gigabytes(bytes: u64) -> String {
     format!("{:.2} GB", bytes as f64 / 1e9)
 }
 
-/// Why the chosen engine can't transcribe right now: `(code, sentence)`.
+/// Why the chosen engine can't transcribe right now: `(code, sentence)`. `hex_state` is Hex's
+/// state when the caller already asked it (it is asked here otherwise, blocking).
 pub(crate) fn engine_problem(
     paths: &GxserverPaths,
     settings: &DictateSettings,
+    hex_state: Option<&hex::State>,
 ) -> Option<(&'static str, String)> {
+    if settings.engine == Engine::Hex {
+        let asked;
+        let state = match hex_state {
+            Some(state) => state,
+            None => {
+                asked = hex::state(&paths.home_dir);
+                &asked
+            }
+        };
+        return hex::problem(state, settings.hex_model.as_deref());
+    }
     match provider_of(settings.engine) {
         None => {
             let spec = catalog::model(&settings.local_model)?;
@@ -143,12 +179,16 @@ pub(crate) fn engine_problem(
     }
 }
 
-/// `DictateEngine` in the API contract.
-pub(crate) fn engine_view(state: &AppState, settings: &DictateSettings) -> Value {
-    let problem = engine_problem(&state.paths, settings);
+/// `DictateEngine` in the API contract. `hex_state` is [`hex_state_for`]'s answer.
+pub(crate) fn engine_view(
+    state: &AppState,
+    settings: &DictateSettings,
+    hex_state: Option<&hex::State>,
+) -> Value {
+    let problem = engine_problem(&state.paths, settings, hex_state);
     json!({
         "engine": settings.engine.id(),
-        "label": engine_label(settings),
+        "label": engine_label_with(settings, hex_state),
         "modelId": (settings.engine == Engine::Local).then_some(settings.local_model.as_str()),
         "ready": problem.is_none(),
         "problem": problem.map(|(code, message)| json!({"code": code, "message": message})),

@@ -10,7 +10,7 @@ use std::{
 use super::{
     binaries, desktop_control,
     flight::Flights,
-    homebrew, jobs, node, paths, powershell, system_tools,
+    hex, homebrew, jobs, node, paths, powershell, system_tools,
     tools::{self, Status, ToolId},
     uv,
 };
@@ -140,6 +140,7 @@ fn status_and_grants(tool: ToolId, home: &Path) -> (Status, Option<desktop_contr
         ToolId::SystemTools => system_tools::status(home),
         ToolId::PowerShell => powershell::status(),
         ToolId::Beads | ToolId::Gh | ToolId::Glab => binaries::status(tool, home),
+        ToolId::Hex => hex::status(home),
     };
     (status, None)
 }
@@ -196,7 +197,10 @@ pub(crate) fn state(tool: ToolId, home: &Path, fresh: bool) -> Value {
         .filter(|operation| *operation != "install" || status.install_blocker.is_none())
         .collect();
     value["actions"] = json!(actions);
-    if !active && actions.contains(&"update") {
+    // A missing Hex says which version Install brings (the Updates list shows it then).
+    let latest_wanted =
+        actions.contains(&"update") || (tool == ToolId::Hex && actions.contains(&"install"));
+    if !active && latest_wanted {
         match tools::latest_version(tool, fresh) {
             Some(Ok(latest)) => {
                 if let Some(current) = &status.version {
@@ -293,6 +297,10 @@ fn run_operation(tool: ToolId, operation: &str, home: &Path, log: &Log) -> Resul
         (ToolId::SystemTools, false) => return Err("Ghostex does not remove system tools.".into()),
         (ToolId::PowerShell, true) => powershell::install(log)?,
         (ToolId::PowerShell, false) => return Err("Ghostex does not remove PowerShell 7.".into()),
+        (ToolId::Hex, true) => hex::install(home, log)?,
+        (ToolId::Hex, false) => {
+            return Err("Ghostex does not remove Hex. Remove it the way you installed it.".into())
+        }
         (ToolId::Trycua | ToolId::Spaceo, _) => {
             desktop_control::run_operation(tool, operation, home, log)?
         }

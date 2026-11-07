@@ -3,6 +3,7 @@
 //!
 //! - `/api/readDictateSettings`, `/api/setDictateSettings` `{patch}`
 //! - `/api/readDictateEngine`: what will transcribe, for the mic's tooltip
+//! - `hex` in `/api/readDictateSettings`: where the user stands with Hex 3 (`hex.rs`)
 //! - `/api/listSpeechModels`, `/api/downloadSpeechModel` `{id}`,
 //!   `/api/cancelSpeechModelDownload` `{id}`, `/api/deleteSpeechModel` `{id}`
 //! - `/api/skipDictationPolish` `{id}`
@@ -10,7 +11,7 @@
 use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
 
-use super::{catalog, cleanup, dictate, models, settings};
+use super::{catalog, cleanup, dictate, hex, models, settings};
 use crate::domain::{read_domain_rpc_params, DomainStateError};
 use crate::protocol::rpc_success;
 use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
@@ -83,8 +84,13 @@ async fn route(state: &AppState, path: &str, body: &Value) -> Result<Value, Doma
             read_all(state).await
         }
         "/api/readDictateEngine" => {
-            let settings = blocking(move || Ok(dictate::current_settings(&paths))).await?;
-            Ok(dictate::engine_view(state, &settings))
+            let (settings, hex_state) = blocking(move || {
+                let settings = dictate::current_settings(&paths);
+                let hex_state = dictate::hex_state_for(&paths, &settings);
+                Ok((settings, hex_state))
+            })
+            .await?;
+            Ok(dictate::engine_view(state, &settings, hex_state.as_ref()))
         }
         "/api/listSpeechModels" => {
             let settings = {
@@ -170,8 +176,24 @@ async fn read_all(state: &AppState) -> Result<Value, DomainStateError> {
         blocking(move || Ok(models_answer(&paths, &in_use))).await?
     };
     let object = answer.as_object_mut().expect("models_answer is an object");
+    // Hex is asked on every read: its row says where the user stands even before it is picked.
+    let hex_state = {
+        let home = paths.home_dir.clone();
+        blocking(move || Ok(hex::state(&home))).await?
+    };
     object.insert("settings".to_string(), json!(settings));
-    object.insert("engine".to_string(), dictate::engine_view(state, &settings));
+    object.insert(
+        "engine".to_string(),
+        dictate::engine_view(
+            state,
+            &settings,
+            (settings.engine == settings::Engine::Hex).then_some(&hex_state),
+        ),
+    );
+    object.insert(
+        "hex".to_string(),
+        hex::view(&hex_state, settings.hex_model.as_deref()),
+    );
     object.insert(
         "keys".to_string(),
         json!({"xai": key_view(Provider::Xai), "openai": key_view(Provider::OpenAi)}),

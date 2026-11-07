@@ -554,29 +554,40 @@ async fn tool_items(state: &AppState, usage: &Usage, fresh: bool) -> Vec<Value> 
     let Ok(answer) = crate::managed_tools::endpoint::dispatch(&state.paths, &params).await else {
         return Vec::new();
     };
+    let hex_wanted = crate::voice_agent::dictate_uses_hex(&state.paths);
     answer["tools"]
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|tool| tool_item(tool, usage))
+        .filter_map(|tool| tool_item(tool, usage, hex_wanted))
         .collect()
 }
 
-fn tool_item(tool: &Value, usage: &Usage) -> Option<Value> {
+/// `hex_wanted`: Dictate transcribes with Hex here, so Hex is listed (and lights the top bar)
+/// even before it is installed, with Install as its update.
+pub(super) fn tool_item(tool: &Value, usage: &Usage, hex_wanted: bool) -> Option<Value> {
     let id = tool["id"].as_str()?;
-    if tool["installed"] != true {
+    let hex = id == "hex";
+    if hex && tool["supported"] != true {
+        return None;
+    }
+    if tool["installed"] != true && !(hex && hex_wanted) {
         return None;
     }
     let can_update = tool["actions"]
         .as_array()
         .is_some_and(|actions| actions.iter().any(|action| action == "update"));
+    let can_install = tool["actions"]
+        .as_array()
+        .is_some_and(|actions| actions.iter().any(|action| action == "install"));
     let desktop_control = matches!(id, "trycua" | "spaceo");
-    // Only what Ghostex installed is Ghostex's to update; cua-driver and SpaceO always are.
-    if !desktop_control && !(can_update && tool["source"] == "ghostex") {
+    // Only what Ghostex installed is Ghostex's to update; cua-driver, SpaceO and Hex always are.
+    if !desktop_control && !hex && !(can_update && tool["source"] == "ghostex") {
         return None;
     }
     let detail = match id {
         "trycua" => "Tool · cua-driver".to_string(),
+        "hex" => "Dictation app".to_string(),
         _ => "Tool".to_string(),
     };
     let mut item = item(
@@ -590,8 +601,10 @@ fn tool_item(tool: &Value, usage: &Usage) -> Option<Value> {
         tool["latestVersion"].as_str().map(str::to_string),
     );
     let job = &tool["job"];
-    let failed = job["status"] == "failed" && job["operation"] == "update";
-    let settled = if tool["updateAvailable"] == true {
+    let failed = job["status"] == "failed"
+        && (job["operation"] == "update" || (hex && job["operation"] == "install"));
+    let missing = tool["installed"] != true;
+    let settled = if tool["updateAvailable"] == true || (missing && can_install) {
         "available"
     } else if tool["checkError"].is_string() || tool["notAnswering"].is_string() {
         "unknown"
@@ -612,7 +625,11 @@ fn tool_item(tool: &Value, usage: &Usage) -> Option<Value> {
         );
         item.insert("settledState".into(), json!(settled));
     }
-    let note = if tool["needsPassword"] == true && state == "available" {
+    let note = if missing && state == "available" {
+        Some("Not installed. Dictate is set to use Hex.")
+    } else if hex && state == "available" {
+        tool["detail"].as_str()
+    } else if tool["needsPassword"] == true && state == "available" {
         Some("Asks for your password.")
     } else if state == "available" {
         tool["permissionNote"].as_str()
@@ -621,12 +638,19 @@ fn tool_item(tool: &Value, usage: &Usage) -> Option<Value> {
     };
     item.insert("note".into(), json!(note));
     item.insert("state".into(), json!(state));
-    item.insert("canUpdate".into(), json!(can_update && state != "updating"));
+    item.insert(
+        "canUpdate".into(),
+        json!((can_update || (missing && can_install)) && state != "updating"),
+    );
+    // Hex installs and updates only when the user clicks (CDXC:Dictate 2026-11-07 in managed_tools/hex.rs).
     item.insert(
         "canAuto".into(),
-        json!(can_update && tool["needsPassword"] != true),
+        json!(can_update && !hex && tool["needsPassword"] != true),
     );
-    item.insert("topBar".into(), json!(desktop_control));
+    item.insert(
+        "topBar".into(),
+        json!(desktop_control || (hex && hex_wanted)),
+    );
     item.insert("inUse".into(), json!(usage.any_working()));
     Some(Value::Object(item))
 }
@@ -764,4 +788,70 @@ async fn app_item(state: &AppState) -> Value {
     item.insert("topBar".into(), json!(true));
     item.insert("inUse".into(), json!(false));
     Value::Object(item)
+}
+
+#[cfg(test)]
+mod hex_tests {
+    use super::{tool_item, Usage};
+    use serde_json::json;
+
+    fn hex(installed: bool, actions: &[&str], extra: serde_json::Value) -> serde_json::Value {
+        let mut tool = json!({
+            "id": "hex", "label": "Hex", "supported": true, "installed": installed,
+            "actions": actions, "source": "system", "latestVersion": "3.3.0",
+        });
+        for (key, value) in extra.as_object().unwrap() {
+            tool[key] = value.clone();
+        }
+        tool
+    }
+
+    #[test]
+    fn a_missing_hex_is_listed_with_install_only_when_dictate_uses_it() {
+        let usage = Usage::default();
+        assert!(tool_item(&hex(false, &["install"], json!({})), &usage, false).is_none());
+        let item = tool_item(&hex(false, &["install"], json!({})), &usage, true).expect("listed");
+        assert_eq!(item["state"], "available");
+        assert_eq!(item["canUpdate"], true);
+        assert_eq!(item["canAuto"], false, "Hex installs only on a click");
+        assert_eq!(item["topBar"], true);
+        assert_eq!(item["latest"], "3.3.0");
+        assert_eq!(item["note"], "Not installed. Dictate is set to use Hex.");
+    }
+
+    #[test]
+    fn an_installed_hex_shows_its_version_and_a_newer_release() {
+        let usage = Usage::default();
+        let tool = hex(
+            true,
+            &["update"],
+            json!({"version": "3.2.0", "updateAvailable": true}),
+        );
+        let item = tool_item(&tool, &usage, false).expect("listed");
+        assert_eq!(item["installed"], "3.2.0");
+        assert_eq!(item["latest"], "3.3.0");
+        assert_eq!(item["state"], "available");
+        assert_eq!(item["canUpdate"], true);
+        assert_eq!(item["canAuto"], false);
+        assert_eq!(
+            item["topBar"], false,
+            "only lights the top bar when Dictate uses Hex"
+        );
+        let current = hex(
+            true,
+            &["update"],
+            json!({"version": "3.3.0", "updateAvailable": false}),
+        );
+        assert_eq!(
+            tool_item(&current, &usage, true).unwrap()["state"],
+            "upToDate"
+        );
+    }
+
+    #[test]
+    fn hex_where_hex_3_does_not_ship_is_not_listed() {
+        let mut tool = hex(false, &[], json!({}));
+        tool["supported"] = json!(false);
+        assert!(tool_item(&tool, &Usage::default(), true).is_none());
+    }
 }
