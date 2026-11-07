@@ -202,13 +202,12 @@ fn badge_lines(account: &Value) -> Vec<String> {
         .unwrap_or(&[]);
     let pct = |w: &Value| w["usedPercent"].as_f64().map(|v| format!("{:.0}", v));
     if usage_only_provider(text(account, "provider")) {
-        // Gemini's 5h and 7d on one line like Codex; Cursor's and Copilot's one Mo window.
-        let usage = windows.iter().filter_map(|w| pct(w)).collect::<Vec<_>>();
-        return if usage.is_empty() {
-            Vec::new()
-        } else {
-            vec![format!("{}%", usage.join("/"))]
-        };
+        // CDXC:AgentProviders 2026-11-07 DECISION:
+        // User, with a screenshot of the sidebar's usage meters (Claude and Codex stacked "74%" over "0%", Gemini packed as "0/0%"): "pls make the gemini one 2 lines like the others". A usage-only provider draws one stacked "N%" line per window, in the order gxserver lists them (Gemini's 5h then 7d); Cursor's and Copilot's single Mo window stays one line. The tile has no tooltip (2026-09-21), so the window labels stay in the usage popup.
+        return windows
+            .iter()
+            .filter_map(|w| pct(w).map(|v| format!("{v}%")))
+            .collect();
     }
     if text(account, "provider") == "codex" {
         let main: Vec<_> = windows.iter().filter(|w| w["model"].is_null()).collect();
