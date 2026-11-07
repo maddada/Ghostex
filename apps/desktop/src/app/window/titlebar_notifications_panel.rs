@@ -4,7 +4,7 @@
 //! feel instant, and sends one command per click back through the main app.
 //! The rows are every online computer's (gx-core `notification_feeds.rs`): with a remote
 //! computer in the sidebar the panel shows All, This computer and Remote tabs, a remote row
-//! names its computer in a chip by the title, and an offline computer gets one line at the top.
+//! names its computer in a chip by the title, and the Remote tab shows one dimmed line when an offline computer has rows waiting to come back.
 use super::native_modal_kit::{ModalRailItem, modal_bordered_segmented_control};
 use super::resources_style::*;
 use crate::app::helpers::*;
@@ -21,9 +21,6 @@ const NOTIFICATION_CARD_CHECK_SIZE: f32 = 22.0;
 /// Title line height, so the line keeps one height whether or not it is hovered.
 const NOTIFICATION_CARD_TITLE_LINE_HEIGHT: f32 = 18.0;
 const NOTIFICATION_CHIP_ICON: &str = "titlebar/device-desktop.svg";
-const NOTIFICATION_OFFLINE_ICON: &str = "titlebar/alert-triangle.svg";
-/// The offline line's amber (the mockup's `#f5c26b`).
-const NOTIFICATION_OFFLINE_AMBER: u32 = 0xf5c26b;
 
 impl GpuiTitlebarReadingPanel {
     pub(crate) fn notifications(
@@ -418,28 +415,20 @@ impl GpuiTitlebarReadingPanel {
             .into_any_element()
     }
 
-    /// "<Computer> is offline. Its notifications show again when it reconnects." at the top of the
-    /// list while a remote computer's rows are hidden.
+    /// "<Computer> is offline. Its notifications show again when it reconnects." as a plain dimmed
+    /// line at the top of the Remote tab while a remote computer's rows are waiting to come back.
+    ///
+    /// CDXC:Notifications 2026-11-07 DECISION: User: "don't show this all the time man". A
+    /// computer that is off is normal, so this is a quiet dimmed line in the list's style, not a
+    /// yellow warning banner.
     fn render_notifications_offline_notice(notice: &str) -> AnyElement {
-        h_flex()
+        div()
             .w_full()
-            .items_center()
-            .gap(px(8.0))
-            .mb(px(2.0))
-            .px(px(9.0))
-            .py(px(7.0))
-            .rounded(px(RESOURCE_CONTROL_RADIUS))
-            .border_1()
-            .border_color(rgb(NOTIFICATION_OFFLINE_AMBER).opacity(0.30))
-            .bg(rgb(NOTIFICATION_OFFLINE_AMBER).opacity(0.10))
-            .text_size(px(12.0))
-            .text_color(rgb(NOTIFICATION_OFFLINE_AMBER).opacity(0.85))
-            .child(titlebar_svg_icon(
-                NOTIFICATION_OFFLINE_ICON,
-                14.0,
-                rgb(NOTIFICATION_OFFLINE_AMBER).opacity(0.85).into(),
-            ))
-            .child(div().min_w_0().flex_1().child(notice.to_string()))
+            .px(px(2.0))
+            .pb(px(2.0))
+            .text_size(px(11.5))
+            .text_color(chrome_ink().opacity(0.50))
+            .child(notice.to_string())
             .into_any_element()
     }
 

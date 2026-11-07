@@ -60,8 +60,13 @@ impl NotificationFeedTab {
     }
 
     /// Whether this tab shows the offline line.
+    ///
+    /// CDXC:Notifications 2026-11-07 DECISION: User (the offline banner showed on every open of
+    /// the panel because a Windows PC was off): "don't show this all the time man". A computer
+    /// that is simply off is normal, so the line lives on the Remote tab only, never on All or
+    /// This computer.
     pub fn shows_offline_notice(self) -> bool {
-        self != Self::ThisComputer
+        self == Self::Remote
     }
 
     /// The computers Mark all read and Clear all go to from this tab: the online ones it shows.
@@ -128,8 +133,9 @@ fn offline_notice(names: &[&str]) -> Option<String> {
 /// `{ items, unreadCount, localUnreadCount, remoteUnreadCount, nextUnreadId?, nextUnreadMachineId?,
 /// offlineNotice?, hasRemoteMachines, type }`. `items` holds the online computers' rows, newest
 /// first, a remote row carrying `machineId` and `machineName`. An offline computer's rows and
-/// count are left out; it gets the offline line only once its feed has been read, because before
-/// that it had nothing on screen to hide.
+/// count are left out; it gets the offline line only when its last-read feed holds rows (so
+/// notifications really are waiting to come back). An offline computer with nothing pending, or
+/// one whose feed was never read, gets no line.
 pub fn merged_notification_feed_message(feeds: &[MachineNotificationFeed<'_>]) -> Value {
     let mut items: Vec<Value> = Vec::new();
     let mut local_unread = 0u64;
@@ -141,7 +147,11 @@ pub fn merged_notification_feed_message(feeds: &[MachineNotificationFeed<'_>]) -
             continue;
         };
         if !feed.online {
-            if !feed.machine.is_local() {
+            let has_pending_rows = message
+                .get("items")
+                .and_then(Value::as_array)
+                .is_some_and(|rows| !rows.is_empty());
+            if !feed.machine.is_local() && has_pending_rows {
                 offline_names.push(if feed.machine_name.is_empty() {
                     "A remote computer"
                 } else {
@@ -254,4 +264,122 @@ pub fn merged_notification_feed_jump_target<'a>(
         *deferred_machine == machine && item["sessionId"].as_str() == Some(deferred_session_id)
     });
     (!deferring).then_some(item)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn row(id: &str) -> Value {
+        json!({ "id": id, "createdAt": "2026-11-07T10:00:00Z" })
+    }
+
+    fn message(rows: Vec<Value>) -> Value {
+        json!({ "items": rows, "unreadCount": 0 })
+    }
+
+    fn notice(feeds: &[MachineNotificationFeed<'_>]) -> Option<String> {
+        merged_notification_feed_message(feeds)
+            .get("offlineNotice")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    }
+
+    fn windows() -> MachineId {
+        MachineId::Remote("windows".into())
+    }
+
+    #[test]
+    fn offline_line_shows_only_on_the_remote_tab() {
+        assert!(!NotificationFeedTab::All.shows_offline_notice());
+        assert!(!NotificationFeedTab::ThisComputer.shows_offline_notice());
+        assert!(NotificationFeedTab::Remote.shows_offline_notice());
+    }
+
+    #[test]
+    fn offline_computer_with_waiting_rows_gets_the_line() {
+        let local = message(vec![]);
+        let remote = message(vec![row("a")]);
+        let machine = windows();
+        let feeds = [
+            MachineNotificationFeed {
+                machine: &MachineId::Local,
+                machine_name: "",
+                online: true,
+                message: Some(&local),
+            },
+            MachineNotificationFeed {
+                machine: &machine,
+                machine_name: "Windows",
+                online: false,
+                message: Some(&remote),
+            },
+        ];
+        assert_eq!(
+            notice(&feeds).as_deref(),
+            Some("Windows is offline. Its notifications show again when it reconnects.")
+        );
+    }
+
+    #[test]
+    fn offline_computer_with_nothing_waiting_gets_no_line() {
+        let empty = message(vec![]);
+        let machine = windows();
+        let feeds = [MachineNotificationFeed {
+            machine: &machine,
+            machine_name: "Windows",
+            online: false,
+            message: Some(&empty),
+        }];
+        assert_eq!(notice(&feeds), None);
+    }
+
+    #[test]
+    fn offline_computer_never_read_gets_no_line() {
+        let machine = windows();
+        let feeds = [MachineNotificationFeed {
+            machine: &machine,
+            machine_name: "Windows",
+            online: false,
+            message: None,
+        }];
+        assert_eq!(notice(&feeds), None);
+    }
+
+    #[test]
+    fn online_computer_gets_no_line_and_only_waiting_offline_ones_are_named() {
+        let rows = message(vec![row("a")]);
+        let empty = message(vec![]);
+        let (windows, mac_mini, laptop) = (
+            windows(),
+            MachineId::Remote("mini".into()),
+            MachineId::Remote("laptop".into()),
+        );
+        let feeds = [
+            MachineNotificationFeed {
+                machine: &windows,
+                machine_name: "Windows",
+                online: false,
+                message: Some(&rows),
+            },
+            MachineNotificationFeed {
+                machine: &mac_mini,
+                machine_name: "Mac mini",
+                online: false,
+                message: Some(&empty),
+            },
+            MachineNotificationFeed {
+                machine: &laptop,
+                machine_name: "Laptop",
+                online: true,
+                message: Some(&rows),
+            },
+        ];
+        assert_eq!(
+            notice(&feeds).as_deref(),
+            Some("Windows is offline. Its notifications show again when it reconnects.")
+        );
+    }
 }
