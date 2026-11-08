@@ -19,6 +19,14 @@ pub(crate) struct ToggleGpuiExtensionPin {
     pub(crate) pinned: bool,
 }
 
+/// CDXC:Extensions 2026-11-08 DECISION:
+/// User: right-clicking a pinned extension's icon in the work area header offers "Unpin from header" and "Disable extension" besides "Extension Store". Disable writes the same `enabled: false` the Settings > Extensions page's Enabled switch writes (that switch has no confirmation or undo, so neither does this).
+#[derive(Clone, Debug, Eq, PartialEq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct DisableGpuiExtension {
+    pub(crate) extension_id: String,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct BrowseGpuiExtensions;
@@ -184,9 +192,34 @@ impl GhostexGpuiApp {
         pinned: bool,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.update_extension_state_patch(
+            extension_id,
+            serde_json::json!({ "pinned": pinned }),
+            "The extension pin state could not be saved.",
+            cx,
+        );
+    }
+
+    /// Turns an extension off the way Settings > Extensions' Enabled switch does.
+    pub(crate) fn disable_extension(&mut self, extension_id: String, cx: &mut gpui::Context<Self>) {
+        self.update_extension_state_patch(
+            extension_id,
+            serde_json::json!({ "enabled": false }),
+            "The extension could not be disabled.",
+            cx,
+        );
+    }
+
+    fn update_extension_state_patch(
+        &mut self,
+        extension_id: String,
+        patch: serde_json::Value,
+        failure: &'static str,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let params = serde_json::json!({
             "id": extension_id,
-            "patch": { "pinned": pinned },
+            "patch": patch,
         });
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
@@ -197,12 +230,7 @@ impl GhostexGpuiApp {
                 if result.is_ok() {
                     this.refresh_extensions_in_background(cx);
                 } else {
-                    this.dispatch_gpui_workspace_action_toast(
-                        "warning",
-                        "Extensions",
-                        "The extension pin state could not be saved.",
-                        cx,
-                    );
+                    this.dispatch_gpui_workspace_action_toast("warning", "Extensions", failure, cx);
                 }
             });
         })

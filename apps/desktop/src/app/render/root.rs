@@ -916,6 +916,12 @@ impl Render for GhostexGpuiApp {
                 */
                 this.open_gpui_settings_extensions_page(Some(window), cx);
             }))
+            .on_action(cx.listener(|this, action: &ToggleGpuiExtensionPin, _window, cx| {
+                this.update_extension_pin(action.extension_id.clone(), action.pinned, cx);
+            }))
+            .on_action(cx.listener(|this, action: &DisableGpuiExtension, _window, cx| {
+                this.disable_extension(action.extension_id.clone(), cx);
+            }))
             .on_action(cx.listener(|this, _: &OpenGpuiAccountsModal, window, cx| {
                 this.open_gpui_settings_accounts_page(Some(window), cx);
             }))

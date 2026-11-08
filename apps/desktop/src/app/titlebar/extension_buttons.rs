@@ -231,6 +231,22 @@ impl GhostexGpuiApp {
                     );
                 }),
             )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener({
+                    let extension_id = button.id.as_str().to_string();
+                    move |this, event: &MouseDownEvent, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        this.show_gpui_titlebar_pinned_extension_menu(
+                            extension_id.clone(),
+                            event.position,
+                            window,
+                            cx,
+                        );
+                    }
+                }),
+            )
             .when(!open, |this| {
                 this.managed_discrete_tooltip_with_placement(
                     ManagedTooltipPlacement::Left,

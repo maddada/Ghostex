@@ -100,6 +100,32 @@ impl GhostexGpuiApp {
             .show(position, window, cx);
     }
 
+    /// CDXC:ContextMenus 2026-11-08 DECISION:
+    /// User: right-clicking a pinned extension's icon in the work area header offers "Unpin from header" and "Disable extension", and keeps "Extension Store" (it showed only that). The standard context menu look. Unpin is the extensions menu's pin toggle; Disable is Settings > Extensions' Enabled switch.
+    pub(crate) fn show_gpui_titlebar_pinned_extension_menu(
+        &self,
+        extension_id: String,
+        position: gpui::Point<Pixels>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        GpuiContextMenu::new()
+            .menu(
+                "Unpin from header",
+                Box::new(ToggleGpuiExtensionPin {
+                    extension_id: extension_id.clone(),
+                    pinned: false,
+                }),
+            )
+            .menu(
+                "Disable extension",
+                Box::new(DisableGpuiExtension { extension_id }),
+            )
+            .separator()
+            .menu("Extension Store", Box::new(OpenGpuiExtensionsModal))
+            .show(position, window, cx);
+    }
+
     /// CDXC:ContextMenus 2026-09-17 DECISION:
     /// User: right-clicking a titlebar account shows Accounts below Extensions in that context menu.
     pub(crate) fn show_gpui_titlebar_account_menu(
