@@ -4,7 +4,7 @@ Standalone preview of the native GPUI app modals so their look can be checked
 against the React Storybook stories without launching Ghostex. Run with:
     cargo run --release --bin native-modal-demo
 Environment:
-    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|updates-menu|... (which modal; default export-transcript)
+    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|updates-menu|start-menu|... (which modal; default export-transcript)
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
     GHOSTEX_NATIVE_MODAL_DEMO_STATE=<per-modal state name>    (default: the opening state)
     GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND=1                    (open without taking focus, for screenshots)
@@ -117,6 +117,8 @@ mod settings_modal;
 mod space_editor_demo;
 #[path = "../app/window/space_editor_modal.rs"]
 mod space_editor_modal;
+#[path = "native_modal_demo/start_menu.rs"]
+mod start_menu_demo;
 #[path = "native_modal_demo/update_available.rs"]
 mod update_available_demo;
 // The top bar's Updates button and list: `app` holds the stand-ins its rows file reads.
@@ -570,6 +572,7 @@ fn main() {
                 "new-thread-picker" => new_thread_picker_demo::open(&demo, cx),
                 "update-available" => update_available_demo::open(&demo, cx),
                 "updates-menu" => updates_menu_demo::open(&demo, cx),
+                "start-menu" => start_menu_demo::open(&demo, cx),
                 "remote-setup" => remote_setup_demo::open(&demo, cx),
                 "delayed-send" => delayed_send_demo::open(&demo, cx),
                 "space-editor" => space_editor_demo::open(&demo, cx),

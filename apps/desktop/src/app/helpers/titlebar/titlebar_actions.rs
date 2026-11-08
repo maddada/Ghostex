@@ -117,6 +117,20 @@ pub(crate) fn gpui_titlebar_actions_for_active_project_id(
     gpui_titlebar_actions_from_sidebar_command_buttons(&commands)
 }
 
+/// The Start menu's Global section: the composed sidebar HUD's `globalCommands`, in their saved
+/// order, parsed the way a project's own Actions are. Empty before the store's first HUD.
+///
+/// CDXC:AgentLauncher 2026-11-08 WHY: the list comes from the same HUD `runSidebarCommand` resolves
+/// a Global Action against (`plan_sidebar_command_run`), so a row is always one the run can find,
+/// and the row hands only its id back: the command text is resolved again at run time.
+pub(crate) fn gpui_titlebar_global_actions_from_sidebar_hud(
+    hud: Option<&serde_json::Value>,
+) -> Vec<GpuiTitlebarAction> {
+    hud.and_then(|hud| hud.get("globalCommands"))
+        .map(gpui_titlebar_actions_from_sidebar_command_buttons)
+        .unwrap_or_default()
+}
+
 pub(crate) fn gpui_titlebar_actions_from_sidebar_command_buttons(
     buttons: &serde_json::Value,
 ) -> Vec<GpuiTitlebarAction> {

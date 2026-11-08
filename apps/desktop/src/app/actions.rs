@@ -464,6 +464,14 @@ pub(crate) struct RunGpuiTitlebarAction {
     pub(crate) action_index: u64,
 }
 
+/// A Global Action row of the Start menu, by id: it runs as `runSidebarCommand` with the global
+/// scope, in the active project.
+#[derive(Clone, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct RunGpuiTitlebarGlobalAction {
+    pub(crate) command_id: String,
+}
+
 /// One row of the titlebar's ⋯ menu, by its position in `GpuiTitlebarMoreMenuItem::ALL`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]

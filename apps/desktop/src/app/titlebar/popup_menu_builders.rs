@@ -119,39 +119,15 @@ impl GhostexGpuiApp {
             })
             .or_else(|| actions.iter().find(|action| action.is_configured()))
             .map(|action| action.command_id.clone());
-        let mut menu =
-            titlebar_popup_menu_with_scroll_behavior(menu, width, max_height, scrollable)
-                .check_side(Side::Right);
-
-        if actions.is_empty() {
-            menu = menu.menu_element_with_disabled(
-                Box::new(ConfigureGpuiTitlebarActions),
-                true,
-                move |_, _| titlebar_popup_empty_menu_row("No Actions configured".to_string()),
-            );
-        } else {
-            for (action_index, action) in actions.iter().enumerate() {
-                let row = action.clone();
-                let checked = active_command_id.as_deref() == Some(row.command_id.as_str());
-                menu = menu.menu_element_with_check(
-                    checked,
-                    Box::new(RunGpuiTitlebarAction {
-                        action_index: action_index as u64,
-                    }),
-                    move |_, _| titlebar_popup_action_menu_row(row.clone()),
-                );
-            }
-        }
-
-        menu.separator()
-            .menu_element(Box::new(ConfigureGpuiTitlebarActions), move |_, _| {
-                titlebar_popup_standard_menu_row(
-                    TITLEBAR_ICON_SETTINGS,
-                    TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
-                    "Configure".to_string(),
-                    false,
-                )
-            })
+        let global_actions = self.visible_gpui_titlebar_global_actions();
+        let menu = titlebar_popup_menu_with_scroll_behavior(menu, width, max_height, scrollable)
+            .check_side(Side::Right);
+        super::actions_menu_rows::titlebar_actions_menu_rows(
+            menu,
+            &actions,
+            active_command_id.as_deref(),
+            &global_actions,
+        )
     }
 
     pub(crate) fn build_gpui_titlebar_git_popup_menu(

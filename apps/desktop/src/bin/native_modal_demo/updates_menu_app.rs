@@ -1,5 +1,6 @@
 //! Stand-ins for the few `crate::app` items the top bar's Updates rows use
-//! (app/titlebar/updates_menu_rows.rs), so the demo draws those rows from the app's own file.
+//! (app/titlebar/updates_menu_rows.rs) and the Start menu's rows use
+//! (app/titlebar/actions_menu_rows.rs), so the demo draws those rows from the app's own files.
 //! Colours are the app's dark-theme values.
 pub(crate) mod actions {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, gpui::Action)]
@@ -14,6 +15,26 @@ pub(crate) mod actions {
         pub(crate) id: String,
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, gpui::Action)]
+    #[action(namespace = ghostex_gpui, no_json)]
+    pub(crate) struct RunGpuiTitlebarAction {
+        pub(crate) action_index: u64,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, gpui::Action)]
+    #[action(namespace = ghostex_gpui, no_json)]
+    pub(crate) struct RunGpuiTitlebarGlobalAction {
+        pub(crate) command_id: String,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, gpui::Action)]
+    #[action(namespace = ghostex_gpui, no_json)]
+    pub(crate) struct ConfigureGpuiTitlebarActions;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, gpui::Action)]
+    #[action(namespace = ghostex_gpui, no_json)]
+    pub(crate) struct CopyGpuiTitlebarGitBranch;
+
     #[derive(Clone, Debug, PartialEq, Eq, gpui::Action)]
     #[action(namespace = ghostex_gpui, no_json)]
     pub(crate) struct DismissGpuiTitlebarUpdateFailure {
@@ -24,6 +45,10 @@ pub(crate) mod actions {
 
 pub(crate) mod consts {
     pub(crate) const TITLEBAR_ICON_DOWNLOAD: &str = "titlebar/download.svg";
+    pub(crate) const TITLEBAR_ICON_SETTINGS: &str = "titlebar/settings.svg";
+    pub(crate) const TITLEBAR_POPUP_ACTION_ROW_HEIGHT: f32 = 44.0;
+    pub(crate) const TITLEBAR_POPUP_ACTION_PREVIEW_TEXT_SIZE: f32 = 11.0;
+    pub(crate) const TITLEBAR_POPUP_GIT_SECTION_LABEL_HEIGHT: f32 = 22.0;
     pub(crate) const TITLEBAR_POPUP_MENU_ITEM_PADDING_X: f32 = 10.0;
     pub(crate) const TITLEBAR_POPUP_MENU_ROW_HEIGHT: f32 = 34.0;
     pub(crate) const TITLEBAR_POPUP_MENU_ROW_ICON_SIZE: f32 = 14.0;
@@ -101,6 +126,107 @@ pub(crate) mod helpers {
                     ),
             )
             .child(div().child(label))
+    }
+
+    /// The app's `GpuiTitlebarAction`, cut to what the Start menu's rows read.
+    #[derive(Clone, Debug)]
+    pub(crate) struct GpuiTitlebarAction {
+        pub(crate) command_id: String,
+        pub(crate) name: String,
+        pub(crate) icon_path: &'static str,
+        /// The command or URL; empty for an Action with neither yet.
+        pub(crate) preview: String,
+    }
+
+    /// The app's `titlebar_popup_empty_menu_row`.
+    pub(crate) fn titlebar_popup_empty_menu_row(label: String) -> impl IntoElement {
+        h_flex()
+            .flex_1()
+            .min_h(px(TITLEBAR_POPUP_MENU_ROW_HEIGHT))
+            .items_center()
+            .text_size(px(TITLEBAR_POPUP_MENU_ROW_TEXT_SIZE))
+            .text_color(rgb(0xffffff).opacity(0.42))
+            .child(label)
+    }
+
+    /// The app's `titlebar_popup_git_section` (a disabled heading row).
+    pub(crate) fn titlebar_popup_git_section(
+        menu: gpui_component::menu::PopupMenu,
+        label: impl Into<gpui::SharedString>,
+    ) -> gpui_component::menu::PopupMenu {
+        let label = label.into();
+        menu.menu_element_with_disabled(
+            Box::new(super::actions::CopyGpuiTitlebarGitBranch),
+            true,
+            move |_, _| {
+                h_flex()
+                    .w_full()
+                    .min_h(px(TITLEBAR_POPUP_GIT_SECTION_LABEL_HEIGHT))
+                    .items_center()
+                    .text_size(px(11.0))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(rgb(0xffffff).opacity(0.55))
+                    .child(label.clone())
+            },
+        )
+    }
+
+    /// The app's `titlebar_popup_action_menu_row`: icon, name, and the command or URL below it.
+    pub(crate) fn titlebar_popup_action_menu_row(action: GpuiTitlebarAction) -> impl IntoElement {
+        use gpui::prelude::FluentBuilder as _;
+        let unconfigured = action.preview.is_empty();
+        let preview = if unconfigured {
+            "Set the command".to_string()
+        } else {
+            action.preview.clone()
+        };
+        h_flex()
+            .min_w_0()
+            .flex_1()
+            .overflow_hidden()
+            .min_h(px(TITLEBAR_POPUP_ACTION_ROW_HEIGHT))
+            .items_start()
+            .gap(px(10.0))
+            .py(px(6.0))
+            .text_color(titlebar_popup_menu_foreground())
+            .child(
+                div()
+                    .flex()
+                    .w(px(TITLEBAR_POPUP_MENU_ROW_ICON_SIZE))
+                    .pt(px(1.0))
+                    .justify_center()
+                    .child(
+                        svg()
+                            .size(px(TITLEBAR_POPUP_MENU_ROW_ICON_SIZE))
+                            .path(action.icon_path)
+                            .text_color(rgb(0xffffff).opacity(0.84)),
+                    ),
+            )
+            .child(
+                gpui_component::v_flex()
+                    .min_w(px(0.0))
+                    .flex_1()
+                    .overflow_hidden()
+                    .gap(px(1.0))
+                    .child(
+                        div()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .text_size(px(TITLEBAR_POPUP_MENU_ROW_TEXT_SIZE))
+                            .line_height(px(16.0))
+                            .child(action.name.clone()),
+                    )
+                    .child(
+                        div()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .text_size(px(TITLEBAR_POPUP_ACTION_PREVIEW_TEXT_SIZE))
+                            .line_height(px(14.0))
+                            .text_color(rgb(0xffffff).opacity(0.48))
+                            .when(unconfigured, |this| this.italic())
+                            .child(preview),
+                    ),
+            )
     }
 }
 
