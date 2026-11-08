@@ -260,7 +260,7 @@ How to use this file:
 - **Work area tint in light mode** `windowGlassWorkAreaTintLight` (number default 97): How much of the desktop the work area hides in light mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it.
 - **Show active pane outline** `showActivePaneOutline` (boolean, default false) [advanced]: Show an outline around the currently focused pane.
 - **Active pane outline colour** `workspaceActivePaneBorderColor` (text, default #3b82f6) [advanced]: Color of the outline around the currently focused pane.
-- **Frame the work area** `workAreaFrame` (boolean, default false): Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge. Only on macOS.
+- **Frame the work area** `workAreaFrame` (boolean, default true): Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge. Only on macOS.
 - **Pane gap** `workspacePaneGap` (number default 0): Gap in pixels between split panes in the Agents view.
 - **Custom dark mode depth (set by Colourfulness)** `customSidebarTitlebarBackgroundDarknessPercent` (number 85 to 100 default 96): How deep the custom dark mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.
 - **Custom light mode depth (set by Colourfulness)** `customSidebarTitlebarLightBackgroundLightnessPercent` (number default 96): How deep the custom light mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.

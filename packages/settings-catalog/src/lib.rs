@@ -127,6 +127,21 @@ pub fn migrate_chat_view_default(settings: &mut serde_json::Map<String, serde_js
     }
 }
 
+/// Writes `workAreaFrame` false into the settings of someone who already had a settings file when the
+/// frame became on by default, so their work area keeps the edge-to-edge look it had. Returns whether it
+/// changed anything; a saved choice (either way) is left alone.
+///
+/// CDXC:Workarea 2026-11-08 WHY: stored settings leave a key out until it is saved, so an existing user who never touched Frame the work area has no `workAreaFrame` in the file, and the new default (on) would silently frame their window. The desktop runs this once, behind a marker file, at start-up when the settings file already exists (`migrate_work_area_frame_default_once`); a new install has no file then, so it gets the default.
+pub fn keep_work_area_frame_off_for_existing_settings(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    if settings.contains_key("workAreaFrame") {
+        return false;
+    }
+    settings.insert("workAreaFrame".to_string(), serde_json::Value::Bool(false));
+    true
+}
+
 /// Rows a page folds into its collapsed Advanced section (`isAdvancedMainSetting`).
 pub fn is_advanced_setting(key: &str) -> bool {
     data::ADVANCED_MAIN_SETTING_KEYS.contains(&key)
@@ -144,6 +159,50 @@ pub fn general_group_setting_keys(group: &str) -> &'static [&'static str] {
         .find(|(id, _)| *id == group)
         .map(|(_, keys)| *keys)
         .unwrap_or(&[])
+}
+
+#[cfg(test)]
+mod work_area_frame_default_tests {
+    use super::{default_value, keep_work_area_frame_off_for_existing_settings};
+    use serde_json::{json, Map, Value};
+
+    fn migrated(value: Value) -> (bool, Value) {
+        let mut settings: Map<String, Value> = serde_json::from_value(value).unwrap();
+        let changed = keep_work_area_frame_off_for_existing_settings(&mut settings);
+        (changed, Value::Object(settings))
+    }
+
+    #[test]
+    fn frame_is_on_by_default() {
+        assert_eq!(
+            default_value("workAreaFrame"),
+            Some(&crate::json::J::Bool(true))
+        );
+    }
+
+    #[test]
+    fn existing_settings_without_the_key_keep_the_frame_off() {
+        assert_eq!(
+            migrated(json!({"sidebarTheme": "dark"})),
+            (
+                true,
+                json!({"sidebarTheme": "dark", "workAreaFrame": false})
+            )
+        );
+        assert_eq!(migrated(json!({})), (true, json!({"workAreaFrame": false})));
+    }
+
+    #[test]
+    fn a_saved_choice_is_kept() {
+        assert_eq!(
+            migrated(json!({"workAreaFrame": true})),
+            (false, json!({"workAreaFrame": true}))
+        );
+        assert_eq!(
+            migrated(json!({"workAreaFrame": false})),
+            (false, json!({"workAreaFrame": false}))
+        );
+    }
 }
 
 #[cfg(test)]

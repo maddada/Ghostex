@@ -14,7 +14,10 @@ use crate::app::helpers::*;
 /// CDXC:Workarea 2026-11-05 WHY:
 /// The gutter is 6pt on every side, enough to read the card as its own surface without taking room from the work area. The card's radius is the window's corner radius less the gutter (10.5pt), so the two corners run at the same distance, and it stays 10.5pt in full screen, where the window has no corner; what sits inside the card's 1pt border rounds at 9.5pt. The border is the chrome ink at 6% in dark mode and under dark glass and the theme's divider line in light mode, and the shadow is light. The card keeps its background and the glass keeps its tints, and the frame stays with the sidebar hidden and in full screen. macOS only: elsewhere the work area's web pages cannot be clipped to the card's corners (packages/settings-catalog/src/availability.rs).
 /// SEE-ALSO: app/element/work_area_frame.rs (the card and its glass gutter), app/element/window_corner_pane.rs (panes round to the card), native/macos/GpuiWindowCorners.h (web pages clip to the card).
-static WORK_AREA_FRAME: AtomicBool = AtomicBool::new(false);
+///
+/// CDXC:Workarea 2026-11-08 DECISION:
+/// User: "make frame around work area toggle enabled by default for new users please". Supersedes the off default above: a new install starts with the frame on, and anyone who already had a settings file keeps it off, because the first start of this version writes `workAreaFrame` false into their file (shared_settings/work_area_frame_default.rs). The setting is read as on when the file does not carry it.
+static WORK_AREA_FRAME: AtomicBool = AtomicBool::new(true);
 
 /// The gutter between the card and the window's edges (and the sidebar), in points.
 pub(crate) const WORK_AREA_FRAME_MARGIN: f32 = 6.0;
@@ -30,13 +33,13 @@ pub(crate) const WORK_AREA_FRAME_RADIUS: f32 = 16.5 - WORK_AREA_FRAME_MARGIN;
 pub(crate) const WORK_AREA_FRAME_INNER_RADIUS: f32 =
     WORK_AREA_FRAME_RADIUS - WORK_AREA_FRAME_BORDER;
 
-/// Reads `workAreaFrame` (off when unset).
+/// Reads `workAreaFrame` (on when unset: the catalog default).
 pub(crate) fn refresh_work_area_frame(object: &serde_json::Map<String, serde_json::Value>) {
     WORK_AREA_FRAME.store(
         object
             .get("workAreaFrame")
             .and_then(serde_json::Value::as_bool)
-            == Some(true),
+            .unwrap_or(true),
         Ordering::Relaxed,
     );
 }

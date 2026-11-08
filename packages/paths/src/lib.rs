@@ -125,6 +125,11 @@ impl GhostexPaths {
         self.state_dir.join("terminal-ghostty-config-migrated")
     }
 
+    /// Written once the work area frame's on-by-default change has run over an existing settings file.
+    pub fn work_area_frame_default_marker_file(&self) -> PathBuf {
+        self.state_dir.join("work-area-frame-default-migrated")
+    }
+
     pub fn gxserver_config_dir(&self) -> PathBuf {
         self.config_dir.join("gxserver")
     }

@@ -284,6 +284,9 @@ fn main() {
     // Before anything reads or writes terminal settings, so the first config Ghostex
     // terminals load is the copied one.
     shared_settings::ghostty_config_migration::migrate_terminal_config_from_ghostty_once();
+    // Frame the work area is on for a new install; an existing settings file keeps it off.
+    // Before the first settings read, so a new install (no file yet) is told from an existing one.
+    shared_settings::work_area_frame_default::migrate_work_area_frame_default_once();
     // Dictate's old default chord moves to Ctrl+Alt+Space once (voice_agent/dictate_hotkey.rs).
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     app::voice_agent::dictate_hotkey::move_old_default_chord_once();

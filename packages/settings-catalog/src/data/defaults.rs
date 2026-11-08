@@ -881,7 +881,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ),
     ("showActivePaneOutline", J::Bool(false)),
     ("workspaceActivePaneBorderColor", J::Str("#3b82f6")),
-    ("workAreaFrame", J::Bool(false)),
+    // CDXC:Workarea 2026-11-08 DECISION: User: "make frame around work area toggle enabled by default for new users please". On for a new install; a settings file that already exists keeps the look it has (off) because `keep_work_area_frame_off_for_existing_settings` writes `workAreaFrame` false into it once, at the first start of the version that flips this default. Supersedes 2026-11-05's off default (GitHub issue #407, helpers/work_area_frame.rs).
+    ("workAreaFrame", J::Bool(true)),
     ("windowGlass", J::Str("auto")),
     ("windowGlassSource", J::Str("desktopAndWindows")),
     ("windowGlassImagePlacement", J::Str("static")),
