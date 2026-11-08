@@ -41,10 +41,17 @@ const PING_EVERY: Duration = Duration::from_secs(25);
 const RETRY_DELAYS: [u64; 6] = [1, 2, 5, 10, 20, 30];
 const MAX_HTTP_BODY: usize = 32 << 20;
 
+/// How often a live share's guest page check is looked at (it downloads again once an hour,
+/// `page_pin::RECHECK_MS`).
+const PAGE_CHECK_EVERY: Duration = Duration::from_secs(5 * 60);
+
 pub(crate) fn start_collab_connector(state: Arc<AppState>) {
+    super::collab_http::approvals::start(state.clone());
+    start_page_checks(state.clone());
     tokio::spawn(async move {
         let mut failures = 0usize;
         loop {
+            super::collab_http::end_shares_of_missing_chats(&state);
             let config = collab::read_config(&state.paths);
             let wanted = config.enabled && !shares::list().is_empty();
             if !wanted {
@@ -53,7 +60,16 @@ pub(crate) fn start_collab_connector(state: Arc<AppState>) {
                 let _ = tokio::time::timeout(Duration::from_secs(60), collab::changed()).await;
                 continue;
             }
-            let relay = collab::config::relay_url(&config);
+            let relay = collab::config::relay_url();
+            // CDXC:Collab 2026-11-08 DECISION:
+            // User (#495, Q1722): the guest page is pinned to this release; a relay serving any other page gets no shared chat registered, so no guest reaches one through it.
+            if !collab::page_pin::ensure_verified(&relay).await {
+                CONNECTED.store(false, Ordering::Relaxed);
+                republish_all(&state);
+                let wait = Duration::from_millis(collab::page_pin::RETRY_MS as u64);
+                let _ = tokio::time::timeout(wait, collab::changed()).await;
+                continue;
+            }
             let url = format!("{}/h", relay.replacen("http", "ws", 1));
             match tokio_tungstenite::connect_async(url.as_str()).await {
                 Ok((socket, _)) => {
@@ -71,6 +87,23 @@ pub(crate) fn start_collab_connector(state: Arc<AppState>) {
                     let _ =
                         tokio::time::timeout(Duration::from_secs(wait), collab::changed()).await;
                 }
+            }
+        }
+    });
+}
+
+/// While a chat is shared, the relay's guest page is downloaded and checked again every hour;
+/// a failed check wakes the connector, which then drops the relay connection.
+fn start_page_checks(state: Arc<AppState>) {
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(PAGE_CHECK_EVERY).await;
+            let config = collab::read_config(&state.paths);
+            if config.enabled
+                && !shares::list().is_empty()
+                && !collab::page_pin::ensure_verified(&collab::config::relay_url()).await
+            {
+                collab::notify_changed();
             }
         }
     });
@@ -177,6 +210,7 @@ async fn run(
             }
             _ = ping.tick() => {
                 let _ = relay_tx.send(json!({"op": "ping"}));
+                super::collab_http::end_shares_of_missing_chats(state);
                 if !reconcile(state, &relay_tx, &mut routes, &mut conns) { break; }
             }
         }
@@ -197,7 +231,12 @@ fn reconcile(
     routes: &mut HashMap<String, String>,
     conns: &mut HashMap<u64, Conn>,
 ) -> bool {
-    let enabled = collab::read_config(&state.paths).enabled;
+    let enabled = collab::read_config(&state.paths).enabled
+        && (collab::page_pin::unpinned()
+            || matches!(
+                collab::page_pin::state(),
+                collab::page_pin::PinState::Verified { .. }
+            ));
     let live: Vec<shares::StoredShare> = if enabled { shares::list() } else { Vec::new() };
     let wanted: HashMap<String, &shares::StoredShare> = live
         .iter()
@@ -370,7 +409,8 @@ fn guest_message(
                 "t": "intro",
                 "title": title,
                 "owner": owner,
-                "needsCode": !share.code.is_empty(),
+                "needsCode": true,
+                "codeDigits": shares::CODE_DIGITS,
                 "mode": share.mode.as_str(),
             }));
             true
@@ -390,11 +430,11 @@ fn guest_message(
                 reply(json!({"t": "denied", "reason": "name"}));
                 return true;
             }
-            if !share.code.is_empty() && shares::code_locked(&share.id) {
+            if shares::code_locked(&share.id) {
                 reply(json!({"t": "denied", "reason": "locked"}));
                 return false;
             }
-            if !share.code.is_empty() {
+            {
                 let typed = message["code"]
                     .as_str()
                     .unwrap_or_default()
@@ -421,6 +461,15 @@ fn guest_message(
             match shares::join(&share.id, &name, &device) {
                 Ok(viewer) => {
                     collab::audit::record(&share, &title, "joined", &viewer.name, None, 0, None);
+                    let (joined_state, joined_share, joined_name) =
+                        (state.clone(), share.clone(), viewer.name.clone());
+                    tokio::task::spawn_blocking(move || {
+                        super::collab_http::notify_guest_joined(
+                            &joined_state,
+                            &joined_share,
+                            &joined_name,
+                        )
+                    });
                     reply(json!({
                         "t": "welcome",
                         "viewerId": viewer.id,

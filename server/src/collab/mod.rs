@@ -10,6 +10,7 @@
 
 pub mod audit;
 pub mod config;
+pub mod page_pin;
 pub mod shares;
 pub mod tunnel;
 
@@ -17,6 +18,27 @@ use std::sync::OnceLock;
 
 pub use config::{apply_patch, read_config, update_config, CollabConfig, GuestMode};
 pub use shares::insert_chat_collab;
+
+/// Where Collab keeps its files: gxserver's state folder, or one private folder per test run, so
+/// tests never read or end the real shares.
+pub(crate) fn state_paths() -> crate::paths::GxserverPaths {
+    #[cfg(test)]
+    {
+        static HOME: OnceLock<tempfile::TempDir> = OnceLock::new();
+        let home = HOME.get_or_init(|| tempfile::tempdir().expect("collab test home"));
+        crate::paths::get_gxserver_paths(Some(home.path().to_path_buf()))
+    }
+    #[cfg(not(test))]
+    crate::paths::get_gxserver_paths(None)
+}
+
+/// The 11.0.1 move (GitHub #495): an 11.0.0 `collab.json` or share file ends every share and
+/// turns Collab off, once. Run at gxserver start, before anything reads a share.
+pub fn migrate_at_start(paths: &crate::paths::GxserverPaths) {
+    if config::migrate(paths, &[shares::SHARES_FILE, shares::HELD_FILE]) {
+        eprintln!("[collab] 11.0.1: ended the shares made before Collab's security update and turned Collab off");
+    }
+}
 
 /// Ghostex's own share relay, beside the Easy Connect relay (relay-eu.ghostex.dev).
 pub const GHOSTEX_SHARE_RELAY_URL: &str = "https://share.ghostex.dev";

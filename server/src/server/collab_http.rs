@@ -1,15 +1,25 @@
 //! Ghostex Collab's calls.
 //!
 //! `/api/collab` is the owner's (Settings > Collab, the chat's Share popover, the CLI, the phone):
-//! - `op: "read"` (default): the choices, the relay and every share with its link, code, mode and
-//!   viewers.
-//! - `op: "set"`: `patch` holds the choices to change (`enabled`, `expiry`, `requireCode`, `mode`,
-//!   `ownerName`). Turning Ghostex Collab off ends every share.
-//! - `op: "share"`: `projectId`, `sessionId`; the chat's share, made with the choices if it has none.
-//! - `op: "stop"` (`shareId`), `op: "stopAll"`, `op: "setMode"` (`shareId`, `mode`),
-//!   `op: "removeViewer"` (`shareId`, `viewerId`).
+//! - `op: "read"` (default): the choices, the relay, the guest page check (`guestPage`) and every
+//!   share with its mode, expiry and viewers. Never a link or a code.
+//! - `op: "set"`: `patch` holds the choices to change (`enabled`, `expiry` hour/fourHours/day,
+//!   `mode` approve/view, `ownerName`). Turning Collab on needs the owner's signed approval;
+//!   turning it off ends every share. `relayUrl`, `requireCode: false` and a Send default are
+//!   refused.
+//! - `op: "share"`: `projectId`, `sessionId`; the chat's share, made with the choices if it has
+//!   none, with its `link` and `code`. Needs the owner's signed approval every time (it is also
+//!   how the owner sees an existing share's link again), and a relay serving the pinned page.
+//! - `op: "stop"` (`shareId`), `op: "stopAll"`, `op: "removeViewer"` (`shareId`, `viewerId`):
+//!   always allowed. `op: "setMode"` (`shareId`, `mode`): to Send, or from View only to Ask me,
+//!   needs the owner's signed approval; narrowing doesn't.
 //! - `op: "resolve"`: `projectId`, `sessionId`, `heldId`, `action` (`send`, `edit` or `decline`) and
 //!   for `send` an optional edited `text`: the owner's answer to a guest message held for approval.
+//!   `send` needs the owner's signed approval.
+//!
+//! A call that needs an approval answers `approvalRequired` with the request (GitHub #495,
+//! `ai/security-tokens-and-approvals.md`); gxserver makes the change itself once the owner
+//! approves, and the same call repeated with `approvalId` answers with its result.
 //!
 //! `/api/collabTyping` (`projectId`, `sessionId`, `typing`) is sent by the owner's chat and a guest's
 //! while they type into a shared chat.
@@ -20,6 +30,10 @@
 use super::*;
 
 use crate::collab::{self, shares, GuestMode};
+use crate::security::{ActionRequest, PresenceGrant, PresenceOutcome, Principal, SensitiveAction};
+use ghostex_gx_protocol::approval::APPROVAL_ID_PARAM;
+
+use super::security_http::{presence_outcome, presence_outcome_response};
 
 pub(crate) const COLLAB_ENDPOINTS: &[&str] = &[
     "/api/collab",
@@ -73,7 +87,7 @@ fn text(params: &Map<String, Value>, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-fn session_title(state: &Arc<AppState>, project_id: &str, session_id: &str) -> Option<String> {
+fn session_title(state: &AppState, project_id: &str, session_id: &str) -> Option<String> {
     let db = open_gxserver_database(&state.paths).ok()?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let session = repository.get_session(project_id, session_id).ok()??;
@@ -88,7 +102,7 @@ fn session_title(state: &Arc<AppState>, project_id: &str, session_id: &str) -> O
 }
 
 /// A chat's title for its share, also what the guest's join page names.
-pub(crate) fn share_title(state: &Arc<AppState>, share: &shares::StoredShare) -> String {
+pub(crate) fn share_title(state: &AppState, share: &shares::StoredShare) -> String {
     session_title(state, &share.project_id, &share.session_id)
         .unwrap_or_else(|| "A chat".to_string())
 }
@@ -168,6 +182,7 @@ fn note_typing(
 
 pub(crate) async fn handle_collab_http(
     state: &Arc<AppState>,
+    caller: &Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -208,17 +223,50 @@ pub(crate) async fn handle_collab_http(
         }
         return ok(endpoint_path, request_id, json!({}));
     }
-    match handle_owner(state, &params).await {
+    // A repeated call for an approval gxserver already acted on gets that answer back.
+    if let Some(approval_id) = text(&params, APPROVAL_ID_PARAM) {
+        if let Some(answer) = approvals::claim_retry(&approval_id, caller).await {
+            return owner_answer(state, caller, endpoint_path, request_id, &params, answer);
+        }
+    }
+    let answer = handle_owner(state, caller, &params).await;
+    owner_answer(state, caller, endpoint_path, request_id, &params, answer)
+}
+
+fn owner_answer(
+    state: &Arc<AppState>,
+    caller: &Principal,
+    endpoint_path: String,
+    request_id: String,
+    params: &Map<String, Value>,
+    answer: OwnerResult,
+) -> RoutedResponse {
+    match answer {
         Ok(result) => ok(endpoint_path, request_id, result),
-        Err((code, message)) => fail(
+        Err(OwnerError::Presence(outcome)) => {
+            if let PresenceOutcome::Pending(request) = &outcome {
+                approvals::await_approval(state, &request.id, caller, params);
+            }
+            match presence_outcome_response(outcome, &endpoint_path, &request_id) {
+                Err(response) => response,
+                // A grant never comes back as an error.
+                Ok(_) => fail(
+                    endpoint_path,
+                    request_id,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internalError",
+                    "The approval was not used.",
+                ),
+            }
+        }
+        Err(OwnerError::Refused(code, message)) => fail(
             endpoint_path,
             request_id,
-            if code == "badRequest" || code == "collabOff" {
-                StatusCode::BAD_REQUEST
-            } else if code == "notFound" {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
+            match code {
+                "badRequest" | "collabOff" => StatusCode::BAD_REQUEST,
+                "notFound" => StatusCode::NOT_FOUND,
+                "guestPageUnverified" => StatusCode::SERVICE_UNAVAILABLE,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
             },
             code,
             message,
@@ -226,11 +274,25 @@ pub(crate) async fn handle_collab_http(
     }
 }
 
-type OwnerResult = Result<Value, (&'static str, String)>;
+/// Why an owner call did not go through: refused outright, or waiting for (or denied) the
+/// owner's signed approval.
+#[derive(Clone, Debug)]
+pub(crate) enum OwnerError {
+    Refused(&'static str, String),
+    Presence(PresenceOutcome),
+}
+
+impl From<(&'static str, String)> for OwnerError {
+    fn from((code, message): (&'static str, String)) -> Self {
+        Self::Refused(code, message)
+    }
+}
+
+type OwnerResult = Result<Value, OwnerError>;
 
 fn read_all(state: &Arc<AppState>) -> Value {
     let config = collab::read_config(&state.paths);
-    let relay = collab::config::relay_url(&config);
+    let relay = collab::config::relay_url();
     let list: Vec<Value> = shares::list()
         .iter()
         .map(|share| shares::owner_view(share, &relay, Some(share_title(state, share))))
@@ -239,36 +301,99 @@ fn read_all(state: &Arc<AppState>) -> Value {
         "config": {
             "enabled": config.enabled,
             "expiry": config.expiry.as_str(),
-            "requireCode": config.require_code,
+            "requireCode": true,
             "mode": config.mode.as_str(),
             "ownerName": config.owner_name,
             "ownerDisplayName": collab::config::owner_display_name(&config),
         },
         "relay": relay,
         "relayConnected": super::collab_connector::relay_connected(),
+        "guestPage": collab::page_pin::status_json(),
         "shares": list,
     })
 }
 
-fn share_of(params: &Map<String, Value>) -> Result<shares::StoredShare, (&'static str, String)> {
+fn share_of(params: &Map<String, Value>) -> Result<shares::StoredShare, OwnerError> {
     if let Some(id) = text(params, "shareId") {
-        return shares::get(&id).ok_or(("notFound", "This chat is no longer shared.".to_string()));
+        return shares::get(&id)
+            .ok_or_else(|| ("notFound", "This chat is no longer shared.".to_string()).into());
     }
     match (text(params, "projectId"), text(params, "sessionId")) {
         (Some(project_id), Some(session_id)) => shares::for_session(&project_id, &session_id)
-            .ok_or(("notFound", "This chat is no longer shared.".to_string())),
+            .ok_or_else(|| ("notFound", "This chat is no longer shared.".to_string()).into()),
         _ => Err((
             "badRequest",
             "shareId, or projectId and sessionId, is required.".to_string(),
-        )),
+        )
+            .into()),
     }
 }
 
-async fn handle_owner(state: &Arc<AppState>, params: &Map<String, Value>) -> OwnerResult {
+fn session_exists(state: &AppState, project_id: &str, session_id: &str) -> Option<bool> {
+    let db = open_gxserver_database(&state.paths).ok()?;
+    DomainRepository::new(&db, state.metadata.server_id.as_str())
+        .get_session(project_id, session_id)
+        .ok()
+        .map(|session| session.is_some())
+}
+
+/// The gate (`require_owner_presence`, GitHub #495) for one sensitive Collab change: the grant,
+/// or the outcome to answer with. The card's words are gxserver's own, from the chat's title and
+/// the stored share; `params` is exactly what the call acts on.
+fn gate(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+    action: SensitiveAction,
+    target: &str,
+    summary: String,
+    detail: String,
+) -> Result<PresenceGrant, OwnerError> {
+    let request = ActionRequest::new(action, summary)
+        .target(target)
+        .detail(detail)
+        .params(Value::Object(params.clone()));
+    let body = json!({ "params": params });
+    match presence_outcome(state, caller, request, &body) {
+        PresenceOutcome::Granted(grant) => Ok(grant),
+        other => Err(OwnerError::Presence(other)),
+    }
+}
+
+/// After an approved change ran: the security event the audit log and the notifications read.
+fn performed(state: &AppState, caller: &Principal, grant: &PresenceGrant, ok: bool) {
+    // TODO(#495 audit log): call `audit::record(action, caller, outcome, approval)` here once the
+    // audit-log thread's module lands. Until then its log reads this same change from the
+    // `SensitiveActionPerformed` event below (`state.security.subscribe()`).
+    state.security.record_performed(
+        grant.approval.action.clone(),
+        grant.approval.target.clone(),
+        caller,
+        ok,
+    );
+}
+
+fn quoted(title: &str) -> String {
+    format!("\u{201c}{title}\u{201d}")
+}
+
+fn ends_in_words(ms: i64) -> String {
+    match ms / 3_600_000 {
+        0 | 1 => "an hour".to_string(),
+        24 => "a day".to_string(),
+        hours => format!("{hours} hours"),
+    }
+}
+
+async fn handle_owner(
+    state: &Arc<AppState>,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> OwnerResult {
     let op = text(params, "op").unwrap_or_else(|| "read".to_string());
     let saved = |result: std::io::Result<collab::CollabConfig>| {
         result.map_err(|error| {
-            (
+            OwnerError::Refused(
                 "internalError",
                 format!("Ghostex couldn't save Ghostex Collab's settings: {error}"),
             )
@@ -278,9 +403,30 @@ async fn handle_owner(state: &Arc<AppState>, params: &Map<String, Value>) -> Own
         "read" => {}
         "set" => {
             let patch = params.get("patch").cloned().unwrap_or(Value::Null);
+            let current = collab::read_config(&state.paths);
+            let mut next = current.clone();
+            collab::apply_patch(&mut next, &patch).map_err(|message| ("badRequest", message))?;
+            // CDXC:Collab 2026-11-08 DECISION:
+            // User (#495): turning Collab on needs the biometric/PIN approval; turning it off, and the defaults that can only narrow a share (an hour to a day, Ask me or View only), never do.
+            let grant = if next.enabled && !current.enabled {
+                Some(gate(
+                    state,
+                    caller,
+                    params,
+                    SensitiveAction::CollabEnable,
+                    "collab",
+                    "Turn on Ghostex Collab".to_string(),
+                    "Chats can then be shared through links. Each share, and each guest message, still needs your approval.".to_string(),
+                )?)
+            } else {
+                None
+            };
             let next = saved(collab::update_config(&state.paths, |config| {
-                collab::apply_patch(config, &patch)
+                let _ = collab::apply_patch(config, &patch);
             }))?;
+            if let Some(grant) = &grant {
+                performed(state, caller, grant, true);
+            }
             if !next.enabled {
                 for share in shares::stop_all() {
                     republish(state, &share);
@@ -297,7 +443,8 @@ async fn handle_owner(state: &Arc<AppState>, params: &Map<String, Value>) -> Own
                 return Err((
                     "collabOff",
                     "Turn on Ghostex Collab in Settings > Collab to share a chat.".to_string(),
-                ));
+                )
+                    .into());
             }
             let (Some(project_id), Some(session_id)) =
                 (text(params, "projectId"), text(params, "sessionId"))
@@ -305,28 +452,69 @@ async fn handle_owner(state: &Arc<AppState>, params: &Map<String, Value>) -> Own
                 return Err((
                     "badRequest",
                     "projectId and sessionId are required.".to_string(),
-                ));
+                )
+                    .into());
             };
-            if session_title(state, &project_id, &session_id).is_none()
-                && open_gxserver_database(&state.paths)
-                    .ok()
-                    .and_then(|db| {
-                        DomainRepository::new(&db, state.metadata.server_id.as_str())
-                            .get_session(&project_id, &session_id)
-                            .ok()
-                            .flatten()
-                    })
-                    .is_none()
-            {
-                return Err(("notFound", "That chat no longer exists.".to_string()));
+            if session_exists(state, &project_id, &session_id) != Some(true) {
+                return Err(("notFound", "That chat no longer exists.".to_string()).into());
             }
+            // Checked before the approval is asked for, so a paused relay costs no touch.
+            let relay = collab::config::relay_url();
+            if !collab::page_pin::ensure_verified(&relay).await {
+                let message = collab::page_pin::status_json()["message"]
+                    .as_str()
+                    .unwrap_or("The share relay's guest page couldn't be checked.")
+                    .to_string();
+                return Err(("guestPageUnverified", message).into());
+            }
+            let title = session_title(state, &project_id, &session_id)
+                .unwrap_or_else(|| "A chat".to_string());
+            let existing = shares::for_session(&project_id, &session_id);
+            // CDXC:Collab 2026-11-08 DECISION:
+            // User (#495): reading a share's link and code goes through the gate too, so it is the same approval as sharing: no read returns them, only the answer to an approved `share`.
+            let (summary, detail) = match &existing {
+                Some(share) => (
+                    format!("Show the link and code for {}", quoted(&title)),
+                    format!(
+                        "Whoever gets them can join the shared chat until {}.",
+                        chrono::DateTime::from_timestamp_millis(share.expires_at_ms.unwrap_or(0))
+                            .map(|at| at.with_timezone(&chrono::Local).format("%H:%M").to_string())
+                            .unwrap_or_else(|| "it ends".to_string())
+                    ),
+                ),
+                None => (
+                    format!("Share {} through a link", quoted(&title)),
+                    format!(
+                        "Anyone with the link and its code can follow this chat for {}{}.",
+                        ends_in_words(config.expiry.millis()),
+                        if config.mode == GuestMode::View {
+                            ", without writing"
+                        } else {
+                            " and write messages that wait for your approval"
+                        }
+                    ),
+                ),
+            };
+            let grant = gate(
+                state,
+                caller,
+                params,
+                SensitiveAction::CollabShareChat,
+                &session_id,
+                summary,
+                detail,
+            )?;
             let share = shares::share_session(&config, &project_id, &session_id);
+            performed(state, caller, &grant, true);
             republish(state, &share);
             collab::notify_changed();
-            let relay = collab::config::relay_url(&config);
-            return Ok(
-                json!({ "share": shares::owner_view(&share, &relay, Some(share_title(state, &share))) }),
-            );
+            let mut view = shares::owner_view(&share, &relay, Some(title));
+            if let (Some(view), Value::Object(secrets)) =
+                (view.as_object_mut(), shares::owner_secrets(&share, &relay))
+            {
+                view.extend(secrets);
+            }
+            return Ok(json!({ "share": view }));
         }
         "stop" => {
             let share = share_of(params)?;
@@ -346,7 +534,39 @@ async fn handle_owner(state: &Arc<AppState>, params: &Map<String, Value>) -> Own
                 .as_deref()
                 .and_then(GuestMode::parse)
                 .ok_or(("badRequest", "mode is send, approve or view.".to_string()))?;
+            let title = share_title(state, &share);
+            // Narrowing (to Ask me, or View only) is always allowed; letting guests write more
+            // needs the approval, Send most of all.
+            let grant = match (share.mode, mode) {
+                (from, to) if from == to => None,
+                (_, GuestMode::Send) => Some(gate(
+                    state,
+                    caller,
+                    params,
+                    SensitiveAction::CollabEnableSendMode,
+                    &share.session_id,
+                    format!(
+                        "Let guests of {} send messages straight to its agent",
+                        quoted(&title)
+                    ),
+                    "Their messages reach the agent without your approval, and the agent may act on them with your tools and logins.".to_string(),
+                )?),
+                (GuestMode::View, GuestMode::Approve) => Some(gate(
+                    state,
+                    caller,
+                    params,
+                    SensitiveAction::CollabChangeShare,
+                    &share.session_id,
+                    format!("Let guests of {} write messages", quoted(&title)),
+                    "Each message waits for your approval before it reaches the agent."
+                        .to_string(),
+                )?),
+                _ => None,
+            };
             shares::set_mode(&share.id, mode);
+            if let Some(grant) = &grant {
+                performed(state, caller, grant, true);
+            }
             republish(state, &share);
         }
         "removeViewer" => {
@@ -385,10 +605,45 @@ async fn handle_owner(state: &Arc<AppState>, params: &Map<String, Value>) -> Own
                 "edit" => "edited",
                 _ => "declined",
             };
+            let title = share_title(state, &share);
+            // CDXC:Collab 2026-11-08 DECISION:
+            // User (#495): approving a guest's message is a sensitive action ("approve guest messages" needs the biometric/PIN approval), so an agent holding a token can't wave a stranger's words through. Edit and Decline never send anything and stay free.
+            let grant = if action == "send" {
+                let held = shares::peek_held(&share.id, &held_id)
+                    .ok_or(("notFound", "That message was already answered.".to_string()))?;
+                let words = text(params, "text").unwrap_or_else(|| held.text.clone());
+                let (shown, _) = collab::split_image_references(&words);
+                let shown: String = shown.chars().take(600).collect();
+                let pictures =
+                    held.image_paths.len() + collab::split_image_references(&words).1.len();
+                Some(gate(
+                    state,
+                    caller,
+                    params,
+                    SensitiveAction::CollabApproveGuestMessage,
+                    &held_id,
+                    format!("Send {}\u{2019}s message to {}", held.name, quoted(&title)),
+                    format!(
+                        "{}{}{}",
+                        if words == held.text {
+                            ""
+                        } else {
+                            "Edited before sending. "
+                        },
+                        quoted(&shown),
+                        match pictures {
+                            0 => String::new(),
+                            1 => " With 1 picture.".to_string(),
+                            count => format!(" With {count} pictures."),
+                        }
+                    ),
+                )?)
+            } else {
+                None
+            };
             let held = shares::take_held(&share.id, &held_id, outcome)
                 .ok_or(("notFound", "That message was already answered.".to_string()))?;
             republish(state, &share);
-            let title = share_title(state, &share);
             let audit = |outcome: &str| {
                 collab::audit::record(
                     &share,
@@ -403,14 +658,17 @@ async fn handle_owner(state: &Arc<AppState>, params: &Map<String, Value>) -> Own
             return match action.as_str() {
                 "send" => {
                     let words = text(params, "text").unwrap_or_else(|| held.text.clone());
-                    deliver(
+                    let sent = deliver(
                         state,
                         &share,
                         &labelled_guest_text(&held.name, &words),
                         &held.image_paths,
                     )
-                    .await
-                    .map_err(|message| ("sendFailed", message))?;
+                    .await;
+                    if let Some(grant) = &grant {
+                        performed(state, caller, grant, sent.is_ok());
+                    }
+                    sent.map_err(|message| OwnerError::Refused("sendFailed", message))?;
                     audit("approved");
                     Ok(json!({ "sent": true }))
                 }
@@ -424,9 +682,212 @@ async fn handle_owner(state: &Arc<AppState>, params: &Map<String, Value>) -> Own
                 }
             };
         }
-        other => return Err(("badRequest", format!("Unknown op {other}."))),
+        other => return Err(("badRequest", format!("Unknown op {other}.")).into()),
     }
     Ok(read_all(state))
+}
+
+/// Approvals Collab asked for, finished by gxserver once the owner signs them.
+///
+/// CDXC:Collab 2026-11-08 WHY:
+/// The gate's contract has the caller repeat its call with `approvalId`. The chat's held-message card (desktop, web and phone, one chat core), the phone's sheet and an agent's CLI call would each need that wait-and-repeat loop; instead gxserver repeats the call itself, as that same caller, the moment the owner's signed approval arrives, so approving on the Mac or the phone is what makes the change. A caller that does repeat its call gets the same answer back (`claim_retry`), once the change ran, and never a second request.
+pub(crate) mod approvals {
+    use super::*;
+
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock, PoisonError};
+
+    /// How long a finished answer waits for its caller to repeat the call.
+    const KEEP_ANSWER_MS: u64 = 10 * 60_000;
+
+    #[derive(Default)]
+    struct Book {
+        /// Pending approvals, with the call to repeat once approved.
+        waiting: HashMap<String, (Principal, Map<String, Value>)>,
+        /// Approved calls gxserver is running now.
+        running: HashMap<String, Principal>,
+        /// Calls gxserver ran, with their answer.
+        done: HashMap<String, (Principal, OwnerResult, u64)>,
+    }
+
+    fn book() -> &'static Mutex<Book> {
+        static BOOK: OnceLock<Mutex<Book>> = OnceLock::new();
+        BOOK.get_or_init(Mutex::default)
+    }
+
+    fn with_book<T>(change: impl FnOnce(&mut Book) -> T) -> T {
+        let mut book = book().lock().unwrap_or_else(PoisonError::into_inner);
+        let now = crate::security::now_ms();
+        book.done
+            .retain(|_, (_, _, at)| now.saturating_sub(*at) < KEEP_ANSWER_MS);
+        change(&mut book)
+    }
+
+    fn same_caller(asked: &Principal, caller: &Principal) -> bool {
+        asked == caller || caller.is_owner_device()
+    }
+
+    pub(crate) fn await_approval(
+        _state: &AppState,
+        approval_id: &str,
+        caller: &Principal,
+        params: &Map<String, Value>,
+    ) {
+        let mut params = params.clone();
+        params.remove(APPROVAL_ID_PARAM);
+        with_book(|book| {
+            book.waiting
+                .insert(approval_id.to_string(), (caller.clone(), params));
+        });
+    }
+
+    /// A caller repeating its call with `approvalId`: the answer gxserver already got, waiting a
+    /// moment if it is running it now. `None` lets the call go through the gate as usual (the
+    /// caller then spends the approval itself, and gxserver won't).
+    pub(crate) async fn claim_retry(approval_id: &str, caller: &Principal) -> Option<OwnerResult> {
+        for _ in 0..100 {
+            let found = with_book(|book| {
+                if let Some((asked, answer, _)) = book.done.get(approval_id) {
+                    return Some(same_caller(asked, caller).then(|| answer.clone()));
+                }
+                if book.running.contains_key(approval_id) {
+                    return None;
+                }
+                // Still pending, or ours to spend: the call goes through the gate, which answers
+                // Pending again (and is awaited again) or spends the approval for this caller.
+                book.waiting.remove(approval_id);
+                Some(None)
+            });
+            match found {
+                Some(answer) => return answer,
+                None => tokio::time::sleep(Duration::from_millis(50)).await,
+            }
+        }
+        None
+    }
+
+    /// The answer stored for `approval_id`, for tests.
+    #[cfg(test)]
+    pub(crate) fn done_answer(approval_id: &str) -> Option<OwnerResult> {
+        with_book(|book| {
+            book.done
+                .get(approval_id)
+                .map(|(_, answer, _)| answer.clone())
+        })
+    }
+
+    /// Runs one approved call as the caller that asked; `false` when it wasn't awaited here (or a
+    /// repeated call took it first).
+    pub(crate) async fn finish(state: &Arc<AppState>, approval_id: &str) -> bool {
+        let Some((caller, mut params)) = with_book(|book| {
+            let entry = book.waiting.remove(approval_id)?;
+            book.running
+                .insert(approval_id.to_string(), entry.0.clone());
+            Some(entry)
+        }) else {
+            return false;
+        };
+        params.insert(APPROVAL_ID_PARAM.to_string(), json!(approval_id));
+        let answer = Box::pin(handle_owner(state, &caller, &params)).await;
+        if let Err(error) = &answer {
+            eprintln!("[collab] the approved change {approval_id} did not go through: {error:?}");
+        }
+        with_book(|book| {
+            book.running.remove(approval_id);
+            book.done.insert(
+                approval_id.to_string(),
+                (caller, answer, crate::security::now_ms()),
+            );
+        });
+        true
+    }
+
+    fn forget(approval_id: &str) {
+        with_book(|book| {
+            book.waiting.remove(approval_id);
+        });
+    }
+
+    /// Follows the approval stream for the life of gxserver.
+    pub(crate) fn start(state: Arc<AppState>) {
+        let mut events = state.security.subscribe();
+        tokio::spawn(async move {
+            loop {
+                match events.recv().await {
+                    Ok(crate::security::SecurityEvent::ApprovalApproved { request, .. }) => {
+                        let state = state.clone();
+                        tokio::spawn(async move {
+                            finish(&state, &request.id).await;
+                        });
+                    }
+                    Ok(
+                        crate::security::SecurityEvent::ApprovalDenied { request, .. }
+                        | crate::security::SecurityEvent::ApprovalExpired { request },
+                    ) => forget(&request.id),
+                    Ok(_) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        });
+    }
+}
+
+/// A guest joined a shared chat: a row in the owner's notifications (the Mac's and the phone's),
+/// beside the chat's live guest list in the Share popover.
+///
+/// CDXC:Collab 2026-11-08 DECISION:
+/// User (#495): "Notify when a guest joins". The row is filed under the shared chat, so it opens it, but never replaces that chat's unread rows (an approval waiting there must stay).
+pub(crate) fn notify_guest_joined(state: &AppState, share: &shares::StoredShare, guest: &str) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Ok(Some(session)) = repository.get_session(&share.project_id, &share.session_id) else {
+        return;
+    };
+    let title = share_title(state, share);
+    let subtitle = repository
+        .get_project(&share.project_id)
+        .ok()
+        .flatten()
+        .and_then(|project| project["name"].as_str().map(str::to_string))
+        .unwrap_or_default();
+    let row = crate::notification_feed::store::NewNotificationFeedRow {
+        project_id: share.project_id.clone(),
+        session_id: share.session_id.clone(),
+        kind: crate::notification_feed::store::NOTIFICATION_FEED_KIND_CUSTOM,
+        title: format!("{guest} joined {}", quoted(&title)),
+        subtitle,
+        body: "A guest is following this shared chat. Open Share to see who is watching or remove them."
+            .to_string(),
+        agent_name: crate::notification_feed::store::notification_agent_icon(&session),
+        attention_event_id: None,
+    };
+    if crate::notification_feed::store::insert_notification_feed_row_beside(&db, row).is_ok() {
+        crate::notification_feed::api::broadcast_notification_feed_changed(state);
+    }
+}
+
+/// Ends the shares whose chat is gone from the database (deleted while gxserver was down, or by
+/// a path that didn't end its share). `true` when one ended.
+pub(crate) fn end_shares_of_missing_chats(state: &AppState) -> bool {
+    let mut ended = false;
+    for share in shares::list() {
+        if session_exists(state, &share.project_id, &share.session_id) == Some(false) {
+            end_share_of_deleted_chat(&share.project_id, &share.session_id);
+            ended = true;
+        }
+    }
+    ended
+}
+
+/// A deleted chat's share ends with it: its link is dead and its guests are dropped.
+pub(crate) fn end_share_of_deleted_chat(project_id: &str, session_id: &str) {
+    if let Some(share) = shares::stop_for_session(project_id, session_id) {
+        collab::audit::record(&share, "A deleted chat", "ended", "", None, 0, None);
+        collab::notify_changed();
+    }
 }
 
 /// What a share token gets. `None` lets the request through to its normal route (a read of the

@@ -23,10 +23,10 @@ use subtle::ConstantTimeEq;
 use super::config::{CollabConfig, GuestMode};
 use crate::paths::GxserverPaths;
 
-const SHARES_FILE: &str = "collab-shares.json";
+pub const SHARES_FILE: &str = "collab-shares.json";
 /// Guest messages waiting for the owner, per share, kept across restarts like the owner's own
 /// queue keeps its rows.
-const HELD_FILE: &str = "collab-held.json";
+pub const HELD_FILE: &str = "collab-held.json";
 /// What happened to a held message, kept this long so a guest's page can follow it.
 const RESOLVED_KEEP_MS: i64 = 10 * 60_000;
 const RESOLVED_KEEP: usize = 40;
@@ -36,8 +36,10 @@ pub const MAX_VIEWERS: usize = 10;
 pub const TYPING_MS: i64 = 4_000;
 /// Wrong codes one guest connection may type before it is closed.
 pub const MAX_CODE_TRIES: u32 = 5;
+/// Digits in a share's code. Every share has one (GitHub #495).
+pub const CODE_DIGITS: usize = 8;
 /// Wrong codes one share takes, from every connection together, before it stops taking codes for
-/// [`CODE_LOCK_MS`]: guessing a six-digit code is then out of reach.
+/// [`CODE_LOCK_MS`]: guessing an eight-digit code is then out of reach.
 pub const MAX_SHARE_CODE_MISSES: u32 = 20;
 pub const CODE_LOCK_MS: i64 = 15 * 60_000;
 /// Messages one guest may send a minute, and guest messages one share may hold at once.
@@ -77,7 +79,7 @@ pub struct StoredShare {
     /// Proves to the relay that this computer registered `route` first.
     pub host_secret: String,
     pub token: String,
-    /// Six digits; empty when this share asks for no code.
+    /// [`CODE_DIGITS`] digits; a share without one is dropped when the file is read.
     pub code: String,
     pub mode: GuestMode,
     pub created_at_ms: i64,
@@ -136,7 +138,7 @@ fn registry() -> &'static Mutex<Registry> {
 }
 
 fn paths() -> GxserverPaths {
-    crate::paths::get_gxserver_paths(None)
+    super::state_paths()
 }
 
 fn now_ms() -> i64 {
@@ -150,13 +152,28 @@ fn random_bytes<const N: usize>() -> [u8; N] {
 }
 
 fn new_code() -> String {
-    format!("{:06}", u32::from_le_bytes(random_bytes::<4>()) % 1_000_000)
+    format!(
+        "{:08}",
+        u64::from_le_bytes(random_bytes::<8>()) % 100_000_000
+    )
+}
+
+/// A share as the 11.0.1 rules allow it: a code, and an end at most a day after it was made. A
+/// file edited to say otherwise (no code, no end) is not trusted: that share is dropped.
+fn share_is_valid(share: &StoredShare) -> bool {
+    share.code.len() == CODE_DIGITS
+        && share.code.bytes().all(|byte| byte.is_ascii_digit())
+        && share
+            .expires_at_ms
+            .is_some_and(|at| at <= share.created_at_ms + super::config::MAX_SHARE_MS)
 }
 
 fn with_registry<T>(change: impl FnOnce(&mut Registry) -> T) -> T {
     let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
     if !registry.loaded {
         registry.loaded = true;
+        // Whatever reads a share first, the 11.0.1 move has run before the file is read.
+        super::migrate_at_start(&paths());
         let stored: Vec<StoredShare> =
             std::fs::read_to_string(paths().app_state_dir.join(SHARES_FILE))
                 .ok()
@@ -164,6 +181,7 @@ fn with_registry<T>(change: impl FnOnce(&mut Registry) -> T) -> T {
                 .unwrap_or_default();
         registry.shares = stored
             .into_iter()
+            .filter(share_is_valid)
             .map(|share| (share.id.clone(), share))
             .collect();
         for (share_id, messages) in read_held(&paths().app_state_dir) {
@@ -274,14 +292,15 @@ pub fn share_session(config: &CollabConfig, project_id: &str, session_id: &str) 
             route: super::tunnel::route_id(&key),
             host_secret: hex::encode(random_bytes::<32>()),
             token: format!("gxshare_{}", URL_SAFE_NO_PAD.encode(random_bytes::<32>())),
-            code: if config.require_code {
-                new_code()
+            code: new_code(),
+            // Never Send: that is turned on per share, with the owner's approval.
+            mode: if config.mode == GuestMode::View {
+                GuestMode::View
             } else {
-                String::new()
+                GuestMode::Approve
             },
-            mode: config.mode,
             created_at_ms: now,
-            expires_at_ms: config.expiry.millis().map(|ms| now + ms),
+            expires_at_ms: Some(now + config.expiry.millis()),
             blocked: Vec::new(),
         };
         registry.shares.insert(share.id.clone(), share.clone());
@@ -312,6 +331,20 @@ pub fn stop(share_id: &str) -> Option<StoredShare> {
     with_registry(|registry| {
         registry.live.remove(share_id);
         registry.shares.remove(share_id)
+    })
+}
+
+/// Ends the share of a chat that was deleted (or is gone from the database).
+pub fn stop_for_session(project_id: &str, session_id: &str) -> Option<StoredShare> {
+    with_registry(|registry| {
+        let id = registry
+            .shares
+            .values()
+            .find(|share| share.project_id == project_id && share.session_id == session_id)?
+            .id
+            .clone();
+        registry.live.remove(&id);
+        registry.shares.remove(&id)
     })
 }
 
@@ -546,6 +579,19 @@ pub fn hold(share_id: &str, viewer: &Viewer, text: &str, image_paths: &[String])
     })
 }
 
+/// A held message, still waiting.
+pub fn peek_held(share_id: &str, held_id: &str) -> Option<HeldMessage> {
+    with_registry(|registry| {
+        registry
+            .live
+            .get(share_id)?
+            .held
+            .iter()
+            .find(|held| held.id == held_id)
+            .cloned()
+    })
+}
+
 /// Takes a held message out (the owner sent, edited or declined it).
 ///
 /// `outcome` (`sent`, `edited` or `declined`) stays on the chat frame for a while, so the guest's
@@ -580,9 +626,14 @@ pub fn next_typing_deadline(share_id: &str) -> Option<i64> {
     })
 }
 
-/// The link guests open.
+/// The link guests open: the guest page this release pinned (`page_pin`), by its id, and the
+/// share's key after `#`, which browsers never send to the relay.
 pub fn link(share: &StoredShare, relay_url: &str) -> String {
-    format!("{relay_url}/s#{}", share.key)
+    format!(
+        "{relay_url}/s/{}/#{}",
+        super::page_pin::page_id(),
+        share.key
+    )
 }
 
 /// `collab` on a chat frame and on `readSessionChat`: `{ shared: false }`, or who is watching,
@@ -654,7 +705,13 @@ pub fn insert_chat_collab(frame: &mut Map<String, Value>, project_id: &str, sess
     frame.insert("collab".to_string(), value);
 }
 
-/// One share as the owner's Share popover and Settings > Collab show it.
+/// One share's link and code: only in the answer to an approved `share` call, never in a read.
+pub fn owner_secrets(share: &StoredShare, relay_url: &str) -> Value {
+    json!({ "link": link(share, relay_url), "code": share.code })
+}
+
+/// One share as the owner's Share popover and Settings > Collab show it. No link or code: those
+/// come once, with the approval that shared the chat (`owner_secrets`).
 pub fn owner_view(share: &StoredShare, relay_url: &str, title: Option<String>) -> Value {
     let (viewers, held) = with_registry(|registry| {
         let live = registry.live.get(&share.id);
@@ -673,8 +730,7 @@ pub fn owner_view(share: &StoredShare, relay_url: &str, title: Option<String>) -
         "projectId": share.project_id,
         "sessionId": share.session_id,
         "title": title,
-        "link": link(share, relay_url),
-        "code": share.code,
+        "relay": relay_url,
         "mode": share.mode.as_str(),
         "createdAtMs": share.created_at_ms,
         "expiresAtMs": share.expires_at_ms,
@@ -686,6 +742,42 @@ pub fn owner_view(share: &StoredShare, relay_url: &str, title: Option<String>) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn share(code: &str, created: i64, expires: Option<i64>) -> StoredShare {
+        StoredShare {
+            id: "share_1".into(),
+            project_id: "p".into(),
+            session_id: "s".into(),
+            key: String::new(),
+            route: String::new(),
+            host_secret: String::new(),
+            token: "gxshare_x".into(),
+            code: code.into(),
+            mode: GuestMode::Send,
+            created_at_ms: created,
+            expires_at_ms: expires,
+            blocked: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn shares_without_a_code_or_an_end_are_dropped() {
+        let day = super::super::config::MAX_SHARE_MS;
+        assert!(share_is_valid(&share("12345678", 0, Some(day))));
+        assert!(!share_is_valid(&share("", 0, Some(day))));
+        assert!(!share_is_valid(&share("123456", 0, Some(day))));
+        assert!(!share_is_valid(&share("12345678", 0, None)));
+        assert!(!share_is_valid(&share("12345678", 0, Some(day + 1))));
+    }
+
+    #[test]
+    fn codes_are_eight_digits() {
+        for _ in 0..50 {
+            let code = new_code();
+            assert_eq!(code.len(), CODE_DIGITS);
+            assert!(code.bytes().all(|byte| byte.is_ascii_digit()));
+        }
+    }
 
     #[test]
     fn held_messages_survive_a_restart() {

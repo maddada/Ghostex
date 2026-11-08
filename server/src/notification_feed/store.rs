@@ -101,6 +101,45 @@ pub(crate) fn insert_notification_feed_row(
         .ok_or_else(|| DomainStateError::not_found("Notification was not stored."))
 }
 
+/// Insert a row beside the session's unread rows instead of superseding them: only an earlier
+/// unread row with the same title goes. For news about a chat that is not about its agent (a
+/// Ghostex Collab guest joining, `collab_http::notify_guest_joined`), which must not hide an
+/// approval or a finished turn waiting in that chat.
+pub(crate) fn insert_notification_feed_row_beside(
+    db: &Connection,
+    row: NewNotificationFeedRow,
+) -> DomainResult<Value> {
+    let id = uuid::Uuid::new_v4().to_string();
+    db.execute(
+        "DELETE FROM notification_feed WHERE sessionId = ?1 AND readAt IS NULL AND kind = ?2 AND title = ?3",
+        params![row.session_id, row.kind, row.title],
+    )
+    .map_err(sql_error)?;
+    db.execute(
+        r#"
+        INSERT INTO notification_feed (
+          id, projectId, sessionId, kind, title, subtitle, body, agentName, attentionEventId, createdAt, readAt, deferredAt
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, NULL, NULL)
+        "#,
+        params![
+            id,
+            row.project_id,
+            row.session_id,
+            row.kind,
+            row.title,
+            row.subtitle,
+            row.body,
+            row.agent_name,
+            row.attention_event_id,
+            now_iso(),
+        ],
+    )
+    .map_err(sql_error)?;
+    prune_notification_feed(db)?;
+    read_notification_feed_item(db, &id)?
+        .ok_or_else(|| DomainStateError::not_found("Notification was not stored."))
+}
+
 /// Keep active approvals before older ordinary rows, within the feed's 40-row limit.
 fn prune_notification_feed(db: &Connection) -> DomainResult<()> {
     let mut statement = db

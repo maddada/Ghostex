@@ -21,9 +21,7 @@ fn lock() -> &'static Mutex<()> {
 }
 
 fn file() -> std::path::PathBuf {
-    crate::paths::get_gxserver_paths(None)
-        .app_state_dir
-        .join(AUDIT_FILE)
+    super::state_paths().app_state_dir.join(AUDIT_FILE)
 }
 
 /// Appends one entry; `event` is `joined`, `left`, `removed` or `message`, `outcome` (messages

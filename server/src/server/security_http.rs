@@ -37,9 +37,6 @@ use super::{routed_json, AppState, RoutedResponse};
 ///
 /// The error response is HTTP 403 with `error: "approvalRequired"` (or `approvalDenied`, or
 /// `forbidden` for a caller that may not ask) and the request under `approval`.
-// No route calls it until Phase 2 of #495 wires the sensitive routes (and the pairing and
-// Collab threads wire theirs).
-#[allow(dead_code)]
 pub(crate) fn require_owner_presence(
     state: &AppState,
     caller: &Principal,
@@ -48,6 +45,22 @@ pub(crate) fn require_owner_presence(
     endpoint_path: &str,
     request_id: &str,
 ) -> Result<PresenceGrant, RoutedResponse> {
+    presence_outcome_response(
+        presence_outcome(state, caller, action, body),
+        endpoint_path,
+        request_id,
+    )
+}
+
+/// The gate's decision without the HTTP answer, for a route that also needs the pending request
+/// itself (Collab finishes an approved action on its own, `collab_http.rs`). Answer with
+/// [`presence_outcome_response`].
+pub(crate) fn presence_outcome(
+    state: &AppState,
+    caller: &Principal,
+    action: ActionRequest,
+    body: &Value,
+) -> PresenceOutcome {
     let presented = body
         .get("params")
         .and_then(|params| params.get(APPROVAL_ID_PARAM))
@@ -60,13 +73,18 @@ pub(crate) fn require_owner_presence(
         Principal::LocalAgent => "A terminal on this computer".to_string(),
         other => other.kind().to_string(),
     };
-    match state.security.require_owner_presence(
-        caller,
-        &label,
-        action,
-        presented,
-        security::now_ms(),
-    ) {
+    state
+        .security
+        .require_owner_presence(caller, &label, action, presented, security::now_ms())
+}
+
+/// The grant, or the 403 answer (`approvalRequired`, `approvalDenied`, `forbidden`) for the rest.
+pub(crate) fn presence_outcome_response(
+    outcome: PresenceOutcome,
+    endpoint_path: &str,
+    request_id: &str,
+) -> Result<PresenceGrant, RoutedResponse> {
+    match outcome {
         PresenceOutcome::Granted(grant) => Ok(grant),
         PresenceOutcome::Pending(request) => Err(presence_response(
             endpoint_path,
@@ -95,7 +113,6 @@ pub(crate) fn require_owner_presence(
     }
 }
 
-#[allow(dead_code)]
 fn presence_response(
     endpoint_path: &str,
     request_id: &str,
