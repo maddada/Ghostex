@@ -46,6 +46,7 @@ pub mod rpc;
 mod run_in_terminal;
 pub mod saved_prompts;
 mod secret;
+mod security;
 pub mod selector;
 mod session_chat_model;
 mod session_chat_rpc;
@@ -110,6 +111,7 @@ pub fn run() -> i32 {
 /// global help gate.
 const HELP_GATE_EXCLUDED: &[&str] = &[
     "account-login",
+    "security",
     "agent-guide",
     "computers",
     "autopilot",
@@ -420,6 +422,7 @@ fn is_known_command(name: &str) -> bool {
         "resources",
         "computers",
         "autopilot",
+        "security",
         "install-browser-skill",
         "install-browser-mcp-skill",
         "install-browser-use-skill",
@@ -493,6 +496,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "agents" => agents::run(args),
         "computers" => computers::run(args),
         "autopilot" => autopilot::autopilot_command(args),
+        "security" => security::run(args),
         "box" => box_cli::run(args),
         "claude-cloud" => claude_cloud_cli::run(args),
         "gbots" => gbots_cli::run(args),

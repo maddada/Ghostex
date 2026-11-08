@@ -222,7 +222,14 @@ pub(crate) fn args_for_session_on_another_computer(
     // These choose their computer themselves (agents, coordinator) or take no session.
     if matches!(
         name,
-        "computers" | "autopilot" | "coordinator" | "orchestrator" | "agents" | "server" | "help"
+        "computers"
+            | "autopilot"
+            | "security"
+            | "coordinator"
+            | "orchestrator"
+            | "agents"
+            | "server"
+            | "help"
     ) {
         return None;
     }
