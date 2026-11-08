@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/tailscale/tailcat"
+	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/types/key"
 )
 
@@ -36,8 +37,18 @@ const (
 	// reachabilityTimeout bounds the cold rendezvous a fresh client performs on
 	// its first use: resolving the DERP map (a network fetch unless the token
 	// embeds the relay details), connecting to the relay, and completing the
-	// meow handshake with the peer.
-	reachabilityTimeout = 30 * time.Second
+	// meow handshake with the peer. tailcat gives each hello (Client.Ping) 10s
+	// of its own, so a hello that ran out is sent again while this lasts.
+	//
+	// CDXC:RemotePairing 2026-11-08 WHY:
+	// A relay address names its relay by hostname only (genkey --region=<host>),
+	// so the phone's first relay connection after it wakes needs a DNS lookup
+	// inside tailcat's 1.5s per-dial limit, where the public address carries the
+	// relay's IPs. A hello that got through only near the end of tailcat's 10s
+	// left no time for the answer, and the phone fell back to the public relays
+	// although the relay worked (2026-11-07, twice). 20s gives a slow first
+	// hello a second window and still falls back well before a minute.
+	reachabilityTimeout = 20 * time.Second
 
 	// reuseProbeTimeout bounds the disco ping that checks a tunnel being reused
 	// still answers. A healthy tunnel answers in one relay round-trip; magicsock
@@ -54,15 +65,46 @@ const (
 	retiredListenerGrace = 30 * time.Second
 )
 
+// helloRetryAfter is how long a hello must have waited before running out
+// counts as a slow relay worth a second hello, not a broken setup. A variable
+// only so tests need not wait for it.
+var helloRetryAfter = 5 * time.Second
+
+// tunnel is what a forward needs of a tailcat client; tests stand in a fake.
+type tunnel interface {
+	Ping(ctx context.Context) (tailcat.PingResult, error)
+	DiscoPing(ctx context.Context) (*ipnstate.PingResult, error)
+	DialTCPPort(ctx context.Context, port uint16) (net.Conn, error)
+	Close() error
+}
+
+// newTunnel makes the tailcat client for one machine address.
+var newTunnel = func(id, token string, k key.NodePrivate) tunnel {
+	// CDXC:RemotePairing 2026-09-15 WHY:
+	// The tailcat library must be newer than v0.5.0: gxserver installs the tailcat v0.6.0 helper, which serves addresses carrying a WireGuard pre-shared key, and an older client still passes the reachability ping but never completes the handshake, so every dial hangs and the phone reports "Reached the computer, but Ghostex there did not answer".
+	// SEE-ALSO: server/src/tailcat/install.rs (TAILCAT_MODULE) and the go.mod pin next to this file.
+	return &tailcat.Client{
+		Server: tailcat.Addr(token),
+		Key:    k,
+		Logf:   forwardLogf(id),
+	}
+}
+
 type forward struct {
 	id         string
 	token      string
 	remotePort int
 	listener   net.Listener
-	client     *tailcat.Client
+	client     tunnel
 	closed     chan struct{}
 	ctx        context.Context
 	cancel     context.CancelFunc
+
+	// ready is closed once the first rendezvous ended; readyErr is how. Until
+	// then a second caller for the same address waits on it instead of probing
+	// a tunnel that is still saying hello. Both are written once, before close.
+	ready    chan struct{}
+	readyErr error
 
 	// lastDialErr is the most recent per-connection dial failure, cleared on the
 	// next successful dial. It has its own mutex so a dial never waits behind a
@@ -109,9 +151,40 @@ func (f *forward) lastError() string {
 	return f.lastDialErr
 }
 
+// forwardKey is one address of a machine, on one of its ports.
+type forwardKey struct {
+	token      string
+	remotePort int
+}
+
+func (f *forward) key() forwardKey { return forwardKey{f.token, f.remotePort} }
+
+func (f *forward) settled() bool {
+	select {
+	case <-f.ready:
+		return true
+	default:
+		return false
+	}
+}
+
 var (
-	mu       sync.Mutex
-	forwards = map[string]*forward{}
+	mu sync.Mutex
+	// forwards holds each machine's tunnels by address: the one it connected
+	// through last and, while it dials another address, the new one beside it.
+	//
+	// CDXC:RemotePairing 2026-11-08 WHY:
+	// A machine has two addresses (Ghostex's relay first, the public relays
+	// second). With one tunnel per machine, dialing the other address tore down
+	// the tunnel in use, so a phone falling back from the relay to the public
+	// relays always paid a cold rendezvous, even when it had been connected that
+	// way moments before, and a dial on one address could cancel another still
+	// connecting. The tunnel in use now stays until the new address connects; a
+	// failed dial leaves it there for the fallback to reuse.
+	forwards = map[string]map[forwardKey]*forward{}
+	// current is the forward each machine connected through last; LastError
+	// and ForwardPath report on it.
+	current = map[string]*forward{}
 
 	// clientKey is this phone's Easy Connect identity once UseClientKeyFile
 	// loaded it; while zero, every tunnel makes a throwaway key. Guarded by mu.
@@ -203,15 +276,33 @@ func StartForward(id, token string, remotePort int) (int, error) {
 			return 0, err
 		}
 		if !reused {
-			if err := rendezvous(f); err != nil {
+			err := rendezvous(f)
+			f.readyErr = err
+			close(f.ready)
+			if err != nil {
 				stopForwardIf(id, f)
 				return 0, err
 			}
+			connected(id, f)
 			log.Printf("tailcat[%s]: forwarding 127.0.0.1:%d -> peer:%d", id, port, remotePort)
 			go reportLinkPath(f)
 			return port, nil
 		}
+		if !f.settled() {
+			// Another caller is still connecting this address: share its outcome.
+			// Probing a tunnel that is still saying hello would fail and tear it
+			// down under that caller.
+			log.Printf("tailcat[%s]: waiting for the tunnel already connecting", id)
+			<-f.ready
+			if f.readyErr != nil {
+				return 0, f.readyErr
+			}
+			connected(id, f)
+			log.Printf("tailcat[%s]: joined the new tunnel, forwarding 127.0.0.1:%d -> peer:%d", id, port, remotePort)
+			return port, nil
+		}
 		if err := probeReused(f); err == nil {
+			connected(id, f)
 			log.Printf("tailcat[%s]: reusing tunnel, forwarding 127.0.0.1:%d -> peer:%d", id, port, remotePort)
 			return port, nil
 		} else if attempt == 0 {
@@ -233,12 +324,24 @@ func rendezvous(f *forward) error {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(f.ctx, reachabilityTimeout)
 	defer cancel()
-	if _, err := f.client.Ping(ctx); err != nil {
+	for {
+		helloStart := time.Now()
+		_, err := f.client.Ping(ctx)
+		if err == nil {
+			log.Printf("tailcat[%s]: peer reachable in %v", f.id, elapsed(start))
+			return nil
+		}
+		if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) && time.Since(helloStart) >= helloRetryAfter {
+			log.Printf("tailcat[%s]: no answer to the hello after %v; saying hello again", f.id, elapsed(start))
+			continue
+		}
+		if f.ctx.Err() != nil {
+			log.Printf("tailcat[%s]: tunnel stopped while connecting, after %v", f.id, elapsed(start))
+			return fmt.Errorf("tailcat: the tunnel was stopped while it was connecting: %w", err)
+		}
 		log.Printf("tailcat[%s]: peer unreachable after %v: %v", f.id, elapsed(start), err)
 		return fmt.Errorf("tailcat: cannot reach paired machine: %w", err)
 	}
-	log.Printf("tailcat[%s]: peer reachable in %v", f.id, elapsed(start))
-	return nil
 }
 
 // probeReused checks that a tunnel built earlier still carries traffic to the
@@ -367,7 +470,7 @@ func reportLinkPath(f *forward) {
 // when no forward exists or it has not been checked yet.
 func ForwardPath(id string) string {
 	mu.Lock()
-	f := forwards[id]
+	f := current[id]
 	mu.Unlock()
 	if f == nil {
 		return ""
@@ -388,10 +491,12 @@ func ForwardPath(id string) string {
 func StopForward(id string) {
 	mu.Lock()
 	defer mu.Unlock()
-	if _, ok := forwards[id]; ok {
+	if len(forwards[id]) > 0 {
 		log.Printf("tailcat[%s]: StopForward", id)
 	}
-	stopLocked(id)
+	for _, f := range forwards[id] {
+		stopLocked(f)
+	}
 }
 
 // StopAll tears down every forward. The app calls this when connectivity is
@@ -399,9 +504,11 @@ func StopForward(id string) {
 func StopAll() {
 	mu.Lock()
 	defer mu.Unlock()
-	log.Printf("tailcat: StopAll (%d forwards)", len(forwards))
-	for id := range forwards {
-		stopLocked(id)
+	log.Printf("tailcat: StopAll (%d machines)", len(forwards))
+	for _, byAddress := range forwards {
+		for _, f := range byAddress {
+			stopLocked(f)
+		}
 	}
 }
 
@@ -412,7 +519,7 @@ func StopAll() {
 // the bare TCP reset the closed loopback connection produces.
 func LastError(id string) string {
 	mu.Lock()
-	f := forwards[id]
+	f := current[id]
 	mu.Unlock()
 	if f == nil {
 		return ""
@@ -444,10 +551,11 @@ func Ping(token string, timeoutMs int) (int, error) {
 	return int(result.Latency / time.Millisecond), nil
 }
 
-// ensureForward returns the live forward for id (creating it, or replacing one
-// whose token or remote port changed) together with its local port. reused
-// reports whether the forward existed before this call, so the caller knows
-// whether it needs the cold rendezvous or the reuse probe.
+// ensureForward returns the machine's forward for this address and port
+// (creating it, beside the tunnel in use when that one is for another
+// address) together with a fresh local port. reused reports whether the
+// forward existed before this call, so the caller knows whether it needs the
+// cold rendezvous, or the reuse probe once the forward has settled.
 //
 // CDXC:RemotePairing 2026-10-20 WHY:
 // A reused forward gets a fresh loopback listener on every call, and the replaced one keeps accepting for retiredListenerGrace so a concurrent caller handed its port can still dial it. iOS reclaims a suspended app's idle listening sockets (developer.apple.com/forums/thread/85038: clients then get ECONNREFUSED) while the tunnel comes back and answers the reuse probe, so handing out the old port made every reconnect after a long stay in the background fail with "SSH refused the connection" until the app was killed. A reclaimed listener cannot be detected instead: Go keeps it non-blocking, and XNU answers accept on a defunct non-blocking listener with EWOULDBLOCK and never fires its kqueue read filter, so the accept loop stays parked (and Close still returns at once). Only the tunnel's rendezvous is worth reusing.
@@ -459,16 +567,23 @@ func ensureForward(id, token string, remotePort int) (f *forward, port int, reus
 		return nil, 0, false, err
 	}
 	port = listener.Addr().(*net.TCPAddr).Port
-	if existing, ok := forwards[id]; ok {
-		if existing.token == token && existing.remotePort == remotePort {
-			old := existing.listener
-			existing.listener = listener
-			go acceptLoop(existing, listener)
-			time.AfterFunc(retiredListenerGrace, func() { _ = old.Close() })
-			return existing, port, true, nil
+	k := forwardKey{token, remotePort}
+	if existing := forwards[id][k]; existing != nil {
+		old := existing.listener
+		existing.listener = listener
+		go acceptLoop(existing, listener)
+		time.AfterFunc(retiredListenerGrace, func() { _ = old.Close() })
+		return existing, port, true, nil
+	}
+	// Beside the new address the machine keeps the tunnel it connected through
+	// last and any still connecting; an older settled one goes.
+	for _, other := range forwards[id] {
+		if other != current[id] && other.settled() {
+			stopLocked(other)
 		}
-		log.Printf("tailcat[%s]: token or remote port changed, replacing forward", id)
-		stopLocked(id)
+	}
+	if len(forwards[id]) > 0 {
+		log.Printf("tailcat[%s]: dialing another address; the tunnel in use stays until it connects", id)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	f = &forward{
@@ -476,21 +591,35 @@ func ensureForward(id, token string, remotePort int) (f *forward, port int, reus
 		token:      token,
 		remotePort: remotePort,
 		listener:   listener,
-		// CDXC:RemotePairing 2026-09-15 WHY:
-		// The tailcat library must be newer than v0.5.0: gxserver installs the tailcat v0.6.0 helper, which serves addresses carrying a WireGuard pre-shared key, and an older client still passes the reachability ping but never completes the handshake, so every dial hangs and the phone reports "Reached the computer, but Ghostex there did not answer".
-		// SEE-ALSO: server/src/tailcat/install.rs (TAILCAT_MODULE) and the go.mod pin next to this file.
-		client: &tailcat.Client{
-			Server: tailcat.Addr(token),
-			Key:    clientKey,
-			Logf:   forwardLogf(id),
-		},
-		closed: make(chan struct{}),
-		ctx:    ctx,
-		cancel: cancel,
+		client:     newTunnel(id, token, clientKey),
+		closed:     make(chan struct{}),
+		ctx:        ctx,
+		cancel:     cancel,
+		ready:      make(chan struct{}),
 	}
-	forwards[id] = f
+	if forwards[id] == nil {
+		forwards[id] = map[forwardKey]*forward{}
+	}
+	forwards[id][k] = f
 	go acceptLoop(f, listener)
 	return f, port, false, nil
+}
+
+// connected makes f the machine's tunnel in use and closes the machine's other
+// settled tunnels, which a later dial no longer needs. One still connecting
+// is left to finish; whichever connects last is the one in use.
+func connected(id string, f *forward) {
+	mu.Lock()
+	defer mu.Unlock()
+	if forwards[id][f.key()] != f {
+		return
+	}
+	current[id] = f
+	for _, other := range forwards[id] {
+		if other != f && other.settled() {
+			stopLocked(other)
+		}
+	}
 }
 
 // forwardLogf attributes the tailcat library's own log lines to one machine.
@@ -501,22 +630,29 @@ func forwardLogf(id string) func(format string, args ...any) {
 	}
 }
 
-// stopForwardIf tears down id's forward only when it is still f, so a failed
-// validation cannot close a forward another caller replaced in the meantime.
+// stopForwardIf tears down f only while it is still the machine's forward for
+// its address, so a failed validation cannot close one another caller
+// replaced in the meantime.
 func stopForwardIf(id string, f *forward) {
 	mu.Lock()
 	defer mu.Unlock()
-	if forwards[id] == f {
-		stopLocked(id)
+	if forwards[id][f.key()] == f {
+		stopLocked(f)
 	}
 }
 
-func stopLocked(id string) {
-	f, ok := forwards[id]
-	if !ok {
+func stopLocked(f *forward) {
+	byAddress := forwards[f.id]
+	if byAddress[f.key()] != f {
 		return
 	}
-	delete(forwards, id)
+	delete(byAddress, f.key())
+	if len(byAddress) == 0 {
+		delete(forwards, f.id)
+	}
+	if current[f.id] == f {
+		delete(current, f.id)
+	}
 	f.cancel()
 	close(f.closed)
 	_ = f.listener.Close()
