@@ -153,6 +153,21 @@ pub struct SettingsSyncNoteFrame {
     pub note: Value,
 }
 
+/// `approvalRequestsChanged`: an approval request was made, approved, denied or expired
+/// (`crate::approval`, server/src/server/security_http.rs). The desktop shows a new one as a card
+/// with Approve and Deny, and drops the card when it is decided elsewhere.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalRequestsChangedFrame {
+    #[serde(flatten)]
+    pub header: EventHeader,
+    /// `requested`, `approved`, `denied`, `expired`.
+    #[serde(default)]
+    pub change: String,
+    #[serde(default)]
+    pub request: Option<crate::approval::ApprovalRequest>,
+}
+
 /// A command the daemon dispatches to the registered renderer socket. It must be answered with a
 /// `rendererCommandResult` before `timeout_ms`, or the originating RPC fails with
 /// `dependencyUnavailable`.
@@ -199,6 +214,7 @@ pub enum ServerEvent {
     NotificationFeedChanged(EventHeader),
     ConnectorsChanged(ConnectorsChangedFrame),
     SettingsSyncNote(SettingsSyncNoteFrame),
+    ApprovalRequestsChanged(Box<ApprovalRequestsChangedFrame>),
     CloudBoxesChanged(Box<crate::cloud_box::CloudBoxesChangedFrame>),
     RendererCommand(RendererCommandFrame),
     SessionChatSnapshot(Box<ChatSnapshotFrame>),
@@ -272,6 +288,7 @@ impl ServerEvent {
             Self::NotificationFeedChanged(_) => "notificationFeedChanged",
             Self::ConnectorsChanged(_) => "connectorsChanged",
             Self::SettingsSyncNote(_) => "settingsSyncNote",
+            Self::ApprovalRequestsChanged(_) => "approvalRequestsChanged",
             Self::CloudBoxesChanged(_) => crate::cloud_box::CLOUD_BOXES_CHANGED_EVENT_TYPE,
             Self::RendererCommand(_) => "rendererCommand",
             Self::SessionChatSnapshot(_) => "sessionChatSnapshot",
@@ -303,6 +320,7 @@ impl ServerEvent {
             Self::GlobalSidebarCommandsChanged(frame) => &frame.header,
             Self::ConnectorsChanged(frame) => &frame.header,
             Self::SettingsSyncNote(frame) => &frame.header,
+            Self::ApprovalRequestsChanged(frame) => &frame.header,
             Self::CloudBoxesChanged(frame) => &frame.header,
             Self::RendererCommand(frame) => &frame.header,
             Self::SessionChatSnapshot(frame) | Self::SessionChatReplaced(frame) => {
@@ -358,6 +376,7 @@ impl ServerEvent {
             "notificationFeedChanged" => source.read().map(Self::NotificationFeedChanged),
             "connectorsChanged" => source.read().map(Self::ConnectorsChanged),
             "settingsSyncNote" => source.read().map(Self::SettingsSyncNote),
+            "approvalRequestsChanged" => source.read().map(Self::ApprovalRequestsChanged),
             crate::cloud_box::CLOUD_BOXES_CHANGED_EVENT_TYPE => {
                 source.read().map(Self::CloudBoxesChanged)
             }

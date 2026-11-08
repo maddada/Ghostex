@@ -184,6 +184,12 @@ pub(crate) enum GpuiAppToastAction {
     /// Undo on a settings sync note: this computer's value of a synced setting comes back on every
     /// computer (`id` is the note's, server/src/settings_sync/).
     UndoSyncedChange { id: String },
+    /// An approval card's Approve (`deny: false`, drawn next to its Deny) or Deny: GitHub #495,
+    /// app/owner_security/ui.rs.
+    SecurityApproval {
+        request: Box<ghostex_gx_protocol::approval::ApprovalRequest>,
+        deny: bool,
+    },
 }
 
 impl GpuiAppToastAction {
@@ -193,6 +199,8 @@ impl GpuiAppToastAction {
             Self::OpenViewSettings => "Open Settings",
             Self::OpenUpdateDownloadPage => "Open download page",
             Self::UndoSyncedChange { .. } => "Undo",
+            Self::SecurityApproval { deny: false, .. } => "Approve",
+            Self::SecurityApproval { deny: true, .. } => "Deny",
             Self::NativeProjectPathAction { label, .. } | Self::RunInNewTerminal { label, .. } => {
                 label
             }
@@ -841,6 +849,33 @@ impl Render for GpuiAppToastWindow {
                                                 )
                                             })
                                             .when_some(toast.action.clone(), |column, action| {
+                                                // An approval card has Approve and Deny side by side.
+                                                if let GpuiAppToastAction::SecurityApproval {
+                                                    request,
+                                                    deny: false,
+                                                } = &action
+                                                {
+                                                    let deny =
+                                                        GpuiAppToastAction::SecurityApproval {
+                                                            request: request.clone(),
+                                                            deny: true,
+                                                        };
+                                                    return column.child(
+                                                        div()
+                                                            .flex()
+                                                            .gap(px(6.0))
+                                                            .child(self.render_action_button(
+                                                                toast.id.clone(),
+                                                                action.clone(),
+                                                                colors.title,
+                                                            ))
+                                                            .child(self.render_action_button(
+                                                                format!("{}-deny", toast.id),
+                                                                deny,
+                                                                colors.title,
+                                                            )),
+                                                    );
+                                                }
                                                 column.child(self.render_action_button(
                                                     toast.id.clone(),
                                                     action,

@@ -1,0 +1,36 @@
+# CDXC:Security 2026-11-08 WHY:
+# The desktop's owner key and approver key (GitHub #495) live in the OS key store and the approver key only signs after the system's own presence prompt. The platform code is a crate of its own so it can be type-checked for macOS, Windows and Linux from any machine (`cargo check --target …`), which the whole desktop crate (CEF, GhosttyKit) cannot.
+[package]
+name = "ghostex-owner-keys"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "ghostex_owner_keys"
+path = "src/lib.rs"
+
+[dependencies]
+base64 = "0.22"
+ring = "0.17"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
+block2 = "0.6"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = [
+    "Foundation",
+    "Security_Credentials_UI",
+    "Win32_Foundation",
+    "Win32_System_WinRT",
+    "Win32_UI_WindowsAndMessaging",
+] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+windows-future = "0.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+oo7 = { version = "0.6", default-features = false, features = ["async-std", "native_crypto"] }
+futures = "0.3"

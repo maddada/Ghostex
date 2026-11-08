@@ -2570,6 +2570,7 @@ dependencies = [
  "ghostex-gx-client",
  "ghostex-gx-core",
  "ghostex-gx-protocol",
+ "ghostex-owner-keys",
  "ghostex-paths",
  "ghostex-settings-catalog",
  "gpui",
@@ -2688,6 +2689,23 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "ghostex-owner-keys"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "block2 0.6.2",
+ "futures",
+ "objc2 0.6.5",
+ "objc2-foundation 0.3.2",
+ "oo7",
+ "ring",
+ "security-framework",
+ "windows 0.62.2",
+ "windows-future 0.3.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

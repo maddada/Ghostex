@@ -40,7 +40,26 @@ pub(crate) fn gxserver_post_typed_operation(
     params: &serde_json::Value,
     timeout: Duration,
 ) -> Result<(u16, String), String> {
-    gxserver_post_typed_operation_across_restart(path, params, timeout, Duration::ZERO)
+    let answer =
+        gxserver_post_typed_operation_across_restart(path, params, timeout, Duration::ZERO);
+    let Ok((status, body)) = &answer else {
+        return answer;
+    };
+    // The app's own sensitive click: the system prompt now, then the same call with its approval
+    // (CDXC:Security 2026-11-08 in app/owner_security/mod.rs).
+    if let Some(approval_id) = crate::app::owner_security::approve_own_call(*status, body) {
+        let mut params = params.clone();
+        if let Some(object) = params.as_object_mut() {
+            object.insert("approvalId".to_string(), serde_json::json!(approval_id));
+            return gxserver_post_typed_operation_across_restart(
+                path,
+                &params,
+                timeout,
+                Duration::ZERO,
+            );
+        }
+    }
+    answer
 }
 
 /// CDXC:ServerDaemon 2026-10-22 WHY: `cargo xtask start-server` and gxserver updates replace the daemon in place, leaving the port closed for about two seconds while the app stays open. A background caller that meets that gap waits up to `restart_wait` for gxserver to answer instead of failing, because a single refused connect put "gxserver is not reachable" on the chat's error line although gxserver was back a moment later. Only a refused connect is waited out: the request never reached gxserver, so sending it once the port opens cannot run it twice. UI-thread callers keep `Duration::ZERO`. A gxserver still starting is waited out by every caller within its own `timeout` (`gpui_wait_out_gxserver_starting`).
@@ -175,6 +194,7 @@ fn gxserver_post_typed_operation_once(
     ghostex_paths::loopback_owner::check_host_port(GPUI_GXSERVER_LOCAL_API_HOST, port)
         .map_err(|error| error.to_string())?;
     let token = read_gpui_gxserver_auth_token()?;
+    let owner_token = token.starts_with("gxo_").then(|| token.clone());
     stream
         .set_read_timeout(Some(timeout))
         .map_err(|_| "Could not configure gxserver read timeout.".to_string())?;
@@ -224,6 +244,13 @@ fn gxserver_post_typed_operation_once(
         .and_then(|line| line.split_whitespace().nth(1))
         .and_then(|status| status.parse::<u16>().ok())
         .ok_or_else(|| "gxserver returned an invalid HTTP status.".to_string())?;
+    // gxserver no longer knows the owner session (its state was reset): the next call uses the
+    // token file and opens a new one.
+    if status_code == 401 {
+        if let Some(token) = owner_token.as_deref() {
+            crate::app::owner_security::forget_owner_token(token);
+        }
+    }
     Ok((status_code, gxserver_http_response_body(headers, body)?))
 }
 
@@ -557,7 +584,17 @@ pub(crate) fn gpui_sidebar_gxserver_bootstrap(
     })
 }
 
+/// The token for this computer's gxserver: the app's owner session once it is open
+/// (`app/owner_security`), the token file (agent level) until then.
 pub(crate) fn read_gpui_gxserver_auth_token() -> Result<String, String> {
+    if let Some(token) = crate::app::owner_security::cached_owner_token() {
+        return Ok(token);
+    }
+    read_gpui_gxserver_file_token()
+}
+
+/// The token file `gxserver/auth/token`, which carries agent-level powers only (GitHub #495).
+pub(crate) fn read_gpui_gxserver_file_token() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         return windows_terminal_backend::auth_token()

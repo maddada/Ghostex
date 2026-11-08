@@ -411,3 +411,18 @@ mod tests {
         assert_eq!(back, request());
     }
 }
+
+#[cfg(test)]
+mod event_tests {
+    use crate::event::ServerEvent;
+
+    #[test]
+    fn approval_requests_changed_frames_parse() {
+        let frame = r#"{"type":"approvalRequestsChanged","protocolVersion":1,"serverId":"S90","change":"requested","request":{"id":"apr_1","action":"easyConnectEnable","summary":"Turn on Easy Connect","paramsDigest":"ab","nonce":"n","requestedBy":{"kind":"session","label":"Fix login"},"createdAtMs":1,"expiresAtMs":2,"status":"pending"}}"#;
+        let ServerEvent::ApprovalRequestsChanged(frame) = ServerEvent::parse(frame).unwrap() else {
+            panic!("expected approvalRequestsChanged");
+        };
+        assert_eq!(frame.change, "requested");
+        assert_eq!(frame.request.unwrap().summary, "Turn on Easy Connect");
+    }
+}

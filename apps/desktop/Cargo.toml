@@ -63,6 +63,8 @@ flate2 = "1"
 futures = "0.3"
 ghostex-paths = { path = "../../packages/paths" }
 ghostex-gx-protocol = { path = "../../packages/gx-protocol" }
+# The owner and approver keys in the OS key store, and the presence prompt (GitHub #495, app/owner_security/).
+ghostex-owner-keys = { path = "../../packages/owner-keys" }
 ghostex-client-storage = { path = "../../packages/client-storage-native" }
 ghostex-gx-chat-core = { path = "../../packages/gx-chat-core" }
 ghostex-gx-chat-client = { path = "../../packages/gx-chat-client" }

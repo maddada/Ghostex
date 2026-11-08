@@ -266,6 +266,9 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::UndoSyncedChange { id } => {
                 self.gx_store_undo_settings_sync_change(id, cx);
             }
+            GpuiAppToastAction::SecurityApproval { request, deny } => {
+                self.owner_security_decide(request, *deny, cx);
+            }
         }
     }
 

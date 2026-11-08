@@ -190,6 +190,12 @@ pub enum Effect {
     /// `settingsSyncNote` from this computer's gxserver: a synced setting changed on two computers
     /// apart and the later edit won (the "changed on X · Undo" note; `note` as gxserver sends it).
     SettingsSyncNote { note: Value },
+    /// `approvalRequestsChanged` from this computer's gxserver: show a new approval request as a
+    /// card with Approve and Deny, or drop the card of one decided elsewhere.
+    ApprovalRequestsChanged {
+        change: String,
+        request: Option<ghostex_gx_protocol::approval::ApprovalRequest>,
+    },
     /// The machine's stream just went live: a first connect, or back after a loss, when the
     /// payload-less announcements above may have been missed. Read the HUD, the recent projects
     /// and the notification feed again (`refetch.rs`).
@@ -569,6 +575,13 @@ impl Core {
                     .effects
                     .push(Effect::SettingsSyncNote { note: frame.note });
             }
+            ServerEvent::ApprovalRequestsChanged(frame) if machine.is_local() => {
+                let frame = *frame;
+                output.effects.push(Effect::ApprovalRequestsChanged {
+                    change: frame.change,
+                    request: frame.request,
+                });
+            }
             // Only this computer's gxserver is home to boxes; a box's own gxserver or a remote
             // computer announcing one is not this client's registry.
             ServerEvent::CloudBoxesChanged(frame) if machine.is_local() => {
@@ -588,6 +601,7 @@ impl Core {
             | ServerEvent::RendererCommand(_)
             | ServerEvent::CloudBoxesChanged(_)
             | ServerEvent::SettingsSyncNote(_)
+            | ServerEvent::ApprovalRequestsChanged(_)
             | ServerEvent::SessionChatSnapshot(_)
             | ServerEvent::SessionChatReplaced(_)
             | ServerEvent::SessionChatAppended(_)
