@@ -55,18 +55,31 @@ fn folders_in<'a>(entries: impl Iterator<Item = &'a str>) -> Vec<String> {
     folders
 }
 
-/// `command` with the secret folders denied, when the session starts in the home folder and the
-/// agent has a way to be held to them; otherwise unchanged.
+/// Whether `runtime_settings` mark a GBot chat (`runtimeSettings.gbot`, server/src/gbots/session.rs
+/// `CHAT_KEY`).
+pub(crate) fn is_gbot_chat(runtime_settings: Option<&Map<String, Value>>) -> bool {
+    runtime_settings.is_some_and(|runtime| runtime.get("gbot").is_some_and(Value::is_object))
+}
+
+/*
+CDXC:GBots 2026-11-09 DECISION:
+User: a Codex GBot at Full is still kept out of the secret folders. Codex GBots start at Full (server/src/gbots/session.rs `default_approval`), which outside the home folder is `--yolo` with no sandbox at all, so a Codex GBot chat launched at Full gets the same `ghostex-home` profile wherever its folder is: never ask, write anywhere and network on (so `ghostex` reaches gxserver), minus the denied folders. Only Codex at Full: Codex GBots at Ask or Edits and Claude GBots keep their launch as it was. A Windows Codex has no such profile here, so there a Codex GBot at Full is not held to the list.
+*/
+/// `command` with the secret folders denied, when the session starts in the home folder (or is a
+/// Codex GBot chat at Full, `gbot_chat`) and the agent has a way to be held to them; otherwise unchanged.
 pub(crate) fn with_home_secret_folders_denied(
     family: Option<&str>,
     cwd: Option<&str>,
+    gbot_chat: bool,
     command: &str,
 ) -> String {
     if cfg!(test) || command.trim().is_empty() {
         return command.to_string();
     }
     // Part of the Main Hub beta extension: off, launches at the home folder are as before.
-    if !cwd.is_some_and(crate::chief::is_home_folder) || !crate::chief::chief_shown() {
+    let applies = cwd.is_some_and(crate::chief::is_home_folder)
+        || (gbot_chat && family == Some("codex") && codex_bypass(command));
+    if !applies || !crate::chief::chief_shown() {
         return command.to_string();
     }
     let folders = home_secret_folders();
@@ -190,12 +203,7 @@ fn toml_string(value: &str) -> String {
 /// anywhere and reach the network, minus the denied folders; any other launch keeps Codex's
 /// workspace profile with the denies added.
 fn with_codex_denies(command: &str, folders: &[String]) -> String {
-    let bypass = command.split_whitespace().any(|token| {
-        matches!(
-            token.trim_matches(['"', '\'']),
-            "--yolo" | "--dangerously-bypass-approvals-and-sandbox"
-        )
-    });
+    let bypass = codex_bypass(command);
     let denies: Vec<String> = folders
         .iter()
         .map(|folder| format!("{}=\"deny\"", toml_string(folder)))
@@ -225,6 +233,16 @@ fn with_codex_denies(command: &str, folders: &[String]) -> String {
         quote_shell_arg(&format!("permissions.{CODEX_PROFILE}={profile}")),
         quote_shell_arg(&format!("default_permissions=\"{CODEX_PROFILE}\""))
     )
+}
+
+/// Whether a Codex `command` runs without its sandbox (`--yolo`).
+fn codex_bypass(command: &str) -> bool {
+    command.split_whitespace().any(|token| {
+        matches!(
+            token.trim_matches(['"', '\'']),
+            "--yolo" | "--dangerously-bypass-approvals-and-sandbox"
+        )
+    })
 }
 
 /// `command` without the whole word `flag`, leaving every other word and its quoting as it was.

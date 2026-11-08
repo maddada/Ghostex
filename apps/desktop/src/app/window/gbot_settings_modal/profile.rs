@@ -278,7 +278,7 @@ impl GpuiGbotSettingsModalWindow {
             &p,
             "Approval",
             control,
-            Some(GBOT_APPROVALS[selected].2.into()),
+            Some(format!("{}\n{GBOT_CODEX_APPROVAL_NOTE}", GBOT_APPROVALS[selected].2).into()),
         )
     }
 }

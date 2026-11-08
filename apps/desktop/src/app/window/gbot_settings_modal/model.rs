@@ -63,6 +63,11 @@ pub(crate) const GBOT_APPROVALS: [(&str, &str, &str); 4] = [
     ),
 ];
 
+/// Why a Codex GBot starts at Full access, shown under the approval control (the level itself is
+/// gxserver's, server/src/gbots/session.rs `default_approval`).
+pub(crate) const GBOT_CODEX_APPROVAL_NOTE: &str =
+    "Codex GBots start at Full access: below it, Codex's sandbox stops them reaching Ghostex.";
+
 /// The svg asset of a Ghostex icon name.
 pub(crate) fn gbot_icon_path(icon: &str) -> String {
     let icon = if icon.trim().is_empty() {

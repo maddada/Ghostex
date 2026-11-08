@@ -114,6 +114,23 @@ fn chat_title(bot: &Bot, task: Option<&str>) -> String {
 CDXC:GBots 2026-11-08 WHY:
 The approval level is applied through the launch the way every session's is: `ask` and `edits` turn off a "Run without asking" the launcher or the user's global setting would add (`acceptAllMode: disabled`), `edits` adds the agent's own accept-edits mode (Claude `--permission-mode acceptEdits`, Codex `--sandbox workspace-write --ask-for-approval on-request`), and `full` runs without asking (`acceptAllMode: enabled`). `auto` launches like `edits` for now: Autopilot never acts in bot chats (CDXC:Bots 2026-11-08 in bot_projects.rs), and its Decide tier would also answer the bot's questions, which Chief of Staff does for the bots it leads; whether `auto` should mean Autopilot is decided with delegation.
 */
+/*
+CDXC:GBots 2026-11-09 DECISION:
+User: "Codex GBots start at Edits or Full", no sandbox carve-out. Codex's own sandbox below Full (`workspace-write`, which Edits maps to, and the `ghostex-home` profile's workspace shape) has the network off, and that blocks the loopback connection, so every `ghostex` call fails with "Could not connect to local gxserver"; only Full reaches gxserver. A new Codex GBot therefore starts at Full unless its approval is given; Claude's start at Ask as before.
+*/
+/// The approval level a new bot on `agent_id` starts at when none is given.
+pub(crate) fn default_approval(rows: &[Value], agent_id: &str) -> &'static str {
+    let family = rows
+        .iter()
+        .find(|row| row.get("agentId").and_then(Value::as_str) == Some(agent_id))
+        .and_then(coordinator_launcher_family);
+    if family == Some("codex") {
+        "full"
+    } else {
+        "ask"
+    }
+}
+
 fn apply_approval(params: &mut Map<String, Value>, approval: &str, family: Option<&str>) {
     let launch = params
         .entry("launchSettings".to_string())

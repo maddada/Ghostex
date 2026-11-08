@@ -471,6 +471,7 @@ fn create(
         })?,
     };
     super::session::check_agent(&rows, &agent_id)?;
+    let approval = super::session::default_approval(&rows, &agent_id).to_string();
     let now = now_iso();
     let mut bot = Bot {
         bot_id: new_id("b_"),
@@ -483,7 +484,7 @@ fn create(
         agent_id,
         model: None,
         effort: None,
-        approval: "ask".to_string(),
+        approval,
         department_id: None,
         is_lead: false,
         computer: "this".to_string(),

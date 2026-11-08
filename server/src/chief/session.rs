@@ -261,6 +261,23 @@ fn create_chief_session(
     .unwrap_or_default();
     params.insert("surface".into(), json!("workspace"));
     params.insert("requireLaunchCommand".into(), json!(true));
+    // CDXC:GBots 2026-11-09 DECISION: Codex's sandbox below Full blocks `ghostex` from reaching
+    // gxserver (server/src/gbots/session.rs `default_approval`), so Chief of Staff on Codex starts
+    // at Full. At the home folder that becomes "never ask" inside the `ghostex-home` profile, which
+    // still denies the secret folders (server/src/agents/home_secret_folders.rs).
+    let codex = agent_rows
+        .iter()
+        .find(|row| row.get("agentId").and_then(Value::as_str) == Some(agent_id))
+        .and_then(crate::coordinators::coordinator_launcher_family)
+        == Some("codex");
+    if codex {
+        if let Some(launch) = params
+            .get_mut("launchSettings")
+            .and_then(Value::as_object_mut)
+        {
+            launch.insert("acceptAllMode".into(), json!("enabled"));
+        }
+    }
     let params = prepare_coordinator_create_params(&params)?;
     let create_params = create_agent_session_params_for_project(db, &project, &params)?;
     let created = repository.create_session(&create_params, false)?;

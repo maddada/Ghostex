@@ -353,6 +353,7 @@ pub(crate) fn to_agent_resume_input(
             read_text_value(session, "cwd")
                 .or_else(|| read_text_value(project, "path"))
                 .as_deref(),
+            super::is_gbot_chat(session.get("runtimeSettings").and_then(Value::as_object)),
             &command,
         )
     });

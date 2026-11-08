@@ -382,6 +382,7 @@ pub(crate) fn create_agent_session_params_for_project(
                             with_home_secret_folders_denied(
                                 family.as_deref(),
                                 launch_cwd.as_deref(),
+                                is_gbot_chat(Some(&runtime_settings)),
                                 command,
                             ),
                         )
