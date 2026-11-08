@@ -89,6 +89,7 @@ mod dsh_channel_send;
 mod endpoints;
 mod gbots_send;
 mod held_redraw;
+mod held_reload;
 mod mid_turn;
 mod pi_channel_send;
 mod post_send;

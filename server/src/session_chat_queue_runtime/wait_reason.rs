@@ -2,7 +2,8 @@
 //! thresholds of the ladder that heals a row waiting on an agent that is ready by every other sign.
 //!
 //! SEE-ALSO: scheduler.rs (records a reason at every gate, runs the ladder and the watchdog),
-//! held_redraw.rs (the Ctrl+L step), repaint_nudge.rs (the resize step), session_chat_queue.rs
+//! held_redraw.rs (the Ctrl+L step), repaint_nudge.rs (the resize step), held_reload.rs (the
+//! reload step), session_chat_queue.rs
 //! (`set_queue_wait_reason`, which puts the words on the row), packages/gx-chat-core
 //! (`waitReason` on queue rows, held sends and agent message cards).
 
@@ -17,6 +18,11 @@ pub(super) const INPUT_BOX_REDRAW_AFTER_MS: i64 = 20_000;
 /// The input-box ladder's last resort: by now the fresh reads, two Ctrl+L redraws and a resize
 /// nudge have had their chance, so the row goes to the send path, whose own capture decides.
 pub(super) const INPUT_BOX_LAST_RESORT_AFTER_MS: i64 = 180_000;
+
+/// The input-box ladder's reload: a row still held on a missing input box this long, on an agent
+/// idle by every signal, gets the agent reloaded the way Full Reload does (held_reload.rs), before
+/// the stuck words and bell at [`INPUT_BOX_STUCK_AFTER_MS`] ask the user to clear the terminal.
+pub(super) const INPUT_BOX_RELOAD_AFTER_MS: i64 = 240_000;
 
 /// The watchdog: a head row held this long by a gate that should have let it go, on a session
 /// idle by every signal, is logged and handed to the same ladder's last resort.

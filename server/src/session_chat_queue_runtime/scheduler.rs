@@ -1,6 +1,6 @@
 use super::wait_reason::{
     stuck_input_box_text, stuck_notification_body, HeadWait, InputBoxStep, WaitReason,
-    INPUT_BOX_LAST_RESORT_AFTER_MS, WATCHDOG_AFTER_MS,
+    INPUT_BOX_LAST_RESORT_AFTER_MS, INPUT_BOX_RELOAD_AFTER_MS, WATCHDOG_AFTER_MS,
 };
 use super::*;
 
@@ -59,6 +59,19 @@ pub type SessionChatQueueWaker = Arc<dyn Fn(&str, &str, &str) + Send + Sync>;
 /// Posts `(project, session, body)` to the notification bell when the session's head row has been
 /// stuck on a missing input box for five minutes (`INPUT_BOX_STUCK_AFTER_MS`), once per row.
 pub type SessionChatQueueStuckNotifier = Arc<dyn Fn(&str, &str, &str) + Send + Sync>;
+
+/// Reloads the agent of `(project, session)` for its head row `prompt` held on a missing input box
+/// (held_reload.rs); the scheduler awaits it under the session's delivery claim. Answers false when
+/// a passing state (a turn, the cooldown on automatic restarts) refused it, so it is tried again.
+pub type SessionChatQueueInputBoxReloader = Arc<
+    dyn Fn(
+            String,
+            String,
+            String,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
+        + Send
+        + Sync,
+>;
 
 #[derive(Default)]
 struct SessionQueueGate {
@@ -155,7 +168,14 @@ struct InputBoxHold {
     since: DateTime<Utc>,
     logged: bool,
     last_resort_logged: bool,
+    /// The reload step ran or was settled for this row (held_reload.rs): once per row.
+    reload_done: bool,
+    /// When the reload step may be tried again after a passing refusal.
+    reload_retry_at: Option<DateTime<Utc>>,
 }
+
+/// How long the reload step waits after a passing refusal before it tries again.
+const INPUT_BOX_RELOAD_RETRY_MS: i64 = 120_000;
 
 /// Starts or continues `hold` for `prompt_id`. Answers how long the row has waited on the input
 /// box, and true exactly once per row, when it has waited [`INPUT_BOX_HOLD_LOG_AFTER_MS`].
@@ -171,6 +191,8 @@ fn input_box_hold_log_due(
             since: now,
             logged: false,
             last_resort_logged: false,
+            reload_done: false,
+            reload_retry_at: None,
         }),
     };
     let waited = now.signed_duration_since(hold.since).num_milliseconds();
@@ -324,6 +346,9 @@ struct ReadyDelivery {
     /// long as the input box is missing (CDXC:SessionChat 2026-10-11 in session_chat_send_wake.rs).
     startup_send: bool,
     model_selection: Option<crate::session_chat_model_selection::PendingModelSelection>,
+    /// Not a send: the head row has waited past [`INPUT_BOX_RELOAD_AFTER_MS`] on a missing input
+    /// box, so the agent is reloaded instead (held_reload.rs).
+    input_box_reload: bool,
 }
 
 #[derive(Clone)]
@@ -338,6 +363,7 @@ pub struct SessionChatQueueRuntime {
     compacting_refresher: SessionChatQueueCompactingRefresher,
     waker: SessionChatQueueWaker,
     stuck_notifier: SessionChatQueueStuckNotifier,
+    input_box_reloader: SessionChatQueueInputBoxReloader,
     gates: Arc<Mutex<HashMap<String, SessionQueueGate>>>,
     composer_holds: crate::session_chat_queue_undelivered::SessionChatQueueComposerHolds,
     /// Sessions with a delivery in flight. The claim in
@@ -359,6 +385,7 @@ impl SessionChatQueueRuntime {
         compacting_refresher: SessionChatQueueCompactingRefresher,
         waker: SessionChatQueueWaker,
         stuck_notifier: SessionChatQueueStuckNotifier,
+        input_box_reloader: SessionChatQueueInputBoxReloader,
     ) -> Self {
         Self {
             paths,
@@ -371,6 +398,7 @@ impl SessionChatQueueRuntime {
             compacting_refresher,
             waker,
             stuck_notifier,
+            input_box_reloader,
             gates: Arc::new(Mutex::new(HashMap::new())),
             composer_holds: Default::default(),
             delivering: Arc::new(Mutex::new(HashSet::new())),
@@ -582,6 +610,17 @@ impl SessionChatQueueRuntime {
                 prompt_id: head.id.clone(),
                 startup_send: head.startup_send,
                 model_selection: None,
+                input_box_reload: false,
+            })
+        };
+        let reload = |head: &crate::session_chat_queue::SessionChatQueuedPrompt| {
+            Assessment::Deliver(ReadyDelivery {
+                project_id: project_id.to_string(),
+                session_id: session_id.to_string(),
+                prompt_id: head.id.clone(),
+                startup_send: head.startup_send,
+                model_selection: None,
+                input_box_reload: true,
             })
         };
         let hold = |head: &crate::session_chat_queue::SessionChatQueuedPrompt,
@@ -653,6 +692,7 @@ impl SessionChatQueueRuntime {
                 prompt_id: String::new(),
                 startup_send: false,
                 model_selection: Some(selection.clone()),
+                input_box_reload: false,
             });
         }
         // CDXC:SessionChat 2026-09-09 SEE-ALSO:
@@ -752,6 +792,12 @@ impl SessionChatQueueRuntime {
             // last resort needs every other signal to say idle, since this branch runs before
             // the activity and transcript gates.
             let waited = self.hold_for_input_box(project_id, session_id, &head.id, &composer, now);
+            if waited >= INPUT_BOX_RELOAD_AFTER_MS
+                && self.idle_by_every_signal(key, &session, generated_at)
+                && self.claim_input_box_reload(key, &head.id, now)
+            {
+                return reload(head);
+            }
             if waited >= INPUT_BOX_LAST_RESORT_AFTER_MS
                 && !self.composer_holds.waiting(key, &head.id, now)
                 && self.idle_by_every_signal(key, &session, generated_at)
@@ -909,6 +955,11 @@ impl SessionChatQueueRuntime {
                 (self.compacting_refresher)(project_id, session_id, composer_agent.as_deref());
             }
             // Every gate above has passed, so the agent is idle by every other signal.
+            if waited >= INPUT_BOX_RELOAD_AFTER_MS
+                && self.claim_input_box_reload(key, &head.id, now)
+            {
+                return reload(head);
+            }
             if waited >= INPUT_BOX_LAST_RESORT_AFTER_MS {
                 self.log_last_resort(project_id, session_id, &head.id, &composer);
                 return deliver(head);
@@ -919,6 +970,17 @@ impl SessionChatQueueRuntime {
     }
 
     async fn deliver(&self, key: String, ready: ReadyDelivery) {
+        if ready.input_box_reload {
+            let prompt_id = ready.prompt_id.clone();
+            if (self.input_box_reloader)(ready.project_id, ready.session_id, ready.prompt_id).await
+            {
+                self.settle_input_box_reload(&key, &prompt_id);
+            }
+            self.composer_holds.clear(&key);
+            self.reset_gate(&key);
+            self.finish_delivery(&key);
+            return;
+        }
         if let Some(selection) = ready.model_selection {
             (self.model_selector)(ready.project_id, ready.session_id, selection).await;
             self.reset_gate(&key);
@@ -1053,6 +1115,39 @@ impl SessionChatQueueRuntime {
             );
         }
         waited
+    }
+
+    /// Whether the reload step is due for this held row now: not settled yet, and past the wait
+    /// after a passing refusal. Answering yes starts that wait.
+    fn claim_input_box_reload(&self, key: &str, prompt_id: &str, now: DateTime<Utc>) -> bool {
+        self.gates.lock().is_ok_and(|mut gates| {
+            gates
+                .get_mut(key)
+                .and_then(|gate| gate.input_box_hold.as_mut())
+                .filter(|hold| {
+                    hold.prompt_id == prompt_id
+                        && !hold.reload_done
+                        && hold.reload_retry_at.is_none_or(|at| now >= at)
+                })
+                .map(|hold| {
+                    hold.reload_retry_at =
+                        Some(now + chrono::Duration::milliseconds(INPUT_BOX_RELOAD_RETRY_MS));
+                })
+                .is_some()
+        })
+    }
+
+    /// The reload step ran, or was refused for good, for this row: it is not tried again.
+    fn settle_input_box_reload(&self, key: &str, prompt_id: &str) {
+        if let Ok(mut gates) = self.gates.lock() {
+            if let Some(hold) = gates
+                .get_mut(key)
+                .and_then(|gate| gate.input_box_hold.as_mut())
+                .filter(|hold| hold.prompt_id == prompt_id)
+            {
+                hold.reload_done = true;
+            }
+        }
     }
 
     fn notice_confirmed(
@@ -1203,6 +1298,7 @@ impl SessionChatQueueRuntime {
             prompt_id: prompt_id.to_string(),
             startup_send,
             model_selection: None,
+            input_box_reload: false,
         })
     }
 

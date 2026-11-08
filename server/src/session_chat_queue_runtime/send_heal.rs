@@ -312,26 +312,12 @@ pub(crate) async fn restart_agent_for_send(
             return Err(reason);
         }
     }
-    let key = format!("{}:{}", target.project_id, target.session_id);
     let fingerprint = if agent_running {
         None
     } else {
         wake_fingerprint(state, &session).await
     };
-    {
-        let restarts = SEND_HEAL_RESTARTS.get_or_init(|| Mutex::new(HashMap::new()));
-        let Ok(mut restarts) = restarts.lock() else {
-            return Err("the restart record could not be read");
-        };
-        restarts.retain(|_, at| at.elapsed() < SEND_HEAL_RESTART_COOLDOWN);
-        if restarts.contains_key(&key) {
-            return Err("the agent was already restarted automatically a few minutes ago");
-        }
-        if !count_same_restart(&key, fingerprint) {
-            return Err(RESTART_REPEATED_WITHOUT_AGENT);
-        }
-        restarts.insert(key, Instant::now());
-    }
+    claim_automatic_restart(target, fingerprint)?;
     cycle_session(state, &target.project_id, &target.session_id).await?;
     record(
         state,
@@ -344,6 +330,77 @@ pub(crate) async fn restart_agent_for_send(
         },
     );
     Ok(())
+}
+
+/// Takes the session's one automatic restart per [`SEND_HEAL_RESTART_COOLDOWN`], refused when a
+/// restart already ran in it or the same restart of a gone agent keeps repeating.
+fn claim_automatic_restart(
+    target: &crate::session_chat_send::SessionChatSendTarget,
+    fingerprint: Option<String>,
+) -> Result<(), &'static str> {
+    let key = format!("{}:{}", target.project_id, target.session_id);
+    let restarts = SEND_HEAL_RESTARTS.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut restarts) = restarts.lock() else {
+        return Err("the restart record could not be read");
+    };
+    restarts.retain(|_, at| at.elapsed() < SEND_HEAL_RESTART_COOLDOWN);
+    if restarts.contains_key(&key) {
+        return Err("the agent was already restarted automatically a few minutes ago");
+    }
+    if !count_same_restart(&key, fingerprint) {
+        return Err(RESTART_REPEATED_WITHOUT_AGENT);
+    }
+    restarts.insert(key, Instant::now());
+    Ok(())
+}
+
+/// CDXC:SessionChat 2026-11-08 DECISION:
+/// User, after five thread reports sat "Waiting for agent" on an idle coordinator for four hours:
+/// "had to do full reload to wake you up and get these moving.. wtf? Please fix". A message held
+/// because the agent's input box is not on screen, on an agent idle by its hooks and transcript,
+/// is healed by the Full Reload the user did (sleep, then wake on the same conversation) once the
+/// fresh reads, Ctrl+L and resize of the input-box ladder have not brought the box back
+/// (held_reload.rs). Unlike a refused send's restart, a coordinator is reloaded too: the user's
+/// own fix was a coordinator's reload, its threads run in their own sessions and go on, and a
+/// coordinator that cannot take their reports is stuck anyway. Background tasks Claude's footer
+/// counts (`⧉ N`) still refuse it, as do a running turn, compaction, a pending question and the
+/// shared ten-minute limit on automatic restarts.
+pub(crate) async fn reload_idle_agent_for_input_box(
+    state: &AppState,
+    target: &crate::session_chat_send::SessionChatSendTarget,
+) -> Result<(), ReloadRefusal> {
+    let passing = |reason| ReloadRefusal {
+        reason,
+        lasting: false,
+    };
+    let session = &target.session;
+    if !can_start_on_its_conversation(state, session).await {
+        return Err(ReloadRefusal {
+            reason: "the agent has no conversation to resume",
+            lasting: true,
+        });
+    }
+    if agent_is_busy(session).await {
+        return Err(passing("the agent is in the middle of a turn"));
+    }
+    let screen = crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
+    if screen.as_deref().is_some_and(shows_claude_background_tasks) {
+        return Err(passing("the agent has background tasks a reload would end"));
+    }
+    claim_automatic_restart(target, None).map_err(passing)?;
+    // A sleep or wake that failed is not retried on its own: the stuck words and bell take over.
+    cycle_session(state, &target.project_id, &target.session_id)
+        .await
+        .map_err(|reason| ReloadRefusal {
+            reason,
+            lasting: true,
+        })
+}
+
+/// Why an input-box reload did not run; a `lasting` one is not tried again for the same message.
+pub(crate) struct ReloadRefusal {
+    pub(crate) reason: &'static str,
+    pub(crate) lasting: bool,
 }
 
 /// CDXC:SessionChat 2026-11-07 WHY:

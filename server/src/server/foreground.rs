@@ -419,6 +419,7 @@ pub async fn run_gxserver_foreground(
         session_chat_queue_compacting_refresher(&state),
         session_chat_queue_waker(&state),
         crate::session_chat_queue_runtime::session_chat_queue_stuck_notifier(&state),
+        crate::session_chat_queue_runtime::session_chat_queue_input_box_reloader(&state),
     )
     .start(shutdown_tx.subscribe());
     crate::session_chat_send_failure::spawn_send_failure_task(

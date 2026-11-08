@@ -172,3 +172,20 @@ pub(crate) fn session_chat_queue_stuck_notifier(
         );
     })
 }
+
+/// The input-box ladder's reload step (held_reload.rs).
+pub(crate) fn session_chat_queue_input_box_reloader(
+    state: &Arc<AppState>,
+) -> crate::session_chat_queue_runtime::SessionChatQueueInputBoxReloader {
+    let state = state.clone();
+    Arc::new(
+        move |project_id: String, session_id: String, prompt_id: String| {
+            Box::pin(super::held_reload::reload_for_held_message(
+                state.clone(),
+                project_id,
+                session_id,
+                prompt_id,
+            ))
+        },
+    )
+}
