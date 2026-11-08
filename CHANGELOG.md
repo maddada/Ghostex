@@ -2,35 +2,54 @@
 
 ## Unreleased
 
-## 11.1.2 - 2026-11-08
+## 11.2.0 - 2026-11-08
 
-**Ghostex 11.1.2 is out.** Bots get your connected apps and sign-ins, pasted images send with your message, one approval card per agent and project, Chief of Staff in the Unified sidebar, and fixes for local network access on macOS and coordinator messages.
+**Ghostex 11.2.0 is out.** Bots get your connected apps and sign-ins, pasted images send with your message, agents work across your projects without asking again, approvals open as centred dialogs, remote computers connect more smoothly, and Settings gets tidier.
 
 ### 🤖 Bots
 
-- **GBots bots get every app you connect in Settings > Connectors**, with the same Ask, Allow and Never rules and approval cards in the bot's chat, plus your gh and Google sign-ins, and they answer setup questions with Ghostex's own screens.
-- **Bot chats stay calm:** no Autopilot or Ghostex nudges, and a Ghostex message never becomes a bot chat's title.
-- **One sidebar session per bot chat**, with existing twins merged; a renamed bot chat keeps its name, and renaming no longer types "/rename" to the bot. The first bot shows as Primary Bot.
+- **GBots bots get every app you connect in Settings > Connectors** and your gh and Google sign-ins, with the same Ask, Allow and Never rules, and they answer setup questions with Ghostex's own screens.
+- **Bot chats stay calm:** no Autopilot nudges, and a Ghostex message never becomes a bot chat's title.
+- **One sidebar session per bot chat**, and a renamed bot chat keeps its name without "/rename" being typed to the bot.
 
 ### 💬 Chat
 
 - **Enter waits for a pasted image and sends your text and the image together**, on the desktop, the web and the phone, and pasting is faster.
-- **Red error lines become one-line cards**, and tool cards line up: even heights and gaps, and calls after a background task or a rejected call join the card.
-- **The working row drops a finished tool's label.**
+- **Tool cards stay one line** with the running call in the header ("+2 more"), and open when a call waits for your approval.
+- **Red error lines are one-line cards**, and several pictures in one message show without "[Image #2]".
+- **A queued Codex message never leaves a stuck "left the queue" card** (#509).
+- **The Summary and Detailed view chips show their icon**, turning into the × to close, and handover headings below a one-click answer are styled again.
 
-### 🔐 Approvals
+### 🔐 Approvals and agents
 
-- **An agent reaching another project asks with one card**, however many messages it sends, and approving or denying closes it everywhere at once.
-- **"Ask once per project" answers survive a restart**, and Stop on a connected computer's session never shows a raw approval line.
+- **Agents work across your projects again without asking:** they message, start, type into, interrupt and answer sessions in any project, while pairing, Collab, security settings and starting an agent with approvals off still ask you.
+- **Every notice with a button is a centred dialog**, one at a time ("1 of 3"), and an "Approvals waiting" pill brings back the ones you put aside. Copy details sits with the buttons, and light dialogs' main buttons are frosted grey.
+- **A Claude Code prompt with the auto-block countdown is answered on the first click**, and an answered card dims with "Sending…".
+
+### 🌐 Remote computers
+
+- **A computer added with its password connects right away** (#508), and an Easy Connect computer that must pair again says so instead of retrying.
+- **A connected computer asks once to act as you**, not on every connect; a computer that is really this one never asks to let itself in, and an approved request takes effect at once.
+- **Settings > Remote has a Current machine card** with this computer's name, short name and SSH access, and it no longer checks SSH every 10 seconds.
+- **Windows can message a Mac when signed in as an administrator.**
+
+### ⚙️ Settings and the window
+
+- **Theme presets sit in one compact sideways row**, colour rows stack in a narrow window, and the Settings rail's groups read in sentence case with more room.
+- **Settings > Dictation explains Hex clearly**, with Install Hex (the official installer, after you confirm with Touch ID) and a link to anoma.ly/hex.
+- **View playbook shows the playbook your coordinators follow**, from the New Coordinator dialog, Settings and the right-click editor.
+- **macOS: full screen with transparency shows your blurred desktop picture** instead of black.
+- **macOS: Login Items lists Ghostex's helpers as Ghostex**, and Ghostex stops rewriting them on every start (#510).
+- **Main Hub (beta) in Settings > Extensions**, off by default.
 
 ### 🩹 Fixes and polish
 
-- **Chief is now Chief of Staff**, shows in the Unified sidebar, stays out of the Bots views, and dims its chevron when it has nothing to fold.
+- **A session whose terminal ended outside Ghostex shows as sleeping and reopens** (#512), thanks to @bet4it.
+- **Chief is now Chief of Staff.**
 - **macOS: programs in your sessions reach the local network again** (#504).
 - **Coordinators: a message and a thread report sent at the same moment both arrive** (#505, #506), and a finished report no longer raises a false "not moving".
 - **Pins are one filled and outline pair everywhere**, and right-clicking a pinned extension's header icon offers Unpin and Disable.
-- **The extensions menu's Terminal chip reads in the light theme**, and the × on toasts and board cards is easier to see.
-- **Linear tickets linked by their ID open in the right workspace.**
+- **The extensions menu's Terminal chip reads in the light theme**, the × on toasts and board cards is easier to see, and Linear tickets linked by their ID open in the right workspace.
 
 ## 11.1.1 - 2026-11-08
 
