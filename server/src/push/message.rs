@@ -24,6 +24,8 @@ pub(crate) enum AlertKind {
     Finished,
     NeedsInput,
     Failed,
+    /// A sensitive action recorded in the security log (server/src/audit/notify.rs).
+    Security,
 }
 
 impl AlertKind {
@@ -32,6 +34,7 @@ impl AlertKind {
             Self::Finished => "finished",
             Self::NeedsInput => "needsInput",
             Self::Failed => "failed",
+            Self::Security => "security",
         }
     }
 
@@ -41,6 +44,7 @@ impl AlertKind {
             Self::NeedsInput if has_question => "Has a question",
             Self::NeedsInput => "Waiting for you",
             Self::Failed => "Ended with an error",
+            Self::Security => "Security: check this was you",
         }
     }
 
@@ -50,6 +54,8 @@ impl AlertKind {
             Self::Finished => kinds.finished,
             Self::NeedsInput => kinds.waiting,
             Self::Failed => kinds.error,
+            // CDXC:Security 2026-11-08 WHY: the point of the notice is that the owner sees every sensitive action at once, so no per-kind switch turns it off.
+            Self::Security => true,
         }
     }
 }

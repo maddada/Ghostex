@@ -13,6 +13,7 @@ pub mod agent_transcripts;
 pub(crate) mod agentbox;
 pub mod agents;
 pub(crate) mod app_update;
+pub mod audit;
 pub mod auth;
 pub mod automations;
 pub(crate) mod autopilot;

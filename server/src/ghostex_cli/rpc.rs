@@ -325,7 +325,17 @@ fn with_agent_caller(pathname: &str, body: &Value) -> Option<Value> {
     if pathname != "/api/answerSessionChatPrompt" {
         return None;
     }
-    let caller = [
+    let caller = caller_session_from_env()?;
+    let mut body = body.clone();
+    body.get_mut("params")?
+        .as_object_mut()?
+        .insert("agentCaller".to_string(), Value::String(caller));
+    Some(body)
+}
+
+/// The session this CLI runs in, from the variables Ghostex sets in every session.
+fn caller_session_from_env() -> Option<String> {
+    [
         "GHOSTEX_GLOBAL_SESSION_REF",
         "GHOSTEX_NATIVE_SESSION_ID",
         "GHOSTEX_SESSION_ID",
@@ -337,12 +347,7 @@ fn with_agent_caller(pathname: &str, body: &Value) -> Option<Value> {
             .ok()
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
-    })?;
-    let mut body = body.clone();
-    body.get_mut("params")?
-        .as_object_mut()?
-        .insert("agentCaller".to_string(), Value::String(caller));
-    Some(body)
+    })
 }
 
 /// The gxserver response envelope (`{ok, result, requestId, ...}`) exactly as the daemon sent it,
@@ -365,6 +370,8 @@ pub fn request_gxserver_envelope(
         .or_else(|| flags.number("timeoutMs"))
         .unwrap_or(15_000.0);
     let body_text = body.to_string();
+    // The security log names the session a sensitive request came from (server/src/audit/caller.rs).
+    let caller_session = caller_session_from_env();
     // The token goes only to a listener of this account (ghostex_paths::loopback_owner).
     ghostex_paths::loopback_owner::check_url(&target.base_url)
         .map_err(|error| CliError::Other(error.to_string()))?;
@@ -372,14 +379,18 @@ pub fn request_gxserver_envelope(
     let outcome = crate::http_client::wait_out_server_starting(
         Instant::now() + Duration::from_millis(timeout_ms.max(0.0) as u64),
         |remaining| {
-            crate::http_agent::answering_agent()
+            let mut request = crate::http_agent::answering_agent()
                 .post(format!("{}{}", target.base_url, pathname))
                 .header("authorization", format!("Bearer {}", target.token))
                 .header("content-type", "application/json")
                 .header(
                     GXSERVER_PROTOCOL_HEADER,
                     GXSERVER_PROTOCOL_VERSION.to_string(),
-                )
+                );
+            if let Some(session) = &caller_session {
+                request = request.header(crate::audit::CALLER_SESSION_HEADER, session.as_str());
+            }
+            request
                 .config()
                 .timeout_global(Some(remaining.max(Duration::from_millis(1))))
                 .build()

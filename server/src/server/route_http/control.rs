@@ -40,6 +40,9 @@ pub(super) async fn route_control_http(
         "/api/startFeedbackAgent" => {
             handle_start_feedback_agent_http(&state, endpoint.path, request_id, &body_json).await
         }
+        crate::audit::SECURITY_LOG_ENDPOINT => {
+            crate::audit::handle_security_log_http(endpoint.path, request_id, &body_json).await
+        }
         "/api/tailcatStatus" | "/api/updateTailcatState" | "/api/installTailcat" => {
             handle_tailcat_http(&state, endpoint.path, request_id, &body_json).await
         }

@@ -31,6 +31,14 @@ pub(crate) const ACCOUNT_NOTIFICATION_SESSION_PREFIX: &str = "account:";
 /// The `projectId` account rows are stored under.
 pub(crate) const ACCOUNT_NOTIFICATION_PROJECT_ID: &str = "accounts";
 
+/// A sensitive action recorded in the security log (server/src/audit/notify.rs): one row per log
+/// entry, under this prefix plus the entry's number, so a click opens Settings > Security and the
+/// orphan sweep keeps it. Clients draw it like an account row, with no session to open.
+pub(crate) const NOTIFICATION_FEED_KIND_SECURITY: &str = "security";
+pub(crate) const SECURITY_NOTIFICATION_SESSION_PREFIX: &str = "security:";
+/// The `projectId` security rows are stored under.
+pub(crate) const SECURITY_NOTIFICATION_PROJECT_ID: &str = "security";
+
 pub(crate) fn account_notification_session_id(account_id: &str) -> String {
     format!("{ACCOUNT_NOTIFICATION_SESSION_PREFIX}{account_id}")
 }
@@ -183,8 +191,8 @@ fn prune_notification_feed(db: &Connection) -> DomainResult<()> {
 /// Rows whose session was deleted have nothing to open; drop them before listing.
 fn drop_orphaned_notification_feed_rows(db: &Connection) -> DomainResult<()> {
     db.execute(
-        "DELETE FROM notification_feed WHERE sessionId NOT IN (SELECT sessionId FROM sessions) AND substr(sessionId, 1, length(?1)) <> ?1",
-        params![ACCOUNT_NOTIFICATION_SESSION_PREFIX],
+        "DELETE FROM notification_feed WHERE sessionId NOT IN (SELECT sessionId FROM sessions) AND substr(sessionId, 1, length(?1)) <> ?1 AND substr(sessionId, 1, length(?2)) <> ?2",
+        params![ACCOUNT_NOTIFICATION_SESSION_PREFIX, SECURITY_NOTIFICATION_SESSION_PREFIX],
     )
     .map_err(sql_error)?;
     Ok(())
@@ -244,13 +252,18 @@ pub(crate) fn unread_notification_session_ids(
 ) -> DomainResult<Vec<String>> {
     let mut statement = db
         .prepare(
-            "SELECT DISTINCT sessionId FROM notification_feed WHERE readAt IS NULL AND (?1 IS NULL OR id = ?1) AND substr(sessionId, 1, length(?2)) <> ?2",
+            "SELECT DISTINCT sessionId FROM notification_feed WHERE readAt IS NULL AND (?1 IS NULL OR id = ?1) AND substr(sessionId, 1, length(?2)) <> ?2 AND substr(sessionId, 1, length(?3)) <> ?3",
         )
         .map_err(sql_error)?;
     let rows = statement
-        .query_map(params![id, ACCOUNT_NOTIFICATION_SESSION_PREFIX], |row| {
-            row.get::<_, String>(0)
-        })
+        .query_map(
+            params![
+                id,
+                ACCOUNT_NOTIFICATION_SESSION_PREFIX,
+                SECURITY_NOTIFICATION_SESSION_PREFIX
+            ],
+            |row| row.get::<_, String>(0),
+        )
         .map_err(sql_error)?
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(sql_error)?;
@@ -419,6 +432,13 @@ fn item_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
         .and_then(|id| id.strip_prefix(ACCOUNT_NOTIFICATION_SESSION_PREFIX))
     {
         item["accountId"] = Value::String(account_id.to_string());
+    }
+    if let Some(entry) = item["sessionId"]
+        .as_str()
+        .and_then(|id| id.strip_prefix(SECURITY_NOTIFICATION_SESSION_PREFIX))
+        .and_then(|seq| seq.parse::<u64>().ok())
+    {
+        item["securityEntry"] = Value::from(entry);
     }
     Ok(item)
 }

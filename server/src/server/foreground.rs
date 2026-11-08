@@ -218,6 +218,7 @@ pub async fn run_gxserver_foreground(
         version,
         zmx_title_observers: Arc::new(Mutex::new(HashMap::new())),
     });
+    crate::audit::install_notifier(state.clone());
     /*
     CDXC:Build 2026-06-24-20:22:
     The JSON RPC catch-all needs the raw Request so server can preserve the
