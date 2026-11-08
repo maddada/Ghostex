@@ -47,10 +47,11 @@ impl BotState {
             .unwrap_or("Bot")
             .trim()
             .to_string();
-        // The runtime names its own first bot (the Chief of Staff) after the product, which in the
+        // The runtime names its own first bot (its `chiefOfStaff`) after the product, which in the
         // Bots space would read as a heading rather than a bot.
+        // CDXC:Chief 2026-11-08 DECISION: User (Q1903): that bot shows as "Primary Bot", not "Chief of Staff", so it no longer clashes with Ghostex's Chief of Staff (server/src/chief/).
         if name == "GBots" && bot.get("chiefOfStaff").and_then(Value::as_bool) == Some(true) {
-            name = "Chief of Staff".to_string();
+            name = "Primary Bot".to_string();
         }
         let threads = bot
             .get("tasks")
