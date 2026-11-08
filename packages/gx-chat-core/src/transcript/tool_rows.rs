@@ -157,6 +157,8 @@ pub fn tool_fold_label(hidden_count: usize) -> String {
 /// that renders as a question exchange.
 ///
 /// CDXC:SessionChat 2026-10-22 DECISION: User, seeing "+4 previous tool calls" drawn under the call it ran before: "please in this case show the 'previous tool calls' above the 'Confirm folder contents...' tool call. the previous tool calls thing should always be before the last tool call not below it". The toggle sits right before the last call (`toggleBefore`, that row's index), closed or open, so the calls it reveals appear above it in the order they ran and the last call stays below. The renderers place it there (desktop `tool_run.rs`, phone `ToolRows.tsx`).
+///
+/// CDXC:SessionChat 2026-11-08 DECISION: User, with the detailed view's earlier call opened: "it's showing that prev tool call above the collapse header (Show fewer tool calls) ... we should show Show fewer tool calls above all other tool calls sir, not to be in between them". Closed, the toggle stays right before the last call; open, it moves to the top of the group (`toggleBeforeOpen`, 0) and every call, the revealed earlier ones then the always-visible last ones, follows below it in the order they ran. The revealed rows grow below the toggle, so it never moves under the pointer. [`tool_fold_toggle_before`] picks the slot for either state.
 pub fn tool_run_fold(exchanges: &[bool]) -> Value {
     let visible: Vec<bool> = exchanges
         .iter()
@@ -168,7 +170,21 @@ pub fn tool_run_fold(exchanges: &[bool]) -> Value {
         "visible": visible,
         "hiddenCount": hidden_count,
         "toggleBefore": exchanges.len().saturating_sub(1),
+        "toggleBeforeOpen": 0,
         "collapsedLabel": tool_fold_label(hidden_count),
         "expandedLabel": TOOL_FOLD_EXPANDED_LABEL,
     })
+}
+
+/// The row index the fold toggle is drawn before: the last call while the run is closed, the first
+/// row while it is open, so the toggle never sits between the calls it reveals.
+pub fn tool_fold_toggle_before(fold: &Value, open: bool) -> usize {
+    let key = if open {
+        "toggleBeforeOpen"
+    } else {
+        "toggleBefore"
+    };
+    fold[key]
+        .as_u64()
+        .map_or(if open { 0 } else { usize::MAX }, |index| index as usize)
 }
