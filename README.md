@@ -43,17 +43,17 @@
 <h3 align="center">First-class Coordinators with Visual Questions</h3>
 <p align="center">Coordinators fully manage your projects for you and spin up threads automatically.</br>Work best with the /ghostex-visuals skill</p>
 <p align="center">
-  <a href="media/readme/gx-hero-7.webp">
+  <a href="media/readme/gx-hero-9.webp">
     <picture>
-      <img width="960" src="media/readme/gx-hero-7.webp" />
+      <img width="960" src="media/readme/gx-hero-9.webp" />
     </picture>
   </a>
 </p>
 
 <p align="center">
-  <a href="media/readme/gx-hero-8.webp">
+  <a href="media/readme/gx-hero-10.webp">
     <picture>
-      <img width="960" src="media/readme/gx-hero-8.webp" />
+      <img width="960" src="media/readme/gx-hero-10.webp" />
     </picture>
   </a>
 </p>
