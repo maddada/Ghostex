@@ -61,12 +61,12 @@ fn preview_failure(code: &str) -> Option<DictatePhase> {
     let (provider, message, detail) = match code {
         "noKey" => (
             None,
-            "Dictate needs an xAI or OpenAI API key, and neither is set. Add one in Settings > Voice, then transcribe again.",
+            "Dictate needs an xAI or OpenAI API key, and neither is set. Add one in Settings > Dictation, then transcribe again.",
             None,
         ),
         "badKey" => (
             Some("xai"),
-            "xAI refused the API key. Check it in Settings > Voice, then transcribe again.",
+            "xAI refused the API key. Check it in Settings > Dictation, then transcribe again.",
             Some("Incorrect API key provided."),
         ),
         "providerUnavailable" => (
@@ -94,9 +94,9 @@ fn preview_failure(code: &str) -> Option<DictatePhase> {
             "The recording's audio file is gone, so it can't be transcribed.",
             None,
         ),
-        "modelMissing" => (
-            Some("local"),
-            "Dictate's engine is the local model, and Parakeet TDT 0.6B v3 isn't downloaded yet (0.72 GB). Download it in Settings > Voice, then transcribe again.",
+        "hexNotInstalled" => (
+            Some("hex"),
+            "Hex 3 isn't installed on this computer. Install it to transcribe with Hex.",
             None,
         ),
         _ => return None,
@@ -201,8 +201,6 @@ pub(crate) fn dictate_engine() -> Option<serde_json::Value> {
 }
 
 pub(crate) fn refresh_engine() {}
-
-pub(crate) fn download_engine_model(_model_id: &str) {}
 
 pub(crate) fn previous_recording() -> Option<(String, u64, i64)> {
     None

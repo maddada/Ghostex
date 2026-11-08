@@ -141,10 +141,10 @@ pub(crate) fn remote_key_sentence(code: &str, machine_name: Option<&str>) -> Str
         ),
     };
     if code == "badKey" {
-        format!("{subject} refused its voice key. Check it in Settings › Voice on {place}.")
+        format!("{subject} refused its voice key. Check it in Settings › Voice Agent on {place}.")
     } else {
         format!(
-            "{subject} has no voice key yet. Add one in Settings › Voice on {place} to have a voice call about its sessions."
+            "{subject} has no voice key yet. Add one in Settings › Voice Agent on {place} to have a voice call about its sessions."
         )
     }
 }

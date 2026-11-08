@@ -349,7 +349,7 @@ struct Running {
     shared: Arc<Shared>,
     input_name: Option<String>,
     output_name: Option<String>,
-    /// The microphone is the one picked in Settings › Voice, not the system default.
+    /// The microphone is the one picked in Settings › Dictation, not the system default.
     chosen_input: bool,
 }
 
@@ -360,7 +360,7 @@ fn named_input(host: &cpal::Host, name: &str) -> Option<Device> {
         .find(|device| device_name(device).as_deref() == Some(name))
 }
 
-/// The microphones' names, for Settings › Voice's picker, and the default one's.
+/// The microphones' names, for Settings › Dictation's picker, and the default one's.
 pub(crate) fn input_names() -> (Vec<String>, Option<String>) {
     let host = cpal::default_host();
     let mut names: Vec<String> = host

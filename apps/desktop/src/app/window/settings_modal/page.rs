@@ -48,6 +48,58 @@ impl PageBlock {
     }
 }
 
+/// Space above the page title, below the search field.
+const HEADER_TOP: f32 = 20.0;
+
+/// The page's title with its one-line intro under it (`ghostex_settings_catalog::page_intro`),
+/// above the first section, whose own extra top space it takes over.
+///
+/// CDXC:Settings 2026-11-08 DECISION:
+/// User (Q1712 "Page title and line"): every Settings page shows its title with a one-line intro under it, no card; the lines are the catalog's (packages/settings-catalog/src/intros.rs).
+fn with_page_header(
+    tab: SettingsTabId,
+    p: &SettingsPalette,
+    blocks: Vec<PageBlock>,
+) -> Vec<PageBlock> {
+    let header = v_flex()
+        .w_full()
+        .px(px(2.0))
+        .gap(px(4.0))
+        .child(
+            div()
+                .text_size(px(20.0))
+                .line_height(px(26.0))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(hsla(p.foreground))
+                .child(tab.title()),
+        )
+        .when_some(
+            ghostex_settings_catalog::page_intro(tab.id()),
+            |header, intro| {
+                header.child(
+                    div()
+                        .text_size(px(13.5))
+                        .line_height(px(19.0))
+                        .text_color(hsla(p.muted))
+                        .child(intro),
+                )
+            },
+        );
+    let mut blocks = blocks;
+    // Pages add 20px over their first section's own 12px; the header takes that place now.
+    if let Some(first) = blocks.first_mut() {
+        first.margin_top = first.margin_top.min(12.0);
+    }
+    let mut out = Vec::with_capacity(blocks.len() + 1);
+    out.push(PageBlock {
+        anchor: None,
+        element: header.into_any_element(),
+        margin_top: HEADER_TOP,
+    });
+    out.extend(blocks);
+    out
+}
+
 /// `getMostlyVisibleSettingsSectionId`: the anchor with the most height in the viewport, ties to
 /// the one nearest the viewport's center.
 fn mostly_visible(
@@ -92,6 +144,7 @@ pub(crate) fn settings_page(
     blocks: Vec<PageBlock>,
     cx: &mut App,
 ) -> AnyElement {
+    let blocks = with_page_header(tab, p, blocks);
     let (handle, tracker) = store.update(cx, |store, _| {
         (store.scroll_handle(tab), store.tracker(tab))
     });
@@ -107,7 +160,6 @@ pub(crate) fn settings_page(
             .when(block.margin_top > 0.0, |this| this.mt(px(block.margin_top)))
             .child(block.element)
     });
-    let _ = p;
     let column = v_flex()
         .w_full()
         .items_center()

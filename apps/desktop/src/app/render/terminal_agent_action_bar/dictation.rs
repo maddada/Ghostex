@@ -3,7 +3,7 @@
 // Pressing the button while it transcribes cancels (the recording is kept as dismissed), and
 // right-clicking it transcribes the newest recording that has no text yet (Transcribe previous).
 // A failure is a toast that says why; the recording stays for Transcribe previous and in
-// Settings › Voice › Dictation history.
+// Settings › Dictation › Dictation history.
 //
 // CDXC:SessionChat 2026-10-08 DECISION:
 // User: "show the mic in the terminal view bottom bar to the left of the chat view button". It is
@@ -129,7 +129,7 @@ impl GhostexGpuiApp {
                 DictateEvent::Failure { title, message } => {
                     let message = if title == "Transcription failed" {
                         format!(
-                            "{message} Right-click the microphone to transcribe it again, or find it in Settings > Voice > Dictation history."
+                            "{message} Right-click the microphone to transcribe it again, or find it in Settings > Dictation > Dictation history."
                         )
                     } else {
                         message.clone()

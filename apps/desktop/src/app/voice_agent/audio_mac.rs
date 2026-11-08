@@ -190,7 +190,7 @@ impl Drop for MacVoiceAudio {
     }
 }
 
-/// The microphones' names, for Settings › Voice's picker, and the default one's (CoreAudio's input
+/// The microphones' names, for Settings › Dictation's picker, and the default one's (CoreAudio's input
 /// devices, `GhostexVoiceInputDevices`).
 pub(crate) fn input_names() -> (Vec<String>, Option<String>) {
     let mut buffer = vec![0 as std::ffi::c_char; 16 * 1024];

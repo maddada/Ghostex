@@ -24,6 +24,7 @@ mod hotkey_definitions;
 pub mod hotkey_label;
 pub mod hotkeys;
 pub mod interface_scale;
+pub mod intros;
 pub mod json;
 pub mod layout;
 pub mod modules;
@@ -43,6 +44,7 @@ pub use hotkeys::{
     HotkeyDefinition, TERMINAL_HOTKEYS_SETTING_KEY, TERMINAL_ONLY_HOTKEY_IDS,
     VIEW_SCOPED_HOTKEY_IDS,
 };
+pub use intros::page_intro;
 pub use json::{Json, ToJson, J};
 pub use layout::{general_group, general_navigation, GeneralGroup, NavItem, GENERAL_GROUPS};
 pub use rows::{Page, RuntimeOptions, Section, SettingOption, SettingRow};

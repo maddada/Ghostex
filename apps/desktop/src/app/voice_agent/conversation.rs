@@ -74,7 +74,7 @@ const HANG_UP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 const MAX_ROWS: usize = 60;
 /// A device change restarts the audio at most this many times per conversation.
 pub(super) const MAX_AUDIO_RESTARTS: u32 = 5;
-/// The speeds the panel's buttons and Settings › Voice offer (`voiceAgentSpeed`).
+/// The speeds the panel's buttons and Settings › Voice Agent offer (`voiceAgentSpeed`).
 pub(crate) const VOICE_AGENT_SPEEDS: [f32; 6] = [1.0, 1.2, 1.4, 1.6, 1.8, 2.0];
 const SPEED_SETTING: &str = "voiceAgentSpeed";
 const CALL_MODE_SETTING: &str = "voiceAgentCallMode";
@@ -150,7 +150,7 @@ impl VoiceProblem {
         matches!(self.code.as_str(), "noKey" | "badKey")
     }
 
-    /// Whether this computer's Settings › Voice is where the user fixes it.
+    /// Whether this computer's Settings › Voice Agent is where the user fixes it.
     pub(crate) fn wants_settings(&self) -> bool {
         self.is_key() && !self.elsewhere
     }
@@ -917,7 +917,7 @@ impl GhostexGpuiApp {
     }
 
     /// Brings the open conversation in line with the saved speed and voice, after any settings
-    /// save (the panel's buttons, Settings › Voice, `ghostex settings set`).
+    /// save (the panel's buttons, Settings › Voice Agent, `ghostex settings set`).
     ///
     /// CDXC:VoiceMode 2026-10-20 WHY: the speed is applied on this computer (the audio is stretched with its pitch kept: `native/macos/GpuiVoiceAudio.m` on macOS, `stretch.rs` on Windows and Linux), at once and mid-sentence, for both providers; gxserver only learns the rate (`playbackRate`) so its playback clock stays right. A voice is sent to gxserver, which switches when the provider allows and otherwise answers that it speaks from the next conversation.
     pub(crate) fn apply_voice_agent_settings(
@@ -987,7 +987,7 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Settings › Voice, from the panel's "Open Settings".
+    /// Settings › Voice Agent, from the panel's "Open Settings".
     pub(crate) fn open_gpui_settings_voice_agent_page(&mut self, cx: &mut gpui::Context<Self>) {
         let modal = GpuiAppModalKind::Settings;
         let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
@@ -1169,12 +1169,12 @@ fn error_sentence(event: &Value) -> String {
     let message = event["message"].as_str().map(str::trim).unwrap_or_default();
     match event["code"].as_str() {
         Some("noKey") if message.is_empty() => {
-            "Add your API key in Settings › Voice to talk to the voice agent.".to_string()
+            "Add your API key in Settings › Voice Agent to talk to the voice agent.".to_string()
         }
         Some("badKey") if message.is_empty() => {
-            "Your API key was refused. Check it in Settings › Voice.".to_string()
+            "Your API key was refused. Check it in Settings › Voice Agent.".to_string()
         }
-        Some("badKey") => format!("{message} Check it in Settings › Voice."),
+        Some("badKey") => format!("{message} Check it in Settings › Voice Agent."),
         Some("providerUnavailable") if message.is_empty() => {
             "The voice provider can't be reached right now. Try again in a moment.".to_string()
         }

@@ -122,7 +122,6 @@ impl GhostexGpuiApp {
             | "updates"
             | "requestRemoteMachineConnectStates"
             | "requestDictateDevices"
-            | "revealDictateModelsFolder"
             | "addProjectDialogRequest"
             | "pickReplacementProjectFolder"
             | "setSessionNote"

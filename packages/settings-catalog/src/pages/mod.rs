@@ -8,6 +8,7 @@ mod cloud_boxes;
 mod collab;
 mod connectors;
 mod debugging;
+mod dictation;
 mod extensions;
 mod integrations;
 mod open_targets;
@@ -44,6 +45,7 @@ pub fn pages(platform: Platform) -> Vec<Page> {
         secrets::page(),
         workspaces::page(),
         connectors::page(),
+        dictation::page(),
         voice_agent::page(),
     ]
 }

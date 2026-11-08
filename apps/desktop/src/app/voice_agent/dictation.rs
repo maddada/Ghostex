@@ -1,7 +1,7 @@
 //! Dictate for the chat box and the terminal bar: record first (`recorder.rs`, a WAV file this app
 //! keeps until gxserver has it), transcribe second (gxserver's `/api/transcribeDictation`, with the
-//! engine picked in Settings › Voice: a local model, or OpenAI's or xAI's speech-to-text with the
-//! key kept on this computer), then gxserver's clean-up and AI polish, which the chat box shows as
+//! engine picked in Settings › Dictation: Hex on that computer, or OpenAI's or xAI's speech-to-text
+//! with the key kept on this computer), then gxserver's clean-up and AI polish, which the chat box shows as
 //! Polishing with Skip. The two steps are independent: whatever goes
 //! wrong while transcribing, the recording stays and Transcribe again or Transcribe previous sends
 //! it once more.
@@ -598,7 +598,7 @@ fn outcome_of(answer: Result<Value, String>, kept: Kept) -> Outcome {
                 .to_string();
             if text.is_empty() {
                 Outcome::Nothing(
-                    "No words were heard in the recording. It is kept in Settings > Voice > Dictation history."
+                    "No words were heard in the recording. It is kept in Settings > Dictation > Dictation history."
                         .to_string(),
                 )
             } else {
@@ -674,13 +674,6 @@ pub(crate) fn refresh_engine() {
     {
         *slot = Some(engine);
     }
-}
-
-/// The microphone pressed while the local engine has no model yet ("Click to download"): starts
-/// that model's download (blocking).
-pub(crate) fn download_engine_model(model_id: &str) {
-    let _ = recorder::rpc("downloadSpeechModel", json!({"id": model_id}), LIST_TIMEOUT);
-    refresh_engine();
 }
 
 /// `m:ss` for a recording's length.

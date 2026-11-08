@@ -294,7 +294,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     ]),
     // CDXC:VoiceMode 2026-10-25 DECISION:
     // User: "voice agent should be an extension so ppl can disable it's button and not see it top of the app if they want". This supersedes the 2026-10-20 decision that the voice agent is built in and not an extension (pages/voice_agent.rs). A whole-feature entry like Read aloud, on by default with a new key (`voiceAgentHidden`, default false, like `connectorsHidden`) and not behind Enable Experimental Features, so nothing changes for anyone who has not touched it. Off hides the header's headset and its arrow menu, the voice call rows and the three hotkeys, ends a call that is running, and gxserver refuses new calls (server/src/voice_agent/feature.rs); the phone follows through `builtInFeaturesOff`. Saved voice settings and the remembered conversation are kept.
-    // CDXC:VoiceMode 2026-10-30 DECISION: User picked option A for the page while this is off on 2026-10-25: "It stays in Settings with only the xAI key and Dictation history, plus a note that Dictate uses that key". Dictate is a separate feature, so the page (Settings > Extensions > Voice agent) is not in `settingsPages`; only the call rows (`settingKeys`) go. On 2026-10-30 Dictate started using the OpenAI key when no xAI key is saved (Q781), and the user answered Q795 "show the OpenAI key too": while this is off the page keeps both keys and the Dictation history, so the OpenAI key is no longer one of the `settingKeys`. Supersedes "only the xAI key".
+    // CDXC:VoiceMode 2026-11-08 DECISION: User: Voice becomes two pages, "Dictation" and "Voice Agent" (CDXC:VoiceMode 2026-11-08 in pages/dictation.rs). The 2026-10-25 option A ("It stays in Settings with only the xAI key and Dictation history") and Q795 ("show the OpenAI key too") are kept by the Dictation page, which shows the key its engine needs and the Dictation history whether this is on or off, so the Voice Agent page is this feature's `settingsPages` and leaves the rail while it is off, with its key rows. Supersedes the 2026-10-30 version, where the shared page stayed for the keys.
     // SEE-ALSO: server/src/voice_agent/feature.rs (gxserver's gate), apps/desktop/src/app/voice_agent/conversation.rs (`voice_agent_on`), apps/mobile/app/src/voice/featureSwitch.ts, docs/2026-10-20/voice-mode/voice-agent-client-contract.md.
     J::Obj(&[
         ("description", J::Str("Talk with a voice agent about your agent sessions: the headset at the top of the window starts a call, and its arrow starts one about a single session, here and in the phone app. Dictate in the chat box is separate and keeps working when this is off.")),
@@ -304,7 +304,8 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsKey", J::Str("voiceAgentHidden")),
         ("appWide", J::Bool(true)),
         ("title", J::Str("Voice agent")),
-        ("settingKeys", J::Arr(&[J::Str("voiceAgentProvider"), J::Str("voiceAgentXaiVoice"), J::Str("voiceAgentOpenaiVoice"), J::Str("voiceAgentSpeed"), J::Str("voiceAgentCallMode"), J::Str("voiceAgentMemory")])),
+        ("settingKeys", J::Arr(&[J::Str("voiceAgentProvider"), J::Str("voiceAgentXaiKey"), J::Str("voiceAgentOpenaiKey"), J::Str("voiceAgentXaiVoice"), J::Str("voiceAgentOpenaiVoice"), J::Str("voiceAgentSpeed"), J::Str("voiceAgentCallMode"), J::Str("voiceAgentMemory")])),
+        ("settingsPages", J::Arr(&[J::Str("voiceAgent")])),
         ("hotkeys", J::Arr(&[J::Str("toggleVoiceAgent"), J::Str("voiceCallAboutSession"), J::Str("holdToTalk")])),
     ]),
     // CDXC:VoiceMode 2026-10-21 DECISION:

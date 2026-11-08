@@ -1,4 +1,4 @@
-//! Dictate's microphone: the input devices Settings › Voice's picker offers, and the one a
+//! Dictate's microphone: the input devices Settings › Dictation's picker offers, and the one a
 //! recording opens (`dictateMicrophone`, empty for the system default).
 //!
 //! CDXC:VoiceMode 2026-11-05 DECISION: User (Q1264) picked a microphone picker among Dictate's
@@ -37,7 +37,7 @@ pub(crate) fn input_names() -> (Vec<String>, Option<String>) {
 }
 
 impl crate::GhostexGpuiApp {
-    /// Settings › Voice asked for the microphones and whether macOS takes Ctrl+Alt+Space:
+    /// Settings › Dictation asked for the microphones and whether macOS takes Ctrl+Alt+Space:
     /// answered as `dictateDevices`.
     pub(crate) fn answer_dictate_devices(&mut self, cx: &mut gpui::Context<Self>) {
         let listed = cx.background_executor().spawn(async {
@@ -60,24 +60,5 @@ impl crate::GhostexGpuiApp {
             });
         })
         .detach();
-    }
-
-    /// Show in Finder (Explorer, the file manager) for this computer's speech models, the folder
-    /// gxserver keeps them in (`server/src/voice_agent/speech/models.rs`).
-    pub(crate) fn reveal_dictate_models_folder(&mut self, cx: &mut gpui::Context<Self>) {
-        let folder = ghostex_paths::GhostexPaths::resolve()
-            .gxserver_data_dir()
-            .join("speech-models");
-        let opened = std::fs::create_dir_all(&folder)
-            .map_err(|error| error.to_string())
-            .and_then(|_| crate::app::helpers::gpui_open_path(&folder));
-        if let Err(message) = opened {
-            self.dispatch_gpui_app_modal_toast(
-                "warning",
-                "Could not open the models folder",
-                &message,
-                cx,
-            );
-        }
     }
 }

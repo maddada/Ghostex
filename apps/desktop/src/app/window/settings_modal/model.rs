@@ -44,6 +44,7 @@ pub(crate) enum SettingsTabId {
     About,
     Workspaces,
     Connectors,
+    Dictation,
     VoiceAgent,
 }
 
@@ -76,7 +77,7 @@ impl SettingsTabId {
     /// (the catalog) at the rail's bottom with the pages that fold under it
     /// ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration, Connectors, Debugging,
     /// the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 28] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 29] = [
         SettingsTabId::Updates,
         SettingsTabId::Chat,
         SettingsTabId::Sidebar,
@@ -85,6 +86,7 @@ impl SettingsTabId {
         SettingsTabId::Notifications,
         SettingsTabId::FilesLinks,
         SettingsTabId::PowerSleep,
+        SettingsTabId::Dictation,
         SettingsTabId::VoiceAgent,
         SettingsTabId::Hotkeys,
         SettingsTabId::Agents,
@@ -111,8 +113,7 @@ impl SettingsTabId {
     /// User, about the old "Store" row inside the group: "I dont like how store looks like the other ones here and i dont like that it's hidden there and i dont like that it's called store". Q640-Q641: the catalog page is called "Extensions" and is its own rail row at the bottom, drawn like the other top-level rows; clicking it opens the page, and a chevron "below the extensinos button" folds and unfolds the switched-on extensions' pages listed here. About moves up "to be last one with the ones up top so it's not next to extensions". Q642: no update count. Q643: the phone is left alone. This supersedes the 2026-10-19 Q308 decision (the page renamed "Store", first item in the group, a header that only folds); the rest of 2026-10-19 still holds: Q306 the group holds Workspaces, Connectors, Cloud Boxes, Actions, Open In, OS Integration and Debugging; Q307 the fold is "Collapsed the first time, then remembers" (`settingsModalNavigation`); a search opens it and lists only its matching pages; a deep link to one of its pages opens it; folded over the open page, its chevron row shows the selected fill. Q313: Connectors, OS Integration and Debugging are built-in extensions with "Switch on top of the gate" (CDXC:Extensions 2026-10-19 in official_extensions.rs).
     /// CDXC:VoiceMode 2026-10-25 DECISION:
     /// User: "voice agent needs to be moved under extensions in the sidebar of the settings of the gpui app too". Voice agent is the group's first page now that the voice agent is a built-in extension (official_extensions.rs). Deep links (`initialTab: "voiceAgent"`, the voice panel's Open Settings, `ghostex settings open --tab voiceAgent`) open the group like any page in it.
-    /// CDXC:VoiceMode 2026-10-25 WHY: unlike the group's other feature pages it stays in the rail while its extension is off, because the trimmed page still holds the xAI and OpenAI keys Dictate uses and the Dictation history (the voice agent entry has no `settingsPages`, so `built_in_extension_allows_page` keeps it).
-    /// CDXC:VoiceMode 2026-11-05 DECISION: User (Q1269): "A new Voice page under APP. It holds Dictate, the Voice agent and the shared keys." The page left this group for the App tier, after Power & Sleep, and is titled Voice; its `voiceAgent` id is kept for deep links and `voice` opens it too. Supersedes the 2026-10-25 move under Extensions.
+    /// CDXC:VoiceMode 2026-11-08 DECISION: User: "we need to call Voice page in settings "Dictation" and have "Voice Agent" as a separate page"; Q1710: Voice Agent sits right under Dictation, both in the App tier after Power & Sleep. Dictation has the new `dictation` id and `voice` opens it; Voice Agent keeps `voiceAgent` and leaves the rail while its extension is off (`settingsPages` in official_extensions.rs), since Dictation now holds the keys it needs and the Dictation history. Supersedes Q1269's single Voice page (2026-11-05) and the 2026-10-25 move under Extensions.
     pub(crate) const EXTENSIONS_GROUP: [SettingsTabId; 7] = [
         SettingsTabId::Workspaces,
         SettingsTabId::CloudBoxes,
@@ -139,6 +140,7 @@ impl SettingsTabId {
             | SettingsTabId::Notifications
             | SettingsTabId::FilesLinks
             | SettingsTabId::PowerSleep
+            | SettingsTabId::Dictation
             | SettingsTabId::VoiceAgent
             | SettingsTabId::Hotkeys => RailTier::App,
             SettingsTabId::Agents
@@ -210,6 +212,7 @@ impl SettingsTabId {
             SettingsTabId::About => "about",
             SettingsTabId::Workspaces => "workspaces",
             SettingsTabId::Connectors => "connectors",
+            SettingsTabId::Dictation => "dictation",
             SettingsTabId::VoiceAgent => "voiceAgent",
         }
     }
@@ -223,7 +226,7 @@ impl SettingsTabId {
             return Some(SettingsTabId::Theme);
         }
         if id == "voice" {
-            return Some(SettingsTabId::VoiceAgent);
+            return Some(SettingsTabId::Dictation);
         }
         Self::RAIL_ORDER.into_iter().find(|tab| tab.id() == id)
     }
@@ -259,7 +262,8 @@ impl SettingsTabId {
             SettingsTabId::About => "About",
             SettingsTabId::Workspaces => "Workspaces",
             SettingsTabId::Connectors => "Connectors",
-            SettingsTabId::VoiceAgent => "Voice",
+            SettingsTabId::Dictation => "Dictation",
+            SettingsTabId::VoiceAgent => "Voice Agent",
         }
     }
 
@@ -293,7 +297,8 @@ impl SettingsTabId {
             SettingsTabId::About => "modals/settings/info-circle.svg",
             SettingsTabId::Workspaces => "modals/settings/briefcase.svg",
             SettingsTabId::Connectors => "modals/settings/plug-connected.svg",
-            SettingsTabId::VoiceAgent => "modals/settings/microphone.svg",
+            SettingsTabId::Dictation => "modals/settings/microphone.svg",
+            SettingsTabId::VoiceAgent => "titlebar/headset.svg",
         }
     }
 }
@@ -529,27 +534,49 @@ mod tests {
         }
     }
 
-    /// CDXC:VoiceMode 2026-11-05: Voice sits in the App tier after Power & Sleep, and both its old
-    /// `voiceAgent` id and `voice` open it.
+    /// CDXC:VoiceMode 2026-11-08: Dictation sits in the App tier after Power & Sleep with Voice
+    /// Agent right under it; `voice` opens Dictation and `voiceAgent` Voice Agent.
     #[test]
-    fn voice_is_an_app_page_after_power_and_sleep() {
+    fn dictation_then_voice_agent_follow_power_and_sleep() {
         let order = SettingsTabId::RAIL_ORDER;
         let position = |tab| order.iter().position(|t| *t == tab).unwrap();
         assert_eq!(
-            position(SettingsTabId::VoiceAgent),
+            position(SettingsTabId::Dictation),
             position(SettingsTabId::PowerSleep) + 1
         );
-        assert_eq!(SettingsTabId::VoiceAgent.tier(), RailTier::App);
-        assert!(!SettingsTabId::VoiceAgent.in_extensions_group());
-        assert_eq!(SettingsTabId::VoiceAgent.title(), "Voice");
+        assert_eq!(
+            position(SettingsTabId::VoiceAgent),
+            position(SettingsTabId::Dictation) + 1
+        );
+        for tab in [SettingsTabId::Dictation, SettingsTabId::VoiceAgent] {
+            assert_eq!(tab.tier(), RailTier::App);
+            assert!(!tab.in_extensions_group());
+        }
+        assert_eq!(SettingsTabId::Dictation.title(), "Dictation");
+        assert_eq!(SettingsTabId::VoiceAgent.title(), "Voice Agent");
+        assert_eq!(
+            SettingsTabId::from_id("dictation"),
+            Some(SettingsTabId::Dictation)
+        );
+        assert_eq!(
+            SettingsTabId::from_id("voice"),
+            Some(SettingsTabId::Dictation)
+        );
         assert_eq!(
             SettingsTabId::from_id("voiceAgent"),
             Some(SettingsTabId::VoiceAgent)
         );
-        assert_eq!(
-            SettingsTabId::from_id("voice"),
-            Some(SettingsTabId::VoiceAgent)
-        );
+    }
+
+    /// CDXC:Settings 2026-11-08: every page in the rail has its one-line intro in the catalog.
+    #[test]
+    fn every_rail_page_has_an_intro() {
+        for tab in SettingsTabId::RAIL_ORDER {
+            assert!(
+                ghostex_settings_catalog::page_intro(tab.id()).is_some(),
+                "{tab:?} has no intro in packages/settings-catalog/src/intros.rs"
+            );
+        }
     }
 
     /// CDXC:Settings 2026-10-27: About ends the everyday pages, then the Extensions page, then the

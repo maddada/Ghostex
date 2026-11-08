@@ -92,7 +92,7 @@ impl VoiceAudio {
         )
     }
 
-    /// [`Self::start`] recording from the input device named `microphone` (Settings › Voice's
+    /// [`Self::start`] recording from the input device named `microphone` (Settings › Dictation's
     /// picker); the system default when `None`, or when that device is not connected.
     pub(crate) fn start_with_microphone(
         voice_processing: bool,

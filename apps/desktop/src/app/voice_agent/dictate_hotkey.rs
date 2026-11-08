@@ -1,5 +1,5 @@
 //! The Dictate hotkey's timing (Ctrl+Alt+Space by default): what a press and its release do in
-//! each mode, `dictateHotkeyMode` in Settings › Voice. The chat box does the recording
+//! each mode, `dictateHotkeyMode` in Settings › Dictation. The chat box does the recording
 //! (`native_chat/dictation.rs`); this file only decides when the hotkey starts or stops it.
 //!
 //! CDXC:VoiceMode 2026-11-05 DECISION: User (Q1261) picked Auto: a tap toggles (tap to start, tap

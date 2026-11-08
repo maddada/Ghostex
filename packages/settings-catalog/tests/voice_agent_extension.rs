@@ -62,15 +62,24 @@ fn turning_it_off_hides_its_hotkeys_but_not_dictate() {
 }
 
 #[test]
-fn turning_it_off_keeps_the_page_with_dictates_keys_and_history() {
-    assert_eq!(built_in_extensions::feature_owning_page("voiceAgent"), None);
-    assert!(built_in_extensions::page_shown_with(
+fn turning_it_off_hides_its_page_and_keeps_dictations_keys_and_history() {
+    assert_eq!(
+        built_in_extensions::feature_owning_page("voiceAgent"),
+        Some(VOICE_AGENT)
+    );
+    assert!(!built_in_extensions::page_shown_with(
         "voiceAgent",
+        saved(Some(true))
+    ));
+    assert!(built_in_extensions::page_shown_with(
+        "dictation",
         saved(Some(true))
     ));
     let hidden = built_in_extensions::hidden_setting_keys_with(saved(Some(true)));
     for call_row in [
         "voiceAgentProvider",
+        "voiceAgentXaiKey",
+        "voiceAgentOpenaiKey",
         "voiceAgentXaiVoice",
         "voiceAgentOpenaiVoice",
         "voiceAgentSpeed",
@@ -79,10 +88,14 @@ fn turning_it_off_keeps_the_page_with_dictates_keys_and_history() {
     ] {
         assert!(hidden.contains(&call_row), "{call_row} hides");
     }
-    // Dictate uses the xAI key, or the OpenAI key when no xAI key is saved.
-    assert!(!hidden.contains(&"voiceAgentXaiKey"));
-    assert!(!hidden.contains(&"voiceAgentOpenaiKey"));
-    assert!(!hidden.contains(&"voiceAgentDictationHistory"));
+    // Dictation shows the key its engine needs, and its history, either way.
+    for dictation_row in [
+        "dictateXaiKey",
+        "dictateOpenaiKey",
+        "voiceAgentDictationHistory",
+    ] {
+        assert!(!hidden.contains(&dictation_row), "{dictation_row} stays");
+    }
     let shown = built_in_extensions::hidden_setting_keys_with(saved(None));
     assert!(!shown.contains(&"voiceAgentProvider"));
 }

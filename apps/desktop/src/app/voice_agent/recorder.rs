@@ -165,7 +165,7 @@ impl ActiveRecording {
                         let capture_sender = sender.clone();
                         let restart = restart.clone();
                         let silent = silent.clone();
-                        // Settings › Voice's microphone, read at each (re)start.
+                        // Settings › Dictation's microphone, read at each (re)start.
                         let started = VoiceAudio::start_with_microphone(
                             false,
                             false,

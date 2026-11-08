@@ -1,4 +1,4 @@
-//! Settings › Voice agent › Dictation history: every Dictate recording gxserver keeps on this
+//! Settings › Dictation › Dictation history: every Dictate recording gxserver keeps on this
 //! computer (`/api/listDictations`, server/src/voice_agent/recordings.rs), newest first and grouped
 //! by day, with what became of it: its text, "This transcription was dismissed" with Recover, or
 //! why it failed with Try again. Hovering a row offers Play, Download, Copy, Transcribe (the text

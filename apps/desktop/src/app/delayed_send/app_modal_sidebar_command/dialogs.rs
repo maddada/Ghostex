@@ -30,12 +30,9 @@ impl GhostexGpuiApp {
             "requestRemoteMachineConnectStates" => {
                 self.handle_request_remote_machine_connect_states(cx);
             }
-            // Settings › Voice (voice_agent/microphones.rs).
+            // Settings › Dictation (voice_agent/microphones.rs).
             "requestDictateDevices" => {
                 self.answer_dictate_devices(cx);
-            }
-            "revealDictateModelsFolder" => {
-                self.reveal_dictate_models_folder(cx);
             }
             "addProjectDialogRequest" => {
                 self.handle_gpui_add_project_dialog_request_message(command, cx);

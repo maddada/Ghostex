@@ -7,6 +7,8 @@
 //! (Sidebar Tags with the New tag form, from the sidebar's New tag deep link), `hotkeys` (the
 //! Hotkeys entry point), `marked-preview` (the Marked sections style Preview dialog open). Saves are
 //! applied back to the modal the way the app rehydrates it.
+//! `dictation`, `dictation-retired`, `dictation-openai` and `voice-agent` are Settings › Dictation and
+//! Voice Agent (settings_voice.rs).
 //! `GHOSTEX_NATIVE_MODAL_DEMO_GLASS=1` previews the frosted palette.
 //! `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS='{"actionsHidden":false}'` merges saved settings over the
 //! state's (a built-in extension switched on or off, for example).
@@ -33,6 +35,8 @@ mod settings_secrets;
 mod settings_sync;
 #[path = "settings_updates.rs"]
 mod settings_updates;
+#[path = "settings_voice.rs"]
+mod settings_voice;
 #[path = "settings_workspaces.rs"]
 mod settings_workspaces;
 
@@ -194,6 +198,12 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     cx.defer(move |cx| reply(result, cx));
                     return;
                 }
+                if settings_voice::owns(&host_state)
+                    && let Some(result) = settings_voice::rpc(&host_state, &path, &params)
+                {
+                    cx.defer(move |cx| reply(result, cx));
+                    return;
+                }
                 if settings_secrets::owns(&host_state)
                     && let Some(result) = settings_secrets::rpc(&host_state, &path, &params)
                 {
@@ -277,6 +287,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             .or_else(|| settings_sync::open_message(&state))
             .or_else(|| settings_cloud_boxes::open_message(&state))
             .or_else(|| settings_secrets::open_message(&state))
+            .or_else(|| settings_voice::open_message(&state))
             .or_else(|| settings_f2::open_message(&state))
             .or_else(|| settings_e::open_message(&state))
             .unwrap_or_else(|| json!({})),
@@ -301,6 +312,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     } else if settings_workspaces::owns(&state)
         || settings_machines::owns(&state)
         || settings_secrets::owns(&state)
+        || settings_voice::owns(&state)
     {
         true
     } else if settings_cloud_boxes::owns(&state) {

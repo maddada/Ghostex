@@ -1,4 +1,4 @@
-//! Settings > Agents (its CLIs and session resume hooks), Settings > Integrations and Settings > Voice (Dictate) with a remote machine
+//! Settings > Agents (its CLIs and session resume hooks), Settings > Integrations and Settings > Dictation with a remote machine
 //! picked: their gxserver calls go to that machine's gxserver through its tunnel instead of this
 //! computer's.
 //!
@@ -30,13 +30,10 @@ fn allowed_keys(path: &str) -> Option<&'static [&'static str]> {
         "/api/readAgentHookStatus" | "/api/installAgentHooks" | "/api/uninstallAgentHooks" => {
             &["agentIds"]
         }
-        // Settings › Voice with a remote machine picked: that computer's Dictate engine, models and
-        // clean-up (server/src/voice_agent/speech/http.rs). Keys never cross.
-        "/api/readDictateSettings" | "/api/listSpeechModels" => &[],
+        // Settings › Dictation with a remote machine picked: that computer's Dictate engine, old
+        // models and clean-up (server/src/voice_agent/speech/http.rs). Keys never cross.
+        "/api/readDictateSettings" | "/api/deleteOldSpeechModels" => &[],
         "/api/setDictateSettings" => &["patch"],
-        "/api/downloadSpeechModel"
-        | "/api/cancelSpeechModelDownload"
-        | "/api/deleteSpeechModel" => &["id"],
         _ => return None,
     })
 }
@@ -224,21 +221,13 @@ mod tests {
         assert_eq!(
             settings_remote_params(
                 "/api/setDictateSettings",
-                &json!({ "patch": { "engine": "local" }, "apiKey": "x" })
+                &json!({ "patch": { "engine": "hex" }, "apiKey": "x" })
             ),
-            Some(json!({ "patch": { "engine": "local" } }))
+            Some(json!({ "patch": { "engine": "hex" } }))
         );
         assert_eq!(
-            settings_remote_params(
-                "/api/downloadSpeechModel",
-                &json!({ "id": "parakeet-tdt-0.6b-v3" })
-            ),
-            Some(json!({ "id": "parakeet-tdt-0.6b-v3" }))
-        );
-        // A patch is an object only on its own path.
-        assert_eq!(
-            settings_remote_params("/api/deleteSpeechModel", &json!({ "id": { "x": 1 } })),
-            None
+            settings_remote_params("/api/deleteOldSpeechModels", &json!({ "id": "x" })),
+            Some(json!({}))
         );
         assert_eq!(
             settings_remote_params("/api/setVoiceAgentKey", &json!({ "apiKey": "x" })),

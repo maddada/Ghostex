@@ -1,4 +1,4 @@
-//! Settings › Voice › Dictate's Hex row, shown when the engine is Hex: where the user stands with
+//! Settings › Dictation's Hex row, shown when the engine is Hex: where the user stands with
 //! Hex 3 on the shown computer (`hex` in `/api/readDictateSettings`), in plain words. Hex 3 not
 //! found gets Install Hex (Ghostex's install, `/api/managedTools`, only on click) and Hex's
 //! download page; Hex not running gets Check again; a running Hex gets a picker of the models it
@@ -9,6 +9,24 @@ use super::*;
 
 /// How often the row re-reads the install job while Hex installs.
 const INSTALL_POLL: Duration = Duration::from_secs(2);
+
+/// What to do in Hex after the step the row shows, so setting it up reads as a short list.
+///
+/// CDXC:Dictate 2026-11-08 DECISION: User (Q1709): with our local engine gone, Settings explains how to use Hex: install it, open it and allow the microphone, download a model in Hex's settings, and keep it opening at login so dictation works after a restart.
+pub(super) fn hex_next_step(state: &str) -> Option<&'static str> {
+    match state {
+        "notInstalled" => Some(
+            "After it installs: open Hex, allow the microphone, and download a model in Hex's settings (Parakeet v3 for English and 24 European languages, Whisper for the rest). Ghostex finds it by itself.",
+        ),
+        "notRunning" => Some(
+            "Open Hex, then Check again. Turn on Open at login in Hex so dictation keeps working after a restart.",
+        ),
+        "ready" | "problem" => Some(
+            "In Hex's settings, under Models, download a model; Ghostex lists it here once it is ready.",
+        ),
+        _ => None,
+    }
+}
 
 impl VoiceAgentTab {
     /// Hex is offered where Hex 3 ships for the shown computer.
@@ -31,7 +49,10 @@ impl VoiceAgentTab {
         let installing = self.dictate.hex_install.is_some();
         let description = match hex["problem"]["message"].as_str() {
             _ if installing => "Installing Hex…".to_string(),
-            Some(message) => message.to_string(),
+            Some(message) => match hex_next_step(state) {
+                Some(step) => format!("{message}\n{step}"),
+                None => message.to_string(),
+            },
             None => format!(
                 "Hex {} is running. Recordings stay on this computer.",
                 hex["version"].as_str().unwrap_or_default()
@@ -137,18 +158,30 @@ impl VoiceAgentTab {
             }
             _ => check_again,
         };
+        // Ready: the model picker on the right. Otherwise what is missing and what to do next, in
+        // full under the label, with its buttons (rows show no description text).
+        if state == "ready" && hex["ready"] == true {
+            return Some(setting_row(
+                p,
+                "dictateHex",
+                RowSpec::new("Hex").description(description),
+                None,
+                control,
+                cx,
+            ));
+        }
         Some(setting_row(
             p,
             "dictateHex",
-            RowSpec::new("Hex").description(description),
+            RowSpec::new("Hex").wide(),
             None,
-            control,
+            super::notice::note_with_controls(p, description, vec![control]),
             cx,
         ))
     }
 
     /// Install Hex: Ghostex's install of Hex on the shown computer, followed until it ends.
-    fn install_hex(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn install_hex(&mut self, cx: &mut Context<Self>) {
         if self.dictate.hex_install.is_some() {
             return;
         }

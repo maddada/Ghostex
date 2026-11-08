@@ -69,8 +69,8 @@ const FAILURE_CARD_WIDTH: f32 = 300.0;
 pub(super) struct FailureActions {
     /// `(label, provider)`: Add key or Check key, opening that provider's key field.
     pub(super) key: Option<(&'static str, &'static str)>,
-    /// A button opening Settings › Voice at Dictate's models (the local engine has no model yet,
-    /// or it is still downloading).
+    /// A button opening Settings › Dictation at the engine: Set up Hex while Hex isn't ready, Pick
+    /// an engine where Hex 3 has no build.
     pub(super) models: Option<&'static str>,
     /// Transcribe again: whatever went wrong may be gone by now.
     pub(super) retry: bool,
@@ -80,14 +80,15 @@ pub(super) struct FailureActions {
 
 /// The buttons for gxserver's failure code (`server/src/voice_agent/transcribe.rs`). A key that
 /// is missing or can't be read anymore (`noKey`) offers Add key, a refused one Check key, both on
-/// the provider gxserver named (xAI when it named none). The local engine with no model downloaded
-/// (`modelMissing`) offers Download a model, and one still downloading Show download; both open
-/// Settings › Voice at the models. A recording whose audio is gone has nothing left to try.
+/// the provider gxserver named (xAI when it named none). Hex that isn't installed, running or
+/// ready offers Set up Hex, and a computer Hex 3 has no build for Pick an engine; both open
+/// Settings › Dictation at the engine. A recording whose audio is gone has nothing left to try.
 ///
-/// CDXC:VoiceMode 2026-11-05 DECISION: Dictate's engine is the user's explicit choice (Q1259,
-/// Q1272) and never falls back by itself, so a Local engine without a model is a failure the card
-/// explains, with the way to fix it one press away (Settings › Voice, where the download runs with
-/// its progress), and Transcribe again for once it is there.
+/// CDXC:VoiceMode 2026-11-08 DECISION: Dictate's engine is the user's explicit choice (Q1259,
+/// Q1272) and never falls back by itself, so Hex that isn't ready is a failure the card explains,
+/// with the way to fix it one press away (Settings › Dictation, where Install Hex runs), and
+/// Transcribe again for once it is there. Supersedes the 2026-11-05 Download a model for the
+/// retired local engine (CDXC:Dictate 2026-11-08 in server/src/voice_agent/speech/retired.rs).
 pub(super) fn failure_actions(failure: &DictateFailure) -> FailureActions {
     let provider = match failure.provider.as_deref() {
         Some("openai") => "openai",
@@ -96,8 +97,10 @@ pub(super) fn failure_actions(failure: &DictateFailure) -> FailureActions {
     let (key, models, retry, recording_kept) = match failure.code.as_str() {
         "noKey" => (Some(("Add key", provider)), None, true, true),
         "badKey" => (Some(("Check key", provider)), None, true, true),
-        "modelMissing" | "localUnavailable" => (None, Some("Download a model"), true, true),
-        "modelDownloading" => (None, Some("Show download"), true, true),
+        "hexUnsupported" => (None, Some("Pick an engine"), true, true),
+        "hexNotInstalled" | "hexNotRunning" | "hexModelNotReady" | "hexVersion" => {
+            (None, Some("Set up Hex"), true, true)
+        }
         "audioMissing" => (None, None, false, false),
         _ => (None, None, true, true),
     };
@@ -109,12 +112,12 @@ pub(super) fn failure_actions(failure: &DictateFailure) -> FailureActions {
     }
 }
 
-/// Settings › Voice, scrolled to Dictate (its engine and models).
+/// Settings › Dictation, scrolled to its engine.
 pub(crate) fn open_voice_models() -> serde_json::Value {
     json!({
         "type": "open",
         "modal": "settings",
-        "initialTab": "voiceAgent",
+        "initialTab": "dictation",
         "initialSection": "dictate",
     })
 }
@@ -122,18 +125,18 @@ pub(crate) fn open_voice_models() -> serde_json::Value {
 fn provider_label(provider: &str) -> &'static str {
     match provider {
         "openai" => "OpenAI",
-        "local" => "The local model",
+        "hex" => "Hex",
         _ => "xAI",
     }
 }
 
-/// Settings › Voice with `provider`'s key field focused.
+/// Settings › Dictation with `provider`'s key field (under the engine) focused.
 pub(super) fn open_voice_agent_key(provider: &str) -> serde_json::Value {
     json!({
         "type": "open",
         "modal": "settings",
-        "initialTab": "voiceAgent",
-        "initialSection": "keys",
+        "initialTab": "dictation",
+        "initialSection": "dictate",
         "initialVoiceAgentKey": provider,
     })
 }
@@ -252,19 +255,8 @@ impl NativeChatView {
             .is_some_and(|control| control.dictate.read(cx).recording())
     }
 
-    /// Start recording, or stop and transcribe. With the local engine picked and its model not
-    /// downloaded, the press starts the download instead (the tooltip says "Click to download")
-    /// and opens Settings › Voice, where its progress shows.
+    /// Start recording, or stop and transcribe.
     pub(super) fn toggle_dictation(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.dictating(cx)
-            && let Some(model) = missing_engine_model()
-        {
-            cx.background_executor()
-                .spawn(async move { crate::app::voice_agent::download_engine_model(&model) })
-                .detach();
-            cx.emit(NativeChatEvent::Host(open_voice_models()));
-            return;
-        }
         let dictate = self.dictate(window, cx);
         dictate.update(cx, |dictate, cx| dictate.toggle(cx));
         cx.notify();
@@ -321,10 +313,10 @@ impl NativeChatView {
         dictate.update(cx, |dictate, cx| dictate.transcribe_previous(cx));
     }
 
-    /// Settings › Voice, scrolled to Dictation history.
+    /// Settings › Dictation, scrolled to Dictation history.
     pub(super) fn open_dictation_history(&mut self, cx: &mut Context<Self>) {
         cx.emit(NativeChatEvent::Host(json!({
-            "type":"open","modal":"settings","initialTab":"voiceAgent","initialSection":"dictations",
+            "type":"open","modal":"settings","initialTab":"dictation","initialSection":"dictations",
         })));
     }
 
@@ -770,7 +762,7 @@ impl NativeChatView {
 }
 
 /// The microphone's tooltip: "Dictate · <engine>" over the hotkey and how it works, or over what
-/// is missing (a model not downloaded, no key) when the engine isn't ready.
+/// is missing (Hex not running, no key) when the engine isn't ready.
 ///
 /// CDXC:VoiceMode 2026-11-05 DECISION: User (Q1259): "we need to also mention in a tooltip what we
 /// use"; the mockup's two lines, "Dictate · Local, Parakeet v3" then "⌃⌥Space: tap or hold to
@@ -818,15 +810,7 @@ pub(super) fn dictate_hotkey_mode() -> String {
         .to_string()
 }
 
-/// The local engine's model when it is picked and not downloaded yet.
-fn missing_engine_model() -> Option<String> {
-    let engine = crate::app::voice_agent::dictate_engine()?;
-    (engine["problem"]["code"] == "modelMissing")
-        .then(|| engine["modelId"].as_str().map(str::to_string))
-        .flatten()
-}
-
-/// `dictateInsertSpacing`, on unless turned off in Settings › Voice.
+/// `dictateInsertSpacing`, on unless turned off in Settings › Dictation.
 fn dictate_insert_spacing() -> bool {
     crate::shared_settings::shared_sidebar_settings_snapshot()
         .object()
@@ -875,19 +859,20 @@ mod tests {
 
     #[test]
     fn the_tooltip_names_the_engine_over_the_hotkey() {
-        let engine = json!({"engine": "local", "label": "Local, Parakeet v3", "ready": true, "problem": null});
+        let engine =
+            json!({"engine": "hex", "label": "Hex, Parakeet v3", "ready": true, "problem": null});
         assert_eq!(
             dictation_tooltip_text(Some(&engine), false, "⌃⌥Space", "auto"),
-            "Dictate · Local, Parakeet v3\n⌃⌥Space: tap or hold to talk"
+            "Dictate · Hex, Parakeet v3\n⌃⌥Space: tap or hold to talk"
         );
         assert_eq!(
             dictation_tooltip_text(Some(&engine), true, "⌃⌥Space", "auto"),
             "Stop dictating\n⌃⌥Space stops"
         );
-        let missing = json!({"label": "Local, Parakeet v3", "ready": false, "problem": {"code": "modelMissing", "message": "Not downloaded yet. Click to download (0.72 GB)"}});
+        let missing = json!({"label": "Hex", "ready": false, "problem": {"code": "hexNotRunning", "message": "Hex isn't running on this computer. Open Hex."}});
         assert_eq!(
             dictation_tooltip_text(Some(&missing), false, "⌃⌥Space", "auto"),
-            "Dictate · Local, Parakeet v3\nNot downloaded yet. Click to download (0.72 GB)"
+            "Dictate · Hex\nHex isn't running on this computer. Open Hex."
         );
         // Before gxserver answered, and with no hotkey set.
         assert_eq!(dictation_tooltip_text(None, false, "", "auto"), "Dictate");
@@ -898,18 +883,20 @@ mod tests {
     }
 
     #[test]
-    fn a_local_engine_without_a_model_offers_download_a_model() {
-        let actions = failure_actions(&failure("modelMissing", Some("local")));
-        assert_eq!(actions.models, Some("Download a model"));
-        assert_eq!(actions.key, None);
-        assert!(actions.retry && actions.recording_kept);
+    fn hex_that_isnt_ready_offers_set_up_hex() {
+        for code in ["hexNotInstalled", "hexNotRunning", "hexModelNotReady"] {
+            let actions = failure_actions(&failure(code, Some("hex")));
+            assert_eq!(actions.models, Some("Set up Hex"), "{code}");
+            assert_eq!(actions.key, None);
+            assert!(actions.retry && actions.recording_kept);
+        }
         assert_eq!(
-            failure_actions(&failure("modelDownloading", Some("local"))).models,
-            Some("Show download")
+            failure_actions(&failure("hexUnsupported", Some("hex"))).models,
+            Some("Pick an engine")
         );
         assert_eq!(
             open_voice_models(),
-            json!({"type": "open", "modal": "settings", "initialTab": "voiceAgent", "initialSection": "dictate"})
+            json!({"type": "open", "modal": "settings", "initialTab": "dictation", "initialSection": "dictate"})
         );
     }
 
@@ -992,8 +979,8 @@ mod tests {
             json!({
                 "type": "open",
                 "modal": "settings",
-                "initialTab": "voiceAgent",
-                "initialSection": "keys",
+                "initialTab": "dictation",
+                "initialSection": "dictate",
                 "initialVoiceAgentKey": "openai",
             })
         );

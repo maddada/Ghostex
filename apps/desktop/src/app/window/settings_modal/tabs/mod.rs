@@ -72,6 +72,7 @@ pub(crate) fn settings_tab_view(
         SettingsTabId::Secrets => secrets::secrets_tab_view(store, window, cx),
         SettingsTabId::Workspaces => workspaces::workspaces_tab_view(store, cx),
         SettingsTabId::Connectors => connectors::connectors_tab_view(store, cx),
+        SettingsTabId::Dictation => voice_agent::dictation_tab_view(store, window, cx),
         SettingsTabId::VoiceAgent => voice_agent::voice_agent_tab_view(store, window, cx),
         // TAB-ARMS: one arm per page.
     }
