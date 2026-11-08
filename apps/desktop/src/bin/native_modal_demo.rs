@@ -31,6 +31,16 @@ mod fold_motion;
 mod host_name;
 #[path = "../hotkey_label.rs"]
 mod hotkey_label;
+// Settings > Interface's Linux-only Display scale row reads what the app found at launch (#503).
+#[cfg(target_os = "linux")]
+#[path = "../linux_x11_scale.rs"]
+mod linux_x11_scale;
+
+/// The preview never hides `WAYLAND_DISPLAY` the way the app does (main.rs), so it inherited none.
+#[cfg(target_os = "linux")]
+pub(crate) fn linux_inherited_wayland_display() -> Option<&'static str> {
+    None
+}
 #[path = "../app/window/native_modal_kit/mod.rs"]
 mod native_modal_kit;
 #[path = "../app/window/session_handoff_modal.rs"]
