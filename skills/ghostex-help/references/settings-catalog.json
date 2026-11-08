@@ -12115,6 +12115,17 @@
       "agentWritable": false
     },
     {
+      "key": "reuseSshConnection",
+      "title": "Reuse an existing SSH connection",
+      "subtitle": "Use the SSH connection you already signed in to, for computers that ask for a verification code each time.",
+      "tab": "remote",
+      "tabTitle": "Remote",
+      "section": "remoteMachines",
+      "sectionTitle": "Remote machines",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "password",
       "title": "Password",
       "subtitle": "SSH passwords are stored in the system keychain.",

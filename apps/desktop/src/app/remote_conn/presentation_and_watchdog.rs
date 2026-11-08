@@ -206,7 +206,13 @@ impl GhostexGpuiApp {
             .remote_gxserver_connections
             .iter_mut()
             .filter_map(|(machine_id, connection)| {
-                (!matches!(connection.child.try_wait(), Ok(None))).then(|| machine_id.clone())
+                // A forward in the user's own SSH master has no ssh process to watch; the health
+                // probe below is what notices its master going away (GitHub #496).
+                connection
+                    .child
+                    .as_mut()
+                    .is_some_and(|child| !matches!(child.try_wait(), Ok(None)))
+                    .then(|| machine_id.clone())
             })
             .collect::<Vec<_>>();
         for machine_id in exited_machine_ids {

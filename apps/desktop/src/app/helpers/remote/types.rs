@@ -107,6 +107,10 @@ pub(crate) struct GpuiRemoteMachineConfig {
     pub(crate) ssh_port: Option<u16>,
     pub(crate) ssh_user: Option<String>,
     pub(crate) has_saved_password: bool,
+    /// The machine reuses the multiplexing connection the user's own SSH config keeps open
+    /// (GitHub #496): Ghostex never logs in to it, and a host that asks for a verification code
+    /// on every login can be reached through the master the user signed in to in a terminal.
+    pub(crate) reuse_ssh_connection: bool,
     pub(crate) wsl_distribution: Option<String>,
     pub(crate) disabled: bool,
     /// The connect's shared SSH login (`GpuiRemoteSshConnectionShare`); set only on the copy one connect runs with.
@@ -464,7 +468,12 @@ pub(crate) struct GpuiRemoteAskpassScript {
 
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 pub(crate) struct GpuiRemoteSpawnedTunnel {
-    pub(crate) child: Child,
+    /// The tunnel's ssh process, which owns the forward; `None` when the forward lives in the
+    /// user's own SSH master instead (GitHub #496).
+    pub(crate) child: Option<Child>,
+    /// The forward this tunnel registered in the user's SSH master, taken back when the tunnel
+    /// ends (GitHub #496).
+    pub(crate) forward: Option<GpuiRemoteSharedSshForward>,
     pub(crate) _askpass: Option<GpuiRemoteAskpassScript>,
 }
 

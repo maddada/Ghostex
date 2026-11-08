@@ -645,6 +645,7 @@ How to use this file:
 - **SSH user** `sshUser` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH user.
 - **SSH port** `sshPort` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH port.
 - **Identity file** `identityFile` (Settings UI row without a settings key; use `ghostex settings open`): SSH identity file used to connect to the remote machine.
+- **Reuse an existing SSH connection** `reuseSshConnection` (Settings UI row without a settings key; use `ghostex settings open`): Use the SSH connection you already signed in to, for computers that ask for a verification code each time.
 - **Password** `password` (Settings UI row without a settings key; use `ghostex settings open`): SSH passwords are stored in the system keychain.
 - **Install / Connect gxserver** `installGxserver` (Settings UI row without a settings key; use `ghostex settings open`): Install, update, or connect gxserver on a saved remote machine.
 - **This computer's short name** `localMachineShortName` (text, default (empty)) [not agent-writable]: Up to 2 characters on the sidebar's computer pills; empty uses one made from the computer's name.

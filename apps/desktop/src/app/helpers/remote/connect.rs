@@ -115,6 +115,25 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
             "The saved remote machine is missing required SSH settings.",
         );
     }
+    // A machine that reuses the user's SSH connection must not open one: this connect either
+    // rides the master the user signed in to, or reports what to do about it before any command
+    // reaches the host (GitHub #496).
+    if config.reuse_ssh_connection {
+        if let Some(refusal) = gpui_remote_ssh_reuse_connection_refusal(&config) {
+            support_logs::append(
+                support_logs::GpuiSupportLog::RemoteGxserverInstall,
+                "gpui.remoteGxserver.sshShare",
+                serde_json::json!({
+                    "shared": false,
+                    "reusedConnection": false,
+                }),
+            );
+            return GpuiRemoteGxserverConnectResult::without_connection(
+                GpuiRemoteGxserverConnectState::SshFailed,
+                refusal.as_str(),
+            );
+        }
+    }
     // Every command below rides this one login; it closes when the connect returns.
     let ssh_share = match GpuiRemoteSshConnectionShare::open(&config) {
         Ok(ssh_share) => ssh_share,
@@ -140,7 +159,10 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
     support_logs::append(
         support_logs::GpuiSupportLog::RemoteGxserverInstall,
         "gpui.remoteGxserver.sshShare",
-        serde_json::json!({ "shared": ssh_share.is_shared() }),
+        serde_json::json!({
+            "reusedConnection": config.reuse_ssh_connection,
+            "shared": ssh_share.is_shared(),
+        }),
     );
     let config = ssh_share.share_into(config);
     let mut execution_target = GpuiRemoteExecutionTarget::PosixHost;
@@ -356,7 +378,9 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
         // that reports zmx missing could not have started a session on any platform.
         Ok(mut connection) if connection.capabilities.zmx_missing => {
             connection.terminate();
-            let _ = connection.child.wait();
+            if let Some(child) = connection.child.as_mut() {
+                let _ = child.wait();
+            }
             GpuiRemoteGxserverConnectResult::without_connection(
                 GpuiRemoteGxserverConnectState::InstallFailed,
                 GPUI_REMOTE_RUNTIME_BROKEN_MESSAGE,
@@ -367,7 +391,9 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
                 gpui_remote_protocol_mismatch_message(connection.capabilities.protocol_version)
             {
                 connection.terminate();
-                let _ = connection.child.wait();
+                if let Some(child) = connection.child.as_mut() {
+                    let _ = child.wait();
+                }
                 return GpuiRemoteGxserverConnectResult::without_connection(
                     GpuiRemoteGxserverConnectState::Unsupported,
                     message.as_str(),

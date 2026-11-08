@@ -65,6 +65,11 @@ pub fn normalize_remote_machine_settings(candidate: Option<&Value>) -> Vec<Value
         if item.get("sshPasswordSaved") == Some(&Value::Bool(true)) {
             machine.insert("sshPasswordSaved".to_string(), Value::Bool(true));
         }
+        // A machine that rides an SSH connection the user already signed in to (GitHub #496); off
+        // unless set, like `agentAccess`, so only `true` is kept.
+        if item.get("reuseSshConnection") == Some(&Value::Bool(true)) {
+            machine.insert("reuseSshConnection".to_string(), Value::Bool(true));
+        }
         if easy {
             machine.insert(
                 "transport".to_string(),

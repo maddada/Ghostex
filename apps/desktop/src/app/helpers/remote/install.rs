@@ -48,6 +48,12 @@ pub(crate) fn gpui_probe_remote_gxserver_install(
     if config.ssh_host.trim().is_empty() {
         return GpuiRemoteGxserverInstallProbe::default();
     }
+    // A machine that only signs in through the user's own SSH connection (GitHub #496) is not
+    // probed while that connection is closed: this probe's login could never succeed, and every
+    // attempt is one more refused one on the host.
+    if config.reuse_ssh_connection && gpui_remote_ssh_reuse_connection_refusal(&config).is_some() {
+        return GpuiRemoteGxserverInstallProbe::default();
+    }
     let posix_result = gpui_run_remote_ssh(
         &config,
         gpui_remote_installed_gxserver_version_command(),

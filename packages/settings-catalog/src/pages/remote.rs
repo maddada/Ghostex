@@ -52,6 +52,7 @@ pub(crate) fn remote_machines() -> Section {
             row("sshUser", "SSH user", "Remote machine SSH user."),
             row("sshPort", "SSH port", "Remote machine SSH port."),
             row("identityFile", "Identity file", "SSH identity file used to connect to the remote machine."),
+            row("reuseSshConnection", "Reuse an existing SSH connection", "Use the SSH connection you already signed in to, for computers that ask for a verification code each time."),
             row("password", "Password", "SSH passwords are stored in the system keychain."),
             row("installGxserver", "Install / Connect gxserver", "Install, update, or connect gxserver on a saved remote machine."),
         ],

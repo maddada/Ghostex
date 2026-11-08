@@ -777,6 +777,8 @@ pub(super) struct MachineDraft {
     pub(super) ssh_identity_file: String,
     pub(super) ssh_password: String,
     pub(super) ssh_password_saved: bool,
+    /// Ride the SSH connection the user signed in to instead of signing in again (GitHub #496).
+    pub(super) reuse_ssh_connection: bool,
     pub(super) ssh_port: String,
     pub(super) ssh_user: String,
     pub(super) wsl_distribution: String,
@@ -827,6 +829,8 @@ pub(super) fn machine_draft_from_settings(machine: &Value) -> MachineDraft {
         ssh_identity_file: text(machine, "sshIdentityFile").unwrap_or_default(),
         ssh_password: String::new(),
         ssh_password_saved: machine.get("sshPasswordSaved").and_then(Value::as_bool) == Some(true),
+        reuse_ssh_connection: machine.get("reuseSshConnection").and_then(Value::as_bool)
+            == Some(true),
         ssh_port: machine
             .get("sshPort")
             .and_then(Value::as_f64)
@@ -906,6 +910,12 @@ pub(super) fn normalize_remote_machine_draft(draft: &MachineDraft) -> Option<Val
         "sshHost": if draft.easy_connect { "" } else { draft.ssh_host.as_str() },
         "sshIdentityFile": draft.ssh_identity_file,
         "sshPasswordSaved": draft.ssh_password_saved,
+        // An Easy Connect machine is dialed on this computer's own forwarder, and a Windows WSL
+        // machine's gxserver listens inside that distribution where a local forward cannot land,
+        // so neither has a connection of the user's to reuse.
+        "reuseSshConnection": draft.reuse_ssh_connection
+            && !draft.easy_connect
+            && draft.wsl_distribution.trim().is_empty(),
         "sshPort": ssh_port,
         "sshUser": draft.ssh_user,
         "wslDistribution": wsl_distribution,

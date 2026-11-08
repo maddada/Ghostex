@@ -29,7 +29,7 @@ pub(crate) fn gpui_open_remote_gxserver_tunnel(
                 Err(_) => continue,
             };
         if let Some(capabilities) =
-            gpui_wait_for_remote_authenticated_health(local_port, token, &mut tunnel.child)
+            gpui_wait_for_remote_authenticated_health(local_port, token, tunnel.child.as_mut())
         {
             return Ok(GpuiRemoteGxserverConnection {
                 _base_url: format!("http://127.0.0.1:{local_port}"),
@@ -41,17 +41,24 @@ pub(crate) fn gpui_open_remote_gxserver_tunnel(
                 presentation_stream_generation: None,
                 token: token.to_string(),
                 child: tunnel.child,
+                forward: tunnel.forward,
                 liveness: GpuiRemoteTunnelLiveness::default(),
                 this_computer: false,
                 reverse_tunnel: None,
             });
         }
         // A tunnel that is still running bound its port (ExitOnForwardFailure), so another port
-        // would only be another SSH login over the same link (GitHub #361).
-        let tunnel_was_running = matches!(tunnel.child.try_wait(), Ok(None));
-        gpui_forget_remote_tunnel(tunnel.child.id());
-        let _ = tunnel.child.kill();
-        let _ = tunnel.child.wait();
+        // would only be another SSH login over the same link (GitHub #361). A forward registered
+        // in the user's master is listening on the port it was given, so the same holds there.
+        let tunnel_was_running = match tunnel.child.as_mut() {
+            Some(child) => matches!(child.try_wait(), Ok(None)),
+            None => true,
+        };
+        if let Some(child) = tunnel.child.as_mut() {
+            gpui_forget_remote_tunnel(child.id());
+            let _ = child.kill();
+            let _ = child.wait();
+        }
         if tunnel_was_running {
             break;
         }
@@ -108,21 +115,32 @@ pub(crate) fn gpui_spawn_remote_gxserver_tunnel(
     execution_target: &GpuiRemoteExecutionTarget,
     local_port: u16,
 ) -> Result<GpuiRemoteSpawnedTunnel, String> {
-    let target_arguments = gpui_remote_ssh_target_arguments(config)?;
-    let askpass = gpui_remote_ssh_askpass_script(config)?;
     let mut arguments = Vec::new();
     let remote_port = gpui_remote_gxserver_port(execution_target);
     // Bound to 127.0.0.1 explicitly, like the code-server tunnel: without a bind address ssh can
     // succeed on ::1 alone while another account already holds 127.0.0.1:<port>, which is where
     // the health probe then sends the token. The registry matches this exact `-L` value.
     let forward = format!("127.0.0.1:{local_port}:127.0.0.1:{remote_port}");
+    // The machine that reuses the user's SSH connection gets no ssh process of its own: the
+    // forward is registered in that master, which keeps it until this app takes it back
+    // (GitHub #496).
+    if config.reuse_ssh_connection {
+        let _ = gpui_remote_ssh_forward_in_existing_connection(config, "-L", forward.as_str())?;
+        return Ok(GpuiRemoteSpawnedTunnel {
+            child: None,
+            forward: GpuiRemoteSharedSshForward::new(config, "-L", forward.as_str()),
+            _askpass: None,
+        });
+    }
+    let target_arguments = gpui_remote_ssh_target_arguments(config)?;
+    let askpass = gpui_remote_ssh_askpass_script(config)?;
     if !matches!(
         execution_target,
         GpuiRemoteExecutionTarget::WindowsWsl { .. }
     ) {
         arguments.push("-N".to_string());
     }
-    arguments.extend(gpui_remote_ssh_tunnel_options(config.has_saved_password));
+    arguments.extend(gpui_remote_ssh_tunnel_options(config));
     arguments.extend([
         "-o".to_string(),
         "ExitOnForwardFailure=yes".to_string(),
@@ -157,7 +175,8 @@ pub(crate) fn gpui_spawn_remote_gxserver_tunnel(
         return Err("SSH tunnel exited before remote gxserver became reachable.".to_string());
     }
     Ok(GpuiRemoteSpawnedTunnel {
-        child,
+        child: Some(child),
+        forward: None,
         _askpass: askpass,
     })
 }
@@ -193,23 +212,42 @@ pub(crate) fn gpui_remote_gxserver_candidate_ports() -> Vec<u16> {
 /// [`GPUI_REMOTE_GXSERVER_HEALTH_DEADLINE`] and each probe may take
 /// [`GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT`]; an SSH process that exits ends it at once, so a refused
 /// login or an unreachable host is still reported as soon as SSH gives up (GitHub #361).
+///
+/// `tunnel` is `None` when the forward lives in the user's own SSH master (GitHub #496): the
+/// listener is up before the first probe, so refusal after refusal there means that machine does
+/// not serve gxserver on that port, and the wait gives up after
+/// [`GPUI_REMOTE_GXSERVER_REGISTERED_FORWARD_REFUSAL_DEADLINE`] instead of the full deadline.
 pub(crate) fn gpui_wait_for_remote_authenticated_health(
     local_port: u16,
     token: &str,
-    tunnel: &mut std::process::Child,
+    mut tunnel: Option<&mut std::process::Child>,
 ) -> Option<GpuiRemoteGxserverCapabilities> {
+    let has_ssh_process = tunnel.is_some();
     let deadline = Instant::now() + GPUI_REMOTE_GXSERVER_HEALTH_DEADLINE;
+    let mut refused_since: Option<Instant> = None;
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() || !matches!(tunnel.try_wait(), Ok(None)) {
+        if remaining.is_zero() {
             return None;
         }
-        if let GpuiRemoteHealthProbe::Healthy(capabilities) = gpui_remote_health_probe(
+        if let Some(child) = tunnel.as_deref_mut()
+            && !matches!(child.try_wait(), Ok(None))
+        {
+            return None;
+        }
+        match gpui_remote_health_probe(
             local_port,
             token,
             remaining.min(GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT),
         ) {
-            return Some(capabilities);
+            GpuiRemoteHealthProbe::Healthy(capabilities) => return Some(capabilities),
+            GpuiRemoteHealthProbe::Refused if !has_ssh_process => {
+                let since = *refused_since.get_or_insert_with(Instant::now);
+                if since.elapsed() >= GPUI_REMOTE_GXSERVER_REGISTERED_FORWARD_REFUSAL_DEADLINE {
+                    return None;
+                }
+            }
+            _ => refused_since = None,
         }
         thread::sleep(GPUI_REMOTE_GXSERVER_TUNNEL_RETRY_DELAY);
     }

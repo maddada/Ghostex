@@ -289,6 +289,7 @@ pub(crate) fn gpui_remote_ssh_shell_command(
         arguments.push("-tt".to_string());
     }
     arguments.extend(gpui_remote_ssh_client_options(config.has_saved_password));
+    arguments.extend(gpui_remote_ssh_reuse_connection_arguments(config));
     arguments.extend(target_arguments);
     let command = if interactive_login_shell {
         gpui_remote_command_for_execution_target(execution_target, remote_command)

@@ -17,7 +17,12 @@ pub(crate) struct RemoteBrowserTunnel {
 
 enum BrowserTransport {
     Ssh {
-        child: Mutex<Child>,
+        /// The tunnel's ssh process, which owns the forward; `None` when the forward lives in the
+        /// user's own SSH master (GitHub #496).
+        child: Mutex<Option<Child>>,
+        /// The `-D` forward in the user's SSH master, taken back when the tunnel stops
+        /// (GitHub #496).
+        forward: Mutex<Option<GpuiRemoteSharedSshForward>>,
         #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
         _askpass: Option<GpuiRemoteAskpassScript>,
     },
@@ -27,11 +32,16 @@ enum BrowserTransport {
 impl RemoteBrowserTunnel {
     pub(crate) fn stop(&self) {
         match &self.transport {
-            BrowserTransport::Ssh { child, .. } => {
-                if let Ok(mut child) = child.lock() {
+            BrowserTransport::Ssh { child, forward, .. } => {
+                if let Ok(mut child) = child.lock()
+                    && let Some(child) = child.as_mut()
+                {
                     gpui_forget_remote_tunnel(child.id());
                     let _ = child.kill();
                     let _ = child.wait();
+                }
+                if let Ok(mut forward) = forward.lock() {
+                    forward.take();
                 }
             }
             BrowserTransport::Gxserver(proxy) => proxy.stop(),
@@ -39,10 +49,13 @@ impl RemoteBrowserTunnel {
     }
     pub(crate) fn is_alive(&self) -> bool {
         match &self.transport {
-            BrowserTransport::Ssh { child, .. } => child
-                .lock()
-                .ok()
-                .is_some_and(|mut child| matches!(child.try_wait(), Ok(None))),
+            BrowserTransport::Ssh { child, .. } => child.lock().ok().is_some_and(|mut child| {
+                match child.as_mut() {
+                    Some(child) => matches!(child.try_wait(), Ok(None)),
+                    // A forward registered in the user's SSH master has no process of its own.
+                    None => true,
+                }
+            }),
             BrowserTransport::Gxserver(proxy) => proxy.is_alive(),
         }
     }
@@ -82,13 +95,30 @@ pub(crate) fn start_remote_browser_tunnel(
         });
     }
     let askpass = gpui_remote_ssh_askpass_script(config)?;
-    let mut args = gpui_remote_ssh_tunnel_options(config.has_saved_password);
+    let dynamic_forward = format!("127.0.0.1:{port}");
+    if config.reuse_ssh_connection {
+        let _ =
+            gpui_remote_ssh_forward_in_existing_connection(config, "-D", dynamic_forward.as_str())?;
+        return gpui_wait_for_remote_browser_tunnel(RemoteBrowserTunnel {
+            port,
+            transport: BrowserTransport::Ssh {
+                child: Mutex::new(None),
+                forward: Mutex::new(GpuiRemoteSharedSshForward::new(
+                    config,
+                    "-D",
+                    dynamic_forward.as_str(),
+                )),
+                _askpass: None,
+            },
+        });
+    }
+    let mut args = gpui_remote_ssh_tunnel_options(config);
     args.extend([
         "-N".into(),
         "-o".into(),
         "ExitOnForwardFailure=yes".into(),
         "-D".into(),
-        format!("127.0.0.1:{port}"),
+        dynamic_forward.clone(),
     ]);
     args.extend(gpui_remote_ssh_target_arguments(config)?);
     let mut command = gpui_remote_background_command(&gpui_remote_ssh_executable());
@@ -104,14 +134,24 @@ pub(crate) fn start_remote_browser_tunnel(
     let child = command
         .spawn()
         .map_err(|_| "Could not start the browser SSH tunnel.")?;
-    gpui_record_remote_tunnel(child.id(), &format!("127.0.0.1:{port}"));
-    let tunnel = RemoteBrowserTunnel {
+    gpui_record_remote_tunnel(child.id(), dynamic_forward.as_str());
+    gpui_wait_for_remote_browser_tunnel(RemoteBrowserTunnel {
         port,
         transport: BrowserTransport::Ssh {
-            child: Mutex::new(child),
+            child: Mutex::new(Some(child)),
+            forward: Mutex::new(None),
             _askpass: askpass,
         },
-    };
+    })
+}
+
+/// Waits until the tunnel's SOCKS port answers, the proof that its forward works, then hands the
+/// tunnel back; its caller owns stopping it.
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+fn gpui_wait_for_remote_browser_tunnel(
+    tunnel: RemoteBrowserTunnel,
+) -> Result<RemoteBrowserTunnel, String> {
+    let port = tunnel.port;
     let deadline = Instant::now() + Duration::from_secs(12);
     while Instant::now() < deadline && tunnel.is_alive() {
         if let Ok(mut stream) =

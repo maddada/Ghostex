@@ -26,6 +26,12 @@ const GPUI_REMOTE_SSH_CONTROL_PERSIST_SECONDS: u32 = 60;
 /// CDXC:RemotePairing 2026-10-26 WHY:
 /// A connect runs up to seven SSH commands before its tunnel (token read, platform probes, build-identity read, code-server platform), and each one was its own TCP connection and login: the user's Windows PC logged a burst of seven "Accepted publickey" lines, one to two seconds apart, on every Ghostex start. The connect now logs in once as a multiplexing master and runs those commands over it, so one connect costs two logins (this master and the tunnel, which keeps its own process; see `gpui_remote_ssh_tunnel_options`). A command whose socket is gone falls back to its own connection (`ControlMaster=no`), and a client that cannot multiplex (native Windows OpenSSH) keeps one connection per command.
 /// SEE-ALSO: ssh_exec.rs (the runners that pass `gpui_remote_ssh_shared_connection_arguments`), connect.rs.
+///
+/// CDXC:RemoteMachines 2026-11-08 WHY:
+/// A machine set to reuse an existing SSH connection (GitHub #496) never gets a master from here:
+/// the only connection that can sign in to such a host is the one the user opened in a terminal,
+/// and a login from this app would stop at the verification prompt. `open` therefore stays
+/// unshared, and every command runs through the user's master (`gpui_remote_ssh_reuse_connection_arguments`).
 pub(crate) struct GpuiRemoteSshConnectionShare {
     control_path: Option<PathBuf>,
     target_host: String,
@@ -44,6 +50,11 @@ impl GpuiRemoteSshConnectionShare {
     /// connect unshared, running each command over its own connection as before.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) fn open(config: &GpuiRemoteMachineConfig) -> Result<Self, GpuiRemoteProcessResult> {
+        if config.reuse_ssh_connection {
+            // The user's own master is the connect's login; opening another one would be a login
+            // this app cannot complete (`gpui_remote_ssh_reuse_connection_refusal` checked one is up).
+            return Ok(Self::unshared());
+        }
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -269,6 +280,217 @@ pub(crate) fn gpui_remote_ssh_shared_connection_arguments(
     ]
 }
 
+/// The options that send one command over the connection the user signed in to, resolved from
+/// their own `~/.ssh/config`; empty unless the machine reuses an existing connection.
+///
+/// `ControlMaster=no` is the whole point: ssh uses the master at the configured `ControlPath` and
+/// never creates, persists or exits one of its own (GitHub #496).
+pub(crate) fn gpui_remote_ssh_reuse_connection_arguments(
+    config: &GpuiRemoteMachineConfig,
+) -> Vec<String> {
+    if !config.reuse_ssh_connection {
+        return Vec::new();
+    }
+    vec!["-o".to_string(), "ControlMaster=no".to_string()]
+}
+
+/// Why a machine set to reuse an SSH connection cannot connect right now, or `None` when the
+/// user's master is up for it.
+///
+/// CDXC:RemoteMachines 2026-11-08 WHY:
+/// Without a master, every command below would open its own connection and stop at the host's
+/// verification prompt, which reads as a rejected login and can trip the host's own lockout rules,
+/// so the connect is refused before any of them runs. `ssh -O check` only asks the local master
+/// over its socket; it never dials the host. A config with no `ControlPath` is a different answer
+/// (there is nothing for the user's ssh to multiplex over), as is a socket that is not running.
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+pub(crate) fn gpui_remote_ssh_reuse_connection_refusal(
+    config: &GpuiRemoteMachineConfig,
+) -> Option<String> {
+    let target_arguments = match gpui_remote_ssh_target_arguments(config) {
+        Ok(target_arguments) => target_arguments,
+        // The first command reports the same refusal through the ordinary path.
+        Err(message) => return Some(message),
+    };
+    let target = config.ssh_target_host();
+    let mut arguments = vec![
+        "-O".to_string(),
+        "check".to_string(),
+        "-o".to_string(),
+        "BatchMode=yes".to_string(),
+        "-o".to_string(),
+        "ControlMaster=no".to_string(),
+    ];
+    arguments.extend(target_arguments);
+    let result = gpui_run_remote_process(
+        &gpui_remote_ssh_executable(),
+        &arguments,
+        None,
+        GPUI_REMOTE_SSH_CONTROL_TIMEOUT,
+    );
+    if result.exit_code == 0 {
+        return None;
+    }
+    if result
+        .stderr
+        .to_ascii_lowercase()
+        .contains("no controlpath")
+    {
+        return Some(format!(
+            "Reusing an SSH connection needs ControlPath and ControlMaster auto for {target} in your SSH config. Add them, sign in once in a terminal, then reconnect."
+        ));
+    }
+    Some(format!(
+        "No SSH connection to {target} is open. Sign in to it in a terminal ({}) and finish the prompt there, then reconnect.",
+        gpui_remote_ssh_sign_in_hint(config)
+    ))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+pub(crate) fn gpui_remote_ssh_reuse_connection_refusal(
+    _config: &GpuiRemoteMachineConfig,
+) -> Option<String> {
+    None
+}
+
+/// `ssh [-p <port>] user@host`, the command the user runs to open the connection Ghostex reuses.
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows")),
+    allow(dead_code)
+)]
+fn gpui_remote_ssh_sign_in_hint(config: &GpuiRemoteMachineConfig) -> String {
+    match config.ssh_port {
+        Some(port) => format!("ssh -p {port} {}", config.ssh_target_host()),
+        None => format!("ssh {}", config.ssh_target_host()),
+    }
+}
+
+/// Registers one forward in the connection the user signed in to; `Some(port)` is the port the far
+/// side picked for an `-R` forward (`0` in the spec asked it to pick one), `Err` says why not.
+///
+/// CDXC:RemoteMachines 2026-11-08 WHY:
+/// `ssh -N -L` over an existing master does not give a tunnel: ssh asks the master for a session
+/// too, and with no command that session is a remote shell that reads straight from the closed
+/// stdin and exits, so the client exits at once while the forward is left behind in the master
+/// (measured against OpenSSH 10.5). `-O forward` registers the forward and exits by itself, the
+/// master keeps it, and that is also the only form that reports the port an `-R 127.0.0.1:0:…`
+/// forward got (printed on stdout). `GpuiRemoteSharedSshForward` takes the forward back when the
+/// tunnel ends. `ControlMaster=no` keeps a config with `ControlMaster yes` from turning this into
+/// a fresh login instead of a control request.
+/// SEE-ALSO: gpui_remote_ssh_tunnel_options (the tunnel a machine without the reuse setting gets).
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+pub(crate) fn gpui_remote_ssh_forward_in_existing_connection(
+    config: &GpuiRemoteMachineConfig,
+    option: &'static str,
+    forward: &str,
+) -> Result<Option<u16>, String> {
+    let target_arguments = gpui_remote_ssh_target_arguments(config)?;
+    let mut arguments = vec![
+        "-O".to_string(),
+        "forward".to_string(),
+        "-o".to_string(),
+        "BatchMode=yes".to_string(),
+        "-o".to_string(),
+        "ControlMaster=no".to_string(),
+        option.to_string(),
+        forward.to_string(),
+    ];
+    arguments.extend(target_arguments);
+    let result = gpui_run_remote_process(
+        &gpui_remote_ssh_executable(),
+        &arguments,
+        None,
+        GPUI_REMOTE_GXSERVER_CONNECT_TIMEOUT,
+    );
+    if result.exit_code != 0 {
+        return Err(
+            "The SSH connection did not open the tunnel's port. Sign in to the machine in a terminal again, then reconnect."
+                .to_string(),
+        );
+    }
+    Ok((option == "-R")
+        .then(|| result.stdout.trim().parse::<u16>().ok())
+        .flatten())
+}
+
+/// One forward this app asked someone else's multiplexing master for, taken back when the tunnel
+/// that asked for it ends.
+///
+/// CDXC:RemoteMachines 2026-11-08 WHY:
+/// `ssh -L`/`-R`/`-D` against an existing master registers the forward in the master itself
+/// (`mux_master_process_open_fwd` adds it to the master's own forwarding table), and it stays
+/// there after the client that asked for it exits: the master keeps listening and forwarding long
+/// after Ghostex disconnected, and every reconnect would leave another one behind. A tunnel on a
+/// reused connection therefore cancels its own forward, by the same exact spec ssh registered,
+/// when it ends. It only ever cancels that forward for that target: it never exits the master,
+/// which belongs to the user's other sessions.
+/// SEE-ALSO: ssh_exec.rs (`gpui_remote_ssh_tunnel_options`), tunnel_and_auth.rs, reverse_tunnel.rs,
+/// browser_tunnel.rs, source_code_server.rs.
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows")),
+    allow(dead_code)
+)]
+pub(crate) struct GpuiRemoteSharedSshForward {
+    config: GpuiRemoteMachineConfig,
+    /// `-L`, `-R` or `-D`, the option the tunnel passed.
+    option: &'static str,
+    /// The forward exactly as the tunnel passed it (`-L`/`-R`/`-D` value).
+    forward: String,
+}
+
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows")),
+    allow(dead_code)
+)]
+impl GpuiRemoteSharedSshForward {
+    /// The cleanup for a tunnel's forward; `None` unless the machine rides an existing connection,
+    /// the only case with a master to take it back from.
+    pub(crate) fn new(
+        config: &GpuiRemoteMachineConfig,
+        option: &'static str,
+        forward: &str,
+    ) -> Option<Self> {
+        config.reuse_ssh_connection.then(|| Self {
+            config: config.clone(),
+            option,
+            forward: forward.to_string(),
+        })
+    }
+}
+
+impl Drop for GpuiRemoteSharedSshForward {
+    fn drop(&mut self) {
+        gpui_remote_ssh_cancel_forward(self);
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+fn gpui_remote_ssh_cancel_forward(forward: &GpuiRemoteSharedSshForward) {
+    let Ok(target_arguments) = gpui_remote_ssh_target_arguments(&forward.config) else {
+        return;
+    };
+    let mut arguments = vec![
+        "-O".to_string(),
+        "cancel".to_string(),
+        "-o".to_string(),
+        "BatchMode=yes".to_string(),
+        "-o".to_string(),
+        "ControlMaster=no".to_string(),
+        forward.option.to_string(),
+        forward.forward.clone(),
+    ];
+    arguments.extend(target_arguments);
+    let _ = gpui_run_remote_process(
+        &gpui_remote_ssh_executable(),
+        &arguments,
+        None,
+        GPUI_REMOTE_SSH_FORWARD_CANCEL_TIMEOUT,
+    );
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn gpui_remote_ssh_cancel_forward(_forward: &GpuiRemoteSharedSshForward) {}
+
 /// A master login failure every later command would repeat: the machine refused the login or
 /// could not be reached. Anything else is retried command by command.
 #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
@@ -363,6 +585,7 @@ mod tests {
             ssh_port: None,
             ssh_user: None,
             has_saved_password: false,
+            reuse_ssh_connection: false,
             wsl_distribution: None,
             disabled: false,
             ssh_control_path: None,
