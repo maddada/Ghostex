@@ -244,3 +244,15 @@ per event.
   decision 1A of the follow-up: revisit with a `keychain-access-groups` entitlement later).
 - Settings > Security lists the security log, not the approver keys or pending requests; pending
   requests show as cards on the desktop and in the phone's Approvals screen.
+- `/api/terminal` still opens for the token file, so a token-file caller can attach to any
+  session's terminal and type there without the approval `/api/sendSessionText` asks for. This is
+  part of the same-user limit, not a separate hole: any program running as the user can already
+  type into any session without gxserver, by running `ghostex attach <session>` (it execs the
+  session's stored `zmx attach` command, `ghostex_cli/attach.rs`) or by attaching to the zmx
+  socket, which is the user's own file. Shutting the token file out of `/api/terminal` alone
+  would break its only two clients, both of which hold just a token file today: the GPUI web
+  build (`/api/webBootstrap` hands it this computer's token file) and Cloud Box attach
+  (`ghostex cloud attach` sends the box's token file). Tighten it together with their own tokens:
+  an approval-gated owner session for `ghostex web`, and a token the box gives home at boot that
+  agents on the box can't read. The desktop (local and over SSH), the phone and `ghostex attach`
+  don't use `/api/terminal`.
