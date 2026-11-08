@@ -340,6 +340,23 @@ mod tests {
         ));
     }
 
+    /// Against a running relay: `GHOSTEX_COLLAB_TEST_RELAY=http://127.0.0.1:58871 cargo test --lib
+    /// page_pin -- --ignored`, with `GHOSTEX_COLLAB_TEST_EXPECT=mismatch` after changing a served file.
+    #[test]
+    #[ignore]
+    fn checks_a_live_relay() {
+        let relay = std::env::var("GHOSTEX_COLLAB_TEST_RELAY").expect("GHOSTEX_COLLAB_TEST_RELAY");
+        let expect = std::env::var("GHOSTEX_COLLAB_TEST_EXPECT").unwrap_or_default();
+        let base = format!("{relay}/s/{}/", page_id());
+        let state = verify(MANIFEST, &base, fetch, 1);
+        eprintln!("{state:?}");
+        if expect == "mismatch" {
+            assert!(matches!(state, PinState::Mismatch { .. }));
+        } else {
+            assert_eq!(state, PinState::Verified { at_ms: 1 });
+        }
+    }
+
     #[test]
     fn the_built_in_manifest_is_well_formed() {
         let files = manifest_files(MANIFEST);

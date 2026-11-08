@@ -1,6 +1,6 @@
 [package]
 name = "ghostex-share-relay"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "Ghostex Collab's share relay: carries end-to-end encrypted traffic between a guest's browser and the owner's gxserver."
 publish = false

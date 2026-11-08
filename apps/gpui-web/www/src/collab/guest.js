@@ -1,4 +1,5 @@
-// Ghostex Collab's guest page: the link `share.ghostex.dev/s#<key>` opens the GPUI web build here.
+// Ghostex Collab's guest page: the link `share.ghostex.dev/s/<page id>/#<key>` opens the GPUI web build here
+// (the relay serves the page pinned to the owner's release, server/src/collab/page_pin.rs).
 // Before the app starts, this connects to the owner's computer through the relay (tunnel.js), asks
 // the guest's name and the share's code, and hands the app a guest endpoint that reaches only the
 // shared chat. It reconnects on its own when the connection drops.
@@ -26,7 +27,8 @@ const LOCKED = ['Too many wrong codes', 'This chat stopped taking codes for a fe
 const RETRY_MS = [1000, 2000, 3000, 5000];
 
 export function isGuestPage() {
-  return location.pathname === '/s' || location.pathname === '/s/';
+  // `/s/<page id>/` (11.0.1 and later), or 11.0.0's `/s`.
+  return /^\/s(\/([0-9a-f]{16}|dev)\/?)?\/?$/.test(location.pathname);
 }
 
 const STYLE = `
@@ -185,7 +187,13 @@ export async function startGuest(root) {
     let codeInput = null;
     if (intro.needsCode) {
       const codeField = el('label', 'gx-collab-field');
-      codeInput = Object.assign(el('input', 'gx-collab-code'), { inputMode: 'numeric', maxLength: 6, autocomplete: 'one-time-code', pattern: '[0-9]{6}', required: true });
+      const digits = intro.codeDigits ?? 6;
+      codeInput = Object.assign(el('input', 'gx-collab-code'), { inputMode: 'numeric', maxLength: digits + 1, autocomplete: 'one-time-code', required: true });
+      // The owner's app shows the code in two groups ("1234 5678"); a pasted space is fine.
+      codeInput.addEventListener('input', () => {
+        const clean = codeInput.value.replace(/\D/g, '').slice(0, digits);
+        if (clean !== codeInput.value.replace(/ /g, '')) codeInput.value = clean;
+      });
       codeInput.setAttribute('aria-label', 'Code');
       codeField.append(el('span', null, `Code from ${intro.owner}`), codeInput);
       form.append(codeField);
@@ -200,7 +208,7 @@ export async function startGuest(root) {
       button.disabled = true;
       error.textContent = '';
       const name = nameInput.value.trim();
-      const code = codeInput?.value.trim() ?? '';
+      const code = codeInput?.value.replace(/\D/g, '') ?? '';
       try {
         const reply = await join(tunnel, name, code);
         if (reply.t === 'welcome') {

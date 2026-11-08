@@ -2,7 +2,7 @@
 //!
 //! An owner's gxserver keeps one outgoing WebSocket here (`/h`) while Ghostex Collab is on and a
 //! chat is shared, and registers each shared chat by its route id. A guest's browser opens the
-//! link `/s#<key>`, gets the guest page from this relay, hashes the key into the same route id and
+//! link `/s/<page id>/#<key>` (11.0.0's links: `/s#<key>`), gets the guest page from this relay, hashes the key into the same route id and
 //! connects to `/g/<route>`. The relay pairs the two and copies frames between them. It never sees
 //! the key (browsers keep the `#fragment` to themselves), so it cannot read the frames: the page
 //! and gxserver encrypt them end to end with keys derived from it (`server/src/collab/tunnel.rs`
@@ -16,6 +16,13 @@
 //! - relay → host: `{"op":"registered","route":R}`, `{"op":"error","route":R,"code":C}`,
 //!   `{"op":"open","route":R,"conn":N}`, `{"op":"data","conn":N,"data":"<base64>"}`,
 //!   `{"op":"close","conn":N}`, `{"op":"pong"}`.
+//!
+//! Guest pages (`--pages`): one folder per page, named by its page hash, the SHA-256 of its
+//! manifest (every file's SHA-256 and path, `shasum -a 256` lines sorted by path). The relay
+//! hashes each folder when it starts and serves only folders whose files match their name, at
+//! `/s/<first 16 hex of the hash>/`. Each Ghostex release pins one page hash
+//! (`server/src/collab/page_pin.rs`) and checks this relay serves exactly that page before it
+//! shares through it, so several releases' pages live here side by side.
 //!
 //! A guest's frames on `/g/<route>` are binary and opaque. `S` is a random host secret; the relay
 //! keeps only its SHA-256, so another party that learns a route id (a guest who has the link)
@@ -79,7 +86,12 @@ struct Tables {
 struct Relay {
     tables: Mutex<Tables>,
     next_id: AtomicU64,
+    /// 11.0.0's guest page, at `/s` and its `/assets/…`.
     web_dist: Option<PathBuf>,
+    /// Pinned guest pages by page id (the hash's first 16 hex), each checked against its name.
+    pages: HashMap<String, PathBuf>,
+    /// A development page at `/s/dev/`, unchecked (`--dev-page`).
+    dev_page: Option<PathBuf>,
     /// Behind Caddy: the client's address is the first `X-Forwarded-For` entry.
     behind_proxy: bool,
     limits: Mutex<HashMap<(IpAddr, Side), Usage>>,
@@ -106,7 +118,78 @@ fn sha256_hex(text: &str) -> String {
 struct Args {
     listen: SocketAddr,
     web_dist: Option<PathBuf>,
+    pages: Option<PathBuf>,
+    dev_page: Option<PathBuf>,
     behind_proxy: bool,
+}
+
+// ---- pinned guest pages -----------------------------------------------------------------------
+
+/// Every file under `root` (dot files skipped), as `/`-separated relative paths.
+fn page_files(root: &Path) -> std::io::Result<Vec<String>> {
+    let mut files = Vec::new();
+    let mut folders = vec![root.to_path_buf()];
+    while let Some(folder) = folders.pop() {
+        for entry in std::fs::read_dir(&folder)? {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                continue;
+            }
+            let kind = entry.file_type()?;
+            if kind.is_dir() {
+                folders.push(entry.path());
+            } else if kind.is_file() {
+                let relative = entry
+                    .path()
+                    .strip_prefix(root)
+                    .map_err(std::io::Error::other)?
+                    .components()
+                    .map(|part| part.as_os_str().to_string_lossy().to_string())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                files.push(relative);
+            }
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+/// A page folder's manifest: `<sha256>  <path>` per file, sorted by path, what
+/// `find . -type f | sed 's|^\./||' | LC_ALL=C sort | xargs shasum -a 256` writes.
+fn page_manifest(root: &Path) -> std::io::Result<String> {
+    let mut manifest = String::new();
+    for file in page_files(root)? {
+        let bytes = std::fs::read(root.join(&file))?;
+        manifest.push_str(&format!(
+            "{}  {file}\n",
+            hex::encode(Sha256::digest(&bytes))
+        ));
+    }
+    Ok(manifest)
+}
+
+/// The page folders under `pages` whose files hash to their folder's name, by page id. A folder
+/// that doesn't match is left out and named on stderr.
+fn load_pages(pages: &Path) -> anyhow::Result<HashMap<String, PathBuf>> {
+    let mut found = HashMap::new();
+    for entry in std::fs::read_dir(pages)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !entry.file_type()?.is_dir() || name.starts_with('.') {
+            continue;
+        }
+        let hash = sha256_hex(&page_manifest(&entry.path())?);
+        if hash != name {
+            eprintln!(
+                "ghostex-share-relay: not serving page folder {name}: its files hash to {hash}"
+            );
+            continue;
+        }
+        found.insert(name[..16].to_string(), entry.path());
+    }
+    Ok(found)
 }
 
 // ---- rate limits ------------------------------------------------------------------------------
@@ -202,6 +285,8 @@ fn too_many() -> Response {
 fn parse_args() -> anyhow::Result<Args> {
     let mut listen: SocketAddr = "127.0.0.1:58800".parse()?;
     let mut web_dist = None;
+    let mut pages = None;
+    let mut dev_page = None;
     let mut behind_proxy = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -218,11 +303,24 @@ fn parse_args() -> anyhow::Result<Args> {
                         anyhow::anyhow!("--web-dist needs a folder")
                     })?))
             }
+            "--pages" => {
+                pages = Some(PathBuf::from(
+                    args.next()
+                        .ok_or_else(|| anyhow::anyhow!("--pages needs a folder"))?,
+                ))
+            }
+            "--dev-page" => {
+                dev_page =
+                    Some(PathBuf::from(args.next().ok_or_else(|| {
+                        anyhow::anyhow!("--dev-page needs a folder")
+                    })?))
+            }
             "--behind-proxy" => behind_proxy = true,
             "--help" | "-h" => {
                 println!(
-                    "ghostex-share-relay [--listen 127.0.0.1:58800] [--web-dist <gpui-web www/dist>] [--behind-proxy]\n\n\
-                     Local dev: run it with --web-dist apps/gpui-web/www/dist and point gxserver at it with\n\
+                    "ghostex-share-relay [--listen 127.0.0.1:58800] [--pages <folder of page-hash folders>] [--web-dist <11.0.0 page>] [--dev-page <gpui-web www/dist>] [--behind-proxy]\n\n\
+                     Local dev: run it with --dev-page apps/gpui-web/www/dist, start a debug gxserver with\n\
+                     GHOSTEX_COLLAB_UNPINNED_GUEST_PAGE=1 and point it at the relay with\n\
                      GHOSTEX_COLLAB_RELAY_URL=http://127.0.0.1:58800. Production sits behind TLS (Caddy) at\n\
                      https://share.ghostex.dev."
                 );
@@ -234,6 +332,8 @@ fn parse_args() -> anyhow::Result<Args> {
     Ok(Args {
         listen,
         web_dist,
+        pages,
+        dev_page,
         behind_proxy,
     })
 }
@@ -241,10 +341,22 @@ fn parse_args() -> anyhow::Result<Args> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = parse_args()?;
+    let pages = match &args.pages {
+        Some(folder) => load_pages(folder)?,
+        None => HashMap::new(),
+    };
+    for (id, folder) in &pages {
+        eprintln!(
+            "ghostex-share-relay: guest page {id} from {}",
+            folder.display()
+        );
+    }
     let relay = Arc::new(Relay {
         tables: Mutex::new(Tables::default()),
         next_id: AtomicU64::new(0),
         web_dist: args.web_dist,
+        pages,
+        dev_page: args.dev_page,
         behind_proxy: args.behind_proxy,
         limits: Mutex::new(HashMap::new()),
         route_opens: Mutex::new(HashMap::new()),
@@ -632,16 +744,53 @@ fn content_type(path: &Path) -> &'static str {
     }
 }
 
-/// Serves the GPUI web build: `/s` (and `/`) is its page, which starts in guest mode on `/s`.
+/// Serves the guest pages: `/s/<page id>/…` from that pinned page's folder (its `index.html` for
+/// the folder itself), `/s/dev/…` from `--dev-page`, and 11.0.0's page at `/s` and `/assets/…`.
 async fn static_file(State(relay): State<Arc<Relay>>, uri: Uri) -> Response {
-    let Some(root) = relay.web_dist.as_ref() else {
-        return (StatusCode::NOT_FOUND, "No guest page on this relay").into_response();
-    };
     let request = uri.path().trim_start_matches('/');
-    let relative = if request.is_empty() || request == "s" || request == "s/" {
-        "index.html"
-    } else {
-        request
+    let versioned = request.strip_prefix("s/").and_then(|rest| {
+        let (id, file) = rest.split_once('/').unwrap_or((rest, ""));
+        if id.is_empty() {
+            return None;
+        }
+        let root = if id == "dev" {
+            relay.dev_page.as_ref()
+        } else {
+            relay.pages.get(id)
+        };
+        Some((id, root, file))
+    });
+    let (root, relative) = match versioned {
+        Some((id, Some(_), file)) if file.is_empty() && !request.ends_with('/') => {
+            // `/s/<id>` → `/s/<id>/`, so the page's relative files resolve inside its folder;
+            // the browser keeps the link's `#key` across the redirect.
+            let mut response = StatusCode::PERMANENT_REDIRECT.into_response();
+            if let Ok(location) = HeaderValue::from_str(&format!("/s/{id}/")) {
+                response.headers_mut().insert(header::LOCATION, location);
+            }
+            return response;
+        }
+        Some((_, Some(root), file)) => (root, if file.is_empty() { "index.html" } else { file }),
+        Some((_, None, _)) => {
+            return (
+                StatusCode::NOT_FOUND,
+                "This share link needs a guest page this relay doesn't have. Ask for a new link.",
+            )
+                .into_response()
+        }
+        None => {
+            let Some(root) = relay.web_dist.as_ref() else {
+                return (StatusCode::NOT_FOUND, "No guest page on this relay").into_response();
+            };
+            (
+                root,
+                if request.is_empty() || request == "s" || request == "s/" {
+                    "index.html"
+                } else {
+                    request
+                },
+            )
+        }
     };
     let relative = Path::new(relative);
     if relative
@@ -672,9 +821,43 @@ async fn static_file(State(relay): State<Arc<Relay>>, uri: Uri) -> Response {
         header::CACHE_CONTROL,
         HeaderValue::from_static(if relative == Path::new("index.html") {
             "no-store"
+        } else if versioned.is_some() {
+            // A pinned page's files never change under their folder.
+            "public, max-age=86400, immutable"
         } else {
             "public, max-age=300"
         }),
     );
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn page_folders_are_served_only_under_their_own_hash() {
+        let temp = std::env::temp_dir().join(format!("gx-relay-pages-{}", std::process::id()));
+        let page = temp.join("staging");
+        std::fs::create_dir_all(page.join("assets")).unwrap();
+        std::fs::write(page.join("index.html"), "<html></html>").unwrap();
+        std::fs::write(page.join("assets/a.js"), "1").unwrap();
+        let manifest = page_manifest(&page).unwrap();
+        assert_eq!(
+            manifest,
+            format!(
+                "{}  assets/a.js\n{}  index.html\n",
+                sha256_hex("1"),
+                sha256_hex("<html></html>")
+            )
+        );
+        let hash = sha256_hex(&manifest);
+        std::fs::rename(&page, temp.join(&hash)).unwrap();
+        let pages = load_pages(&temp).unwrap();
+        assert_eq!(pages.get(&hash[..16]), Some(&temp.join(&hash)));
+        // A changed file: the folder no longer matches its name and is not served.
+        std::fs::write(temp.join(&hash).join("assets/a.js"), "2").unwrap();
+        assert!(load_pages(&temp).unwrap().is_empty());
+        std::fs::remove_dir_all(&temp).unwrap();
+    }
 }

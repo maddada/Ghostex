@@ -1,12 +1,14 @@
 # Ghostex Collab's share relay (share.ghostex.dev), behind Caddy on the same box.
-# Install: /opt/ghostex-share-relay/ghostex-share-relay and the guest page in /opt/ghostex-share-relay/web.
+# Install: /opt/ghostex-share-relay/ghostex-share-relay, each release's guest page unpacked into
+# /opt/ghostex-share-relay/pages (one folder per page hash, kept side by side), and 11.0.0's page
+# in /opt/ghostex-share-relay/web for links made before 11.0.1.
 [Unit]
 Description=Ghostex Collab share relay
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/opt/ghostex-share-relay/ghostex-share-relay --listen 127.0.0.1:58800 --web-dist /opt/ghostex-share-relay/web --behind-proxy
+ExecStart=/opt/ghostex-share-relay/ghostex-share-relay --listen 127.0.0.1:58800 --pages /opt/ghostex-share-relay/pages --web-dist /opt/ghostex-share-relay/web --behind-proxy
 Restart=always
 RestartSec=2
 DynamicUser=yes
