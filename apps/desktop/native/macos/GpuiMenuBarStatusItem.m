@@ -886,10 +886,16 @@ static const NSTimeInterval GhostexGpuiMenuBarStatusIdleSessionMaximumAge =
   [self removeDismissEventMonitors];
 }
 
+/**
+ CDXC:StatusPet 2026-11-08 WHY:
+ User: "ghostex app gets slower with time until it becomes super slow ... even pasting an image takes long" and "click on the Needs you question pill and it takes like 5 seconds before it jumps to it". Every session status change (a working session moves its last-active time several times a minute, and the user runs dozens of sessions) rebuilt this dropdown's rows on the main thread while it was closed, parsing every session's timestamp twice through ICU each time: up to half of the main thread in the samples taken while the user reproduced it, so the chat's paste and jump waited behind it. The rows are only seen while the dropdown is open, and opening it rebuilds them (`toggleFromStatusButton:`), so a closed dropdown only keeps the projects.
+ */
 - (void)setProjects:
     (NSArray<GhostexGpuiMenuBarStatusProjectModel *> *)projects {
   _projects = [projects copy] ?: @[];
-  [self rebuildRows];
+  if (_panel.visible) {
+    [self rebuildRows];
+  }
 }
 
 - (CGFloat)contentWidth {
@@ -1633,6 +1639,22 @@ static void GhostexGpuiApplyMenuBarStatusItemOnMain(
   }
 
   NSStatusItem *item = GhostexGpuiEnsureMenuBarStatusItem();
+  /*
+   CDXC:StatusPet 2026-11-08 WHY:
+   The rows change far more often than the counts, and drawing the badge image and setting the item's length again laid out the menu bar on every change. The badge is drawn again only when what it shows changed.
+   */
+  static GhostexGpuiMenuBarStatusEntry shownEntries[3];
+  static NSUInteger shownCount = 0;
+  static NSAppearanceName shownAppearance = nil;
+  NSAppearanceName appearance = NSApp.effectiveAppearance.name;
+  if (shownAppearance != nil && item.visible && item.button.target == target &&
+      shownCount == count && [shownAppearance isEqualToString:appearance] &&
+      memcmp(shownEntries, entries, sizeof(GhostexGpuiMenuBarStatusEntry) * count) == 0) {
+    return;
+  }
+  shownAppearance = appearance;
+  shownCount = count;
+  memcpy(shownEntries, entries, sizeof(GhostexGpuiMenuBarStatusEntry) * count);
   NSSize preferredSize = GhostexGpuiMenuBarStatusPreferredSize(entries, count);
   item.length = preferredSize.width;
   item.visible = YES;
