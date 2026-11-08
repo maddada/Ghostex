@@ -1344,6 +1344,21 @@ async fn send_nudge(
     text: &str,
     ledger_key: String,
 ) -> std::result::Result<(), String> {
+    // A bot's conversation (GBots, Hermes) takes no nudge (CDXC:Bots 2026-11-08, bot_projects.rs).
+    let (checking, project_id) = (state.clone(), key.0.clone());
+    let bot = tokio::task::spawn_blocking(move || {
+        open_gxserver_database(&checking.paths).is_ok_and(|db| {
+            crate::bot_projects::is_bot_conversation(
+                &DomainRepository::new(&db, checking.metadata.server_id.as_str()),
+                &project_id,
+            )
+        })
+    })
+    .await
+    .unwrap_or(false);
+    if bot {
+        return Err("it is a bot's conversation, which Ghostex never nudges".to_string());
+    }
     let send_request_id = memory
         .lock()
         .map(|mut memory| {

@@ -74,6 +74,24 @@ fn bot_launch_command(profile: &str) -> String {
     format!("hermes -p {profile}")
 }
 
+/// Whether a project is in the Bots space (a Hermes bot or a GBot): its sessions are chats with a
+/// bot runtime, not agent sessions doing a task.
+///
+/// CDXC:Bots 2026-11-08 DECISION:
+/// User, after Autopilot typed "Ghostex: [Autopilot] your last turn stopped before your task was done…" into a GBots bot's greeting ("…I'll follow up in a moment.") and it became the conversation's title: "bug pls fix". No automatic Ghostex message (Autopilot's rules, the self-heal "carry on", a coordinator's stall or idle nudge) goes to a bot conversation; the bot answers people, it has no task to carry on.
+pub(crate) fn is_bot_project(project: &Value) -> bool {
+    project.pointer("/launchSettings/isBot") == Some(&Value::Bool(true))
+}
+
+/// BLOCKING (SQLite). [`is_bot_project`] for a session's project id.
+pub(crate) fn is_bot_conversation(repository: &DomainRepository<'_>, project_id: &str) -> bool {
+    repository
+        .get_project(project_id)
+        .ok()
+        .flatten()
+        .is_some_and(|project| is_bot_project(&project))
+}
+
 /// The Hermes profile a bot project stands for. `None` for any other project, and for a stored
 /// profile name that is not a plain word.
 pub(crate) fn bot_profile(project: &Value) -> Option<&str> {

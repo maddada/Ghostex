@@ -66,7 +66,13 @@ impl BotState {
                     .get("title")
                     .and_then(Value::as_str)
                     .map(str::trim)
-                    .filter(|title| !title.is_empty() && *title != "New thread")
+                    // The runtime titles a conversation from its first message, which may be one
+                    // Ghostex typed (CDXC:SessionTitles 2026-11-08, agents/activity.rs).
+                    .filter(|title| {
+                        !title.is_empty()
+                            && *title != "New thread"
+                            && !crate::agents::is_ghostex_system_message(title)
+                    })
                     .unwrap_or_default()
                     .to_string();
                 Some((thread, ThreadState { title, busy }))
@@ -308,6 +314,7 @@ fn apply(
                             &project_id,
                             session,
                             &thread.title,
+                            &bot.name,
                         )?;
                         text(session, "sessionId")
                     }
@@ -590,11 +597,20 @@ fn rename_untouched_conversation(
     project_id: &str,
     session: &Value,
     title: &str,
+    bot_name: &str,
 ) -> Result<(), DomainStateError> {
     let untouched = session
         .pointer("/runtimeSettings/titleSource")
         .and_then(Value::as_str)
         == Some(GBOTS_TITLE_SOURCE);
+    // A title a Ghostex message gave it before Ghostex filtered those goes back to the bot's name
+    // until the runtime has a real one.
+    let title =
+        if title.is_empty() && crate::agents::is_ghostex_system_message(&text(session, "title")) {
+            bot_name
+        } else {
+            title
+        };
     if !untouched || title.is_empty() || text(session, "title") == title {
         return Ok(());
     }

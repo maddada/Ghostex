@@ -171,8 +171,12 @@ fn publish_attention(
     );
 }
 
-/// Whether the session is an open coordinator's thread, and whether it is a coordinator.
-fn roles(db: &rusqlite::Connection, key: &SessionKey) -> (bool, bool) {
+/// Whether the session is an open coordinator's thread, and whether it is a coordinator. A bot's
+/// conversation is neither: it is never told to carry on (CDXC:Bots 2026-11-08, bot_projects.rs).
+fn roles(db: &rusqlite::Connection, server_id: &str, key: &SessionKey) -> (bool, bool) {
+    if crate::bot_projects::is_bot_conversation(&DomainRepository::new(db, server_id), &key.0) {
+        return (false, false);
+    }
     let thread = coordinators::read_thread(db, &key.0, &key.1)
         .ok()
         .flatten()
@@ -185,7 +189,7 @@ fn roles(db: &rusqlite::Connection, key: &SessionKey) -> (bool, bool) {
 }
 
 fn gave_up(state: &AppState, db: &rusqlite::Connection, key: &SessionKey, reason: &GiveUpReason) {
-    if roles(db, key).0 {
+    if roles(db, state.metadata.server_id.as_str(), key).0 {
         heal::queue_report(
             key,
             HealReportKind::GaveUp {
@@ -348,7 +352,7 @@ async fn run_heal(state: &Arc<AppState>, due: &HealDue) -> HealOutcome {
     let role_key = key.clone();
     let (thread, coordinator) = tokio::task::spawn_blocking(move || {
         open_gxserver_database(&role_state.paths)
-            .map(|db| roles(&db, &role_key))
+            .map(|db| roles(&db, role_state.metadata.server_id.as_str(), &role_key))
             .unwrap_or((false, false))
     })
     .await

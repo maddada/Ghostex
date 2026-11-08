@@ -1013,8 +1013,18 @@ pub(crate) fn strip_first_prompt_title_claim_prefixes(value: &str) -> &str {
     }
 }
 
+/// A message Ghostex itself typed (Autopilot's rules, a coordinator's nudge, a heal): its lines open
+/// with "Ghostex:".
+///
+/// CDXC:SessionTitles 2026-11-08 DECISION:
+/// User, after "Ghostex: [Autopilot] your last…" became a GBots conversation's sidebar title: "bug pls fix". A Ghostex or Autopilot system message never names a session or conversation; titles come from the user's or the bot's real first message.
+pub(crate) fn is_ghostex_system_message(text: &str) -> bool {
+    text.trim_start().starts_with("Ghostex:")
+}
+
 pub(crate) fn is_first_prompt_claim_meta_prompt(prompt: &str) -> bool {
-    prompt.starts_with("# AGENTS")
+    is_ghostex_system_message(prompt)
+        || prompt.starts_with("# AGENTS")
         || prompt.contains("tool_use_id")
         || [
             "<command",

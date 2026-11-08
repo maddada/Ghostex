@@ -337,7 +337,7 @@ async fn decide(
         .unwrap_or_default();
     let message = text(params, "message");
     let leave = text(params, "leave");
-    let (title, project) = {
+    let (title, project, bot) = {
         let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
             code: "internalError",
             message: error.to_string(),
@@ -346,15 +346,27 @@ async fn decide(
         let session = repository
             .get_session(&project_id, &session_id)?
             .ok_or_else(|| DomainStateError::not_found("Session not found."))?;
-        let project = repository
-            .get_project(&project_id)?
+        let project = repository.get_project(&project_id)?;
+        let bot = project
+            .as_ref()
+            .is_some_and(crate::bot_projects::is_bot_project);
+        let project = project
             .and_then(|project| project["name"].as_str().map(str::to_string))
             .unwrap_or_default();
         (
             session["title"].as_str().unwrap_or_default().to_string(),
             project,
+            bot,
         )
     };
+    // A bot's conversation is a chat, not a task: Autopilot types nothing into it (CDXC:Bots
+    // 2026-11-08, bot_projects.rs).
+    if bot && (message.is_some() || !answers.is_empty()) {
+        return Err(DomainStateError {
+            code: "invalidState",
+            message: "That is a bot's conversation: Autopilot never sends it anything.".to_string(),
+        });
+    }
     let failed = |message: String| DomainStateError {
         code: "invalidState",
         message,

@@ -537,6 +537,9 @@ fn candidate(
     if session.get("kind").and_then(Value::as_str) != Some("agent")
         || crate::agents::session_is_draft(session)
         || crate::agentbox::is_agentbox_session(session)
+        // A bot's conversation (GBots, Hermes) is a chat, not a task: its greeting's "I'll follow
+        // up in a moment." is no turn cut off mid-task (CDXC:Bots 2026-11-08, bot_projects.rs).
+        || crate::bot_projects::is_bot_project(project)
     {
         return false;
     }
