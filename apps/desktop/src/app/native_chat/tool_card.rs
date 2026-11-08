@@ -5,6 +5,8 @@
 //! which rows the card holds and when it folds are decided in
 //! `packages/gx-chat-core/src/transcript/tool_card.rs` (the user's decision is there); this file
 //! only lays the card out and moves it.
+//!
+//! CDXC:SessionChat 2026-11-08 DECISION: User, of a folded "Used 1 tool" card above a "Message to <thread>" card: "make these 2 please have same height, they don't right now", then "keep the 'Message to …' card's height and make the tool cards match it". The tool card's header is the one-line cards' header height and its border their one scaled pixel, so folded it is 44px tall like every one-line card (the 2026-10-18 DECISION in cards.rs); its look is otherwise unchanged.
 
 use super::file_change_card::card_colors;
 use super::transcript::text;
@@ -180,7 +182,9 @@ impl NativeChatView {
             .flex()
             .flex_col()
             .rounded(px(12.0 * s))
-            .border_1()
+            // One scaled pixel, as the one-line cards' shell has, so the folded card is exactly as
+            // tall as they are (`SINGLE_LINE_CARD.header_height`).
+            .border(px(s))
             .border_color(border)
             .bg(surface)
             .overflow_hidden()
@@ -315,7 +319,9 @@ impl NativeChatView {
             .items_center()
             .gap(px(8.0 * s))
             .px(px(10.0 * s))
-            .min_h(px(38.0 * s))
+            // The one-line cards' header height ("Message to …", "Worked for 12s"), so a tool card
+            // folded beside one of them is the same height.
+            .h(px(super::cards::SINGLE_LINE_CARD.header_height(s)))
             .min_w_0()
             .chat_cursor_pointer()
             .hover(move |style| style.bg(hover))
