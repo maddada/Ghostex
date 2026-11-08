@@ -443,9 +443,6 @@ impl Render for GpuiSettingsModalWindow {
         let rail = render_rail(self, &p, pages, active_tab, cx);
         let search = self.render_search(&p, window, cx);
         let page = self.tabs.get(&active_tab).cloned();
-        // Under glass a dialog nested in Settings veils the page in the theme's colour
-        // (CDXC:Settings 2026-11-08 on `SettingsPalette::dialog_surface`).
-        super::fields::set_settings_glass(window, p.glass.then(|| p.solid_dialog_surface()));
         div()
             .id("settings-modal")
             .size_full()
