@@ -62,3 +62,8 @@ pub(crate) mod space_editor_modal {
     use crate::*;
     include!(concat!(env!("OUT_DIR"), "/space_editor_modal.rs"));
 }
+
+/// The 11.0.1 security notice's window size (`window/security_upgrade_modal.rs` on the desktop),
+/// which `app_modal_kind.rs` reads; the page never opens that notice.
+pub(crate) const SECURITY_UPGRADE_MODAL_WIDTH: f32 = 640.0;
+pub(crate) const SECURITY_UPGRADE_MODAL_INITIAL_HEIGHT: f32 = 520.0;
