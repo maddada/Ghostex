@@ -1898,7 +1898,13 @@ impl GpuiExportTranscriptModalWindow {
                             .font_family(MODAL_MONO_FONT)
                             .text_size(px(12.0))
                             .line_height(px(17.4))
-                            .child(path),
+                            // A file on this computer opens in Files (CDXC:PathLinks 2026-11-08).
+                            .child(if can_reveal {
+                                path_link("export-transcript-saved-path", path.clone(), path)
+                                    .into_any_element()
+                            } else {
+                                div().child(path).into_any_element()
+                            }),
                     )
                     .when(can_reveal, |this| {
                         this.child(

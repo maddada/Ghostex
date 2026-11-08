@@ -11,6 +11,7 @@ mod host_messages;
 mod main_hub_card;
 mod modals;
 mod new_thread_picker;
+mod path_links;
 mod project_path_actions;
 mod session_links;
 mod side_chat;
@@ -18,6 +19,7 @@ mod toasts;
 mod work_view;
 mod workspace;
 
+pub(crate) use path_links::install_path_links;
 pub(crate) use toasts::WebToasts;
 
 /// What this page holds for those services.

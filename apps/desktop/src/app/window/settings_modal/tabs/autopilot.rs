@@ -6,7 +6,7 @@
 //! CDXC:Autopilot 2026-11-07 DECISION:
 //! User: "we should have settings area for autopilot specifically", with every hard limit as its own toggle ("add all those as toggles in the page in settings for autopilot please"), the auto-answer toggle with its 5/10/15-minute wait, the approval-cards toggle, the supervisor model ("Opus 5.5 medium" or "sol 6.1 high"), a sweep slider, and "Summary and log: in the autopilot page in settings pls. make that page intuitive please i trust u. it should have log there."
 //! SEE-ALSO: server/src/autopilot/config.rs (the choices and their defaults), packages/settings-catalog/src/pages/autopilot.rs (its search rows).
-use super::super::super::native_modal_kit::MODAL_MONO_FONT;
+use super::super::super::native_modal_kit::{MODAL_MONO_FONT, looks_like_path, path_link};
 use super::super::catalog::SettingOption;
 use super::super::fields::{
     ButtonVariant, FieldStates, ROW_PADDING_X, ROW_PADDING_Y, RowSpec, SettingsPage, SliderBinding,
@@ -579,16 +579,22 @@ pub(super) fn padded_text(p: &SettingsPalette, parts: &[(&str, bool)]) -> AnyEle
     let mut line = h_flex().flex_wrap().items_baseline();
     for (part, code) in parts {
         line = line.child(if *code {
-            div()
+            let chip = div()
                 .px(px(4.0))
                 .rounded(px(4.0))
                 .bg(p.raised_hover)
                 .text_color(p.foreground)
                 .font_family(MODAL_MONO_FONT)
                 .text_size(px(12.5))
-                .child(part.to_string())
+                .child(part.to_string());
+            // A path is a link: it opens in Files (CDXC:PathLinks 2026-11-08).
+            if looks_like_path(part) {
+                path_link(format!("padded-text-{part}"), part.to_string(), chip).into_any_element()
+            } else {
+                chip.into_any_element()
+            }
         } else {
-            div().child(part.to_string())
+            div().child(part.to_string()).into_any_element()
         });
     }
     div()

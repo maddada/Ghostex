@@ -204,12 +204,12 @@ impl GhostexGpuiApp {
                 }
                 return;
             }
-            if gpui_open_path(&resolved.file_path).is_err() {
-                self.report_session_chat_file_open_failure(
-                    &format!("Could not open that folder in {GPUI_FILE_MANAGER_NAME}."),
-                    cx,
-                );
-            }
+            // CDXC:PathLinks 2026-11-08 DECISION:
+            // User: every path Ghostex shows opens in Files when clicked, folders too. A folder
+            // inside the project is revealed in Files' tree; one outside it (which Files never
+            // lists) still opens in the file manager (app/path_links.rs).
+            let folder = resolved.file_path.to_string_lossy().into_owned();
+            self.open_path_link_in_files(&folder, window, cx);
             return;
         }
         self.open_resolved_project_file(

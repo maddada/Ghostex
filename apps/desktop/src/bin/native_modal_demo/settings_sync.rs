@@ -1,16 +1,24 @@
 //! Preview of the Sync and Autopilot Settings pages against a real gxserver (a throwaway one from
 //! `cargo xtask test-server`), so the pages show live computers and notes, or Autopilot's log.
 //!
-//! States: `sync`, `autopilot`, `collab`, `security`. Environment: `GHOSTEX_NATIVE_MODAL_DEMO_GXSERVER_URL` (`http://127.0.0.1:<port>`)
+//! States: `sync`, `autopilot`, `autopilot-supervisor`, `collab`, `security`. Environment: `GHOSTEX_NATIVE_MODAL_DEMO_GXSERVER_URL` (`http://127.0.0.1:<port>`)
 //! and `GHOSTEX_NATIVE_MODAL_DEMO_GXSERVER_TOKEN_FILE` (that server's `auth/token`). Without them
 //! the page shows the service as unreachable.
 use serde_json::{Value, json};
 
 pub(super) fn owns(state: &str) -> bool {
-    state == "sync" || state == "autopilot" || state == "collab" || state == "security"
+    state == "sync"
+        || state == "autopilot"
+        || state == "autopilot-supervisor"
+        || state == "collab"
+        || state == "security"
 }
 
 pub(super) fn open_message(state: &str) -> Option<Value> {
+    // `autopilot-supervisor` is Autopilot searched for its Supervisor section (the notes folder path).
+    if state == "autopilot-supervisor" {
+        return Some(json!({ "initialTab": "autopilot", "initialSearchQuery": "supervisor" }));
+    }
     owns(state).then(|| json!({ "initialTab": state }))
 }
 

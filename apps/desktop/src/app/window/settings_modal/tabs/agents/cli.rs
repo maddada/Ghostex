@@ -1103,7 +1103,8 @@ impl AgentsTab {
                     .text_size(px(12.0))
                     .line_height(px(16.0))
                     .text_color(hsla(muted))
-                    .child(path),
+                    // The CLI's file opens in Files (CDXC:PathLinks 2026-11-08).
+                    .child(path_link("agent-cli-executable-path", path.clone(), path)),
             );
         }
         if let Some(directory) = state

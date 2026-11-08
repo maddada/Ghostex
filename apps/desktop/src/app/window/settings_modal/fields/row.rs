@@ -626,6 +626,8 @@ pub(crate) fn settings_section_heading(
     description: Option<SharedString>,
     actions: Option<AnyElement>,
 ) -> Div {
+    let title: SharedString = title.into();
+    let title_key = title.to_string();
     h_flex()
         .w_full()
         .items_end()
@@ -642,14 +644,15 @@ pub(crate) fn settings_section_heading(
                         .line_height(px(20.8))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(hsla(p.foreground))
-                        .child(title.into()),
+                        .child(title),
                 )
                 .children(description.map(|description| {
                     div()
                         .text_size(px(13.0))
                         .line_height(px(18.85))
                         .text_color(hsla(p.muted))
-                        .child(description)
+                        // A path in the text opens in Files (CDXC:PathLinks 2026-11-08).
+                        .child(linkified_text(&title_key, &description))
                 })),
         )
         .children(actions.map(|actions| {

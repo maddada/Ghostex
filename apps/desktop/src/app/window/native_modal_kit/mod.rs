@@ -13,6 +13,7 @@
 pub(crate) mod controls;
 pub(crate) mod legacy;
 pub(crate) mod palette;
+pub(crate) mod path_link;
 pub(crate) mod popover_host;
 pub(crate) mod segmented_and_rail;
 pub(crate) mod select;
@@ -22,6 +23,7 @@ pub(crate) mod skinned;
 pub(crate) use controls::*;
 pub(crate) use legacy::*;
 pub(crate) use palette::*;
+pub(crate) use path_link::*;
 pub(crate) use popover_host::*;
 pub(crate) use segmented_and_rail::*;
 pub(crate) use select::*;

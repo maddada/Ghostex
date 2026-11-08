@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **File and folder paths in Ghostex's own screens open in Files when clicked** (Settings pages and their descriptions, dialogs, chat folders): `~` expands to your home folder, a right-click offers Copy path and Reveal in Finder, and a folder outside the project opens in your file manager.
+
 ## 11.2.0 - 2026-11-08
 
 **Ghostex 11.2.0 is out.** Bots get your connected apps and sign-ins, pasted images send with your message, agents work across your projects without asking again, approvals open as centred dialogs, remote computers connect more smoothly, and Settings gets tidier.

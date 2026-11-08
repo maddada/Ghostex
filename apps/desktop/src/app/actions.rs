@@ -75,6 +75,19 @@ gpui::actions!(
     ]
 );
 
+/// The path menu of a path shown in Ghostex's own UI (app/path_links.rs).
+#[derive(Clone, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct CopyGpuiPathLink {
+    pub(crate) path: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct RevealGpuiPathLink {
+    pub(crate) path: String,
+}
+
 /// Window menu: bring one workspace window to the front (app/workspace_windows/).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]

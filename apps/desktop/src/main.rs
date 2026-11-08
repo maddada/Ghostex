@@ -337,6 +337,7 @@ fn main() {
         ui_fonts::register(cx);
         crate::app::window::frosted_host::register_frosted_tooltip_root_plugin(cx);
         crate::app::window::modal_popover_host::install_frosted_modal_popover_host();
+        crate::app::path_links::install_path_links(cx);
         apply_gpui_component_theme(cx);
         ui_fonts::apply_fonts(
             shared_settings::shared_sidebar_settings_snapshot().object(),

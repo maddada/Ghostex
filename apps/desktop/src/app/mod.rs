@@ -91,6 +91,7 @@ pub(crate) mod onboarding_modal_lifecycle;
 pub(crate) mod os_integration;
 pub(crate) mod owner_security;
 pub(crate) mod page_annotations;
+pub(crate) mod path_links;
 pub(crate) mod panel_motion;
 pub(crate) mod project_editor;
 pub(crate) mod project_keep_alive;

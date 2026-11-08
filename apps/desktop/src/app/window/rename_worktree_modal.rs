@@ -499,7 +499,12 @@ impl GpuiRenameWorktreeModalWindow {
                     // The dialog's 14px/20px body line height is inherited as the 1.4286 factor.
                     .line_height(px(17.14))
                     .text_color(hsla(css_fade(lp.muted, 0.92)))
-                    .child(self.draft.current_path.clone()),
+                    // The worktree's folder opens in Files (CDXC:PathLinks 2026-11-08).
+                    .child(path_link(
+                        "rename-worktree-current-path",
+                        self.draft.current_path.clone(),
+                        self.draft.current_path.clone(),
+                    )),
             )
             .child(self.render_field(preview, window, cx))
             .child(self.render_branch_option(cx));
