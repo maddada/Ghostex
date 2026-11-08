@@ -10,7 +10,8 @@
 //! `agents-cli-running` (Gemini installing), `agents-cli-failed` (Grok's failed update),
 //! `agents-editor-new`, `agents-editor-edit` (Claude), `agents-skip-confirm`, `agents-loading`
 //! (hook status never answers), `agents-empty` (no launchers), `agents-search` ("approval"),
-//! `agents-no-match` ("tailscale"). The page reads the page states from `preview_state`.
+//! `agents-no-match` ("tailscale"), `agents-home` (scrolled to the Home folder card),
+//! `agents-home-open` (its folders row opened by a search). The page reads the page states from `preview_state`.
 use crate::settings_modal::catalog::{module, settings_catalog};
 use serde_json::{Map, Value, json};
 use std::cell::RefCell;
@@ -74,6 +75,10 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
     match state {
         "agents-hooks" => message["initialAgentsSection"] = json!("agentHooks"),
         "agents-search" => message["initialSearchQuery"] = json!("approval"),
+        // The Home folder card (on with `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS='{"mainHubHidden":false}'`),
+        // its folders row folded, or opened by a search that finds it.
+        "agents-home" => message["initialSection"] = json!("homeFolder"),
+        "agents-home-open" => message["initialSearchQuery"] = json!("can't read"),
         "agents-no-match" => message["initialSearchQuery"] = json!("tailscale"),
         _ => {}
     }

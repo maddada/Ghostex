@@ -357,9 +357,12 @@ impl AgentsTab {
                 .cloned()
                 .unwrap_or(Value::Null);
             let modified = !value.is_null() && value != default;
+            let found_by_search =
+                section.is_searching && section.visible_keys.contains(HOME_SECRET_FOLDERS);
             rows.push(home_secret_folders_field(
                 self,
                 p,
+                found_by_search,
                 RowSpec::new("Folders agents can't read in your home folder")
                     .description(
                         "Agents Ghostex starts in your home folder are kept out of these folders and files. Claude Code's file tools and every Codex command are held to the list; Claude's shell commands and other agents are not.",

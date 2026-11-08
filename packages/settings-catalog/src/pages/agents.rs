@@ -5,7 +5,7 @@ pub(crate) fn page() -> Page {
     Page {
         id: "agents",
         title: "Agents",
-        sections: vec![agent_list(), config(), home_folder(), agent_hooks()],
+        sections: vec![agent_list(), config(), agent_hooks(), home_folder()],
     }
 }
 

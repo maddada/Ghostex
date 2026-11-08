@@ -21,6 +21,10 @@ const INVALID_FOLDER_MESSAGE: &str = "Enter a path that starts with ~/ or /, suc
 pub(crate) struct HomeSecretFoldersState {
     input: Entity<InputState>,
     error: Option<String>,
+    /// The list is open; it starts folded to its count.
+    expanded: bool,
+    /// The Settings search found this row last time it was drawn; finding it opens the list once.
+    found: bool,
 }
 
 /// A usable entry: `~/`-relative or absolute, without a trailing separator.
@@ -101,7 +105,12 @@ impl FieldStates {
             );
             let states = page.field_states();
             states.subscriptions.push(subscription);
-            states.home_secret_folders = Some(HomeSecretFoldersState { input, error: None });
+            states.home_secret_folders = Some(HomeSecretFoldersState {
+                input,
+                error: None,
+                expanded: false,
+                found: false,
+            });
         }
         page.field_states()
             .home_secret_folders
@@ -111,10 +120,14 @@ impl FieldStates {
     }
 }
 
-/// The list as a wide row.
+/// The row: folded to "14 folders" with a chevron, which opens the editable list under it.
+///
+/// CDXC:Chief 2026-11-08 DECISION:
+/// User, of Settings > Agents > Home folder: "move it bottom of page and collapse it by default the part about which folders to read". The section is the Agents page's last, and this row starts folded to a one-line count with a chevron; opening it shows the list, its remove buttons and Add. Whether it is open lasts while Settings is open.
 pub(crate) fn home_secret_folders_field<V: SettingsPage>(
     page: &mut V,
     p: &SettingsPalette,
+    found_by_search: bool,
     spec: RowSpec,
     on_reset: Option<PageAction<V>>,
     value: &Value,
@@ -128,6 +141,46 @@ pub(crate) fn home_secret_folders_field<V: SettingsPage>(
         .as_ref()
         .and_then(|state| state.error.clone());
     let folders = read_folders(value);
+    // A search that finds this row opens it once; the chevron still folds it after that.
+    let expanded = page
+        .field_states()
+        .home_secret_folders
+        .as_mut()
+        .is_some_and(|state| {
+            if found_by_search && !state.found {
+                state.expanded = true;
+            }
+            state.found = found_by_search;
+            state.expanded
+        });
+    let summary = match folders.len() {
+        0 => "No folders".to_string(),
+        1 => "1 folder".to_string(),
+        count => format!("{count} folders"),
+    };
+    let toggle = settings_button(
+        p,
+        "home-secret-folders-toggle",
+        summary,
+        Some(if expanded {
+            icon::CHEVRON_DOWN
+        } else {
+            icon::CHEVRON_RIGHT
+        }),
+        ButtonVariant::Outline,
+        false,
+        None,
+        |page: &mut V, _window, cx| {
+            if let Some(state) = page.field_states().home_secret_folders.as_mut() {
+                state.expanded = !state.expanded;
+            }
+            cx.notify();
+        },
+        cx,
+    );
+    if !expanded {
+        return setting_row(p, KEY, spec, on_reset, toggle, cx);
+    }
     let list: AnyElement = if folders.is_empty() {
         div()
             .text_size(px(14.0))
@@ -185,6 +238,7 @@ pub(crate) fn home_secret_folders_field<V: SettingsPage>(
     let control = v_flex()
         .w_full()
         .gap(px(12.0))
+        .child(h_flex().child(toggle))
         .child(list)
         .child(
             h_flex()
