@@ -63,6 +63,11 @@ struct OwnerSession {
     token: Option<String>,
     last_attempt: Option<Instant>,
     opening: bool,
+    /// The `addApproverKey` request enrolling the owner key there waits on (another owner key is
+    /// enrolled on that computer): later attempts read it instead of asking again.
+    waiting_approval: Option<String>,
+    /// That request was denied or lapsed: no more asking there until the app restarts.
+    gave_up: bool,
 }
 
 static SESSIONS: Mutex<Option<HashMap<String, OwnerSession>>> = Mutex::new(None);
@@ -71,6 +76,79 @@ thread_local! {
     /// Set while this thread runs an approval or opens an owner session, so a call inside it
     /// neither prompts again nor waits on an owner session that is being opened.
     static IN_SECURITY_FLOW: Cell<bool> = const { Cell::new(false) };
+    /// Set while this thread runs work the user didn't just start (a renewal, a retry loop), so
+    /// an `approvalRequired` answer never shows the system prompt ([`without_prompts`]).
+    static NO_PROMPTS: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Whether a system prompt for one of the app's own calls is open now; a second call waits for
+/// nothing and doesn't prompt (see [`approve_own_call`]).
+static PROMPT_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/*
+CDXC:Security 2026-11-08 WHY:
+User, on 11.1.0: "Man i see 1 million pin requests on my windows machine saying let the agents on x and x reach each other. Please don't do this! You spammed my machine with those, have like 50 open." The connected-computer renewal runs every minute on a background thread, and every `approvalRequired` answer of the app's own calls showed Windows Hello there and then, so a computer not approved yet opened a new PIN prompt each minute, each blocking its thread until answered. The system prompt is for the user's own click only: work the app does on its own runs inside `without_prompts`, waits on the one request it made, and shows it as an approval card instead (`remote_conn/connected_computers.rs`); and only one prompt is ever open at a time, whatever asks.
+*/
+/// Runs `work` with the system prompt off on this thread: a call answered `approvalRequired`
+/// returns that answer instead of prompting.
+pub(crate) fn without_prompts<R>(work: impl FnOnce() -> R) -> R {
+    let outer = NO_PROMPTS.with(|flag| flag.replace(true));
+    let result = work();
+    NO_PROMPTS.with(|flag| flag.set(outer));
+    result
+}
+
+/// The request in an answer that asks for the owner's approval: `approvalRequired` (a new
+/// request) or `approvalPending` (one already waiting, server/security_gates.rs).
+pub(crate) fn waiting_request_in(status: u16, body: &str) -> Option<ApprovalRequest> {
+    if status != 403 {
+        return None;
+    }
+    let envelope: Value = serde_json::from_str(body).ok()?;
+    let code = envelope.get("error").and_then(Value::as_str)?;
+    if code != APPROVAL_REQUIRED_ERROR && code != APPROVAL_PENDING_ERROR {
+        return None;
+    }
+    serde_json::from_value(envelope.get("approval")?.clone()).ok()
+}
+
+/// gxserver's answer for a call that met a request already waiting (server/security_gates.rs).
+pub(crate) const APPROVAL_PENDING_ERROR: &str = "approvalPending";
+
+/// Where a request a background call waits on stands.
+pub(crate) enum RequestState {
+    Pending(ApprovalRequest),
+    /// Approved: the call may be sent again with its id.
+    Approved,
+    /// Denied, or lapsed unanswered: don't ask again on your own.
+    Declined,
+    /// Gone (gxserver restarted, or the approval was spent by another call): asking again makes
+    /// at most one new request.
+    Gone,
+    /// gxserver didn't answer; try again later.
+    Unknown,
+}
+
+/// Reads request `id` on `transport`'s gxserver, without prompting.
+pub(crate) fn request_state(transport: &Transport, id: &str) -> RequestState {
+    use ghostex_gx_protocol::approval::ApprovalStatus;
+    let answer =
+        in_security_flow(|| rpc(transport, "/api/readApprovalRequest", json!({ "id": id })));
+    match answer {
+        Ok(answer) => match serde_json::from_value::<ApprovalRequest>(
+            answer.get("request").cloned().unwrap_or_default(),
+        ) {
+            Ok(request) => match request.status {
+                ApprovalStatus::Pending => RequestState::Pending(request),
+                ApprovalStatus::Approved => RequestState::Approved,
+                ApprovalStatus::Denied | ApprovalStatus::Expired => RequestState::Declined,
+                _ => RequestState::Gone,
+            },
+            Err(_) => RequestState::Gone,
+        },
+        Err((Some(code), _)) if code == "notFound" => RequestState::Gone,
+        Err(_) => RequestState::Unknown,
+    }
 }
 
 fn with_session<R>(key: &str, run: impl FnOnce(&mut OwnerSession) -> R) -> R {
@@ -240,15 +318,10 @@ fn open_owner_session(transport: &Transport) -> Result<String, String> {
         let key =
             ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
         let public_key = key.public_key_b64();
-        let enrolled = rpc(
+        let enrolled = enroll_owner_key(
             transport,
-            "/api/enrollOwnerKey",
             json!({ "key": key_json(&public_key, &public_key, "Ghostex app") }),
-        )
-        .map_err(|(code, message)| match code.as_deref() {
-            Some(APPROVAL_REQUIRED_ERROR) => "Another owner key is enrolled on that computer's Ghostex. Approve this app from a device you trust.".to_string(),
-            _ => message,
-        })?;
+        )?;
         let key_id = enrolled
             .get("key")
             .and_then(|key| text(key, "keyId"))
@@ -270,6 +343,69 @@ fn open_owner_session(transport: &Transport) -> Result<String, String> {
         .map_err(|(_, message)| message)?;
         text(&opened, "token").ok_or_else(|| "gxserver opened no owner session".to_string())
     })
+}
+
+/*
+CDXC:Security 2026-11-08 WHY:
+When another owner key is already enrolled on a computer (a second computer connecting to it), enrolling this app's owner key there asks for that owner's approval. The owner session is retried every minute, and each request lapsed after ten minutes, so the Mac's log gained a new "Let M7-DESKTOP (Ghostex app) (windows) act as the owner of Ghostex on this computer" request every ten minutes all day (30 on 8 Nov). The app now asks once: it waits on that request, sends its key again with the approval once it is approved, and stops asking there until it restarts when it is denied or lapses.
+*/
+/// `/api/enrollOwnerKey` on `transport`, waiting on the approval it asked for there instead of
+/// asking again.
+fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, String> {
+    const WAITING: &str = "Another owner key is enrolled on that computer's Ghostex. Approve this app there or on your phone.";
+    const STOPPED: &str = "This app wasn't approved as an owner on that computer; it uses that computer's token file until Ghostex restarts.";
+    let key = transport.key();
+    let (waiting, gave_up) = with_session(&key, |session| {
+        (session.waiting_approval.clone(), session.gave_up)
+    });
+    if gave_up {
+        return Err(STOPPED.to_string());
+    }
+    let mut params = params;
+    if let Some(id) = waiting {
+        match request_state(transport, &id) {
+            RequestState::Pending(_) | RequestState::Unknown => return Err(WAITING.to_string()),
+            RequestState::Approved => {
+                params = with_approval_id(&params, &id).unwrap_or(params);
+            }
+            RequestState::Declined => {
+                with_session(&key, |session| {
+                    session.waiting_approval = None;
+                    session.gave_up = true;
+                });
+                return Err(STOPPED.to_string());
+            }
+            RequestState::Gone => {}
+        }
+        with_session(&key, |session| session.waiting_approval = None);
+    }
+    let (status, body) = raw_rpc(transport, "/api/enrollOwnerKey", &params)?;
+    if let Some(request) = waiting_request_in(status, &body) {
+        with_session(&key, |session| {
+            session.waiting_approval = Some(request.id.clone())
+        });
+        return Err(WAITING.to_string());
+    }
+    let envelope: Value =
+        serde_json::from_str(&body).map_err(|_| "gxserver returned invalid JSON.".to_string())?;
+    if (200..300).contains(&status) && envelope.get("ok").and_then(Value::as_bool) == Some(true) {
+        return Ok(envelope.get("result").cloned().unwrap_or(Value::Null));
+    }
+    Err(text(&envelope, "message")
+        .unwrap_or_else(|| format!("gxserver request failed with HTTP {status}.")))
+}
+
+/// One call on `transport`, answered as HTTP status and body (the app's own transport: it sends
+/// the owner session when one is open).
+fn raw_rpc(transport: &Transport, endpoint: &str, params: &Value) -> Result<(u16, String), String> {
+    match transport {
+        Transport::Local => {
+            crate::app::helpers::gxserver_post_typed_operation(endpoint, params, CALL_TIMEOUT)
+        }
+        Transport::Remote(target) => {
+            gpui_remote_gxserver_post_typed_operation(target, endpoint, params, CALL_TIMEOUT)
+        }
+    }
 }
 
 /// Shows the system prompt with the request's summary, signs the request with this computer's
@@ -350,13 +486,13 @@ pub(crate) fn deny_request(transport: &Transport, id: &str) -> Result<(), String
 
 /*
 CDXC:Security 2026-11-08 WHY:
-A sensitive change the user starts in the app (turning on Easy Connect, connecting a computer, a security-relaxing setting) reaches gxserver as an owner call that still needs a signed approval. Showing the system prompt right then, with gxserver's summary, and sending the call again is what the user expects from their own click; a card would make them approve their own click twice. Never on the main thread (the prompt would freeze the window) and never inside an approval or owner-session flow already running.
+A sensitive change the user starts in the app (turning on Easy Connect, a security-relaxing setting; letting a connected computer in waits as a card instead, CDXC:Security 2026-11-08 at `without_prompts`) reaches gxserver as an owner call that still needs a signed approval. Showing the system prompt right then, with gxserver's summary, and sending the call again is what the user expects from their own click; a card would make them approve their own click twice. Never on the main thread (the prompt would freeze the window) and never inside an approval or owner-session flow already running.
 */
 /// For a call of the app's own that `transport`'s gxserver answered with `approvalRequired`
 /// (`body`): prompts, approves, and returns the approval id to send the call again with. `None`
 /// when the answer isn't one, the user didn't approve, or this thread can't prompt.
 pub(crate) fn approve_own_call(transport: &Transport, status: u16, body: &str) -> Option<String> {
-    if status != 403 || IN_SECURITY_FLOW.with(Cell::get) {
+    if status != 403 || IN_SECURITY_FLOW.with(Cell::get) || NO_PROMPTS.with(Cell::get) {
         return None;
     }
     if std::thread::current().name() == Some("main") {
@@ -368,7 +504,22 @@ pub(crate) fn approve_own_call(transport: &Transport, status: u16, body: &str) -
     }
     let request: ApprovalRequest =
         serde_json::from_value(envelope.get("approval")?.clone()).ok()?;
-    match approve_request(transport, &request) {
+    // One system prompt at a time, whatever asks: a second call meanwhile returns its answer.
+    if PROMPT_OPEN
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Acquire,
+        )
+        .is_err()
+    {
+        log::info!("own call not prompted: another approval prompt is open");
+        return None;
+    }
+    let approved = approve_request(transport, &request);
+    PROMPT_OPEN.store(false, std::sync::atomic::Ordering::Release);
+    match approved {
         Ok(()) => Some(request.id),
         Err(error) => {
             log::info!("own call not approved: {error}");

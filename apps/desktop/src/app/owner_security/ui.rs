@@ -34,11 +34,46 @@ impl GhostexGpuiApp {
             self.remove_gpui_app_toast(&id, cx);
             return;
         }
-        // The app's own clicks are approved right where they happen (`approve_own_call`).
+        // The app's own clicks are approved right where they happen (`approve_own_call`); its
+        // background work shows its own card (`owner_security_show_waiting_request`).
         if request.requested_by.kind == "owner" {
             return;
         }
-        let asker = if request.requested_by.label.is_empty() {
+        self.owner_security_show_card(machine_id, request, cx);
+    }
+
+    /// The card for a request the app's own background work waits on (a connected computer's
+    /// renewal, `remote_conn/connected_computers.rs`): shown once, whoever made it, since that
+    /// work never shows the system prompt.
+    pub(crate) fn owner_security_show_waiting_request(
+        &mut self,
+        machine_id: Option<String>,
+        request: &ApprovalRequest,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        // Once per request: a card the user closed doesn't come back on the next renewal.
+        static SHOWN: std::sync::Mutex<Option<std::collections::HashSet<String>>> =
+            std::sync::Mutex::new(None);
+        let first = SHOWN
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get_or_insert_with(Default::default)
+            .insert(card_id(machine_id.as_deref(), &request.id));
+        if first {
+            self.owner_security_show_card(machine_id, request.clone(), cx);
+        }
+    }
+
+    fn owner_security_show_card(
+        &mut self,
+        machine_id: Option<String>,
+        request: ApprovalRequest,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let id = card_id(machine_id.as_deref(), &request.id);
+        let asker = if request.requested_by.kind == "owner" {
+            "Ghostex".to_string()
+        } else if request.requested_by.label.is_empty() {
             "An agent".to_string()
         } else {
             request.requested_by.label.clone()
@@ -105,6 +140,11 @@ impl GhostexGpuiApp {
             },
         };
         let request = request.clone();
+        let lets_computer_in = matches!(
+            request.action,
+            ghostex_gx_protocol::approval::SensitiveAction::ComputerGrant
+                | ghostex_gx_protocol::approval::SensitiveAction::ComputerRegister
+        );
         let decided = cx.background_executor().spawn(async move {
             if deny {
                 super::deny_request(&transport, &request.id)
@@ -115,6 +155,11 @@ impl GhostexGpuiApp {
         cx.spawn(async move |this, cx| {
             let outcome = decided.await;
             let _ = this.update(cx, |this, cx| {
+                // A connected computer waits on this request: send its call now instead of on
+                // its next renewal, well inside the approval's two minutes.
+                if outcome.is_ok() && lets_computer_in && !deny {
+                    this.renew_connected_computers(true, cx);
+                }
                 if let Err(error) = outcome {
                     this.dispatch_gpui_workspace_action_toast(
                         "warning",

@@ -32,6 +32,19 @@ struct MachineRegistration {
     holders: HashSet<u16>,
     /// When the way back may be tried again after the machine refused it.
     reverse_retry_at: Option<Instant>,
+    /// The request letting this pair connect that each side's gxserver is waiting on: the
+    /// renewal reads it instead of calling that side again (CDXC:Security 2026-11-08 below).
+    waiting: HashMap<Side, String>,
+    /// Sides whose request was denied or lapsed unanswered: not asked again until Agent access is
+    /// turned off and on, or the app restarts.
+    declined: HashSet<Side>,
+}
+
+/// Which gxserver a renewal call goes to: this computer's or the connected machine's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Side {
+    Local,
+    Remote,
 }
 
 fn state() -> MutexGuard<'static, HashMap<String, MachineRegistration>> {
@@ -57,6 +70,12 @@ struct RegistrationJob {
 struct RegistrationOutcome {
     machine_id: String,
     local_port: u16,
+    /// Requests this renewal waits on, to show as approval cards (machine id `None` for this
+    /// computer's gxserver).
+    waiting: Vec<(
+        Option<String>,
+        ghostex_gx_protocol::approval::ApprovalRequest,
+    )>,
     opened_reverse: Option<GpuiRemoteReverseTunnel>,
     reverse_failed: bool,
     /// The machine's own switch is off for this computer: the way back closes here too.
@@ -177,9 +196,19 @@ impl GhostexGpuiApp {
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let outcomes = background
-                .spawn(async move { jobs.into_iter().map(register_machine).collect::<Vec<_>>() })
+                .spawn(async move {
+                    // Never the system prompt from here: a request waits as a card instead.
+                    crate::app::owner_security::without_prompts(|| {
+                        jobs.into_iter().map(register_machine).collect::<Vec<_>>()
+                    })
+                })
                 .await;
-            let _ = this.update(cx, |this, _cx| {
+            let _ = this.update(cx, |this, cx| {
+                for outcome in &outcomes {
+                    for (machine, request) in &outcome.waiting {
+                        this.owner_security_show_waiting_request(machine.clone(), request, cx);
+                    }
+                }
                 for outcome in outcomes {
                     if outcome.close_reverse {
                         if let Some(connection) = this
@@ -305,6 +334,8 @@ fn grant_from(result: &Value) -> Option<Grant> {
 
 enum Grants {
     Issued(Grant, Grant),
+    /// A side waits for the owner to let this pair connect.
+    Waiting,
     /// The machine's own Agent access switch is off for this computer.
     DeniedThere,
     /// One side's gxserver predates connected computers.
@@ -314,21 +345,35 @@ enum Grants {
 /// The tokens each side gives the other, minted (or renewed) on this computer (as its own app,
 /// `owner`, which lifts a deny this computer's switch set) and on the machine (as another
 /// computer's app, which the machine refuses while its own switch is off).
-fn issue_grants(job: &RegistrationJob, remote_server_id: &str, rotate: bool) -> Grants {
-    let Some(local) = post_local(
+fn issue_grants(
+    job: &RegistrationJob,
+    remote_server_id: &str,
+    rotate: bool,
+    outcome: &mut RegistrationOutcome,
+) -> Grants {
+    let local = match gated_post(
+        job,
+        Side::Local,
         "/api/issueComputerGrant",
         json!({ "serverId": remote_server_id, "name": job.name, "rotate": rotate, "owner": true, "ttlMs": REGISTRATION_TTL_MS }),
-    )
-    .as_ref()
-    .and_then(grant_from) else {
-        return Grants::Unsupported;
+        outcome,
+    ) {
+        Gated::Answered(answer) => match answer.as_ref().and_then(grant_from) {
+            Some(local) => local,
+            None => return Grants::Unsupported,
+        },
+        Gated::Waiting => return Grants::Waiting,
     };
-    let Some(remote) = post_remote(
-        &job.target,
+    let remote = match gated_post(
+        job,
+        Side::Remote,
         "/api/issueComputerGrant",
         json!({ "serverId": local.server_id, "name": local.name, "rotate": rotate, "ttlMs": REGISTRATION_TTL_MS }),
-    ) else {
-        return Grants::Unsupported;
+        outcome,
+    ) {
+        Gated::Answered(Some(remote)) => remote,
+        Gated::Answered(None) => return Grants::Unsupported,
+        Gated::Waiting => return Grants::Waiting,
     };
     if remote.get("denied").and_then(Value::as_bool) == Some(true) {
         return Grants::DeniedThere;
@@ -347,6 +392,7 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
     let mut outcome = RegistrationOutcome {
         machine_id: job.machine_id.clone(),
         local_port: job.target.local_port,
+        waiting: Vec::new(),
         opened_reverse: None,
         reverse_failed: false,
         close_reverse: false,
@@ -358,6 +404,11 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
         machine.server_id = Some(remote_server_id.clone());
     }
     if !job.agent_access {
+        // Turning Agent access off and on asks again for a pair that was declined.
+        if let Some(machine) = state().get_mut(&job.machine_id) {
+            machine.waiting.clear();
+            machine.declined.clear();
+        }
         // Registered with access off so refusals on either side can name it; no tokens remain,
         // and the deny keeps the machine's own renewals from minting one here again.
         let _ = post_local(
@@ -390,27 +441,30 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
         }
         return outcome;
     }
-    let (mut local, mut remote) = match issue_grants(&job, &remote_server_id, job.rotate) {
-        Grants::Issued(local, remote) => (local, remote),
-        Grants::DeniedThere => {
-            off_on_other_computer(&remote_server_id, &job.name);
-            outcome.close_reverse = true;
-            return outcome;
-        }
-        Grants::Unsupported => {
-            // One side predates connected computers: agents can't use this machine, and nothing is
-            // left registered that could suggest they can.
-            let _ = post_local(
-                "/api/unregisterConnectedComputer",
-                json!({ "serverId": remote_server_id }),
-            );
-            let _ = post_local(
-                "/api/revokeComputerGrant",
-                json!({ "serverId": remote_server_id }),
-            );
-            return outcome;
-        }
-    };
+    let (mut local, mut remote) =
+        match issue_grants(&job, &remote_server_id, job.rotate, &mut outcome) {
+            Grants::Issued(local, remote) => (local, remote),
+            // Nothing is torn down while the owner hasn't answered: the pair was never let in.
+            Grants::Waiting => return outcome,
+            Grants::DeniedThere => {
+                off_on_other_computer(&remote_server_id, &job.name);
+                outcome.close_reverse = true;
+                return outcome;
+            }
+            Grants::Unsupported => {
+                // One side predates connected computers: agents can't use this machine, and nothing is
+                // left registered that could suggest they can.
+                let _ = post_local(
+                    "/api/unregisterConnectedComputer",
+                    json!({ "serverId": remote_server_id }),
+                );
+                let _ = post_local(
+                    "/api/revokeComputerGrant",
+                    json!({ "serverId": remote_server_id }),
+                );
+                return outcome;
+            }
+        };
     // The way back: kept while it lands on this gxserver's current way-back listener, else
     // (re)opened, with new tokens on both sides when it was not opened with them already.
     let mut reverse_port = job
@@ -419,10 +473,11 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
         .map(|(remote_port, _)| remote_port);
     if reverse_port.is_none() && (job.may_open_reverse || job.reverse.is_some()) {
         if !job.rotate {
-            match issue_grants(&job, &remote_server_id, true) {
+            match issue_grants(&job, &remote_server_id, true, &mut outcome) {
                 Grants::Issued(rotated_local, rotated_remote) => {
                     (local, remote) = (rotated_local, rotated_remote);
                 }
+                Grants::Waiting => return outcome,
                 Grants::DeniedThere => {
                     off_on_other_computer(&remote_server_id, &job.name);
                     outcome.close_reverse = true;
@@ -502,6 +557,101 @@ fn open_reverse_tunnel(
     let settings = shared_settings::shared_sidebar_settings_snapshot();
     let config = gpui_remote_machine_config_from_settings(settings.object(), machine_id)?;
     gpui_open_remote_reverse_tunnel(&config, &target.execution_target, peer_port)
+}
+
+/// What a call that may need the owner's approval came to.
+enum Gated {
+    /// gxserver answered (`None`: refused, failed or unreachable, as [`post_local`] reads it).
+    Answered(Option<Value>),
+    /// The owner hasn't answered this side's request yet, or declined it: nothing was called.
+    Waiting,
+}
+
+/*
+CDXC:Security 2026-11-08 WHY:
+User, on 11.1.0: "Man i see 1 million pin requests on my windows machine saying let the agents on x and x reach each other. Please don't do this! You spammed my machine with those, have like 50 open. What's solution?" This renewal runs every minute; letting a new pair connect needs the owner's signed approval on each side's gxserver, and every renewal used to call again, prompt again and, unanswered, ask again. Now a side's request is asked once and then waited on: while it is pending the renewal reads it and doesn't call that side, and its approval card shows (never the system prompt, `without_prompts`); once approved the call goes again with its id, which lets the pair in for 30 days; denied or lapsed, that side is not asked again until Agent access is turned off and on or the app restarts. gxserver keeps one such request per pair whoever asks (server/security_gates.rs), so an app restart, a reconnect or the other computer's own renewal reuse it too.
+*/
+/// `path` on `side`'s gxserver, for a call gxserver may answer with a request for the owner's
+/// approval (see the CDXC note above).
+fn gated_post(
+    job: &RegistrationJob,
+    side: Side,
+    path: &str,
+    params: Value,
+    outcome: &mut RegistrationOutcome,
+) -> Gated {
+    use crate::app::owner_security::{self, RequestState, Transport};
+    let transport = match side {
+        Side::Local => Transport::Local,
+        Side::Remote => Transport::Remote(job.target.clone()),
+    };
+    let card_machine = match side {
+        Side::Local => None,
+        Side::Remote => Some(job.machine_id.clone()),
+    };
+    let (waiting, declined) = {
+        let registration = state();
+        let machine = registration.get(&job.machine_id);
+        (
+            machine.and_then(|machine| machine.waiting.get(&side).cloned()),
+            machine.is_some_and(|machine| machine.declined.contains(&side)),
+        )
+    };
+    if declined {
+        return Gated::Waiting;
+    }
+    let forget = |declined: bool| {
+        if let Some(machine) = state().get_mut(&job.machine_id) {
+            machine.waiting.remove(&side);
+            if declined {
+                machine.declined.insert(side);
+            }
+        }
+    };
+    let mut params = params;
+    if let Some(id) = waiting {
+        match owner_security::request_state(&transport, &id) {
+            RequestState::Pending(request) => {
+                outcome.waiting.push((card_machine, request));
+                return Gated::Waiting;
+            }
+            RequestState::Unknown => return Gated::Waiting,
+            RequestState::Declined => {
+                forget(true);
+                return Gated::Waiting;
+            }
+            RequestState::Approved => {
+                params = owner_security::with_approval_id(&params, &id).unwrap_or(params);
+                forget(false);
+            }
+            RequestState::Gone => forget(false),
+        }
+    }
+    let answer = match side {
+        Side::Local => gxserver_post_typed_operation(path, &params, RPC_TIMEOUT).ok(),
+        Side::Remote => {
+            gpui_remote_gxserver_post_typed_operation(&job.target, path, &params, RPC_TIMEOUT).ok()
+        }
+    };
+    let Some((status, body)) = answer else {
+        return Gated::Answered(None);
+    };
+    if let Some(request) = owner_security::waiting_request_in(status, &body) {
+        if let Some(machine) = state().get_mut(&job.machine_id) {
+            machine.waiting.insert(side, request.id.clone());
+        }
+        outcome.waiting.push((card_machine, request));
+        return Gated::Waiting;
+    }
+    let denied = serde_json::from_str::<Value>(&body)
+        .ok()
+        .and_then(|envelope| envelope.get("error")?.as_str().map(str::to_string))
+        .is_some_and(|code| code == "approvalDenied");
+    if denied {
+        forget(true);
+        return Gated::Waiting;
+    }
+    Gated::Answered(result_of(status, &body))
 }
 
 fn post_local(path: &str, params: Value) -> Option<Value> {

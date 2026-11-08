@@ -4,7 +4,7 @@
 //! | Route | Asks when |
 //! | --- | --- |
 //! | `/api/updateTailcatState` | Easy Connect goes on, opens a new port, lets new devices in (or empties its allow-list), changes its relay |
-//! | `/api/registerConnectedComputer`, `/api/issueComputerGrant` | a computer not approved in the last 30 days (Agent access off never asks) |
+//! | `/api/registerConnectedComputer`, `/api/issueComputerGrant` | a computer not approved in the last 30 days, with Agent access on: one request per computer, whoever asks (registering a computer with Agent access off never asks) |
 //! | `/api/autopilot` `op: "set"` | `answerApprovals` goes on, `limits` change |
 //! | `/api/gbots` `action: "create"` | always (a new bot) |
 //! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a security-relaxing setting changes, or GBots goes on |
@@ -30,7 +30,10 @@ use crate::{
     security::{self, ActionRequest, Principal, RouteAccess, SensitiveAction},
 };
 
-use super::{require_owner_presence, routed_json, AppState, RoutedResponse};
+use super::{
+    presence_outcome, presence_outcome_response, require_owner_presence, routed_json, AppState,
+    RoutedResponse,
+};
 
 /// `Some(response)` when the call must stop here: refused, or waiting for an approval.
 pub(crate) fn gate(
@@ -92,7 +95,11 @@ pub(crate) fn gate(
         }
         return None;
     }
-    match require_owner_presence(state, caller, action, body, endpoint_path, request_id) {
+    let decided = match &computer {
+        Some(_) => computer_presence(state, caller, action, body, endpoint_path, request_id),
+        None => require_owner_presence(state, caller, action, body, endpoint_path, request_id),
+    };
+    match decided {
         Ok(grant) => {
             if let Some((server_id, _)) = computer {
                 state
@@ -118,6 +125,53 @@ pub(crate) fn gate(
             None
         }
         Err(response) => Some(response),
+    }
+}
+
+/// The answer when a call meets a connected computer's request that was already waiting:
+/// `approvalPending` with the request, so the caller waits on it.
+pub(crate) const APPROVAL_PENDING_ERROR: &str = "approvalPending";
+
+/*
+CDXC:Security 2026-11-08 WHY:
+The 11.1.0 app showed Windows Hello for every `approvalRequired` answer of its own calls, and its connected-computer renewal runs every minute, so a computer nobody had approved yet opened a new PIN prompt each minute (about 50 open by the time the user saw them). Only the call that makes a computer's request is told `approvalRequired`; a call that meets the request already waiting is told `approvalPending`, with the same request, which no app prompts for. That keeps an app still on 11.1.0, renewing against a computer already updated, to one prompt per request.
+*/
+/// [`require_owner_presence`] for the connected-computer routes, with a repeat answered
+/// `approvalPending` (see the CDXC note above).
+fn computer_presence(
+    state: &AppState,
+    caller: &Principal,
+    action: ActionRequest,
+    body: &Value,
+    endpoint_path: &str,
+    request_id: &str,
+) -> Result<security::PresenceGrant, RoutedResponse> {
+    let now = security::now_ms();
+    match presence_outcome(state, caller, action, body) {
+        security::PresenceOutcome::Pending(request) if request.created_at_ms < now => {
+            let message = format!(
+                "Still waiting for your approval on your computer or phone: {}.",
+                request.summary
+            );
+            let mut answer = serde_json::to_value(rpc_error(
+                APPROVAL_PENDING_ERROR,
+                message,
+                Some(request_id.to_string()),
+            ))
+            .unwrap_or_else(|_| json!({}));
+            if let Some(object) = answer.as_object_mut() {
+                object.insert(
+                    "approval".to_string(),
+                    serde_json::to_value(&request).unwrap_or(Value::Null),
+                );
+            }
+            Err(routed_json(
+                Some(endpoint_path.to_string()),
+                StatusCode::FORBIDDEN,
+                answer,
+            ))
+        }
+        outcome => presence_outcome_response(outcome, endpoint_path, request_id),
     }
 }
 
@@ -207,6 +261,9 @@ fn coordinator_refusal(
     (!own).then_some("A session can only manage its own threads and its own coordinator.")
 }
 
+/// How long a connected computer's request waits for the owner.
+const COMPUTER_REQUEST_TTL_MS: u64 = 24 * 60 * 60 * 1000;
+
 /// The approval a connected-computer route needs, with the computer's server id; `None` when the
 /// computer was approved in the last 30 days or the call only closes a door.
 fn computer_gate(
@@ -214,16 +271,17 @@ fn computer_gate(
     endpoint_path: &str,
     params: &Map<String, Value>,
 ) -> Option<(String, ActionRequest)> {
-    let action = match endpoint_path {
-        "/api/registerConnectedComputer" => SensitiveAction::ComputerRegister,
-        "/api/issueComputerGrant" => {
-            if params.get("agentAccess").and_then(Value::as_bool) == Some(false) {
-                return None;
-            }
-            SensitiveAction::ComputerGrant
-        }
-        _ => return None,
-    };
+    if !matches!(
+        endpoint_path,
+        "/api/registerConnectedComputer" | "/api/issueComputerGrant"
+    ) {
+        return None;
+    }
+    // Agent access off only closes a door: registering a computer with it off (so refusals can
+    // name it) and its renewals never ask.
+    if params.get("agentAccess").and_then(Value::as_bool) == Some(false) {
+        return None;
+    }
     let server_id = text(params, "serverId")?.to_string();
     if state
         .security
@@ -232,13 +290,19 @@ fn computer_gate(
         return None;
     }
     let name = text(params, "name").unwrap_or(&server_id).to_string();
+    /*
+    CDXC:Security 2026-11-08 WHY:
+    User, on 11.1.0: "Man i see 1 million pin requests on my windows machine saying let the agents on x and x reach each other. Please don't do this!" Registering a computer and minting its grant are one question to the owner ("let these two computers' agents reach each other"), so both routes ask the same shared request: one per computer, reused by the owner session and the token file, by this app's renewals and the other computer's, and spent by whichever call comes first (approving it lets the computer in for 30 days, which passes the other route too). It waits a day for an answer instead of ten minutes, so a renewal that keeps meeting it never makes a new one while the owner is away.
+    */
     let request = ActionRequest::new(
-        action,
+        SensitiveAction::ComputerGrant,
         format!("Let the agents on {name} and this computer reach each other"),
     )
     .target(server_id.clone())
     .params(json!({ "serverId": server_id }))
-    .detail("Approved computers stay connected for 30 days.");
+    .detail("Approved computers stay connected for 30 days.")
+    .shared()
+    .pending_ttl(COMPUTER_REQUEST_TTL_MS);
     Some((server_id, request))
 }
 

@@ -257,7 +257,8 @@ pub fn route_access(path: &str) -> RouteAccess {
         | super::OWNER_SESSION_ENDPOINT => RouteAccess::Needs(Capability::RequestSensitiveAction),
         super::SECURITY_STATUS_ENDPOINT => RouteAccess::Needs(Capability::OwnSession),
         // `/api/registerConnectedComputer` and `/api/issueComputerGrant` ask in
-        // server/security_gates.rs, once per computer for 30 days, not on every renewal.
+        // server/security_gates.rs, once per computer for 30 days, not on every renewal, and
+        // never with Agent access off.
         _ => RouteAccess::Needs(Capability::ProjectSessions),
     }
 }

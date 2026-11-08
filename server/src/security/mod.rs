@@ -233,7 +233,7 @@ impl SecurityState {
 
     /*
     CDXC:Security 2026-11-08 WHY:
-    The desktop renews a connected computer's registration and grant every few minutes (connected_computers/registry.rs keeps them 3 minutes), so asking for an approval on each renewal would prompt all day. The owner approves a computer once; renewals for it pass for 30 days (the design's longest grant), and a new computer, or one whose approval lapsed, asks again. Turning a computer's Agent access off never asks.
+    The desktop renews a connected computer's registration and grant every few minutes (connected_computers/registry.rs keeps them 3 minutes), so asking for an approval on each renewal would prompt all day. The owner approves a computer once; renewals for it pass for 30 days (the design's longest grant), and a new computer, or one whose approval lapsed, asks again. Registering a computer, or renewing it, with Agent access off never asks (`security_gates.rs`; until 11.1.1 only the grant route skipped it, so turning Agent access off still asked on every registration).
     */
     /// Whether the owner approved computer `server_id` within the last 30 days.
     pub fn computer_approved(&self, server_id: &str, now_ms: u64) -> bool {

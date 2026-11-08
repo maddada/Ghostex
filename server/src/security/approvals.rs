@@ -36,6 +36,11 @@ pub struct ActionRequest {
     pub params: Value,
     pub summary: String,
     pub detail: Option<String>,
+    /// Any caller's identical pending request is reused, and may be spent by any caller that
+    /// could ask for it (see [`ActionRequest::shared`]).
+    pub shared: bool,
+    /// How long the request waits for the owner, when not [`PENDING_TTL_MS`].
+    pub pending_ttl_ms: Option<u64>,
 }
 
 impl ActionRequest {
@@ -46,7 +51,26 @@ impl ActionRequest {
             params: Value::Null,
             summary: summary.into(),
             detail: None,
+            shared: false,
+            pending_ttl_ms: None,
         }
+    }
+
+    /*
+    CDXC:Security 2026-11-08 WHY:
+    User, on 11.1.0: "Man i see 1 million pin requests on my windows machine saying let the agents on x and x reach each other. Please don't do this! You spammed my machine with those, have like 50 open." A request about a thing rather than about the caller (letting another computer in) is one question however many callers ask it: the app's owner session and its token file, this app's renewal and the other computer's, all reuse the one that is waiting, so the owner answers once.
+    */
+    /// One request for this change whoever asks: an identical pending request from any caller is
+    /// reused, and the approval may be spent by any caller that can ask for it.
+    pub fn shared(mut self) -> Self {
+        self.shared = true;
+        self
+    }
+
+    /// Waits `ttl_ms` for the owner instead of [`PENDING_TTL_MS`].
+    pub fn pending_ttl(mut self, ttl_ms: u64) -> Self {
+        self.pending_ttl_ms = Some(ttl_ms);
+        self
     }
 
     pub fn target(mut self, target: impl Into<String>) -> Self {
@@ -109,6 +133,16 @@ struct StoredRequest {
     request: ApprovalRequest,
     /// Who asked; only they (or the owner's devices) may read the request back.
     requester: Principal,
+    /// [`ActionRequest::shared`]: any caller that can ask may read and spend it.
+    shared: bool,
+}
+
+impl StoredRequest {
+    fn open_to(&self, caller: &Principal) -> bool {
+        caller.is_owner_device()
+            || self.requester == *caller
+            || (self.shared && caller.has(super::Capability::RequestSensitiveAction))
+    }
 }
 
 /// In-memory on purpose: requests live minutes, and a gxserver restart dropping them only
@@ -132,7 +166,7 @@ impl ApprovalStore {
         let mut requests = self.lock();
         sweep(&mut requests, now_ms);
         if let Some(existing) = requests.values().find(|stored| {
-            stored.requester == *requester
+            (stored.requester == *requester || (action.shared && stored.shared))
                 && stored.request.status == ApprovalStatus::Pending
                 && stored.request.action == action.action
                 && stored.request.target == action.target
@@ -150,7 +184,7 @@ impl ApprovalStore {
             nonce: random_b64(32),
             requested_by,
             created_at_ms: now_ms,
-            expires_at_ms: now_ms + PENDING_TTL_MS,
+            expires_at_ms: now_ms + action.pending_ttl_ms.unwrap_or(PENDING_TTL_MS),
             status: ApprovalStatus::Pending,
             decided_at_ms: None,
             decided_by: None,
@@ -160,6 +194,7 @@ impl ApprovalStore {
             StoredRequest {
                 request: request.clone(),
                 requester: requester.clone(),
+                shared: action.shared,
             },
         );
         (request, true)
@@ -184,7 +219,7 @@ impl ApprovalStore {
         sweep(&mut requests, now_ms);
         requests
             .get(id)
-            .filter(|stored| caller.is_owner_device() || stored.requester == *caller)
+            .filter(|stored| stored.open_to(caller))
             .map(|stored| stored.request.clone())
     }
 
@@ -257,7 +292,7 @@ impl ApprovalStore {
         sweep(&mut requests, now_ms);
         let stored = requests
             .get_mut(id)
-            .filter(|stored| caller.is_owner_device() || stored.requester == *caller)
+            .filter(|stored| stored.open_to(caller))
             .ok_or(ApprovalError::NotFound)?;
         let request = &mut stored.request;
         if request.action != action.action
