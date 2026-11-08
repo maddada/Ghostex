@@ -63,6 +63,7 @@ pub(crate) fn gpui_run_remote_ssh_script_in_execution_target(
     };
     let mut arguments = gpui_remote_ssh_client_options(config.has_saved_password);
     arguments.extend(gpui_remote_ssh_shared_connection_arguments(config));
+    arguments.extend(gpui_remote_ssh_reuse_connection_arguments(config));
     arguments.extend(target_arguments);
     arguments.push(gpui_remote_command_for_execution_target(
         execution_target,
@@ -110,6 +111,7 @@ pub(crate) fn gpui_run_remote_ssh_raw(
     };
     let mut arguments = gpui_remote_ssh_client_options(config.has_saved_password);
     arguments.extend(gpui_remote_ssh_shared_connection_arguments(config));
+    arguments.extend(gpui_remote_ssh_reuse_connection_arguments(config));
     arguments.extend(target_arguments);
     arguments.push(remote_command.to_string());
     gpui_run_remote_process(
@@ -144,6 +146,7 @@ pub(crate) fn gpui_run_remote_ssh_with_stdin_file_in_execution_target(
     };
     let mut arguments = gpui_remote_ssh_client_options(config.has_saved_password);
     arguments.extend(gpui_remote_ssh_shared_connection_arguments(config));
+    arguments.extend(gpui_remote_ssh_reuse_connection_arguments(config));
     arguments.extend(target_arguments);
     arguments.push(gpui_remote_command_for_execution_target(
         execution_target,
@@ -564,19 +567,21 @@ pub(crate) fn gpui_login_shell_remote_command(command: &str) -> String {
     )
 }
 
+/// The options every tunnel's ssh process runs with.
+///
 /// CDXC:RemoteMachines 2026-09-18 WHY:
 /// A managed tunnel must own its SSH process and forwarding socket. Reusing a user-configured multiplexing master can make the child exit successfully before the readiness probe and leaves tunnel shutdown tied to an unrelated master.
-/// SEE-ALSO: tunnel_and_auth.rs, browser_tunnel.rs, source_code_server.rs.
+///
+/// CDXC:RemoteMachines 2026-11-08 WHY:
+/// A machine that reuses the user's SSH connection (GitHub #496) cannot open its own login: the host asks for a verification code that only the user can answer. Its tunnels ride that master instead (`ControlMaster=no`, so they never create, persist or exit one) and take their forward back when they end (`GpuiRemoteSharedSshForward`), because ssh keeps a `-L`/`-R`/`-D` forward in the master after the client that asked for it exits. This supersedes the 2026-09-18 rule only for that mode; every other machine's tunnel still owns its socket (`ControlPath=none`).
+/// SEE-ALSO: tunnel_and_auth.rs, reverse_tunnel.rs, browser_tunnel.rs, source_code_server.rs.
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
-pub(crate) fn gpui_remote_ssh_tunnel_options(has_saved_password: bool) -> Vec<String> {
-    let mut arguments = gpui_remote_ssh_client_options(has_saved_password);
-    arguments.extend([
-        "-o".to_string(),
-        "ControlMaster=no".to_string(),
-        "-o".to_string(),
-        "ControlPath=none".to_string(),
-        "-o".to_string(),
-        "ForkAfterAuthentication=no".to_string(),
-    ]);
+pub(crate) fn gpui_remote_ssh_tunnel_options(config: &GpuiRemoteMachineConfig) -> Vec<String> {
+    let mut arguments = gpui_remote_ssh_client_options(config.has_saved_password);
+    arguments.extend(["-o".to_string(), "ControlMaster=no".to_string()]);
+    if !config.reuse_ssh_connection {
+        arguments.extend(["-o".to_string(), "ControlPath=none".to_string()]);
+    }
+    arguments.extend(["-o".to_string(), "ForkAfterAuthentication=no".to_string()]);
     arguments
 }

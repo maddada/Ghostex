@@ -11,7 +11,7 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
     ButtonSize, ButtonVariant, icon, settings_button_sized, settings_icon, settings_icon_button,
-    settings_switch, tooltip_text,
+    tooltip_text,
 };
 use super::super::super::model::SettingsTabId;
 use super::easy_connect::{path_card, path_head};
@@ -460,6 +460,7 @@ fn machine_draft_to_form(draft: &MachineDraft) -> Value {
         "easyConnectAddress": draft.easy_connect_address,
         "sshHost": draft.ssh_host,
         "sshIdentityFile": draft.ssh_identity_file,
+        "reuseSshConnection": draft.reuse_ssh_connection,
         "sshPort": draft.ssh_port,
         "sshUser": draft.ssh_user,
         "wslDistribution": draft.wsl_distribution,
@@ -494,6 +495,7 @@ fn machine_draft_from_form(form: &Value, base: MachineDraft) -> MachineDraft {
         ssh_identity_file: text("sshIdentityFile", base.ssh_identity_file.clone()),
         ssh_password: String::new(),
         ssh_password_saved: base.ssh_password_saved,
+        reuse_ssh_connection: flag("reuseSshConnection", base.reuse_ssh_connection),
         ssh_port: text("sshPort", base.ssh_port.clone()),
         ssh_user: text("sshUser", base.ssh_user.clone()),
         wsl_distribution: text("wslDistribution", base.wsl_distribution.clone()),
@@ -1017,92 +1019,38 @@ pub(super) fn machine_dialog(
     let mut fields: Vec<AnyElement> = Vec::new();
     if !is_new {
         let visible = !draft.disabled;
-        fields.push(
-            h_flex()
-                .id("remote-machine-dialog-visible")
-                .role(gpui::Role::Switch)
-                .aria_toggled(a11y_toggled(visible))
-                .aria_label("Show in sidebar")
-                .w_full()
-                .items_center()
-                .gap(px(12.0))
-                .switch_row_press(
-                    switch_row_wash(p.foreground),
-                    false,
-                    bind_press(cx, move |tab, _window, cx| {
-                        if let Some(dialog) = tab.machine_dialog.as_mut() {
-                            dialog.draft.disabled = visible;
-                        }
-                        cx.notify();
-                    }),
-                )
-                .child(
-                    v_flex()
-                        .flex_1()
-                        .min_w_0()
-                        .child(
-                            div()
-                                .text_size(px(14.0))
-                                .line_height(px(19.25))
-                                .text_color(hsla(t.muted))
-                                .child("Show in sidebar"),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(13.0))
-                                .line_height(px(18.85))
-                                .text_color(hsla(colors.muted))
-                                .child("Turn off to hide this machine from the sidebar without deleting it."),
-                        ),
-                )
-                .child(div().flex_shrink_0().child(settings_switch(&p, visible, false)))
-                .into_any_element(),
-        );
+        fields.push(dialog_switch_row(
+            t,
+            &colors,
+            "remote-machine-dialog-visible",
+            "Show in sidebar",
+            "Turn off to hide this machine from the sidebar without deleting it.",
+            visible,
+            move |tab| {
+                if let Some(dialog) = tab.machine_dialog.as_mut() {
+                    dialog.draft.disabled = visible;
+                }
+            },
+            cx,
+        ));
     }
     {
         // CDXC:RemoteMachines 2026-11-03 DECISION: the user chose that connecting a computer is permission enough for agents on both computers to start, message and read each other's sessions, with one switch per machine to stop it (on by default). SEE-ALSO: server/src/connected_computers/registry.rs.
         let agent_access = !draft.agent_access_off;
-        fields.push(
-            h_flex()
-                .id("remote-machine-dialog-agent-access")
-                .role(gpui::Role::Switch)
-                .aria_toggled(a11y_toggled(agent_access))
-                .aria_label("Agent access")
-                .w_full()
-                .items_center()
-                .gap(px(12.0))
-                .switch_row_press(
-                    switch_row_wash(p.foreground),
-                    false,
-                    bind_press(cx, move |tab, _window, cx| {
-                        if let Some(dialog) = tab.machine_dialog.as_mut() {
-                            dialog.draft.agent_access_off = agent_access;
-                        }
-                        cx.notify();
-                    }),
-                )
-                .child(
-                    v_flex()
-                        .flex_1()
-                        .min_w_0()
-                        .child(
-                            div()
-                                .text_size(px(14.0))
-                                .line_height(px(19.25))
-                                .text_color(hsla(t.muted))
-                                .child("Agent access"),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(13.0))
-                                .line_height(px(18.85))
-                                .text_color(hsla(colors.muted))
-                                .child("Agents on this computer can start, message and read sessions on this machine, and its agents can do the same here."),
-                        ),
-                )
-                .child(div().flex_shrink_0().child(settings_switch(&p, agent_access, false)))
-                .into_any_element(),
-        );
+        fields.push(dialog_switch_row(
+            t,
+            &colors,
+            "remote-machine-dialog-agent-access",
+            "Agent access",
+            "Agents on this computer can start, message and read sessions on this machine, and its agents can do the same here.",
+            agent_access,
+            move |tab| {
+                if let Some(dialog) = tab.machine_dialog.as_mut() {
+                    dialog.draft.agent_access_off = agent_access;
+                }
+            },
+            cx,
+        ));
     }
     if let Some(reading) = &code_reading {
         let (text, color) = match reading {
@@ -1273,6 +1221,30 @@ pub(super) fn machine_dialog(
                     None,
                 )),
             ));
+        // A Windows WSL machine's gxserver listens inside that distribution, where a forward in
+        // the user's own SSH connection cannot land, so the setting is not offered for it.
+        if !easy_connect && draft.wsl_distribution.trim().is_empty() {
+            // CDXC:RemoteMachines 2026-11-08 DECISION: GitHub #496, where the maintainer asked for
+            // "an advanced toggle to be enabled in the remote tab": the machine can ride the SSH
+            // connection the user already signed in to, so hosts that ask for a verification code
+            // on every login (2FA) work over the master `~/.ssh/config` keeps open.
+            // SEE-ALSO: helpers/remote/ssh_connection_share.rs (the check and the reused login).
+            let reuse = draft.reuse_ssh_connection;
+            advanced_fields = advanced_fields.child(dialog_switch_row(
+                t,
+                &colors,
+                "remote-machine-dialog-reuse-ssh",
+                "Reuse an existing SSH connection",
+                "For computers that ask for a verification code each time you sign in. Sign in once in a terminal with ControlMaster on in your SSH config, and Ghostex uses that connection instead of signing in again.",
+                reuse,
+                move |tab| {
+                    if let Some(dialog) = tab.machine_dialog.as_mut() {
+                        dialog.draft.reuse_ssh_connection = !reuse;
+                    }
+                },
+                cx,
+            ));
+        }
         advanced = advanced.child(advanced_fields);
     }
     fields.push(advanced.into_any_element());

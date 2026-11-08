@@ -394,6 +394,12 @@ pub(crate) const GPUI_REMOTE_GXSERVER_INSTALLED_VERSION_MAX_LENGTH: usize = 40;
 // non-zero code means the remote login shell never ran the probe script.
 pub(crate) const GPUI_REMOTE_GXSERVER_NOT_INSTALLED_EXIT_CODE: i32 = 3;
 pub(crate) const GPUI_REMOTE_GXSERVER_CONNECT_TIMEOUT: Duration = Duration::from_secs(18);
+// `ssh -O check` and `ssh -O forward` only talk to the local master over its socket (no network
+// round trip), so this bounds a hung or wedged ssh, not a slow link.
+pub(crate) const GPUI_REMOTE_SSH_CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
+// `ssh -O cancel` runs while a tunnel is torn down, sometimes on the window's own thread, so it
+// gets less time: a master this app can talk to answers at once.
+pub(crate) const GPUI_REMOTE_SSH_FORWARD_CANCEL_TIMEOUT: Duration = Duration::from_secs(2);
 pub(crate) const GPUI_REMOTE_GXSERVER_INSTALL_PROBE_TIMEOUT: Duration = Duration::from_secs(12);
 pub(crate) const GPUI_REMOTE_GXSERVER_ARCHIVE_TIMEOUT: Duration = Duration::from_secs(60);
 pub(crate) const GPUI_REMOTE_GXSERVER_UPLOAD_TIMEOUT: Duration = Duration::from_secs(120);
@@ -410,6 +416,10 @@ pub(crate) const GPUI_REMOTE_GXSERVER_HEALTH_TIMEOUT: Duration = Duration::from_
 // How long a new tunnel may take to log in and carry a healthy answer; an SSH that exits ends the
 // wait at once (`gpui_wait_for_remote_authenticated_health`).
 pub(crate) const GPUI_REMOTE_GXSERVER_HEALTH_DEADLINE: Duration = Duration::from_secs(45);
+// The same wait for a forward registered in the user's own SSH master: it listens before the
+// first probe, so a port that keeps refusing has nothing behind it on that machine.
+pub(crate) const GPUI_REMOTE_GXSERVER_REGISTERED_FORWARD_REFUSAL_DEADLINE: Duration =
+    Duration::from_secs(10);
 pub(crate) const GPUI_REMOTE_GXSERVER_WATCHDOG_INTERVAL: Duration = Duration::from_secs(15);
 pub(crate) const GPUI_REMOTE_GXSERVER_TUNNEL_STARTUP_DELAY: Duration = Duration::from_millis(350);
 pub(crate) const GPUI_REMOTE_GXSERVER_TUNNEL_RETRY_DELAY: Duration = Duration::from_millis(200);

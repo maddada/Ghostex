@@ -90,12 +90,16 @@ pub(crate) fn source_code_server_spawn_remote_runtime(
             break;
         }
         let askpass = gpui_remote_ssh_askpass_script(machine_config)?;
-        let mut arguments = gpui_remote_ssh_tunnel_options(machine_config.has_saved_password);
+        let local_forward =
+            format!("127.0.0.1:{local_port}:127.0.0.1:{SOURCE_CODE_SERVER_REMOTE_PORT}");
+        let forward_cleanup =
+            GpuiRemoteSharedSshForward::new(machine_config, "-L", local_forward.as_str());
+        let mut arguments = gpui_remote_ssh_tunnel_options(machine_config);
         arguments.extend([
             "-o".to_string(),
             "ExitOnForwardFailure=yes".to_string(),
             "-L".to_string(),
-            format!("127.0.0.1:{local_port}:127.0.0.1:{SOURCE_CODE_SERVER_REMOTE_PORT}"),
+            local_forward,
         ]);
         arguments.extend(gpui_remote_ssh_target_arguments(machine_config)?);
         arguments.push(gpui_remote_command_for_execution_target(
@@ -200,6 +204,7 @@ pub(crate) fn source_code_server_spawn_remote_runtime(
         if readiness.is_ready() && child_running {
             return Ok(SourceCodeServerRuntimeStartOutput {
                 child,
+                forward: forward_cleanup,
                 runtime_origin: format!("http://127.0.0.1:{local_port}"),
                 runtime_key: Some(runtime_key),
                 prompt_editor_ipc_ready: readiness.prompt_editor_ipc_ready,

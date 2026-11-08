@@ -29,6 +29,7 @@ pub(crate) fn gpui_cloud_box_machine_config(remote_machine_id: &str) -> GpuiRemo
         ssh_port: None,
         ssh_user: None,
         has_saved_password: false,
+        reuse_ssh_connection: false,
         wsl_distribution: None,
         disabled: false,
         ssh_control_path: None,

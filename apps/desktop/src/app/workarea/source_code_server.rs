@@ -284,6 +284,7 @@ impl GhostexGpuiApp {
                     target,
                     settings,
                     output.child,
+                    output.forward,
                     output.started_at,
                     output.runtime_origin,
                     output.runtime_key,
@@ -297,7 +298,7 @@ impl GhostexGpuiApp {
                 self.source_code_server_runtime.set_failed(
                     target,
                     settings,
-                    Some(output.child),
+                    Some((output.child, output.forward)),
                     Some(output.started_at),
                     SourceCodeServerRuntimeFailure::Launch,
                 );

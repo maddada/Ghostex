@@ -3,8 +3,9 @@
 //! pieces every card shares (badges, section labels, spinners, the raised segmented control, the
 //! small switch, compact buttons and inputs).
 use super::super::super::super::native_modal_kit::*;
-use super::super::super::fields::{icon, settings_icon, tooltip_text};
+use super::super::super::fields::{icon, settings_icon, settings_switch, tooltip_text};
 use super::super::super::palette::SettingsPalette;
+use super::RemoteTab;
 use super::model::BadgeTone;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -13,7 +14,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, Transformation, Window, div, px, radians, rgb,
 };
 use gpui_component::input::{Input, InputState};
-use gpui_component::{Sizable as _, Size as ComponentSize, h_flex};
+use gpui_component::{Sizable as _, Size as ComponentSize, h_flex, v_flex};
 use std::time::Duration;
 
 pub(super) const ICON_ALERT: &str = "modals/settings/alert-triangle.svg";
@@ -610,6 +611,62 @@ pub(super) fn dialog_colors(t: &RemoteTokens) -> DialogColors {
         foreground: if p.light { p.foreground } else { rgb(0xfafafa) },
         muted: if p.light { p.muted } else { rgb(0xa1a1a1) },
     }
+}
+
+/// A switch row of a Settings > Remote dialog: a title and one line of detail, the app's switch
+/// on the right, and the whole row toggles it (`SwitchRowExt` in native_modal_kit/controls.rs).
+pub(super) fn dialog_switch_row(
+    t: &RemoteTokens,
+    colors: &DialogColors,
+    id: &'static str,
+    label: &'static str,
+    detail_text: &'static str,
+    value: bool,
+    toggle: impl Fn(&mut RemoteTab) + 'static,
+    cx: &mut Context<RemoteTab>,
+) -> AnyElement {
+    let p = t.p.nested_dialog();
+    h_flex()
+        .id(id)
+        .role(gpui::Role::Switch)
+        .aria_toggled(a11y_toggled(value))
+        .aria_label(label)
+        .w_full()
+        .items_center()
+        .gap(px(12.0))
+        .switch_row_press(
+            switch_row_wash(p.foreground),
+            false,
+            bind_press(cx, move |tab, _window, cx| {
+                toggle(tab);
+                cx.notify();
+            }),
+        )
+        .child(
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .child(
+                    div()
+                        .text_size(px(14.0))
+                        .line_height(px(19.25))
+                        .text_color(hsla(t.muted))
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .text_size(px(13.0))
+                        .line_height(px(18.85))
+                        .text_color(hsla(colors.muted))
+                        .child(detail_text),
+                ),
+        )
+        .child(
+            div()
+                .flex_shrink_0()
+                .child(settings_switch(&p, value, false)),
+        )
+        .into_any_element()
 }
 
 /// The window-wide black/65 backdrop a nested Settings dialog lays over the rail, the search and

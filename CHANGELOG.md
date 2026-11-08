@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Machines that ask for a verification code (2FA) now connect:** turn on **Reuse an existing SSH connection** in a remote machine's Advanced settings, sign in once in a terminal, and Ghostex runs over that connection instead of signing in again (#496).
+
 ## 11.0.0 - 2026-11-07
 
 **Ghostex 11.0.0 is out.** Share a chat with anyone through a link with Ghostex Collab, let Autopilot keep your sessions moving while you are away, build your own bots on Claude Code and Codex with GBots, dictate with Hex, sync accounts, agents and skills between your computers, and annotate pages with screenshots; the iPhone gets a Live Activity, Home Screen widgets, the iPhone Duo two-pane layout, terminal themes and a Files browser.

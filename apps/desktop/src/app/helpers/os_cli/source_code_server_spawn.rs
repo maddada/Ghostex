@@ -145,6 +145,7 @@ fn source_code_server_spawn_host_runtime(
     );
     Ok(SourceCodeServerRuntimeStartOutput {
         child,
+        forward: None,
         runtime_origin: source_code_server_editor_origin(),
         runtime_key: Some(runtime_key),
         prompt_editor_ipc_ready: readiness.prompt_editor_ipc_ready,
@@ -239,6 +240,7 @@ pub(crate) fn source_code_server_spawn_runtime(
     );
     Ok(SourceCodeServerRuntimeStartOutput {
         child,
+        forward: None,
         runtime_origin: source_code_server_editor_origin(),
         runtime_key: Some(runtime_key),
         prompt_editor_ipc_ready: readiness.prompt_editor_ipc_ready,

@@ -4409,6 +4409,14 @@ sessions, so any client can control agents on any machine.
   why, with Reconnect and Remote Settings buttons. Ghostex keeps retrying a
   dropped connection, but a rejected username or password is not retried (so
   the account is not locked out); saving a new SSH password reconnects it.
+  A computer that asks for a verification code (2FA) on every sign-in can't be
+  signed in to by Ghostex itself. In the machine's Edit dialog, open Advanced
+  and turn on **Reuse an existing SSH connection**, put `ControlPath` and
+  `ControlMaster auto` for that host in your `~/.ssh/config`, and sign in once
+  in a terminal with `ssh <user>@<host>`. Ghostex then runs its commands and
+  its tunnel over that signed-in connection and never tries a login of its
+  own. After the connection closes, sign in in a terminal again; the machine
+  says "No SSH connection to <user>@<host> is open" until you do.
   To update Ghostex on a remote machine without going to its screen, look at
   its tile in Settings > Remote or its tab in the sidebar: a connected machine
   shows the Ghostex version it runs, and when a newer one is out its tab shows

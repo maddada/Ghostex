@@ -78,6 +78,14 @@ pub(crate) fn gpui_remote_machine_config_from_settings(
             .get("sshPasswordSaved")
             .and_then(serde_json::Value::as_bool)
             == Some(true),
+        // An Easy Connect machine is dialed on this computer's loopback forwarder and a Windows
+        // WSL machine runs gxserver inside its distribution, so neither reuses an SSH connection.
+        reuse_ssh_connection: transport == GpuiRemoteMachineTransport::Ssh
+            && wsl_distribution.is_none()
+            && machine
+                .get("reuseSshConnection")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true),
         wsl_distribution,
         disabled: machine.get("disabled").and_then(serde_json::Value::as_bool) == Some(true),
         ssh_control_path: None,
