@@ -71,6 +71,7 @@ keep their own endpoint allow-lists).
 | `RequestSensitiveAction` (may ask) | yes | yes | yes | yes |
 | `DecideApprovals` (list, approve, deny, approver keys) | no | no | no | no |
 | `OwnerSecrets` (answer a secret request, have gxserver read a secret provider reference) | no | no | no | no |
+| `OwnerSetup` (install extensions, secret providers, teams; see "Settings only") | no | no | no | no |
 
 Secret requests are answered only by the owner: `/api/answerSecretRequest` and
 `/api/checkSecretReference` need `OwnerSecrets`; `/api/setVoiceAgentKey` needs it when the key
@@ -82,8 +83,39 @@ session itself (its own `gxs_` token) may create a secret request for its chat
 (`/api/createSecretRequest`) and wait for the answer (`/api/waitSecretRequest`).
 
 `Principal::skips_approval(action)` is the one rule for which sensitive actions a caller skips:
-`AnswerOtherSessionPrompt` with `AnswerAnyPrompt`, `TypeIntoOtherSession` and
-`InterruptOtherSession` with `SteerAnySession`, and nothing else for anyone.
+`AnswerOtherSessionPrompt` with `AnswerAnyPrompt`, `TypeIntoOtherSession`,
+`InterruptOtherSession` and `ReachOtherProject` with `SteerAnySession`, and nothing else for
+anyone.
+
+### Settings only: `OwnerSetup` (11.1.1, #495 follow-up)
+
+The user's rule: agents explain owner-only things and point to Settings, but can't turn them on.
+These calls are the owner's devices' alone; agents, coordinators, threads, Chief, the token file
+(so also the ghostex CLI in the user's own terminal and the GPUI web build) and connected
+computers are refused with a message naming the Settings page
+(`server/src/server/security_owner_only.rs`). There is no approval to ask for.
+
+| Route | Owner-only when | Settings page |
+| --- | --- | --- |
+| `/api/installExtension` | always: a local folder, a catalog id, a zip URL | Extensions |
+| `/api/updateExtensionState` | it turns an extension on, or grants a permission it doesn't hold | Extensions |
+| `/api/saveSecretProvider`, `/api/removeSecretProvider` | always | Secrets |
+| `/api/joinTeamSync`, `/api/createTeamSyncInvite`, `/api/setTeamLinearKey`, `/api/setOwnLinearKey`, `/api/setSlackFlowSettings` | always (leaving a team, and linking your Slack user with the one-time code Slack sends you, stay open) | Workspaces |
+| `/api/updateAgentSettings` | it turns `agentAcceptAllEnabled` on | Agents |
+| `/api/setWorkSource` | it sets a new ticket command path while the workspace has ticket credentials stored (they would go to the new command); clear them first | (CLI only today) |
+| `updateSettingsPatch` | a key the catalog doesn't mark `agentWritable` (`settings_agent_writable.rs`) | the key's page |
+
+The settings keys that loosen security are off the agent-writable list
+(`USER_ONLY_KEYS` in `packages/settings-catalog/src/help/mod.rs`): `agentAcceptAllEnabled`,
+`workspacesHidden`, `cloudBoxesPhoneStartEnabled`, `trustProjectFoldersAutomatically`,
+`connectorsHidden`, `customSessionTitleGenerationCommand`, `globalWorktreeCommand`,
+`customDefaultEditorCommand`, `terminalClipboardPasteProtection`, `botAutomationsHidden`.
+GBots and Sync keys stay writable and ask (`settingsWeakenSecurity`, `gbotsEnable`).
+
+Extensions besides the routes: an install without the consent dialog's approval gets no
+permissions (`store_entry_for_install`), and a payload that wasn't installed through Ghostex (no
+store entry) is never started, served or given state; it lists as off and can only be
+uninstalled (`extensions/registry.rs`).
 
 ### Chief's head role
 
@@ -132,6 +164,10 @@ Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in 
 | Terminal input | `typeIntoOtherSession` | `security_gates.rs` | `/api/sendSessionText` (send-text, send-key), `/api/sendSessionEnter`, `/api/sendSessionMessage` by anyone but the owner's devices into a session that isn't the caller's own, a coordinator's threads included (user decision). A coordinator's Escape or Ctrl-C to its own thread passes; chat messages through the chat queue (`ghostex agents send`) never ask. |
 | Interrupting | `interruptOtherSession` | `security_gates.rs` | `/api/interruptSessionChat` by anyone but the owner's devices for a session that is neither the caller's own nor one of its threads (user decision). |
 | Approvers | `addApproverKey` | `security_http.rs` | A second owner key, or any approver key after the first. |
+| Other projects | `reachOtherProject` (target: the project id, or `folder:<path>`) | `security_cross_project.rs` | A session token's chat message, queued prompt or delayed send to a session of another project, or a create (`createSession`, `createAgentSession`, `createWorktreeSession`, `createWorkspaceTerminal`, `forkSession`) in another project or a new folder. A project's worktrees count as the project. Never for the owner's devices, the token file (it has no project of its own; the web build and the CLI in the user's terminal use it), a coordinator's own threads, a coordinator's creates (it starts its threads that way) or Chief. Approved once, it is remembered in memory for that session (`<project>:<session>`) and that project until gxserver restarts (`SecurityState::project_reach_approved`). |
+| Full access | `forceFullAccess` | `security_cross_project.rs` | A create with `launchSettings.acceptAllMode: "enabled"` when neither "Agent approvals: accept all" nor the agent's own launcher setting is on, in any project, whoever but the owner's devices calls (Chief included). Every time; an approval also counts as the project's reach approval. |
+| Teams | `teamSyncConnect` (target: the backend's address) | `security_gates.rs` | `/api/connectTeamSync` by anyone but the owner's devices. It is `ghostex team deploy`'s last step, which Settings > Workspaces sends the owner to a terminal for, so it asks instead of being refused; the rest of team setup is Settings only. |
+| Cloud Boxes | `cloudBoxShareLogins` | `security_gates.rs` | `/api/cloudBoxes` `create`, `setAgentLogin` with `allowed: true`, `projectSettings` with `settings`, by anyone but the owner's devices: they put the owner's agent logins and a project's secret files onto a box. Turning a login off and reading never ask. `connectInfo` is unchanged. |
 
 Add a new action here, in the enum, and in the phone's TypeScript port together.
 
@@ -319,6 +355,20 @@ Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairi
 - Rows from before 11.0.1 are `legacy`: no token, SSH line removed at start where no Windows
   administrator prompt is needed. `remote_access::has_active_easy_connect_devices(&db)` and
   `easy_connect_devices_to_pair_again(&db)` are for the one-time re-pair notice.
+
+## Bundled skills are signed
+
+gxserver refreshes Ghostex's bundled skills from GitHub between releases
+(`server/src/agent_skills_remote.rs`), but installs a downloaded file only when it matches a
+statement signed with the component signing key: the `agent-skills` release's
+`ghostex-skills.json`, `{ statement, signature }`, where the statement is
+`ghostex-skills-v1\n<commit>\n<issuedAtMs>\n<skill>/<path> <sha256> <size> <mode>…` (sorted).
+The files are fetched at that commit and checked by SHA-256; a manifest older than the newest one
+accepted is refused. `.github/workflows/publish-agent-skills.yml` signs the skills at the
+dispatched commit (`tooling/release-gpui/sign-agent-skills.mjs`) and replaces the asset. Without a
+manifest that verifies, nothing is downloaded and the app's bundled copy stays the source. Debug
+builds may read `GHOSTEX_AGENT_SKILLS_MANIFEST_URL` and `GHOSTEX_AGENT_SKILLS_FILES_URL` (and the
+test key in `GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY`) to test against a local copy.
 
 ## Not covered yet
 
