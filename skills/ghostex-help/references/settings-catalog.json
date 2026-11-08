@@ -3842,7 +3842,7 @@
     {
       "key": "sessionChatMutedThinking",
       "title": "Show thinking in grey",
-      "subtitle": "Show the agent's thinking in grey and its replies in the full text colour, so the two are easy to tell apart.",
+      "subtitle": "Show the agent's thinking in grey, so it reads apart from the agent's replies.",
       "tab": "theme",
       "tabTitle": "Interface",
       "group": "appearance",
