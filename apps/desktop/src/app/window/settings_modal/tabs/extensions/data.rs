@@ -181,6 +181,7 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "changes" => "modals/settings/git-commit.svg",
         "extensionsButton" => "modals/settings/puzzle.svg",
         "connectors" => "modals/settings/plug-connected.svg",
+        "chief" => "titlebar/ghostex-flower.svg",
         "osIntegration" => "modals/settings/device-desktop.svg",
         "debugging" => "modals/settings/bug.svg",
         "help" => "modals/settings/help-circle.svg",

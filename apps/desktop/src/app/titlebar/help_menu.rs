@@ -257,6 +257,9 @@ impl GhostexGpuiApp {
         let Some(prompt) = gpui_titlebar_help_question_prompt(question_index) else {
             return;
         };
+        if self.ask_chief_help_question(&prompt, cx) {
+            return;
+        }
         self.help_chat_timing_start(question_index);
         // Help chats live in one project rooted at the Ghostex config folder
         // (OS-specific, resolved by ghostex_paths), not in a fresh Quick
@@ -318,6 +321,46 @@ impl GhostexGpuiApp {
             }
         })
         .detach();
+    }
+
+    /// CDXC:Chief 2026-11-08 DECISION:
+    /// User (Q1739): "Ask anything" goes to the head coordinator. While Chief is on and has been opened, a Help row opens Chief's chat instead of a new Help chat, with the sample question staged as an editable draft (the 2026-09-09 rule that a Help row never sends still holds); "Ask anything" opens it with nothing staged. Chief answers from the ghostex-help guide (its playbook says so). With Chief off, or before its first open, the Help chat below is unchanged.
+    /// Returns whether Chief took the question.
+    fn ask_chief_help_question(&mut self, question: &str, cx: &mut gpui::Context<Self>) -> bool {
+        if !crate::app::native_sidebar::chief::chief_on() {
+            return false;
+        }
+        let Some(chief) = self
+            .native_sidebar
+            .snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.chiefs.iter().find(|chief| chief.is_local).cloned())
+        else {
+            return false;
+        };
+        let staged = (!question.trim().is_empty()).then(|| {
+            serde_json::json!({
+                "projectId": chief.project_id,
+                "sessionId": chief.session_id,
+                "content": question,
+                "clientId": "ghostex-help-menu",
+            })
+        });
+        let sidebar_session_id = chief.sidebar_session_id.clone();
+        cx.spawn(async move |this, cx| {
+            if let Some(params) = staged {
+                let _ = crate::app::gx_store::gx_rpc(None, "/api/setSessionChatDraft", params).await;
+            }
+            let _ = this.update(cx, |this, cx| {
+                this.dispatch_native_sidebar_ui(
+                    serde_json::json!({ "type": "selectSession", "sessionId": sidebar_session_id, "mode": "focus" }),
+                    cx,
+                );
+                let _ = this.react_to_native_sidebar_session_click(&sidebar_session_id, cx);
+            });
+        })
+        .detach();
+        true
     }
 
     fn report_help_skill_install_failure(&mut self, message: &str, cx: &mut gpui::Context<Self>) {
