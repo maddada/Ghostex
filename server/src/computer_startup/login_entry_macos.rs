@@ -48,13 +48,8 @@ pub(super) fn install(
         })
         .collect::<String>();
     let launch_log = paths.logs_dir.join("gxserver").join("launch.log");
-    let bundle = app_bundle_identifier(gxserver)
-        .map(|identifier| {
-            format!(
-                "<key>AssociatedBundleIdentifiers</key><array><string>{}</string></array>",
-                xml_escape(&identifier)
-            )
-        })
+    let bundle = ghostex_paths::macos_launch_agent::app_bundle_identifier(gxserver)
+        .map(|identifier| ghostex_paths::macos_launch_agent::associated_bundle_entry(&identifier))
         .unwrap_or_default();
     let plist = format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict><key>Label</key><string>{label}</string><key>ProgramArguments</key><array><string>{program}</string><string>{AT_LOGIN_COMMAND}</string></array><key>EnvironmentVariables</key><dict>{environment}</dict>{bundle}<key>LimitLoadToSessionType</key><string>Aqua</string><key>RunAtLoad</key><true/><key>KeepAlive</key><false/><key>AbandonProcessGroup</key><true/><key>ProcessType</key><string>Interactive</string><key>StandardOutPath</key><string>{log}</string><key>StandardErrorPath</key><string>{log}</string></dict></plist>\n",
@@ -98,23 +93,6 @@ fn location(place: &LoginEntryPlace) -> Result<(PathBuf, String)> {
         LoginEntryPlace::Profile(folder) => folder.clone(),
     };
     Ok((folder, label))
-}
-
-/// The bundle id of the app gxserver ships in (`<app>/Contents/Resources/Web/gxserver/bin/gxserver`).
-fn app_bundle_identifier(gxserver: &Path) -> Option<String> {
-    let bundle = gxserver.ancestors().find(|ancestor| {
-        ancestor
-            .extension()
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("app"))
-    })?;
-    let output = Command::new("/usr/bin/plutil")
-        .args(["-extract", "CFBundleIdentifier", "raw", "-o", "-"])
-        .arg(bundle.join("Contents/Info.plist"))
-        .stdin(Stdio::null())
-        .output()
-        .ok()?;
-    let identifier = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    (output.status.success() && !identifier.is_empty()).then_some(identifier)
 }
 
 fn xml_escape(value: &str) -> String {

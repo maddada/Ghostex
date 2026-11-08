@@ -4,7 +4,6 @@
 use anyhow::{anyhow, Context, Result};
 use std::{
     env, fs,
-    os::unix::fs::OpenOptionsExt,
     path::PathBuf,
     process::{Command, Stdio},
     time::{Duration, Instant},
@@ -67,26 +66,23 @@ pub(super) fn install(port: u16) -> Result<()> {
             )
         })
         .collect::<String>();
+    // Names Ghostex in Login Items instead of the signing developer (CDXC:BackgroundItems 2026-11-08
+    // in packages/paths/src/macos_launch_agent.rs).
+    let associated_bundle = ghostex_paths::macos_launch_agent::app_bundle_identifier(&binary)
+        .map(|identifier| ghostex_paths::macos_launch_agent::associated_bundle_entry(&identifier))
+        .unwrap_or_default();
     let plist = format!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict><key>Label</key><string>{}</string><key>ProgramArguments</key><array><string>{}</string><string>--recover-after-login</string></array><key>EnvironmentVariables</key><dict>{}</dict><key>LimitLoadToSessionType</key><string>Aqua</string><key>RunAtLoad</key><true/><key>KeepAlive</key><false/><key>StandardOutPath</key><string>{log}</string><key>StandardErrorPath</key><string>{log}</string></dict></plist>\n",
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict><key>Label</key><string>{}</string><key>ProgramArguments</key><array><string>{}</string><string>--recover-after-login</string></array><key>EnvironmentVariables</key><dict>{}</dict>{bundle}<key>LimitLoadToSessionType</key><string>Aqua</string><key>RunAtLoad</key><true/><key>KeepAlive</key><false/><key>StandardOutPath</key><string>{log}</string><key>StandardErrorPath</key><string>{log}</string></dict></plist>\n",
         xml_escape(&label),
         xml_escape(&binary.to_string_lossy()),
         environment,
         log = xml_escape(&launch_log.to_string_lossy()),
+        bundle = associated_bundle,
     );
-    // Rewritten only when it changed, so routine server starts do not churn the LaunchAgents folder.
-    if fs::read_to_string(&plist_path).ok().as_deref() != Some(plist.as_str()) {
-        use std::io::Write;
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&plist_path)
-            .with_context(|| format!("open {}", plist_path.display()))?;
-        file.write_all(plist.as_bytes())
-            .with_context(|| format!("write {}", plist_path.display()))?;
-    }
+    // Rewritten only when it changed, so routine server starts do not churn the LaunchAgents folder
+    // (each change there makes macOS re-check Ghostex's background items, CDXC:BackgroundItems).
+    ghostex_paths::macos_launch_agent::write_plist_if_changed(&plist_path, &plist)
+        .with_context(|| format!("write {}", plist_path.display()))?;
 
     let uid = unsafe { libc::getuid() };
     let domain = format!("gui/{uid}");

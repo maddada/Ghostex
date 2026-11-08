@@ -745,6 +745,76 @@ pub(crate) fn gpui_launchd_plist_xml_escape(value: &str) -> String {
         .replace('>', "&gt;")
 }
 
+/// The plist line naming the app `binary` ships in, so Login Items lists the gxserver job under
+/// Ghostex rather than the signing developer (GitHub #510); empty outside an app bundle.
+#[cfg(target_os = "macos")]
+fn gpui_gxserver_launch_agent_bundle_entry(binary: &Path) -> String {
+    ghostex_paths::macos_launch_agent::app_bundle_identifier(binary)
+        .map(|identifier| {
+            format!(
+                "\t{}\n",
+                ghostex_paths::macos_launch_agent::associated_bundle_entry(&identifier)
+            )
+        })
+        .unwrap_or_default()
+}
+
+/*
+CDXC:BackgroundItems 2026-11-08 WHY: GitHub #510. The gxserver job's plist is only rewritten when
+the app starts gxserver, and a gxserver that outlives an app restart keeps running, so an install
+whose plist predates `AssociatedBundleIdentifiers` would keep showing "Mohamad Youssef" in Login
+Items until gxserver next restarts. At app start the key is added to the existing plist in place,
+with nothing else changed and no launchctl call: launchd keeps the loaded job, and macOS's
+background-item check reads the plist file itself when ~/Library/LaunchAgents changes (its log
+shows "checking for an updated legacy agent or daemon item" after a plist write). A plist that
+already has the key is left untouched, so this writes at most once per install.
+*/
+#[cfg(target_os = "macos")]
+pub(crate) fn gpui_name_ghostex_in_gxserver_launch_agent() {
+    let Some(home) = env::var_os("HOME") else {
+        return;
+    };
+    let plist_path = PathBuf::from(home)
+        .join("Library/LaunchAgents")
+        .join(format!("{}.plist", gpui_gxserver_launch_agent_label()));
+    let Ok(plist) = std::fs::read_to_string(&plist_path) else {
+        return;
+    };
+    if plist.contains("<key>AssociatedBundleIdentifiers</key>") {
+        return;
+    }
+    let Some(program) = std::process::Command::new("/usr/bin/plutil")
+        .args(["-extract", "ProgramArguments.0", "raw", "-o", "-"])
+        .arg(&plist_path)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .filter(|program| !program.is_empty())
+    else {
+        return;
+    };
+    let entry = gpui_gxserver_launch_agent_bundle_entry(Path::new(&program));
+    // The outer dict's closing tag is the last `</dict>` in the file.
+    let Some(end) = plist.rfind("</dict>") else {
+        return;
+    };
+    if entry.is_empty() {
+        return;
+    }
+    let updated = format!("{}{entry}{}", &plist[..end], &plist[end..]);
+    if let Err(error) =
+        ghostex_paths::macos_launch_agent::write_plist_if_changed(&plist_path, &updated)
+    {
+        log::warn!(
+            "could not name Ghostex in {}: {error}",
+            plist_path.display()
+        );
+    }
+}
+
 /*
 CDXC:ServerDaemon 2026-07-10:
 macOS 27 attributes app-spawned processes that outlive the app to the app's
@@ -864,15 +934,20 @@ fn gpui_spawn_local_gxserver_launchd_job(
 	<string>{launch_log}</string>
 	<key>StandardErrorPath</key>
 	<string>{launch_log}</string>
-</dict>
+{associated_bundle}</dict>
 </plist>
 "#,
         label = gpui_launchd_plist_xml_escape(&label),
         binary = gpui_launchd_plist_xml_escape(binary_path),
         environment_xml = environment_xml,
         launch_log = gpui_launchd_plist_xml_escape(launch_log_path),
+        associated_bundle = gpui_gxserver_launch_agent_bundle_entry(binary),
     );
-    std::fs::write(&plist_path, plist).map_err(|_| LAUNCH_FAILURE.to_string())?;
+    // Written only when it changed (CDXC:BackgroundItems 2026-11-08 in
+    // packages/paths/src/macos_launch_agent.rs): every change in ~/Library/LaunchAgents makes
+    // macOS re-check Ghostex's background items.
+    ghostex_paths::macos_launch_agent::write_plist_if_changed(&plist_path, &plist)
+        .map_err(|_| LAUNCH_FAILURE.to_string())?;
 
     let job_target = gpui_gxserver_launchd_job_target();
     let domain_target = format!("gui/{}", gpui_current_uid());

@@ -239,6 +239,10 @@ fn main() {
     thread::spawn(gpui_auto_install_ghostex_cli_wrappers);
     // Tunnels a crashed or force-quit Ghostex left running (app/helpers/remote/tunnel_registry.rs).
     thread::spawn(gpui_reap_orphaned_remote_tunnels);
+    // Login Items names Ghostex, not the signing developer, for a gxserver job installed before
+    // 11.1.2 (GitHub #510); never restarts gxserver.
+    #[cfg(target_os = "macos")]
+    thread::spawn(app::helpers::board_gxserver::gpui_name_ghostex_in_gxserver_launch_agent);
     // Only finds the CEF runtime on disk; nothing starts or downloads it here
     // (CDXC:CefRuntime 2026-09-28 in app/helpers/web_runtime.rs).
     // A runtime the user uninstalled (or, on Windows, reinstalled) while it ran is removed first,

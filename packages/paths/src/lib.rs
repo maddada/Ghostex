@@ -8,6 +8,8 @@ use std::{
 pub mod agent_homes;
 pub mod durable_file;
 pub mod loopback_owner;
+#[cfg(target_os = "macos")]
+pub mod macos_launch_agent;
 pub mod portable;
 pub mod powershell;
 pub mod same_folder;
