@@ -255,19 +255,106 @@ pub(crate) fn gpui_start_gxserver_through_bundled_agent(
     steps: &mut Vec<String>,
 ) -> Result<(), String> {
     let started = Instant::now();
-    let mut note = |text: String| {
-        steps.push(format!(
+    let mut own = Vec::new();
+    let result = start_through_bundled_agent(binary, &mut |text: String| {
+        own.push(format!(
             "bundled agent +{}ms: {text}",
             started.elapsed().as_millis()
         ))
-    };
-    let app = match eligible(binary) {
-        Ok(app) => app,
-        Err(reason) => {
-            set_helpers(GpuiBackgroundHelpers::Legacy(reason.clone()));
-            return Err(reason);
+    });
+    steps.extend(own.iter().cloned());
+    match result {
+        Ok(()) => {
+            set_helpers(GpuiBackgroundHelpers::Bundled);
+            Ok(())
         }
-    };
+        Err(failure) => {
+            set_helpers(if failure.needs_approval {
+                GpuiBackgroundHelpers::NeedsApproval
+            } else {
+                GpuiBackgroundHelpers::Legacy(failure.reason.clone())
+            });
+            // Written whatever the debug-log setting, so a fallback on a user's Mac says why.
+            if !failure.expected {
+                support_logs::append(
+                    support_logs::GpuiSupportLog::HostLifecycle,
+                    "gpui.gxserverBootstrap.bundledAgentFailed",
+                    serde_json::json!({ "reason": failure.reason, "steps": own }),
+                );
+            }
+            Err(failure.reason)
+        }
+    }
+}
+
+/// Why the bundled agent did not start gxserver.
+struct BundledFailure {
+    reason: String,
+    needs_approval: bool,
+    /// A separate profile or a build without the plists: nothing went wrong.
+    expected: bool,
+}
+
+impl From<String> for BundledFailure {
+    fn from(reason: String) -> Self {
+        Self {
+            reason,
+            needs_approval: false,
+            expected: false,
+        }
+    }
+}
+
+/// Where the legacy gxserver plist waits while the bundled job starts: out of
+/// ~/Library/LaunchAgents, so nothing can load the legacy job meanwhile.
+fn parked_legacy_plist() -> PathBuf {
+    ghostex_paths::GhostexPaths::resolve()
+        .gxserver_state_dir()
+        .join("legacy-gxserver-launch-agent.plist")
+}
+
+/// Puts a parked legacy plist back, for the fallback.
+fn restore_legacy_plist(note: &mut impl FnMut(String)) {
+    let parked = parked_legacy_plist();
+    let legacy = agents::legacy_plist_path(agents::LEGACY_GXSERVER);
+    if parked.exists() && !legacy.exists() {
+        match std::fs::rename(&parked, &legacy) {
+            Ok(()) => note("legacy plist put back".to_string()),
+            Err(error) => note(format!("could not put the legacy plist back: {error}")),
+        }
+    }
+}
+
+/// The legacy job and plist go, the parked copy too, and the other helpers follow: the bundled
+/// job runs gxserver.
+fn finish_migration(note: &mut impl FnMut(String)) {
+    match agents::remove_legacy_agent(agents::LEGACY_GXSERVER) {
+        Ok(()) => note("legacy gxserver job and plist removed".to_string()),
+        Err(error) => note(format!("could not remove the legacy plist: {error}")),
+    }
+    let _ = std::fs::remove_file(parked_legacy_plist());
+    std::thread::spawn(|| gpui_reconcile_bundled_helpers(None));
+}
+
+/*
+CDXC:BackgroundItems 2026-11-08 WHY: on the user's Mac the first migration lost a race. While the
+app booted out the legacy job, agent hooks in the running sessions called `gxserver start`, which
+found the legacy plist still in ~/Library/LaunchAgents and loaded and started the legacy job again
+(`launchctl print` showed it loaded with runs = 1 seconds after a bootout), so the app fell back.
+The legacy plist is therefore moved out of the folder as soon as the bundled job is registered and
+loaded (that is the "confirmed enabled" point), before the legacy job is booted out; from then on
+`gxserver start` finds the bundled job. It is moved back if the bundled job does not start
+gxserver, and the legacy path below starts it as before.
+*/
+fn start_through_bundled_agent(
+    binary: &Path,
+    note: &mut impl FnMut(String),
+) -> Result<(), BundledFailure> {
+    let app = eligible(binary).map_err(|reason| BundledFailure {
+        reason,
+        needs_approval: false,
+        expected: true,
+    })?;
     let target = format!("gui/{}/{}", gpui_current_uid(), agents::BUNDLED_GXSERVER);
     let before = gpui_inspect_launchd_job(&target)?;
     note(format!("job before start: {}", before.describe()));
@@ -279,32 +366,53 @@ pub(crate) fn gpui_start_gxserver_through_bundled_agent(
                 GpuiLocalGxserverHealthState::Healthy { .. }
             ) {
                 note("its gxserver is running and healthy; leaving it alone".to_string());
-                set_helpers(GpuiBackgroundHelpers::Bundled);
+                finish_migration(note);
                 return Ok(());
             }
             std::thread::sleep(Duration::from_millis(250));
         }
     }
-    if let Err(error) = register(&app, agents::BUNDLED_GXSERVER) {
-        let reason = error.describe();
-        set_helpers(match error {
-            RegisterError::NeedsApproval => GpuiBackgroundHelpers::NeedsApproval,
-            RegisterError::Failed(_) => GpuiBackgroundHelpers::Legacy(reason.clone()),
-        });
-        note(format!("not registered: {reason}"));
-        return Err(reason);
-    }
+    register(&app, agents::BUNDLED_GXSERVER).map_err(|error| BundledFailure {
+        reason: error.describe(),
+        needs_approval: matches!(error, RegisterError::NeedsApproval),
+        expected: false,
+    })?;
+    note("registered and loaded".to_string());
     let program = app.join(agents::BUNDLED_GXSERVER_PROGRAM);
     let mut state = agents::read_bundled_agents_state();
     state.insert(
         "program".to_string(),
         serde_json::Value::String(program.to_string_lossy().into_owned()),
     );
-    if let Err(error) = agents::write_bundled_agents_state(&state) {
-        note(format!("could not record the program: {error}"));
-    }
+    agents::write_bundled_agents_state(&state)
+        .map_err(|error| format!("record the bundled program: {error}"))?;
 
-    // The legacy job may still own the port; it goes before the bundled one starts.
+    let legacy = agents::legacy_plist_path(agents::LEGACY_GXSERVER);
+    if legacy.exists() {
+        let parked = parked_legacy_plist();
+        if let Some(folder) = parked.parent() {
+            let _ = std::fs::create_dir_all(folder);
+        }
+        std::fs::rename(&legacy, &parked)
+            .map_err(|error| format!("move the legacy plist aside: {error}"))?;
+        note("legacy plist moved aside".to_string());
+    }
+    let result = kickstart_bundled_job(&target, note);
+    match result {
+        Ok(pid) => {
+            note(format!("gxserver pid {pid}"));
+            finish_migration(note);
+            Ok(())
+        }
+        Err(reason) => {
+            restore_legacy_plist(note);
+            Err(reason.into())
+        }
+    }
+}
+
+/// Boots out the legacy job (its plist is already aside), then starts the bundled one.
+fn kickstart_bundled_job(target: &str, note: &mut impl FnMut(String)) -> Result<u32, String> {
     let legacy_target = format!("gui/{}/{}", gpui_current_uid(), agents::LEGACY_GXSERVER);
     if gpui_inspect_launchd_job(&legacy_target)?.loaded {
         let bootout = gpui_run_launchctl(&["bootout", &legacy_target]);
@@ -314,39 +422,24 @@ pub(crate) fn gpui_start_gxserver_through_bundled_agent(
         ));
         gpui_wait_for_launchd_job_removal(&legacy_target, Duration::from_secs(12))?;
     }
-
-    let mut pid = None;
     for round in 1..=2u32 {
-        let current = gpui_inspect_launchd_job(&target)?;
-        // A process that did not answer health above is replaced.
+        let current = gpui_inspect_launchd_job(target)?;
+        // A process that did not answer health is replaced.
         let arguments: &[&str] = if current.pid.is_some() {
-            &["kickstart", "-k", &target]
+            &["kickstart", "-k", target]
         } else {
-            &["kickstart", &target]
+            &["kickstart", target]
         };
         let kickstart = gpui_run_launchctl(arguments);
         note(format!(
             "kickstart {round}: {}",
             gpui_describe_launchctl_result(&kickstart)
         ));
-        if let Some(found) = gpui_wait_for_launchd_job_pid(&target, Duration::from_secs(3))? {
-            pid = Some(found);
-            break;
+        if let Some(pid) = gpui_wait_for_launchd_job_pid(target, Duration::from_secs(3))? {
+            return Ok(pid);
         }
     }
-    let Some(pid) = pid else {
-        let reason = "the bundled gxserver job did not start a process".to_string();
-        set_helpers(GpuiBackgroundHelpers::Legacy(reason.clone()));
-        return Err(reason);
-    };
-    note(format!("gxserver pid {pid}"));
-    match agents::remove_legacy_agent(agents::LEGACY_GXSERVER) {
-        Ok(()) => note("legacy gxserver plist removed".to_string()),
-        Err(error) => note(format!("could not remove the legacy plist: {error}")),
-    }
-    set_helpers(GpuiBackgroundHelpers::Bundled);
-    std::thread::spawn(|| gpui_reconcile_bundled_helpers(None));
-    Ok(())
+    Err("the bundled gxserver job did not start a process".to_string())
 }
 
 fn start_server_at_login_setting() -> bool {
