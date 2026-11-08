@@ -117,7 +117,13 @@ async fn read_all(state: &AppState) -> Result<Value, DomainStateError> {
         let paths = paths.clone();
         blocking(move || Ok(retired::old_models_view(&paths))).await?
     };
-    let mut answer = json!({ "oldModels": old_models });
+    // Phones and desktops from before the local engine was retired read these without a guard.
+    let mut answer = json!({
+        "oldModels": old_models,
+        "models": [],
+        "modelsDiskBytes": 0,
+        "localAvailable": false,
+    });
     let object = answer.as_object_mut().expect("a JSON object");
     // Hex is asked on every read: its row says where the user stands even before it is picked.
     let hex_state = {
