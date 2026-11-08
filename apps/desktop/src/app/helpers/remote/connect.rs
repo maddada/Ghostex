@@ -69,7 +69,13 @@ pub(crate) fn gpui_connect_remote_gxserver_platform(
     );
     let uses_easy_connect = config.uses_easy_connect();
     let remote_machine_id = config.remote_machine_id.clone();
-    let result = gpui_connect_remote_gxserver_platform_inner(config, install_approved, progress_tx);
+    let password_saved = config.has_saved_password || config.reuse_ssh_connection;
+    let mut result =
+        gpui_connect_remote_gxserver_platform_inner(config, install_approved, progress_tx);
+    // A refused login with no password saved never had one to send: say so, not that it was wrong.
+    if !password_saved && matches!(result.state, GpuiRemoteGxserverConnectState::AuthFailed) {
+        result.message = GPUI_REMOTE_NO_SAVED_PASSWORD_MESSAGE.to_string();
+    }
     /*
     CDXC:RemotePairing 2026-09-03:
     A failed Easy Connect attempt must not leave its loopback forwarder
@@ -472,6 +478,7 @@ pub(crate) fn gpui_remote_token_read_failure_message(
 pub(crate) const GPUI_REMOTE_PACKAGE_INCOMPLETE_MARKER: &str =
     "__ghostex_remote_package_incomplete__";
 pub(crate) const GPUI_REMOTE_PACKAGE_INCOMPLETE_MESSAGE: &str = "The gxserver package for that machine is incomplete: zmx, ghostex or gxserver is missing or does not run, so the machine was left as it was. Update or reinstall Ghostex on this computer, then reconnect.";
+pub(crate) const GPUI_REMOTE_NO_SAVED_PASSWORD_MESSAGE: &str = "The machine refused the login: no SSH password is saved for it, and it accepted no SSH key from this computer. Enter its SSH password in Settings > Remote > this machine. On Windows, that is the account password, not the Windows Hello PIN.";
 pub(crate) const GPUI_REMOTE_RUNTIME_BROKEN_MESSAGE: &str = "gxserver runs on that machine, but its zmx program is missing or broken, so new sessions cannot start.";
 
 pub(crate) fn gpui_remote_sanitized_process_failure(
