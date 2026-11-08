@@ -121,11 +121,31 @@ pub(crate) fn sidebar_runtime_settings_snapshot_from_shared_settings(
     }
 }
 
+/// CDXC:Settings 2026-11-08 WHY:
+/// The settings poll (every 2 s, `start_project_editor_auto_sleep_policy_polling`) built this on
+/// the main thread each time only to compare it with the last one, and in the user's build that
+/// serialization took a fifth of the main thread while they reproduced "pasting an image takes
+/// ages". A snapshot with the same revision and content hash is the same object, so its JSON is
+/// kept and handed out again.
 pub(crate) fn sidebar_runtime_saved_settings_json(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
 ) -> String {
-    serde_json::to_string(&serde_json::Value::Object(settings.object().clone()))
-        .unwrap_or_else(|_| "{}".to_string())
+    thread_local! {
+        static LAST: std::cell::RefCell<Option<((u64, u64), String)>> =
+            const { std::cell::RefCell::new(None) };
+    }
+    let key = (settings.revision, settings.content_hash);
+    LAST.with_borrow_mut(|last| {
+        if let Some((known, json)) = last.as_ref() {
+            if *known == key {
+                return json.clone();
+            }
+        }
+        let json = serde_json::to_string(&serde_json::Value::Object(settings.object().clone()))
+            .unwrap_or_else(|_| "{}".to_string());
+        *last = Some((key, json.clone()));
+        json
+    })
 }
 
 pub(crate) fn changed_sidebar_runtime_settings_snapshot(
