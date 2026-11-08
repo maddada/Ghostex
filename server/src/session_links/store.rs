@@ -99,6 +99,27 @@ impl StoredSessionLinks {
         self.items.iter().any(|item| item.link.key() == key)
     }
 
+    /// Learns the Linear workspaces the stored ticket URLs name, then gives each Linear ticket
+    /// with no URL the page its team's workspace gives it, so it is kept across restarts
+    /// (CDXC:SessionLinks 2026-11-08 in linear_workspaces.rs). Returns whether the list changed.
+    pub(crate) fn fill_linear_urls(&mut self) -> bool {
+        let stored = self.items.iter().chain(&self.removed_items);
+        for url in stored.filter_map(|item| item.url.as_deref()) {
+            super::remember_linear_workspace(url);
+        }
+        let mut changed = false;
+        for item in self.items.iter_mut().chain(&mut self.removed_items) {
+            if item.url.is_some() {
+                continue;
+            }
+            if let SessionLinkRef::Linear { identifier } = &item.link {
+                item.url = super::linear_issue_url(identifier);
+                changed |= item.url.is_some();
+            }
+        }
+        changed
+    }
+
     /// Adds a link found automatically. Returns whether the list changed: a link already there or
     /// removed by a person is left alone.
     pub(crate) fn add_found(&mut self, link: StoredSessionLink) -> bool {

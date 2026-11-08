@@ -256,6 +256,8 @@ pub(crate) fn run_session_links_refresh_once(
             }
         }
 
+        changed |= stored.fill_linear_urls();
+
         if changed {
             write_session_links(&db, &project_id, &session_id, &stored)?;
         }

@@ -886,11 +886,11 @@ impl Render for SessionLinksList {
         #[cfg(target_arch = "wasm32")]
         let _ = window;
         let links = self.shown_links().unwrap_or_default();
-        // Only links read as open count: one not read yet is neither open nor finished.
+        // CDXC:SessionLinks 2026-11-08 WHY: The count is what Open and Pinned list as not finished, so it agrees with them. Counting only links with a state said "0 open" over "Open 1" for a Linear ticket Ghostex cannot read (no Linear key for its workspace), which is never loading and never gets a state; one still loading waits under Loading and is not counted.
         let open = links
             .items
             .iter()
-            .filter(|item| !item.finished && item.state.is_some())
+            .filter(|item| !item.finished && !item.loading)
             .count();
         let failing = links
             .items

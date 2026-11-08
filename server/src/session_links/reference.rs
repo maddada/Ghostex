@@ -190,16 +190,7 @@ pub(crate) fn parse_github_url(text: &str) -> Option<SessionLinkRef> {
 
 /// A Linear issue URL (`https://linear.app/<workspace>/issue/GHX-142/some-title`).
 pub(crate) fn parse_linear_url(text: &str) -> Option<SessionLinkRef> {
-    let rest = text
-        .trim()
-        .strip_prefix("https://linear.app/")
-        .or_else(|| text.trim().strip_prefix("http://linear.app/"))?;
-    let mut parts = rest.split('/');
-    let _workspace = parts.next()?;
-    if parts.next()? != "issue" {
-        return None;
-    }
-    let identifier = crate::work_mode::normalize_linear_identifier(parts.next()?)?;
+    let (_, identifier) = super::linear_url_parts(text)?;
     Some(SessionLinkRef::Linear { identifier })
 }
 
