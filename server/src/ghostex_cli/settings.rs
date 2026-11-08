@@ -53,6 +53,7 @@ const SETTINGS_MODAL_TABS: &[&str] = &[
     "agents",
     "accounts",
     "secrets",
+    "security",
     "actions",
     "openTargets",
     "hotkeys",

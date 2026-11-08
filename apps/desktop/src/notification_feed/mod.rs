@@ -69,6 +69,9 @@ pub(crate) enum GpuiNotificationFeedKind {
     ResetExpiring,
     /// Ghostex used an expiring banked reset on its own (an account row).
     ResetRedeemed,
+    /// A sensitive action recorded in the security log (server/src/audit/notify.rs): opens
+    /// Settings > Security.
+    Security,
 }
 
 impl GpuiNotificationFeedKind {
@@ -82,6 +85,7 @@ impl GpuiNotificationFeedKind {
             "failed" => Some(Self::Failed),
             "resetExpiring" => Some(Self::ResetExpiring),
             "resetRedeemed" => Some(Self::ResetRedeemed),
+            "security" => Some(Self::Security),
             _ => None,
         }
     }
@@ -96,6 +100,7 @@ impl GpuiNotificationFeedKind {
             Self::Failed => "Failed",
             Self::ResetExpiring => "Reset expiring",
             Self::ResetRedeemed => "Reset used",
+            Self::Security => "Security",
         }
     }
 
@@ -131,6 +136,7 @@ impl GpuiNotificationFeedKind {
             Self::NeedsInput => "titlebar/help-circle.svg",
             Self::Bell => "titlebar/bell.svg",
             Self::Failed => "titlebar/alert-circle.svg",
+            Self::Security => "titlebar/shield-check.svg",
             Self::Custom | Self::SendFailed | Self::ResetExpiring | Self::ResetRedeemed => {
                 "titlebar/info-circle.svg"
             }
@@ -154,6 +160,8 @@ pub(crate) struct GpuiNotificationFeedItem {
     pub(crate) agent_name: Option<String>,
     /// Set on account rows: the saved account the row is about.
     pub(crate) account_id: Option<String>,
+    /// Set on security rows: the security log entry the row announces.
+    pub(crate) security_entry: Option<u64>,
     pub(crate) created_at: String,
     pub(crate) created_at_epoch_secs: Option<i64>,
     pub(crate) read: bool,
@@ -185,6 +193,9 @@ impl GpuiNotificationFeedItem {
             body: text("body").unwrap_or_default(),
             agent_name: text("agentName"),
             account_id: text("accountId"),
+            security_entry: value
+                .get("securityEntry")
+                .and_then(serde_json::Value::as_u64),
             read: value.get("read")?.as_bool()?,
             awaiting_approval: value
                 .get("awaitingApproval")

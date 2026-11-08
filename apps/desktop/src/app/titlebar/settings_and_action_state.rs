@@ -106,6 +106,24 @@ impl GhostexGpuiApp {
     }
 
     /// Settings > Accounts, showing `provider`'s (`claude`, `codex`) accounts when one is named.
+    /// Opens Settings on page `tab` (a `SettingsTabId` id).
+    pub(crate) fn open_gpui_settings_tab(
+        &mut self,
+        tab: &str,
+        window: Option<&mut Window>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let modal = GpuiAppModalKind::Settings;
+        let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
+        let open_message = serde_json::json!({
+            "initialTab": tab,
+            "modal": modal.modal_id(),
+            "type": "open",
+            "latestSidebarStateMessage": sidebar_state_message.clone(),
+        });
+        self.open_gpui_app_modal_window(modal, open_message, sidebar_state_message, window, cx);
+    }
+
     pub(crate) fn open_gpui_settings_accounts_page_for_provider(
         &mut self,
         provider: Option<&str>,

@@ -22,6 +22,7 @@ pub(crate) mod os_integration;
 pub(crate) mod projects;
 pub(crate) mod remote;
 pub(crate) mod secrets;
+pub(crate) mod security;
 pub(crate) mod sync;
 pub(crate) mod theme;
 pub(crate) mod updates;
@@ -70,6 +71,7 @@ pub(crate) fn settings_tab_view(
         SettingsTabId::Autopilot => autopilot::autopilot_tab_view(store, cx),
         SettingsTabId::Collab => collab::collab_tab_view(store, cx),
         SettingsTabId::Secrets => secrets::secrets_tab_view(store, window, cx),
+        SettingsTabId::Security => security::security_tab_view(store, cx),
         SettingsTabId::Workspaces => workspaces::workspaces_tab_view(store, cx),
         SettingsTabId::Connectors => connectors::connectors_tab_view(store, cx),
         SettingsTabId::Dictation => voice_agent::dictation_tab_view(store, window, cx),

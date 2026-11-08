@@ -40,6 +40,8 @@ struct OpenTarget {
     session_id: String,
     /// Set on account rows (banked reset warnings): open the account, not a session.
     account_id: Option<String>,
+    /// Set on security rows: open Settings > Security, not a session.
+    security: bool,
 }
 
 impl OpenTarget {
@@ -50,6 +52,7 @@ impl OpenTarget {
             project_id: item["projectId"].as_str()?.to_string(),
             session_id: item["sessionId"].as_str()?.to_string(),
             account_id: item["accountId"].as_str().map(str::to_string),
+            security: item["securityEntry"].is_u64(),
         })
     }
 
@@ -60,6 +63,7 @@ impl OpenTarget {
             project_id: item.project_id.clone(),
             session_id: item.session_id.clone(),
             account_id: item.account_id.clone(),
+            security: item.security_entry.is_some(),
         }
     }
 }
@@ -240,6 +244,24 @@ impl GhostexGpuiApp {
             "action": "markRead",
             "notificationId": target.notification_id,
         });
+        // A security row opens this computer's Settings > Security; a remote computer's is only
+        // marked read (its log is read on that computer).
+        if target.security {
+            let machine = target.machine;
+            cx.spawn(async move |this, cx| {
+                let marked = update_notification_feed(route, mark_read).await;
+                let _ = this.update(cx, |this, cx| {
+                    if let Some(message) = marked {
+                        this.gx_store_store_notification_feed(machine.clone(), message, cx);
+                    }
+                    if machine.is_local() {
+                        this.open_gpui_settings_tab("security", None, cx);
+                    }
+                });
+            })
+            .detach();
+            return;
+        }
         if let Some(account_id) = target.account_id {
             let machine = target.machine;
             cx.spawn(async move |this, cx| {

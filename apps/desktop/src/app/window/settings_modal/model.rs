@@ -37,6 +37,7 @@ pub(crate) enum SettingsTabId {
     Autopilot,
     Collab,
     Secrets,
+    Security,
     Actions,
     OpenTargets,
     Hotkeys,
@@ -77,7 +78,7 @@ impl SettingsTabId {
     /// (the catalog) at the rail's bottom with the pages that fold under it
     /// ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration, Connectors, Debugging,
     /// the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 29] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 30] = [
         SettingsTabId::Updates,
         SettingsTabId::Chat,
         SettingsTabId::Sidebar,
@@ -94,6 +95,7 @@ impl SettingsTabId {
         SettingsTabId::Autopilot,
         SettingsTabId::Collab,
         SettingsTabId::Secrets,
+        SettingsTabId::Security,
         SettingsTabId::Integrations,
         SettingsTabId::Remote,
         SettingsTabId::Sync,
@@ -148,6 +150,7 @@ impl SettingsTabId {
             | SettingsTabId::Autopilot
             | SettingsTabId::Collab
             | SettingsTabId::Secrets
+            | SettingsTabId::Security
             | SettingsTabId::Integrations
             | SettingsTabId::Remote
             | SettingsTabId::Sync
@@ -205,6 +208,7 @@ impl SettingsTabId {
             SettingsTabId::Autopilot => "autopilot",
             SettingsTabId::Collab => "collab",
             SettingsTabId::Secrets => "secrets",
+            SettingsTabId::Security => "security",
             SettingsTabId::Actions => "actions",
             SettingsTabId::OpenTargets => "openTargets",
             SettingsTabId::Hotkeys => "hotkeys",
@@ -255,6 +259,7 @@ impl SettingsTabId {
             SettingsTabId::Autopilot => "Autopilot",
             SettingsTabId::Collab => "Collab",
             SettingsTabId::Secrets => "Secrets",
+            SettingsTabId::Security => "Security",
             SettingsTabId::Actions => "Actions",
             SettingsTabId::OpenTargets => "Open In",
             SettingsTabId::Hotkeys => "Hotkeys",
@@ -290,6 +295,7 @@ impl SettingsTabId {
             SettingsTabId::Autopilot => "modals/settings/plane.svg",
             SettingsTabId::Collab => "modals/settings/users-group.svg",
             SettingsTabId::Secrets => "modals/settings/key.svg",
+            SettingsTabId::Security => "modals/settings/shield-check.svg",
             SettingsTabId::Actions => "modals/settings/player-play.svg",
             SettingsTabId::OpenTargets => "modals/settings/external-link.svg",
             SettingsTabId::Hotkeys => "modals/settings/keyboard.svg",
