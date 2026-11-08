@@ -167,6 +167,18 @@ fn tone_color(tone: &str) -> Option<u32> {
 }
 
 /// A chip's icon by what it links to.
+/// Whether a board action leaves the board for a chat: a thread's chat, or a question or page
+/// (`jumpToQuestion`, or the question link a card's chip carries).
+fn board_action_jumps(action: &Value) -> bool {
+    match action["type"].as_str() {
+        Some("jumpToQuestion" | "openCoordinatorThread") => true,
+        Some("openMarkdownLink") => action["href"].as_str().is_some_and(|href| {
+            href.starts_with(ghostex_gx_chat_core::transcript::open_questions::QUESTION_LINK_PREFIX)
+        }),
+        _ => false,
+    }
+}
+
 fn chip_icon(kind: &str) -> Option<&'static str> {
     Some(match kind {
         "pr" => "titlebar/git-pull-request.svg",
@@ -1168,8 +1180,7 @@ impl NativeChatView {
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
                     cx.stop_propagation();
-                    this.invoke(open_thread.clone(), cx);
-                    this.close_pill_menu(cx);
+                    this.invoke_board_jump(open_thread.clone(), cx);
                 }))
                 .into_any_element()
         });
@@ -1302,7 +1313,7 @@ impl NativeChatView {
                         this.board.focus = this.board.focus.take().filter(|focus| focus.key != key);
                         this.invoke(toggle.clone(), cx);
                     } else {
-                        this.invoke(command.clone(), cx);
+                        this.invoke_board_jump(command.clone(), cx);
                     }
                 }))
             })
@@ -1828,10 +1839,8 @@ impl NativeChatView {
                         if command["type"] == "insertBoardReference" {
                             this.insert_board_reference(&text(&command, "reference"), cx);
                         } else {
-                            this.invoke(command.clone(), cx);
-                            if command["type"] == "openCoordinatorThread"
-                                || command["type"] == "openMarkdownLink"
-                            {
+                            this.invoke_board_jump(command.clone(), cx);
+                            if command["type"] == "openMarkdownLink" {
                                 this.close_pill_menu(cx);
                             }
                         }
@@ -1840,6 +1849,22 @@ impl NativeChatView {
             }
         }
         Some(panel.into_any_element())
+    }
+
+    /// Runs a board click. One that jumps into a chat (a question or page chip, a card's question
+    /// or page, a thread row that opens its chat) closes the board first, whichever way it is
+    /// showing (docked, the floating card, the columns), so the chat is visible at the target.
+    /// Everything that stays on the board (a drag, Done, the ×, a menu) keeps it open.
+    ///
+    /// CDXC:Coordinators 2026-11-09 DECISION:
+    /// User: "when i click in the board to jump to a question please close the board".
+    fn invoke_board_jump(&mut self, action: Value, cx: &mut Context<Self>) {
+        if board_action_jumps(&action) {
+            self.board.open = false;
+            self.close_pill_menu(cx);
+            cx.notify();
+        }
+        self.invoke(action, cx);
     }
 
     /// A card dropped on group `group`: it moves there (onto Done it is marked done, onto Removed
@@ -2503,7 +2528,7 @@ impl NativeChatView {
                     })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
-                        this.invoke(command.clone(), cx);
+                        this.invoke_board_jump(command.clone(), cx);
                     }))
             })
             .into_any_element()
