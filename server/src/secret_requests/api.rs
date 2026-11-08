@@ -13,7 +13,7 @@ use serde_json::{json, Map, Value};
 
 use super::store::{self, NewSecretRequest, SecretAnswer, SecretRequestError, SecretRequestStatus};
 use crate::domain::{read_domain_rpc_params, DomainStateError};
-use crate::protocol::rpc_success;
+use crate::protocol::{rpc_error, rpc_success};
 use crate::security::{Capability, Principal};
 use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
 
@@ -46,6 +46,35 @@ fn request_error(error: SecretRequestError) -> DomainStateError {
         SecretRequestError::NotFound => DomainStateError::not_found(error.message()),
         SecretRequestError::StoreFailed => DomainStateError::corrupt_state(error.message()),
         other => DomainStateError::bad_request(other.message()),
+    }
+}
+
+fn forbidden(message: &str) -> DomainStateError {
+    DomainStateError {
+        code: "forbidden",
+        message: message.to_string(),
+    }
+}
+
+/*
+CDXC:Secrets 2026-11-08 DECISION:
+Only the session that asks for a secret makes its card and waits for the answer: the caller must be that session's own `gxs_` token (`Principal::Session` with the same project and session). Anyone else (another session, the token file, the owner's devices, connected computers) is refused, so no one can put a card in another session's chat or collect the file its answer was saved to.
+*/
+/// Refuses a caller that is not session `project_id`/`session_id` itself.
+fn require_own_session(
+    caller: &Principal,
+    project_id: &str,
+    session_id: &str,
+) -> Result<(), DomainStateError> {
+    match caller {
+        Principal::Session {
+            project_id: own_project,
+            session_id: own_session,
+            ..
+        } if own_project == project_id && own_session == session_id => Ok(()),
+        _ => Err(forbidden(
+            "A secret request can only be made and waited for by the agent asking, from inside its own session.",
+        )),
     }
 }
 
@@ -106,9 +135,14 @@ fn watch(state: Arc<AppState>, id: String, project_id: String, session_id: Strin
     });
 }
 
-fn create(state: &Arc<AppState>, params: &Map<String, Value>) -> Result<Value, DomainStateError> {
+fn create(
+    state: &Arc<AppState>,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
     let project_id = required(params, "projectId")?;
     let session_id = required(params, "sessionId")?;
+    require_own_session(caller, &project_id, &session_id)?;
     let timeout = params
         .get("timeoutMs")
         .and_then(Value::as_u64)
@@ -132,25 +166,27 @@ fn create(state: &Arc<AppState>, params: &Map<String, Value>) -> Result<Value, D
 
 async fn wait(
     state: &Arc<AppState>,
+    caller: &Principal,
     params: Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     let id = required(&params, "requestId")?;
+    let Some((project_id, session_id)) = store::session_of(&id) else {
+        return Err(request_error(SecretRequestError::NotFound));
+    };
+    require_own_session(caller, &project_id, &session_id)?;
     let wait_for = params
         .get("waitMs")
         .and_then(Value::as_u64)
         .map(Duration::from_millis)
         .unwrap_or(MAX_WAIT)
         .min(MAX_WAIT);
-    let session = store::session_of(&id);
     let waiting_id = id.clone();
     let outcome = tokio::task::spawn_blocking(move || store::wait(&waiting_id, wait_for))
         .await
         .map_err(|_| DomainStateError::corrupt_state("The secret request stopped unexpectedly."))?
         .map_err(request_error)?;
     if outcome.status != SecretRequestStatus::Pending {
-        if let Some((project_id, session_id)) = session {
-            republish(state, &project_id, &session_id);
-        }
+        republish(state, &project_id, &session_id);
     }
     let mut result = json!({ "requestId": id, "status": status_text(outcome.status) });
     if let Some(file) = outcome.file {
@@ -180,12 +216,9 @@ async fn answer(
     params: Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     if !caller.has(Capability::OwnerSecrets) {
-        return Err(DomainStateError {
-            code: "forbidden",
-            message:
-                "Only you can answer a secret request, from Ghostex on your computer or phone."
-                    .to_string(),
-        });
+        return Err(forbidden(
+            "Only you can answer a secret request, from Ghostex on your computer or phone.",
+        ));
     }
     let project_id = required(&params, "projectId")?;
     let session_id = required(&params, "sessionId")?;
@@ -244,8 +277,8 @@ pub(crate) async fn handle_secret_request_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     let result = match endpoint_path.as_str() {
-        "/api/createSecretRequest" => create(state, &params),
-        "/api/waitSecretRequest" => wait(state, params).await,
+        "/api/createSecretRequest" => create(state, caller, &params),
+        "/api/waitSecretRequest" => wait(state, caller, params).await,
         "/api/cancelSecretRequest" => cancel(state, &params),
         "/api/answerSecretRequest" => answer(state, caller, params).await,
         _ => Err(DomainStateError::not_found(
@@ -257,6 +290,11 @@ pub(crate) async fn handle_secret_request_http(
             Some(endpoint_path),
             StatusCode::OK,
             rpc_success(request_id, value),
+        ),
+        Err(error) if error.code == "forbidden" => routed_json(
+            Some(endpoint_path),
+            StatusCode::FORBIDDEN,
+            rpc_error(error.code, error.message, Some(request_id)),
         ),
         Err(error) => domain_error_response(endpoint_path, request_id, error),
     }

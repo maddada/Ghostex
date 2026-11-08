@@ -77,7 +77,9 @@ Secret requests are answered only by the owner: `/api/answerSecretRequest` and
 is an `op://` reference, and `/api/cloudBoxes` `cloudKit` (the provider keys and box logins the
 phone keeps) always (`security_gates.rs`). The answer handler checks it again before it reads
 a reference. Agents, the token file (so also the GPUI web build), connected computers, guests and
-extensions are refused; there is no approval to ask for.
+extensions are refused; there is no approval to ask for. The other way round, only the asking
+session itself (its own `gxs_` token) may create a secret request for its chat
+(`/api/createSecretRequest`) and wait for the answer (`/api/waitSecretRequest`).
 
 `Principal::skips_approval(action)` is the one rule for which sensitive actions a caller skips:
 `AnswerOtherSessionPrompt` with `AnswerAnyPrompt`, `TypeIntoOtherSession` and
