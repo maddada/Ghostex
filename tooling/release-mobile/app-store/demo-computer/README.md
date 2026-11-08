@@ -35,4 +35,4 @@ The seed script gives the demo agents only fictional projects. It deliberately c
 
 In Ghostex on the simulator, choose **Connect a computer**, then the manual **Or type the details** link. The form is labeled **Connect over Tailscale**, but it accepts a plain address. Enter `Work computer`, address `127.0.0.1`, username `demo`, and the local demo password. Open **Advanced**, set **SSH port** to `2222`, and connect. Add a second machine with name `Home computer` and port `2223`. Use the same plain address and username. The Tailscale precheck is informational for this local simulator setup.
 
-These loopback ports work only on this Mac's simulators. For App Review, the same containers need an externally reachable SSH or Easy Connect route and reviewer-specific credentials before giving Apple access.
+These loopback ports work only on this Mac's simulators. App Review uses the in-app demo described in `../README.md` (Try a demo computer). Keep this SSH login on this computer.

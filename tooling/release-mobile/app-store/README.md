@@ -6,7 +6,7 @@ Everything App Store Connect shows for `com.maddada.ghostex.ios`, kept here so a
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `app-store.json`                  | Name, subtitle, URLs, promotional text, keywords, copyright, categories, content rights, release type, age rating answers, screenshot folders |
 | `description.en-US.txt`           | The App Store description                                                                                                                     |
-| `review-notes.txt`                | Notes for App Review; `{{DEMO_ADDRESS}}`, `{{DEMO_USERNAME}}` and `{{DEMO_SSH_PORT}}` are filled from secrets                                 |
+| `review-notes.txt`                | Notes for App Review. The in-app demo steps; no placeholders to fill                                         |
 | `screenshots/iphone-6.9/NN-*.png` | iPhone screenshots, 1320 x 2868, uploaded in file-name order                                                                                  |
 | `screenshots/ipad-13/NN-*.png`    | iPad screenshots, 2064 x 2752 (required while the app supports iPad)                                                                          |
 
@@ -26,22 +26,21 @@ Already set: `APPLE_ASC_ISSUER_ID`, `APPLE_ASC_KEY_ID`, `APPLE_ASC_KEY_BASE64`.
 
 To add (`gh secret set <NAME> -R maddada/Ghostex`):
 
-| Secret                                                              | Value                                                   |
-| ------------------------------------------------------------------- | ------------------------------------------------------- |
-| `APPLE_REVIEW_CONTACT_FIRST_NAME`, `APPLE_REVIEW_CONTACT_LAST_NAME` | Who App Review contacts                                 |
-| `APPLE_REVIEW_CONTACT_PHONE`                                        | Phone with country code, for example `+971 50 123 4567` |
-| `APPLE_REVIEW_CONTACT_EMAIL`                                        | Email App Review writes to                              |
-| `APPLE_REVIEW_DEMO_ADDRESS`                                         | Public address (IP or host name) of the demo computer   |
-| `APPLE_REVIEW_DEMO_USERNAME`, `APPLE_REVIEW_DEMO_PASSWORD`          | SSH login on the demo computer                          |
-| `APPLE_REVIEW_DEMO_SSH_PORT`                                        | Its SSH port (22 when not set)                          |
+| Secret                                                              | Value                                                                                                      |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `APPLE_REVIEW_CONTACT_FIRST_NAME`, `APPLE_REVIEW_CONTACT_LAST_NAME` | Who App Review contacts                                                                                    |
+| `APPLE_REVIEW_CONTACT_PHONE`                                        | Phone with country code, for example `+971 50 123 4567`                                                    |
+| `APPLE_REVIEW_CONTACT_EMAIL`                                        | Email App Review writes to                                                                                 |
+| `APPLE_REVIEW_DEMO_USERNAME`, `APPLE_REVIEW_DEMO_PASSWORD`          | Optional sign-in. Leave unset for the in-app demo                                                         |
+| `APPLE_REVIEW_DEMO_ADDRESS`, `APPLE_REVIEW_DEMO_SSH_PORT`           | Optional. Passed through and ignored. The notes have no SSH placeholders                                  |
 
-The logs of this public repository never print these values. Without them `prepare` leaves App Review Information as it is in App Store Connect, so it can also be typed there by hand.
+The logs of this public repository never print these values. `prepare` writes App Review Information only when all four contact values are set. Without them it leaves App Review Information as it is in App Store Connect, so it can also be typed there by hand. When the demo username or password is unset, that write sets `demoAccountRequired` to false and sends no username or password. A sign-in already stored in App Store Connect stays until you clear it there. Set both secrets only if App Review should show a sign-in. The in-app demo does not use one.
 
-## The demo computer for App Review
+## The demo for App Review
 
-The app shows nothing until it is connected to a computer running Ghostex, and Easy Connect codes expire after 15 minutes, so the reviewer needs a computer that stays online during review and a login that does not expire. Run a small Linux server (any cloud provider) with SSH password login, Ghostex's Linux gxserver and `ghostex` CLI, a few sample projects and agent sessions, and put its address and login in the secrets above. The reviewer connects through **Use Tailscale → Or type the details**, which connects over plain SSH to any address. Keep it running until the app is approved; Apple sometimes checks again days later. Use a throwaway server with nothing private on it, since its login is handed to Apple.
+Reviewers use the demo built into the app. Launch it and tap **Try a demo computer** (or **Connect your computer**, then the **Try a demo computer** card, then **Open demo**). The Sessions list for **Demo computer** opens. The steps are in `review-notes.txt`. The demo runs fully offline, keeps its data in memory, and needs no account, no SSH server, and no network. Remove it from Settings > Demo computer > Remove demo computer.
 
-`demo-computer/` builds that computer as a Docker image (Ghostex's Linux Release backend, sshd with password login, the Atlas API, Side project and Wander travel sample projects) and seeds its agent sessions; its README has the steps. The screenshots were taken against two local copies of it on `127.0.0.1:2222` and `:2223`, which only the simulator can reach. For review, run the same image on a server with a public address, give it a fresh password, and put those in the `APPLE_REVIEW_DEMO_*` secrets. The reviewer gets a shell on that computer and can read any agent login stored there, so never copy a personal `auth.json` onto it (the local seeding step does that only inside the throwaway local containers): give its agent a separate API key with a small spending limit, and revoke the key after review.
+`demo-computer/` builds local Docker containers used to take the App Store screenshots on a simulator (`127.0.0.1:2222` and `:2223`). Its README has the steps. App Review uses the in-app demo. Keep the containers' SSH login on this computer: the local seeding step copies an agent login into those throwaway containers only, and that copy is removed when the seed finishes.
 
 ## One-time steps in App Store Connect (no API)
 

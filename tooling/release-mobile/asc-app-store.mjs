@@ -16,12 +16,14 @@
  * version's release type comes from app-store.json (MANUAL means you press Release).
  *
  * Env: the key env in asc-api.mjs; GHOSTEX_WHATS_NEW (required from the second released version on);
- * GHOSTEX_REVIEW_CONTACT_FIRST_NAME, _LAST_NAME, _PHONE, _EMAIL and GHOSTEX_REVIEW_DEMO_ADDRESS,
- * _USERNAME, _PASSWORD, _SSH_PORT (App Review Information; the demo computer Apple's reviewer uses).
+ * GHOSTEX_REVIEW_CONTACT_FIRST_NAME, _LAST_NAME, _PHONE, _EMAIL (optional; App Review Information is
+ * written only when all four are set). GHOSTEX_REVIEW_DEMO_USERNAME and _PASSWORD are optional; when
+ * either is unset, demoAccountRequired is false and no credentials are sent. GHOSTEX_REVIEW_DEMO_ADDRESS
+ * and _SSH_PORT are accepted and ignored. The notes file has no placeholders.
  *
  * CDXC:Release 2026-10-19 WHY:
  * maddada/Ghostex is public, so its workflow logs are too: this script logs states, counts and
- * whether a field is set, never the review contact, the demo computer or the review notes.
+ * whether a field is set, never the review contact, demo credentials or the review notes.
  * App Privacy, Pricing and Availability and the EU trader (DSA) status have no App Store Connect API,
  * so they stay one-time steps in App Store Connect (tooling/release-mobile/app-store/README.md).
  * Apple refuses "What's New" on an app's first version, so it is only sent once a version is live.
@@ -151,7 +153,14 @@ function loadListing() {
   return listing;
 }
 
-/** App Review Information from the environment, or null for each part that is not configured. */
+/*
+ * CDXC:Release 2026-11-08 DECISION:
+ * User: App Review uses the in-app "Try a demo computer" demo, not an SSH demo server.
+ * GHOSTEX_REVIEW_DEMO_* (APPLE_REVIEW_DEMO_* in the workflow) are optional.
+ * When the username or password is unset, the review detail sets demoAccountRequired to false and sends no demo credentials, and the notes have no SSH placeholders.
+ * Review contact stays optional: write App Review Information only when the contact env is set.
+ * Supersedes the demo-computer sign-in of 2026-10-19.
+ */
 function reviewDetailFromEnv(notesTemplate) {
   const env = process.env;
   const contact = {
@@ -160,34 +169,24 @@ function reviewDetailFromEnv(notesTemplate) {
     contactPhone: env.GHOSTEX_REVIEW_CONTACT_PHONE?.trim(),
     contactEmail: env.GHOSTEX_REVIEW_CONTACT_EMAIL?.trim(),
   };
-  const demo = {
-    address: env.GHOSTEX_REVIEW_DEMO_ADDRESS?.trim(),
-    username: env.GHOSTEX_REVIEW_DEMO_USERNAME?.trim(),
-    password: env.GHOSTEX_REVIEW_DEMO_PASSWORD,
-    sshPort: env.GHOSTEX_REVIEW_DEMO_SSH_PORT?.trim() || '22',
-  };
-  const contactComplete = Object.values(contact).every(Boolean);
-  const demoComplete = Boolean(demo.address && demo.username && demo.password);
-  const notes = demoComplete
-    ? notesTemplate
-        .replaceAll('{{DEMO_ADDRESS}}', demo.address)
-        .replaceAll('{{DEMO_USERNAME}}', demo.username)
-        .replaceAll('{{DEMO_SSH_PORT}}', demo.sshPort)
-    : null;
-  if (notes && notes.length > LIMITS.notes)
+  const notes = notesTemplate.trim();
+  if (notes.length > LIMITS.notes)
     throw new Error(`review notes are ${notes.length} characters; App Store Connect allows ${LIMITS.notes}`);
-  if (notes && /\{\{[A-Z_]+\}\}/.test(notes))
-    throw new Error('review-notes.txt has a placeholder this script does not fill');
-  return {
-    contact: contactComplete ? contact : null,
-    demo: demoComplete
+  if (/\{\{[A-Z_]+\}\}/.test(notes)) throw new Error('review-notes.txt has a placeholder this script does not fill');
+  const username = env.GHOSTEX_REVIEW_DEMO_USERNAME?.trim() ?? '';
+  const password = env.GHOSTEX_REVIEW_DEMO_PASSWORD ?? '';
+  const demo =
+    username && password.trim()
       ? {
           demoAccountRequired: true,
-          demoAccountName: demo.username,
-          demoAccountPassword: demo.password,
+          demoAccountName: username,
+          demoAccountPassword: password,
           notes,
         }
-      : null,
+      : { demoAccountRequired: false, notes };
+  return {
+    contact: Object.values(contact).every(Boolean) ? contact : null,
+    demo,
   };
 }
 
@@ -636,19 +635,17 @@ async function prepareBuild(client, app, version, versionString, buildNumber, ti
 
 async function prepareReviewDetail(client, version, listing, dryRun) {
   const { contact, demo } = reviewDetailFromEnv(listing.notesTemplate);
-  if (!contact) log('App Review contact: GHOSTEX_REVIEW_CONTACT_* not all set; left as it is in App Store Connect');
-  if (!demo)
-    log(
-      'App Review demo computer: GHOSTEX_REVIEW_DEMO_ADDRESS, _USERNAME and _PASSWORD not all set; left as it is in App Store Connect'
-    );
-  const attributes = { ...(contact ?? {}), ...(demo ?? {}) };
-  if (!Object.keys(attributes).length) return;
-  const existing = await requestOrNull(client, 'GET', `/v1/appStoreVersions/${version.id}/appStoreReviewDetail`);
-  const parts = [contact && 'contact', demo && `demo computer and notes (${demo.notes.length} characters)`]
-    .filter(Boolean)
-    .join(', ');
-  log(`App Review Information: ${dryRun ? 'would write' : 'wrote'} ${parts}`);
+  if (!contact) {
+    log('App Review contact: GHOSTEX_REVIEW_CONTACT_* not all set; left as it is in App Store Connect');
+    return;
+  }
+  const signIn = demo.demoAccountRequired ? 'sign-in required' : 'no sign-in';
+  log(
+    `App Review Information: ${dryRun ? 'would write' : 'wrote'} contact, ${signIn}, notes (${demo.notes.length} characters)`
+  );
   if (dryRun) return;
+  const attributes = { ...contact, ...demo };
+  const existing = await requestOrNull(client, 'GET', `/v1/appStoreVersions/${version.id}/appStoreReviewDetail`);
   if (existing?.data)
     await client.request('PATCH', `/v1/appStoreReviewDetails/${existing.data.id}`, {
       data: {
@@ -748,7 +745,8 @@ async function versionProblems(client, app, version, listing) {
   );
   if (!(d.contactFirstName && d.contactLastName && d.contactPhone && d.contactEmail))
     problems.push('App Review contact incomplete');
-  if (!d.demoAccountName || !d.notes) problems.push('App Review sign-in or notes missing');
+  if (!d.notes) problems.push('App Review notes missing');
+  if (d.demoAccountRequired && !d.demoAccountName) problems.push('App Review sign-in missing');
   return problems;
 }
 
@@ -887,16 +885,41 @@ function validateMode() {
     log(
       `Screenshots ${set.displayType}: ${set.files.length} in ${set.dir}${set.files.length ? ` (${set.files[0].width}x${set.files[0].height})` : ''}`
     );
-  const sample = {
-    GHOSTEX_REVIEW_DEMO_ADDRESS: 'demo.example.com',
-    GHOSTEX_REVIEW_DEMO_USERNAME: 'reviewer',
-    GHOSTEX_REVIEW_DEMO_PASSWORD: 'sample',
-  };
-  const saved = Object.fromEntries(Object.keys(sample).map((key) => [key, process.env[key]]));
-  Object.assign(process.env, sample);
+  const demoKeys = [
+    'GHOSTEX_REVIEW_DEMO_ADDRESS',
+    'GHOSTEX_REVIEW_DEMO_USERNAME',
+    'GHOSTEX_REVIEW_DEMO_PASSWORD',
+    'GHOSTEX_REVIEW_DEMO_SSH_PORT',
+  ];
+  const saved = Object.fromEntries(demoKeys.map((key) => [key, process.env[key]]));
   try {
+    for (const key of demoKeys) delete process.env[key];
+    const missing = reviewDetailFromEnv(listing.notesTemplate);
+    for (const key of demoKeys) process.env[key] = '';
+    const blank = reviewDetailFromEnv(listing.notesTemplate);
+    for (const detail of [missing, blank]) {
+      if (detail.demo.demoAccountRequired !== false)
+        throw new Error('unset demo env must set demoAccountRequired to false');
+      if ('demoAccountName' in detail.demo || 'demoAccountPassword' in detail.demo)
+        throw new Error('unset demo env must not send demo credentials');
+    }
+    process.env.GHOSTEX_REVIEW_DEMO_ADDRESS = 'demo.example.com';
+    process.env.GHOSTEX_REVIEW_DEMO_SSH_PORT = '22';
+    process.env.GHOSTEX_REVIEW_DEMO_USERNAME = 'reviewer';
+    process.env.GHOSTEX_REVIEW_DEMO_PASSWORD = '';
+    if (reviewDetailFromEnv(listing.notesTemplate).demo.demoAccountRequired !== false)
+      throw new Error('a demo address without a password must not require a sign-in');
+    process.env.GHOSTEX_REVIEW_DEMO_PASSWORD = 'sample';
+    const complete = reviewDetailFromEnv(listing.notesTemplate);
+    if (
+      complete.demo.demoAccountRequired !== true ||
+      complete.demo.demoAccountName !== 'reviewer' ||
+      complete.demo.demoAccountPassword !== 'sample' ||
+      complete.demo.notes !== missing.demo.notes
+    )
+      throw new Error('demo username and password were not picked up, or they changed the notes');
     log(
-      `review notes: ${reviewDetailFromEnv(listing.notesTemplate).demo.notes.length}/${LIMITS.notes} characters with sample values`
+      `review notes: ${missing.demo.notes.length}/${LIMITS.notes} characters; demo account not required unless username and password are both set`
     );
   } finally {
     for (const [key, value] of Object.entries(saved)) {
