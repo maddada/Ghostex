@@ -15,7 +15,7 @@ fn switch() -> Section {
         "switch",
         "Ghostex Collab",
         vec![
-            row("collabEnabled", "Ghostex Collab", "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write messages you approve. Off by default; turning it on asks for Touch ID (Windows Hello, or your system password on Linux), and so does each share. While it is off nothing can be shared and every link stops working. Share is in each chat's header."),
+            row("collabEnabled", "Ghostex Collab", "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Off by default; while it is off nothing can be shared and every link stops working. Share is in each chat's header."),
             row("collabOwnerName", "Your name", "The name guests see for you (\"Shared by …\", \"Waiting for …\"). Empty uses this computer's user name."),
         ],
     )
@@ -26,8 +26,9 @@ fn new_shares() -> Section {
         "newShares",
         "New shares start with",
         vec![
-            row("collabMode", "Guest messages", "What a guest's message does: Ask me (you approve each one with Touch ID, or Edit or Decline it) or View only. Ask me by default. Send (straight to the agent, labelled with their name) is turned on for one chat in its Share popover, with Touch ID."),
-            row("collabExpiry", "Link ends after", "1 hour (the default), 4 hours or 24 hours, at most. Stop sharing ends a link at once, and deleting the chat ends its link too."),
+            row("collabMode", "Guest messages", "What a guest's message does: Ask me (you approve each one with Send, Edit or Decline), Send (straight to the agent, labelled with their name) or View only. Ask me by default; change it for one chat in its Share popover."),
+            row("collabExpiry", "Link ends after", "1 hour, 24 hours (the default), 7 days, or never. Stop sharing ends a link at once."),
+            row("collabRequireCode", "Ask for a code", "Guests also type the six-digit code shown in the Share popover, so a link alone is not enough. On by default."),
         ],
     )
 }
@@ -36,7 +37,7 @@ fn shared() -> Section {
     section(
         "shared",
         "Shared now",
-        vec![row("collabShares", "Shared chats", "Every chat shared right now, who is watching it and when its link ends, with Stop sharing for each and Stop all. Guests always type the eight-digit code that comes with the link, and you get a notification when one joins.")],
+        vec![row("collabShares", "Shared chats", "Every chat shared right now, how many are watching it and when its link ends, with Stop sharing for each and Stop all.")],
     )
 }
 
