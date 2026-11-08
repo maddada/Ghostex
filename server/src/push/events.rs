@@ -112,6 +112,7 @@ fn enqueue_row_alert(
         .filter(|name| !name.is_empty())
         .map(str::to_string)
         .or_else(|| crate::presentation::read_runtime_text(session, "agentName"))
+        .or_else(|| crate::presentation::custom_agent_display_name(None, session))
         .unwrap_or_else(|| agent_id.trim().to_string());
     state.push.enqueue_alert(AlertEvent {
         kind,

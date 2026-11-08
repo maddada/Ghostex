@@ -67,6 +67,42 @@ pub(crate) fn session_agent_icon(project: Option<&Value>, session: &Value) -> Op
     project_custom_agent_icon(project, &agent_id).or(Some(agent_id))
 }
 
+/// CDXC:AgentProviders 2026-11-08 FIX: User, on the phone's bell showing
+/// "custom-claude-70-dl0rpxbt39e0-…" for a session: "Name of coordinator here looks wrong please fix".
+/// A session of a custom agent kept its `custom-…` id after the agent left Settings > Agents, and
+/// every name fallback (the session's `agentName`, the push title) printed that id. A custom agent is
+/// named by the project's custom agent entry, else by its base agent (the CLI family its launch icon
+/// declares: "Claude"); None for any other agent id, whose callers keep their own fallback.
+pub(crate) fn custom_agent_display_name(
+    project: Option<&Value>,
+    session: &Value,
+) -> Option<String> {
+    let agent_id = string_field(session, "agentId")?;
+    let agent_id = agent_id.trim();
+    if !agent_id.starts_with("custom-") {
+        return None;
+    }
+    project
+        .and_then(|project| project.get("customAgents"))
+        .and_then(Value::as_array)
+        .and_then(|agents| {
+            agents.iter().find(|agent| {
+                agent
+                    .get("agentId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|candidate| candidate.trim().eq_ignore_ascii_case(agent_id))
+            })
+        })
+        .and_then(|agent| string_field(agent, "name"))
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .or_else(|| {
+            let icon = session_agent_icon(project, session)?;
+            let base = crate::agents::default_agent_icon_to_id(&icon)?;
+            crate::sidebar_hud::default_agent_name(base).map(str::to_string)
+        })
+}
+
 pub(crate) fn project_custom_agent_icon(project: Option<&Value>, agent_id: &str) -> Option<String> {
     project
         .and_then(|project| project.get("customAgents"))

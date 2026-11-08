@@ -271,6 +271,7 @@ pub(crate) fn project_presentation_session(
         &mut output,
         "agentName",
         read_runtime_text(session, "agentName")
+            .or_else(|| custom_agent_display_name(Some(project), session))
             .or_else(|| string_field(session, "agentId"))
             .filter(|value| !value.is_empty()),
     );
