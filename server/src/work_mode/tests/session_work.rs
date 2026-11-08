@@ -105,6 +105,10 @@ fn a_linear_branch_links_its_ticket_and_the_card_shows_its_linear_project() {
 
 #[test]
 fn hand_set_linear_and_github_links_publish_what_is_known_about_each() {
+    // Linear URLs teach gxserver each team's workspace process-wide (session_links/linear_workspaces.rs), and other
+    // tests in this run read ACM tickets, so learn ACM's workspace here too: the result is then the same whichever
+    // tests ran first, and a ticket known only by its ID gets its page from it.
+    crate::session_links::remember_linear_workspace("https://linear.app/acme/issue/ACM-12");
     let (project, session) = linear_session(
         "Manual",
         "/gx-char/session/linear-manual",
@@ -224,6 +228,7 @@ fn hand_set_linear_and_github_links_publish_what_is_known_about_each() {
               "source": "user",
               "sourceLabel": "You added",
               "identifier": "ACM-14",
+              "url": "https://linear.app/acme/issue/ACM-14",
               "loading": true
             },
             {
@@ -235,6 +240,7 @@ fn hand_set_linear_and_github_links_publish_what_is_known_about_each() {
               "identifier": "ACM-13",
               "state": "notFound",
               "stateName": "Not found",
+              "url": "https://linear.app/acme/issue/ACM-13",
               "finished": true
             }
           ]
