@@ -1,0 +1,1 @@
+../../../../../desktop/src/app/window/settings_modal/palette.rs

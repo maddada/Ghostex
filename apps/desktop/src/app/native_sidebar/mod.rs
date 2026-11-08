@@ -14,6 +14,7 @@ mod disclosure;
 pub(crate) mod drag;
 mod drag_source;
 mod empty;
+pub(crate) mod gbots_rows;
 mod host;
 pub(crate) mod hover_actions;
 pub(crate) mod icons;

@@ -436,10 +436,17 @@ impl Turn {
             .blocks
             .iter()
             .any(|block| matches!(block, SessionChatBlock::ImageRef { .. }));
+        // A command's card line (`ghostex gbots create`'s "GBot added", gx-protocol chat_card.rs)
+        // is drawn out of the fold like a sent message, so its row stays in view like one.
+        let chat_card = message.blocks.iter().any(|block| {
+            matches!(block, SessionChatBlock::ToolResult { output, .. }
+                if output.contains(ghostex_gx_protocol::chat_card::CHAT_CARD_MARKER))
+        });
         let keep = preserve
             || final_reply
             || question
             || sent_message
+            || chat_card
             || visible
             || (reply && asks_questions(&message))
             || message

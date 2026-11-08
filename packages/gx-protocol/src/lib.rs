@@ -20,6 +20,8 @@ pub mod agentbox;
 /// Signed approvals for sensitive actions (GitHub #495); used module-qualified.
 pub mod approval;
 pub mod chat;
+/// Cards a `ghostex` command prints for the chat to draw; used module-qualified.
+pub mod chat_card;
 pub mod client_message;
 /// Cloud Boxes; used module-qualified (`cloud_box::CloudBox`), not glob re-exported, because its
 /// param names (`ListParams`, `BoxParams`) are generic.

@@ -313,6 +313,8 @@ impl GhostexGpuiApp {
                                                     .iter()
                                                     .find(|group| group.group_id == item.id)
                                                     .filter(|group| !session_groups.nests(group))
+                                                    // A GBot is drawn inside Main Hub's group (gbots_rows.rs).
+                                                    .filter(|group| group.gbot().is_none())
                                                     .map(|group| {
                                                         // CDXC:Spaces 2026-10-06 WHY: padding, not a margin, so this block's measured bounds (where a press is a row's and not the empty list space that starts a Space drag) cover the project header's box, which reaches left over its chevron; as a margin, a click on the chevron armed the Space drag and showed the grabbing hand.
                                                         div()

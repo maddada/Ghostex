@@ -54,6 +54,8 @@ pub struct SidebarView {
     /// The selected remote machine is not connected, so the list says why above whatever it still
     /// holds (`machines::machine_notice`). Absent for this computer and a connected machine.
     pub machine_notice: Option<MachineNotice>,
+    /// Main Hub's GBots section (`gbots.rs`): at most one, under the drawn home group.
+    pub gbots: Vec<super::gbots::GbotsSectionView>,
     /// Chief's rows (`chief.rs`): the selected machine's, or with computers combined this
     /// computer's first and then each other computer's. Drawn under the Spaces bar whether or
     /// not the Chief extension is on; the host leaves them out while it is off.
@@ -311,6 +313,9 @@ pub struct ProjectContextView {
     pub work_tracker_github: bool,
     /// The home project: its header is Main Hub's row (`SidebarView::home_headers`).
     pub is_home: bool,
+    /// The GBot whose folder this project is: the group is drawn as that bot's row in Main Hub's
+    /// GBots section (`SidebarView::gbots`), never as a project.
+    pub gbot: Option<ghostex_gx_protocol::presentation::PresentationGbotsBot>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -642,6 +647,9 @@ pub struct SessionRow {
     /// A computer's Chief of Staff (gxserver's `isChief`): pinned first in its group, ahead of
     /// every other pinned row (ordering.rs `sort_pinned`).
     pub is_chief: bool,
+    /// A GBot chat Chief of Staff opened (gxserver's `gbotsChat.openedBy`): its row carries a small
+    /// "Chief" tag under the bot (apps/desktop/src/app/native_sidebar/gbots_rows.rs).
+    pub opened_by_chief: bool,
     /// gxserver's `sidebarOrder`: the manual place the Project sidebar gives the row among its
     /// project's rows (and the order of its Pinned), which the Unified sidebar's pinned cards
     /// follow too (unified_sidebar/build.rs). `None` when the row has none.

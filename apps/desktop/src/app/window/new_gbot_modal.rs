@@ -1,4 +1,5 @@
-//! Native GPUI New bot dialog: a GBot's name, its instructions and the agent it runs on.
+//! Native GPUI New GBot dialog: a GBot's name, its role, its instructions and the agent it runs
+//! on. Its look (icon and colour) and the rest are set in GBot Settings afterwards.
 //!
 //! CDXC:GBots 2026-11-06 DECISION:
 //! User (via coordinator): "creating a bot (name, instructions, agent)", the agent being the user's own Claude Code or Codex. The agent is a segmented pick (the shared control), Claude Code first.
@@ -14,18 +15,20 @@ use gpui_component::v_flex;
 use std::rc::Rc;
 
 pub(crate) const NEW_GBOT_MODAL_WIDTH: f32 = 540.0;
-pub(crate) const NEW_GBOT_MODAL_INITIAL_HEIGHT: f32 = 520.0;
+pub(crate) const NEW_GBOT_MODAL_INITIAL_HEIGHT: f32 = 590.0;
 
-const TITLE: &str = "New bot";
-const DESCRIPTION: &str = "A bot that runs on your own agent. It can start and steer agent sessions on any of your computers.";
+const TITLE: &str = "New GBot";
+const DESCRIPTION: &str = "A GBot keeps its name, instructions and memory in every chat. It runs on your own agent and sits under Chief of Staff in Main Hub.";
 const FIELD_NAME: &str = "Name";
-const NAME_PLACEHOLDER: &str = "e.g. Release Captain";
+const NAME_PLACEHOLDER: &str = "e.g. Researcher";
+const FIELD_ROLE: &str = "Role";
+const ROLE_PLACEHOLDER: &str = "e.g. Finds and compares options";
 const FIELD_INSTRUCTIONS: &str = "Instructions";
 const INSTRUCTIONS_PLACEHOLDER: &str =
-    "What this bot does, e.g. Keep an eye on my release threads and nudge any that get stuck.";
+    "What this GBot does, e.g. Compare flights and hotels and bring me a short list with prices.";
 const FIELD_AGENT: &str = "Runs on";
 const CANCEL: &str = "Cancel";
-const CREATE: &str = "Create bot";
+const CREATE: &str = "Create GBot";
 
 /// The agents a bot runs on: gxserver's id and the label.
 const AGENTS: [(&str, &str); 2] = [("claude", "Claude Code"), ("codex", "Codex")];
@@ -33,6 +36,7 @@ const AGENTS: [(&str, &str); 2] = [("claude", "Claude Code"), ("codex", "Codex")
 pub(crate) enum NewGbotModalCommand {
     Create {
         name: String,
+        title: String,
         instructions: String,
         agent: String,
     },
@@ -49,6 +53,7 @@ pub(crate) struct GpuiNewGbotModalWindow {
     host: NewGbotModalHost,
     palette: ModalPalette,
     name_input: Entity<InputState>,
+    title_input: Entity<InputState>,
     instructions_input: Entity<TextareaState>,
     name: String,
     agent: usize,
@@ -65,6 +70,7 @@ impl GpuiNewGbotModalWindow {
         cx: &mut Context<Self>,
     ) -> Self {
         let name_input = cx.new(|cx| InputState::new(window, cx).placeholder(NAME_PLACEHOLDER));
+        let title_input = cx.new(|cx| InputState::new(window, cx).placeholder(ROLE_PLACEHOLDER));
         let instructions_input =
             cx.new(|cx| TextareaState::new(window, cx).placeholder(INSTRUCTIONS_PLACEHOLDER));
         let name_subscription = cx.subscribe_in(
@@ -82,6 +88,7 @@ impl GpuiNewGbotModalWindow {
             host,
             palette: config.palette,
             name_input,
+            title_input,
             instructions_input,
             name: String::new(),
             agent: 0,
@@ -110,11 +117,13 @@ impl GpuiNewGbotModalWindow {
         if name.is_empty() {
             return;
         }
+        let title = self.title_input.read(cx).value().trim().to_string();
         let instructions = self.instructions_input.read(cx).value().trim().to_string();
         let agent = AGENTS[self.agent.min(AGENTS.len() - 1)].0.to_string();
         self.close_window_and_send(
             NewGbotModalCommand::Create {
                 name,
+                title,
                 instructions,
                 agent,
             },
@@ -123,10 +132,15 @@ impl GpuiNewGbotModalWindow {
         );
     }
 
-    /// Enter in the name field creates; in the instructions it is a new line, and Cmd/Ctrl+Enter
+    /// Enter in the name or role field creates; in the instructions it is a new line, and Cmd/Ctrl+Enter
     /// creates.
     fn on_enter_action(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
-        let in_name = self.name_input.read(cx).focus_handle(cx).is_focused(window);
+        let in_name = self.name_input.read(cx).focus_handle(cx).is_focused(window)
+            || self
+                .title_input
+                .read(cx)
+                .focus_handle(cx)
+                .is_focused(window);
         if !action.secondary && !in_name {
             cx.propagate();
             return;
@@ -167,6 +181,12 @@ impl GpuiNewGbotModalWindow {
                     .gap(px(8.0))
                     .child(modal_section_title(&p, FIELD_NAME))
                     .child(modal_text_input(&p, &self.name_input, false, window, cx)),
+            )
+            .child(
+                v_flex()
+                    .gap(px(8.0))
+                    .child(modal_section_title(&p, FIELD_ROLE))
+                    .child(modal_text_input(&p, &self.title_input, false, window, cx)),
             )
             .child(
                 v_flex()

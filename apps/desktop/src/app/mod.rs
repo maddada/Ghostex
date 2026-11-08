@@ -18,6 +18,7 @@ pub(crate) mod core;
 pub(crate) mod element;
 pub(crate) mod extensions;
 pub(crate) mod ffi;
+pub(crate) mod gbot_settings_modal_lifecycle;
 pub(crate) mod helpers;
 pub(crate) mod hotkeys;
 pub(crate) mod model;

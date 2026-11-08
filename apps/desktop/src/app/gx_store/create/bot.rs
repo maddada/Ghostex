@@ -70,32 +70,54 @@ impl GhostexGpuiApp {
 }
 
 impl GhostexGpuiApp {
-    /// Makes a GBot (`/api/gbots` op `create`). Its row arrives through the presentation like any
-    /// added project, so nothing waits on the answer but a failure, which shows as a toast.
+    /// Makes a GBot (`/api/gbots` op `create`). Its row arrives under Chief of Staff through the
+    /// presentation like any added project, so nothing waits on the answer but a failure, which
+    /// shows as a toast with gxserver's sentence.
     pub(crate) fn gx_store_create_gbot(
         &mut self,
         name: String,
+        title: String,
         instructions: String,
         agent: String,
         cx: &mut gpui::Context<Self>,
     ) {
+        let params = json!({
+            "op": "create",
+            "name": name,
+            "title": title,
+            "soul": instructions,
+            "agentId": agent,
+        });
         cx.spawn(async move |this, cx| {
-            let created = gx_rpc(
-                None,
-                "/api/gbots",
-                json!({
-                    "op": "create",
-                    "name": name,
-                    "instructions": instructions,
-                    "agent": agent,
-                }),
-            )
-            .await;
+            #[allow(unused_mut)]
+            let mut created = gx_rpc(None, "/api/gbots", params.clone()).await;
+            // Adding a GBot asks for the owner's approval (server/src/server/security_gates.rs):
+            // Touch ID shows while the call is out; when it wasn't used the phone may still
+            // approve, and the repeated call then adds it.
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(id) = created
+                .as_ref()
+                .err()
+                .and_then(|error| error.approval_required())
+                .and_then(|approval| approval["id"].as_str())
+                .map(str::to_string)
+            {
+                created = match crate::app::window::collab_share::wait_for_approval(id.clone())
+                    .await
+                {
+                    Ok(()) => {
+                        let mut again = params;
+                        again["approvalId"] = json!(id);
+                        gx_rpc(None, "/api/gbots", again).await
+                    }
+                    Err(message) => Err(super::super::GxRpcError::transport("/api/gbots", message)),
+                };
+            }
             if let Err(error) = created {
                 let _ = this.update(cx, |this, cx| {
                     this.gx_store_create_toast(
                         "warning",
-                        "Bot not created",
+                        "GBot not created",
                         Some(&error.message),
                         cx,
                     );

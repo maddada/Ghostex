@@ -346,6 +346,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             }]
         }
         ActionKind::LoadPageThumbnail => crate::transcript::page_thumbnails::load(state, action),
+        ActionKind::GbotCard => crate::transcript::gbot_cards::act(state, action),
         ActionKind::LoadImage => {
             /*
             The picture behind an "[Image #N](path)" reference lives on the session's machine, so the

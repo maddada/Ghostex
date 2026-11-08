@@ -49,8 +49,18 @@ impl GhostexGpuiApp {
         let scale = appearance.scale;
         // CDXC:Sidebar 2026-09-24 DECISION:
         // User: don't show the Sessions label under a project or worktree when it's the only label there (no pinned, drafts or parked sessions). Superseded 2026-10-04: it no longer comes back while a session is dragged, because a drag must never change the sidebar's layout.
+        // Main Hub's GBots, drawn after its Pinned section (Chief of Staff) and before its loose
+        // sessions (native_sidebar/gbots_rows.rs).
+        let snapshot = self.native_sidebar.snapshot.clone();
+        let mut gbots = snapshot
+            .as_deref()
+            .and_then(|snapshot| self.render_native_gbots_section(group, snapshot, appearance, cx));
+        let gbots_after = group
+            .sections
+            .iter()
+            .position(|section| section.id == "pinned");
         let hide_lone_sessions_heading =
-            matches!(group.sections.as_slice(), [only] if only.id == "sessions");
+            gbots.is_none() && matches!(group.sections.as_slice(), [only] if only.id == "sessions");
         let body = self
             .native_sidebar
             .disclosures
@@ -61,6 +71,9 @@ impl GhostexGpuiApp {
                     .pb(px(3.0 * scale))
                     // Main Hub before Chief of Staff's first open: its row's place (chief.rs).
                     .children(self.render_native_sidebar_chief_placeholder(group, appearance, cx))
+                    .when(gbots_after.is_none(), |column| {
+                        column.children(gbots.take())
+                    })
                     .when(
                         group.sessions.is_empty() && group.project_context.is_some(),
                         |column| {
@@ -134,6 +147,9 @@ impl GhostexGpuiApp {
                                 )
                             })
                             .children(body)
+                            .when(gbots_after == Some(index), |column| {
+                                column.children(gbots.take())
+                            })
                             .into_any_element()
                     }));
                 self.render_native_project_fold(

@@ -172,6 +172,45 @@ pub(crate) fn create_bot_chat(
     opened_by: &str,
     task: Option<&str>,
 ) -> Result<(Value, bool), DomainStateError> {
+    create_bot_chat_with(
+        state,
+        db,
+        repository,
+        bot,
+        &ChatOpening {
+            opened_by,
+            task,
+            ..ChatOpening::default()
+        },
+    )
+}
+
+/// How a chat is opened: by whom, with what first task, and (for work handed over with
+/// `ghostex gbots ask`, assign.rs) who it reports to.
+#[derive(Default)]
+pub(crate) struct ChatOpening<'a> {
+    pub opened_by: &'a str,
+    pub task: Option<&'a str>,
+    /// `runtimeSettings.gbot.purpose`; `task` or `chat` from `task` when unset.
+    pub purpose: Option<&'a str>,
+    /// The sender's chat (`projectId:sessionId`, or `user`) for chats `ask` opens.
+    pub from: Option<&'a str>,
+    /// The sender's standing chat with this bot (`ask --chat standing`).
+    pub standing: bool,
+    /// Linked as this coordinator's thread (its project and session ids) with this task before its
+    /// agent starts, so the supervisor sees its first turn from the beginning.
+    pub link: Option<(&'a str, &'a str, &'a str)>,
+}
+
+/// [`create_bot_chat`] with every option.
+pub(crate) fn create_bot_chat_with(
+    state: &AppState,
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    bot: &Bot,
+    opening: &ChatOpening<'_>,
+) -> Result<(Value, bool), DomainStateError> {
+    let (opened_by, task) = (opening.opened_by, opening.task);
     let agent_rows = bot_agent_rows(repository)?;
     check_agent(&agent_rows, &bot.agent_id)?;
     let project = super::project::bot_project(repository, bot)?.ok_or_else(|| {
@@ -222,14 +261,20 @@ pub(crate) fn create_bot_chat(
         .get_mut("runtimeSettings")
         .and_then(Value::as_object_mut)
     {
-        runtime.insert(
-            CHAT_KEY.to_string(),
-            json!({
-                "botId": bot.bot_id,
-                "openedBy": opened_by,
-                "purpose": if task.is_some() { "task" } else { "chat" },
-            }),
-        );
+        let mut record = json!({
+            "botId": bot.bot_id,
+            "openedBy": opened_by,
+            "purpose": opening
+                .purpose
+                .unwrap_or(if task.is_some() { "task" } else { "chat" }),
+        });
+        if let Some(from) = opening.from {
+            record["from"] = json!(from);
+        }
+        if opening.standing {
+            record["standing"] = json!(true);
+        }
+        runtime.insert(CHAT_KEY.to_string(), record);
     }
     apply_approval(&mut params, &bot.approval, family);
     let params = prepare_coordinator_create_params(&params)?;
@@ -242,6 +287,16 @@ pub(crate) fn create_bot_chat(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    if let Some((coordinator_project, coordinator_session, thread_task)) = opening.link {
+        crate::coordinators::link_thread(
+            db,
+            &project_id,
+            &session_id,
+            coordinator_project,
+            coordinator_session,
+            thread_task,
+        )?;
+    }
     if let Some(family) = family {
         // The session exists: a skill that would not install or a message that would not queue is
         // reported by the chat, not a reason to leave a session nobody started.

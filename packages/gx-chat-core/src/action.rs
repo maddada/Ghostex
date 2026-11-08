@@ -149,6 +149,7 @@ action_kinds! {
     InsertSkill => "insertSkill",
     LoadImage => "loadImage",
     LoadPageThumbnail => "loadPageThumbnail",
+    GbotCard => "gbotCard",
 
     // Sending.
     Send => "send",

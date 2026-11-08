@@ -273,6 +273,7 @@ mod tests {
                 work: vec![Arc::new(work)],
                 questions: vec![],
                 sent_messages: vec![],
+                gbot_cards: vec![],
                 workflows: vec![],
                 artifacts: vec![],
                 final_message: Some(message("f", vec![], "done")),

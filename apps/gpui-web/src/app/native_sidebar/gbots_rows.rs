@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_sidebar/gbots_rows.rs

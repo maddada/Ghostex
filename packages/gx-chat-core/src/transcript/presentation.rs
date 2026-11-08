@@ -323,6 +323,15 @@ pub fn project_message(
                 .collect(),
         ),
     );
+    // The "GBot added" cards this message's commands printed (`gbot_cards.rs`), drawn after its
+    // tool rows; only present when there are some.
+    let gbot_cards: Vec<Value> = tool_pairs
+        .iter()
+        .flat_map(crate::transcript::gbot_cards::gbot_cards)
+        .collect();
+    if !gbot_cards.is_empty() {
+        projected.insert("gbotCards".to_string(), Value::Array(gbot_cards));
+    }
     projected.insert(
         "images".to_string(),
         Value::Array(images.iter().map(image_source).collect()),
@@ -1335,6 +1344,20 @@ fn turn_items(
                             match builder
                                 .message_or_placeholder(row, eager, Draw::Read)
                                 .get("sentMessages")
+                                .cloned()
+                            {
+                                Some(Value::Array(cards)) => cards,
+                                _ => Vec::new(),
+                            }
+                        })
+                        .collect(),
+                    /* The folded rows' "GBot added" cards, hoisted like the sent messages. */
+                    gbot_cards: collapsed_work
+                        .iter()
+                        .flat_map(|row| {
+                            match builder
+                                .message_or_placeholder(row, eager, Draw::Read)
+                                .get("gbotCards")
                                 .cloned()
                             {
                                 Some(Value::Array(cards)) => cards,

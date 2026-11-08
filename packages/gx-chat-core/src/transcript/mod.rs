@@ -20,6 +20,7 @@ pub mod file_paths;
 pub mod file_position;
 pub mod files_links;
 pub mod foreign;
+pub mod gbot_cards;
 pub mod image_markers;
 pub mod images;
 pub mod inline_answers;

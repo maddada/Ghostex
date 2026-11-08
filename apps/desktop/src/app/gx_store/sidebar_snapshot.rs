@@ -439,6 +439,7 @@ pub(super) fn snapshot_from_view(
             .map(crate::app::native_sidebar::chief::native_home)
             .collect(),
         machines_with_home: view.machines_with_home.clone(),
+        gbots: view.gbots.clone(),
         // The two hotkey labels are the hotkey settings formatted for the current platform, which
         // the list re-reads whenever the settings file's content hash moves.
         search_shortcut: input.search_shortcut.clone(),
@@ -645,6 +646,13 @@ fn project_context(group: &GroupView) -> Option<Value> {
         object.insert(
             "botGatewayRunning".to_string(),
             Value::Bool(context.bot_gateway_running),
+        );
+    }
+    // A GBot's look, which Main Hub's GBots section draws its row from (native_sidebar/gbots_rows.rs).
+    if let Some(gbot) = &context.gbot {
+        object.insert(
+            "gbot".to_string(),
+            serde_json::to_value(gbot).unwrap_or(Value::Null),
         );
     }
     // The Work view and the sidebar's briefcase show while any project has Work mode on
@@ -901,6 +909,10 @@ fn build_session(
         "isGeneratingFirstPromptTitle".to_string(),
         Value::Bool(row.is_generating_first_prompt_title),
     );
+    // A GBot chat Chief of Staff opened: the row's "Chief" tag (native_sidebar/gbots_rows.rs).
+    if row.opened_by_chief {
+        details.insert("openedByChief".to_string(), Value::Bool(true));
+    }
     // The coordinator tree (gx-core `RowNesting`), drawn by native_sidebar/threads.rs.
     if row.is_coordinator {
         details.insert("isCoordinator".to_string(), Value::Bool(true));

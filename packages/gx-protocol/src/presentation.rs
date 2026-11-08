@@ -244,6 +244,10 @@ pub struct PresentationProject {
     /// under Chief of Staff in Main Hub, never in the projects list or the Bots space.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gbots_bot: Option<PresentationGbotsBot>,
+    /// The project is a GBot's folder, published whether GBots are on or off: clients never list
+    /// it as a project (with GBots off nothing of the bot shows).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub gbots_project: bool,
     /// Issues Workflow (formerly Work mode) is on for this project: a Linear key applies to it, `gh`
     /// is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs).
     /// Present only when true.

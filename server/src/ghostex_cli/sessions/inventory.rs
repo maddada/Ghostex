@@ -189,19 +189,26 @@ pub fn fetch_live_gxserver_session_list_for(
         "gitRepositoryRootPath",
     );
     // CDXC:WorkMode 2026-10-24 WHY: whether Issues Workflow is on for a project, its Linear and GitHub parts and its primary tracker are worked out from what gxserver's background passes keep in memory (its Linear key, `gh auth status`), which this separate process does not have, so they are folded in from the snapshot; the phone picks its Link to rows from them.
-    let project_work_fields: Vec<(&str, HashMap<String, &Value>)> =
-        ["workMode", "workLinear", "workGithubOff", "workTracker"]
-            .into_iter()
-            .map(|field| {
-                (
-                    field,
-                    presentation_project_field_map(
-                        snapshot.and_then(|snapshot| snapshot.get("projects")),
-                        field,
-                    ),
-                )
-            })
-            .collect();
+    // CDXC:GBots 2026-11-09 WHY: a GBot's look (`gbotsBot`) and the mark that its project is a GBot's folder (`gbotsProject`) come from gxserver's copy of the bots and its GBots switch state, which this process does not hold, so they are folded in the same way; the phone draws GBots under Chief of Staff and keeps their projects out of its projects list from them.
+    let project_work_fields: Vec<(&str, HashMap<String, &Value>)> = [
+        "workMode",
+        "workLinear",
+        "workGithubOff",
+        "workTracker",
+        "gbotsBot",
+        "gbotsProject",
+    ]
+    .into_iter()
+    .map(|field| {
+        (
+            field,
+            presentation_project_field_map(
+                snapshot.and_then(|snapshot| snapshot.get("projects")),
+                field,
+            ),
+        )
+    })
+    .collect();
     result.insert(
         "projects".to_string(),
         Value::Array(

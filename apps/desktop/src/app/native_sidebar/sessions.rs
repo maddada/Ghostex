@@ -268,6 +268,7 @@ impl GhostexGpuiApp {
                 // CDXC:Sidebar 2026-10-29 DECISION: User: "please swap the order of these 2 things (the threads one for orchestrator with the link tag)". The links badge comes before a coordinator's workers badge; the phone's SessionRow.tsx follows.
                 .when(!buttons_shown, |row| row.children(self.render_native_session_links_badge(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::coordinator_badge(session, appearance)))
+                .when(!buttons_shown, |row| row.children(super::gbots_rows::opened_by_chief_tag(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::worktree_badge(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::computer_badge(session, appearance)))
                 .when(!buttons_shown, |row| row.children(self.render_voice_call_badge(&session.session_id, appearance)))

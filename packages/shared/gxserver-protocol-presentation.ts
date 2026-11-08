@@ -164,6 +164,8 @@ export interface GxserverPresentationProject {
     isLead?: true;
     paused?: true;
   };
+  /** The project is a GBot's folder (published whether GBots are on or off); clients never list it as a project. */
+  gbotsProject?: true;
   /** Issues Workflow (formerly Work mode) is on for this project: a Linear key applies, `gh` is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs); present only when true. */
   workMode?: true;
   /** Issues Workflow is on and a Linear key applies to this project; present only when true. */

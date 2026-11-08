@@ -351,7 +351,7 @@ fn computer_gate(
 
 /*
 CDXC:GBots 2026-11-08 DECISION:
-User (Q2103 A): Chief of Staff adds a GBot on its own and tells you in one card, so its adds ask nobody. Your own computer, phone and terminal still ask before a bot is added (the previous GBots' rule, kept by M0). Other agents may not add bots at all (Q-D A): `/api/gbots` refuses them with one sentence, so they are not asked for here; neither is anyone while GBots are off or for a name `/api/gbots` refuses, which it answers instead.
+User (Q2103 A): Chief of Staff adds a GBot on its own and tells you in one card, so its adds ask nobody, unless you turned off "Chief of Staff may add GBots on its own" (`gbotsChiefAddsOnItsOwn`, Settings > Agents), when each of its adds asks you first. Your own computer, phone and terminal still ask before a bot is added (the previous GBots' rule, kept by M0). Other agents may not add bots at all (Q-D A): `/api/gbots` refuses them with one sentence, so they are not asked for here; neither is anyone while GBots are off or for a name `/api/gbots` refuses, which it answers instead.
 */
 fn gbots_add_action(
     state: &AppState,
@@ -361,7 +361,7 @@ fn gbots_add_action(
     let user = matches!(
         caller,
         Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent
-    );
+    ) || (caller.is_head() && !crate::gbots::chief_adds_on_its_own(&state.paths));
     let name = text(params, "name").unwrap_or_default();
     // A name `/api/gbots` refuses anyway is never worth the user's approval.
     if !user || !crate::gbots::gbots_on(&state.paths) || crate::gbots::name_problem(name).is_some()

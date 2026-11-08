@@ -27,6 +27,9 @@ impl GhostexGpuiApp {
         } else if action.command["type"] == "chief" {
             // Chief's row and menu (native_sidebar/chief.rs).
             self.run_native_sidebar_chief_command(&action.command, window, cx);
+        } else if action.command["type"] == "gbots" {
+            // Main Hub's GBots rows and menus (native_sidebar/gbots_rows.rs).
+            self.run_native_sidebar_gbots_command(&action.command, window, cx);
         } else if action.command["type"] == "openNotifications" {
             // The sidebar menu carries Notifications only while the bell is out of the row, so the
             // dropdown hangs from the menu button instead of the bell's last painted spot.

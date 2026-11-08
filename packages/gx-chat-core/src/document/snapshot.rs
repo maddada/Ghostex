@@ -107,6 +107,10 @@ pub struct Document {
     /// (`transcript/workflow_card.rs`); a tool row's `workflow` names its card. Family b.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub workflow_cards: BTreeMap<String, Value>,
+    /// What can change on each "GBot added" card, by change id (`transcript/gbot_cards.rs`); a
+    /// card with no entry here asks for one with `gbotCard` `op: load`. Family b.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub gbot_card_states: BTreeMap<String, Value>,
 
     // ---- composer ---------------------------------------------------------
     pub queue: Queue,

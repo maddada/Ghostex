@@ -57,6 +57,9 @@ pub(crate) struct ProjectContextInput {
     pub(crate) work_tracker_github: bool,
     /// The home project (`PresentationProject::is_home`), drawn under Main Hub's row.
     pub(crate) is_home: bool,
+    /// The GBot this project is the folder of (`PresentationProject::gbots_bot`), drawn as the
+    /// bot's row in Main Hub's GBots section (gbots.rs).
+    pub(crate) gbot: Option<ghostex_gx_protocol::presentation::PresentationGbotsBot>,
 }
 
 /// Who is focused right now, in the vocabulary the rows compare against.
@@ -283,6 +286,7 @@ fn project_context_view(project: &ProjectContextInput) -> ProjectContextView {
         work_github: project.work_github,
         work_tracker_github: project.work_tracker_github,
         is_home: project.is_home,
+        gbot: project.gbot.clone(),
     }
 }
 

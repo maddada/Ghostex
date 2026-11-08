@@ -11,6 +11,11 @@
 //! | `remove` | `bot` | you, Chief of Staff |
 //! | `newChat` | `bot`, `task?` | you, Chief of Staff |
 //! | `closeChat` | `chat` (a session ref) | you; Chief of Staff for the chats it opened |
+//! | `ask` | `bot`, `task`, `consult?`, `chat?` (`new`, `standing` or a ref), `doneWhen?`; or `rework` (an assignment id) and `task` | you, Chief of Staff, GBots and other coordinators (assign.rs says who may hand work) |
+//! | `assignments` | `all?` | the caller's own; `all` for you and Chief of Staff |
+//! | `changes` | | anyone here |
+//! | `change` | `change` | anyone here (the "GBot added" card reads it) |
+//! | `undo` | `change` | you; Chief of Staff for its own changes |
 //!
 //! Every op is refused while GBots are off (feature.rs). An approval level above `ask` is set from
 //! your own computer or phone only.
@@ -223,8 +228,74 @@ fn run(
             }))
         }
         "closeChat" => close_chat(state, &db, &repository, asker, required(params, "chat")?),
+        "ask" => {
+            let sender = super::assign::Sender::of(
+                &db,
+                caller_session(caller),
+                asker.is_user(),
+                asker == Asker::Chief,
+            )?;
+            super::assign::ask(state, &db, &repository, sender, params)
+        }
+        "assignments" => {
+            let all = params.get("all").and_then(Value::as_bool) == Some(true);
+            let sender = super::assign::Sender::of(
+                &db,
+                caller_session(caller),
+                asker.is_user(),
+                asker == Asker::Chief,
+            )
+            .ok();
+            super::assign::assignments(&db, sender.as_ref(), all && asker.may_manage())
+        }
+        "changes" => {
+            let changes = super::changes::list_changes(&db, 50)?
+                .iter()
+                .map(|change| super::changes::change_summary(&db, change))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(json!({ "changes": changes }))
+        }
+        "change" => {
+            let change = require_change(&db, required(params, "change")?)?;
+            Ok(json!({ "change": super::changes::change_summary(&db, &change)? }))
+        }
+        "undo" => {
+            let change = require_change(&db, required(params, "change")?)?;
+            let allowed = asker.is_user() || (asker == Asker::Chief && change.by == "chief");
+            if !allowed {
+                return Err(forbidden(if asker == Asker::Chief {
+                    "Chief of Staff undoes only the changes it made; the user undoes the rest."
+                } else {
+                    "Only you and Chief of Staff undo a change to GBots."
+                }));
+            }
+            super::changes::undo(
+                &db,
+                &change,
+                |bot_id| remove(state, &db, &repository, asker, bot_id),
+                |before| {
+                    let mut restore = Map::new();
+                    restore.insert("bot".into(), json!(before.bot_id));
+                    for (key, value) in [
+                        ("name", json!(before.name)),
+                        ("title", json!(before.title)),
+                        ("description", json!(before.description)),
+                        ("soul", json!(before.soul)),
+                        ("icon", json!(before.icon)),
+                        ("color", json!(before.color)),
+                        ("agentId", json!(before.agent_id)),
+                        ("model", json!(before.model)),
+                        ("effort", json!(before.effort)),
+                        ("approval", json!(before.approval)),
+                    ] {
+                        restore.insert(key.into(), value);
+                    }
+                    edit(state, &db, &repository, asker, &restore)
+                },
+            )
+        }
         other => Err(DomainStateError::bad_request(format!(
-            "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat or closeChat."
+            "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat, closeChat, ask, assignments, changes, change or undo."
         ))),
     }
 }
@@ -280,6 +351,29 @@ fn chats(
         .map(|session| super::session::chat_summary(&state.metadata.server_id, session))
         .collect();
     Ok(json!({ "bot": bot_summary(bot), "chats": chats }))
+}
+
+/// The project and session of a caller that is a session.
+fn caller_session(caller: &Principal) -> Option<(&str, &str)> {
+    match caller {
+        Principal::Session {
+            project_id,
+            session_id,
+            ..
+        } => Some((project_id.as_str(), session_id.as_str())),
+        _ => None,
+    }
+}
+
+fn require_change(
+    db: &Connection,
+    change_id: &str,
+) -> Result<super::changes::Change, DomainStateError> {
+    super::changes::read_change(db, change_id)?.ok_or_else(|| {
+        DomainStateError::not_found(format!(
+            "There is no GBots change {change_id}. `ghostex gbots changes` lists them."
+        ))
+    })
 }
 
 /// The bot a caller's own session is a chat of.
@@ -354,6 +448,9 @@ fn create(
         return Err(DomainStateError::bad_request("Give the GBot a name."));
     }
     check_approval(asker, &fields)?;
+    if asker == Asker::Chief {
+        super::changes::check_chief_add_caps(db)?;
+    }
     let others = list_bots(db)?;
     if others.len() >= MAX_BOTS {
         return Err(DomainStateError {
@@ -426,7 +523,12 @@ fn create(
     super::brief::refresh_all_instruction_files(&state.paths, db);
     let mut summary = bot_summary(&bot);
     summary["folder"] = json!(folder);
-    Ok(json!({ "bot": summary, "changeId": change_id }))
+    let mut answer = json!({ "bot": summary, "changeId": change_id });
+    // Chief of Staff's adds are told to the user in one card in its chat (card.rs).
+    if asker == Asker::Chief {
+        answer["chatCard"] = super::card::gbot_added_card(&change_id, &bot);
+    }
+    Ok(answer)
 }
 
 fn edit(
@@ -539,7 +641,7 @@ fn remove(
 
 /// `(projectId, sessionId)` of a chat ref: `S…:P…:G…`, `P…:G…`, or a bare session id looked up
 /// among the bots' projects.
-fn chat_key(
+pub(super) fn chat_key(
     db: &Connection,
     repository: &DomainRepository<'_>,
     reference: &str,

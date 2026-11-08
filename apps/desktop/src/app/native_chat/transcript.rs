@@ -747,6 +747,12 @@ impl NativeChatView {
             card_above = true;
         }
         if !self.in_work_fold
+            && let Some(cards) = self.gbot_cards(list(message, "gbotCards"), p, cx)
+        {
+            row = row.child(div().mt(card_gap(card_above)).child(cards));
+            card_above = true;
+        }
+        if !self.in_work_fold
             && let Some(cards) = self.workflow_cards(list(message, "workflows"), p, cx)
         {
             row = row.child(div().mt(card_gap(card_above)).child(cards));

@@ -27,6 +27,8 @@ const ACCEPT_ALL: &str = "agentAcceptAllEnabled";
 const TRUST_PROJECT_FOLDERS: &str = "trustProjectFoldersAutomatically";
 const SHOW_ON_ALL_SPACES: &str = "chiefShowOnAllSpaces";
 const CONFIRM_NEW_CHAT: &str = "chiefConfirmNewChat";
+/// Whether Chief of Staff adds GBots without asking (server/src/server/security_gates.rs).
+const CHIEF_ADDS_GBOTS: &str = "gbotsChiefAddsOnItsOwn";
 const HOME_SECRET_FOLDERS: &str = "homeSecretFolders";
 /// How the agent a project's new-session button starts is remembered (gx-core `agent_choice.rs`).
 const NEW_SESSION_AGENT_SCOPE: &str = "newSessionAgentScope";
@@ -347,6 +349,23 @@ impl AgentsTab {
                     "Ask before New Chat or Change Agent starts a new chat with Chief of Staff. Your earlier chats stay in Main Hub either way.",
                 ),
                 values.bool(CONFIRM_NEW_CHAT),
+                cx,
+            ));
+        }
+        // Shown while GBots are on (they need Main Hub, checked above).
+        let gbots_on = ghostex_settings_catalog::built_in_extensions::on_with(
+            ghostex_settings_catalog::built_in_extensions::GBOTS,
+            |key| values.value(key).as_bool(),
+        );
+        if gbots_on && should_show_setting(&section, CHIEF_ADDS_GBOTS, None) {
+            rows.push(toggle_field(
+                self,
+                p,
+                CHIEF_ADDS_GBOTS,
+                RowSpec::new("Chief of Staff may add GBots on its own").description(
+                    "Chief of Staff adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one.",
+                ),
+                values.bool(CHIEF_ADDS_GBOTS),
                 cx,
             ));
         }

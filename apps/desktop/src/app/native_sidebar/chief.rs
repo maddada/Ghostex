@@ -409,6 +409,10 @@ impl GhostexGpuiApp {
         if chief_on() && self.native_sidebar_chief_of(machine_id).is_none() {
             items.push(json!({ "label": format!("Start {}", super::chief_row_view::CHIEF_LABEL), "icon": "plus", "command": chief_command("open", machine_id) }));
         }
+        // The first GBot has no GBots heading to add it from yet (native_sidebar/gbots_rows.rs).
+        if machine_id == ghostex_gx_core::LOCAL_MACHINE_ID && super::gbots_rows::gbots_on() {
+            items.push(json!({ "label": "New GBot…", "icon": "robot", "command": { "type": "gbots", "op": "newGbot" } }));
+        }
         // The settings are this computer's; another computer's home is drawn in its own entry
         // only when this one has none.
         if machine_id == ghostex_gx_core::LOCAL_MACHINE_ID {

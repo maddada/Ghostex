@@ -49,6 +49,10 @@ pub(crate) struct NativeSidebarSnapshot {
     /// The machines whose Chief is a home header; the others keep the row under the Spaces bar.
     #[serde(skip)]
     pub(crate) machines_with_home: Vec<String>,
+    /// Main Hub's GBots section (gx-core `SidebarView::gbots`), drawn inside the home group
+    /// (native_sidebar/gbots_rows.rs).
+    #[serde(skip)]
+    pub(crate) gbots: Vec<ghostex_gx_core::GbotsSectionView>,
     pub(crate) search_shortcut: Option<String>,
     pub(crate) commands_shortcut: Option<String>,
 }

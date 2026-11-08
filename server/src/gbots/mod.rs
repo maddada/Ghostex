@@ -11,13 +11,21 @@
 //! - [`presentation`]: `gbotsBot` on the project row, `gbotsChat` on each chat.
 //! - [`feature`]: on only while Main Hub and the GBots switch are both on; [`sweep`] keeps that
 //!   current and puts bot chats to sleep when GBots go off.
+//! - [`assign`]: `ghostex gbots ask`, work handed to a bot or a question asked of it, reported back
+//!   the coordinator-thread way; [`assignments`] is its table.
+//! - [`changes`]: the change journal read back, Undo, Chief of Staff's caps; [`card`]: the "GBot
+//!   added" card.
 //! - [`endpoint`]: `/api/gbots`.
 //! - [`retire`]: the one-time removal of the previous GBots; [`trash`]: folders to the Trash.
 //!
 //! CDXC:GBots 2026-11-08 DECISION:
 //! User: remove the previous GBots fully, "we are doing our own bots thing." The previous GBots, a downloaded runtime gxserver ran beside itself, is gone with its runtime download, transcript mirror, chat agent, Bots space source and settings; its bots and chats are not imported. Native GBots keep the name, the extension switch (`gbotsEnabled`), the `ghostex gbots` command and the `/api/gbots` route. Existing computers lose the old bots once, in retire.rs.
 
+mod assign;
+mod assignments;
 mod brief;
+mod card;
+mod changes;
 mod endpoint;
 mod feature;
 mod folder;
@@ -29,8 +37,11 @@ mod session;
 mod sweep;
 mod trash;
 
+pub(crate) use assign::{
+    report_heading as assignment_report_heading, settle_report as settle_assignment_report,
+};
 pub(crate) use endpoint::{handle_gbots_http, GBOTS_ENDPOINT};
-pub(crate) use feature::{gbots_off_message, gbots_on, gbots_shown};
+pub(crate) use feature::{chief_adds_on_its_own, gbots_off_message, gbots_on, gbots_shown};
 pub(crate) use presentation::{
     insert_gbots_project_presentation, insert_gbots_session_presentation,
 };

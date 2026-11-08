@@ -92,6 +92,10 @@ pub enum TranscriptItem {
         /// Cards for the messages the turn's work sent other agents, hoisted out of the fold.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         sent_messages: Vec<Value>,
+        /// "GBot added" cards the folded rows' commands printed, hoisted out of the fold
+        /// (`transcript/gbot_cards.rs`).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        gbot_cards: Vec<Value>,
         /// The Workflow call ids of the folded rows, whose cards (`workflowCards`) are drawn
         /// outside the fold, hoisted like the sent messages.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

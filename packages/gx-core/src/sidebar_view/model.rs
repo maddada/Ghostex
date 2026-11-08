@@ -592,6 +592,7 @@ impl SidebarViewModel {
             // Bots belong to no workspace; every other project shows in its workspace's windows.
             if let (Some(workspace), Some(loaded)) = (&window_workspace, loaded) {
                 if meta.bot_profile(project_id).is_none()
+                    && !meta.is_gbot(project_id)
                     && !workspace.shows_project(loaded, project_id)
                 {
                     continue;
@@ -1233,6 +1234,7 @@ pub(super) fn project_context(
             && project.work_tracker.as_deref() == Some("github"),
         work_tracker_github: project.work_tracker.as_deref() == Some("github"),
         is_home: project.is_home,
+        gbot: project.gbots_bot.clone(),
     })
 }
 

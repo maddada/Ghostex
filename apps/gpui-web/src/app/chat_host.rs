@@ -125,6 +125,23 @@ impl GhostexGpuiApp {
                     }
                 }
             }
+            // A "GBot added" card's Open settings (native_chat/gbot_card.rs): the bot's GBot
+            // Settings window on the chat's own computer, as the desktop's host_actions.rs does.
+            Some("openGbotSettings") => {
+                let bot_id = message["botId"]
+                    .as_str()
+                    .or_else(|| message["params"]["botId"].as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                if !bot_id.is_empty() {
+                    let machine = session
+                        .machine
+                        .remote_id()
+                        .unwrap_or(ghostex_gx_core::LOCAL_MACHINE_ID)
+                        .to_string();
+                    self.open_gpui_gbot_settings_modal(bot_id, machine, cx);
+                }
+            }
             // A command in a reply: a new terminal in the session's folder that runs it (or only
             // types it, for Paste), the desktop's `run_session_chat_command_in_terminal`.
             Some(action @ ("runInTerminal" | "pasteInTerminal")) => {

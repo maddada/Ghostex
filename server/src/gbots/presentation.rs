@@ -1,8 +1,8 @@
-//! What GBots add to the sidebar presentation every client draws: `gbotsBot` on a bot's project
-//! row (its look and place) and `gbotsChat` on each of its chats (its bot and who opened it),
-//! both only while GBots are on. Building a presentation never reads the database: the project
-//! rows read a copy of the bots kept here, refreshed whenever a bot is added, edited or removed
-//! and at gxserver start (sweep.rs).
+//! What GBots add to the sidebar presentation every client draws: `gbotsProject` on a bot's
+//! project row (always), `gbotsBot` on it (its look and place) and `gbotsChat` on each of its
+//! chats (its bot and who opened it), those two only while GBots are on. Building a presentation
+//! never reads the database: the project rows read a copy of the bots kept here, refreshed
+//! whenever a bot is added, edited or removed and at gxserver start (sweep.rs).
 //!
 //! CDXC:GBots 2026-11-08 WHY:
 //! A new field rather than the previous GBots' `botKind: "gbots"` / `botProfile`, so a client from before the previous GBots was removed, on another computer, never draws a native GBot as one of those (plan risk 9). Clients that don't know `gbotsBot` yet draw the bot's project as an ordinary project.
@@ -75,11 +75,15 @@ fn presented_bot(bot_id: &str) -> Option<Value> {
         .and_then(|map| map.get(bot_id).cloned())
 }
 
-/// Adds `gbotsBot` to a project row of a bot's project.
+/// Adds `gbotsProject` to a bot's project row, and `gbotsBot` while GBots are on.
+///
+/// CDXC:GBots 2026-11-09 WHY:
+/// `gbotsProject` is published whether GBots are on or off, so a client keeps a GBot's folder out of the projects list in both cases: while GBots are off their chats sleep and nothing of them shows, rather than each bot turning into a plain project.
 pub(crate) fn insert_gbots_project_presentation(project: &Value, output: &mut Map<String, Value>) {
     let Some(bot_id) = gbots_bot_id(project) else {
         return;
     };
+    output.insert("gbotsProject".to_string(), Value::Bool(true));
     if !super::gbots_shown() {
         return;
     }

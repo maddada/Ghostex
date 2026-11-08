@@ -266,6 +266,13 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
                         if crate::chief::is_home_project(project) && crate::chief::chief_shown() {
                             project_map.insert("isHome".to_string(), json!(true));
                         }
+                        // A GBot's project: its look while GBots are on, and always the mark that keeps it out of the projects list (server/src/gbots/presentation.rs).
+                        insert_present(&mut project_map, "gbotsBot", project.get("gbotsBot"));
+                        insert_present(
+                            &mut project_map,
+                            "gbotsProject",
+                            project.get("gbotsProject"),
+                        );
                         // The Unified list names a project by its repository, so one repository on two computers is one project (packages/gx-core/src/unified_sidebar/repo.rs).
                         insert_present(
                             &mut project_map,
@@ -832,6 +839,8 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     // The same second-whitelist trap for Chief's flag (cli_session.rs).
     insert_js(&mut map, "isChief", &[s("isChief")]);
     insert_js(&mut map, "chiefEarlier", &[s("chiefEarlier")]);
+    // The same trap for a GBot chat's bot and opener (server/src/gbots/presentation.rs).
+    insert_js(&mut map, "gbotsChat", &[s("gbotsChat")]);
     insert_js(
         &mut map,
         "coordinatorProjectId",

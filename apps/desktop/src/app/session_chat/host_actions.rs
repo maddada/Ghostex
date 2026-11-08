@@ -538,6 +538,23 @@ impl GhostexGpuiApp {
             );
             return;
         }
+        // A "GBot added" card's Open settings (native_chat/gbot_card.rs): the bot's GBot Settings
+        // window, on the chat's own computer.
+        if action == "openGbotSettings" {
+            if let Some(bot_id) = message
+                .get("botId")
+                .and_then(serde_json::Value::as_str)
+                .filter(|bot_id| !bot_id.is_empty())
+            {
+                let machine_id = message
+                    .get("machineId")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(ghostex_gx_core::LOCAL_MACHINE_ID)
+                    .to_string();
+                self.open_gpui_gbot_settings_modal(bot_id.to_string(), machine_id, cx);
+            }
+            return;
+        }
         // A command in a reply goes to a terminal of the Commands panel, run or only typed
         // (`run_in_terminal.rs`).
         if action == "runInTerminal" || action == "pasteInTerminal" {

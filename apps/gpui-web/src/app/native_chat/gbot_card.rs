@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_chat/gbot_card.rs

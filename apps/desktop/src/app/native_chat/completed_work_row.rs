@@ -65,6 +65,7 @@ impl NativeChatView {
             work,
             questions,
             sent_messages,
+            gbot_cards,
             workflows,
             artifacts,
             final_message,
@@ -162,6 +163,9 @@ impl NativeChatView {
             tail.push((cards, true));
         }
         if let Some(cards) = self.sent_agent_message_cards(sent_messages, p, cx) {
+            tail.push((cards, true));
+        }
+        if let Some(cards) = self.gbot_cards(gbot_cards, p, cx) {
             tail.push((cards, true));
         }
         if let Some(cards) = self.workflow_cards(workflows, p, cx) {

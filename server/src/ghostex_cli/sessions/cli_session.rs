@@ -217,6 +217,8 @@ pub(super) fn to_cli_session(
     // CDXC:Chief 2026-11-08 WHY: the phone draws Chief's row from this flag and leaves the session out of its project (apps/mobile/app ChiefRow).
     insert_js(&mut map, "isChief", &[p("isChief")]);
     insert_js(&mut map, "chiefEarlier", &[p("chiefEarlier")]);
+    // A GBot chat's bot and who opened it; the phone folds it under its bot (apps/mobile/app GbotsRows).
+    insert_js(&mut map, "gbotsChat", &[p("gbotsChat")]);
     insert_js(&mut map, "mainHubHidden", &[p("mainHubHidden")]);
     insert_js(
         &mut map,

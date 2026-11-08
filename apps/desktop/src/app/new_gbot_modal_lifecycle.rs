@@ -1,12 +1,11 @@
-//! Open and create for the native New bot dialog (GBots). Nothing opens it until native GBots
-//! give it a place under Chief of Staff in Main Hub.
+//! Open and create for the native New GBot dialog, opened from Main Hub's GBots heading
+//! (native_sidebar/gbots_rows.rs).
 //! SEE-ALSO: apps/desktop/src/app/window/new_gbot_modal.rs (the window), apps/desktop/src/app/gx_store/create/bot.rs (`gx_store_create_gbot`).
 use crate::app::window::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    /// Opens the New bot dialog.
-    #[allow(dead_code)]
+    /// Opens the New GBot dialog.
     pub(crate) fn open_gpui_new_gbot_modal(&mut self, cx: &mut gpui::Context<Self>) {
         let config = NewGbotModalConfig {
             palette: self.gpui_native_dialog_palette(),
@@ -14,11 +13,12 @@ impl GhostexGpuiApp {
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             if let NewGbotModalCommand::Create {
                 name,
+                title,
                 instructions,
                 agent,
             } = command
             {
-                app.gx_store_create_gbot(name, instructions, agent, cx);
+                app.gx_store_create_gbot(name, title, instructions, agent, cx);
             }
             app.release_native_app_modal_window(GpuiAppModalKind::NewGbot, cx);
         });

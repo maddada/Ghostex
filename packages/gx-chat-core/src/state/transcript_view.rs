@@ -142,6 +142,10 @@ pub struct TranscriptViewState {
     pub page_thumbnail_requests: BTreeMap<u64, String>,
     /// How many times in a row each page's picture was asked for and not there yet.
     pub page_thumbnail_attempts: BTreeMap<String, u32>,
+    /// The "GBot added" cards' live state, by change id ([`crate::transcript::gbot_cards`]).
+    pub gbot_cards: BTreeMap<String, crate::transcript::gbot_cards::GbotCardEntry>,
+    /// The `/api/gbots` calls those cards made, by request id, with the change asked about.
+    pub gbot_card_requests: BTreeMap<u64, String>,
     /// The summary mode the write in flight will adopt once it lands.
     pub pending_summary_mode: Option<bool>,
     /// The verbose override the write in flight will adopt once it lands.
@@ -278,6 +282,8 @@ impl Default for TranscriptViewState {
             picture_digests_revision: 0,
             page_thumbnail_requests: BTreeMap::new(),
             page_thumbnail_attempts: BTreeMap::new(),
+            gbot_cards: BTreeMap::new(),
+            gbot_card_requests: BTreeMap::new(),
             pending_summary_mode: None,
             pending_verbose_override: None,
             pending_simple_override: None,

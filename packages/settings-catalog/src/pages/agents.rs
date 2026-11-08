@@ -33,6 +33,7 @@ pub(crate) fn home_folder() -> Section {
         vec![
             row("chiefShowOnAllSpaces", "Show Main Hub on all Spaces", "Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to."),
             row("chiefConfirmNewChat", "Ask before New Chat", "Ask before New Chat or Change Agent starts a new chat with Chief of Staff. Your earlier chats stay in Main Hub either way."),
+            row("gbotsChiefAddsOnItsOwn", "Chief of Staff may add GBots on its own", "With GBots on, Chief of Staff adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one. Only you can change this, not an agent."),
             row("homeSecretFolders", "Folders agents can't read in your home folder", "Agents Ghostex starts in your home folder are kept out of these folders and files. Claude Code's file tools and every Codex command are held to the list; Claude's shell commands and other agents are not."),
         ],
     )

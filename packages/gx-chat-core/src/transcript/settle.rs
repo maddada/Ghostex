@@ -25,6 +25,11 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
     {
         match crate::transcript::page_thumbnails::settle_rpc(state, *request_id, outcome.as_ref()) {
             Some(answer) => effects.extend(answer),
+            None if crate::transcript::gbot_cards::settle_rpc(
+                state,
+                *request_id,
+                outcome.as_ref(),
+            ) => {}
             None => effects.extend(crate::transcript::actions::settle_rpc(
                 state,
                 *request_id,

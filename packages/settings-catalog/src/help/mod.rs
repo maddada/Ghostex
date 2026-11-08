@@ -149,6 +149,7 @@ const USER_ONLY_KEYS: &[&str] = &[
     "customDefaultEditorCommand",
     "terminalClipboardPasteProtection",
     "botAutomationsHidden",
+    "gbotsChiefAddsOnItsOwn",
 ];
 
 fn number_range(key: &str) -> Option<NumberRange> {

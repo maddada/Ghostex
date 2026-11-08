@@ -91,6 +91,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.withdrawn_pages = crate::transcript::open_questions::withdrawn_pages(&askers);
     into.deferred_work = view.deferred_work.clone();
     into.workflow_cards = crate::transcript::workflow_card::workflow_cards(state, context).0;
+    into.gbot_card_states = crate::transcript::gbot_cards::card_states(state);
     into.api_error_card = crate::transcript::api_errors::api_error_card(state, context);
     /*
     The user rail's own actions. `rewindAvailable` is React's `rewindToMessage` gate (a host that can

@@ -1145,6 +1145,23 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                     Some(note) => format!("{body}\n\n{note}"),
                     None => body,
                 };
+                // A GBot's chat working on work handed to it says whose report it is ("Researcher
+                // reports on A12"), server/src/gbots/assign.rs.
+                let (heading_state, heading_key) = (state.clone(), report.thread.key());
+                let heading = tokio::task::spawn_blocking(move || {
+                    crate::gbots::assignment_report_heading(
+                        &heading_state,
+                        &heading_key.0,
+                        &heading_key.1,
+                    )
+                })
+                .await
+                .ok()
+                .flatten();
+                let body = match heading {
+                    Some(heading) => format!("{heading}\n\n{body}"),
+                    None => body,
+                };
                 (body, Some(message.unwrap_or_default()))
             }
             ReportKind::Waiting { summary, .. } => (
@@ -1266,15 +1283,30 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                     ReportKind::Undelivered { sent_at, .. } => Some(sent_at.clone()),
                     _ => None,
                 };
-                let _ = tokio::task::spawn_blocking(move || match undelivered_sent_at {
-                    Some(sent_at) => settle_undelivered(&settle_state, &thread, &sent_at),
-                    None => settle_report(
-                        &settle_state,
-                        &thread,
-                        finished_text.as_deref(),
-                        kind_key.as_deref(),
-                        closed,
-                    ),
+                let gbots_finished = match &report.kind {
+                    ReportKind::Finished { cut_off: false } => Some(true),
+                    ReportKind::Closed => Some(false),
+                    _ => None,
+                };
+                let _ = tokio::task::spawn_blocking(move || {
+                    match undelivered_sent_at {
+                        Some(sent_at) => settle_undelivered(&settle_state, &thread, &sent_at),
+                        None => settle_report(
+                            &settle_state,
+                            &thread,
+                            finished_text.as_deref(),
+                            kind_key.as_deref(),
+                            closed,
+                        ),
+                    }
+                    if let Some(finished) = gbots_finished {
+                        crate::gbots::settle_assignment_report(
+                            &settle_state,
+                            &thread.project_id,
+                            &thread.session_id,
+                            finished,
+                        );
+                    }
                 })
                 .await;
             }

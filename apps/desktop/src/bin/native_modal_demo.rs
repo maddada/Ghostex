@@ -84,6 +84,10 @@ mod delete_worktree_demo;
 mod delete_worktree_modal;
 #[path = "native_modal_demo/extension_menu.rs"]
 mod extension_menu_demo;
+#[path = "native_modal_demo/gbot_settings.rs"]
+mod gbot_settings_demo;
+#[path = "../app/window/gbot_settings_modal/mod.rs"]
+mod gbot_settings_modal;
 #[path = "native_modal_demo/missing_project_folder.rs"]
 mod missing_project_folder_demo;
 #[path = "../app/window/missing_project_folder_modal.rs"]
@@ -675,6 +679,7 @@ fn main() {
                 "rename-session" => rename_session_demo::open(&demo, cx),
                 "new-orchestrator" => new_coordinator_demo::open(&demo, cx),
                 "orchestrator-memory" => coordinator_details_demo::open(&demo, cx),
+                "gbot-settings" => gbot_settings_demo::open(&demo, cx),
                 "close-buttons" => close_buttons_demo::open(&demo, cx),
                 "session-note" => session_note_demo::open(&demo, cx),
                 "chief-row" => chief_row_demo::open(&demo, cx),

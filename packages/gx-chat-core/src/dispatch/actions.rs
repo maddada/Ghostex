@@ -58,7 +58,8 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::RunInTerminal
         | ActionKind::PasteInTerminal
         | ActionKind::LoadImage
-        | ActionKind::LoadPageThumbnail => Family::Transcript,
+        | ActionKind::LoadPageThumbnail
+        | ActionKind::GbotCard => Family::Transcript,
 
         ActionKind::Answer
         | ActionKind::QuestionText

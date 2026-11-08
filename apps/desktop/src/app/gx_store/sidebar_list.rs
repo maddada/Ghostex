@@ -674,6 +674,7 @@ impl GhostexGpuiApp {
             chiefs: Vec::new(),
             home_headers: Vec::new(),
             machines_with_home: Vec::new(),
+            gbots: Vec::new(),
             search_shortcut: None,
             commands_shortcut: None,
         };

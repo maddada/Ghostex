@@ -113,6 +113,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("botAutomationsHidden", J::Bool(true)),
     // CDXC:GBots 2026-11-08 DECISION: GBots is off by default (official_extensions.rs).
     ("gbotsEnabled", J::Bool(false)),
+    // CDXC:GBots 2026-11-09 DECISION: User (Q2103 A): Chief of Staff adds GBots on its own, on by default; off, each add asks you first (server/src/server/security_gates.rs).
+    ("gbotsChiefAddsOnItsOwn", J::Bool(true)),
     ("tipsAndTricksTitlebarButtonHidden", J::Bool(false)),
     ("notificationsTitlebarButtonHidden", J::Bool(false)),
     ("helpTitlebarButtonHidden", J::Bool(false)),

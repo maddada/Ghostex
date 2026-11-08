@@ -27,10 +27,24 @@ USAGE
   ghostex gbots brief [--bot <bot>]              What loads into a GBot (its instructions,
                                                  shared preferences, memory and team); a GBot
                                                  runs it in its own chats with no --bot
+  ghostex gbots ask <bot> (--task <brief> | --body-file <file>) [--consult]
+                       [--chat new|standing|<chat>] [--done-when <text>] [--json]
+                                                 Hand a GBot work, or with --consult ask it a
+                                                 question only. Returns at once; its report comes
+                                                 back to your chat when it finishes. Work goes to
+                                                 your standing chat with it, a question to a new
+                                                 chat that closes once it answers
+  ghostex gbots ask --rework <assignment> --task <what is missing>
+                                                 Send a report back for rework (twice at most)
+  ghostex gbots assignments [--all] [--json]     Work you handed out and its state
+  ghostex gbots changes [--json]                 GBots added, changed and removed, newest first
+  ghostex gbots undo <change>                    Undo adding or changing a GBot (refused once it
+                                                 changed since)
 
   <bot> is a GBot's name or id. Colours: periwinkle, sky, mint, gold, coral, lavender, pink, rose.
   Icons are Ghostex icon names (robot, search, pencil, …). Only you and Chief of Staff add, change
-  and remove GBots; adding one from a terminal asks for your approval first. Turn on Main Hub and
+  and remove GBots; adding one from a terminal asks for your approval first. Chief of Staff and a
+  department's lead hand a GBot work; any other GBot or coordinator may only ask it a question. Turn on Main Hub and
   GBots in Settings > Extensions. Add --computer <name> to run a command on another computer.
 ";
 
@@ -140,6 +154,51 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             }
             gbots(params, &flags)?
         }
+        "ask" => {
+            let mut params = json!({ "op": "ask" });
+            if let Some(rework) = flags.string_value("rework") {
+                params["rework"] = json!(rework);
+            } else {
+                params["bot"] = json!(bot_arg(rest, verb)?);
+            }
+            let task =
+                match flags.string_value("bodyFile") {
+                    Some(path) => Some(std::fs::read_to_string(path).map_err(|error| {
+                        CliError::Other(format!("Could not read {path}: {error}"))
+                    })?),
+                    None => flags.string_value("task").map(str::to_string),
+                };
+            let task = task.filter(|task| !task.trim().is_empty()).ok_or_else(|| {
+                CliError::Other(
+                    "Say what you want: --task \"<brief>\" or --body-file <file>.".to_string(),
+                )
+            })?;
+            params["task"] = json!(task);
+            if flags.contains("consult") {
+                params["consult"] = json!(true);
+            }
+            if let Some(chat) = flags.string_value("chat") {
+                params["chat"] = json!(chat);
+            }
+            if let Some(done_when) = flags.string_value("doneWhen") {
+                params["doneWhen"] = json!(done_when);
+            }
+            gbots(params, &flags)?
+        }
+        "assignments" => gbots(
+            json!({ "op": "assignments", "all": flags.contains("all") }),
+            &flags,
+        )?,
+        "changes" => gbots(json!({ "op": "changes" }), &flags)?,
+        "undo" => {
+            let change = rest.get(1).cloned().ok_or_else(|| {
+                CliError::Other(
+                    "Name the change: ghostex gbots undo <change>. `ghostex gbots changes` lists them."
+                        .to_string(),
+                )
+            })?;
+            gbots(json!({ "op": "undo", "change": change }), &flags)?
+        }
         "close-chat" => {
             let chat = rest.get(1).cloned().ok_or_else(|| {
                 CliError::Other(
@@ -221,6 +280,81 @@ fn print_answer(verb: &str, answer: &Value) {
                 text(bot, "folder"),
                 text(bot, "name")
             );
+            // Chief of Staff's adds: the line its chat draws as the "GBot added" card.
+            if answer["chatCard"].is_object() {
+                println!(
+                    "{}",
+                    ghostex_gx_protocol::chat_card::chat_card_line(&answer["chatCard"])
+                );
+            }
+        }
+        "ask" => {
+            let assignment = &answer["assignment"];
+            let id = text(assignment, "assignmentId");
+            let bot = text(&answer["bot"], "name");
+            let chat = text(&answer["chat"], "globalRef");
+            let what = match (answer["rework"].as_i64(), text(assignment, "mode")) {
+                (Some(round), _) => format!("Sent {id} back to {bot} (rework {round})"),
+                (None, "consult") => format!("Asked {bot} ({id})"),
+                _ => format!("Handed {id} to {bot}"),
+            };
+            let state = if text(answer, "status") == "started" {
+                "it has it"
+            } else {
+                "it takes it once its agent is ready"
+            };
+            println!("{what} in chat {chat}: {state}.");
+            if answer["reportsBack"].as_bool() == Some(true) {
+                println!("Its report comes back to you when it finishes; end your turn now instead of waiting.");
+            } else {
+                println!("Read its answer in that chat.");
+            }
+        }
+        "assignments" => {
+            let rows = answer["assignments"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            if rows.is_empty() {
+                println!("No assignments yet.");
+            }
+            for row in rows {
+                println!(
+                    "{}\t{}\t{}\t{}\t{}",
+                    text(&row, "assignmentId"),
+                    text(&row, "botName"),
+                    text(&row, "mode"),
+                    text(&row, "status"),
+                    text(&row, "brief").lines().next().unwrap_or_default()
+                );
+            }
+        }
+        "changes" => {
+            let rows = answer["changes"].as_array().cloned().unwrap_or_default();
+            if rows.is_empty() {
+                println!("No changes yet.");
+            }
+            for row in rows {
+                let state = if row["undoneAt"].is_string() {
+                    "undone"
+                } else if row["undoable"].as_bool() == Some(true) {
+                    "can undo"
+                } else {
+                    ""
+                };
+                println!(
+                    "{}\t{}\t{}\tby {}\t{}\t{state}",
+                    text(&row, "changeId"),
+                    text(&row, "kind"),
+                    text(&row, "name"),
+                    text(&row, "by"),
+                    text(&row, "at"),
+                );
+            }
+        }
+        "undo" => {
+            let change = &answer["change"];
+            println!("Undid {} ({}).", text(change, "kind"), text(change, "name"));
         }
         "edit" => {
             let bot = &answer["bot"];
