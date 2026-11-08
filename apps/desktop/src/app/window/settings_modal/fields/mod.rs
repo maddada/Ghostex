@@ -20,6 +20,7 @@ pub(crate) mod hover_actions;
 pub(crate) mod icon_picker;
 pub(crate) mod ignored_ports;
 pub(crate) mod media;
+pub(crate) mod notice;
 pub(crate) mod qr;
 pub(crate) mod reorder;
 pub(crate) mod row;

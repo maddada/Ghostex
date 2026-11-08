@@ -8,6 +8,7 @@
 //! SEE-ALSO: server/src/autopilot/config.rs (the choices and their defaults), packages/settings-catalog/src/pages/autopilot.rs (its search rows).
 use super::super::super::native_modal_kit::{MODAL_MONO_FONT, looks_like_path, path_link};
 use super::super::catalog::SettingOption;
+use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, FieldStates, ROW_PADDING_X, ROW_PADDING_Y, RowSpec, SettingsPage, SliderBinding,
     SliderSaver, segmented_field, select_field, settings_button, settings_section,
@@ -708,7 +709,19 @@ impl Render for AutopilotTab {
             )));
             return settings_page(&self.store, SettingsTabId::Autopilot, &p, blocks, cx);
         }
-        if let Some(error) = self.error.clone() {
+        if self.error.as_deref().is_some_and(is_service_unreachable) {
+            blocks.push(PageBlock::plain(service_unreachable_state(
+                &p,
+                "autopilot-unreachable",
+                |page: &mut Self, _window, cx| page.reload(cx),
+                cx,
+            )));
+        }
+        if let Some(error) = self
+            .error
+            .clone()
+            .filter(|error| !is_service_unreachable(error))
+        {
             let retry = settings_button(
                 &p,
                 "autopilot-retry",

@@ -14,6 +14,7 @@
 //! User (#495, Q1730): Collab is an extension component. Its on/off switch is gone: it is on while installed, installing asks for the owner's approval (Settings > Extensions), and uninstalling (here or there) never asks.
 //! SEE-ALSO: server/collab/src/config.rs (the choices and their defaults), packages/settings-catalog/src/pages/collab.rs (its search rows), apps/desktop/src/app/window/collab_share.rs (a chat's Share popover).
 use super::super::catalog::SettingOption;
+use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, CONTROL_LANE_WIDTH, FieldStates, ListItemStatus, RowSpec, SettingsPage,
     segmented_field, setting_row, settings_button, settings_list_item, settings_section,
@@ -569,7 +570,19 @@ impl Render for CollabTab {
             )));
             return settings_page(&self.store, SettingsTabId::Collab, &p, blocks, cx);
         }
-        if let Some(error) = self.error.clone() {
+        if self.error.as_deref().is_some_and(is_service_unreachable) {
+            blocks.push(PageBlock::plain(service_unreachable_state(
+                &p,
+                "collab-unreachable",
+                |page: &mut Self, _window, cx| page.reload(cx),
+                cx,
+            )));
+        }
+        if let Some(error) = self
+            .error
+            .clone()
+            .filter(|error| !is_service_unreachable(error))
+        {
             let retry = settings_button(
                 &p,
                 "collab-retry",

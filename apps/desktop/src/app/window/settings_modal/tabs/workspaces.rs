@@ -20,6 +20,7 @@ mod team;
 mod tracker;
 
 use super::super::catalog::SettingOption;
+use super::super::fields::notice::{greyed_out, is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, FieldStates, RowSpec, SettingsPage, setting_row, settings_button,
     settings_section, settings_segmented, settings_select, settings_text_input, static_note,
@@ -819,9 +820,19 @@ impl Render for WorkspacesTab {
                 .child(div().flex_1().min_w_0().child(intro))
                 .child(new_button),
         ));
-        if let Some(error) = self.error.clone() {
+        let unreachable = self.error.as_deref().is_some_and(is_service_unreachable);
+        if unreachable {
+            blocks.push(PageBlock::plain(service_unreachable_state(
+                &p,
+                "workspaces-unreachable",
+                |page: &mut Self, _window, cx| page.reload(cx),
+                cx,
+            )));
+        } else if let Some(error) = self.error.clone() {
             blocks.push(PageBlock::plain(static_note(&p, error, true)));
         }
+        // What follows needs the service to save: dimmed while it does not answer.
+        let first_control_block = blocks.len();
         for workspace in self.ordered_workspaces() {
             let anchor = format!("workspace-{}", text(&workspace, "workspaceId"));
             if let Some(section) = self.workspace_section(&p, &workspace, window, cx) {
@@ -838,6 +849,12 @@ impl Render for WorkspacesTab {
                 {
                     blocks.push(PageBlock::section(format!("{anchor}-flow-steps"), section));
                 }
+            }
+        }
+        if unreachable {
+            for block in &mut blocks[first_control_block..] {
+                let element = std::mem::replace(&mut block.element, gpui::Empty.into_any_element());
+                block.element = greyed_out(element);
             }
         }
         settings_page(&self.store, SettingsTabId::Workspaces, &p, blocks, cx)

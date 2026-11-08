@@ -14,6 +14,7 @@ mod rules;
 mod signin_panel;
 mod widgets;
 
+use super::super::fields::notice::{greyed_out, is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, FieldStates, SettingsPage, settings_button, static_note,
 };
@@ -169,9 +170,19 @@ impl Render for ConnectorsTab {
                 .child(div().flex_1().min_w_0().child(intro))
                 .child(refresh),
         ));
-        if let Some(error) = self.error.clone() {
+        let unreachable = self.error.as_deref().is_some_and(is_service_unreachable);
+        if unreachable {
+            blocks.push(PageBlock::plain(service_unreachable_state(
+                &p,
+                "connectors-unreachable",
+                |page: &mut Self, _window, cx| page.reload(cx),
+                cx,
+            )));
+        } else if let Some(error) = self.error.clone() {
             blocks.push(PageBlock::plain(static_note(&p, error, true)));
         }
+        // What follows needs the service to save: dimmed while it does not answer.
+        let first_control_block = blocks.len();
         let workspaces_enabled = self
             .connectors
             .as_ref()
@@ -213,6 +224,12 @@ impl Render for ConnectorsTab {
                     self.cli_section(&p, &workspace, title("Command-line sign-ins"), cx)
             {
                 blocks.push(PageBlock::section(format!("{id}-cli"), section));
+            }
+        }
+        if unreachable {
+            for block in &mut blocks[first_control_block..] {
+                let element = std::mem::replace(&mut block.element, gpui::Empty.into_any_element());
+                block.element = greyed_out(element);
             }
         }
         settings_page(&self.store, SettingsTabId::Connectors, &p, blocks, cx)

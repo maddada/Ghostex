@@ -5,6 +5,7 @@
 //! CDXC:Security 2026-11-08 DECISION:
 //! User (Q1724, GitHub #495): an append-only, hash-chained log "in Settings > Security, and a notification for every sensitive action. Who (session, device), what, when; you notice in real time."
 //! SEE-ALSO: server/src/audit/ (the log and its check), packages/settings-catalog/src/pages/security.rs (its search rows), apps/desktop/src/app/gx_store/notifications/commands.rs (a security row in the bell opens this page).
+use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, FieldStates, ListItemStatus, SettingsPage, settings_button, settings_list_item,
     settings_section, static_note,
@@ -259,7 +260,19 @@ impl Render for SecurityTab {
             )));
             return settings_page(&self.store, SettingsTabId::Security, &p, blocks, cx);
         }
-        if let Some(error) = self.error.clone() {
+        if self.error.as_deref().is_some_and(is_service_unreachable) {
+            blocks.push(PageBlock::plain(service_unreachable_state(
+                &p,
+                "security-unreachable",
+                |page: &mut Self, _window, cx| page.reload(cx),
+                cx,
+            )));
+        }
+        if let Some(error) = self
+            .error
+            .clone()
+            .filter(|error| !is_service_unreachable(error))
+        {
             let retry = settings_button(
                 &p,
                 "security-retry",

@@ -4,6 +4,7 @@
 //! each action. The switches are this computer's own settings (`syncSpaces` and the rest).
 //! SEE-ALSO: server/src/settings_sync/ (the routes), gx-core settings_sync (`SYNC_CATEGORIES`, the
 //! rules and CDXC:SettingsSync 2026-11-06).
+use super::super::fields::notice::{greyed_out, is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, FieldStates, ListItemStatus, RowSpec, SettingsPage, setting_row,
     settings_button, settings_list_item, settings_section, static_note, switch_control,
@@ -389,9 +390,19 @@ impl Render for SyncTab {
                 .child(div().flex_1().min_w_0().child(intro))
                 .child(refresh),
         ));
-        if let Some(error) = self.error.clone() {
+        let unreachable = self.error.as_deref().is_some_and(is_service_unreachable);
+        if unreachable {
+            blocks.push(PageBlock::plain(service_unreachable_state(
+                &p,
+                "sync-unreachable",
+                |page: &mut Self, _window, cx| page.reload(cx),
+                cx,
+            )));
+        } else if let Some(error) = self.error.clone() {
             blocks.push(PageBlock::plain(static_note(&p, error, true)));
         }
+        // What follows needs the service to save: dimmed while it does not answer.
+        let first_control_block = blocks.len();
         let shown = |section: &str| {
             let result = search.section(section);
             !result.is_searching || result.has_visible()
@@ -410,6 +421,12 @@ impl Render for SyncTab {
             && let Some(section) = self.changes(&p, cx)
         {
             blocks.push(PageBlock::section("syncChanges", section));
+        }
+        if unreachable {
+            for block in &mut blocks[first_control_block..] {
+                let element = std::mem::replace(&mut block.element, gpui::Empty.into_any_element());
+                block.element = greyed_out(element);
+            }
         }
         settings_page(&self.store, SettingsTabId::Sync, &p, blocks, cx)
     }
