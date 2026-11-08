@@ -344,6 +344,27 @@ pub(crate) fn available_draft_agents(project: &Value) -> Value {
     Value::Array(agents.iter().map(AvailableDraftAgent::to_value).collect())
 }
 
+/// The icons of the agents turned on in Settings › Agents (an agent with no icon gives its id),
+/// in launcher order, for the chat's model menu: it shows a provider's tab only when one of these
+/// runs it (CDXC:AgentLauncher 2026-11-08 in packages/gx-chat-core/src/menus/picker/inputs.rs).
+/// Every project stores the same agent list, so the session's own project answers for all.
+pub(crate) fn enabled_agent_icons(project: &Value) -> Vec<String> {
+    let agents =
+        crate::sidebar_hud::sidebar_agent_buttons_from_projects(std::slice::from_ref(project));
+    let mut icons = Vec::new();
+    for agent in agents.as_array().into_iter().flatten() {
+        let Some(agent) = agent.as_object() else {
+            continue;
+        };
+        let icon =
+            read_text_from_map(agent, "icon").or_else(|| read_text_from_map(agent, "agentId"));
+        if let Some(icon) = icon.filter(|icon| !icons.contains(icon)) {
+            icons.push(icon);
+        }
+    }
+    icons
+}
+
 /*
 CDXC:Drafts 2026-08-28 (agent switching):
 `/api/switchDraftAgent`. A draft holds no conversation, so this needs no
@@ -790,5 +811,57 @@ mod first_activity_tests {
             Some("2026-11-07T00:00:00.000Z"),
         ));
         assert!(!runtime_settings_are_draft(&runtime_settings));
+    }
+}
+
+#[cfg(test)]
+mod enabled_agent_icons_tests {
+    use super::*;
+
+    /// Issue #486: Claude and Codex turned off, plus a custom agent built on Claude.
+    #[test]
+    fn lists_the_icons_of_agents_that_are_on_only() {
+        let project = json!({
+            "projectId": "P1",
+            "customAgents": [
+                {"agentId": "claude", "name": "Claude", "command": "claude", "isDefault": true, "hidden": true},
+                {"agentId": "codex", "name": "Codex", "command": "codex", "isDefault": true, "hidden": true},
+                {"agentId": "custom-work", "name": "Work Claude", "command": "claude --profile work", "icon": "claude"}
+            ],
+            "customAgentOrder": ["claude", "codex", "opencode", "custom-work"]
+        });
+        let icons = enabled_agent_icons(&project);
+        assert!(icons.contains(&"opencode".to_string()), "{icons:?}");
+        assert!(icons.contains(&"claude".to_string()), "{icons:?}");
+        assert!(!icons.contains(&"codex".to_string()), "{icons:?}");
+        // Each icon once, however many agents share it.
+        let mut unique = icons.clone();
+        unique.dedup();
+        assert_eq!(unique.len(), icons.len());
+    }
+
+    #[test]
+    fn only_opencode_on_lists_only_opencode() {
+        // Every agent the roster knows, each turned off except OpenCode.
+        let roster =
+            crate::sidebar_hud::read_sidebar_agent_roster(&[], &std::collections::HashMap::new());
+        let agents = roster
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|agent| agent["agentId"].as_str())
+            .map(|agent_id| {
+                json!({
+                    "agentId": agent_id,
+                    "name": agent_id,
+                    "command": agent_id,
+                    "isDefault": true,
+                    "hidden": agent_id != "opencode",
+                })
+            })
+            .collect::<Vec<_>>();
+        assert!(agents.len() > 5);
+        let project = json!({"projectId": "P1", "customAgents": agents});
+        assert_eq!(enabled_agent_icons(&project), ["opencode"]);
     }
 }

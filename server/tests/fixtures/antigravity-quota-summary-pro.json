@@ -1,0 +1,45 @@
+{
+  "groups": [
+    {
+      "buckets": [
+        {
+          "bucketId": "gemini-weekly",
+          "displayName": "Weekly Limit Remaining",
+          "window": "weekly",
+          "resetTime": "2026-11-15T04:24:21Z",
+          "remainingFraction": 1
+        },
+        {
+          "bucketId": "gemini-5h",
+          "displayName": "Five Hour Limit Remaining",
+          "window": "5h",
+          "resetTime": "2026-11-08T09:24:21Z",
+          "remainingFraction": 1
+        }
+      ],
+      "displayName": "Gemini Models",
+      "description": "Models within this group: Gemini Flash, Gemini Pro"
+    },
+    {
+      "buckets": [
+        {
+          "bucketId": "3p-weekly",
+          "displayName": "Weekly Limit Remaining",
+          "window": "weekly",
+          "resetTime": "2026-11-15T04:24:21Z",
+          "remainingFraction": 1
+        },
+        {
+          "bucketId": "3p-5h",
+          "displayName": "Five Hour Limit Remaining",
+          "window": "5h",
+          "resetTime": "2026-11-08T09:24:21Z",
+          "remainingFraction": 1
+        }
+      ],
+      "displayName": "Claude and GPT models",
+      "description": "Models within this group: Claude Opus, Claude Sonnet, GPT-OSS"
+    }
+  ],
+  "description": "Within each group, models share a weekly limit and a 5-hour limit. Quota is consumed proportionally to the cost of the tokens. Thus, limits will last longer with shorter tasks or using more cost-effective models. The 5-hour limit smooths out aggregate demand to fairly distribute global capacity across all users, while your weekly limit is tied directly to your individual tier."
+}

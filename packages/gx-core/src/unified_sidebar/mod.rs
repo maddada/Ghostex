@@ -37,8 +37,9 @@ pub use grouping::{group_unified_sidebar, move_unified_project, ordered_repo_key
 pub use lanes::{unified_lane_inputs, unified_lane_menu_inputs};
 pub use machines::{unified_branch_line, unified_shows_machine, UnifiedBranchLine};
 pub use repo::{
-    merge_repo_identities, normalize_git_remote, origin_keys_of, repo_identity,
-    resolve_repo_identity, RepoIdentity,
+    folder_in_repository, merge_repo_identities, normalize_git_remote, origin_keys_of,
+    project_repo_key, repo_identity, repository_of_project_key, resolve_repo_identity,
+    RepoIdentity,
 };
 pub use reveal::{
     find_unified_row, open_unified_reveal, unified_shelf_key, unified_shelf_label,

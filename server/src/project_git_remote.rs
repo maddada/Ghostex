@@ -296,6 +296,17 @@ pub fn cached_project_git_remote(path: &str) -> Option<ProjectGitRemote> {
     project_git_remote_cache().lock().ok()?.get(path)
 }
 
+/// Whether `path` has been probed (with or without a repository found), so its cached answer is
+/// final rather than not known yet.
+pub fn project_git_remote_probed(path: &str) -> bool {
+    let path = path.trim();
+    !path.is_empty()
+        && project_git_remote_cache()
+            .lock()
+            .map(|cache| cache.contains(path))
+            .unwrap_or(false)
+}
+
 /// The published `gitRemoteOriginUrl` value for a project path: the URL string,
 /// an explicit `Value::Null` for a repository with no `origin`, and `None` for a
 /// path that is unknown to the cache or is not a git work tree (the key is then

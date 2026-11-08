@@ -17,7 +17,9 @@ use crate::change::ChangeSummary;
 use crate::core::Core;
 use crate::keys::{MachineId, ProjectKey, SessionKey};
 use crate::presentation_store::PresentationStore;
-use crate::unified_sidebar::repo::{merge_repo_identities, repo_identity, RepoIdentity};
+use crate::unified_sidebar::repo::{
+    folder_in_repository, merge_repo_identities, project_repo_key, repo_identity, RepoIdentity,
+};
 
 use super::groups::{
     FoldedWorktreePlan, GroupKind, GroupPlan, PlanActionTarget, ProjectContextInput, RowRef,
@@ -168,10 +170,10 @@ pub(super) fn merge_machines(
             .map_or(identity.key, |merged| merged.key.clone());
         // Each folder of a repository is its own project (#461). A folder with no origin is
         // keyed by its own folder name already.
-        match folder_in_repository(project).filter(|_| from_origin) {
-            Some(folder) => format!("{key}#{folder}"),
-            None => key,
-        }
+        let folder =
+            folder_in_repository(&project.path, project.git_repository_root_path.as_deref())
+                .filter(|_| from_origin);
+        project_repo_key(&key, folder.as_deref())
     };
 
     let mut outcome = MergeOutcome::default();
@@ -603,25 +605,6 @@ fn identity_of(project: &ProjectContextInput) -> RepoIdentity {
         None,
         &project.title,
     )
-}
-
-/// Where a project's folder is inside its repository (`product-x`, `company/sub-co`), lowercase,
-/// when it is a subfolder rather than the repository itself. `None` for the repository's root and
-/// when the root is unknown or does not contain the folder.
-fn folder_in_repository(project: &ProjectContextInput) -> Option<String> {
-    let normalize = |path: &str| {
-        path.trim()
-            .replace('\\', "/")
-            .trim_end_matches('/')
-            .to_string()
-    };
-    let root = normalize(project.git_repository_root_path.as_deref()?);
-    let path = normalize(&project.path);
-    let folder = path
-        .strip_prefix(&root)?
-        .strip_prefix('/')?
-        .trim_matches('/');
-    (!folder.is_empty()).then(|| folder.to_lowercase())
 }
 
 /// The session groups drawn right after the project plan at `index`, as indices.

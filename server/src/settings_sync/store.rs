@@ -26,6 +26,9 @@ pub(crate) struct SyncStore {
     pub(crate) notes: Vec<SyncNote>,
     /// This computer's Spaces were saved to `backups/` before sync first wrote them.
     pub(crate) spaces_backed_up: bool,
+    /// Spaces sync keys projects by repository and folder here, and the Spaces an older sync
+    /// folded together were put back from the backup (#488, `repair_folded_spaces`).
+    pub(crate) spaces_keyed_by_folder: bool,
     /// Each value category's keys and values as the last sync left this computer (missing while
     /// the category is off, so turning it on seeds again).
     pub(crate) value_baselines: BTreeMap<String, BTreeMap<String, Value>>,

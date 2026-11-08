@@ -204,9 +204,23 @@ fn badge_lines(account: &Value) -> Vec<String> {
     if usage_only_provider(text(account, "provider")) {
         // CDXC:AgentProviders 2026-11-07 DECISION:
         // User, with a screenshot of the sidebar's usage meters (Claude and Codex stacked "74%" over "0%", Gemini packed as "0/0%"): "pls make the gemini one 2 lines like the others". A usage-only provider draws one stacked "N%" line per window, in the order gxserver lists them (Gemini's 5h then 7d); Cursor's and Copilot's single Mo window stays one line. The tile has no tooltip (2026-09-21), so the window labels stay in the usage popup.
+        // CDXC:AgentProviders 2026-11-08 DECISION:
+        // Gemini now also lists Antigravity's Claude/GPT group as model-scoped 5h and 7d windows (server/src/accounts/usage_only/gemini.rs). The tile keeps one line per main window, and each line shows the most used window of that length across every group, so the limit agy hits first is the one on the tile; the settings pane and the chat's accounts panel list each group.
         return windows
             .iter()
-            .filter_map(|w| pct(w).map(|v| format!("{v}%")))
+            .filter(|w| w["model"].is_null())
+            .filter_map(|main| {
+                let seconds = main["limitWindowSeconds"].as_i64();
+                windows
+                    .iter()
+                    .filter(|w| {
+                        std::ptr::eq(*w, main)
+                            || (seconds.is_some() && w["limitWindowSeconds"].as_i64() == seconds)
+                    })
+                    .filter_map(|w| w["usedPercent"].as_f64())
+                    .reduce(f64::max)
+                    .map(|v| format!("{v:.0}%"))
+            })
             .collect();
     }
     if text(account, "provider") == "codex" {
@@ -921,6 +935,23 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    /// Gemini's tile stays two lines when Antigravity's Claude/GPT group comes along: each line is
+    /// the most used group's window of that length (Claude/GPT's 74% five-hour use, not Gemini's 0%).
+    #[test]
+    fn a_gemini_tile_shows_the_tightest_group_per_window() {
+        let gemini = json!({"provider": "gemini", "usage": [
+            {"id": "fiveHour", "label": "5h", "usedPercent": 0.0, "limitWindowSeconds": 18000},
+            {"id": "sevenDay", "label": "7d", "usedPercent": 1.0, "limitWindowSeconds": 604800},
+            {"id": "3p-5h", "label": "Claude/GPT 5h", "usedPercent": 74.0, "limitWindowSeconds": 18000, "model": "Claude/GPT"},
+            {"id": "3p-weekly", "label": "Claude/GPT 7d", "usedPercent": 10.0, "limitWindowSeconds": 604800, "model": "Claude/GPT"}
+        ]});
+        assert_eq!(badge_lines(&gemini), ["74%", "10%"]);
+        let cursor = json!({"provider": "cursor", "usage": [
+            {"id": "month", "label": "Mo", "usedPercent": 41.0}
+        ]});
+        assert_eq!(badge_lines(&cursor), ["41%"]);
     }
 
     /// The user's sidebar on 2026-10-30: MS and ST are signed in here and on the Windows machine.

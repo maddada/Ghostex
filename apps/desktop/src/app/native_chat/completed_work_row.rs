@@ -1,6 +1,6 @@
 //! A finished turn: its "Worked for 2m 5s" summary with the turn's counts beside it, the work log
-//! behind it, the "N files changed" fold, the artifacts and answered questions it keeps in view,
-//! and the final reply. What the summary says is decided in gx-chat-core `work_summary.rs`.
+//! behind it with the "N files changed" fold right under the summary while it is open, the
+//! artifacts and answered questions it keeps in view, and the final reply. What the summary says is decided in gx-chat-core `work_summary.rs`.
 //!
 //! At rest the row is one column with a 10px gap. While the
 //! turn is folding, or its log is opening or closing, `disclosure_motion.rs` reports a frame and
@@ -91,8 +91,9 @@ impl NativeChatView {
             .flatten();
         let heading = self.work_summary(item, &id, expanded, pictures, p, cx);
         // Every row of a finished turn hides its own writes; they belong to the turn's
-        // "N files changed" fold below the heading (file_change_card.rs). Rows that are still
-        // folding keep theirs until they are gone, as they were a moment ago.
+        // "N files changed" fold, drawn right under the heading while the turn is open
+        // (file_change_card.rs, gx-chat-core `turn_files_fold`). Rows that are still folding keep
+        // theirs until they are gone, as they were a moment ago.
         let folding = motion.is_some_and(|frame| frame.kind == FoldMotionKind::Fold);
         let log = if folding {
             let mut rows: Vec<AnyElement> = Vec::new();
@@ -101,6 +102,12 @@ impl NativeChatView {
             }
             (!rows.is_empty()).then_some(rows)
         } else if expanded || motion.is_some() {
+            // The files fold leads the opened turn, collapsed, then the log; both ease in and out
+            // together with the turn.
+            let mut parts: Vec<AnyElement> = Vec::new();
+            if let Some(files) = self.completed_files_fold(item, true, p, cx) {
+                parts.push(files);
+            }
             // React hung the whole log off the rail the "Worked for" heading opened
             // (`SessionChatExpansion`), so the turn's work reads as one indented block.
             self.hide_file_changes = true;
@@ -113,8 +120,8 @@ impl NativeChatView {
                 log.push(self.message_row(message, p, window, cx));
             }
             self.in_work_fold = false;
-            (!log.is_empty()).then(|| {
-                vec![disclosure_body(
+            if !log.is_empty() {
+                parts.push(disclosure_body(
                     p,
                     DisclosureRail::Work,
                     8.0,
@@ -122,13 +129,13 @@ impl NativeChatView {
                     "Collapse completed work",
                     log,
                     cx,
-                )]
-            })
+                ));
+            }
+            (!parts.is_empty()).then_some(parts)
         } else {
             None
         };
         self.hide_file_changes = true;
-        let files = self.completed_files_fold(item, p, cx);
         // Each part after the files, and whether it is a stack of one-line cards.
         let mut tail: Vec<(AnyElement, bool)> = Vec::new();
         for message in artifacts {
@@ -150,7 +157,7 @@ impl NativeChatView {
         }
         // The space above each tail part: the heading is a one-line card, so a stack of cards right
         // under it (or under another stack) sits a row gap away (`SINGLE_LINE_CARD.gap_above`).
-        let mut above_is_card = log.is_none() && files.is_none();
+        let mut above_is_card = log.is_none();
         let tail: Vec<(AnyElement, f32)> = tail
             .into_iter()
             .map(|(part, is_card)| {
@@ -168,11 +175,10 @@ impl NativeChatView {
                 row = row.children(log.into_iter().map(|part| spaced(part, PART_GAP)));
             }
             return row
-                .children(files.map(|part| spaced(part, PART_GAP)))
                 .children(tail.into_iter().map(|(part, gap)| spaced(part, gap)))
                 .into_any_element();
         };
-        self.moving_completed_work_row(&id, frame, heading, log, files, tail, s)
+        self.moving_completed_work_row(&id, frame, heading, log, tail, s)
     }
 
     /// The bar a finished turn folds behind: a clock tile with a green check badge, "Worked for
@@ -304,19 +310,17 @@ impl NativeChatView {
     }
 
     /// The row while it folds, opens or closes. Each part carries the gap above it, so a part
-    /// eased to nothing leaves no gap behind.
-    #[allow(clippy::too_many_arguments)]
+    /// eased to nothing leaves no gap behind. Opening or closing, `log` is the files fold and the
+    /// work log, which ease together.
     fn moving_completed_work_row(
         &mut self,
         id: &str,
         frame: FoldFrame,
         heading: AnyElement,
         log: Option<Vec<AnyElement>>,
-        files: Option<AnyElement>,
         tail: Vec<(AnyElement, f32)>,
         s: f32,
     ) -> AnyElement {
-        let spaced = |part: AnyElement| div().pt(px(PART_GAP * s)).child(part).into_any_element();
         let mut row = div().flex().flex_col().w_full();
         let top = div()
             .flex()
@@ -351,13 +355,6 @@ impl NativeChatView {
                         .into_any_element(),
                 ));
             }
-            if let Some(files) = files {
-                row = row.child(eased_part(
-                    self.disclosure_motion.borrow_mut().height(id, "files"),
-                    frame.heading,
-                    spaced(files),
-                ));
-            }
         } else {
             row = row.child(top);
             if let Some(log) = log {
@@ -365,13 +362,15 @@ impl NativeChatView {
                     self.disclosure_motion.borrow_mut().height(id, "log"),
                     frame.log,
                     div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(PART_GAP * s))
                         .pt(px(PART_GAP * s))
                         .opacity(frame.rows_opacity)
                         .children(log)
                         .into_any_element(),
                 ));
             }
-            row = row.children(files.map(spaced));
         }
         row.children(
             tail.into_iter()

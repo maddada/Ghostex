@@ -145,6 +145,11 @@ pub(crate) fn gpui_sidebar_agent_icon(value: Option<&str>) -> Option<&'static st
         "dsh" | "dsh-tui" | "deepseek" | "deepseek harness" => Some("dsh"),
         "devin" => Some("devin"),
         "empryo" | "em" => Some("empryo"),
+        // CDXC:GBots 2026-11-08 WHY: a GBots conversation's row names its agent "gbots", but it is
+        // not a launcher agent (it is not in GPUI_DEFAULT_SIDEBAR_AGENTS), so the table fallback
+        // below never found it. The session then had no agent icon, session_chat_agent_for_icon
+        // never ran, and the conversation opened on its terminal only (issue #493).
+        "gbots" => Some("gbots"),
         other => GPUI_DEFAULT_SIDEBAR_AGENTS
             .iter()
             .find(|agent| agent.agent_id == other || agent.icon == other)
@@ -186,6 +191,19 @@ mod tests {
                 agent.icon
             );
         }
+    }
+
+    /// A GBots conversation's row names its agent `gbots`; it keeps that icon and has a chat agent,
+    /// so Chat View can open on the mirrored transcript (issue #493).
+    #[test]
+    fn gbots_conversation_resolves_to_its_icon_and_chat_agent() {
+        let icon = gpui_sidebar_agent_icon(Some("gbots"));
+        assert_eq!(icon, Some("gbots"));
+        assert_eq!(gpui_sidebar_agent_icon(Some(" GBots ")), Some("gbots"));
+        assert_eq!(
+            crate::app::session_chat_surfaces::session_chat_agent_for_icon(icon.unwrap()),
+            Some("gbots")
+        );
     }
 
     /// A cloud session's tab carries its agent, so the chat gates take it: it has a chat agent and

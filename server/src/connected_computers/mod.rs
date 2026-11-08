@@ -6,6 +6,7 @@ mod peer_listener;
 mod registry;
 mod relay;
 mod scope;
+mod thread_scope;
 
 pub(crate) use http::{
     handle_connected_computers_http, this_computer_name, CONNECTED_COMPUTER_ENDPOINTS,

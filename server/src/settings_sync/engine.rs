@@ -7,7 +7,8 @@ use ghostex_gx_core::settings_sync::{
     apply_spaces_entries, category_enabled, derive_spaces_edits, describe_list_key,
     describe_setting_key, describe_spaces_key, entries_digest, hlc_wall_ms, key_category,
     local_edit, member_key, merge_entries, merge_spaces_by_name, next_hlc, removed_key,
-    spaces_named_apart, LocalSpaces, SyncEntry, GROUP_CATEGORY, SYNC_CATEGORIES,
+    repair_folded_spaces, spaces_named_apart, LocalSpaces, SyncEntry, GROUP_CATEGORY,
+    SYNC_CATEGORIES,
 };
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -173,6 +174,9 @@ impl Engine<'_> {
         if !self.enabled("spaces/") {
             return Ok(());
         }
+        if !self.store.spaces_keyed_by_folder {
+            self.repair_folded_spaces()?;
+        }
         let read = read_local_spaces(self.db, &self.server_id, &self.store.entries)?;
         let baseline = self.store.spaces_baseline.clone();
         let edits = derive_spaces_edits(
@@ -189,6 +193,38 @@ impl Engine<'_> {
         }
         self.store.spaces_baseline = Some(baseline_of(read));
         Ok(())
+    }
+
+    /// Once, when Spaces sync starts keying projects by repository and folder here: puts the
+    /// projects of a repository that 11.0.0's sync folded into one Space back where the backup
+    /// taken before sync first wrote this computer's Spaces had them (#488). It waits until every
+    /// project's repository root is known, since until then the keys carry no folders.
+    fn repair_folded_spaces(&mut self) -> Result<(), DomainStateError> {
+        let read = read_local_spaces(self.db, &self.server_id, &self.store.entries)?;
+        if !read.remotes_probed {
+            return Ok(());
+        }
+        self.store.spaces_keyed_by_folder = true;
+        if !self.store.spaces_backed_up {
+            return Ok(());
+        }
+        let Some((path, backup)) = first_spaces_backup(self.state) else {
+            return Ok(());
+        };
+        let (Some(spaces), Some(collections)) = (
+            backup.get("sidebarSpaces"),
+            backup.get("sidebarProjectCollections"),
+        ) else {
+            return Ok(());
+        };
+        let Some(repaired) = repair_folded_spaces(local(&read), spaces, collections) else {
+            return Ok(());
+        };
+        eprintln!(
+            "[gxserver] settings sync: put back the Spaces of projects that share a repository from {} (#488)",
+            path.display()
+        );
+        write_local_spaces(self.state, self.db, &repaired.spaces, &repaired.collections)
     }
 
     /// Merges another computer's entries, returning the new notes. On the first sync with that
@@ -328,6 +364,26 @@ fn baseline_of(read: LocalSpacesRead) -> SpacesBaseline {
         collections: read.collections,
         repos: read.repos,
     }
+}
+
+/// The oldest Spaces backup sync saved here (the one taken before it first wrote them), with
+/// its path.
+fn first_spaces_backup(state: &AppState) -> Option<(std::path::PathBuf, Value)> {
+    let folder = state.paths.root_dir.join("backups");
+    let path = std::fs::read_dir(&folder)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name.starts_with("settings-sync-spaces-") && name.ends_with(".json")
+                })
+        })
+        .min()?;
+    let backup = serde_json::from_slice(&std::fs::read(&path).ok()?).ok()?;
+    Some((path, backup))
 }
 
 /// This computer's Spaces and groups as they were before sync first touched them, in

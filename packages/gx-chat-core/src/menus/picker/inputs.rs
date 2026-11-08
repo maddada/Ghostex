@@ -34,7 +34,7 @@ pub struct MenuInputs {
     /// Every provider's model lineup, as `modelMenuEntries()` sweeps them.
     pub catalogs: std::sync::Arc<ModelMenuCatalogs>,
     /// What `catalogs` was built from ([`catalogs_key`]).
-    pub catalogs_key: (u64, bool),
+    pub catalogs_key: CatalogsKey,
 }
 
 /// Reads family e1's options and builds family e2's inputs.
@@ -54,11 +54,16 @@ pub fn menu_inputs_from(state: &ChatState, options: &NativeChatOptions) -> MenuI
     // the publish test), on every timer tick of every retained chat. It depends only on the agent
     // model catalog and on whether this is a Hermes chat, so the settle's sweep is reused while
     // both are unchanged. Every write to the catalog after that sweep bumps its generation; the
-    // one that does not (the bundled seed in `picker::settle`) runs before it.
+    // one that does not (the bundled seed in `picker::settle`) runs before it. The agents turned
+    // on are part of the key too, so turning one off rebuilds the tabs.
     let catalogs = if state.pickers.catalogs_key == Some(catalogs_key) {
         std::sync::Arc::clone(&state.pickers.catalogs)
     } else {
-        std::sync::Arc::new(model_menu_catalogs(state, options.model_provider))
+        std::sync::Arc::new(model_menu_catalogs(
+            state,
+            options.model_provider,
+            catalogs_key.2,
+        ))
     };
     MenuInputs {
         menu: model_menu_context(state, options),
@@ -68,13 +73,42 @@ pub fn menu_inputs_from(state: &ChatState, options: &NativeChatOptions) -> MenuI
     }
 }
 
-/// What the provider sweep depends on: the agent model catalog's generation, and whether the
-/// session is a Hermes chat (whose picker shows its own tab alone).
-pub fn catalogs_key(state: &ChatState, session_provider: Option<&str>) -> (u64, bool) {
+/// What the provider sweep depends on: the agent model catalog's generation, whether the
+/// session is a Hermes chat (whose picker shows its own tab alone), and which providers' agents
+/// are turned on ([`shown_providers`]).
+pub type CatalogsKey = (u64, bool, Option<u16>);
+
+/// [`CatalogsKey`] for this frame.
+pub fn catalogs_key(state: &ChatState, session_provider: Option<&str>) -> CatalogsKey {
     (
         state.menus.model_catalog_generation,
         session_provider == Some(ModelPickerProvider::Hermes.as_str()),
+        shown_providers(state, session_provider),
     )
+}
+
+/// The providers whose model menu tab may show, one bit per [`MODEL_MENU_PROVIDERS`] slot, or
+/// `None` (every provider) until a read has said which agents are on.
+///
+/// CDXC:AgentLauncher 2026-11-08 WHY:
+/// Issue #486: with only OpenCode on in Settings › Agents, the model menu still showed a tab for
+/// every agent. A tab now needs an agent that is on and runs that provider (a custom agent counts
+/// for its base agent's icon). The session's own provider always keeps its tab, even when its
+/// agent was turned off after the session started, since that tab is where its model is picked.
+pub fn shown_providers(state: &ChatState, session_provider: Option<&str>) -> Option<u16> {
+    let icons = state.session.enabled_agent_icons.as_ref()?;
+    let mut mask = 0u16;
+    for (slot, provider) in MODEL_MENU_PROVIDERS.into_iter().enumerate() {
+        let on = session_provider == Some(provider.as_str())
+            || icons.iter().any(|icon| {
+                crate::menus::picker::model_picker::model_picker_provider(Some(icon))
+                    == Some(provider)
+            });
+        if on {
+            mask |= 1 << slot;
+        }
+    }
+    Some(mask)
 }
 
 /// `sessionChatSessionOptionCatalog(provider)` for each provider in [`MODEL_MENU_PROVIDERS`].
@@ -84,11 +118,18 @@ pub fn catalogs_key(state: &ChatState, session_provider: Option<&str>) -> (u64, 
 /// named after it, listing the bot's default model plus the models its sessions have used. Other
 /// agents' tabs stay out of it, and the Hermes tab only exists in a Hermes chat, whose core alone
 /// holds the profile's lineup.
-fn model_menu_catalogs(state: &ChatState, session_provider: Option<&str>) -> ModelMenuCatalogs {
+fn model_menu_catalogs(
+    state: &ChatState,
+    session_provider: Option<&str>,
+    shown: Option<u16>,
+) -> ModelMenuCatalogs {
     let hermes = ModelPickerProvider::Hermes.as_str();
     let mut catalogs = ModelMenuCatalogs::new();
-    for provider in MODEL_MENU_PROVIDERS {
+    for (slot, provider) in MODEL_MENU_PROVIDERS.into_iter().enumerate() {
         if session_provider == Some(hermes) && provider != ModelPickerProvider::Hermes {
+            continue;
+        }
+        if shown.is_some_and(|shown| shown & (1 << slot) == 0) {
             continue;
         }
         let Some(catalog) =

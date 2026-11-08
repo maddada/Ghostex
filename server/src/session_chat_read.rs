@@ -66,6 +66,9 @@ pub(crate) struct SessionChatReadResolution {
     switchable_agents: Option<Value>,
     /// Whether the session runs on its own login, so the chat offers no account (CDXC:AgentProviders 2026-10-09 in accounts/launch.rs).
     uses_own_login: bool,
+    /// The agents turned on in Settings › Agents (`crate::agents::enabled_agent_icons`), in the
+    /// fingerprint so a long-polling phone learns when one is turned on or off.
+    enabled_agent_icons: Vec<String>,
     fingerprint: String,
 }
 
@@ -138,6 +141,10 @@ pub(crate) fn resolve_session_chat_read_state(
     let switchable_agents = project
         .as_ref()
         .and_then(|project| crate::agents::switchable_session_agents_value(project, &session));
+    let enabled_agent_icons = project
+        .as_ref()
+        .map(crate::agents::enabled_agent_icons)
+        .unwrap_or_default();
     let uses_own_login = project
         .as_ref()
         .and_then(|project| crate::accounts::launch::provider(project, &session))
@@ -329,6 +336,7 @@ pub(crate) fn resolve_session_chat_read_state(
     if uses_own_login {
         uses_own_login.hash(&mut hasher);
     }
+    enabled_agent_icons.hash(&mut hasher);
     let fingerprint = format!("{:016x}", hasher.finish());
 
     Ok(SessionChatReadResolution {
@@ -345,6 +353,7 @@ pub(crate) fn resolve_session_chat_read_state(
         available_agents,
         switchable_agents,
         uses_own_login,
+        enabled_agent_icons,
         fingerprint,
     })
 }
@@ -537,6 +546,7 @@ pub(crate) async fn handle_read_session_chat_http(
         available_agents,
         switchable_agents,
         uses_own_login,
+        enabled_agent_icons,
         fingerprint,
     } = resolution;
 
@@ -584,6 +594,9 @@ pub(crate) async fn handle_read_session_chat_http(
     }
     // On every answer, so a client tells "this daemon says no" from an older daemon that never sends it.
     result.insert("usesOwnLogin".to_string(), json!(uses_own_login));
+    // Rides every read, so the model menu on every client (the phone included) hides the tabs of
+    // agents that are off.
+    result.insert("enabledAgentIcons".to_string(), json!(enabled_agent_icons));
     // The Catch me up switch rides every read, so a client without the settings file (the phone) learns it too.
     result.insert(
         "catchUp".to_string(),

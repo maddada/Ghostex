@@ -15,6 +15,7 @@ mod hlc;
 mod lists;
 mod settings_keys;
 mod spaces;
+mod spaces_repair;
 
 pub use entries::{
     entries_digest, local_edit, merge_entries, MergeOutcome, SyncConflict, SyncEntry,
@@ -34,6 +35,7 @@ pub use spaces::{
     apply_spaces_entries, derive_spaces_edits, describe_spaces_key, group_deleted_edit,
     merge_spaces_by_name, spaces_named_apart, LocalSpaces, SpacesApplied,
 };
+pub use spaces_repair::repair_folded_spaces;
 
 /// One thing a computer can sync, as Settings > Sync lists it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -11,7 +11,9 @@ use serde_json::json;
 
 use crate::{
     constants::GXSERVER_PROTOCOL_HEADER,
+    paths::GxserverPaths,
     protocol::rpc_error,
+    security::Principal,
     server::{json_response, routed_json, RoutedResponse},
 };
 
@@ -51,6 +53,8 @@ pub(crate) async fn relay(
     headers: HeaderMap,
     body: Body,
     request_id: String,
+    caller: &Principal,
+    paths: &GxserverPaths,
 ) -> RoutedResponse {
     let endpoint_path = Some(RELAY_ROUTE_PREFIX.to_string());
     let Some((server_id, forwarded)) = parse_relay_path(path) else {
@@ -106,6 +110,19 @@ pub(crate) async fn relay(
             );
         }
     };
+    // Whose thread a session is only this computer knows (thread_scope.rs).
+    let refused = {
+        let db = crate::storage::open_gxserver_database(paths).ok();
+        super::thread_scope::refusal(db.as_deref(), caller, server_id, forwarded, &bytes)
+    };
+    if let Some(message) = refused {
+        return refusal(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            message.to_string(),
+            request_id,
+        );
+    }
     let protocol = header_text(&headers, GXSERVER_PROTOCOL_HEADER);
     let content_type = header_text(&headers, header::CONTENT_TYPE.as_str());
     let url = format!("{}{forwarded}", computer.base_url);

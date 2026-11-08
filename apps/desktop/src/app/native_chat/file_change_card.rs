@@ -16,6 +16,7 @@ use super::{
 };
 use crate::app::native_chat::cursor::ChatCursor as _;
 use ghostex_gx_chat_core::TranscriptItem;
+use ghostex_gx_chat_core::transcript::file_change_rows::{TurnFilesFold, turn_files_fold};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement,
@@ -225,12 +226,14 @@ impl NativeChatView {
         Some(self.file_change_diff(key, file, &detail, &palette, p, cx))
     }
 
-    /// The turn's writes, folded behind "N files changed" the way React grouped a finished turn
-    /// (the decision in `session-chat-message-list/list.tsx`). The label and the rows are projected
+    /// The turn's writes, folded behind "N files changed" ("Edited N files" in simple mode) right
+    /// under the turn's card while that card is open; a closed card shows none (gx-chat-core
+    /// `turn_files_fold`, where the user's decision is). The label and the rows are projected
     /// together in the core (`transcript/presentation.rs`), so the label counts the files drawn.
     pub(super) fn completed_files_fold(
         &mut self,
         item: &TranscriptItem,
+        turn_open: bool,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
@@ -248,14 +251,11 @@ impl NativeChatView {
         };
         // An older turn arrives collapsed with only the paths its unread work changed; the row
         // stays and reads that work on open, as React's list did (`list.tsx`).
-        let unread = files.is_empty()
-            && deferred
-                .as_ref()
-                .and_then(|work| work["filePaths"].as_array())
-                .is_some_and(|paths| !paths.is_empty());
-        if files.is_empty() && !unread {
-            return None;
-        }
+        let unread = match turn_files_fold(item, turn_open) {
+            TurnFilesFold::Hidden => return None,
+            TurnFilesFold::Files => false,
+            TurnFilesFold::Unread => true,
+        };
         let key = format!("work-files:{id}");
         let expanded = self.is_expanded(&key, false);
         let motion = self.disclosure_frame(&key, expanded, cx);

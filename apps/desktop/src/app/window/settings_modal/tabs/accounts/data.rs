@@ -231,7 +231,11 @@ impl Account {
     /// The windows the detail pane draws as bars: five-hour first, then the others.
     pub(crate) fn usage_bars(&self) -> Vec<UsageWindow> {
         let mut windows = self.headline_windows();
-        windows.sort_by_key(|window| !window.is_five_hour());
+        // gxserver already lists a usage-only account's windows in order (Gemini's 5h, 7d, then
+        // each other Antigravity group's 5h and 7d); sorting would pull every group's 5h together.
+        if !self.usage_only() {
+            windows.sort_by_key(|window| !window.is_five_hour());
+        }
         windows
     }
 
@@ -304,7 +308,8 @@ impl Account {
     pub(crate) fn headline_windows(&self) -> Vec<UsageWindow> {
         let usage = self.usage();
         if self.usage_only() {
-            // Cursor and Copilot have one month window; Gemini its 5h and 7d.
+            // Cursor and Copilot have one month window; Gemini its 5h and 7d, then each other
+            // Antigravity group's (Claude/GPT 5h and 7d).
             return usage;
         }
         let main: Vec<&UsageWindow> = usage

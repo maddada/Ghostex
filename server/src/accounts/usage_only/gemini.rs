@@ -271,7 +271,13 @@ pub(crate) fn read(account: &UsageAccount) -> Result<(Reading, Option<Credential
         let reply = cloud_code(base, "retrieveUserQuotaSummary", &token, &body)?;
         if reply.ok() {
             let reading = map(&reply.body, plan.clone());
-            if reading.usage.len() == 2 {
+            if reading
+                .usage
+                .iter()
+                .filter(|window| window.model.is_none())
+                .count()
+                == 2
+            {
                 return Ok((reading, renewed.then_some(credential)));
             }
             last = Some(Ok(reading));
@@ -320,43 +326,241 @@ fn plan_name(load: &Value) -> Option<String> {
         .filter(|name| !name.trim().is_empty())
 }
 
-/// The Gemini pool's 5h and weekly buckets as the usual `5h` and `7d` windows.
+/// Every quota group of the answer, as agy's `/usage` lists them. The Gemini group's 5h and weekly
+/// buckets are the account's own `5h` and `7d` windows; every other group (Claude and GPT models)
+/// gets the same windows scoped to its name ("Claude/GPT 5h"), as Claude's Sonnet and Codex's
+/// Spark limits are.
+///
+/// CDXC:AgentProviders 2026-11-08 WHY:
+/// Gregg on Discord: "Gemini usage is not Antigravity usage it seems. Because those numbers from
+/// the Gemini account do not match what I see when I type /usage in agy." Google's answer carries
+/// a "Gemini Models" group and a "Claude and GPT models" group (`3p-5h`, `3p-weekly`), each with
+/// its own 5h and weekly limit, and agy's `/usage` shows both. Ghostex read only the Gemini group,
+/// so running Claude or GPT-OSS in agy used up a limit Ghostex never showed.
 fn map(body: &Value, plan: Option<String>) -> Reading {
     let groups = body["response"]["groups"]
         .as_array()
         .or_else(|| body["groups"].as_array())
         .cloned()
         .unwrap_or_default();
-    let buckets: Vec<&Value> = groups
-        .iter()
-        .flat_map(|group| group["buckets"].as_array().into_iter().flatten())
-        .collect();
-    let mut usage = Vec::new();
-    for (bucket_id, id, label, seconds) in [
-        ("gemini-5h", "fiveHour", "5h", 5 * 3600),
-        ("gemini-weekly", "sevenDay", "7d", 7 * 86400),
-    ] {
-        let Some(bucket) = buckets
-            .iter()
-            .find(|bucket| bucket["bucketId"] == bucket_id)
-        else {
-            continue;
-        };
-        let Some(left) = http::number(&bucket["remainingFraction"]) else {
-            continue;
-        };
-        usage.push(UsageWindow {
-            id: id.into(),
-            label: label.into(),
-            used_percent: http::clamp_percent(((1.0 - left.clamp(0.0, 1.0)) * 100.0).round()),
-            limit_window_seconds: Some(seconds),
-            resets_at: bucket["resetTime"].as_str().map(str::to_string),
-            model: None,
+    let mut main = Vec::new();
+    let mut scoped = Vec::new();
+    for group in &groups {
+        let buckets = group["buckets"]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let gemini = buckets.iter().any(|bucket| {
+            bucket["bucketId"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("gemini-"))
         });
+        let model = (!gemini).then(|| group_name(group, buckets));
+        let mut group_windows = Vec::new();
+        for bucket in buckets {
+            let Some((short, seconds)) = bucket_window(bucket) else {
+                continue;
+            };
+            let Some(left) = http::number(&bucket["remainingFraction"]) else {
+                continue;
+            };
+            let bucket_id = bucket["bucketId"].as_str().unwrap_or(short);
+            let window = UsageWindow {
+                id: match (&model, short) {
+                    (None, "5h") => "fiveHour".into(),
+                    (None, _) => "sevenDay".into(),
+                    (Some(_), _) => bucket_id.into(),
+                },
+                label: match &model {
+                    Some(model) => format!("{model} {short}"),
+                    None => short.into(),
+                },
+                used_percent: http::clamp_percent(((1.0 - left.clamp(0.0, 1.0)) * 100.0).round()),
+                limit_window_seconds: Some(seconds),
+                resets_at: bucket["resetTime"].as_str().map(str::to_string),
+                model: model.clone(),
+            };
+            if model.is_some() {
+                group_windows.push(window);
+            } else if !main.iter().any(|w: &UsageWindow| w.id == window.id) {
+                main.push(window);
+            }
+        }
+        group_windows.sort_by_key(|window| window.limit_window_seconds);
+        scoped.extend(group_windows);
     }
+    // The Gemini 5h window first, then its 7d, as Ghostex always listed them.
+    main.sort_by_key(|window| window.id != "fiveHour");
+    let mut usage = main;
+    usage.extend(scoped);
     Reading {
         usage,
         plan,
         details: Vec::new(),
+    }
+}
+
+/// A bucket's window as Ghostex labels it and its length: Google's `window` ("5h", "weekly"), else
+/// its id's suffix (`gemini-5h`, `3p-weekly`).
+fn bucket_window(bucket: &Value) -> Option<(&'static str, i64)> {
+    let window = bucket["window"].as_str().unwrap_or_default();
+    let id = bucket["bucketId"].as_str().unwrap_or_default();
+    if window == "5h" || id.ends_with("-5h") {
+        Some(("5h", 5 * 3600))
+    } else if window == "weekly" || id.ends_with("-weekly") {
+        Some(("7d", 7 * 86400))
+    } else {
+        None
+    }
+}
+
+/// The short name a non-Gemini group's windows carry: "Claude/GPT" for the third-party models'
+/// group, else Google's group name without a trailing "models".
+fn group_name(group: &Value, buckets: &[Value]) -> String {
+    let third_party = buckets.iter().any(|bucket| {
+        bucket["bucketId"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("3p-"))
+    });
+    if third_party {
+        return "Claude/GPT".into();
+    }
+    let name = group["displayName"].as_str().unwrap_or_default().trim();
+    let lower = name.to_lowercase();
+    let name = if lower.ends_with(" models") {
+        name[..name.len() - " models".len()].trim()
+    } else {
+        name
+    };
+    if name.is_empty() {
+        "Other".into()
+    } else {
+        name.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `retrieveUserQuotaSummary`'s answer for a Google AI Pro account on 2026-11-08, read with the
+    /// client Ghostex signs in as, while agy 1.5.2's `/usage` listed "Gemini Models" and "Claude and
+    /// GPT models" (each a weekly and a five-hour limit) for the same account.
+    const RECORDED: &str =
+        include_str!("../../../tests/fixtures/antigravity-quota-summary-pro.json");
+
+    fn recorded_with(fractions: &[(&str, f64)]) -> Value {
+        let mut body: Value = serde_json::from_str(RECORDED).unwrap();
+        for group in body["groups"].as_array_mut().unwrap() {
+            for bucket in group["buckets"].as_array_mut().unwrap() {
+                if let Some((_, left)) = fractions.iter().find(|(id, _)| bucket["bucketId"] == *id)
+                {
+                    bucket["remainingFraction"] = json!(left);
+                }
+            }
+        }
+        body
+    }
+
+    fn row(reading: &Reading) -> Vec<(String, String, f64, Option<String>)> {
+        reading
+            .usage
+            .iter()
+            .map(|w| {
+                (
+                    w.id.clone(),
+                    w.label.clone(),
+                    w.used_percent,
+                    w.model.clone(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_recorded_answer_reads_every_group_agy_shows() {
+        let body: Value = serde_json::from_str(RECORDED).unwrap();
+        let reading = map(&body, Some("Google AI Pro".into()));
+        assert_eq!(
+            row(&reading),
+            vec![
+                ("fiveHour".into(), "5h".into(), 0.0, None),
+                ("sevenDay".into(), "7d".into(), 0.0, None),
+                (
+                    "3p-5h".into(),
+                    "Claude/GPT 5h".into(),
+                    0.0,
+                    Some("Claude/GPT".into())
+                ),
+                (
+                    "3p-weekly".into(),
+                    "Claude/GPT 7d".into(),
+                    0.0,
+                    Some("Claude/GPT".into())
+                ),
+            ]
+        );
+        assert_eq!(reading.usage[0].limit_window_seconds, Some(18_000));
+        assert_eq!(reading.usage[1].limit_window_seconds, Some(604_800));
+        assert_eq!(reading.usage[3].limit_window_seconds, Some(604_800));
+        assert_eq!(
+            reading.usage[0].resets_at.as_deref(),
+            Some("2026-11-08T09:24:21Z")
+        );
+    }
+
+    /// agy's `/usage` prints what is left ("Five Hour Limit Remaining 26.00%"); Ghostex shows what
+    /// is used, so the same bucket reads 74%. Claude/GPT use shows on its own windows and leaves
+    /// the Gemini ones alone.
+    #[test]
+    fn claude_and_gpt_use_in_agy_shows_on_its_own_windows() {
+        let body = recorded_with(&[
+            ("3p-5h", 0.26),
+            ("3p-weekly", 0.9),
+            ("gemini-weekly", 0.995),
+        ]);
+        let reading = map(&body, None);
+        let used: Vec<(String, f64)> = reading
+            .usage
+            .iter()
+            .map(|w| (w.label.clone(), w.used_percent))
+            .collect();
+        assert_eq!(
+            used,
+            vec![
+                ("5h".into(), 0.0),
+                ("7d".into(), 1.0),
+                ("Claude/GPT 5h".into(), 74.0),
+                ("Claude/GPT 7d".into(), 10.0),
+            ]
+        );
+    }
+
+    /// The `response`-wrapped shape and an unknown extra group (a weekly-only one, as agy shows
+    /// for Gemini 4 Argon) still read, under the group's own name.
+    #[test]
+    fn an_unknown_group_keeps_its_own_name() {
+        let body = json!({"response": {"groups": [
+            {"displayName": "Gemini Models", "buckets": [
+                {"bucketId": "gemini-5h", "window": "5h", "remainingFraction": 0.5},
+                {"bucketId": "gemini-weekly", "window": "weekly", "remainingFraction": "0.75"}
+            ]},
+            {"displayName": "Gemini 4 Argon", "buckets": [
+                {"bucketId": "argon-weekly", "window": "weekly", "remainingFraction": 0.4}
+            ]}
+        ]}});
+        assert_eq!(
+            row(&map(&body, None)),
+            vec![
+                ("fiveHour".into(), "5h".into(), 50.0, None),
+                ("sevenDay".into(), "7d".into(), 25.0, None),
+                (
+                    "argon-weekly".into(),
+                    "Gemini 4 Argon 7d".into(),
+                    60.0,
+                    Some("Gemini 4 Argon".into())
+                ),
+            ]
+        );
     }
 }
