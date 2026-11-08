@@ -353,6 +353,11 @@ fn automation_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AutomationDe
         prompt: row.get("prompt")?,
         schedule: parse_json_value(&schedule_json),
         updated_at: row.get("updatedAt")?,
+        owner_bot_id: row.get("ownerBotId")?,
+        precheck: row
+            .get::<_, Option<String>>("precheckJson")?
+            .map(|text| parse_json_value(&text)),
+        deliver: row.get("deliver")?,
     })
 }
 
@@ -380,7 +385,7 @@ pub(super) fn automations_to_value(automations: Vec<AutomationDefinitionRecord>)
         automations
             .into_iter()
             .map(|automation| {
-                json!({
+                let mut value = json!({
                     "agentId": automation.agent_id,
                     "createdAt": automation.created_at,
                     "enabled": automation.enabled,
@@ -392,7 +397,15 @@ pub(super) fn automations_to_value(automations: Vec<AutomationDefinitionRecord>)
                     "prompt": automation.prompt,
                     "schedule": automation.schedule,
                     "updatedAt": automation.updated_at,
-                })
+                });
+                // A GBot's routine says whose it is; an older client ignores the extra fields.
+                if let Some(bot_id) = automation.owner_bot_id {
+                    value["ownerBotId"] = json!(bot_id);
+                    value["precheck"] = automation.precheck.unwrap_or(Value::Null);
+                    value["deliver"] =
+                        json!(automation.deliver.unwrap_or_else(|| "chat".to_string()));
+                }
+                value
             })
             .collect(),
     )

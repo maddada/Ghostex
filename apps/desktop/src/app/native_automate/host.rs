@@ -51,6 +51,39 @@ impl GhostexGpuiApp {
         })
     }
 
+    /// A GBot routine card's Edit (session_chat/host_actions.rs): the Automate view with routine
+    /// `automation_id` selected, when `project_id` (the GBot's project) is the active project, as it
+    /// is while its chat shows. False when it isn't, so the caller opens GBot Settings instead.
+    pub(crate) fn open_native_automate_for_routine(
+        &mut self,
+        project_id: &str,
+        automation_id: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let in_scope = self
+            .native_automate_scope()
+            .is_some_and(|scope| !scope.all_projects && scope.project_id == project_id);
+        if !in_scope || !self.titlebar_mode_available(TitlebarMode::Automate) {
+            return false;
+        }
+        let view = match self.native_automate.clone() {
+            Some(view) => view,
+            None => {
+                let app = cx.weak_entity();
+                let view = cx.new(|cx| NativeAutomateView::new(app, cx));
+                self.native_automate = Some(view.clone());
+                view
+            }
+        };
+        view.update(cx, |view, cx| {
+            view.focus_automation(automation_id.to_string(), cx)
+        });
+        let shown = self.set_active_mode(TitlebarMode::Automate, window, cx);
+        cx.notify();
+        shown
+    }
+
     /// The view panel's Automate page. See the DECISION on `NativeAutomateView`'s `Render`.
     ///
     /// CDXC:Automations 2026-09-23 WHY:

@@ -358,6 +358,7 @@ pub async fn run_gxserver_foreground(
     crate::work_mode::load_work_source_store_at_startup(&paths, &logger);
     crate::work_mode::replace_project_workspaces_at_startup(&paths, &metadata.server_id);
     startup_gate.step("starting its background runtimes");
+    state.automation_runtime.attach_app_state(&state);
     state.automation_runtime.start(shutdown_tx.subscribe());
     state.delayed_send_runtime.start(
         shutdown_tx.subscribe(),

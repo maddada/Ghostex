@@ -75,6 +75,8 @@ pub(crate) struct NativeAutomateView {
     pub(crate) busy_id: Option<String>,
     pub(crate) tab: AutomateTab,
     pub(crate) selected_automation_id: Option<String>,
+    /// The automation to select once the next scope's data loads (a GBot routine card's Edit).
+    focus_request: Option<String>,
     pub(crate) selected_run_id: Option<String>,
     pub(crate) sessions: Vec<AutomationSessionOption>,
     pub(crate) dialog: Option<OpenAutomationDialog>,
@@ -113,6 +115,7 @@ impl NativeAutomateView {
             busy_id: None,
             tab: AutomateTab::Automations,
             selected_automation_id: None,
+            focus_request: None,
             selected_run_id: None,
             sessions: Vec::new(),
             dialog: None,
@@ -150,6 +153,7 @@ impl NativeAutomateView {
         self.host = Some(host);
         let appearance_changed = self.appearance.replace(appearance) != Some(appearance);
         if self.scope.as_ref() == Some(&scope) {
+            self.focus_request = None;
             return appearance_changed;
         }
         let load = !scope.coming_soon;
@@ -158,7 +162,7 @@ impl NativeAutomateView {
         self.load_error = None;
         self.error_message = None;
         self.busy_id = None;
-        self.selected_automation_id = None;
+        self.selected_automation_id = self.focus_request.take();
         self.selected_run_id = None;
         self.sessions.clear();
         self.loading = false;
@@ -166,6 +170,14 @@ impl NativeAutomateView {
             self.load(cx);
         }
         true
+    }
+
+    /// Selects automation `id` on the Automations tab, now or once the scope it belongs to loads.
+    pub(crate) fn focus_automation(&mut self, id: String, cx: &mut Context<Self>) {
+        self.tab = AutomateTab::Automations;
+        self.selected_automation_id = Some(id.clone());
+        self.focus_request = Some(id);
+        cx.notify();
     }
 
     /// True while the view has nothing to show yet; the host draws the Automate skeleton.

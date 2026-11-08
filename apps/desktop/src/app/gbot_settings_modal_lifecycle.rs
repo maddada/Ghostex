@@ -17,6 +17,17 @@ impl GhostexGpuiApp {
         machine_id: String,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.open_gpui_gbot_settings_modal_on(bot_id, machine_id, GbotSettingsTab::Profile, cx);
+    }
+
+    /// The same, opened on `tab` (the row menu's Memory… opens the Memory tab).
+    pub(crate) fn open_gpui_gbot_settings_modal_on(
+        &mut self,
+        bot_id: String,
+        machine_id: String,
+        tab: GbotSettingsTab,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let remote = if machine_id.is_empty() || machine_id == ghostex_gx_core::LOCAL_MACHINE_ID {
             None
         } else {
@@ -37,7 +48,7 @@ impl GhostexGpuiApp {
             let shown = gx_rpc(
                 remote.clone(),
                 "/api/gbots",
-                json!({ "op": "show", "bot": bot_id }),
+                json!({ "op": "show", "bot": bot_id.clone() }),
             )
             .await;
             // Without the agent list the picker still shows the bot's own agent.
@@ -47,13 +58,26 @@ impl GhostexGpuiApp {
                     .ok(),
                 Err(_) => None,
             };
+            // Opening on Memory reads it first, so the tab draws filled.
+            let memory = match (&shown, tab) {
+                (Ok(_), GbotSettingsTab::Memory) => gx_rpc(
+                    remote.clone(),
+                    "/api/gbots",
+                    json!({ "op": "memoryShow", "bot": bot_id }),
+                )
+                .await
+                .ok(),
+                _ => None,
+            };
             let _ = this.update(cx, |app, cx| {
                 let record = shown.map_err(|error| error.message).and_then(|answer| {
                     GbotSettingsRecord::from_show(&answer["bot"])
                         .ok_or_else(|| "Ghostex couldn't read this GBot.".to_string())
                 });
                 match record {
-                    Ok(record) => app.open_gpui_gbot_settings_window(record, status, remote, cx),
+                    Ok(record) => {
+                        app.open_gpui_gbot_settings_window(record, status, remote, tab, memory, cx)
+                    }
                     Err(message) => app.dispatch_gpui_app_modal_toast(
                         "warning",
                         "GBot settings didn't open",
@@ -71,53 +95,90 @@ impl GhostexGpuiApp {
         record: GbotSettingsRecord,
         status: Option<Value>,
         remote: Option<GpuiRemoteGxserverRequestTarget>,
+        tab: GbotSettingsTab,
+        memory: Option<Value>,
         cx: &mut gpui::Context<Self>,
     ) {
         let config = GbotSettingsModalConfig {
+            memory,
             agents: gbot_agent_choices(status.as_ref(), &record.agent_id),
             record,
             palette: self.gpui_native_panel_palette(),
-            tab: GbotSettingsTab::Profile,
+            tab,
         };
         // The window stays open while the save runs and closes only when gxserver accepted it
         // (CDXC:GBots 2026-11-09 in window/gbot_settings_modal/window.rs).
-        let host = self.native_app_modal_host(cx, move |app, command, cx| {
-            let GbotSettingsModalCommand::Save {
+        let host = self.native_app_modal_host(cx, move |app, command, cx| match command {
+            GbotSettingsModalCommand::Save {
                 bot_id,
                 changes,
                 reply,
-            } = command
-            else {
+            } => {
+                let mut params = changes;
+                params.insert("op".to_string(), json!("edit"));
+                params.insert("bot".to_string(), json!(bot_id));
+                let remote = remote.clone();
+                cx.spawn(async move |this, cx| {
+                    let saved = gx_rpc(remote, "/api/gbots", Value::Object(params))
+                        .await
+                        .map(|_| ())
+                        .map_err(|error| error.message);
+                    let _ = this.update(cx, |app, cx| {
+                        let succeeded = saved.is_ok();
+                        let failure = saved.as_ref().err().cloned();
+                        let shown = reply.finish(saved, cx);
+                        if succeeded && shown {
+                            app.release_native_app_modal_window(GpuiAppModalKind::GbotSettings, cx);
+                        } else if let (false, Some(message)) = (shown, failure) {
+                            // Cancelled while the save ran: nothing is left to show the refusal in.
+                            app.dispatch_gpui_app_modal_toast(
+                                "warning",
+                                "GBot not saved",
+                                &message,
+                                cx,
+                            );
+                        }
+                    });
+                })
+                .detach();
+            }
+            // The Memory tab: the op, then the memory as it is afterwards (memory.rs).
+            GbotSettingsModalCommand::MemoryLoad { bot_id, reply } => {
+                run_gbot_memory_op(remote.clone(), None, bot_id, reply, cx)
+            }
+            GbotSettingsModalCommand::MemorySave {
+                bot_id,
+                text,
+                base,
+                reply,
+            } => run_gbot_memory_op(
+                remote.clone(),
+                Some(json!({ "op": "memoryEdit", "bot": bot_id, "text": text, "base": base })),
+                bot_id,
+                reply,
+                cx,
+            ),
+            GbotSettingsModalCommand::MemoryUndo {
+                bot_id,
+                change,
+                reply,
+            } => run_gbot_memory_op(
+                remote.clone(),
+                Some(json!({ "op": "memoryUndo", "bot": bot_id, "change": change })),
+                bot_id,
+                reply,
+                cx,
+            ),
+            // The Routines tab: the op, then the routines as they are afterwards (routines.rs).
+            GbotSettingsModalCommand::Routines { bot_id, op, reply } => {
+                run_gbot_routine_op(remote.clone(), op, bot_id, reply, cx)
+            }
+            GbotSettingsModalCommand::Reveal { path } => {
+                app.reveal_gbot_memory_file(remote.is_some(), &path, cx)
+            }
+            GbotSettingsModalCommand::Cancel => {
                 app.release_native_app_modal_window(GpuiAppModalKind::GbotSettings, cx);
-                return;
-            };
-            let mut params = changes;
-            params.insert("op".to_string(), json!("edit"));
-            params.insert("bot".to_string(), json!(bot_id));
-            let remote = remote.clone();
-            cx.spawn(async move |this, cx| {
-                let saved = gx_rpc(remote, "/api/gbots", Value::Object(params))
-                    .await
-                    .map(|_| ())
-                    .map_err(|error| error.message);
-                let _ = this.update(cx, |app, cx| {
-                    let succeeded = saved.is_ok();
-                    let failure = saved.as_ref().err().cloned();
-                    let shown = reply.finish(saved, cx);
-                    if succeeded && shown {
-                        app.release_native_app_modal_window(GpuiAppModalKind::GbotSettings, cx);
-                    } else if let (false, Some(message)) = (shown, failure) {
-                        // Cancelled while the save ran: nothing is left to show the refusal in.
-                        app.dispatch_gpui_app_modal_toast(
-                            "warning",
-                            "GBot not saved",
-                            &message,
-                            cx,
-                        );
-                    }
-                });
-            })
-            .detach();
+            }
         });
         self.open_native_app_modal(
             GpuiAppModalKind::GbotSettings,
@@ -129,4 +190,86 @@ impl GhostexGpuiApp {
             cx,
         );
     }
+
+    /// Show in Finder for a GBot's memory file; only on the computer the file is on.
+    fn reveal_gbot_memory_file(&mut self, remote: bool, path: &str, cx: &mut gpui::Context<Self>) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if !remote {
+            if let Err(message) = gpui_reveal_path_in_finder(std::path::Path::new(path)) {
+                self.dispatch_gpui_app_modal_toast("warning", "Couldn't show it", &message, cx);
+            }
+            return;
+        }
+        let _ = (remote, path);
+        self.dispatch_gpui_app_modal_toast(
+            "info",
+            "It's on the GBot's computer",
+            "Show in Finder works in Ghostex on the computer the GBot lives on.",
+            cx,
+        );
+    }
+}
+
+/// Runs memory op `op` (none for a plain read), then reads the memory again, and hands the window
+/// the read or the op's refusal.
+fn run_gbot_memory_op(
+    remote: Option<GpuiRemoteGxserverRequestTarget>,
+    op: Option<Value>,
+    bot_id: String,
+    reply: GbotMemoryReply,
+    cx: &mut gpui::Context<GhostexGpuiApp>,
+) {
+    cx.spawn(async move |_this, cx| {
+        let mut result = Ok(());
+        if let Some(op) = op {
+            result = gx_rpc(remote.clone(), "/api/gbots", op)
+                .await
+                .map(|_| ())
+                .map_err(|error| error.message);
+        }
+        let shown = match result {
+            Ok(()) => gx_rpc(
+                remote,
+                "/api/gbots",
+                json!({ "op": "memoryShow", "bot": bot_id }),
+            )
+            .await
+            .map_err(|error| error.message),
+            Err(message) => Err(message),
+        };
+        let _ = cx.update(|cx| reply.finish(shown, cx));
+    })
+    .detach();
+}
+
+/// Runs routine op `op` (none for a plain read), then lists the GBot's routines again, and hands
+/// the window the list or the op's refusal.
+fn run_gbot_routine_op(
+    remote: Option<GpuiRemoteGxserverRequestTarget>,
+    op: Option<Value>,
+    bot_id: String,
+    reply: GbotRoutinesReply,
+    cx: &mut gpui::Context<GhostexGpuiApp>,
+) {
+    cx.spawn(async move |_this, cx| {
+        let mut result = Ok(());
+        if let Some(op) = op {
+            result = gx_rpc(remote.clone(), "/api/gbots", op)
+                .await
+                .map(|_| ())
+                .map_err(|error| error.message);
+        }
+        let listed = match result {
+            Ok(()) => gx_rpc(
+                remote,
+                "/api/gbots",
+                json!({ "op": "routines", "bot": bot_id }),
+            )
+            .await
+            .map_err(|error| error.message),
+            Err(message) => Err(message),
+        };
+        let _ = cx.update(|cx| reply.finish(listed, cx));
+    })
+    .detach();
 }

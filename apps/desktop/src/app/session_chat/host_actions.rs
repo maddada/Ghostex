@@ -555,6 +555,39 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        // A "Routine set" card's Edit (native_chat/gbot_card.rs): the Automate view with the
+        // routine selected when the GBot's project is the active one, else its GBot Settings on the
+        // Routines tab (CDXC:GBots 2026-11-09 in gx-chat-core transcript/routine_cards.rs).
+        if action == "editGbotRoutine" {
+            let field = |key: &str| {
+                message
+                    .get(key)
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            let (bot_id, routine_id, project_id) =
+                (field("botId"), field("routineId"), field("projectId"));
+            let machine_id = Some(field("machineId"))
+                .filter(|id| !id.is_empty())
+                .unwrap_or_else(|| ghostex_gx_core::LOCAL_MACHINE_ID.to_string());
+            let local = machine_id == ghostex_gx_core::LOCAL_MACHINE_ID;
+            if local
+                && !project_id.is_empty()
+                && self.open_native_automate_for_routine(&project_id, &routine_id, window, cx)
+            {
+                return;
+            }
+            if !bot_id.is_empty() {
+                self.open_gpui_gbot_settings_modal_on(
+                    bot_id,
+                    machine_id,
+                    crate::app::window::GbotSettingsTab::Routines,
+                    cx,
+                );
+            }
+            return;
+        }
         // A command in a reply goes to a terminal of the Commands panel, run or only typed
         // (`run_in_terminal.rs`).
         if action == "runInTerminal" || action == "pasteInTerminal" {

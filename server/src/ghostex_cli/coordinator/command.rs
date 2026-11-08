@@ -729,6 +729,17 @@ fn update(command: &str, parsed: &ParsedArgs) -> CliResult<()> {
         return Ok(());
     }
     match command {
+        // A GBot's chat: the note went into its bot's memory (server/src/gbots/memory/ops.rs).
+        "remember" if view["gbotsMemory"].is_object() => {
+            let added = &view["gbotsMemory"];
+            if added["added"].as_bool() == Some(false) {
+                println!("{}", added["message"].as_str().unwrap_or("Already kept."));
+            } else {
+                println!(
+                    "Kept in your memory (MEMORY.md), which every chat of yours reads. Next time use `ghostex gbots memory add`."
+                );
+            }
+        }
         "remember" => {
             let count = view["coordinator"]["memory"]
                 .as_array()

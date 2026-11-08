@@ -214,6 +214,8 @@ pub(crate) struct ChatOpening<'a> {
     pub from: Option<&'a str>,
     /// The sender's standing chat with this bot (`ask --chat standing`).
     pub standing: bool,
+    /// The chat's title instead of the first line of its task (a routine's "<name> · <date>").
+    pub title: Option<&'a str>,
     /// Linked as this coordinator's thread (its project and session ids) with this task before its
     /// agent starts, so the supervisor sees its first turn from the beginning.
     pub link: Option<(&'a str, &'a str, &'a str)>,
@@ -257,7 +259,12 @@ pub(crate) fn create_bot_chat_with(
         agent_rows: &agent_rows,
         project_id: &project_id,
         agent_id: &bot.agent_id,
-        title: Some(chat_title(bot, task)),
+        title: Some(
+            opening
+                .title
+                .map(str::to_string)
+                .unwrap_or_else(|| chat_title(bot, task)),
+        ),
         goal,
         task: task.unwrap_or_default().to_string(),
         model: bot.model.clone(),

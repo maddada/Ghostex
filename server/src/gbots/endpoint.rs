@@ -16,6 +16,8 @@
 //! | `changes` | | anyone here |
 //! | `change` | `change` | anyone here (the "GBot added" card reads it) |
 //! | `undo` | `change` | you; Chief of Staff for its own changes |
+//! | `routines`, `routineAdd`, `routineEdit`, `routinePause`, `routineResume`, `routineRemove`, `routineRunNow` | routines.rs | you, Chief of Staff, the GBot's own chats |
+//! | `memory…`, `prefs…` | see memory/ops.rs | the bot's own chats, you, Chief of Staff |
 //!
 //! Every op is refused while GBots are off (feature.rs). An approval level above `ask` is set from
 //! your own computer or phone only.
@@ -44,7 +46,7 @@ pub(crate) const GBOTS_ENDPOINT: &str = "/api/gbots";
 
 /// Who is asking, as GBots' rules see it.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Asker {
+pub(super) enum Asker {
     /// The owner's computer or phone.
     OwnerDevice,
     /// The `ghostex` CLI in the user's own terminal (the token file).
@@ -68,11 +70,11 @@ impl Asker {
         }
     }
 
-    fn is_user(self) -> bool {
+    pub(super) fn is_user(self) -> bool {
         matches!(self, Self::OwnerDevice | Self::Terminal)
     }
 
-    fn may_manage(self) -> bool {
+    pub(super) fn may_manage(self) -> bool {
         self.is_user() || self == Self::Chief
     }
 
@@ -294,8 +296,18 @@ fn run(
                 },
             )
         }
+        op if super::memory::handles(op) => {
+            let memory_caller = super::memory::MemoryCaller {
+                own_bot: own_bot(&db, caller)?,
+                may_manage: asker.may_manage(),
+                label: asker.label(),
+            };
+            super::memory::run(state, &db, &repository, memory_caller, op, params)
+        }
+        // A GBot's routines (routines.rs).
+        op if op.starts_with("routine") => super::routines::run(state, &db, &repository, caller, asker, op, params),
         other => Err(DomainStateError::bad_request(format!(
-            "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat, closeChat, ask, assignments, changes, change or undo."
+            "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat, closeChat, ask, assignments, changes, change, undo or a memory op (memoryShow, memoryAdd, …)."
         ))),
     }
 }
@@ -377,7 +389,10 @@ fn require_change(
 }
 
 /// The bot a caller's own session is a chat of.
-fn own_bot(db: &Connection, caller: &Principal) -> Result<Option<Bot>, DomainStateError> {
+pub(super) fn own_bot(
+    db: &Connection,
+    caller: &Principal,
+) -> Result<Option<Bot>, DomainStateError> {
     let Principal::Session { project_id, .. } = caller else {
         return Ok(None);
     };
@@ -561,6 +576,10 @@ fn edit(
             code: "internalError",
             message: format!("Saved, but SOUL.md could not be written: {error}"),
         })?;
+    }
+    // Open chats are told to read their brief again (memory/notify.rs).
+    if bot.soul != before.soul {
+        super::memory::tell_open_chats(state, repository, &bot);
     }
     if bot.name != before.name && !bot.project_id.is_empty() {
         super::project::rename_bot_project(state, db, repository, &bot)?;

@@ -331,7 +331,7 @@ fn sql_time_now() -> String {
 }
 
 /// Wakes a sleeping chat so it takes what was just queued; a running one takes it when idle.
-fn wake_if_asleep(state: &AppState, session: &Value) {
+pub(super) fn wake_if_asleep(state: &AppState, session: &Value) {
     if crate::presentation::session_attributes::effective_lifecycle_state(session) != "sleep" {
         return;
     }
@@ -501,6 +501,7 @@ pub(super) fn ask(
                     from: Some(&from),
                     standing: !consult && chat == "standing",
                     link,
+                    title: None,
                 },
             )?;
             let (project, session_id) = (

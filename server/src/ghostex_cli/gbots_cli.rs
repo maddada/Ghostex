@@ -9,7 +9,7 @@ use crate::ghostex_cli::{
     rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
-const HELP: &str =
+const HELP_HEAD: &str =
     "GBots: your own team of bots, led by Chief of Staff in Main Hub. Each GBot keeps
 its name, instructions and memory in every chat; its chats run on your own Claude Code or Codex.
 
@@ -40,13 +40,24 @@ USAGE
   ghostex gbots changes [--json]                 GBots added, changed and removed, newest first
   ghostex gbots undo <change>                    Undo adding or changing a GBot (refused once it
                                                  changed since)
+";
 
+/// The rest of the help, after the memory verbs (gbots_memory_cli.rs).
+const HELP_TAIL: &str = "
   <bot> is a GBot's name or id. Colours: periwinkle, sky, mint, gold, coral, lavender, pink, rose.
   Icons are Ghostex icon names (robot, search, pencil, …). Only you and Chief of Staff add, change
   and remove GBots; adding one from a terminal asks for your approval first. Chief of Staff and a
   department's lead hand a GBot work; any other GBot or coordinator may only ask it a question. Turn on Main Hub and
   GBots in Settings > Extensions. Add --computer <name> to run a command on another computer.
 ";
+
+fn help() -> String {
+    format!(
+        "{HELP_HEAD}{}{}{HELP_TAIL}",
+        super::gbots_memory_cli::MEMORY_HELP,
+        super::gbots_routine_cli::ROUTINE_HELP
+    )
+}
 
 fn gbots(params: Value, flags: &Flags) -> CliResult<Value> {
     call_gxserver_rpc("/api/gbots", &params, flags)
@@ -111,11 +122,17 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     let flags = parsed.flags.clone();
     let rest = &parsed.rest;
     if flags.contains("help") || flags.contains("h") || rest.is_empty() {
-        print!("{HELP}");
+        print!("{}", help());
         return Ok(());
     }
     let json_out = flags.contains("json");
     let verb = rest[0].as_str();
+    match verb {
+        "memory" => return super::gbots_memory_cli::run_memory(rest, &flags),
+        "prefs" => return super::gbots_memory_cli::run_prefs(rest, &flags),
+        "routine" | "routines" => return super::gbots_routine_cli::run_routine(rest, &flags),
+        _ => {}
+    }
     let answer = match verb {
         "list" => gbots(json!({ "op": "list" }), &flags)?,
         "show" => gbots(json!({ "op": "show", "bot": bot_arg(rest, verb)? }), &flags)?,
@@ -210,7 +227,8 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         }
         other => {
             return Err(CliError::Other(format!(
-                "unknown gbots command `{other}`.\n\n{HELP}"
+                "unknown gbots command `{other}`.\n\n{}",
+                help()
             )))
         }
     };

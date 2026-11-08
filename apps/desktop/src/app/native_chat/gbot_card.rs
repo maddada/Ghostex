@@ -3,7 +3,11 @@
 //! words both). The bot's icon in its colour, "Researcher added", what it is and runs on, then
 //! Undo and Open settings; after Undo, "Researcher removed" and "Undone".
 //!
-//! CDXC:GBots 2026-11-09 SEE-ALSO: the user's decision is on packages/gx-chat-core/src/transcript/gbot_cards.rs; the phone draws the same card in apps/mobile/app/src/chat/native/transcript/GbotCard.tsx.
+//! The "Routine set" card (`kind: routineSet`, packages/gx-chat-core/src/transcript/routine_cards.rs)
+//! is drawn here too: the GBot's icon, "Routine set: Inbox watch", its schedule in words and its next
+//! run, then Pause (Resume), Edit and Undo.
+//!
+//! CDXC:GBots 2026-11-09 SEE-ALSO: the user's decision is on packages/gx-chat-core/src/transcript/gbot_cards.rs and routine_cards.rs; the phone draws the same card in apps/mobile/app/src/chat/native/transcript/GbotCard.tsx.
 
 use super::tone_card::{ToneButton, ToneCardParts, ToneLook, tone_look};
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
@@ -95,6 +99,22 @@ impl NativeChatView {
                     .into_any_element(),
             );
         }
+        let is_routine = text(card, "kind") == "routineSet";
+        for (key, strong) in [("next", true), ("checkNote", false)] {
+            let line = text(state, key);
+            if is_routine && !line.is_empty() {
+                body.push(
+                    div()
+                        .w_full()
+                        .min_w_0()
+                        .whitespace_normal()
+                        .text_size(px(12.5 * s))
+                        .text_color(if strong { p.foreground } else { p.muted })
+                        .child(line)
+                        .into_any_element(),
+                );
+            }
+        }
         let note = text(state, "note");
         if !note.is_empty() {
             body.push(
@@ -122,6 +142,69 @@ impl NativeChatView {
             );
         }
         let mut footer_end = Vec::new();
+        if is_routine && !undone && state["routine"] == true {
+            let routine_id = text(card, "routineId");
+            let pause_enabled = state["pauseEnabled"] == true;
+            let paused = state["paused"] == true;
+            let (pause_change, pause_routine) = (change_id.clone(), routine_id.clone());
+            let op = text(state, "pauseOp");
+            footer_end.push(
+                self.tone_button(
+                    gpui::SharedString::from(format!("routine-card-pause:{change_id}")),
+                    &text(state, "pauseLabel"),
+                    Some(if paused {
+                        "titlebar/player-play.svg"
+                    } else {
+                        "titlebar/player-pause.svg"
+                    }),
+                    ToneButton::Secondary,
+                    None,
+                    !pause_enabled,
+                    p,
+                )
+                .when(pause_enabled, |button| {
+                    button.on_click(cx.listener(move |this, _, _, cx| {
+                        this.invoke(
+                            json!({
+                                "type": "gbotCard",
+                                "op": op,
+                                "changeId": pause_change,
+                                "routineId": pause_routine,
+                            }),
+                            cx,
+                        )
+                    }))
+                })
+                .into_any_element(),
+            );
+            if state["editEnabled"] == true {
+                let (edit_change, edit_bot) = (change_id.clone(), bot_id.clone());
+                footer_end.push(
+                    self.tone_button(
+                        gpui::SharedString::from(format!("routine-card-edit:{change_id}")),
+                        "Edit",
+                        Some("titlebar/pencil.svg"),
+                        ToneButton::Secondary,
+                        None,
+                        false,
+                        p,
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.invoke(
+                            json!({
+                                "type": "gbotCard",
+                                "op": "edit",
+                                "changeId": edit_change,
+                                "botId": edit_bot,
+                                "routineId": routine_id,
+                            }),
+                            cx,
+                        )
+                    }))
+                    .into_any_element(),
+                );
+            }
+        }
         if !undone {
             let enabled = state["undoEnabled"] == true;
             let undo_id = change_id.clone();

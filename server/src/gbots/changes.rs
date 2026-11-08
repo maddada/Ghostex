@@ -26,6 +26,13 @@ pub(crate) struct Change {
     pub by: String,
     pub at: String,
     pub undone_at: Option<String>,
+    /// `before` and `after` as saved, for changes that are not about a bot (a routine's).
+    pub before_raw: Option<Value>,
+    pub after_raw: Option<Value>,
+}
+
+fn is_routine(kind: &str) -> bool {
+    kind.starts_with("routine")
 }
 
 fn sql(error: rusqlite::Error) -> DomainStateError {
@@ -38,16 +45,26 @@ fn sql(error: rusqlite::Error) -> DomainStateError {
 const COLUMNS: &str = "changeId, kind, subjectId, beforeJson, afterJson, byWho, at, undoneAt";
 
 fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Change> {
-    let bot = |text: Option<String>| text.and_then(|text| serde_json::from_str::<Bot>(&text).ok());
+    let bot = |text: &Option<String>| {
+        text.as_deref()
+            .and_then(|text| serde_json::from_str::<Bot>(text).ok())
+    };
+    let raw = |text: &Option<String>| {
+        text.as_deref()
+            .and_then(|text| serde_json::from_str::<Value>(text).ok())
+    };
+    let (before, after): (Option<String>, Option<String>) = (row.get(3)?, row.get(4)?);
     Ok(Change {
         change_id: row.get(0)?,
         kind: row.get(1)?,
         subject_id: row.get(2)?,
-        before: bot(row.get(3)?),
-        after: bot(row.get(4)?),
+        before: bot(&before),
+        after: bot(&after),
         by: row.get(5)?,
         at: row.get(6)?,
         undone_at: row.get(7)?,
+        before_raw: raw(&before),
+        after_raw: raw(&after),
     })
 }
 
@@ -137,6 +154,15 @@ pub(crate) fn undo_problem(
     if change.undone_at.is_some() {
         return Ok(Some("That change was already undone.".to_string()));
     }
+    if is_routine(&change.kind) {
+        return super::routines::undo_problem(
+            db,
+            &change.kind,
+            &change.subject_id,
+            change.before_raw.as_ref(),
+            change.after_raw.as_ref(),
+        );
+    }
     let current = read_bot(db, &change.subject_id)?;
     let name = change
         .after
@@ -159,6 +185,29 @@ pub(crate) fn undo_problem(
 
 /// A change as `/api/gbots` answers it; `bot` is the bot as it is now, when it still exists.
 pub(crate) fn change_summary(db: &Connection, change: &Change) -> Result<Value, DomainStateError> {
+    if is_routine(&change.kind) {
+        let shown = change.after_raw.as_ref().or(change.before_raw.as_ref());
+        let problem = undo_problem(db, change)?;
+        let routine = super::routines::current(db, &change.subject_id)?;
+        let bot_id = shown
+            .and_then(|routine| routine.get("botId"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        return Ok(json!({
+            "changeId": change.change_id,
+            "kind": change.kind,
+            "routineId": change.subject_id,
+            "botId": bot_id,
+            "name": shown.and_then(|routine| routine.get("name")).cloned(),
+            "by": change.by,
+            "at": change.at,
+            "undoneAt": change.undone_at,
+            "undoable": problem.is_none(),
+            "undoProblem": problem,
+            "routine": routine,
+            "bot": read_bot(db, bot_id)?.as_ref().map(bot_summary),
+        }));
+    }
     let current = read_bot(db, &change.subject_id)?;
     let shown = change.after.as_ref().or(change.before.as_ref());
     let problem = undo_problem(db, change)?;
@@ -193,6 +242,17 @@ pub(crate) fn undo(
             },
             message: problem,
         });
+    }
+    if is_routine(&change.kind) {
+        let done = super::routines::undo(
+            db,
+            &change.kind,
+            &change.subject_id,
+            change.before_raw.as_ref(),
+        )?;
+        mark_undone(db, &change.change_id)?;
+        let change = read_change(db, &change.change_id)?.unwrap_or_else(|| change.clone());
+        return Ok(json!({ "change": change_summary(db, &change)?, "done": done }));
     }
     let done = match (change.kind.as_str(), change.before.as_ref()) {
         ("botAdded", _) => remove(&change.subject_id)?,

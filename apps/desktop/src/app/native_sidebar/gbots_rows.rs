@@ -1,6 +1,6 @@
 //! Main Hub's GBots section: the GBots heading under Chief of Staff, then one row per GBot (its
 //! icon in its colour, its name, a status dot while a chat works or waits) whose chats fold under
-//! it like a project's sessions. A bot row's menu has New Chat, GBot Settings… and Remove GBot…;
+//! it like a project's sessions. A bot row's menu has New Chat, GBot Settings…, Memory… and Remove GBot…;
 //! the heading's has New GBot….
 //!
 //! CDXC:GBots 2026-11-09 DECISION:
@@ -144,6 +144,7 @@ fn gbot_menu(look: &GbotLook, machine_id: &str) -> Value {
     json!([
         { "label": "New Chat", "icon": "plus", "disabled": look.paused, "command": gbots_command("newChat", target.clone()) },
         { "label": "GBot Settings…", "icon": "settings", "command": gbots_command("settings", target.clone()) },
+        { "label": "Memory…", "icon": "brain", "command": gbots_command("memory", target.clone()) },
         { "separator": true },
         { "label": "Remove GBot…", "icon": "trash", "command": gbots_command("remove", target) },
     ])
@@ -533,6 +534,12 @@ impl GhostexGpuiApp {
         match text("op").as_str() {
             "newGbot" => self.open_gpui_new_gbot_modal(cx),
             "settings" => self.open_gpui_gbot_settings_modal(bot_id, machine, cx),
+            "memory" => self.open_gpui_gbot_settings_modal_on(
+                bot_id,
+                machine,
+                crate::app::window::GbotSettingsTab::Memory,
+                cx,
+            ),
             "newChat" => self.start_native_sidebar_gbot_chat(&machine, bot_id, cx),
             "remove" => {
                 let name = text("name");

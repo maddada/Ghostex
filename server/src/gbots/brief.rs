@@ -4,90 +4,18 @@
 //! `ghostex gbots brief` (run by the bot before its first reply and after any compaction, so a
 //! long chat picks up memory that changed since it started).
 
-use std::path::Path;
-
-use super::folder::{bot_folder, read_preferences, MEMORY_DIR, MEMORY_FILE};
+use super::folder::{bot_folder, read_preferences, MEMORY_FILE};
+use super::memory::{
+    topic_index_lines, within_budget, MEMORY_MAX_BYTES, MEMORY_MAX_LINES, PREFERENCES_MAX_LINES,
+};
 use super::record::Bot;
 use crate::paths::GxserverPaths;
 
-/// `MEMORY.md` loads up to this many lines and bytes; the rest stays in the file.
-pub(crate) const MEMORY_MAX_LINES: usize = 200;
-pub(crate) const MEMORY_MAX_BYTES: usize = 24 * 1024;
-/// The topic index lists at most this many topics, in at most this many characters.
-const TOPICS_MAX: usize = 40;
-const TOPICS_MAX_CHARS: usize = 2_000;
-/// Shared preferences load up to this many lines.
-const PREFERENCES_MAX_LINES: usize = 100;
+const GENERATED_NOTE: &str = "<!-- Written by Ghostex from this GBot's settings and memory, and rewritten when they change: edits here are lost. Change the GBot's instructions in Ghostex (`ghostex gbots edit`); keep facts with `ghostex gbots memory add`. -->";
 
-const GENERATED_NOTE: &str = "<!-- Written by Ghostex from this GBot's settings and memory, and rewritten when they change: edits here are lost. Change the GBot's instructions in Ghostex (`ghostex gbots edit`); keep facts in MEMORY.md. -->";
-
-/// The first `max_lines` lines and `max_bytes` bytes of `text`, and whether it was cut.
-fn within_budget(text: &str, max_lines: usize, max_bytes: usize) -> (String, bool) {
-    let mut kept = String::new();
-    let mut cut = false;
-    for (index, line) in text.lines().enumerate() {
-        if index >= max_lines || kept.len() + line.len() + 1 > max_bytes {
-            cut = true;
-            break;
-        }
-        kept.push_str(line);
-        kept.push('\n');
-    }
-    (kept.trim_end().to_string(), cut)
-}
-
-/// `memory/<topic>.md` files: the first `# ` heading is the title and the first plain line under
-/// it the description. The archive and the daily log are not topics.
-fn topic_index(folder: &Path) -> Vec<String> {
-    let Ok(entries) = std::fs::read_dir(folder.join(MEMORY_DIR)) else {
-        return Vec::new();
-    };
-    let mut files: Vec<_> = entries
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.extension().is_some_and(|ext| ext == "md")
-                && path.file_stem().is_some_and(|stem| stem != "archive")
-        })
-        .collect();
-    files.sort();
-    let mut lines = Vec::new();
-    let mut used = 0;
-    for path in files.into_iter().take(TOPICS_MAX) {
-        let text = std::fs::read_to_string(&path).unwrap_or_default();
-        let stem = path
-            .file_stem()
-            .map(|stem| stem.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let mut title = stem.clone();
-        let mut description = String::new();
-        let mut seen_title = false;
-        for line in text.lines().map(str::trim) {
-            if !seen_title {
-                if let Some(heading) = line.strip_prefix("# ") {
-                    title = heading.trim().to_string();
-                    seen_title = true;
-                }
-                continue;
-            }
-            if !line.is_empty() && !line.starts_with('#') {
-                description = line.to_string();
-                break;
-            }
-        }
-        let line = if description.is_empty() {
-            format!("- {title} (memory/{stem}.md)")
-        } else {
-            format!("- {title}: {description} (memory/{stem}.md)")
-        };
-        if used + line.len() > TOPICS_MAX_CHARS {
-            break;
-        }
-        used += line.len();
-        lines.push(line);
-    }
-    lines
-}
+/// How a bot keeps its memory, in every brief (the `ghostex-gbots` skill says the same at more
+/// length).
+const KEEPING_MEMORY: &str = "## Keeping your memory\n\n- Save a fact worth keeping between chats: `ghostex gbots memory add \"<fact>\"` (add `--until YYYY-MM-DD` when it stops being true then). Keep each note short; when MEMORY.md fills up, Ghostex moves the oldest notes to memory/archive.md.\n- Longer detail goes in a topic: `ghostex gbots memory add --topic <name> \"<text>\"`; read one with `ghostex gbots memory topic <name>`.\n- Remove a note that is no longer true: `ghostex gbots memory forget \"<words of it>\"`.\n- Never edit MEMORY.md, the topics or this file with your own file tools: Ghostex keeps a journal of every change so the user can undo it, and keeps keys and passwords out of these files.\n- What you did each day is in memory/log/ (Ghostex writes it): `ghostex gbots memory log --days 3`.\n\n";
 
 /// The text that loads into `bot`; `team` is every bot on this computer.
 pub(crate) fn brief_text(paths: &GxserverPaths, bot: &Bot, team: &[Bot]) -> String {
@@ -133,13 +61,14 @@ pub(crate) fn brief_text(paths: &GxserverPaths, bot: &Bot, team: &[Bot]) -> Stri
             ));
         }
     }
-    let topics = topic_index(&folder);
+    let topics = topic_index_lines(&folder);
     if !topics.is_empty() {
         out.push_str(&format!(
             "## Memory topics\n\nRead a topic's file when the work touches it.\n\n{}\n\n",
             topics.join("\n")
         ));
     }
+    out.push_str(KEEPING_MEMORY);
     out.push_str("## Your team\n\n- Chief of Staff: leads the GBots and may hand you work.\n");
     for other in team {
         let you = if other.bot_id == bot.bot_id {

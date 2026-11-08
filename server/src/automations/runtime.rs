@@ -17,6 +17,8 @@ pub struct AutomationRuntime {
     pub(super) base_url: String,
     pub(super) paths: GxserverPaths,
     pub(super) server_id: String,
+    /// gxserver's state once it exists (routine_tick.rs), for GBot routines.
+    pub(super) app: AppSlot,
 }
 
 #[derive(Clone)]
@@ -32,6 +34,12 @@ pub(super) struct AutomationDefinitionRecord {
     pub(super) prompt: String,
     pub(super) schedule: Value,
     pub(super) updated_at: String,
+    /// The GBot whose routine this is (server/src/gbots/routines.rs): each run is a chat of it.
+    pub(super) owner_bot_id: Option<String>,
+    /// The check that runs as plain code before a run (precheck.rs).
+    pub(super) precheck: Option<Value>,
+    /// Where a routine's result goes: `chat` (its own chat) or `chief`.
+    pub(super) deliver: Option<String>,
 }
 
 #[derive(Clone)]
@@ -99,6 +107,7 @@ impl AutomationRuntime {
             base_url,
             paths,
             server_id: server_id.into(),
+            app: AppSlot::default(),
         }
     }
 
@@ -129,6 +138,10 @@ impl AutomationRuntime {
         recover_running_automation_runs(self, &repository, &db)?;
         let due = read_due_automations(&db)?;
         for automation in due {
+            if automation.owner_bot_id.is_some() || automation.precheck.is_some() {
+                let _ = self.routine_due(&repository, &db, &automation);
+                continue;
+            }
             if has_active_run(&db, &automation.id)? {
                 let run = create_run_record(
                     &automation,
@@ -181,7 +194,9 @@ impl AutomationRuntime {
                 .await
             {
                 let db = open_gxserver_database(&self.paths).map_err(internal_error)?;
-                return fail_run(&db, &project_id, &run_id, &error.message, "failed");
+                fail_run(&db, &project_id, &run_id, &error.message, "failed")?;
+                self.routine_run_settled(&project_id, &run_id);
+                return Ok(());
             }
         }
         let run_created_at = {
@@ -204,6 +219,7 @@ impl AutomationRuntime {
                 run_created_at.as_deref(),
             )? {
                 complete_run(&db, &project_id, &run_id, &status, summary.as_deref())?;
+                self.routine_run_settled(&project_id, &run_id);
                 return Ok(());
             }
         }
@@ -214,7 +230,9 @@ impl AutomationRuntime {
             &run_id,
             "Automation did not report an AUTOMATION_RESULT marker before the watcher timeout.",
             "needs_attention",
-        )
+        )?;
+        self.routine_run_settled(&project_id, &run_id);
+        Ok(())
     }
 
     /*

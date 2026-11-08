@@ -1928,6 +1928,11 @@ pub(crate) fn handle_coordinator_http(
     repository: &DomainRepository<'_>,
     params: &Map<String, Value>,
 ) -> std::result::Result<Value, DomainStateError> {
+    // A GBot's chat keeps what it remembers in its bot's memory (server/src/gbots/memory/ops.rs).
+    if let Some(answer) = crate::gbots::gbot_coordinator_remember(state, endpoint_path, db, params)?
+    {
+        return Ok(answer);
+    }
     let output = coordinators::handle_coordinator_endpoint(endpoint_path, db, repository, params)?;
     for (project_id, session_id) in &output.changed_sessions {
         schedule_presentation_session_delta(state, db, repository, project_id, session_id)?;

@@ -46,6 +46,10 @@ pub(crate) fn observe_agent_activity_result(
         .get("activity")
         .and_then(Value::as_str)
         .unwrap_or("idle");
+    // A GBot's chat that finished a turn adds a line to the bot's daily log.
+    if let Some(session) = result.get("session") {
+        crate::gbots::observe_gbot_activity(&state.paths, previous, next, activity, session);
+    }
     let entered_attention = result.get("enteredAttention").and_then(Value::as_bool) == Some(true);
     let left_attention = previous == "attention" && next != "attention";
     let explicitly_acknowledged = endpoint_path == "/api/updateAgentActivity"

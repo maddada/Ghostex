@@ -9,6 +9,7 @@
 //! SEE-ALSO: apps/desktop/src/app/gbot_settings_modal_lifecycle.rs (open, save), server/src/gbots/endpoint.rs (`show`, `edit`).
 use super::super::native_modal_kit::*;
 use super::super::settings_modal::palette::{SETTINGS_FONT, SettingsPalette};
+use super::memory::{GbotMemoryReply, GbotMemoryTab, MemoryOpTag};
 use super::model::*;
 use super::parts::kit_palette;
 use gpui::{
@@ -30,16 +31,23 @@ pub(crate) enum GbotSettingsTab {
     Profile,
     Instructions,
     Memory,
+    Routines,
 }
 
 impl GbotSettingsTab {
-    pub(crate) const ALL: [Self; 3] = [Self::Profile, Self::Instructions, Self::Memory];
+    pub(crate) const ALL: [Self; 4] = [
+        Self::Profile,
+        Self::Instructions,
+        Self::Memory,
+        Self::Routines,
+    ];
 
     pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Profile => "Profile",
             Self::Instructions => "Instructions",
             Self::Memory => "Memory",
+            Self::Routines => "Routines",
         }
     }
 
@@ -48,6 +56,7 @@ impl GbotSettingsTab {
             Self::Profile => "titlebar/user.svg",
             Self::Instructions => "titlebar/file-text.svg",
             Self::Memory => "titlebar/brain.svg",
+            Self::Routines => "titlebar/clock.svg",
         }
     }
 }
@@ -78,6 +87,35 @@ pub(crate) enum GbotSettingsModalCommand {
         changes: Map<String, Value>,
         reply: GbotSettingsSaveReply,
     },
+    /// The Memory tab (memory.rs): read the memory (`memoryShow`); save MEMORY.md (`memoryEdit`
+    /// with `base`, the hash it was read at); undo change `change` (`memoryUndo`). Each answers
+    /// through `reply` with `memoryShow` as it is afterwards, or gxserver's refusal.
+    MemoryLoad {
+        bot_id: String,
+        reply: GbotMemoryReply,
+    },
+    MemorySave {
+        bot_id: String,
+        text: String,
+        base: String,
+        reply: GbotMemoryReply,
+    },
+    MemoryUndo {
+        bot_id: String,
+        change: String,
+        reply: GbotMemoryReply,
+    },
+    /// The Routines tab (routines.rs): `op` (none for a plain read), then `routines` as it is
+    /// afterwards, or gxserver's refusal.
+    Routines {
+        bot_id: String,
+        op: Option<Value>,
+        reply: super::routines::GbotRoutinesReply,
+    },
+    /// Shows a memory file in Finder.
+    Reveal {
+        path: String,
+    },
     Cancel,
 }
 
@@ -90,6 +128,8 @@ pub(crate) struct GbotSettingsModalConfig {
     pub(crate) palette: ModalPalette,
     /// The tab it opens on.
     pub(crate) tab: GbotSettingsTab,
+    /// A `memoryShow` answer already read (opening on the Memory tab), so the tab draws at once.
+    pub(crate) memory: Option<Value>,
 }
 
 pub(crate) struct GpuiGbotSettingsModalWindow {
@@ -112,6 +152,9 @@ pub(crate) struct GpuiGbotSettingsModalWindow {
     pub(super) saving: bool,
     /// Why the last save was refused, shown beside the buttons.
     pub(super) error: Option<String>,
+    pub(super) memory: GbotMemoryTab,
+    pub(super) pending_memory_op: Option<MemoryOpTag>,
+    pub(super) routines: super::routines::GbotRoutinesTab,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
 }
@@ -193,6 +236,24 @@ impl GpuiGbotSettingsModalWindow {
             ));
         }
         let palette = SettingsPalette::resolve(&config.palette);
+        let mut memory = GbotMemoryTab::new(window, cx);
+        if let Some(view) = config
+            .memory
+            .as_ref()
+            .and_then(super::memory_model::GbotMemoryView::from_show)
+        {
+            memory.view = Some(view);
+            memory.requested = true;
+        } else if config.tab == GbotSettingsTab::Memory {
+            cx.defer_in(window, |this: &mut Self, window, cx| {
+                this.ensure_memory(window, cx)
+            });
+        }
+        if config.tab == GbotSettingsTab::Routines {
+            cx.defer_in(window, |this: &mut Self, window, cx| {
+                this.ensure_routines(window, cx)
+            });
+        }
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
         Self {
@@ -212,6 +273,9 @@ impl GpuiGbotSettingsModalWindow {
             page_scroll: ScrollHandle::new(),
             saving: false,
             error: None,
+            memory,
+            pending_memory_op: None,
+            routines: Default::default(),
             focus_handle,
             _subscriptions: subscriptions,
         }
@@ -246,6 +310,12 @@ impl GpuiGbotSettingsModalWindow {
         self.tab = tab;
         self.agent_select.close();
         self.page_scroll.set_offset(gpui::point(px(0.0), px(0.0)));
+        if tab == GbotSettingsTab::Memory {
+            self.ensure_memory(window, cx);
+        }
+        if tab == GbotSettingsTab::Routines {
+            self.ensure_routines(window, cx);
+        }
         if tab == GbotSettingsTab::Instructions {
             self.soul_input
                 .update(cx, |input, cx| input.focus(window, cx));
@@ -261,6 +331,11 @@ impl GpuiGbotSettingsModalWindow {
     }
 
     fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Cmd/Ctrl+Enter in the memory editor saves the memory, not the profile.
+        if self.tab == GbotSettingsTab::Memory && self.memory.editing {
+            self.save_memory(window, cx);
+            return;
+        }
         if self.saving {
             return;
         }
@@ -346,6 +421,10 @@ impl GpuiGbotSettingsModalWindow {
             cx.notify();
             return;
         }
+        if self.tab == GbotSettingsTab::Memory && self.memory.editing {
+            self.cancel_memory_edit(cx);
+            return;
+        }
         self.cancel(window, cx);
     }
 
@@ -422,7 +501,8 @@ impl Render for GpuiGbotSettingsModalWindow {
         let page = match self.tab {
             GbotSettingsTab::Profile => self.render_profile(window, cx),
             GbotSettingsTab::Instructions => self.render_instructions(window, cx),
-            GbotSettingsTab::Memory => self.render_memory(),
+            GbotSettingsTab::Memory => self.render_memory(window, cx),
+            GbotSettingsTab::Routines => self.render_routines(cx),
         };
         let footer = self.render_footer(cx);
         let menu = self.render_agent_menu(window, cx);
@@ -473,7 +553,7 @@ impl ModalCornerClose for GpuiGbotSettingsModalWindow {
     }
 
     /// Unsaved edits or a save on its way keep the window open on a click away.
-    fn keeps_open_on_click_away(&self, _window: &Window, _cx: &App) -> bool {
-        self.saving || !self.changes().is_empty()
+    fn keeps_open_on_click_away(&self, _window: &Window, cx: &App) -> bool {
+        self.saving || !self.changes().is_empty() || self.memory_edited(cx)
     }
 }

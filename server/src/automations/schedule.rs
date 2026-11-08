@@ -90,32 +90,11 @@ fn next_basic_cron(
     now: chrono::DateTime<Utc>,
     expression: &str,
 ) -> Option<chrono::DateTime<Utc>> {
-    let parts = expression.split_whitespace().collect::<Vec<_>>();
-    if parts.len() != 5 {
-        return None;
+    let fields = super::cron::parse_cron(expression)?;
+    match fields.minute_step {
+        Some(step) => next_minute_step(zone, now, step),
+        None => fields.next_after(zone, now),
     }
-    if let Some(step) = parts[0]
-        .strip_prefix("*/")
-        .and_then(|value| value.parse::<u32>().ok())
-    {
-        if parts[1] == "*" && parts[2] == "*" && parts[3] == "*" && parts[4] == "*" && step > 0 {
-            return next_minute_step(zone, now, step);
-        }
-    }
-    let minute = parts[0].parse::<u32>().ok()?;
-    let hour = parts[1].parse::<u32>().ok()?;
-    if parts[2] != "*" || parts[3] != "*" || hour > 23 || minute > 59 {
-        return None;
-    }
-    if parts[4] == "*" {
-        return next_weekly(zone, now, hour, minute, &ALL_DAYS);
-    }
-    let days = parts[4]
-        .split(',')
-        .filter_map(|day| day.parse::<u64>().ok())
-        .map(|day| day % 7)
-        .collect::<Vec<_>>();
-    next_weekly(zone, now, hour, minute, &days)
 }
 
 /// CDXC:Automations 2026-11-08 WHY:

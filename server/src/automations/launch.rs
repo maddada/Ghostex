@@ -59,6 +59,7 @@ pub(super) fn queue_automation_run(
             };
             run.updated_at = now_iso();
             upsert_run(db, &run)?;
+            runtime.routine_run_settled(&run.project_id, &run.id);
             Ok(run)
         }
     }
@@ -77,11 +78,45 @@ fn launch_automation(
         .and_then(Value::as_str)
         .unwrap_or("local");
     let prompt = build_automation_prompt(&automation.prompt);
+    if let Some(bot_id) = automation.owner_bot_id.as_deref() {
+        return launch_bot_automation(runtime, repository, db, automation, bot_id, &prompt);
+    }
     match execution_kind {
         "thread" => launch_thread_automation(runtime, repository, db, automation, &prompt, run),
         "worktree" => launch_worktree_automation(runtime, repository, db, automation, &prompt, run),
         _ => launch_local_automation(runtime, repository, db, automation, &prompt),
     }
+}
+
+/// A GBot's routine runs as a chat of that GBot (gbots/routine_runs.rs), which queues the prompt
+/// itself, so the watcher has nothing left to deliver.
+fn launch_bot_automation(
+    runtime: &AutomationRuntime,
+    repository: &DomainRepository<'_>,
+    db: &Connection,
+    automation: &AutomationDefinitionRecord,
+    bot_id: &str,
+    prompt: &str,
+) -> Result<AutomationLaunch, DomainStateError> {
+    let app = runtime.app_state().ok_or_else(|| DomainStateError {
+        code: "needsAttention",
+        message: "Ghostex was still starting, so the routine's chat could not open.".to_string(),
+    })?;
+    let (session_project_id, session_id) = crate::gbots::start_routine_run(
+        &app,
+        db,
+        repository,
+        bot_id,
+        &automation.id,
+        &automation.name,
+        prompt,
+    )?;
+    Ok(AutomationLaunch {
+        pending_prompt: None,
+        session_id,
+        session_project_id,
+        worktree: None,
+    })
 }
 
 fn launch_local_automation(

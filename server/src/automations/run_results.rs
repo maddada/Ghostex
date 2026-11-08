@@ -27,13 +27,30 @@ pub(super) fn recover_running_automation_runs(
         };
         let session_project_id =
             find_run_session_project_id(repository, &run).unwrap_or_else(|| run.project_id.clone());
-        if let Some((status, summary)) = read_automation_result_from_session(
+        /*
+        CDXC:Automations 2026-11-09 WHY:
+        A run whose chat can't be read any more (closed while gxserver was stopped, say) ends as needing attention on its own. Its error used to end the whole scheduler tick, so one such run stopped every automation from running again.
+        */
+        let read = read_automation_result_from_session(
             repository,
             &session_project_id,
             session_id,
             Some(&run.created_at),
-        )? {
+        );
+        let Ok(read) = read else {
+            fail_run(
+                db,
+                &run.project_id,
+                &run.id,
+                "The run's chat closed before it reported a result.",
+                "needs_attention",
+            )?;
+            runtime.routine_run_settled(&run.project_id, &run.id);
+            continue;
+        };
+        if let Some((status, summary)) = read {
             complete_run(db, &run.project_id, &run.id, &status, summary.as_deref())?;
+            runtime.routine_run_settled(&run.project_id, &run.id);
         } else {
             /*
             A recovered run already reached the delivery step in the watcher that

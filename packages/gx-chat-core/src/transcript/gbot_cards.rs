@@ -14,7 +14,7 @@
 //! User (Q2103 A, mockup "Researcher added"): the card's title says the bot was added, one line says what it is and what it runs on, and its buttons are Undo and Open settings; after Undo it reads "Researcher removed" and "Undone". Undo is offered only while it would work (gxserver refuses it once the bot changed since), and the reason shows instead.
 //! SEE-ALSO: server/src/gbots/card.rs and changes.rs (the card line and Undo), apps/desktop/src/app/native_chat/gbot_card.rs (desktop and web), apps/mobile/app/src/chat/native/transcript/GbotCard.tsx (phone).
 
-use ghostex_gx_protocol::chat_card::{chat_cards_in, GBOT_ADDED};
+use ghostex_gx_protocol::chat_card::{chat_cards_in, GBOT_ADDED, ROUTINE_SET};
 use serde_json::{json, Value};
 
 use crate::action::UserAction;
@@ -40,8 +40,14 @@ pub fn gbot_cards(pair: &ToolPair<'_>) -> Vec<Value> {
     }
     chat_cards_in(output)
         .into_iter()
-        .filter(|card| str_of(card, "kind") == GBOT_ADDED && !str_of(card, "changeId").is_empty())
+        .filter(|card| {
+            matches!(str_of(card, "kind"), GBOT_ADDED | ROUTINE_SET)
+                && !str_of(card, "changeId").is_empty()
+        })
         .map(|card| {
+            if str_of(&card, "kind") == ROUTINE_SET {
+                return crate::transcript::routine_cards::routine_card(&card);
+            }
             let name = str_of(&card, "name");
             let agent = agent_display_name(str_of(&card, "agentId"), "");
             let role = str_of(&card, "title").trim().trim_end_matches('.');
@@ -52,6 +58,7 @@ pub fn gbot_cards(pair: &ToolPair<'_>) -> Vec<Value> {
                 (true, true) => String::new(),
             };
             json!({
+                "kind": GBOT_ADDED,
                 "changeId": str_of(&card, "changeId"),
                 "botId": str_of(&card, "botId"),
                 "name": name,
@@ -69,6 +76,9 @@ pub fn gbot_cards(pair: &ToolPair<'_>) -> Vec<Value> {
 /// settingsEnabled, error }`.
 fn card_state(entry: &GbotCardEntry) -> Value {
     let change = entry.change.as_ref();
+    if change.is_some_and(|change| str_of(change, "kind").starts_with("routine")) {
+        return crate::transcript::routine_cards::card_state(entry);
+    }
     let undone = change.is_some_and(|change| change.get("undoneAt").is_some_and(Value::is_string));
     let bot_exists = change.is_some_and(|change| change.get("bot").is_some_and(Value::is_object));
     let undoable = change.is_some_and(|change| change.get("undoable") == Some(&Value::Bool(true)));
@@ -101,6 +111,8 @@ pub struct GbotCardEntry {
     pub change: Option<Value>,
     pub loading: bool,
     pub undoing: bool,
+    /// A routine card's Pause or Resume is on its way.
+    pub pausing: bool,
     /// Why the last Undo or read failed.
     pub error: String,
 }
@@ -115,7 +127,8 @@ pub fn card_states(state: &ChatState) -> std::collections::BTreeMap<String, Valu
         .collect()
 }
 
-/// `{type: "gbotCard", changeId, op: "load" | "undo" | "openSettings", botId?}`.
+/// `{type: "gbotCard", changeId, op: "load" | "undo" | "openSettings" | "pause" | "resume" |
+/// "edit", botId?, routineId?}`; the last three are a "Routine set" card's (routine_cards.rs).
 pub fn act(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let change_id = str_of(&Value::Object(action.params.clone()), "changeId")
         .trim()
@@ -149,12 +162,15 @@ pub fn act(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
             params: Box::new(json!({ "botId": bot_id, "machineId": machine_id })),
         }];
     }
+    if op == "edit" {
+        return crate::transcript::routine_cards::edit(state, action);
+    }
     let entry = state
         .transcript_view
         .gbot_cards
         .entry(change_id.clone())
         .or_default();
-    if entry.loading || entry.undoing {
+    if entry.loading || entry.undoing || entry.pausing {
         return Vec::new();
     }
     let params = match op.as_str() {
@@ -167,6 +183,22 @@ pub fn act(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
             entry.undoing = true;
             entry.error.clear();
             json!({ "op": "undo", "change": change_id })
+        }
+        "pause" | "resume" => {
+            let routine_id = action
+                .param("routineId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if routine_id.is_empty() {
+                return Vec::new();
+            }
+            entry.pausing = true;
+            entry.error.clear();
+            json!({
+                "op": if op == "pause" { "routinePause" } else { "routineResume" },
+                "routine": routine_id,
+                "change": change_id,
+            })
         }
         _ => return Vec::new(),
     };
@@ -195,8 +227,10 @@ pub fn settle_rpc(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) 
         .entry(change_id)
         .or_default();
     let undoing = entry.undoing;
+    let pausing = entry.pausing;
     entry.loading = false;
     entry.undoing = false;
+    entry.pausing = false;
     match outcome {
         RpcOutcome::Ok { result } => {
             if let Some(change) = result.get("change").filter(|change| change.is_object()) {
@@ -215,7 +249,9 @@ pub fn settle_rpc(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) 
                 return true;
             }
             entry.error = if message.trim().is_empty() {
-                if undoing {
+                if pausing {
+                    "That didn't go through. Try again.".to_string()
+                } else if undoing {
                     "Undo didn't go through. Try again.".to_string()
                 } else {
                     "Couldn't read this GBot's state.".to_string()

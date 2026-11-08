@@ -69,6 +69,9 @@ pub(super) fn normalize_definition_payload(
         prompt,
         schedule,
         updated_at: now,
+        owner_bot_id: None,
+        precheck: None,
+        deliver: None,
     })
 }
 
