@@ -1,5 +1,6 @@
 //! The security log: an append-only, hash-chained record of every sensitive action (who asked,
-//! what, when, which approval signed it and how it ended), with a notification for each.
+//! what, when, which approval signed it and how it ended), with a notification for the important
+//! ones (`notify::notifies`).
 //!
 //! The API other code calls is one function:
 //!
