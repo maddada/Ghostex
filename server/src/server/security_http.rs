@@ -228,6 +228,22 @@ pub(crate) fn route_security_http(
     Some(reply(StatusCode::OK, result))
 }
 
+/*
+CDXC:Security 2026-11-08 WHY:
+GitHub #508 / Windows security log: "Let Mohamads-MacBook-Pro-2 (Ghostex app) act as the owner of
+Ghostex on this computer" was asked 8 times in one day, never answered, because the Mac's app
+enrolled its owner key on every connect (its owner session opener runs on the first call to a
+connected computer), and each restart of either side made a new request. That owner session only
+lets the owner's Stop, prompt answers and typing on this computer's sessions go without asking, so
+it is asked for when one of those first needs it, not at connect: the opener sends
+`askOwner: false`, which enrolls a key that needs no approval and otherwise answers
+`ownerApprovalNeeded` without making a request. A call without the field asks, as before.
+*/
+/// `/api/enrollOwnerKey`'s flag: `false` enrolls only when no approval is needed.
+const ASK_OWNER_PARAM: &str = "askOwner";
+/// The answer to `askOwner: false` when the key needs the owner's approval.
+const OWNER_APPROVAL_NEEDED: &str = "ownerApprovalNeeded";
+
 /// How long another computer's request to act as the owner here waits for an answer.
 const OWNER_KEY_REQUEST_TTL_MS: u64 = 24 * 60 * 60 * 1000;
 
@@ -250,6 +266,12 @@ fn enroll_key(
     use ghostex_gx_protocol::approval::{EnrollKeyParams, SensitiveAction};
     let security = &state.security;
     let now = security::now_ms();
+    // `askOwner: false`: enroll only if no approval is needed (see the note at `ASK_OWNER_PARAM`).
+    let mut params = params;
+    let may_ask = params
+        .remove(ASK_OWNER_PARAM)
+        .and_then(|value| value.as_bool())
+        != Some(false);
     let EnrollKeyParams { key } =
         parse(params.clone()).map_err(|(code, message)| EnrollRefusal::Reply(code, message))?;
     let key_id = security::key_id_of(&key)
@@ -296,6 +318,17 @@ fn enroll_key(
         return Err(EnrollRefusal::Reply(
             "forbidden",
             "The first approver key is added by Ghostex on your computer.".to_string(),
+        ));
+    }
+    if !first
+        && owner
+        && !may_ask
+        && !params.contains_key(ghostex_gx_protocol::approval::APPROVAL_ID_PARAM)
+    {
+        return Err(EnrollRefusal::Reply(
+            OWNER_APPROVAL_NEEDED,
+            "Another owner key is enrolled here; this key needs the owner's approval, which wasn't asked for."
+                .to_string(),
         ));
     }
     if !first {

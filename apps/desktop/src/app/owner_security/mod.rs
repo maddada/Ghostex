@@ -68,6 +68,9 @@ struct OwnerSession {
     waiting_approval: Option<String>,
     /// That request was denied or lapsed: no more asking there until the app restarts.
     gave_up: bool,
+    /// That computer has another owner, so this key needs its approval: the background opener
+    /// stops there, and only the owner's own action on that computer asks (`askOwner`).
+    needs_ask: bool,
 }
 
 static SESSIONS: Mutex<Option<HashMap<String, OwnerSession>>> = Mutex::new(None);
@@ -177,7 +180,7 @@ fn cached_token(transport: &Transport) -> Option<String> {
     }
     let key = transport.key();
     let start = with_session(&key, |session| {
-        if session.token.is_some() {
+        if session.token.is_some() || session.needs_ask {
             return None;
         }
         let due = session
@@ -193,7 +196,11 @@ fn cached_token(transport: &Transport) -> Option<String> {
         let _ = std::thread::Builder::new()
             .name("ghostex-owner-session".into())
             .spawn(move || {
-                let opened = in_security_flow(|| open_owner_session(&transport));
+                // A connected computer's owner key that needs approval there is asked for when the
+                // owner first acts there, never from here (CDXC:Security 2026-11-08 in
+                // server/src/server/security_http.rs, `ASK_OWNER_PARAM`).
+                let may_ask = matches!(transport, Transport::Local);
+                let opened = in_security_flow(|| open_owner_session(&transport, may_ask));
                 with_session(&transport.key(), |session| {
                     session.opening = false;
                     match opened {
@@ -237,7 +244,7 @@ fn require_owner_session(transport: &Transport) -> Result<String, String> {
     if let Some(token) = with_session(&transport.key(), |session| session.token.clone()) {
         return Ok(token);
     }
-    let token = open_owner_session(transport)?;
+    let token = open_owner_session(transport, true)?;
     with_session(&transport.key(), |session| {
         session.token = Some(token.clone())
     });
@@ -313,15 +320,16 @@ fn key_json(public_key: &str, device_public_key: &str, role: &str) -> Value {
 
 /// Enrolls the owner key on `transport`'s gxserver (trusted on first use there) and opens an
 /// owner session with it.
-fn open_owner_session(transport: &Transport) -> Result<String, String> {
+fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, String> {
     in_security_flow(|| {
         let key =
             ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
         let public_key = key.public_key_b64();
-        let enrolled = enroll_owner_key(
-            transport,
-            json!({ "key": key_json(&public_key, &public_key, "Ghostex app") }),
-        )?;
+        let mut params = json!({ "key": key_json(&public_key, &public_key, "Ghostex app") });
+        if !may_ask {
+            params["askOwner"] = json!(false);
+        }
+        let enrolled = enroll_owner_key(transport, params)?;
         let key_id = enrolled
             .get("key")
             .and_then(|key| text(key, "keyId"))
@@ -431,6 +439,15 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
         with_session(&key, |session| session.waiting_approval = None);
     }
     let (status, body) = raw_rpc(transport, "/api/enrollOwnerKey", &params)?;
+    if serde_json::from_str::<Value>(&body)
+        .ok()
+        .and_then(|envelope| text(&envelope, "error"))
+        .as_deref()
+        == Some(OWNER_APPROVAL_NEEDED_ERROR)
+    {
+        with_session(&key, |session| session.needs_ask = true);
+        return Err("This app isn't approved as an owner on that computer yet; it asks when you first act there.".to_string());
+    }
     if let Some(request) = waiting_request_in(status, &body) {
         with_session(&key, |session| {
             session.waiting_approval = Some(request.id.clone())
