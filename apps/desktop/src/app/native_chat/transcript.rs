@@ -389,7 +389,22 @@ impl NativeChatView {
         self.rich_markdown(id, content, references, p, cx)
     }
 
+    /// A message row; the agent's reply that just arrived fades in (reply_arrival.rs).
     pub(super) fn message_row(
+        &mut self,
+        message: &Value,
+        p: &ChatAppearance,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let row = self.message_row_drawn(message, p, window, cx);
+        match message["id"].as_str() {
+            Some(id) if message["role"] == "assistant" => self.reply_arrival_row(id, row, window),
+            _ => row,
+        }
+    }
+
+    fn message_row_drawn(
         &mut self,
         message: &Value,
         p: &ChatAppearance,

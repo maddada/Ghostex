@@ -1320,6 +1320,7 @@ fn notice_fails_a_row(notice: &crate::session_chat_notice::SessionChatTerminalNo
 /// says so on its row, not as an unreadable box.
 ///
 /// CDXC:SessionChat 2026-11-02 WHY: a screen the chat passes keys through to (OMP's tool approval, another agent's own picker) stands in for the input box until the user answers it, the same wait the activity gate calls `Answer` for a queued row. The input-box ladder is for a box that cannot be read: a message sent during an OMP approval said "the agent's input box can't be read yet, asking it to redraw its screen", and after five minutes it would have said the box was gone (live test, 2026-11-02).
+/// CDXC:Coordinators 2026-11-08 WHY: GitHub #502: a coordinator's brief to a new thread on another computer waited behind Claude Code's "Trust this folder?" and was never typed once the user answered it. The prompt has rows the chat answers itself, so it fell to the input-box ladder, whose three-minute last resort went to the send, which refuses while an answerable prompt shows ("Answer it in chat before sending") and so marked the brief Not sent for good. A user on another computer rarely answers within three minutes. A blocking prompt with rows (folder trust, a chooser) is a wait for the user's answer like a passed-through one, and the brief goes once it is answered.
 fn startup_notice_wait(
     notice: &crate::session_chat_notice::SessionChatTerminalNotice,
 ) -> Option<WaitReason> {
@@ -1327,7 +1328,7 @@ fn startup_notice_wait(
         Some(WaitReason::MissingLogin)
     } else if notice.start_failed() {
         Some(WaitReason::StartFailed)
-    } else if notice.blocks_input() && notice.passes_keys_through() {
+    } else if notice.blocks_input() && (notice.passes_keys_through() || notice.is_answerable()) {
         Some(WaitReason::Answer)
     } else {
         None
