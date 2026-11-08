@@ -19,8 +19,17 @@ pub use log::{append as append_log, read_recent as read_log, summary, LogEntry, 
 pub use notes::{ensure_notes, next_wake_number, notes_dir, write_wake};
 
 /// The choices as last read or written; the paths of this gxserver once the runtime started.
+#[cfg(not(test))]
 pub fn current() -> AutopilotConfig {
     read_config(&crate::paths::get_gxserver_paths(None))
+}
+
+/// Tests keep to the choices this process wrote, else the defaults: the default paths are this
+/// Mac's own gxserver, and its saved Autopilot (on, answering approvals) wrote every approval
+/// row already read and sent no push, so the OMP wait and push delivery tests failed on it.
+#[cfg(test)]
+pub fn current() -> AutopilotConfig {
+    config::cached_or_default()
 }
 
 /// The project a worktree project was made from, as its row says (`worktree.parentProjectId`).

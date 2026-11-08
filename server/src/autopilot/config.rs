@@ -231,6 +231,16 @@ impl AutopilotConfig {
     }
 }
 
+/// The choices this process last read or wrote, else the defaults; never a file on disk.
+#[cfg(test)]
+pub(super) fn cached_or_default() -> AutopilotConfig {
+    cached()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+        .unwrap_or_else(|| AutopilotConfig::default().normalized())
+}
+
 fn cached() -> &'static Mutex<Option<AutopilotConfig>> {
     static CONFIG: Mutex<Option<AutopilotConfig>> = Mutex::new(None);
     &CONFIG
