@@ -2,12 +2,10 @@ use crate::data::*;
 use crate::json::opt;
 use crate::json::Opt;
 use crate::rows::{row, section, Section};
+use crate::Platform;
 
-pub(crate) fn theming() -> Section {
-    section(
-        "theming",
-        "Interface",
-        vec![
+pub(crate) fn theming(platform: Platform) -> Section {
+    let mut rows = vec![
             row("sidebarTheme", "Appearance", "Follow the system appearance by default, or choose Light or Dark.").options(SIDEBAR_THEME_SETTING_OPTIONS),
             row("darkThemePreset", "Dark mode colour", "The colour of the sidebar and window in dark mode: one of sixteen colour squares, or the + square for a custom colour.").options(DARK_THEME_PRESET_OPTIONS),
             row("customSidebarTitlebarBackgroundTintColor", "Custom dark mode tint", "The custom dark mode colour, chosen in the colour picker the + square opens."),
@@ -57,8 +55,19 @@ pub(crate) fn theming() -> Section {
             row("workAreaFrame", "Frame the work area", "Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge."),
             // CDXC:Settings 2026-11-08 DECISION: User: "please add setting under this [Frame the work area] to show traffic lights on macos when sidebar is collapsed (default to yes). only show this sub setting on macos. also please move this whole setting under a new advanced area in the interface page in settings". Both rows sit in the Interface page's Advanced fold (`ADVANCED_MAIN_SETTING_KEYS`).
             row("showWindowButtonsWhenSidebarCollapsed", "Show the window buttons when the sidebar is collapsed", "Keep the red, yellow and green window buttons in the window's top left while the sidebar is collapsed. Off hides them until you open the floating sidebar, which carries them in its top row. Full screen keeps its own title bar either way."),
-        ],
-    )
+    ];
+    if platform == Platform::Linux {
+        // CDXC:PlatformSupport 2026-11-08 DECISION: User (issue #503): a Linux-only Display scale row under Scale areas separately (interface_scale.rs has the full decision).
+        let after = rows
+            .iter()
+            .position(|row| row.key == "interfaceScaleAreasSeparately")
+            .map_or(rows.len(), |index| index + 1);
+        rows.insert(
+            after,
+            row("linuxDisplayScale", "Display scale", "How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. Interface scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.").options(crate::interface_scale::LINUX_DISPLAY_SCALE_OPTIONS),
+        );
+    }
+    section("theming", "Interface", rows)
 }
 
 /// `GHOSTTY_THEME_SETTING_OPTIONS` without "Use terminal config file": the light palette always names a theme.

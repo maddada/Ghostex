@@ -301,6 +301,8 @@ pub(crate) fn open_workspace_window(
             app.start_gpui_workspace_open_target_availability_scan(cx);
             if lead {
                 app.start_gpui_updater(cx);
+                #[cfg(target_os = "linux")]
+                app.offer_interface_scale_reset_for_display_scale(cx);
             }
             cx.on_app_quit(move |this, cx| {
                 this.flush_gpui_quit_persistence(cx);

@@ -156,6 +156,9 @@ impl GhostexGpuiApp {
             // Raised only by Chief's Disable Extension, which a page does not offer
             // (native_sidebar/chief.rs).
             GpuiAppToastAction::UndoChiefDisable => {}
+            // Raised only by the Linux app at launch (display_scale_offer.rs); a page's size
+            // follows the browser.
+            GpuiAppToastAction::ResetInterfaceScale => {}
             // Raised only by the app's approval cards (app/owner_security/ui.rs); approving needs
             // the computer's own key store and presence prompt, which a page has not.
             GpuiAppToastAction::SecurityApproval { .. } => {}

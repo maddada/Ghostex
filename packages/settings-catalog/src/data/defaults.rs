@@ -574,6 +574,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Settings 2026-11-05 DECISION: User (issue #425): one Interface scale for the sidebar, chat, Files and terminal font, with Scale areas separately off by default. A file that never saved the switch reads it as on when an area was already set away from its default (`interface_scale::scale_areas_separately`).
     ("interfaceScalePercent", J::Num(100.0)),
     ("interfaceScaleAreasSeparately", J::Bool(false)),
+    // CDXC:PlatformSupport 2026-11-08 DECISION: User (issue #503): Linux takes its Display scale from the desktop by default; Settings can fix one instead (`interface_scale::LINUX_DISPLAY_SCALE_SETTING`).
+    ("linuxDisplayScale", J::Str("auto")),
     ("sessionChatZoomPercent", J::Num(100.0)),
     ("filesZoomPercent", J::Num(100.0)),
     ("sessionChatCustomTranscriptWidthEnabled", J::Bool(false)),

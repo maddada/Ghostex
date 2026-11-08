@@ -269,6 +269,9 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::UndoChiefDisable => {
                 self.set_native_sidebar_chief_enabled(true, cx);
             }
+            GpuiAppToastAction::ResetInterfaceScale => {
+                self.reset_interface_scale_to_default(cx);
+            }
             GpuiAppToastAction::SecurityApproval {
                 request,
                 deny,

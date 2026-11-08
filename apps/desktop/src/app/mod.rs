@@ -53,6 +53,7 @@ pub(crate) mod delayed_send;
 pub(crate) mod delayed_send_modal_lifecycle;
 pub(crate) mod delayed_send_sessions;
 pub(crate) mod delete_worktree_modal_lifecycle;
+pub(crate) mod display_scale_offer;
 pub(crate) mod docs_annotation_feedback;
 pub(crate) mod drag_resize;
 pub(crate) mod export_transcript_modal_lifecycle;

@@ -186,6 +186,10 @@ pub(crate) enum GpuiAppToastAction {
     UndoSyncedChange { id: String },
     /// Undo on "Chief turned off": turns the Chief extension back on (native_sidebar/chief.rs).
     UndoChiefDisable,
+    /// Set to 100% on the one-time Linux note that Ghostex now follows the desktop's display
+    /// scale: Interface scale back to 100% (app/display_scale_offer.rs).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    ResetInterfaceScale,
     /// An approval card's Approve (`deny: false`, drawn next to its Deny) or Deny: GitHub #495,
     /// app/owner_security/ui.rs.
     SecurityApproval {
@@ -203,6 +207,7 @@ impl GpuiAppToastAction {
             Self::OpenViewSettings => "Open Settings",
             Self::OpenUpdateDownloadPage => "Open download page",
             Self::UndoSyncedChange { .. } | Self::UndoChiefDisable => "Undo",
+            Self::ResetInterfaceScale => "Set to 100%",
             Self::SecurityApproval { deny: false, .. } => "Approve",
             Self::SecurityApproval { deny: true, .. } => "Deny",
             Self::NativeProjectPathAction { label, .. } | Self::RunInNewTerminal { label, .. } => {

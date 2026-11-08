@@ -701,6 +701,19 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         options: &[],
         user_only: false,
     },
+    // CDXC:PlatformSupport 2026-11-08: the Display scale row exists only in the Linux catalog
+    // (general/theme.rs), and the Help files describe the macOS one.
+    Supplemental {
+        key: "linuxDisplayScale",
+        tab: THEME,
+        group: Some("appearance"),
+        section: "theming",
+        section_title: "Interface",
+        title: "Display scale",
+        subtitle: "Linux only. How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. Interface scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.",
+        options: crate::interface_scale::LINUX_DISPLAY_SCALE_OPTIONS,
+        user_only: false,
+    },
     Supplemental {
         key: "workspacePaneGap",
         tab: THEME,

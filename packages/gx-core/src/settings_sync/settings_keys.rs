@@ -24,6 +24,7 @@ const APPEARANCE_LEFT_OUT: &[&str] = &[
     "windowGlassVideoLight",
     "interfaceScalePercent",
     "interfaceScaleAreasSeparately",
+    "linuxDisplayScale",
     "agentManagerZoomPercent",
     "sessionChatZoomPercent",
     "filesZoomPercent",
