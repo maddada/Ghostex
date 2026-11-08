@@ -1,6 +1,7 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{hash_map::DefaultHasher, BTreeMap, HashMap, HashSet},
     fs::{self, File},
+    hash::{Hash, Hasher},
     io::{self, BufRead, BufReader, Seek, SeekFrom},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
@@ -37,7 +38,17 @@ struct Scan {
     started: Option<Instant>,
     running: bool,
     files: BTreeMap<(Provider, PathBuf), CachedFile>,
+    /// Each provider's last result, under a fingerprint of the files and day it was merged from.
+    merged: BTreeMap<Provider, (u64, Value)>,
 }
+
+/// CDXC:AgentProviders 2026-11-08 WHY:
+/// The titlebar asks for usage every 30 seconds, and each ask older than a minute rescanned the
+/// history: a walk over about 4,900 transcripts and a merge of every usage record, about 0.5 s of
+/// CPU a minute (1% of a core) for a 30-day calendar of daily totals that only the usage panel
+/// shows. It is rescanned every five minutes, and a scan that finds the same files, sizes and
+/// modification times on the same day keeps the last merge instead of redoing it.
+const RESCAN_EVERY: Duration = Duration::from_secs(5 * 60);
 
 impl HistoryRuntime {
     /// CDXC:AgentProviders 2026-09-11 DECISION:
@@ -45,18 +56,15 @@ impl HistoryRuntime {
     /// SEE-ALSO: apps/desktop/src/app/window/account_usage/history.rs consumes only this server snapshot.
     pub fn snapshot(self: &Arc<Self>) -> Value {
         let mut scan = self.scan.lock().unwrap_or_else(|e| e.into_inner());
-        if !scan.running
-            && scan
-                .started
-                .is_none_or(|t| t.elapsed() >= Duration::from_secs(60))
-        {
+        if !scan.running && scan.started.is_none_or(|t| t.elapsed() >= RESCAN_EVERY) {
             scan.running = true;
             scan.started = Some(Instant::now());
             let mut files = std::mem::take(&mut scan.files);
+            let mut merged = std::mem::take(&mut scan.merged);
             let runtime = Arc::clone(self);
             std::thread::spawn(move || {
                 for provider in [Provider::Claude, Provider::Codex] {
-                    let result = collect(provider, &mut files);
+                    let result = collect(provider, &mut files, &mut merged);
                     let mut snapshot = runtime.snapshot.write().unwrap_or_else(|e| e.into_inner());
                     if !snapshot.is_object() {
                         *snapshot = json!({});
@@ -65,6 +73,7 @@ impl HistoryRuntime {
                 }
                 let mut scan = runtime.scan.lock().unwrap_or_else(|e| e.into_inner());
                 scan.files = files;
+                scan.merged = merged;
                 scan.running = false;
             });
         }
@@ -111,7 +120,11 @@ fn roots(provider: Provider) -> (Vec<PathBuf>, bool) {
     )
 }
 
-fn collect(provider: Provider, cache: &mut BTreeMap<(Provider, PathBuf), CachedFile>) -> Value {
+fn collect(
+    provider: Provider,
+    cache: &mut BTreeMap<(Provider, PathBuf), CachedFile>,
+    merged: &mut BTreeMap<Provider, (u64, Value)>,
+) -> Value {
     let today = Local::now().date_naive();
     let first = today - chrono::Duration::days(29);
     let (roots, mut partial) = roots(provider);
@@ -172,6 +185,22 @@ fn collect(provider: Provider, cache: &mut BTreeMap<(Provider, PathBuf), CachedF
             files.insert(canonical, metadata);
         }
     }
+    let fingerprint = {
+        let mut hasher = DefaultHasher::new();
+        (today, partial).hash(&mut hasher);
+        for (path, metadata) in &files {
+            (path, metadata.len(), metadata.modified().ok()).hash(&mut hasher);
+        }
+        hasher.finish()
+    };
+    if let Some((_, value)) = merged
+        .get(&provider)
+        .filter(|(previous, _)| *previous == fingerprint)
+    {
+        let mut value = value.clone();
+        value["updatedAt"] = json!(Local::now().to_rfc3339());
+        return value;
+    }
     cache.retain(|(p, path), _| *p != provider || files.contains_key(path));
     let mut unique: HashMap<String, Entry> = HashMap::new();
     for (path, metadata) in files {
@@ -206,7 +235,14 @@ fn collect(provider: Provider, cache: &mut BTreeMap<(Provider, PathBuf), CachedF
             json!({"date":day.to_string(),"tokens":days.get(&day).copied().unwrap_or(0)})
         })
         .collect();
-    json!({"status":if partial {"partial"} else {"ready"},"hasData":has_data,"days":daily,"updatedAt":Local::now().to_rfc3339(),"timeZone":Local::now().format("%Z").to_string()})
+    let value = json!({"status":if partial {"partial"} else {"ready"},"hasData":has_data,"days":daily,"updatedAt":Local::now().to_rfc3339(),"timeZone":Local::now().format("%Z").to_string()});
+    // A partial result (a file that failed to read) is read again next time.
+    if partial {
+        merged.remove(&provider);
+    } else {
+        merged.insert(provider, (fingerprint, value.clone()));
+    }
+    value
 }
 
 fn merge(entries: &mut HashMap<String, Entry>, entry: Entry) {
