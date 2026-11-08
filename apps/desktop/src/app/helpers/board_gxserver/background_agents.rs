@@ -363,9 +363,13 @@ fn start_through_bundled_agent(
         while probe_started.elapsed() < Duration::from_secs(20) {
             if matches!(
                 gpui_probe_local_gxserver_health(),
-                GpuiLocalGxserverHealthState::Healthy { .. }
+                GpuiLocalGxserverHealthState::Healthy {
+                    tools_available: true
+                }
             ) {
-                note("its gxserver is running and healthy; leaving it alone".to_string());
+                note(
+                    "its gxserver is running, healthy and finds zmx; leaving it alone".to_string(),
+                );
                 finish_migration(note);
                 return Ok(());
             }
@@ -397,18 +401,85 @@ fn start_through_bundled_agent(
             .map_err(|error| format!("move the legacy plist aside: {error}"))?;
         note("legacy plist moved aside".to_string());
     }
-    let result = kickstart_bundled_job(&target, note);
+    let result = kickstart_bundled_job(&target, note).and_then(|pid| {
+        note(format!("gxserver pid {pid}"));
+        verify_bundled_gxserver_can_start_sessions(note)
+    });
     match result {
-        Ok(pid) => {
-            note(format!("gxserver pid {pid}"));
+        Ok(()) => {
             finish_migration(note);
             Ok(())
         }
         Err(reason) => {
+            stop_bundled_job(&target, note);
             restore_legacy_plist(note);
             Err(reason.into())
         }
     }
+}
+
+/*
+CDXC:BackgroundItems 2026-11-08 DECISION: Coordinator, after the bundled gxserver on the user's Mac
+could not find bundled zmx and no session could start: "the switch must refuse to finish (fall
+back to legacy) unless the new gxserver can start a zmx session". gxserver's health answer lists
+its session tools, resolved by the same lookup that starts a session (`resolve_bundled_tool_status`
+in server/src/toolchain.rs), so the switch finishes only when that answer says zmx is available.
+Anything else within the wait, including a gxserver that never answers, stops the bundled job and
+the legacy job starts gxserver instead.
+*/
+fn verify_bundled_gxserver_can_start_sessions(note: &mut impl FnMut(String)) -> Result<(), String> {
+    let deadline = Instant::now() + Duration::from_secs(45);
+    let mut last = "no answer".to_string();
+    while Instant::now() < deadline {
+        match gpui_probe_local_gxserver_health() {
+            GpuiLocalGxserverHealthState::Healthy {
+                tools_available: true,
+            } => {
+                note("healthy, and it finds bundled zmx".to_string());
+                return Ok(());
+            }
+            GpuiLocalGxserverHealthState::Healthy {
+                tools_available: false,
+            } => {
+                return Err(
+                    "the bundled gxserver cannot find bundled zmx, so it could not start sessions"
+                        .to_string(),
+                );
+            }
+            GpuiLocalGxserverHealthState::Starting { .. } => last = "still starting".to_string(),
+            GpuiLocalGxserverHealthState::Unreachable => last = "not answering".to_string(),
+            _ => last = "answering as another build".to_string(),
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    Err(format!(
+        "the bundled gxserver was not ready to start sessions within 45 s ({last})"
+    ))
+}
+
+/// Ends the bundled job's gxserver without unregistering it (only SMAppService may do that), so
+/// the legacy job can take the port.
+fn stop_bundled_job(target: &str, note: &mut impl FnMut(String)) {
+    let Ok(job) = gpui_inspect_launchd_job(target) else {
+        return;
+    };
+    let Some(pid) = job.pid else {
+        return;
+    };
+    let kill = gpui_run_launchctl(&["kill", "SIGTERM", target]);
+    note(format!(
+        "stopping the bundled gxserver pid {pid}: {}",
+        gpui_describe_launchctl_result(&kill)
+    ));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        if gpui_inspect_launchd_job(target).map_or(true, |job| job.pid.is_none()) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let _ = gpui_run_launchctl(&["kill", "SIGKILL", target]);
+    note("the bundled gxserver did not stop in 10 s; killed it".to_string());
 }
 
 /// Boots out the legacy job (its plist is already aside), then starts the bundled one.
