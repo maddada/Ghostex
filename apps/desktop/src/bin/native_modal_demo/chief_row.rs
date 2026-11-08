@@ -4,7 +4,8 @@
 //! so the two can be compared. States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): `one` (default, one
 //! Chief), `working`, `asking`, `open` (its chat is open), `setup` (first open, no agent yet),
 //! `folded` (two more computers have one, folded), `unfolded` (the same, unfolded), `bots` (the
-//! sidebar in Bots mode, where the row is not drawn: `chief_row_shown`).
+//! sidebar in Bots mode, where the row is not drawn: `chief_row_shown`), `unified` (the Unified
+//! sidebar: a stand-in for its header, the row under it, then a Unified group header and cards).
 use super::chief_row_view::*;
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -149,7 +150,37 @@ impl Render for ChiefRowPreview {
             )
         };
         let bots = state == "bots";
+        let unified = state == "unified";
         let shown = chief_row_shown(true, bots);
+        // A stand-in for the Unified header (unified/header.rs): its 36px search row.
+        let unified_header = div().h(px(36.0)).px(px(12.0)).flex().items_center().child(
+            div()
+                .flex_1()
+                .h(px(28.0))
+                .px(px(10.0))
+                .rounded(px(5.0))
+                .border_1()
+                .border_color(hsla(ink, 0.12))
+                .flex()
+                .items_center()
+                .text_size(px(13.0))
+                .text_color(colors.muted)
+                .child("Search sessions"),
+        );
+        // A Unified group header (unified/groups.rs: list column pl 6, header mx 3, px 6, 30px).
+        let unified_group = |title: &str| {
+            div().pl(px(6.0)).child(
+                div()
+                    .mx(px(3.0))
+                    .h(px(30.0))
+                    .px(px(6.0))
+                    .flex()
+                    .items_center()
+                    .text_size(px(12.0))
+                    .text_color(colors.muted)
+                    .child(title.to_string()),
+            )
+        };
         v_flex()
             .w(px(300.0))
             .h(px(330.0))
@@ -158,18 +189,23 @@ impl Render for ChiefRowPreview {
             .text_size(px(TEXT_SIZE))
             .font_family(super::ui_fonts::UI_FONT)
             .pt(px(14.0))
-            .child(
-                h_flex()
-                    .w_full()
-                    .h(px(40.0))
-                    .pb(px(12.0))
-                    .justify_center()
-                    .gap(px(4.0))
-                    .child(space(true, "G"))
-                    .child(space(false, "M"))
-                    .child(space(false, "W"))
-                    .child(space(false, "…")),
-            )
+            .when(unified, |column| {
+                column.child(unified_header).child(div().h(px(6.0)))
+            })
+            .when(!unified, |column| {
+                column.child(
+                    h_flex()
+                        .w_full()
+                        .h(px(40.0))
+                        .pb(px(12.0))
+                        .justify_center()
+                        .gap(px(4.0))
+                        .child(space(true, "G"))
+                        .child(space(false, "M"))
+                        .child(space(false, "W"))
+                        .child(space(false, "…")),
+                )
+            })
             .when(bots, |column| {
                 column.child(
                     div()
@@ -209,7 +245,13 @@ impl Render for ChiefRowPreview {
                     },
                 ))
             })
-            .when(!bots, |column| {
+            .when(unified, |column| {
+                column
+                    .child(unified_group("Today"))
+                    .child(session("Main Coordinator"))
+                    .child(session("Outdated dependencies audit"))
+            })
+            .when(!bots && !unified, |column| {
                 column
                     .child(project_header)
                     .child(session("Main Coordinator"))

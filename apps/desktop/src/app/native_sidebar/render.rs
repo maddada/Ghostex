@@ -65,6 +65,11 @@ impl GhostexGpuiApp {
                     header.child(div().h(px(4.0 * appearance.scale)).flex_shrink_0())
                 })
                 .children(self.render_native_sidebar_space_row(&snapshot, &appearance, false, cx))
+                // CDXC:Chief 2026-11-08 DECISION: User (Q1922): Chief of Staff shows in the Unified sidebar too, under its header, drawn as in the Project sidebar (native_sidebar/chief.rs); its block lines up with the Unified group headers' box.
+                .when(!snapshot.spaces_enabled, |header| {
+                    header.child(div().h(px(6.0 * appearance.scale)).flex_shrink_0())
+                })
+                .children(self.render_native_sidebar_chief(&snapshot, &appearance, cx))
                 .into_any_element()
         });
         let unified_list = unified.as_ref().map(|unified| {
