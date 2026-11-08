@@ -115,6 +115,44 @@ impl VoiceAgentTab {
         cx.notify();
     }
 
+    /// A remote computer's OpenAI or xAI engine without its key: the keys are that computer's own,
+    /// so this computer can't take one; the row says where to add it (it used to be a tooltip on
+    /// the engine row, so nothing showed).
+    pub(super) fn remote_key_missing_row(
+        &mut self,
+        p: &SettingsPalette,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        self.dictate.machine.as_ref()?;
+        let answer = self.dictate.answer.as_ref()?;
+        let name = match answer["settings"]["engine"].as_str()? {
+            "openai" => "OpenAI",
+            "xai" => "xAI",
+            _ => return None,
+        };
+        let code = answer["engine"]["problem"]["code"].as_str()?;
+        if !matches!(code, "noKey" | "keyUnreadable") {
+            return None;
+        }
+        let title = if code == "noKey" {
+            format!("{name} needs an API key")
+        } else {
+            format!("{name}'s saved key can't be read")
+        };
+        Some(setting_row(
+            p,
+            "dictateRemoteKey",
+            RowSpec::new(title).wide(),
+            None,
+            note_with_controls(
+                p,
+                "API keys stay on the computer that uses them. Add it in Settings › Dictation on that computer.",
+                Vec::new(),
+            ),
+            cx,
+        ))
+    }
+
     /// The key the picked cloud engine needs, right under the picker (Q1711). Keys are this
     /// computer's, so a remote computer's engine says where to add it instead (`engine_row`).
     pub(super) fn engine_key_row(

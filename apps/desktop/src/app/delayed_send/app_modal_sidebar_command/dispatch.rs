@@ -123,6 +123,8 @@ impl GhostexGpuiApp {
             | "updates"
             | "requestRemoteMachineConnectStates"
             | "requestDictateDevices"
+            | "hexInstallRun"
+            | "hexOpen"
             | "addProjectDialogRequest"
             | "pickReplacementProjectFolder"
             | "setSessionNote"

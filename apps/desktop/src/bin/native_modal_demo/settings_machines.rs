@@ -3,6 +3,8 @@
 //!
 //! States: `machines-agents` (Agents, Kubuntu VM picked), `machines-agents-open` (Agents on this
 //! computer with the picker open), `machines-integrations` (Integrations, Kubuntu VM picked),
+//! `machines-dictation` and `machines-dictation-openai` (Dictation, Kubuntu VM picked, its Hex not running
+//! or its engine OpenAI without a key),
 //! `machines-old` (Agents, Kubuntu VM picked, its gxserver too old for the requests),
 //! `machines-windows` and `machines-windows-integrations` (Agents and Integrations, Kubuntu VM
 //! picked and answering as Windows: the Developer Mode notice; `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS=
@@ -33,6 +35,9 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
             json!({ "initialTab": "agents", "initialMachineId": "remote-1" })
         }
         "machines-agents-open" => json!({ "initialTab": "agents" }),
+        "machines-dictation" | "machines-dictation-openai" => {
+            json!({ "initialTab": "dictation", "initialMachineId": "remote-1" })
+        }
         "machines-integrations" | "machines-windows-integrations" => {
             json!({ "initialTab": "integrations", "initialMachineId": "remote-1" })
         }
@@ -53,6 +58,16 @@ pub(super) fn answers(message: &Value) -> Vec<Value> {
 
 /// Kubuntu VM's scripted gxserver; the `machines-windows*` states answer as a Windows machine.
 pub(super) fn remote_rpc(state: &str, path: &str, params: &Value) -> Result<Value, String> {
+    if state.starts_with("machines-dictation") {
+        let story = if state == "machines-dictation-openai" {
+            "dictation-openai"
+        } else {
+            "dictation-hex-stopped"
+        };
+        if let Some(result) = super::settings_voice::rpc(story, path, params) {
+            return result;
+        }
+    }
     let answer = linux_rpc(state, path, params)?;
     if !state.starts_with("machines-windows") {
         return Ok(answer);

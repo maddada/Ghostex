@@ -40,6 +40,7 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 mod hex;
+pub(crate) mod hex_install_plan;
 mod notice;
 
 const READ_TIMEOUT: Duration = Duration::from_secs(15);
@@ -81,6 +82,13 @@ pub(crate) struct DictateState {
     devices_requested: bool,
     /// Install Hex is running on the shown computer (`hex.rs`).
     hex_install: Option<Task<()>>,
+    /// The Install Hex confirm dialog is open (this computer's install, run by the app).
+    hex_install_confirm: bool,
+    hex_confirm_focus: gpui::FocusHandle,
+    /// This computer's install as the app reports it (`hexInstallState`).
+    hex_install_run: Option<hex::HexInstallRun>,
+    /// Open Hex was pressed and the row is checking again until Hex runs.
+    hex_opening: Option<Task<()>>,
 }
 
 impl DictateState {
@@ -99,6 +107,10 @@ impl DictateState {
             prompt_draft: None,
             devices_requested: false,
             hex_install: None,
+            hex_install_confirm: false,
+            hex_confirm_focus: cx.focus_handle(),
+            hex_install_run: None,
+            hex_opening: None,
         }
     }
 }
@@ -317,6 +329,11 @@ impl VoiceAgentTab {
                 }
             }
             if let Some(row) = self.engine_key_row(p, visible, window, cx) {
+                rows.push(row);
+            }
+            if visible(ENGINE)
+                && let Some(row) = self.remote_key_missing_row(p, cx)
+            {
                 rows.push(row);
             }
             if visible(OLD_MODELS)

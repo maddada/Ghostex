@@ -149,6 +149,17 @@ impl VoiceAgentTab {
         cx: &mut Context<Self>,
     ) -> Self {
         cx.observe(&store, |_, _, cx| cx.notify()).detach();
+        // Install Hex and Open Hex answer as host payloads (voice_dictate/hex.rs).
+        cx.subscribe(
+            &store,
+            |tab: &mut Self, _store, event: &super::super::store::SettingsStoreEvent, cx| {
+                let super::super::store::SettingsStoreEvent::HostPayload(kind) = event;
+                if kind == "hexInstallState" || kind == "hexOpenFailed" {
+                    tab.receive_hex_payload(kind, cx);
+                }
+            },
+        )
+        .detach();
         let key_field =
             |placeholder: &'static str, window: &mut Window, cx: &mut Context<Self>| KeyField {
                 input: cx.new(|cx| {
@@ -189,6 +200,7 @@ impl VoiceAgentTab {
         tab.read_status(cx);
         if dictation {
             tab.read_dictate(cx);
+            tab.apply_hex_preview_state(cx);
             super::machine_picker::request_machine_states(&tab.store, cx);
         }
         // Dictate's Add key / Check key lands with the caret in that key's field.
@@ -594,7 +606,15 @@ impl Render for VoiceAgentTab {
                 move |tab, _window, cx| store.update(cx, |store, cx| store.set_active_tab(tab, cx)),
             )));
         }
-        settings_page(&self.store, page, &p, blocks, cx)
+        let dialog = if page == SettingsTabId::Dictation {
+            self.render_hex_install_dialog(&p, window, cx)
+        } else {
+            None
+        };
+        div()
+            .size_full()
+            .child(settings_page(&self.store, page, &p, blocks, cx))
+            .children(dialog)
     }
 }
 

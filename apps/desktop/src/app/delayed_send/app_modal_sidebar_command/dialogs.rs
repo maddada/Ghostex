@@ -34,6 +34,13 @@ impl GhostexGpuiApp {
             "requestDictateDevices" => {
                 self.answer_dictate_devices(cx);
             }
+            // Settings › Dictation's Install Hex and Open Hex (voice_agent/hex_install.rs).
+            "hexInstallRun" => {
+                self.run_hex_install(cx);
+            }
+            "hexOpen" => {
+                self.open_hex_app(cx);
+            }
             "addProjectDialogRequest" => {
                 self.handle_gpui_add_project_dialog_request_message(command, cx);
             }

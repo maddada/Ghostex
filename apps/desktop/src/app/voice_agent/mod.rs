@@ -36,6 +36,7 @@ pub(crate) mod dictation;
 pub(crate) mod endpoint;
 pub(crate) mod focus;
 pub(crate) mod header_button;
+pub(crate) mod hex_install;
 pub(crate) mod hold_to_talk;
 pub(crate) mod memory;
 pub(crate) mod microphones;

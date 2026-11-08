@@ -174,6 +174,20 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 for payload in settings_updates::answers(&host_state, &message) {
                     deliver(&host_slot, payload, cx);
                 }
+                for (delay, payload) in settings_voice::script(&host_state, &message) {
+                    if delay == 0 {
+                        deliver(&host_slot, payload, cx);
+                        continue;
+                    }
+                    let slot = host_slot.clone();
+                    cx.spawn(async move |cx| {
+                        cx.background_executor()
+                            .timer(std::time::Duration::from_millis(delay))
+                            .await;
+                        let _ = cx.update(|cx| deliver(&slot, payload, cx));
+                    })
+                    .detach();
+                }
             }
             // The system colour panel belongs to the app host (settings_modal_lifecycle.rs).
             SettingsModalCommand::PickSystemColor { key, initial } => {
