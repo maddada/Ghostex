@@ -14,7 +14,7 @@
 //! Pairing and Collab routes are gated by their own threads with the same
 //! `require_owner_presence`.
 
-use std::{collections::HashSet, sync::OnceLock};
+use std::collections::HashSet;
 
 use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
@@ -331,36 +331,14 @@ fn autopilot_action(params: &Map<String, Value>) -> Option<ActionRequest> {
     })
 }
 
-/// The pages whose settings open a way in or hand out access (#495: Remote, Accounts, Secrets,
-/// Sync, Connectors), plus any key holding a token, password, secret or API key. Collab's are
-/// gated by the Collab routes.
-const SECURITY_RELAXING_TABS: &[&str] = &["remote", "accounts", "secrets", "sync", "connectors"];
-
-fn security_relaxing_keys() -> &'static HashSet<String> {
-    static KEYS: OnceLock<HashSet<String>> = OnceLock::new();
-    KEYS.get_or_init(|| {
-        ghostex_settings_catalog::help::catalog()
-            .settings
-            .into_iter()
-            .filter(|entry| SECURITY_RELAXING_TABS.contains(&entry.tab.as_str()))
-            .map(|entry| entry.key)
-            .collect()
-    })
+/// Whether changing setting `key` to `value` needs the owner's approval (the rule the desktop's
+/// Settings window shares, `ghostex_settings_catalog::security_relaxing`).
+pub(crate) fn setting_needs_approval(key: &str, value: &Value) -> bool {
+    ghostex_settings_catalog::security_relaxing::needs_owner_presence(key, value)
 }
 
 fn holds_secret(key: &str) -> bool {
-    let lowered = key.to_lowercase();
-    ["token", "password", "secret", "apikey", "credential"]
-        .iter()
-        .any(|word| lowered.contains(word))
-}
-
-/// Whether changing setting `key` to `value` needs the owner's approval.
-pub(crate) fn setting_needs_approval(key: &str, value: &Value) -> bool {
-    if key == "gbotsEnabled" {
-        return value.as_bool() == Some(true);
-    }
-    key == "gbotsComputer" || holds_secret(key) || security_relaxing_keys().contains(key)
+    ghostex_settings_catalog::security_relaxing::holds_secret(key)
 }
 
 fn settings_action(params: &Map<String, Value>) -> Option<ActionRequest> {

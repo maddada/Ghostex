@@ -510,6 +510,16 @@ impl SettingsStore {
         );
     }
 
+    /// Shows `values` again without saving them: a save the owner didn't confirm (GitHub #495,
+    /// app/owner_security/settings.rs) leaves the settings as they were.
+    pub(crate) fn revert_settings(&mut self, values: Map<String, Value>, cx: &mut Context<Self>) {
+        for (key, value) in values {
+            self.settings.set(&key, value);
+        }
+        self.refresh_search();
+        cx.notify();
+    }
+
     /// `resetSetting(key)`: back to `DEFAULT_ghostex_SETTINGS[key]`.
     pub(crate) fn reset_setting(&mut self, key: &str, cx: &mut Context<Self>) {
         let Some(default) = settings_catalog().default_value(key).cloned() else {

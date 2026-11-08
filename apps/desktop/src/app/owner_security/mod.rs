@@ -13,6 +13,7 @@
 //!
 //! Contract: `ai/security-tokens-and-approvals.md`.
 
+pub(crate) mod settings;
 pub(crate) mod ui;
 
 use std::{

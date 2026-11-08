@@ -134,6 +134,12 @@ pub fn unlock_approver_key(reason: &str) -> Result<(DeviceKey, Presence), KeyErr
     Ok((load_or_create(KeyRole::Approver)?, presence))
 }
 
+/// The system's presence prompt alone, showing `reason`: for a change the app makes itself that
+/// needs the owner there (a security-relaxing setting saved in the Settings window).
+pub fn confirm_presence(reason: &str) -> Result<Presence, KeyError> {
+    platform::confirm_presence(reason)
+}
+
 /// The approver key's public half without a prompt (for showing which key is enrolled); `None`
 /// when it was never made.
 pub fn approver_public_key() -> Result<Option<String>, KeyError> {

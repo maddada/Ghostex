@@ -32,6 +32,7 @@ mod pages;
 pub mod platform_text;
 pub mod rows;
 mod search_keywords;
+pub mod security_relaxing;
 pub use search_keywords::search_keywords;
 
 pub use hotkey_chords::{
