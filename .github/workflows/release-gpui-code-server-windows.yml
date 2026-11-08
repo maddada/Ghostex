@@ -57,6 +57,12 @@ permissions:
   contents: write
   id-token: write
 
+# Ghostex's component signing key (tooling/release-gpui/component-signing.mjs): publish-component.mjs
+# signs every component archive it records; GHOSTEX_REQUIRE_COMPONENT_SIGNATURES makes it, and the seal, refuse unsigned ones (#495).
+env:
+  GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+  GHOSTEX_REQUIRE_COMPONENT_SIGNATURES: '1'
+
 jobs:
   component:
     runs-on: ${{ inputs.arch == 'arm64' && 'windows-11-vs2026-arm' || 'windows-2025' }}

@@ -35,7 +35,11 @@ on:
         default: false
         type: boolean
 
+# Ghostex's component signing key (tooling/release-gpui/component-signing.mjs): publish-component.mjs
+# signs every component archive it records; GHOSTEX_REQUIRE_COMPONENT_SIGNATURES makes it, and the seal, refuse unsigned ones (#495).
 env:
+  GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+  GHOSTEX_REQUIRE_COMPONENT_SIGNATURES: '1'
   # Every platform a Ghostex app ships for: gxserver runs Collab wherever it runs.
   COLLAB_PLATFORMS: darwin-arm64 linux-x64 linux-arm64 windows-x64 windows-arm64
 

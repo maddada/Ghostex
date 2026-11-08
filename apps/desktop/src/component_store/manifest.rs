@@ -20,6 +20,8 @@ pub struct ComponentPlatformAsset {
     pub sha256_sidecar_name: Option<String>,
     pub sha256: String,
     pub size_bytes: u64,
+    /// Ghostex's signature over this archive (base64 Ed25519, `component_store::signature`).
+    pub signature: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -256,6 +258,10 @@ impl OnDemandManifest {
                             platform_asset.get("sizeBytes"),
                             &format!("components.{key}.platforms.{platform}.sizeBytes"),
                         )?,
+                        signature: platform_asset
+                            .get("signature")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string),
                     },
                 );
             }

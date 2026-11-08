@@ -25,6 +25,7 @@ pub mod client_message;
 /// param names (`ListParams`, `BoxParams`) are generic.
 pub mod cloud_box;
 pub mod collab_component;
+pub mod component_signing;
 pub mod coordinator;
 pub mod de;
 pub mod delta;

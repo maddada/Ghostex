@@ -397,6 +397,8 @@ impl ComponentStore {
                 ));
             }
         }
+        // Ghostex's signature, before the quarantine flag goes and before anything is unpacked.
+        super::signature::verify_component_signature(component, platform, asset)?;
         remove_macos_quarantine(&archive_path)?;
 
         emit(

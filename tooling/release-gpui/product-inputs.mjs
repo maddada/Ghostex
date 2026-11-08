@@ -177,6 +177,7 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: 'tooling/release-gpui/prepare-references.sh' },
   { pathspec: 'tooling/release-gpui/create-deterministic-tar.sh' },
   { pathspec: 'tooling/release-gpui/publish-component.mjs' },
+  { pathspec: 'tooling/release-gpui/component-signing.mjs' },
   { pathspec: 'tooling/release-gpui/on-demand-manifest.mjs' },
   { pathspec: 'tooling/release-gpui/patches' },
   { pathspec: 'tsconfig.json' },

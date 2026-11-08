@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authenticateComponentChecksumSidecar, validateOnDemandManifestV2 } from './on-demand-manifest.mjs';
+import { COMPONENT_SIGNING_KEY_ENV, componentSigningKey, signComponentAsset } from './component-signing.mjs';
 import {
   APP_RELEASE_GITHUB_REPO,
   componentReleaseRepos,
@@ -388,6 +389,7 @@ export function componentManifestRecord({
   componentVersion,
   downloadTag,
   githubRepo = componentsGithubRepo(),
+  signingKey = null,
 }) {
   const sidecarByPlatform = new Map(checksumSidecars.map((sidecar) => [sidecar.platform, sidecar]));
   return {
@@ -405,6 +407,23 @@ export function componentManifestRecord({
             : {}),
           sha256: asset.sha256,
           sizeBytes: asset.sizeBytes,
+          // Ghostex's signature over this exact archive (component-signing.mjs): the bytes were
+          // built by this run, or reused only after their GitHub build attestation checked out.
+          ...(signingKey
+            ? {
+                signature: signComponentAsset(
+                  {
+                    name: component,
+                    componentVersion,
+                    platform: asset.platform,
+                    assetName: asset.assetName,
+                    sha256: asset.sha256,
+                    sizeBytes: asset.sizeBytes,
+                  },
+                  signingKey
+                ),
+              }
+            : {}),
         },
       ])
     ),
@@ -508,6 +527,14 @@ async function main() {
   }
   for (const asset of plan.noops) process.stdout.write(`NO-OP ${asset.assetName} sha256=${asset.sha256}\n`);
 
+  /*
+   * CDXC:Release 2026-11-08 DECISION:
+   * User (#495, Q1731): every component archive carries Ghostex's Ed25519 signature, and clients refuse unsigned ones. A release run without the key would seal archives no client installs, so in the release workflows (GHOSTEX_REQUIRE_COMPONENT_SIGNATURES=1) a missing key stops the run here.
+   */
+  const signingKey = componentSigningKey();
+  if (!signingKey && !options.dryRun && process.env.GHOSTEX_REQUIRE_COMPONENT_SIGNATURES === '1') {
+    throw new Error(`${COMPONENT_SIGNING_KEY_ENV} is not configured: component archives must be signed.`);
+  }
   const record = componentManifestRecord({
     assets,
     checksumSidecars,
@@ -515,6 +542,7 @@ async function main() {
     componentVersion,
     downloadTag: tag,
     githubRepo: repo,
+    signingKey,
   });
   const outputPath = options.output
     ? path.resolve(options.output)

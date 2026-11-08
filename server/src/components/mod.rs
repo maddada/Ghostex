@@ -10,6 +10,10 @@
 //! checked by its caller to hold what it should, and only then moved into place, so a broken
 //! download never leaves a half-installed component.
 //!
+//! Then Ghostex's Ed25519 signature on the archive, sealed beside its SHA-256
+//! (packages/gx-protocol/src/component_signing.rs), is checked against the public key built into
+//! gxserver before anything is unpacked; a release build refuses an unsigned archive.
+//!
 //! The desktop's component store (apps/desktop/src/component_store/) does the same for the Code
 //! editor's code-server and CEF, which the desktop app runs.
 
@@ -25,10 +29,15 @@ use sha2::{Digest as _, Sha256};
 pub(crate) struct SealedComponent {
     pub(crate) name: String,
     pub(crate) component_version: String,
+    /// `<os>-<arch>`, as the manifest names it.
+    pub(crate) platform: String,
     pub(crate) url: String,
     pub(crate) asset_name: String,
     pub(crate) sha256: String,
     pub(crate) size_bytes: u64,
+    /// Ghostex's signature (base64 Ed25519) over the archive's statement; `None` when the release
+    /// sealed none (refused by a release build).
+    pub(crate) signature: Option<String>,
 }
 
 /// The component store: `GHOSTEX_COMPONENT_STORE_DIR` when set (as the desktop's component store
@@ -102,10 +111,15 @@ pub(crate) fn sealed_in(manifest: &Value, name: &str, platform: &str) -> Option<
         .or_else(|| manifest.get("githubRepo"))?
         .as_str()?
         .to_string();
+    let platform_name = platform.to_string();
     let platform = component.pointer(&format!("/platforms/{platform}"))?;
     let asset_name = platform.get("assetName")?.as_str()?.to_string();
     let sha256 = platform.get("sha256")?.as_str()?.to_ascii_lowercase();
     let size_bytes = platform.get("sizeBytes")?.as_u64()?;
+    let signature = platform
+        .get("signature")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let safe = |text: &str| !text.is_empty() && !text.contains(['/', '\\']) && !text.contains("..");
     if !safe(&component_version) || !safe(&asset_name) || !safe(&tag) || sha256.len() != 64 {
         return None;
@@ -114,12 +128,77 @@ pub(crate) fn sealed_in(manifest: &Value, name: &str, platform: &str) -> Option<
         .unwrap_or_else(|_| format!("https://github.com/{repo}/releases/download"));
     Some(SealedComponent {
         name: name.to_string(),
+        platform: platform_name,
         url: format!("{}/{tag}/{asset_name}", base.trim_end_matches('/')),
         component_version,
         asset_name,
         sha256,
         size_bytes,
+        signature,
     })
+}
+
+/// The public key component signatures are checked with: Ghostex's, or (debug builds only, for
+/// tests) `GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY`.
+fn signing_public_key() -> Option<[u8; 32]> {
+    use ghostex_gx_protocol::component_signing::{
+        decode_public_key, COMPONENT_SIGNING_PUBLIC_KEY_HEX,
+    };
+    if cfg!(debug_assertions) {
+        if let Ok(hex) = std::env::var("GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY") {
+            return decode_public_key(&hex);
+        }
+    }
+    decode_public_key(COMPONENT_SIGNING_PUBLIC_KEY_HEX)
+}
+
+/// Checks Ghostex's signature on the archive the release sealed. A release build refuses an
+/// unsigned archive; a development build lets one through with a warning (local dev manifests
+/// carry none), but never a wrong signature.
+pub(crate) fn verify_signature(component: &SealedComponent, title: &str) -> Result<(), String> {
+    verify_signature_allowing_unsigned(component, title, cfg!(debug_assertions))
+}
+
+fn verify_signature_allowing_unsigned(
+    component: &SealedComponent,
+    title: &str,
+    allow_unsigned: bool,
+) -> Result<(), String> {
+    use base64::Engine as _;
+    let Some(signature) = component.signature.as_deref() else {
+        if allow_unsigned {
+            eprintln!(
+                "[components] {} {} is unsigned; a release build would refuse it",
+                component.name, component.component_version
+            );
+            return Ok(());
+        }
+        return Err(format!(
+            "The {title} download isn't signed by Ghostex, so it wasn't installed."
+        ));
+    };
+    let key =
+        signing_public_key().ok_or_else(|| "Ghostex's signing key is unreadable.".to_string())?;
+    let signature = base64::engine::general_purpose::STANDARD
+        .decode(signature.trim())
+        .map_err(|_| {
+            format!("The {title} download's signature is unreadable, so it wasn't installed.")
+        })?;
+    let statement = ghostex_gx_protocol::component_signing::component_signing_statement(
+        &component.name,
+        &component.component_version,
+        &component.platform,
+        &component.asset_name,
+        &component.sha256,
+        component.size_bytes,
+    );
+    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key)
+        .verify(statement.as_bytes(), &signature)
+        .map_err(|_| {
+            format!(
+                "The {title} download's signature doesn't match Ghostex's, so it wasn't installed."
+            )
+        })
 }
 
 pub(crate) fn unique() -> u128 {
@@ -190,7 +269,7 @@ pub(crate) fn fetch_verified(
             "The {title} download does not match this release's checksum."
         ));
     }
-    Ok(())
+    verify_signature(component, title)
 }
 
 /// Unpacks `archive` into `staging`, lets `check` look at it, and moves it to `destination`
@@ -280,6 +359,63 @@ pub(crate) fn prune_other_versions(name: &str, installed: &Path) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// A throwaway key's signature over the statement of `sealed_test_component()` (made with
+    /// Node's `crypto.sign`, as tooling/release-gpui/component-signing.mjs does), so the two
+    /// sides are checked against each other.
+    const TEST_PUBLIC_KEY: &str =
+        "b388c522aec5df9f41e22e510e5c4ebfb3851662d477fee2ae872336ba128e58";
+    const TEST_SIGNATURE: &str =
+        "A/MJ7qChyfPi6XjpHxCCbF2etJ7m2YEfP5gZ+KwoptKYppGfpnAuUYUayr9yogepWp2Tn3ngvvxHs7y3eKIiAA==";
+
+    fn sealed_test_component(signature: Option<&str>) -> SealedComponent {
+        SealedComponent {
+            name: "collab".into(),
+            component_version: "1.0.0-abc".into(),
+            platform: "darwin-arm64".into(),
+            url: String::new(),
+            asset_name: "collab-1.0.0-abc-darwin-arm64.tar.gz".into(),
+            sha256: "a".repeat(64),
+            size_bytes: 42,
+            signature: signature.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn only_ghostexs_signature_over_this_exact_archive_passes() {
+        // The signing key variable is process-wide; Collab's install tests set it too.
+        let _lock = crate::collab_shim::test_lock();
+        std::env::set_var("GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY", TEST_PUBLIC_KEY);
+        assert_eq!(
+            verify_signature(&sealed_test_component(Some(TEST_SIGNATURE)), "Collab"),
+            Ok(())
+        );
+        // The same signature for another size, digest, version or name doesn't pass.
+        let mut other = sealed_test_component(Some(TEST_SIGNATURE));
+        other.size_bytes = 43;
+        assert!(verify_signature(&other, "Collab").is_err());
+        let mut other = sealed_test_component(Some(TEST_SIGNATURE));
+        other.sha256 = "b".repeat(64);
+        assert!(verify_signature(&other, "Collab").is_err());
+        let mut other = sealed_test_component(Some(TEST_SIGNATURE));
+        other.name = "gbots".into();
+        other.asset_name = "gbots-1.0.0-abc-darwin-arm64.tar.gz".into();
+        assert!(verify_signature(&other, "Collab").is_err());
+        assert!(verify_signature(
+            &sealed_test_component(Some("bm90IGEgc2lnbmF0dXJl")),
+            "Collab"
+        )
+        .is_err());
+        // A release build refuses an unsigned archive.
+        assert!(
+            verify_signature_allowing_unsigned(&sealed_test_component(None), "Collab", false)
+                .unwrap_err()
+                .contains("isn't signed")
+        );
+        // Ghostex's real key does not accept the throwaway key's signature.
+        std::env::remove_var("GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY");
+        assert!(verify_signature(&sealed_test_component(Some(TEST_SIGNATURE)), "Collab").is_err());
+    }
 
     #[test]
     fn a_sealed_component_needs_safe_names_and_a_full_checksum() {

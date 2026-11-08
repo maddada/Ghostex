@@ -6,6 +6,7 @@ pub(crate) mod code_server_archive;
 pub(crate) mod code_server_tar;
 pub(crate) mod install_files;
 pub(crate) mod manifest;
+pub(crate) mod signature;
 pub(crate) mod store;
 
 pub(crate) use asset_download::*;

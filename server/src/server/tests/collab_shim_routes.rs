@@ -390,3 +390,141 @@ async fn installing_needs_the_owners_approval_and_uninstalling_never_asks() {
     std::env::remove_var("GHOSTEX_COLLAB_DEV_BINARY");
     std::env::remove_var("GHOSTEX_COMPONENT_STORE_DIR");
 }
+
+/// Serves `files` (name, bytes) at `/<tag>/<name>`.
+async fn serve_files(files: Vec<(String, Vec<u8>)>) -> String {
+    let files = std::sync::Arc::new(files);
+    let app = axum::Router::new().fallback(move |uri: axum::http::Uri| {
+        let files = files.clone();
+        async move {
+            let name = uri
+                .path()
+                .rsplit('/')
+                .next()
+                .unwrap_or_default()
+                .to_string();
+            match files.iter().find(|(file, _)| *file == name) {
+                Some((_, bytes)) => (StatusCode::OK, bytes.clone()),
+                None => (StatusCode::NOT_FOUND, Vec::new()),
+            }
+        }
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    format!("http://127.0.0.1:{port}")
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_sealed_install_refuses_an_archive_without_ghostexs_signature() {
+    use base64::Engine as _;
+    use ring::signature::KeyPair as _;
+    use sha2::Digest as _;
+
+    let setup = setup();
+    let temp = &setup._temp;
+    // A Collab archive (a stand-in binary), as the release publishes it.
+    let stage = temp.path().join("stage");
+    std::fs::create_dir_all(&stage).unwrap();
+    std::fs::write(stage.join("ghostex-collab"), "#!/bin/sh\nexit 0\n").unwrap();
+    let archive = temp.path().join("archive.tar.gz");
+    assert!(std::process::Command::new("tar")
+        .arg("-czf")
+        .arg(&archive)
+        .arg("-C")
+        .arg(&stage)
+        .arg(".")
+        .status()
+        .unwrap()
+        .success());
+    let bytes = std::fs::read(&archive).unwrap();
+    let sha256 = hex::encode(sha2::Sha256::digest(&bytes));
+    let platform = crate::components::platform_dir();
+    let version = "1.0.0-test";
+    let asset = format!("collab-{version}-{platform}.tar.gz");
+
+    // A test signing key stands in for Ghostex's (debug builds read GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY).
+    let rng = ring::rand::SystemRandom::new();
+    let pkcs8 = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
+    let pair = ring::signature::Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).unwrap();
+    std::env::set_var(
+        "GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY",
+        hex::encode(pair.public_key().as_ref()),
+    );
+    let statement = ghostex_gx_protocol::component_signing::component_signing_statement(
+        "collab",
+        version,
+        &platform,
+        &asset,
+        &sha256,
+        bytes.len() as u64,
+    );
+    let good =
+        base64::engine::general_purpose::STANDARD.encode(pair.sign(statement.as_bytes()).as_ref());
+    let other_statement = statement.replace(version, "1.0.0-other");
+    let replayed = base64::engine::general_purpose::STANDARD
+        .encode(pair.sign(other_statement.as_bytes()).as_ref());
+
+    let base = serve_files(vec![(asset.clone(), bytes.clone())]).await;
+    let store = temp.path().join("components");
+    std::env::set_var("GHOSTEX_ON_DEMAND_BASE_URL", &base);
+    std::env::set_var("GHOSTEX_COMPONENT_STORE_DIR", &store);
+    std::env::remove_var("GHOSTEX_COLLAB_DEV_BINARY");
+    let manifest_path = temp.path().join("on-demand-resources.json");
+    let install = |signature: &str| {
+        std::fs::write(
+            &manifest_path,
+            json!({
+                "schemaVersion": 2, "version": "11.0.1", "githubRepo": "maddada/Ghostex", "assets": {},
+                "components": {"collab": {
+                    "name": "collab", "componentVersion": version, "downloadTag": format!("collab-{version}"),
+                    "githubRepo": "maddada/ghostex-components",
+                    "platforms": {platform.clone(): {"assetName": asset, "sha256": sha256, "sizeBytes": bytes.len(), "signature": signature}}
+                }}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        std::env::set_var("GHOSTEX_ON_DEMAND_MANIFEST", &manifest_path);
+        let (tx, rx) = std::sync::mpsc::channel();
+        crate::collab_shim::install::start_install(
+            setup.state.clone(),
+            Box::new(move |ok| {
+                let _ = tx.send(ok);
+            }),
+        )
+        .expect("starts");
+        rx.recv_timeout(std::time::Duration::from_secs(30))
+            .expect("finishes")
+    };
+
+    // A signature for another version of the archive (a replay), or none of Ghostex's: refused,
+    // and nothing is installed.
+    assert!(!install(&replayed));
+    let item = crate::collab_shim::install::item();
+    assert!(
+        item["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("signature"),
+        "{item}"
+    );
+    assert!(crate::collab_shim::install::installed().is_none());
+    // Ghostex's signature over this exact archive: installed.
+    assert!(install(&good));
+    assert!(crate::collab_shim::install::installed().is_some());
+
+    sidecar::stop_now();
+    for key in [
+        "GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY",
+        "GHOSTEX_ON_DEMAND_BASE_URL",
+        "GHOSTEX_ON_DEMAND_MANIFEST",
+        "GHOSTEX_COMPONENT_STORE_DIR",
+    ] {
+        std::env::remove_var(key);
+    }
+}
