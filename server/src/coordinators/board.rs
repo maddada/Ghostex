@@ -1474,10 +1474,18 @@ mod tests {
             request(json!({"op": "drop", "item": "B1"})).is_err(),
             "already removed"
         );
-        let threads = vec![
-            thread("Gsleep", "sleeping", 2),
-            thread("Gwork", "working", 0),
-        ];
+        // Idle since earlier today (two hours ago, or local midnight if sooner), before it was
+        // removed: an idle thread from yesterday is off the board, so a fixed two hours failed
+        // between midnight and 2 am.
+        let since_midnight = i64::from(chrono::Timelike::num_seconds_from_midnight(
+            &Local::now().time(),
+        ));
+        let mut sleeping = thread("Gsleep", "sleeping", 0);
+        sleeping["activeAt"] = json!(
+            (now() - chrono::Duration::seconds(since_midnight.min(7200)))
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        );
+        let threads = vec![sleeping, thread("Gwork", "working", 0)];
         let board = board_value(&threads, &list_board_items(&db, &key).unwrap(), None, now());
         assert_eq!(refs(&board, "removed"), vec!["Gsleep", "B1"]);
         assert_eq!(
