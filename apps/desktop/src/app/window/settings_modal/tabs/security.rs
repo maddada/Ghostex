@@ -225,7 +225,7 @@ impl SecurityTab {
         settings_section(
             p,
             "Security log",
-            Some("Every sensitive action on this computer and who asked for it, newest first. Each one also shows in the notification bell and on your paired phones.".into()),
+            Some("Every sensitive action on this computer and who asked for it, newest first. The important ones also show in the notification bell and on your paired phones.".into()),
             None,
             rows,
         )
