@@ -55,9 +55,9 @@ pub(crate) enum SettingsTabId {
 /// CDXC:Settings 2026-11-08 DECISION:
 /// User: the rail showed only two labels (App, Setup) and they asked for more. Q1770 (option C,
 /// "Six groups by task"): Working (Chat, Sidebar & Sessions, Terminal, Files & Links), Appearance
-/// (Interface, Notifications, Hotkeys), Voice (Dictation, Voice Agent), Agents & Accounts (Agents,
+/// (Interface, Notifications, Hotkeys), Voice (Dictation, Voice Agent), Agents & accounts (Agents,
 /// Accounts, Autopilot, Secrets), Connections (Remote, Sync, Projects, Collab, Integrations) and
-/// Privacy & System (Security, Power & Sleep, About). Q1771: Updates stays alone on top with no
+/// Privacy & system (Security, Power & Sleep, About). Q1771: Updates stays alone on top with no
 /// label. Extensions and the pages that fold under it are unchanged. Every page keeps its own
 /// show/hide rule; a group whose pages are all hidden (Voice with Voice Agent off and no Dictation
 /// match while searching, for one) shows no label, since a label is drawn only above a shown page
@@ -89,9 +89,9 @@ impl RailTier {
             RailTier::Working => "Working",
             RailTier::Appearance => "Appearance",
             RailTier::Voice => "Voice",
-            RailTier::AgentsAccounts => "Agents & Accounts",
+            RailTier::AgentsAccounts => "Agents & accounts",
             RailTier::Connections => "Connections",
-            RailTier::PrivacySystem => "Privacy & System",
+            RailTier::PrivacySystem => "Privacy & system",
             RailTier::More => "More",
         }
     }
@@ -586,7 +586,7 @@ mod tests {
                 ("Appearance", vec!["Interface", "Notifications", "Hotkeys"]),
                 ("Voice", vec!["Dictation", "Voice Agent"]),
                 (
-                    "Agents & Accounts",
+                    "Agents & accounts",
                     vec!["Agents", "Accounts", "Autopilot", "Secrets"]
                 ),
                 (
@@ -594,7 +594,7 @@ mod tests {
                     vec!["Remote", "Sync", "Projects", "Collab", "Integrations"]
                 ),
                 (
-                    "Privacy & System",
+                    "Privacy & system",
                     vec!["Security", "Power & Sleep", "About"]
                 ),
             ]

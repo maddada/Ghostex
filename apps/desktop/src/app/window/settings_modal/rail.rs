@@ -267,6 +267,9 @@ fn rail_fold(
 /// own first page, so it read as part of that group. A later group's label now opens with the
 /// rail's hairline (the one over the Extensions group at the bottom) and clearly more room above
 /// it than below, and its own pages sit tight under it, so each group reads as one block.
+/// Later: "pls add more gap here between label and the items and make them not capitalized
+/// (sentence case)". The labels are drawn as written, in sentence case ("Agents & accounts"), at
+/// 12px with 4px more room under them, still closer to their own pages than to the group above.
 fn render_tier_label(p: &SettingsPalette, tier: RailTier, spaced: bool) -> AnyElement {
     if tier == RailTier::Top {
         return div().into_any_element();
@@ -281,11 +284,12 @@ fn render_tier_label(p: &SettingsPalette, tier: RailTier, spaced: bool) -> AnyEl
                 .border_t_1()
                 .border_color(hsla(p.hairline))
         })
-        .text_size(px(11.0))
-        .line_height(px(14.0))
+        .pb(px(4.0))
+        .text_size(px(12.0))
+        .line_height(px(16.0))
         .font_weight(FontWeight::MEDIUM)
         .text_color(hsla(p.muted))
-        .child(tier.title().to_uppercase())
+        .child(tier.title())
         .into_any_element()
 }
 
