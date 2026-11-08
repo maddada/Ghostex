@@ -115,6 +115,12 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            "installAgentGuideSkill" => {
+                self.run_gpui_ghostex_cli_settings_action(
+                    GpuiGhostexCliSettingsAction::InstallAgentGuideSkill,
+                    cx,
+                );
+            }
             "installVisualsSkill" => {
                 self.run_gpui_ghostex_cli_settings_action(
                     GpuiGhostexCliSettingsAction::InstallVisualsSkill,

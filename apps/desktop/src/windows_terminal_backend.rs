@@ -54,6 +54,7 @@ pub(crate) struct WindowsWslGhostexCliStatus {
     pub(crate) gx_usable: bool,
     pub(crate) move_codex_session_skill_path: Option<String>,
     pub(crate) help_skill_path: Option<String>,
+    pub(crate) agent_guide_skill_path: Option<String>,
     pub(crate) visuals_skill_path: Option<String>,
     pub(crate) secrets_skill_path: Option<String>,
 }

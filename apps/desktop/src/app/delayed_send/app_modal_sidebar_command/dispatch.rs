@@ -75,6 +75,7 @@ impl GhostexGpuiApp {
             | "installGenerateTitleSkill"
             | "installMoveCodexSessionSkill"
             | "installHelpSkill"
+            | "installAgentGuideSkill"
             | "installVisualsSkill"
             | "installSecretsSkill"
             | "installCuaDriverSkill"

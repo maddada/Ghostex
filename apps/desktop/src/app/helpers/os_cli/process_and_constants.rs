@@ -498,6 +498,7 @@ pub(crate) const GPUI_BUNDLED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-move-codex-session",
     "ghostex-manage-beads",
     "ghostex-visuals",
+    "ghostex-agent-guide",
 ];
 
 /// CDXC:Resources 2026-09-06 WHY:

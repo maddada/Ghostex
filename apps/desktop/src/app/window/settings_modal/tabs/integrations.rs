@@ -90,15 +90,17 @@ fn skill_install_message(skill_id: &str) -> Option<&'static str> {
         "generateTitle" => "installGenerateTitleSkill",
         "moveCodexSession" => "installMoveCodexSessionSkill",
         "help" => "installHelpSkill",
+        "agentGuide" => "installAgentGuideSkill",
         "visuals" => "installVisualsSkill",
         "secrets" => "installSecretsSkill",
         _ => return None,
     })
 }
 
-/// `isBundledGhostexAgentSkillInstalled`.
-fn skill_installed(skill_id: &str, status: Option<&Value>) -> bool {
-    let key = match skill_id {
+/// The key of the app's CLI status (`ghostexCliStatus`, built in `helpers/os_cli/cli_status.rs`)
+/// that says whether a bundled skill is installed.
+fn skill_status_key(skill_id: &str) -> Option<&'static str> {
+    Some(match skill_id {
         "browserUse" => "browserSkillInstalled",
         "embeddedBrowserUse" => "embeddedBrowserSkillInstalled",
         "computerUse" => "computerUseSkillInstalled",
@@ -109,11 +111,16 @@ fn skill_installed(skill_id: &str, status: Option<&Value>) -> bool {
         "generateTitle" => "generateTitleSkillInstalled",
         "moveCodexSession" => "moveCodexSessionSkillInstalled",
         "help" => "helpSkillInstalled",
+        "agentGuide" => "agentGuideSkillInstalled",
         "visuals" => "visualsSkillInstalled",
         "secrets" => "secretsSkillInstalled",
-        _ => return false,
-    };
-    flag(status, key) == Some(true)
+        _ => return None,
+    })
+}
+
+/// `isBundledGhostexAgentSkillInstalled`.
+fn skill_installed(skill_id: &str, status: Option<&Value>) -> bool {
+    skill_status_key(skill_id).is_some_and(|key| flag(status, key) == Some(true))
 }
 
 fn flag(status: Option<&Value>, key: &str) -> Option<bool> {
@@ -1566,5 +1573,100 @@ impl Render for IntegrationsTab {
             }
         }
         settings_page(&self.store, SettingsTabId::Integrations, &p, blocks, cx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::helpers::{
+        GPUI_BUNDLED_GHOSTEX_AGENT_SKILL_NAMES, gpui_bundled_agent_skill_name,
+    };
+
+    const DISPATCH: &str =
+        include_str!("../../../delayed_send/app_modal_sidebar_command/dispatch.rs");
+    const SETTINGS_TOOLS: &str =
+        include_str!("../../../delayed_send/app_modal_sidebar_command/settings_tools.rs");
+    const ACTIONS: &str = include_str!("../../../helpers/os_cli/cli_settings_actions.rs");
+    /// The files that build the CLI status payload (SpaceO's fields come from their own file).
+    const STATUS: [&str; 2] = [
+        include_str!("../../../helpers/os_cli/cli_status.rs"),
+        include_str!("../../../helpers/os_cli/spaceo_status.rs"),
+    ];
+
+    /// Issue #489: the Install button of "Ghostex Agent Guide" was greyed out because the row had
+    /// no install message. Every row of the catalog's skill list must be wired end to end, so the
+    /// next skill added to the catalog cannot ship with a dead button either.
+    #[test]
+    fn every_skill_row_has_a_working_install_button() {
+        let skills = catalog_skills(true);
+        assert!(
+            skills.iter().any(|skill| skill.id == "agentGuide"),
+            "the catalog lists Ghostex Agent Guide"
+        );
+        for skill in skills {
+            let id = skill.id.as_str();
+            let message = skill_install_message(id).unwrap_or_else(|| {
+                panic!("{id}: the row has no install message, so Install is disabled")
+            });
+            assert!(
+                DISPATCH.contains(&format!("\"{message}\"")),
+                "{id}: dispatch.rs does not route {message}"
+            );
+            assert!(
+                SETTINGS_TOOLS.contains(&format!("\"{message}\" =>")),
+                "{id}: settings_tools.rs does not handle {message}"
+            );
+            assert!(
+                ACTIONS.contains(&format!("=> \"{message}\"")),
+                "{id}: cli_settings_actions.rs has no action for {message}"
+            );
+            let key = skill_status_key(id)
+                .unwrap_or_else(|| panic!("{id}: the row cannot tell whether it is installed"));
+            assert!(
+                STATUS
+                    .iter()
+                    .any(|source| source.contains(&format!("\"{key}\":"))),
+                "{id}: the CLI status does not publish {key}"
+            );
+            assert!(skill_installed(id, Some(&json!({ key: true }))));
+            assert!(!skill_installed(id, Some(&json!({ key: false }))));
+            assert!(!skill_installed(id, Some(&json!({}))));
+        }
+    }
+
+    /// The trash button next to an installed row removes `~/.agents/skills/<skillName>`; it only
+    /// works for a skill the uninstaller knows by id and by folder name.
+    #[test]
+    fn installed_skill_rows_can_be_uninstalled() {
+        // Known gap, not part of #489: the Secrets row's Uninstall does nothing.
+        const KNOWN_UNINSTALL_GAPS: &[&str] = &["secrets"];
+        for skill in catalog_skills(true) {
+            if KNOWN_UNINSTALL_GAPS.contains(&skill.id.as_str()) {
+                continue;
+            }
+            let name = gpui_bundled_agent_skill_name(&skill.id)
+                .unwrap_or_else(|| panic!("{}: Uninstall does not know this skill", skill.id));
+            assert_eq!(name, skill.skill_name, "{}", skill.id);
+            assert!(
+                GPUI_BUNDLED_GHOSTEX_AGENT_SKILL_NAMES.contains(&name),
+                "{}: Uninstall all skips {name}",
+                skill.id
+            );
+        }
+    }
+
+    #[test]
+    fn agent_guide_row_installs_through_the_agent_guide_verb() {
+        let skill = catalog_skills(true)
+            .into_iter()
+            .find(|skill| skill.id == "agentGuide")
+            .expect("Ghostex Agent Guide is in the catalog");
+        assert_eq!(skill.command, "ghostex agent-guide install-skill");
+        assert_eq!(
+            skill_install_message("agentGuide"),
+            Some("installAgentGuideSkill")
+        );
+        assert!(ACTIONS.contains("&[\"agent-guide\", \"install-skill\"]"));
     }
 }

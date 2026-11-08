@@ -13,6 +13,7 @@ pub(crate) enum GpuiGhostexCliSettingsAction {
     InstallGenerateTitleSkill,
     InstallMoveCodexSessionSkill,
     InstallHelpSkill,
+    InstallAgentGuideSkill,
     InstallVisualsSkill,
     InstallSecretsSkill,
     InstallCuaDriverSkill,
@@ -48,6 +49,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallGenerateTitleSkill => "installGenerateTitleSkill",
             Self::InstallMoveCodexSessionSkill => "installMoveCodexSessionSkill",
             Self::InstallHelpSkill => "installHelpSkill",
+            Self::InstallAgentGuideSkill => "installAgentGuideSkill",
             Self::InstallVisualsSkill => "installVisualsSkill",
             Self::InstallSecretsSkill => "installSecretsSkill",
             Self::InstallCuaDriverSkill => "installCuaDriverSkill",
@@ -73,6 +75,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallGenerateTitleSkill => "Ghostex Auto Rename Session installed",
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session installed",
             Self::InstallHelpSkill => "Ghostex Help installed",
+            Self::InstallAgentGuideSkill => "Ghostex Agent Guide installed",
             Self::InstallVisualsSkill => "Ghostex Visuals installed",
             Self::InstallSecretsSkill => "Ghostex Secrets installed",
             Self::InstallCuaDriverSkill => "Cua Driver skill installed",
@@ -104,6 +107,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallGenerateTitleSkill => "Ghostex Auto Rename Session install failed",
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session install failed",
             Self::InstallHelpSkill => "Ghostex Help install failed",
+            Self::InstallAgentGuideSkill => "Ghostex Agent Guide install failed",
             Self::InstallVisualsSkill => "Ghostex Visuals install failed",
             Self::InstallSecretsSkill => "Ghostex Secrets install failed",
             Self::InstallCuaDriverSkill => "Cua Driver skill install failed",
@@ -232,6 +236,13 @@ pub(crate) fn gpui_run_ghostex_cli_settings_action(
                 action,
                 &["guide", "install-skill"],
                 "Ghostex Help",
+            )
+        }
+        GpuiGhostexCliSettingsAction::InstallAgentGuideSkill => {
+            gpui_install_bundled_ghostex_skill_action(
+                action,
+                &["agent-guide", "install-skill"],
+                "Ghostex Agent Guide",
             )
         }
         GpuiGhostexCliSettingsAction::InstallVisualsSkill => {
