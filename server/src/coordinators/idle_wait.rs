@@ -301,8 +301,55 @@ pub fn says_it_carries_on(message: &str) -> bool {
     STARTS.iter().any(|start| sentence.starts_with(start))
 }
 
+/// The sections of a handover report that say work goes on after the turn: 🔄 In progress and
+/// 🛫 Kicked off.
+const ONGOING_MARKERS: [char; 2] = ['\u{1f504}', '\u{1f6eb}'];
+
+/// The text of a handover report's ongoing sections (`ONGOING_MARKERS`): from a line that opens
+/// with one of them to the next line that opens with any handover marker.
+fn ongoing_sections(message: &str) -> String {
+    let mut ongoing = false;
+    let mut text = String::new();
+    for line in message.lines() {
+        let opening = line
+            .trim_start()
+            .trim_start_matches(['#', '>', ' '])
+            .chars()
+            .next();
+        if let Some(marker) = opening.filter(|ch| HANDOVER_MARKERS.contains(ch)) {
+            ongoing = ONGOING_MARKERS.contains(&marker);
+        }
+        if ongoing {
+            text.push_str(line);
+            text.push('\n');
+        }
+    }
+    text
+}
+
 /// Whether the end of a last message says the thread waits on a background job.
+///
+/// CDXC:Coordinators 2026-11-08 WHY:
+/// Coordinator: "Ghostex's parked-thread watcher just reported THIS thread as 'still idle 70
+/// minutes … waits on a background job' and showed the user a red dot + notification, but you had
+/// finished … (your last turn mentioned a background job that had long finished). A thread that's
+/// done/closed (or whose last turn is a finished report) must never be marked not moving or
+/// notify." The thread (G5yb5) had ended its turn at 12:08 UTC with a finished report about
+/// making restarts check for background jobs; its last 600 characters held "background job" and
+/// "still running" in its ⚠️ Read this and 🧪 Untested sections, which describe work, not a job it
+/// waits on. A message carrying handover markers is a report, so only its 🔄 In progress and
+/// 🛫 Kicked off sections can say it waits on a job (as `says_it_carries_on` already treats a
+/// report as finished); an unmarked message is read as before. A done or closed thread is not
+/// watched at all (`supervise` in server/coordinator_runtime.rs).
 pub fn says_it_waits(message: &str) -> bool {
+    if message.contains(HANDOVER_MARKERS) {
+        let ongoing = ongoing_sections(message);
+        return !ongoing.trim().is_empty() && says_it_waits_unmarked(&ongoing);
+    }
+    says_it_waits_unmarked(message)
+}
+
+fn says_it_waits_unmarked(message: &str) -> bool {
     const PHRASES: [&str; 16] = [
         "in the background",
         "background job",
