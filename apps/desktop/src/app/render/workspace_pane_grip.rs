@@ -27,14 +27,38 @@ use crate::*;
 const WORKSPACE_PANE_GRIP_HEIGHT: f32 = 10.0;
 const WORKSPACE_PANE_GRIP_GROUP: &str = "ghostex-gpui-workspace-pane-grip";
 
+/// Where the drag chip's top-left sits relative to the pointer: a little up and left, so the
+/// pointer holds the chip near its leading edge.
+const WORKSPACE_PANE_DRAG_CHIP_GRAB: gpui::Point<gpui::Pixels> = gpui::Point {
+    x: px(12.0),
+    y: px(14.0),
+};
+
 /// What follows the pointer while a pane's session is dragged by its grip.
 pub(crate) struct WorkspacePaneDragPreview {
     title: String,
+    /// Inset from the drag view's origin to the chip, see `workspace_pane_drag_chip_inset`.
+    chip_inset: gpui::Point<gpui::Pixels>,
+}
+
+/// CDXC:Workarea 2026-11-08 WHY:
+/// GPUI paints a drag view with its origin at the pointer minus where the drag started inside
+/// the dragged element (`cursor_offset`), as if the element itself were being carried. The grip
+/// spans the whole pane, so grabbing its pill (the middle) put the chip half a pane to the left
+/// of the pointer. Insetting the chip by that same offset cancels it, so the chip sits at the
+/// pointer for any pane width, sidebar, frame, split axis or window.
+fn workspace_pane_drag_chip_inset(
+    cursor_offset: gpui::Point<gpui::Pixels>,
+) -> gpui::Point<gpui::Pixels> {
+    gpui::Point {
+        x: (cursor_offset.x - WORKSPACE_PANE_DRAG_CHIP_GRAB.x).max(px(0.0)),
+        y: (cursor_offset.y - WORKSPACE_PANE_DRAG_CHIP_GRAB.y).max(px(0.0)),
+    }
 }
 
 impl Render for WorkspacePaneDragPreview {
     fn render(&mut self, _window: &mut Window, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        div()
+        let chip = div()
             .flex()
             .items_center()
             .h(px(28.0))
@@ -55,7 +79,11 @@ impl Render for WorkspacePaneDragPreview {
                     .whitespace_nowrap()
                     .text_ellipsis()
                     .child(self.title.clone()),
-            )
+            );
+        div()
+            .pl(self.chip_inset.x)
+            .pt(self.chip_inset.y)
+            .child(chip)
     }
 }
 
@@ -74,16 +102,18 @@ impl GhostexGpuiApp {
         let session_id = leaf.tab_group.active_session_id();
         let focused = self.agents_workspace.focused_pane == pane_id;
         let view = cx.entity().downgrade();
-        let grip_bounds =
+        // The menu hangs from the pill, not from the strip: the strip spans the whole pane and a
+        // menu left-aligns to its trigger, so anchoring to the strip opened it at the pane's left
+        // edge. Both are window coordinates from prepaint, in whichever window draws the pane.
+        let pill_bounds =
             std::rc::Rc::new(std::cell::Cell::new(None::<gpui::Bounds<gpui::Pixels>>));
-        let menu_bounds = grip_bounds.clone();
+        let menu_bounds = pill_bounds.clone();
         let title = session_id
             .map(|session_id| self.agents_workspace_tab_display_title(session_id))
             .unwrap_or_default();
         Some(
             div()
                 .id(format!("ghostex-gpui-workspace-pane-grip-{}", pane_id.0))
-                .on_prepaint(move |bounds, _, _| grip_bounds.set(Some(bounds)))
                 .group(WORKSPACE_PANE_GRIP_GROUP)
                 .flex_shrink_0()
                 .w_full()
@@ -103,6 +133,7 @@ impl GhostexGpuiApp {
                 )
                 .child(
                     div()
+                        .on_prepaint(move |bounds, _, _| pill_bounds.set(Some(bounds)))
                         .w(px(36.0))
                         .h(px(4.0))
                         .rounded(px(2.0))
@@ -123,10 +154,11 @@ impl GhostexGpuiApp {
                             source_pane_id: pane_id,
                             session_id,
                         },
-                        move |_dragged, _offset, _window, cx| {
+                        move |_dragged, cursor_offset, _window, cx| {
                             let _ = view.update(cx, |this, cx| this.begin_workspace_tab_drag(cx));
                             let title = title.clone();
-                            cx.new(|_| WorkspacePaneDragPreview { title })
+                            let chip_inset = workspace_pane_drag_chip_inset(cursor_offset);
+                            cx.new(|_| WorkspacePaneDragPreview { title, chip_inset })
                         },
                     )
                 })
@@ -134,7 +166,7 @@ impl GhostexGpuiApp {
         )
     }
 
-    /// Hung below the grip and toggled by it: a click on the grip while its menu is open closes it.
+    /// Hung below the grip's pill and toggled by it: a click on the grip while its menu is open closes it.
     fn show_workspace_pane_grip_menu(
         &self,
         pane_id: WorkspacePaneId,
@@ -179,5 +211,56 @@ impl GhostexGpuiApp {
         self.workspace_split_layout_metrics.clear();
         self.persist_shell_layout_state();
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Where GPUI paints the drag view: the pointer minus where the drag started in the element.
+    fn chip_origin(
+        pointer: gpui::Point<gpui::Pixels>,
+        cursor_offset: gpui::Point<gpui::Pixels>,
+    ) -> gpui::Point<gpui::Pixels> {
+        let view_origin = pointer - cursor_offset;
+        view_origin + workspace_pane_drag_chip_inset(cursor_offset)
+    }
+
+    #[test]
+    fn drag_chip_stays_at_the_pointer_wherever_the_wide_grip_was_grabbed() {
+        let pointer = gpui::point(px(900.0), px(420.0));
+        // The pill in the middle of a narrow pane, of a wide pane, and of a pane past a sidebar,
+        // grabbed anywhere down the strip's height: only the offset inside the grip differs, and
+        // the chip must not move with it.
+        for offset_x in [180.0, 640.0, 1210.0] {
+            for offset_y in [0.0, 5.0, WORKSPACE_PANE_GRIP_HEIGHT] {
+                let offset = gpui::point(px(offset_x), px(offset_y));
+                let origin = chip_origin(pointer, offset);
+                assert_eq!(
+                    origin.x,
+                    pointer.x - WORKSPACE_PANE_DRAG_CHIP_GRAB.x,
+                    "{offset:?}"
+                );
+                // The strip is shorter than the grab, so the chip's top is the strip's top,
+                // and the 28px chip still covers the pointer.
+                assert_eq!(origin.y, pointer.y - offset.y, "{offset:?}");
+                assert!(
+                    origin.y <= pointer.y && pointer.y < origin.y + px(28.0),
+                    "{offset:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn drag_chip_never_pulls_in_past_the_drag_view_origin() {
+        // Grabbed at the grip's very top-left: the chip can't sit up-left of the view's origin,
+        // so it lands at the origin, which is still under the pointer.
+        let offset = gpui::point(px(4.0), px(2.0));
+        assert_eq!(
+            workspace_pane_drag_chip_inset(offset),
+            gpui::point(px(0.0), px(0.0))
+        );
     }
 }
