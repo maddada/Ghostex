@@ -8,6 +8,90 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>11.1.0</title>
+            <pubDate>Sun, 08 Nov 2026 07:17:19 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.1.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>110100</sparkle:version>
+            <sparkle:shortVersionString>11.1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 11.1.0
+
+## 11.1.0 - 2026-11-08
+
+**Ghostex 11.1.0 is out.** A security update that puts you in charge of everything sensitive, with safer pairing for phones and computers (including over SSH and Tailscale); Collab becomes an extension you install, with a new Share popover; Chief, one agent per computer you can ask about anything; calmer notifications; a calm card when a computer is offline, with messages held until it is back; Settings in six groups; and many fixes.
+
+### 🔐 Security update
+- **You approve what matters:** turning on Easy Connect, letting a computer connect, Autopilot's approvals and limits, GBots, settings that loosen security, and an agent answering, stopping or typing into another session all wait for your approval with Touch ID, Windows Hello or your system password, or Face ID or the fingerprint on your phone.
+- **Agents and scripts can ask but never approve:** every session gets its own key when it starts, the `ghostex` CLI waits for your approval and then repeats the call, and settings only you may change can't be written through the API.
+- **Settings > Security keeps a security log** of every sensitive action, chained so an edited or removed entry is flagged; `ghostex security log` shows it in a terminal, and only the important entries reach the bell and the phone.
+- **Easy Connect serves only SSH and Ghostex itself**, an empty allow-list lets nobody in, and file links never open keys, Ghostex's own data or a project's hidden files like `.env`.
+- **Every downloadable component (Collab, GBots, the browser engine) carries Ghostex's signature**, checked before it is unpacked.
+- **After updating, a one-time notice lists the phones and computers that connect through Easy Connect and must pair again**, with the pairing QR right there, ticking each one off as it pairs; phones and computers on Tailscale, your network or SSH keep working.
+
+### 📲 Pairing phones and computers
+- **Each phone pairs with its own device key** kept in the Secure Enclave or Android Keystore: it waits as Pending with three words, and you approve it on the computer, or on a phone already paired, only when the words match. Removing a phone cuts it off at once.
+- **Computers pair the same way:** paste a Show QR code into Add a machine, check the three words on both screens and approve.
+- **Phones that sign in over Tailscale, your network or SSH pair once too**, with the same three matching words; until then answers, Stop and typing from that phone wait for your approval. Run in terminal on the phone uses the phone's own key.
+- **Pairing again needs the new phone app** (Android in this release, iPhone on TestFlight).
+
+### 🤝 Ghostex Collab
+- **Collab is now an extension:** the Ghostex you download doesn't contain it until you install it from Settings > Extensions (or right in the Share popover), with Touch ID; Settings > Collab and Share appear once it is installed, and Uninstall ends every share.
+- **The new Share popover is the live panel:** the link and code, who is watching and who is waiting, a Link lasts chip with 1 hour, 4 hours, 24 hours or Until I stop it, Review for a guest's waiting message, and Stop sharing that says who gets disconnected. The phone's Share sheet matches.
+- **Every share, Send mode and guest message you send on asks for your approval**, links need an eight-digit code, and the guest page is pinned to the exact version your Ghostex trusts.
+- **Guests can answer the agent's questions and open the chat's Ghostex pages and pictures**, and the guest page works on phones; their answers wait for you like their messages.
+- **Collab and GBots show in Settings > Updates and the Updates menu** with Update when a new version is out.
+
+### 🌸 Chief
+- **Chief is one agent per computer you can ask about anything:** any session, agent, project or computer, and Ghostex itself. Its row with the Ghostex flower sits under the Spaces bar, on the computer and the phone.
+- **Chief reads every session and steers them for you** (messages, interrupts, answers prompts) without asking each time, hands project work to that project's coordinator, and leaves security, sharing and pairing to you. "Ask anything about Ghostex" in the Help menu opens its chat.
+- **Each computer has its own Chief**, and you can turn it off in Settings > Extensions > Chief.
+
+### 🔔 Notifications
+- **Alerts come only when a session needs you:** a thread finishing stays quiet, a coordinator alerts only when its handover needs you, and every red dot alerts unless Autopilot heals it.
+- **The phone's bell is an inbox of sessions** under Needs you, Done and Failed, one row each, and Android's persistent notification follows it, thanks to @cagatay-io.
+- **The bell's dot counts only the rows its panel lists.**
+
+### 🌐 Remote computers
+- **A calm "Windows PC is offline · last seen 2h ago" card** sits above the chat box when a computer is off or asleep, with Retry; a message you send then waits and goes out by itself when the computer is back, with Cancel.
+- **Machines that ask for a verification code (2FA) connect:** turn on Reuse an existing SSH connection in the machine's Advanced settings and sign in once in a terminal, thanks to @chen1plus.
+- **Updates covers every connected computer**, with Install for what one of them is missing.
+- **Autopilot and Not moving wait while the computer is offline** instead of nudging agents that can't hear them.
+- **Easy Connect recovers faster** after a stall or a network change on the phone.
+
+### 🧭 Coordinators
+- **Playbook overrides replace editing the playbook**, and the coordinator picks which memory notes go into a thread's brief.
+- **A coordinator links its own threads on another computer**, and a thread's brief there waits out a folder-trust prompt (#497, #502).
+- **The Start menu lists Global Actions under a Global heading** (#501).
+
+### 💬 Chat
+- **The agent's reply fades in, and a long one stops the chat at its top** so you read from the start.
+- **Opening a tool group or any fold at the bottom of the chat scrolls to show its end.**
+- **A board card mention is its own teal chip with the card's title**, dimmed once the card leaves the board.
+- **The model menu shows tabs only for agents you turned on**, its long tooltips stay inside the menu, and the "Not applied" reason shows in full, thanks to @cagatay-io.
+
+### ⚙️ Settings and the window
+- **Settings lists its pages in six labelled groups**: Working, Appearance, Voice, Agents & Accounts, Connections, and Privacy & System; every page opens with a one-line intro.
+- **Frame the work area is on for new installs**, and macOS keeps the window buttons when the sidebar is collapsed (Settings > Interface > Advanced).
+- **The floating sidebar runs the full height, floats as a card inside the frame and keeps its traffic lights crisp**, thanks to @zxcvbinz.
+- **Dictation uses Hex**, Ghostex's own speech engine is gone, and Dictation and Voice Agent are separate pages with each key under its picker.
+- **The voice panel resizes from its edges** and follows new lines until you scroll up.
+- **Files groups filtered and searched files by folder**, and the Changes view can hide test files, on the computer and the phone.
+
+### 🩹 Fixes and polish
+- **A Mac that runs gxserver without the Ghostex app can install skills**, thanks to @sebastianarena.
+- **Automatic account switches no longer hold back an account with room**, and a switch whose agent won't return to the shell reloads the session on the new account.
+- **The Gemini account shows Antigravity's Claude and GPT limits**, matching agy's /usage.
+- **Spaces sync keeps each folder of a repository in its own Space** and puts back Spaces that 11.0.0 folded together (#488).
+- **macOS: arrow keys no longer type stray characters into a Ghostex page's text fields.**
+- **A GBots conversation opens in the chat**, Cloud Boxes run the model and effort you picked, and Cancel stops a waiting setup at once.
+- **OpenCode names the provider when two providers share a model name** (#482), and push and event-stream fixes, thanks to @cagatay-io.
+- **The Install button for Ghostex Agent Guide works**, and the Secrets row's trash button and Uninstall all remove its skill.
+- **Long chats load older pages faster** and gxserver starts faster with many sessions.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.1.0/ghostex-11.1.0-arm64.dmg" length="58096033" type="application/octet-stream" sparkle:edSignature="RFFqPhVKkXKfVSHWKywTZlLgerEsyppCX3LhbVt4egcU4mVMhTNJZUAkg9y7VAS+zMFH+XfFjbvf2X+KesHIBw=="/>
+        </item>
+        <item>
             <title>11.0.0</title>
             <pubDate>Sat, 07 Nov 2026 07:02:59 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.0.0</sparkle:fullReleaseNotesLink>
@@ -449,49 +533,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.46.0/ghostex-10.46.0-arm64.dmg" length="52362954" type="application/octet-stream" sparkle:edSignature="3YU0po1X7gotkxwtpy0D79Pk/EPA4pmx70HquvpKMV9GYx1dlqmoIvOWcIlx1gjaMudYnXgX1Pv2znFS8GmAAw=="/>
         </item>
         <item>
-            <title>10.45.0</title>
-            <pubDate>Tue, 03 Nov 2026 19:06:26 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.45.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>104500</sparkle:version>
-            <sparkle:shortVersionString>10.45.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 10.45.0
-
-## 10.45.0 - 2026-11-03
-
-**Ghostex 10.45.0 is out.** Start a new session in any project on any computer from one picker, connect your own ticket tracker to Work mode, use Voice mode with sessions on your other computers, and hand over only the last few turns of a conversation.
-
-### ✨ New sessions
-
-- **Start a new session anywhere.** The New Thread picker (Cmd+N) names the project it starts in on its top row: click it or press Cmd+N again to pick any project on any computer, with your recent projects first. A project on several computers shows them as chips on its row, starting on the one you used last for it, thanks to @sebastianarena (#359).
-- **The "+" on a project in the Unified filter and on a project group header opens the New Thread picker on that project,** and a project the filter hides joins the filter when you start a session there.
-- **On the phone, the agent menu that starts a session shows its project on top** (tap it to pick any project) and a row of computer chips.
-
-### 🎫 Work mode
-
-- **Connect your own ticket tracker with a ticket command.** Set it with `ghostex issues source set <path>`, store its credentials with `ghostex issues source credential <name>` from stdin (secrets need at least 3 characters), and a session whose branch names one of its tickets shows it on its card and in its links with its title and state. Workspaces connected to a team can't use one, thanks to @lardissone (#396, #402).
-
-### 🎙️ Voice mode
-
-- **Voice mode works with sessions on your connected computers.** It can read them, send them prompts, answer their questions and approvals, stop them, show them and start agents in that computer's projects. A computer whose Agent access is off stays out of reach, and Voice mode tells you why.
-
-### 🤝 Handoff
-
-- **Hand over only the last turns of a conversation.** The History slider in Handoff picks how many recent turns go over (20 by default, remembered), with your earlier prompts listed, or turn on Whole conversation to send everything. On the computer, the web and the phone.
-
-### 🩹 Fixes and polish
-
-- **Clicking a notification switches the sidebar to the session's computer,** and so do the menu bar, Quick Access, the status item, `ghostex focus` and Voice mode when they open a session on another computer, thanks to @lardissone (#401).
-- **Install another agent shows Installing, then Installed,** or the error with Retry.
-- **Line numbers in Files are no longer cut off** on documents with 1,000 lines or more.
-- **The built-in browser updates to Chromium 156.**
-- **Linux: Ctrl+G opens Ghostex's prompt editor instead of vi, so the chat no longer gets stuck behind an editor,** and the false "zmx daemon is not running" alarm is gone, thanks to @isfix (#400).
-- **Linux: Ghostex ships one copy of its keyring library,** thanks to @bet4it (#399).
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.45.0/ghostex-10.45.0-arm64.dmg" length="52379422" type="application/octet-stream" sparkle:edSignature="Rw8yY4KxualtcMcbv+tm+LqR2oV0kd25Ziak+35ZiUAGLjBmvIouvwhBlLFLB8adawPd54UqCEtIlH1bNXY0Dg=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -503,6 +544,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: H7p2gRy8w0EigM/PMwHLqZmuTLj199R1N1ZSYTkTVOnHPwj3nK/dccvGVG+MVrylhoQg5p/SlzUlDnWoWzECBg==
-length: 45808
+edSignature: jsm9IYgkcMnkRWyuoc7LDpBobZ1+IAmW1CNga3uH87no80c6t3Erx1IZqk27N2app9cNF/BMhvRltw5LaL2FCg==
+length: 51255
 -->
