@@ -346,7 +346,15 @@ pub(crate) fn to_agent_resume_input(
             command,
         );
         // Claude's Bypass Permissions warning, consented to for a bypass resume (bypass_consent.rs).
-        super::with_claude_bypass_consent(agent_id.as_deref(), &command)
+        let command = super::with_claude_bypass_consent(agent_id.as_deref(), &command);
+        // The home folder's secret folders (home_secret_folders.rs).
+        super::with_home_secret_folders_denied(
+            agent_id.as_deref(),
+            read_text_value(session, "cwd")
+                .or_else(|| read_text_value(project, "path"))
+                .as_deref(),
+            &command,
+        )
     });
     let runtime_command = match agent_id.as_deref() {
         Some("dsh") => runtime_command.map(|command| with_dsh_launch_env(&command)),

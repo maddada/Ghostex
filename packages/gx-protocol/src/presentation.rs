@@ -150,6 +150,10 @@ pub struct PresentationGitConfig {
 #[serde(rename_all = "camelCase")]
 pub struct PresentationProject {
     pub project_id: String,
+    /// The project at the computer's home folder, whose header is Main Hub's row
+    /// (server/src/chief/home.rs). Absent for every other project and from an older daemon.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_home: bool,
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

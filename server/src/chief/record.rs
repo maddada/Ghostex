@@ -24,11 +24,33 @@ pub(crate) struct ChiefRecord {
     /// The launcher it runs on (the first-open pick, or Change Agent's).
     pub agent_id: String,
     pub created_at: String,
+    /// Chief's earlier chats, newest first: New Chat and Change Agent put the old session to
+    /// sleep and keep it here, so it stays under Chief's row, one click away and resumable
+    /// (session.rs `replace_chief`). A record written before this has none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub earlier: Vec<EarlierChat>,
+}
+
+/// One of Chief's earlier chats.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EarlierChat {
+    pub project_id: String,
+    pub session_id: String,
 }
 
 impl ChiefRecord {
     pub fn key(&self) -> SessionKey {
         (self.project_id.clone(), self.session_id.clone())
+    }
+
+    /// Whether `key` is Chief's current chat or one of its earlier ones.
+    pub fn owns(&self, key: &SessionKey) -> bool {
+        self.key() == *key
+            || self
+                .earlier
+                .iter()
+                .any(|chat| chat.project_id == key.0 && chat.session_id == key.1)
     }
 }
 
@@ -53,7 +75,7 @@ pub(super) fn write_record(
 ) -> Result<(), DomainStateError> {
     let text = serde_json::to_string(record).map_err(|error| DomainStateError {
         code: "internalError",
-        message: format!("Could not save Chief of Staff's record: {error}"),
+        message: format!("Could not save Main Hub's record: {error}"),
     })?;
     db.execute(
         r#"
@@ -65,7 +87,7 @@ pub(super) fn write_record(
     )
     .map_err(|error| DomainStateError {
         code: "internalError",
-        message: format!("SQLite Chief of Staff error: {error}"),
+        message: format!("SQLite Main Hub error: {error}"),
     })?;
     remember(paths, Some(record.key()));
     Ok(())

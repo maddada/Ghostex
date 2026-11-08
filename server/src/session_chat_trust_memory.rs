@@ -212,6 +212,7 @@ pub fn session_folders_remembered(
         || crate::coordinators::coordinator_thread_folder_trusted(
             repository, project_id, session_id,
         )
+        || crate::chief::chief_home_session_trusted(repository, project_id, session_id)
 }
 
 /// CDXC:Feedback 2026-10-16 DECISION:

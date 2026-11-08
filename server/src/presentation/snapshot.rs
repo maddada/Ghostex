@@ -51,6 +51,7 @@ pub fn read_presentation_snapshot(
     insert_delayed_send_presentation_payload(db, &mut snapshot)?;
     crate::close_after_done::insert_close_after_done_presentation_payload(&mut snapshot, db);
     crate::coordinators::insert_coordinator_presentation_payload(&mut snapshot, db, &repository);
+    crate::chief::insert_chief_presentation_payload(&mut snapshot, db);
     // After the coordinator fields: the verdict reads the session's role from them.
     insert_attention_alerts_presentation_payload(&mut snapshot);
     insert_session_chat_queue_presentation_payload(&mut snapshot, db);
@@ -173,6 +174,7 @@ pub fn build_presentation_session_delta(
         db,
         &session,
     );
+    crate::chief::insert_chief_session_projection(&mut presentation_session, db);
     insert_attention_alerts(&mut presentation_session);
     insert_session_chat_queue_session_projection(
         &mut presentation_session,

@@ -203,6 +203,17 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
             json!(true),
         );
     }
+    // CDXC:Chief 2026-11-08 SEE-ALSO: packages/gx-core/src/sidebar_view/assemble.rs (Show on all Spaces) and apps/desktop/src/app/native_sidebar/chief.rs (Ask before New Chat); the phone follows the computer's two switches. Sent only when they differ from the defaults (off, on).
+    if settings
+        .get("chiefShowOnAllSpaces")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        map.insert("chiefShowOnAllSpaces".to_string(), json!(true));
+    }
+    if settings.get("chiefConfirmNewChat").and_then(Value::as_bool) == Some(false) {
+        map.insert("chiefConfirmNewChat".to_string(), json!(false));
+    }
     // Its Parked shelf shows only while session parking is on (the default).
     if settings
         .get("enableSessionParking")
@@ -234,6 +245,10 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
                         insert_present(&mut project_map, "name", project.get("name"));
                         insert_present(&mut project_map, "path", project.get("path"));
                         insert_present(&mut project_map, "projectId", project.get("projectId"));
+                        // The home project, whose header is Main Hub's row (server/src/chief/home.rs).
+                        if crate::chief::is_home_project(project) {
+                            project_map.insert("isHome".to_string(), json!(true));
+                        }
                         // The Unified list names a project by its repository, so one repository on two computers is one project (packages/gx-core/src/unified_sidebar/repo.rs).
                         insert_present(
                             &mut project_map,
@@ -795,6 +810,7 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     insert_js(&mut map, "coordinatorRole", &[s("coordinatorRole")]);
     // The same second-whitelist trap for Chief's flag (cli_session.rs).
     insert_js(&mut map, "isChief", &[s("isChief")]);
+    insert_js(&mut map, "chiefEarlier", &[s("chiefEarlier")]);
     insert_js(
         &mut map,
         "coordinatorProjectId",

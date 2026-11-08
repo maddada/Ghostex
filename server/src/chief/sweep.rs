@@ -50,8 +50,8 @@ pub(crate) fn start_chief_sweep(state: Arc<AppState>) {
     });
 }
 
-/// A Chief session created before the rename (Q1896) is still titled "Chief": it becomes "Chief of
-/// Staff" once, at gxserver start. A title the user gave it is left alone.
+/// A Chief session created before the renames (Q1896, Q1931) is still titled "Chief" or "Chief of
+/// Staff": it takes the current name once, at gxserver start. A title the user gave it is left alone.
 fn rename_old_title(state: &AppState) {
     let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
         return;
@@ -65,7 +65,10 @@ fn rename_old_title(state: &AppState) {
         .ok()
         .flatten()
         .is_some_and(|session| {
-            session.get("title").and_then(serde_json::Value::as_str) == Some(super::OLD_CHIEF_TITLE)
+            session
+                .get("title")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|title| super::OLD_CHIEF_TITLES.contains(&title))
         });
     if !titled_old {
         return;

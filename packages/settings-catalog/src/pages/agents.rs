@@ -5,7 +5,7 @@ pub(crate) fn page() -> Page {
     Page {
         id: "agents",
         title: "Agents",
-        sections: vec![agent_list(), config(), agent_hooks()],
+        sections: vec![agent_list(), config(), home_folder(), agent_hooks()],
     }
 }
 
@@ -20,6 +20,20 @@ pub(crate) fn config() -> Section {
             row("customTitleCommand", "Custom Title Command", "Run this command with the title prompt on stdin. It should print only the title."),
             row("acceptAll", "Agent approvals", "Choose whether supported agents ask before editing files or running commands. Per-agent settings can override this default."),
             row("trustProjectFoldersAutomatically", "Trust project folders automatically", "Mark each project and worktree folder as trusted before its agent starts, so no session stops at a \"Do you trust this folder?\" prompt. Turn it off to answer that prompt yourself."),
+        ],
+    )
+}
+
+/// Main Hub's home: the project at the home folder whose header is Chief's row
+/// (server/src/chief/home.rs), and the folders agents started there can't read.
+pub(crate) fn home_folder() -> Section {
+    section(
+        "homeFolder",
+        "Home folder",
+        vec![
+            row("chiefShowOnAllSpaces", "Show Main Hub on all Spaces", "Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to."),
+            row("chiefConfirmNewChat", "Ask before New Chat", "Ask before New Chat or Change Agent starts a new chat with Main Hub. Your earlier chats stay under its row either way."),
+            row("homeSecretFolders", "Folders agents can't read in your home folder", "Agents Ghostex starts in your home folder are kept out of these folders and files. Claude Code's file tools and every Codex command are held to the list; Claude's shell commands and other agents are not."),
         ],
     )
 }

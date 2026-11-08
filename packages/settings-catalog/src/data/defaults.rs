@@ -152,6 +152,41 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("voiceAgentHidden", J::Bool(false)),
     // CDXC:Chief 2026-11-08 DECISION: Chief is a built-in extension, on by default (official_extensions.rs).
     ("chiefHidden", J::Bool(false)),
+    // CDXC:Chief 2026-11-08 DECISION: User (Q1910): New Chat asks first, with a Don't ask again box that turns this off.
+    ("chiefConfirmNewChat", J::Bool(true)),
+    // CDXC:Chief 2026-11-08 DECISION: User: the home row "should remain top of the space that it's a part of ... not show on top of all spaces like we have now (make this a setting, default off, 'Show on all spaces')".
+    ("chiefShowOnAllSpaces", J::Bool(false)),
+    // CDXC:Chief 2026-11-08 DECISION: User (Q1915): agents Ghostex starts in the home folder are kept out of secret folders (server/src/agents/home_secret_folders.rs). Paths start with ~/ or are absolute; a missing one costs nothing.
+    (
+        "homeSecretFolders",
+        J::Arr(&[
+            J::Str("~/.ssh"),
+            J::Str("~/.aws"),
+            J::Str("~/.gnupg"),
+            J::Str("~/.config/gh"),
+            J::Str("~/.netrc"),
+            J::Str("~/.git-credentials"),
+            J::Str("~/.password-store"),
+            J::Str("~/.config/gcloud"),
+            J::Str("~/.azure"),
+            J::Str("~/.codex/auth.json"),
+            J::Str("~/.claude/.credentials.json"),
+            J::Str("~/Library/Keychains"),
+            J::Str("~/Library/Cookies"),
+            J::Str("~/Library/Safari"),
+            J::Str("~/Library/Application Support/Google/Chrome"),
+            J::Str("~/Library/Application Support/Firefox"),
+            J::Str("~/Library/Application Support/BraveSoftware"),
+            J::Str("~/Library/Application Support/Arc"),
+            J::Str("~/.mozilla"),
+            J::Str("~/.config/google-chrome"),
+            J::Str("~/.config/chromium"),
+            J::Str("~/.local/share/keyrings"),
+            J::Str("~/AppData/Local/Google/Chrome/User Data"),
+            J::Str("~/AppData/Roaming/Mozilla/Firefox"),
+            J::Str("~/AppData/Roaming/Microsoft/Credentials"),
+        ]),
+    ),
     ("openInTitlebarButtonHidden", J::Bool(false)),
     // CDXC:CodeEditor 2026-05-06-15:00
     // Embedded code-server editor panes can reuse the user's local VS Code

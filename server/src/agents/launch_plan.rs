@@ -369,6 +369,31 @@ pub(crate) fn create_agent_session_params_for_project(
                     );
                     plan.insert("command".to_string(), Value::String(command));
                 }
+                // The home folder's secret folders, denied through the agent's own settings on
+                // this run (home_secret_folders.rs).
+                let launch_cwd =
+                    read_text(params, "cwd").or_else(|| read_text_value(project, "path"));
+                if let Some(command) = plan
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .map(|command| {
+                        (
+                            command.to_string(),
+                            with_home_secret_folders_denied(
+                                family.as_deref(),
+                                launch_cwd.as_deref(),
+                                command,
+                            ),
+                        )
+                    })
+                    .and_then(|(before, after)| (after != before).then_some(after))
+                {
+                    plan.insert(
+                        "startupText".to_string(),
+                        Value::String(as_atuin_ignored_shell_input(&command)),
+                    );
+                    plan.insert("command".to_string(), Value::String(command));
+                }
                 if family.as_deref() == Some("dsh") {
                     if let Some(command) = plan
                         .get("command")
