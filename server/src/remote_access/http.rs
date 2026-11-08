@@ -203,7 +203,15 @@ pub(crate) async fn handle_remote_access_http(
                 let db = open_gxserver_database(&paths)?;
                 let now = crate::security::now_ms();
                 if let Some(pending) = pairing_runtime.pending(&device_id, now) {
-                    pairing_runtime.remove_pending(&device_id);
+                    /*
+                    CDXC:RemotePairing 2026-11-08 FIX:
+                    User (GitHub #495, 11.1.1): "a denied phone hears 'denied', not 'expired' (in
+                    the notice and in Settings' Deny)". Deny used to drop the pending entry, so the
+                    phone's next signed ask found nothing and heard "expired". Now only its approval
+                    request is denied: the lists stop showing it (they show pending requests only),
+                    and the phone's next ask finds the denial, hears "denied", and the entry goes
+                    then (or when it lapses).
+                    */
                     crate::audit::record(
                         crate::audit::Action::new("pairing.deny", "Denied a phone waiting to pair")
                             .target(pending.name.clone()),
@@ -450,7 +458,7 @@ pub(crate) async fn handle_remote_access_http(
                     super::computer_pairing::cancel_computer_pairing(&pending_id);
                     return Ok(json!({ "status": "cancelled" }));
                 }
-                super::computer_pairing::computer_pairing_status(&pending_id)
+                super::computer_pairing::computer_pairing_status(&paths, &pending_id)
                     .map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
             })
             .await

@@ -413,13 +413,22 @@ pub(crate) fn phone_statuses(
         .collect()
 }
 
-/// SEAM (pairing v2, GitHub #495): whether each computer of the notice was paired again: a new
-/// Easy Connect address in its Settings > Remote entry, or removed (gone, turned off, or moved off
-/// Easy Connect). Pairing v2 keeps this computer-side rule; the desktop pairs a computer by
-/// pasting that computer's new code into the entry.
+/// SEAM (pairing v2, GitHub #495): whether each computer of the notice was paired again: a
+/// pairing with its Easy Connect address recorded since the update
+/// (`remote_access::computer_pairing`, CDXC:Security 2026-11-08 FIX there), or a new address in
+/// its Settings > Remote entry; or removed (gone, turned off, or moved off Easy Connect).
 pub(crate) fn computer_statuses(
     computers: &[NoticeComputer],
     settings: Option<&Value>,
+) -> Vec<RowStatus> {
+    computer_statuses_with_pairings(computers, settings, &[])
+}
+
+/// [`computer_statuses`] with the Easy Connect addresses this computer paired with since the update.
+pub(crate) fn computer_statuses_with_pairings(
+    computers: &[NoticeComputer],
+    settings: Option<&Value>,
+    paired_addresses: &[String],
 ) -> Vec<RowStatus> {
     let now = easy_connect_computers(settings);
     computers
@@ -430,6 +439,7 @@ pub(crate) fn computer_statuses(
                 .find(|entry| entry.id == computer.id && !computer.id.is_empty())
             {
                 None => RowStatus::Removed,
+                Some(entry) if paired_addresses.contains(&entry.address) => RowStatus::Paired,
                 Some(entry) if entry.address != computer.address => RowStatus::Paired,
                 Some(_) => RowStatus::Waiting,
             }
@@ -513,6 +523,19 @@ pub(crate) fn view_with_ssh(
     settings: Option<&Value>,
     now_ms: i64,
 ) -> Value {
+    view_with_pairings(notice, current, pending, ssh, &[], settings, now_ms)
+}
+
+/// [`view_with_ssh`] with the Easy Connect addresses this computer paired with since the update.
+pub(crate) fn view_with_pairings(
+    notice: &UpgradeNotice,
+    current: &[CurrentPhone],
+    pending: &[PendingDevice],
+    ssh: &SshPhones,
+    paired_addresses: &[String],
+    settings: Option<&Value>,
+    now_ms: i64,
+) -> Value {
     let ssh_pending = pending.iter().find(|device| device.over_ssh);
     let pending: Vec<PendingDevice> = pending
         .iter()
@@ -571,7 +594,11 @@ pub(crate) fn view_with_ssh(
         for (computer, status) in notice
             .computer_rows
             .iter()
-            .zip(computer_statuses(&notice.computer_rows, settings))
+            .zip(computer_statuses_with_pairings(
+                &notice.computer_rows,
+                settings,
+                paired_addresses,
+            ))
         {
             if status == RowStatus::Removed {
                 continue;
@@ -689,11 +716,18 @@ pub(crate) fn handle_endpoint_with_pending(
         }
         _ => {}
     }
-    Ok(view_with_ssh(
+    let paired_addresses: Vec<String> =
+        crate::remote_access::computer_pairing::read_paired_computers(paths)
+            .into_iter()
+            .filter(|paired| paired.paired_at_ms >= notice.taken_at_ms)
+            .map(|paired| paired.address)
+            .collect();
+    Ok(view_with_pairings(
         &notice,
         &current_phones(paths),
         pending,
         &ssh_phones(paths, notice.taken_at_ms, now_ms),
+        &paired_addresses,
         crate::shared_settings_file::read_shared_settings(paths).as_ref(),
         now_ms,
     ))

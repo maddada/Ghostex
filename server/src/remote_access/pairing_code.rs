@@ -342,10 +342,6 @@ impl RemotePairingRuntime {
         waiting
     }
 
-    pub fn pending_count(&self, now_ms: u64) -> usize {
-        self.list_waiting(now_ms).len()
-    }
-
     pub fn note_ask(&self, id: &str, timestamp_ms: u64) {
         if let Some(pending) = self.pending_map().get_mut(id) {
             pending.last_ask_ms = pending.last_ask_ms.max(timestamp_ms);

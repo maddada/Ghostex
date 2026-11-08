@@ -270,6 +270,22 @@ fn is_tailcat_client_public_key(key: &str) -> bool {
     })
 }
 
+/// Devices whose pairing still waits for the owner: a denied one stays until its device asks
+/// (so it hears "denied") but no longer counts.
+fn waiting_for_approval(pairing_runtime: &RemotePairingRuntime, security: &SecurityState) -> usize {
+    let now = now_ms();
+    pairing_runtime
+        .list_waiting(now)
+        .iter()
+        .filter(|device| {
+            security
+                .approvals
+                .read(&device.approval_id, &Principal::Anonymous, now)
+                .is_some_and(|request| request.status == ApprovalStatus::Pending)
+        })
+        .count()
+}
+
 /// The three match words for a QR's nonce and a phone's device key.
 pub fn match_words(nonce: &str, device_public_key: &str) -> Vec<String> {
     let digest = Sha256::digest(pairing_words_input(nonce, device_public_key));
@@ -404,7 +420,7 @@ pub fn begin_pairing(
                 .map_err(|error| PairDeviceError::BadRequest(format!("approverKey: {error}")))
         })
         .transpose()?;
-    if pairing_runtime.pending_count(now_ms()) >= PENDING_PAIRING_LIMIT {
+    if waiting_for_approval(pairing_runtime, security) >= PENDING_PAIRING_LIMIT {
         return Err(PairDeviceError::RateLimited);
     }
 
@@ -555,7 +571,7 @@ pub fn begin_ssh_pairing(
                 .map_err(|error| PairDeviceError::BadRequest(format!("approverKey: {error}")))
         })
         .transpose()?;
-    if pairing_runtime.pending_count(now_ms()) >= PENDING_PAIRING_LIMIT {
+    if waiting_for_approval(pairing_runtime, security) >= PENDING_PAIRING_LIMIT {
         return Err(PairDeviceError::RateLimited);
     }
     let mut nonce_bytes = [0_u8; 24];

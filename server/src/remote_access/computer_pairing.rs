@@ -54,6 +54,8 @@ struct OutgoingPairing {
     key_pkcs8: Vec<u8>,
     last_timestamp_ms: u64,
     computer_name: String,
+    /// The other computer's Easy Connect address, recorded once it approves.
+    address: String,
 }
 
 fn outgoing() -> &'static Mutex<HashMap<String, OutgoingPairing>> {
@@ -338,6 +340,7 @@ pub fn start_computer_pairing(paths: &GxserverPaths, code: ComputerPairingCode) 
                 key_pkcs8,
                 last_timestamp_ms: 0,
                 computer_name: computer_name.clone(),
+                address: code.address.clone(),
             },
         );
     Ok(json!({ "pendingId": pending_id, "words": words, "computerName": computer_name }))
@@ -346,8 +349,8 @@ pub fn start_computer_pairing(paths: &GxserverPaths, code: ComputerPairingCode) 
 /// `/api/computerPairingStatus`: asks the other computer, signed, where the pairing stands;
 /// `{ status: "pending" | "approved" | "denied" | "expired", computerName }`. The tunnel closes
 /// once it is over.
-pub fn computer_pairing_status(pending_id: &str) -> Result<Value> {
-    let (local_port, key_pkcs8, timestamp_ms, computer_name) = {
+pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Result<Value> {
+    let (local_port, key_pkcs8, timestamp_ms, computer_name, address) = {
         let mut map = outgoing()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -361,6 +364,7 @@ pub fn computer_pairing_status(pending_id: &str) -> Result<Value> {
             pairing.key_pkcs8.clone(),
             timestamp_ms,
             pairing.computer_name.clone(),
+            pairing.address.clone(),
         )
     };
     let signature = device_sign(
@@ -381,6 +385,9 @@ pub fn computer_pairing_status(pending_id: &str) -> Result<Value> {
             .to_string(),
         Err(_) => "failed".to_string(),
     };
+    if status == "approved" {
+        record_paired_computer(paths, &address, &computer_name);
+    }
     if status != "pending" {
         cancel_computer_pairing(pending_id);
     }
@@ -390,6 +397,61 @@ pub fn computer_pairing_status(pending_id: &str) -> Result<Value> {
         "computerName": computer_name,
         "deviceId": answer.get("deviceId"),
     }))
+}
+
+/// The computers this one paired with through Easy Connect (pairing v2), kept in
+/// `<gxserver state>/security/computer-pairings.json`.
+const PAIRED_COMPUTERS_FILE: &str = "computer-pairings.json";
+
+/// One computer this one paired with: its Easy Connect address, its name, and when (ms).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairedComputer {
+    pub address: String,
+    pub computer_name: String,
+    pub paired_at_ms: i64,
+}
+
+/*
+CDXC:Security 2026-11-08 FIX:
+User (GitHub #495, 11.1.1): "a re-paired computer must count as paired: decide 'paired again' from
+the pairing itself ..., not from an address change". Pairing again with a computer keeps its Easy
+Connect address (the address follows that computer's own key), so the pair-again notice, which
+looked for a new address, showed it as Needs pairing again. This computer now records each pairing
+the other computer approved, by that address, and the notice counts the entry as paired again
+when a pairing with its address was recorded after the update.
+*/
+fn paired_computers_path(paths: &GxserverPaths) -> std::path::PathBuf {
+    paths.root_dir.join("security").join(PAIRED_COMPUTERS_FILE)
+}
+
+/// The pairings recorded so far (an unreadable file reads as none).
+pub fn read_paired_computers(paths: &GxserverPaths) -> Vec<PairedComputer> {
+    std::fs::read_to_string(paired_computers_path(paths))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Records that the computer at `address` approved this one, replacing an older record for it.
+fn record_paired_computer(paths: &GxserverPaths, address: &str, computer_name: &str) {
+    let mut paired: Vec<PairedComputer> = read_paired_computers(paths)
+        .into_iter()
+        .filter(|entry| entry.address != address)
+        .collect();
+    paired.push(PairedComputer {
+        address: address.to_string(),
+        computer_name: computer_name.to_string(),
+        paired_at_ms: chrono::Utc::now().timestamp_millis(),
+    });
+    let path = paired_computers_path(paths);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(
+        &path,
+        serde_json::to_vec_pretty(&paired).unwrap_or_default(),
+    );
 }
 
 /// `/api/cancelComputerPairing`: stops waiting and closes the tunnel (the other computer's request
