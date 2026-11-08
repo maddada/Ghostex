@@ -14,21 +14,24 @@
 //! packages/settings-catalog/src/data/theme_presets.rs.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::{module, settings_catalog};
-use super::super::super::fields::{settings_icon, settings_section, tooltip_text};
+use super::super::super::fields::{settings_icon, settings_section_heading, tooltip_text};
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::SettingsValues;
 use super::ThemeTab;
 use super::colours::{
     COLOURFULNESS_LAST_POSITION, Rgb, colourfulness_patch, foreground_for, preview_colours,
 };
-use super::controls::{CARD_INSET_X, CARD_INSET_Y, ICON_DARK, ICON_LIGHT};
+use super::controls::{ICON_DARK, ICON_LIGHT};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, div, point, px,
+    AnyElement, Context, DispatchPhase, InteractiveElement as _, IntoElement, KeyDownEvent,
+    ParentElement as _, ScrollEvent, ScrollHandle, SharedString, StatefulInteractiveElement as _,
+    Styled as _, canvas, div, point, px,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Map, Value, json};
+use std::cell::Cell;
+use std::rc::Rc;
 
 /// One row of `THEME_PRESETS`.
 #[derive(Clone, Debug, PartialEq)]
@@ -179,7 +182,10 @@ impl ThemeTab {
         self.save_patch(patch, cx);
     }
 
-    /// The Presets group: the families side by side, each with its cards.
+    /// The Presets group: the heading, then every preset in one row that scrolls sideways.
+    ///
+    /// CDXC:Theming 2026-11-08 DECISION:
+    /// User, of the preset panel: "Please make these a scrollable sideways (1 line) list and make each one 1 word max. it's ugly now please make it nicer area. also takes too much space". The presets sit in one row under the heading with no card around them, about a card and its label tall. Labels are one word (the family's own word plus the moon or sun where a family is only Dark and Light). A thin hairline separates families, and a small quiet caption names a family above its first card only where no card says it (Catppuccin, Tokyo Night, Kanagawa): a caption over "Solarized" would say it twice. The row scrolls with a sideways swipe, Shift and the wheel, or a finger; a vertical swipe or wheel turn still scrolls the page. Like the chat box's pills (pills_strip.rs), an edge that hides more fades into the page and dims the cards it cuts, so nothing paints a dark band on glass. On open the row brings the picked card into view.
     pub(super) fn presets_section(
         &mut self,
         p: &SettingsPalette,
@@ -187,61 +193,229 @@ impl ThemeTab {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let presets = theme_presets();
-        let mut families: Vec<(String, Vec<AnyElement>)> = Vec::new();
-        for preset in &presets {
-            let card = preset_card(p, preset, theme_preset_matches(values, preset), cx);
-            match families
-                .iter_mut()
-                .find(|(family, _)| *family == preset.family)
-            {
-                Some((_, cards)) => cards.push(card),
-                None => families.push((preset.family.clone(), vec![card])),
-            }
+        if presets.is_empty() {
+            return None;
         }
-        let groups: Vec<AnyElement> = families
-            .into_iter()
-            .map(|(family, cards)| {
-                v_flex()
-                    .gap(px(8.0))
-                    .child(
-                        div()
-                            .text_size(px(11.0))
-                            .line_height(px(14.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(hsla(p.muted))
-                            .child(family.to_uppercase()),
-                    )
-                    .child(h_flex().flex_wrap().gap(px(8.0)).children(cards))
-                    .into_any_element()
-            })
-            .collect();
-        let body = h_flex()
+        let row = &self.presets_row;
+        let scroll = row.scroll.clone();
+        let cut = row.cut.get();
+        let (fade_left, fade_right) = row.fades.get();
+        // The scroller's children: a hairline before each family but the first, then its cards.
+        // `slots[i]` is preset i's child index, for measuring and scrolling to it.
+        let mut items: Vec<AnyElement> = Vec::with_capacity(presets.len() + 8);
+        let mut slots: Vec<usize> = Vec::with_capacity(presets.len());
+        let mut selected_slot = None;
+        let hairline = hsla(p.hairline);
+        for (index, preset) in presets.iter().enumerate() {
+            let first_of_family = index == 0 || presets[index - 1].family != preset.family;
+            if first_of_family && index > 0 {
+                items.push(
+                    div()
+                        .flex_shrink_0()
+                        .mx(px(FAMILY_GAP / 2.0))
+                        .mt(px(CAPTION_HEIGHT + CARD_TOP))
+                        .w(px(1.0))
+                        .h(px(PREVIEW_HEIGHT))
+                        .bg(hairline)
+                        .into_any_element(),
+                );
+            }
+            let caption = (first_of_family
+                && !presets
+                    .iter()
+                    .filter(|other| other.family == preset.family)
+                    .any(|other| preset.family.starts_with(other.label.as_str())))
+            .then(|| preset.family.clone());
+            let selected = theme_preset_matches(values, preset);
+            let slot = items.len();
+            if selected && selected_slot.is_none() {
+                selected_slot = Some(slot);
+            }
+            slots.push(slot);
+            items.push(preset_card(
+                p,
+                preset,
+                caption,
+                selected,
+                cut & (1 << index) != 0,
+                cx,
+            ));
+        }
+        // The settings arrive after the first render, so this waits for a picked card.
+        if !self.presets_row.revealed
+            && let Some(slot) = selected_slot
+        {
+            self.presets_row.revealed = true;
+            self.presets_row.reveal.set(Some(slot));
+        }
+        let page = cx.entity_id();
+        let fades = self.presets_row.fades.clone();
+        let reveal = self.presets_row.reveal.clone();
+        let cut_cell = self.presets_row.cut.clone();
+        let measure = scroll.clone();
+        let wheel = scroll.clone();
+        let edge = hsla(p.surface);
+        let body = div()
+            .relative()
             .w_full()
-            .px(px(CARD_INSET_X))
-            .py(px(CARD_INSET_Y))
-            .flex_wrap()
-            .items_start()
-            .gap_x(px(20.0))
-            .gap_y(px(16.0))
-            .children(groups)
+            .min_w_0()
+            .child(
+                div()
+                    .id("theme-presets-row")
+                    .w_full()
+                    .flex()
+                    .items_start()
+                    .overflow_x_scroll()
+                    .restrict_scroll_to_axis()
+                    .track_scroll(&scroll)
+                    // Room for the picked card's ring and the focus ring, which draw outside it.
+                    .px(px(ROW_INSET))
+                    .py(px(ROW_INSET))
+                    .gap(px(CARD_GAP))
+                    .children(items),
+            )
+            .when(fade_left && !p.glass, |area| {
+                area.child(edge_fade(true, edge))
+            })
+            .when(fade_right && !p.glass, |area| {
+                area.child(edge_fade(false, edge))
+            })
+            .child(
+                canvas(
+                    |bounds, window, _| window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal),
+                    move |_, hitbox, window, cx| {
+                        // The picked card waits for its first layout, then centres in the row.
+                        if let Some(slot) = reveal.get()
+                            && let Some(card) = measure.bounds_for_item(slot)
+                        {
+                            reveal.set(None);
+                            let view = measure.bounds();
+                            let centre = card.left() - view.left() + card.size.width / 2.0;
+                            let target = (view.size.width / 2.0 - centre)
+                                .clamp(-measure.max_offset().x, px(0.0));
+                            measure.set_offset(point(target, measure.offset().y));
+                            cx.notify(page);
+                        }
+                        // The fades and dimmed cards follow what this layout measured.
+                        let offset = -f32::from(measure.offset().x);
+                        let max = f32::from(measure.max_offset().x);
+                        let next_fades = (offset > 0.5, max - offset > 0.5);
+                        let view = measure.bounds();
+                        let next_cut = slots.iter().enumerate().fold(0u64, |cut, (index, slot)| {
+                            let Some(card) = measure.bounds_for_item(*slot) else {
+                                return cut;
+                            };
+                            let left = card.left() + measure.offset().x;
+                            let right = left + card.size.width;
+                            let hidden = (next_fades.0 && left < view.left() + px(EDGE_FADE / 2.0))
+                                || (next_fades.1 && right > view.right() - px(EDGE_FADE / 2.0));
+                            if hidden { cut | (1 << index) } else { cut }
+                        });
+                        let fades_changed = fades.replace(next_fades) != next_fades;
+                        if cut_cell.replace(next_cut) != next_cut || fades_changed {
+                            cx.notify(page);
+                        }
+                        let handle = wheel.clone();
+                        window.on_mouse_event(move |event: &ScrollEvent, phase, window, cx| {
+                            if phase != DispatchPhase::Capture
+                                || !hitbox.should_handle_scroll(window)
+                            {
+                                return;
+                            }
+                            // Only a sideways swipe (or Shift and the wheel, which the system
+                            // turns sideways) moves the row; it never reaches the page, which
+                            // would scroll down by it.
+                            let delta = event.delta.pixel_delta(window.line_height());
+                            if delta.x.abs() <= delta.y.abs() {
+                                return;
+                            }
+                            cx.stop_propagation();
+                            let offset = handle.offset();
+                            let next = (offset.x + delta.x).clamp(-handle.max_offset().x, px(0.0));
+                            if next != offset.x {
+                                handle.set_offset(point(next, offset.y));
+                                window.refresh();
+                            }
+                        });
+                    },
+                )
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full(),
+            )
             .into_any_element();
-        settings_section(
-            p,
-            "Presets",
-            Some("Sets the colours below together. You can change each of them afterwards.".into()),
-            None,
-            vec![body],
+        Some(
+            v_flex()
+                .w_full()
+                .gap(px(8.0))
+                .child(settings_section_heading(
+                    p,
+                    "Presets",
+                    Some(
+                        "Sets the colours below together. You can change each of them afterwards."
+                            .into(),
+                    ),
+                    None,
+                ))
+                .child(body)
+                .into_any_element(),
         )
-        .map(IntoElement::into_any_element)
     }
 }
 
-/// One preset card: the sidebar and work area as the preset paints them, two lines of text, the
-/// palette's first four colours, and the name with a sun or moon for its appearance.
+/// The presets row's scroll and what its last paint measured.
+#[derive(Default)]
+pub(super) struct PresetsRow {
+    scroll: ScrollHandle,
+    /// An edge hides more cards: (left, right).
+    fades: Rc<Cell<(bool, bool)>>,
+    /// Which presets (bit per catalog index) an edge cuts.
+    cut: Rc<Cell<u64>>,
+    /// The picked card was brought into view (once, the first time one is picked).
+    revealed: bool,
+    /// The child to centre once it is laid out.
+    reveal: Rc<Cell<Option<usize>>>,
+}
+
+/// A preview's size, the gap between cards and around a family's hairline, and the caption lane.
+const CARD_WIDTH: f32 = 80.0;
+const PREVIEW_HEIGHT: f32 = 48.0;
+const CARD_GAP: f32 = 8.0;
+const FAMILY_GAP: f32 = 12.0;
+const CAPTION_HEIGHT: f32 = 13.0;
+const CARD_TOP: f32 = 3.0;
+/// The scroller's inner margin: the picked ring draws 3.5px and the focus ring 4px outside a card.
+const ROW_INSET: f32 = 4.0;
+/// The width of an edge's fade.
+const EDGE_FADE: f32 = 28.0;
+/// How much of itself a card keeps while an edge cuts it.
+const CUT_CARD_OPACITY: f32 = 0.4;
+
+/// The ramp over an edge of the row that hides more: the page's colour at the edge, clear inward.
+fn edge_fade(toward_left: bool, edge: gpui::Hsla) -> gpui::Div {
+    let ramp = div().absolute().top_0().bottom_0().w(px(EDGE_FADE));
+    let ramp = if toward_left {
+        ramp.left_0()
+    } else {
+        ramp.right_0()
+    };
+    ramp.bg(gpui::linear_gradient(
+        90.0,
+        gpui::linear_color_stop(if toward_left { edge } else { edge.opacity(0.0) }, 0.0),
+        gpui::linear_color_stop(if toward_left { edge.opacity(0.0) } else { edge }, 1.0),
+    ))
+}
+
+/// One preset card: its family's caption when it names one, the sidebar and work area as the
+/// preset paints them, two lines of text, the palette's first four colours, and the one-word label
+/// with a sun or moon for its appearance. `cut`: an edge of the row cuts it, so it dims.
 fn preset_card(
     p: &SettingsPalette,
     preset: &ThemePreset,
+    caption: Option<String>,
     selected: bool,
+    cut: bool,
     cx: &mut Context<ThemeTab>,
 ) -> AnyElement {
     let (sidebar, work, foreground) = preview_colours(
@@ -276,9 +450,10 @@ fn preset_card(
         .aria_selected(selected)
         .focusable()
         .tab_stop(true)
-        .w(px(84.0))
-        .gap(px(5.0))
+        .flex_shrink_0()
+        .w(px(CARD_WIDTH))
         .rounded(px(8.0))
+        .when(cut, |this| this.opacity(CUT_CARD_OPACITY))
         .focus_visible(move |this| {
             this.shadow(vec![
                 gpui::BoxShadow {
@@ -311,11 +486,23 @@ fn preset_card(
             }
         })
         .child(
+            // The caption lane: every card keeps it so the previews line up.
+            div()
+                .h(px(CAPTION_HEIGHT))
+                .whitespace_nowrap()
+                .text_size(px(10.0))
+                .line_height(px(CAPTION_HEIGHT))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(hsla(css_fade(p.muted, 0.8)))
+                .children(caption),
+        )
+        .child(
             div()
                 .relative()
+                .mt(px(CARD_TOP))
                 .child(
                     h_flex()
-                        .h(px(52.0))
+                        .h(px(PREVIEW_HEIGHT))
                         .rounded(px(8.0))
                         .overflow_hidden()
                         .border_1()
@@ -323,7 +510,7 @@ fn preset_card(
                         .hover(move |this| this.border_color(hsla(hover)))
                         .child(
                             div()
-                                .w(px(22.0))
+                                .w(px(20.0))
                                 .h_full()
                                 .rounded_tl(px(7.0))
                                 .rounded_bl(px(7.0))
@@ -362,20 +549,20 @@ fn preset_card(
         )
         .child(
             h_flex()
+                .mt(px(6.0))
                 .gap(px(3.0))
-                .items_start()
+                .items_center()
                 .child(
                     settings_icon(
                         if preset.dark { ICON_DARK } else { ICON_LIGHT },
                         11.0,
                         p.muted,
                     )
-                    .flex_shrink_0()
-                    .mt(px(1.0)),
+                    .flex_shrink_0(),
                 )
                 .child(
                     div()
-                        .min_w_0()
+                        .whitespace_nowrap()
                         .text_size(px(11.0))
                         .line_height(px(13.0))
                         .text_color(hsla(if selected { p.foreground } else { p.muted }))

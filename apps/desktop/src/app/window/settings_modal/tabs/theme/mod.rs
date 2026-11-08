@@ -134,6 +134,8 @@ pub(crate) struct ThemeTab {
     pending_font: Option<String>,
     monospace_font_dropdown: DropdownState,
     pending_monospace_font: Option<String>,
+    /// The Presets row's sideways scroll (presets.rs).
+    presets_row: presets::PresetsRow,
 }
 
 fn palette_dark_dropdown(page: &mut ThemeTab) -> &mut DropdownState {
@@ -198,6 +200,7 @@ impl ThemeTab {
             pending_font: None,
             monospace_font_dropdown: DropdownState::default(),
             pending_monospace_font: None,
+            presets_row: presets::PresetsRow::default(),
         };
         page.apply_preview_state(window, cx);
         page

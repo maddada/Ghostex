@@ -597,41 +597,7 @@ pub(crate) fn settings_section(
         v_flex()
             .w_full()
             .gap(px(12.0))
-            .child(
-                h_flex()
-                    .w_full()
-                    .items_end()
-                    .justify_between()
-                    .gap(px(16.0))
-                    .px(px(2.0))
-                    .child(
-                        v_flex()
-                            .min_w_0()
-                            .gap(px(4.0))
-                            .child(
-                                div()
-                                    .text_size(px(16.0))
-                                    .line_height(px(20.8))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(hsla(p.foreground))
-                                    .child(title.into()),
-                            )
-                            .children(description.map(|description| {
-                                div()
-                                    .text_size(px(13.0))
-                                    .line_height(px(18.85))
-                                    .text_color(hsla(p.muted))
-                                    .child(description)
-                            })),
-                    )
-                    .children(actions.map(|actions| {
-                        h_flex()
-                            .flex_shrink_0()
-                            .items_center()
-                            .gap(px(8.0))
-                            .child(actions)
-                    })),
-            )
+            .child(settings_section_heading(p, title, description, actions))
             .child(
                 v_flex()
                     .w_full()
@@ -643,6 +609,50 @@ pub(crate) fn settings_section(
                     .children(rows),
             ),
     )
+}
+
+/// The heading of a `SettingsSection`: the 16px title, its optional 13px description and the
+/// right-side actions. Sections that are not a raised card of rows (the theme presets' sideways
+/// row) put their own content under it.
+pub(crate) fn settings_section_heading(
+    p: &SettingsPalette,
+    title: impl Into<SharedString>,
+    description: Option<SharedString>,
+    actions: Option<AnyElement>,
+) -> Div {
+    h_flex()
+        .w_full()
+        .items_end()
+        .justify_between()
+        .gap(px(16.0))
+        .px(px(2.0))
+        .child(
+            v_flex()
+                .min_w_0()
+                .gap(px(4.0))
+                .child(
+                    div()
+                        .text_size(px(16.0))
+                        .line_height(px(20.8))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(hsla(p.foreground))
+                        .child(title.into()),
+                )
+                .children(description.map(|description| {
+                    div()
+                        .text_size(px(13.0))
+                        .line_height(px(18.85))
+                        .text_color(hsla(p.muted))
+                        .child(description)
+                })),
+        )
+        .children(actions.map(|actions| {
+            h_flex()
+                .flex_shrink_0()
+                .items_center()
+                .gap(px(8.0))
+                .child(actions)
+        }))
 }
 
 /// The status dot of a `SettingsListItem`.

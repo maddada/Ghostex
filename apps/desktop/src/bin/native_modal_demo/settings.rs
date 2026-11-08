@@ -10,6 +10,8 @@
 //! `dictation`, `dictation-retired`, `dictation-openai` and `voice-agent` are Settings › Dictation and
 //! Voice Agent (settings_voice.rs).
 //! `GHOSTEX_NATIVE_MODAL_DEMO_GLASS=1` previews the frosted palette.
+//! `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS_WIDTH=<points>` opens the dialog narrower or wider than its
+//! base 900 (before the app's enlargement), to check a page at another window width.
 //! `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS='{"actionsHidden":false}'` merges saved settings over the
 //! state's (a built-in extension switched on or off, for example).
 use super::settings_modal::model::SettingsModalHost;
@@ -339,8 +341,11 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         sidebar_state: sidebar_state(&settings.borrow()),
         open_forms: serde_json::Value::Null,
     };
+    let width = super::env("GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS_WIDTH")
+        .parse::<f32>()
+        .unwrap_or(SETTINGS_MODAL_WIDTH);
     let (window, view) = super::open_settings_dialog_window(
-        SETTINGS_MODAL_WIDTH,
+        width,
         SETTINGS_MODAL_HEIGHT,
         move |window, cx| cx.new(|cx| GpuiSettingsModalWindow::new(config, host, window, cx)),
         cx,

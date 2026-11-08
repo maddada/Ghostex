@@ -13,7 +13,9 @@
 //! (every More options open), `theme-custom` (Custom colours in both modes),
 //! `theme-custom-picker` (the same, with the dark "+" square's Pick Color dialog open),
 //! `theme-glass-picture`, `theme-glass-live`, `theme-glass-live-dark-only`,
-//! `theme-glass-live-video`, `theme-glass-opaque` and `theme-glass-blocked`.
+//! `theme-glass-live-video`, `theme-glass-opaque` and `theme-glass-blocked`. `theme-presets` opens
+//! Interface at its Presets row, and `theme-presets-<preset id>` (`theme-presets-kg-wave`) with that
+//! preset picked, which the row scrolls into view.
 use serde_json::{Map, Value, json};
 
 /// `GHOSTEX_NATIVE_MODAL_DEMO_STATE`.
@@ -110,6 +112,14 @@ pub(super) fn story_settings(state: &str, settings: &mut Map<String, Value>) {
             settings.insert("themeSidebarContrast".into(), json!(-8));
             settings.insert("themeWorkAreaContrast".into(), json!(0));
         }
+        state if state.starts_with("theme-presets-") => {
+            let id = &state["theme-presets-".len()..];
+            if let Some((_, patch)) =
+                super::super::settings_modal::tabs::theme::presets::theme_preset_choice(id, false)
+            {
+                settings.extend(patch);
+            }
+        }
         _ => {}
     }
 }
@@ -145,6 +155,9 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
         state if state.starts_with("theme") => "theme",
         _ => return None,
     };
+    if state.starts_with("theme-presets") {
+        return Some(json!({ "initialTab": "theme", "initialSection": "presets" }));
+    }
     // `GHOSTEX_NATIVE_MODAL_DEMO_QUERY` filters the page, e.g. "permissions" for the grant rows.
     let query = super::super::env("GHOSTEX_NATIVE_MODAL_DEMO_QUERY");
     if !query.is_empty() {
