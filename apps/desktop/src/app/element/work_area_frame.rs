@@ -47,16 +47,31 @@ pub(crate) fn work_area_frame_inner_bounds(window: &Window) -> Option<Bounds<Pix
 
 /// The corner radii a rectangle inside the card needs: the inner radius on each corner that sits on
 /// one of the card's inner corners (within a device pixel or two), none elsewhere.
+/// Which sides of `rect` lie on the inside of the card's border, with the work area frame on.
+pub(crate) fn work_area_frame_touching_edges(
+    rect: Bounds<Pixels>,
+    window: &Window,
+) -> Option<gpui::Edges<bool>> {
+    let inner = work_area_frame_inner_bounds(window)?;
+    let near = |a: Pixels, b: Pixels| (a - b).abs() <= px(2.0);
+    Some(gpui::Edges {
+        left: near(rect.left(), inner.left()),
+        right: near(rect.right(), inner.right()),
+        top: near(rect.top(), inner.top()),
+        bottom: near(rect.bottom(), inner.bottom()),
+    })
+}
+
 pub(crate) fn work_area_frame_corner_radii(
     rect: Bounds<Pixels>,
     window: &Window,
 ) -> Option<gpui::Corners<Pixels>> {
-    let inner = work_area_frame_inner_bounds(window)?;
-    let near = |a: Pixels, b: Pixels| (a - b).abs() <= px(2.0);
-    let left = near(rect.left(), inner.left());
-    let right = near(rect.right(), inner.right());
-    let top = near(rect.top(), inner.top());
-    let bottom = near(rect.bottom(), inner.bottom());
+    let gpui::Edges {
+        left,
+        right,
+        top,
+        bottom,
+    } = work_area_frame_touching_edges(rect, window)?;
     let radius = |round: bool| {
         px(if round {
             WORK_AREA_FRAME_INNER_RADIUS

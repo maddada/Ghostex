@@ -109,6 +109,28 @@ impl<E: Element + Styled> Element for WindowCornerPane<E> {
             style.top_right = Some(radii.top_right.into());
             style.bottom_right = Some(radii.bottom_right.into());
             style.bottom_left = Some(radii.bottom_left.into());
+            /*
+            CDXC:Workarea 2026-11-07 WHY:
+            A pane keeps a 1pt border on every side that does not face a resize rail (`rail_aware_pane_border`). Without the frame that side lies on the window's own edge; inside the card it lay right next to the card's 1pt border, so each edge of the work area showed two parallel lines, and in full screen, with no window edge beside them, they read as a double line along the screen's left and right edges (GitHub #432 follow-up). The card's border is the one line there: a side on the card's inner edge paints none. Its width stays in the layout, so the pane's content does not move.
+            */
+            if let Some(touching) =
+                super::work_area_frame::work_area_frame_touching_edges(bounds, window)
+            {
+                let widths = &mut self.0.style().border_widths;
+                let none = || Some(gpui::AbsoluteLength::from(px(0.0)));
+                if touching.left {
+                    widths.left = none();
+                }
+                if touching.right {
+                    widths.right = none();
+                }
+                if touching.top {
+                    widths.top = none();
+                }
+                if touching.bottom {
+                    widths.bottom = none();
+                }
+            }
             return self.0.prepaint(id, inspector_id, bounds, state, window, cx);
         }
         // The command group has a 1pt outer edge and a 1pt right reservation;

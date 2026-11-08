@@ -48,6 +48,7 @@ impl Render for FloatingRevealWindow {
             // the viewport, unlike the window's live bounds, keeps the full width and nothing
             // reflows.
             let offset = window.viewport_size().width.as_f32() - width;
+            let card = app.floating_reveal_card_inset(content) > 0.0;
             let sidebar_width = app.sidebar_width;
             sync_overlay_window_glass(
                 window,
@@ -58,6 +59,7 @@ impl Render for FloatingRevealWindow {
             User: "the sidebar/chat in this case when they're floating should also have the same glass look they had before", then "make the floating sessions area keep the glass look that it should have from before pls". Under window glass the panel's backdrop is the main window's glass picture rather than a blur of the main window (`sync_overlay_window_glass`), and it paints the same tints the docked panels do: the sidebar its own tint (as does the rail beside it) and the sessions column the workspace column's tint, each straight over that picture, with the sessions column clearing its own fills as it does docked (`window_glass_active_for` counts this window). The opaque window keeps its solid fill.
             */
             div()
+                .relative()
                 .size_full()
                 .overflow_hidden()
                 .bg(window_shell_background())
@@ -129,6 +131,20 @@ impl Render for FloatingRevealWindow {
                             )
                         }),
                 )
+                /*
+                CDXC:Sidebar 2026-11-07 WHY:
+                Inside the work area frame the floating sidebar is a card (`floating_reveal_card_inset`), but its fill is the sidebar's, the same as the frame's gutter around it, so without an edge it merged with the gutter and read as a wide sidebar touching the window's edge. It takes the frame card's own hairline, drawn over the content so nothing inside moves. It gets no shadow: the panel ends at the card's edge, so a drawn shadow has no room outside it, and the panel's window shadow is off while it shows the traffic lights because it would shade them through the holes (`wantWindowLights:` in native/macos/GpuiSidebarReveal.m).
+                */
+                .when(card, |this| {
+                    this.child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .rounded(px(WORK_AREA_FRAME_RADIUS))
+                            .border(px(WORK_AREA_FRAME_BORDER))
+                            .border_color(work_area_frame_border_color()),
+                    )
+                })
                 .into_any_element()
         })
     }
@@ -137,11 +153,14 @@ impl Render for FloatingRevealWindow {
 impl GhostexGpuiApp {
     /// Where the panel sits: down the window's left edge (or just past a docked sidebar), from the
     /// header's bottom to the floor, so the header keeps its window controls and its drag band while
-    /// the panel is out; from the window's top while it carries those controls itself
-    /// (`floating_reveal_top`).
+    /// the panel is out; on macOS the floating sidebar runs from the window's top instead, inside
+    /// the work area frame's gutter when the frame is on (`floating_reveal_top`,
+    /// `floating_reveal_card_inset`).
     pub(crate) fn floating_reveal_frame(&self, width: f32) -> Bounds<Pixels> {
-        let top = self.floating_reveal_top(self.floating_reveal_content());
-        let height = (self.main_window_bounds.size.height.as_f32() - top).max(1.0);
+        let content = self.floating_reveal_content();
+        let top = self.floating_reveal_top(content);
+        let bottom = self.floating_reveal_card_inset(content);
+        let height = (self.main_window_bounds.size.height.as_f32() - top - bottom).max(1.0);
         Bounds::new(
             self.main_window_bounds.origin + point(px(self.floating_reveal_left_inset()), px(top)),
             size(px(width.max(1.0)), px(height)),
@@ -368,7 +387,13 @@ impl GhostexGpuiApp {
             };
             let observed = app.clone();
             let result = cx.open_window(options, move |window, cx| {
-                window.set_background_corner_radius(gpui::px(FLOATING_PANEL_CORNER_RADIUS));
+                // On macOS the native host shapes all four corners itself, per corner
+                // (`floating_panel_corner_radii` in host_macos.rs), so GPUI draws square ones.
+                window.set_background_corner_radius(gpui::px(if cfg!(target_os = "macos") {
+                    0.0
+                } else {
+                    FLOATING_PANEL_CORNER_RADIUS
+                }));
                 // CDXC:Sidebar 2026-10-09 WHY:
                 // GPUI owns a Windows pop-up by whichever window is active when it opens. A hover reveal over this workspace window while another one was active was owned by that other window: it stacked with it and moved with it instead of with this one.
                 #[cfg(target_os = "windows")]
