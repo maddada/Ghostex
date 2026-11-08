@@ -266,7 +266,7 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     ));
     more.push(MenuItem::separator());
     more.push(intent("Mobile & Remote", "devices", "remoteSetup"));
-    if input.settings.show_beta_features && !input.settings.hide_keep_awake_titlebar_control {
+    if input.settings.keep_awake_enabled && !input.settings.hide_keep_awake_titlebar_control {
         let active = input.host.keep_awake_minutes;
         let mut children: Vec<MenuItem> = KEEP_AWAKE_OPTIONS
             .iter()

@@ -37,7 +37,13 @@ fn read(app_config_dir: &Path, log_paths: impl FnOnce() -> GxserverPaths) -> Opt
             if !read.problems.is_empty() {
                 log_problems(&log_paths(), &read.problems);
             }
-            read.object.map(Value::Object)
+            read.object.map(|mut object| {
+                // Enable Experimental Features is one switch each now; until the app saves that
+                // (or a gxserver-owned file is saved), every read sees the switches it had
+                // (CDXC:Extensions 2026-11-09 in the settings catalog).
+                ghostex_settings_catalog::migrate_experimental_features_switch(&mut object);
+                Value::Object(object)
+            })
         }
         Err(error) => {
             log_refused_read(log_paths, &error);

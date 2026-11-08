@@ -127,6 +127,52 @@ pub fn migrate_chat_view_default(settings: &mut serde_json::Map<String, serde_js
     }
 }
 
+/// The switches Enable Experimental Features (`showBetaFeatures`) used to open, with the value of
+/// each that means on, and whether it was on by default under the old switch.
+const EXPERIMENTAL_FEATURE_SWITCHES: &[(&str, bool, bool)] = &[
+    ("readAloudHidden", false, false),
+    ("connectorsHidden", false, true),
+    ("osIntegrationHidden", false, true),
+    ("keepAwakeEnabled", true, true),
+    ("allAutomationsEnabled", true, true),
+];
+
+/// Replaces Enable Experimental Features (`showBetaFeatures`) with the switches it opened: each
+/// gets the state it had, on only when the old switch was on and the switch itself was on (or
+/// unset and on by default), and the old key is removed. Returns whether it changed anything; a
+/// settings object without the old key is left alone, so it runs once per settings file.
+///
+/// CDXC:Extensions 2026-11-09 DECISION: User (Q2043 on the Extensions tabs page): "remove the
+/// 'Experimental features' toggle itself and move toggling each of those individually here
+/// instead", with each new switch off by default and someone who had the old switch on keeping
+/// everything it showed. The settings file stores every default, so most files carry
+/// `showBetaFeatures: false` and `connectorsHidden: false`: the old effective state is computed
+/// from both rather than left to the new defaults. Terminal shaders, GBots and Main Hub kept their
+/// own switch under the old one and are not touched. The desktop saves this once at start
+/// (shared_settings/experimental_switches.rs); gxserver applies it to every settings read and
+/// before saving the file itself, so a gxserver that starts before the app, or runs without one,
+/// sees the same switches.
+pub fn migrate_experimental_features_switch(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    let Some(legacy) = settings.remove("showBetaFeatures") else {
+        return false;
+    };
+    let was_on = legacy.as_bool() == Some(true);
+    for (key, on_value, on_by_default) in EXPERIMENTAL_FEATURE_SWITCHES {
+        let switch_on = settings
+            .get(*key)
+            .and_then(serde_json::Value::as_bool)
+            .map_or(*on_by_default, |value| value == *on_value);
+        let now_on = was_on && switch_on;
+        settings.insert(
+            (*key).to_string(),
+            serde_json::Value::Bool(if now_on { *on_value } else { !*on_value }),
+        );
+    }
+    true
+}
+
 /// Writes `workAreaFrame` false into the settings of someone who already had a settings file when the
 /// frame became on by default, so their work area keeps the edge-to-edge look it had. Returns whether it
 /// changed anything; a saved choice (either way) is left alone.

@@ -426,7 +426,6 @@ pub(crate) struct GeneralSearch {
     pub(crate) query: String,
     /// The rows this copy of the search shows (`RowTier`); `None` for every row.
     pub(crate) tier: Option<RowTier>,
-    pub(crate) show_experimental: bool,
     /// Rows of a built-in extension that is off (the Space rows while Spaces is off).
     pub(crate) hidden_keys: Vec<&'static str>,
     /// `settingsSearch[sectionId]`.
@@ -436,11 +435,7 @@ pub(crate) struct GeneralSearch {
 }
 
 impl GeneralSearch {
-    pub(crate) fn new(
-        query: &str,
-        show_experimental: bool,
-        hidden_keys: Vec<&'static str>,
-    ) -> Self {
+    pub(crate) fn new(query: &str, hidden_keys: Vec<&'static str>) -> Self {
         let catalog = settings_catalog();
         let sections: HashMap<String, SectionSearch> = catalog
             .general_sections
@@ -449,10 +444,6 @@ impl GeneralSearch {
                 let settings: Vec<SettingRowDef> = section
                     .settings
                     .iter()
-                    .filter(|row| {
-                        row.key != "terminalShadersEnabled"
-                            || (cfg!(target_os = "macos") && show_experimental)
-                    })
                     .filter(|row| !hidden_keys.contains(&row.key.as_str()))
                     .cloned()
                     .collect();
@@ -485,7 +476,6 @@ impl GeneralSearch {
         Self {
             query: query.to_string(),
             tier: None,
-            show_experimental,
             hidden_keys,
             sections,
             groups,
@@ -545,10 +535,6 @@ impl GeneralSearch {
         if self.hidden_keys.contains(&key) {
             return false;
         }
-        if key == "terminalShadersEnabled" && !(cfg!(target_os = "macos") && self.show_experimental)
-        {
-            return false;
-        }
         if self.is_searching() && self.setting_matches_group_title(key) {
             return true;
         }
@@ -560,8 +546,8 @@ impl GeneralSearch {
         should_show_section(&self.group(group), self.tier)
     }
 
-    /// `mainSubsectionVisible(sectionId, settingsSearch[sectionId])`. `power_visible` is
-    /// `showBetaFeatures`.
+    /// `mainSubsectionVisible(sectionId, settingsSearch[sectionId])`. `power_visible` is whether
+    /// Keep Awake is on (its Power settings: CDXC:Extensions 2026-11-09 in the settings catalog).
     pub(crate) fn subsection_visible(&self, section: &str, power_visible: bool) -> bool {
         if section == "power" && !power_visible {
             return false;
@@ -636,7 +622,7 @@ mod tests {
     use super::*;
 
     fn finds_row(query: &str, section: &str, key: &str) -> bool {
-        GeneralSearch::new(query, true, Vec::new()).setting_visible(section, key)
+        GeneralSearch::new(query, Vec::new()).setting_visible(section, key)
     }
 
     #[test]
@@ -665,7 +651,7 @@ mod tests {
     fn the_interface_page_is_found_by_its_new_name_and_its_old_one() {
         for query in ["interface", "theme"] {
             assert!(
-                GeneralSearch::new(query, true, Vec::new()).subsection_visible("theming", true),
+                GeneralSearch::new(query, Vec::new()).subsection_visible("theming", true),
                 "{query}"
             );
         }

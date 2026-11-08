@@ -40,7 +40,6 @@ pub struct HudSources {
     /// The saved settings object, as the settings file holds it.
     pub settings: Value,
     pub debugging_mode: bool,
-    pub show_beta_features: bool,
     /// This computer's `/api/readSidebarHud` answer.
     pub sidebar_hud: Option<Value>,
     /// Each remote machine's `/api/readSidebarHud` answer, by machine id.
@@ -105,11 +104,7 @@ pub fn compose_sidebar_hud(core: &Core, sources: &HudSources) -> Value {
     let store = core.presentation();
     let empty = Map::new();
     let raw_settings = sources.settings.as_object().unwrap_or(&empty);
-    let settings = settings::hud_settings(
-        &sources.settings,
-        sources.debugging_mode,
-        sources.show_beta_features,
-    );
+    let settings = settings::hud_settings(&sources.settings, sources.debugging_mode);
     let theme_setting = settings::sidebar_theme_setting(raw_settings);
     let theme = settings::resolved_dark_theme(theme_setting).to_string();
     let machines = remote_machines(&sources.settings);

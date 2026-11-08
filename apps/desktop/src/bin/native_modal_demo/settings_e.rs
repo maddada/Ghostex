@@ -41,7 +41,7 @@ pub(super) fn story_settings(state: &str, settings: &mut Map<String, Value>) {
             );
         }
         "os-integration" | "os-integration-status" => {
-            settings.insert("showBetaFeatures".into(), json!(true));
+            settings.insert("osIntegrationHidden".into(), json!(false));
         }
         "open-in" | "open-in-editor" => {
             settings.insert(

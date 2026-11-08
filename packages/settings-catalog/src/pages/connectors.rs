@@ -1,6 +1,6 @@
 use crate::rows::{row, section, Page, Section};
 
-/// Settings › Connectors, shown only while Enable Experimental Features is on.
+/// Settings › Connectors, shown only while its switch in Settings > Extensions > Experimental is on.
 pub(crate) fn page() -> Page {
     Page {
         id: "connectors",

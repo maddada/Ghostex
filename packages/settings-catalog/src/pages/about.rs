@@ -39,15 +39,9 @@ pub(crate) fn beta() -> Section {
         "beta",
         "Experimental",
         vec![
-            // CDXC:Settings 2026-06-28-07:41:
-            // Settings search should find the advanced experimental gate by label and
-            // by the concrete surfaces it enables so the required inventory stays
-            // discoverable without tying Agents Hub to this gate.
-            row(
-                "showBetaFeatures",
-                "Enable Experimental Features",
-                "Show experimental surfaces: OS Integration settings, Browser color scheme, Keep Awake, Connectors, and Read aloud.",
-            ),
+            // Enable Experimental Features is gone: each thing it turned on is its own switch in
+            // Settings > Extensions > Experimental (CDXC:Extensions 2026-11-09 in
+            // data/official_extensions.rs).
             row(
                 "fasterRendering",
                 "Faster rendering",

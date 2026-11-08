@@ -81,7 +81,7 @@ pub(crate) fn agent_manager_zoom_percent(source: &Map<String, Value>) -> Value {
 }
 
 /// The HUD's `settings` value.
-pub(crate) fn hud_settings(raw: &Value, debugging_mode: bool, show_beta_features: bool) -> Value {
+pub(crate) fn hud_settings(raw: &Value, debugging_mode: bool) -> Value {
     let empty = Map::new();
     let source = raw.as_object().unwrap_or(&empty);
     let mut settings = source.clone();
@@ -134,6 +134,5 @@ pub(crate) fn hud_settings(raw: &Value, debugging_mode: bool, show_beta_features
         Value::from(prompt_agent.chars().take(120).collect::<String>()),
     );
     settings.insert("debuggingMode".into(), Value::Bool(debugging_mode));
-    settings.insert("showBetaFeatures".into(), Value::Bool(show_beta_features));
     Value::Object(settings)
 }

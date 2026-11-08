@@ -333,7 +333,6 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("readAloudHidden")),
         // CDXC:VoiceMode 2026-10-22 DECISION: User: "it's ok to bring read aloud work into this release just make it experimental for now if not finished yet (show experimental features makes it appear in the extensions where if enabled then it actually work)". Gated by Enable Experimental Features like Connectors: its card, its Chat rows and its hotkeys show only while that is on, and the phone hears it is on (`builtInFeatures`) only then.
-        ("gatedBy", J::Str("showBetaFeatures")),
         ("appWide", J::Bool(true)),
         ("title", J::Str("Read aloud")),
         ("settingKeys", J::Arr(&[J::Str("readAloudVoice"), J::Str("readAloudRate"), J::Str("readAloudUnavailable")])),
@@ -385,7 +384,6 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("id", J::Str("connectors")),
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("connectorsHidden")),
-        ("gatedBy", J::Str("showBetaFeatures")),
         ("appWide", J::Bool(true)),
         ("title", J::Str("Connectors")),
         ("settingsPages", J::Arr(&[J::Str("connectors")])),
@@ -396,7 +394,6 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("id", J::Str("osIntegration")),
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("osIntegrationHidden")),
-        ("gatedBy", J::Str("showBetaFeatures")),
         ("appWide", J::Bool(true)),
         ("title", J::Str("OS Integration")),
         ("settingsPages", J::Arr(&[J::Str("osIntegration")])),
@@ -419,20 +416,58 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsKey", J::Str("extensionsTitlebarButtonHidden")),
         ("title", J::Str("Extensions")),
     ]),
+    // CDXC:Extensions 2026-11-09 DECISION:
+    // User, on the Extensions tabs page (Q2043): "remove the 'Experimental features' toggle itself
+    // and move toggling each of those individually here instead". Enable Experimental Features
+    // (`showBetaFeatures`) is gone; everything it turned on is its own switch in the Experimental
+    // tab, off by default. Keep Awake (the ⋯ menu entry, the top bar control and Settings >
+    // General > Power), All Automations (projectless automations, a coming-soon overlay while
+    // off) and Terminal shaders (macOS) are new entries; Read aloud, Connectors and OS
+    // Integration lost their gate. Someone who had the old switch on keeps what it showed:
+    // `migrate_experimental_features_switch` in lib.rs.
+    J::Obj(&[
+        ("description", J::Str("Keep this computer awake for a while from the ⋯ menu or the button at the top of the window, with its own settings under Settings > General > Power.")),
+        ("category", J::Str("experimental")),
+        ("id", J::Str("keepAwake")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("keepAwakeEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Keep Awake")),
+        ("platforms", J::Arr(&[J::Str("macos")])),
+        ("settingKeys", J::Arr(&[J::Str("hideKeepAwakeTitlebarControl"), J::Str("keepAwakeDefaultDurationMinutes"), J::Str("keepAwakeActivation"), J::Str("keepAwakeDeactivation"), J::Str("keepAwakeAllowDisplaySleep"), J::Str("keepAwakePreventLidSleep"), J::Str("keepAwakeActivateOnLaunch"), J::Str("keepAwakeActivateOnExternalDisplay"), J::Str("keepAwakeWhileWorkingSessions"), J::Str("keepAwakeBatteryThresholdPercent"), J::Str("keepAwakeDeactivateOnLowPowerMode")])),
+    ]),
+    J::Obj(&[
+        ("description", J::Str("Automations that belong to no project, in Automate's All Automations board. While this is off the board shows that it is coming soon.")),
+        ("category", J::Str("experimental")),
+        ("id", J::Str("allAutomations")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("allAutomationsEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("All Automations")),
+    ]),
+    J::Obj(&[
+        ("description", J::Str("Apply the shaders from Ghostex's terminal config in order. Metal only; tested on Apple Silicon, not yet on Intel Macs. Turn off to restore ordinary rendering in the same sessions.")),
+        ("category", J::Str("experimental")),
+        ("id", J::Str("terminalShaders")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("terminalShadersEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Terminal shaders")),
+        ("platforms", J::Arr(&[J::Str("macos")])),
+    ]),
 ]);
 
 pub const GHOSTEX_OFFICIAL_EXTENSION_CATEGORIES: J = J::Arr(&[
     J::Obj(&[
+        // CDXC:Extensions 2026-11-09 DECISION: User (Q2041): "features is bad category, too
+        // general, wtf is features". These are the parts of Ghostex itself you can switch off;
+        // with the page in tabs, Built-in sits beside Views, Panels & menus, Installed and
+        // Community, which say what they are or where they come from.
         ("id", J::Str("features")),
-        ("label", J::Str("Features")),
-        ("typeLabel", J::Str("Feature")),
-    ]),
-    // CDXC:Extensions 2026-11-09 DECISION: User (Q2038 on the Features list page): the features
-    // shown only while Experimental features is on get their own group, "move gbots there too
-    // please and main hub for now".
-    J::Obj(&[
-        ("id", J::Str("experimental")),
-        ("label", J::Str("Experimental")),
+        ("label", J::Str("Built-in")),
         ("typeLabel", J::Str("Feature")),
     ]),
     J::Obj(&[
@@ -459,5 +494,14 @@ pub const GHOSTEX_OFFICIAL_EXTENSION_CATEGORIES: J = J::Arr(&[
         ("id", J::Str("menus-and-panels")),
         ("label", J::Str("Menus and panels")),
         ("typeLabel", J::Str("Menu item")),
+    ]),
+    // Last, at the right of the tabs (User, Q2041: "Experimental should be the last one on the
+    // right"). CDXC:Extensions 2026-11-09 DECISION: User (Q2038 on the Features list page): the features
+    // shown only while Experimental features is on get their own group, "move gbots there too
+    // please and main hub for now".
+    J::Obj(&[
+        ("id", J::Str("experimental")),
+        ("label", J::Str("Experimental")),
+        ("typeLabel", J::Str("Feature")),
     ]),
 ]);

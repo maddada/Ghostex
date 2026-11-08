@@ -85,9 +85,6 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // Advanced Settings.
     //
     // CDXC:Automations 2026-09-17:
-    // All Automations and project Automate start hidden behind their
-    // coming-soon overlay until Enable Experimental Features is on.
-    ("showBetaFeatures", J::Bool(false)),
     ("fasterRendering", J::Bool(false)),
     ("codeViewTabHidden", J::Bool(false)),
     ("browserViewTabHidden", J::Bool(false)),
@@ -143,8 +140,11 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Extensions 2026-10-25 DECISION: Claude is off by default (official_extensions.rs).
     ("claudeWebHidden", J::Bool(true)),
     // CDXC:Extensions 2026-10-19 DECISION: Connectors, OS Integration and Debugging are on by default; their old gates still apply (official_extensions.rs).
-    ("connectorsHidden", J::Bool(false)),
-    ("osIntegrationHidden", J::Bool(false)),
+    // Off by default since Experimental features became one switch each (2026-11-09).
+    ("connectorsHidden", J::Bool(true)),
+    ("osIntegrationHidden", J::Bool(true)),
+    ("keepAwakeEnabled", J::Bool(false)),
+    ("allAutomationsEnabled", J::Bool(false)),
     ("debuggingHidden", J::Bool(false)),
     // CDXC:VoiceMode 2026-10-25 DECISION: the voice agent is a built-in extension, on by default (official_extensions.rs).
     ("voiceAgentHidden", J::Bool(false)),
@@ -513,10 +513,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // management from Ghostex.
     //
     // CDXC:Settings 2026-06-28-07:41:
-    // Keep Awake is an experimental macOS feature. Enable Experimental Features
-    // must be enabled before the titlebar button or runtime automation is
-    // available; this preference only hides the button again inside that enabled
-    // state.
+    // Keep Awake is an experimental macOS feature. Its own switch (`keepAwakeEnabled`, Settings >
+    // Extensions > Experimental, since 2026-11-09) must be on before the titlebar button or
+    // runtime automation is available; this preference only hides the button again while it is on.
     ("hideKeepAwakeTitlebarControl", J::Bool(false)),
     // CDXC:AgentLauncher 2026-08-01:
     // Every built-in tab strip button stays visible until the user hides it, so

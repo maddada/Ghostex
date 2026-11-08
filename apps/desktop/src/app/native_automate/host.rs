@@ -28,7 +28,9 @@ impl GhostexGpuiApp {
                 project_path: String::new(),
                 project_name: GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE.to_string(),
                 editor_id,
-                coming_soon: !self.sidebar_runtime_settings_snapshot.show_beta_features,
+                coming_soon: !self
+                    .sidebar_runtime_settings_snapshot
+                    .all_automations_enabled,
             });
         }
         if snapshot.is_quick_projectless {

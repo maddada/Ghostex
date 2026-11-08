@@ -24,7 +24,7 @@ use std::rc::Rc;
 
 /// The colour Terminal background starts from when Follow theme is turned off.
 const TERMINAL_BACKGROUND_STARTING_COLOR: &str = "#111111";
-const SHADER_BACKGROUND_OVERRIDE_REASON: &str = "Custom shaders use the background from Ghostex's terminal config. To edit this override, turn Custom shaders off (enable Experimental Features first if the switch is hidden); your saved choice will return.";
+const SHADER_BACKGROUND_OVERRIDE_REASON: &str = "Custom shaders use the background from Ghostex's terminal config. To edit this override, turn Terminal shaders off in Settings > Extensions > Experimental; your saved choice will return.";
 
 fn option(label: &str, value: &str) -> SettingOption {
     SettingOption {
@@ -721,24 +721,8 @@ fn terminal_section(
             cx,
         ));
     }
-    #[cfg(target_os = "macos")]
-    if g.values.bool("showBetaFeatures") && g.visible(s, "terminalShadersEnabled") {
-        rows.push(toggle_field_with(
-            &p,
-            "terminalShadersEnabled",
-            g.spec(
-                "terminalShadersEnabled",
-                "Custom shaders (experimental)",
-                "Apply the shaders from Ghostex's terminal config in order. macOS with Metal only; tested on Apple Silicon. Intel Mac rendering is not yet validated. Windows and Linux are unsupported. Turn off to restore ordinary rendering in the same sessions.",
-            ).experimental(),
-            g.values.bool("terminalShadersEnabled"),
-            Some(reset_key::<GeneralTab>("terminalShadersEnabled")),
-            |page: &mut GeneralTab, enabled, _window, cx| {
-                save(page, "terminalShadersEnabled", json!(enabled), cx);
-            },
-            cx,
-        ));
-    }
+    // Custom shaders is the Terminal shaders switch in Settings > Extensions > Experimental
+    // (CDXC:Extensions 2026-11-09 in the settings catalog).
     settings_section(
         &p,
         g.section_title("terminal", "Terminal"),

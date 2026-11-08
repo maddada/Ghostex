@@ -291,6 +291,8 @@ fn main() {
     // Frame the work area is on for a new install; an existing settings file keeps it off.
     // Before the first settings read, so a new install (no file yet) is told from an existing one.
     shared_settings::work_area_frame_default::migrate_work_area_frame_default_once();
+    // Enable Experimental Features becomes one switch each, once (shared_settings/experimental_switches.rs).
+    shared_settings::experimental_switches::migrate_experimental_features_switch_once();
     // Dictate's old default chord moves to Ctrl+Alt+Space once (voice_agent/dictate_hotkey.rs).
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     app::voice_agent::dictate_hotkey::move_old_default_chord_once();

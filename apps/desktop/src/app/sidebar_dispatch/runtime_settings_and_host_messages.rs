@@ -96,7 +96,7 @@ impl GhostexGpuiApp {
     ) -> bool {
         /*
         CDXC:CefRuntime 2026-06-23-08:23:
-        GPUI runtime settings polling is intentionally narrow: read the shared sidebar settings snapshot once, pass strict debuggingMode/showBetaFeatures plus the saved object to SidebarApp normalization, skip unchanged payloads, and refresh the sidebar CEF bridge only. Browser CEF tabs, generic settings buses, filesystem watchers, path heuristics, and persisted/logged raw settings data stay out of this path.
+        GPUI runtime settings polling is intentionally narrow: read the shared sidebar settings snapshot once, pass strict debuggingMode and the experimental switches plus the saved object to SidebarApp normalization, skip unchanged payloads, and refresh the sidebar CEF bridge only. Browser CEF tabs, generic settings buses, filesystem watchers, path heuristics, and persisted/logged raw settings data stay out of this path.
 
         CDXC:Settings 2026-06-24-11:14:
         Settings saves use this same sidebar CEF runtime-settings refresh path immediately after the shared service write succeeds. The save path must not wait for polling, add a broad settings event bus, or leak raw Settings JSON into Browser tabs, logs, paths, titles, commands, tokens, stdout/stderr, or user content.

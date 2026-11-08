@@ -122,7 +122,7 @@ pub(crate) fn rail_pages(store: &SettingsStore) -> Vec<RailPage> {
     let query = store.search_query().to_string();
     let active_tab = store.active_tab();
     let general = store.general_search();
-    let power_visible = store.bool("showBetaFeatures");
+    let power_visible = store.keep_awake_on();
     let hotkey_sections = hotkey_section_searches(&query, &|id| {
         ghostex_settings_catalog::built_in_extensions::hotkey_shown_with(id, |key| {
             Some(store.bool(key))

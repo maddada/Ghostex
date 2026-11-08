@@ -118,7 +118,7 @@ pub(super) struct GeneralCx {
     pub(super) p: SettingsPalette,
     pub(super) values: SettingsValues,
     pub(super) search: GeneralSearch,
-    /// `showBetaFeatures`: Power shows only with Enable Experimental Features.
+    /// Power shows only while Keep Awake is on (Settings > Extensions > Experimental).
     pub(super) power_visible: bool,
     /// The Sidebar Tags deep link asked for the New tag form.
     pub(super) create_tag: bool,
@@ -352,7 +352,7 @@ impl Render for GeneralTab {
                 p: store.palette(),
                 values: store.values(),
                 search: store.general_search().clone(),
-                power_visible: store.bool("showBetaFeatures"),
+                power_visible: store.keep_awake_on(),
                 create_tag: store.request().initial_sidebar_tags_action.as_deref()
                     == Some("createTag"),
                 shown_above_fold: Vec::new(),

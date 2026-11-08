@@ -25,11 +25,7 @@ fn voice_agent_is_a_built_in_feature_on_by_default() {
 #[test]
 fn voice_agent_needs_no_experimental_gate() {
     assert_eq!(built_in_extensions::gate_key(VOICE_AGENT), None);
-    let experimental_off = |key: &str| match key {
-        "showBetaFeatures" => Some(false),
-        _ => None,
-    };
-    assert!(built_in_extensions::on_with(VOICE_AGENT, experimental_off));
+    assert!(built_in_extensions::on_with(VOICE_AGENT, |_| None));
 }
 
 #[test]

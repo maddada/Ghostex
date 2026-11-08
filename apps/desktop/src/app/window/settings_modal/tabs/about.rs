@@ -5,8 +5,8 @@
 use super::super::super::native_modal_kit::*;
 use super::super::catalog::settings_catalog;
 use super::super::fields::{
-    ButtonVariant, FieldStates, RowSpec, SettingsPage, advanced_fold_header, card_inset,
-    settings_button, settings_icon, settings_section, toggle_field,
+    ButtonVariant, FieldStates, RowSpec, SettingsPage, advanced_fold_header, settings_button,
+    settings_icon, settings_section, toggle_field,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, page_separator, settings_page};
@@ -92,58 +92,9 @@ impl AboutTab {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let mut rows: Vec<AnyElement> = Vec::new();
-        if visible("showBetaFeatures") {
-            // CDXC:Settings 2026-06-28-07:41: the inventory of what Enable Experimental Features turns on.
-            // CDXC:Automations 2026-07-26: GPUI graduated project Automate, so it lists only All Automations.
-            rows.push(toggle_field(
-                self,
-                p,
-                "showBetaFeatures",
-                RowSpec::new("Enable Experimental Features")
-                    .description(
-                        "Show experimental settings, All Automations, and the Keep Awake menu.",
-                    )
-                    .keyed(values, "showBetaFeatures"),
-                values.bool("showBetaFeatures"),
-                cx,
-            ));
-            let muted_fill = if p.light {
-                gpui::rgb(0xf1f1f1)
-            } else {
-                gpui::rgb(0x262626)
-            };
-            rows.push(card_inset(
-                v_flex()
-                    .w_full()
-                    .px(px(16.0))
-                    .py(px(12.0))
-                    .rounded(px(MODAL_RADIUS_CONTROL))
-                    .border_1()
-                    .border_color(hsla(p.hairline))
-                    .bg(hsla(css_fade(muted_fill, 0.2)))
-                    .text_size(px(14.0))
-                    .line_height(px(20.0))
-                    .text_color(hsla(p.muted))
-                    .child(
-                        div()
-                            .mb(px(8.0))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(hsla(p.foreground))
-                            .child("Enabled when on"),
-                    )
-                    .child(
-                        v_flex()
-                            .gap(px(6.0))
-                            .child("OS Integration settings tab")
-                            .child("All Automations")
-                            .child("Power settings and the sidebar menu: Keep Awake")
-                            .children(
-                                cfg!(target_os = "macos")
-                                    .then(|| div().child("Terminal custom shaders (macOS only)")),
-                            ),
-                    ),
-            ));
-        }
+        // Enable Experimental Features and its inventory are gone: each thing it turned on is its
+        // own switch in Settings > Extensions > Experimental (CDXC:Extensions 2026-11-09 in the
+        // settings catalog).
         if visible("fasterRendering") {
             rows.push(toggle_field(
                 self,

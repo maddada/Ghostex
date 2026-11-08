@@ -1,5 +1,5 @@
 //! The OS Integration page (packages/core-ui/settings-modal/tabs/os-integration.tsx (deleted 2026-10-01)), shown only
-//! with Enable Experimental Features: the default-app buttons, the CLI examples, and the file and
+//! while its switch in Settings > Extensions > Experimental is on: the default-app buttons, the CLI examples, and the file and
 //! link handler diagnostics (`requestOSIntegrationStatus` / `setOSIntegrationDefaults`, answered
 //! with an `osIntegrationStatus` payload).
 use super::super::super::native_modal_kit::*;

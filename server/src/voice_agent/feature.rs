@@ -48,8 +48,8 @@ mod tests {
         assert!(voice_agent_on_in(Some(&json!({}))));
         assert!(voice_agent_on_in(Some(&json!({"voiceAgentHidden": false}))));
         assert!(!voice_agent_on_in(Some(&json!({"voiceAgentHidden": true}))));
-        // Not an experimental feature: Enable Experimental Features does not gate it.
-        assert!(voice_agent_on_in(Some(&json!({"showBetaFeatures": false}))));
+        // Not an experimental feature: on by default with nothing saved.
+        assert!(voice_agent_on_in(Some(&json!({}))));
     }
 
     #[test]

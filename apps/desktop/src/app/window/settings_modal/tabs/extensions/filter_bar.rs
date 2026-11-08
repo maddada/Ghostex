@@ -1,31 +1,24 @@
-//! `ExtensionsFilterBar` (extensions-modal/extension-filter-bar.tsx (deleted 2026-10-01)) and the page's counts: the
-//! source select (only when more than one source is on the page), the type and category selects
-//! (searchable: eight or more items) and "N shown". The text filter is the Settings search above
-//! it. The bar sits above the page's scroll area, so the cards scroll under its hairline.
+//! The Extensions page's tab strip (Built-in, Views, Panels & menus, Installed, Community,
+//! Experimental) with each tab's count, and the page's counts. The text filter is the Settings
+//! search above it. The strip sits above the page's scroll area, so the cards scroll under it.
 //!
 //! CDXC:Extensions 2026-11-06 DECISION:
 //! User, of the Extensions page showing Settings' "Search settings" over the bar's own "Search extensions" on a black sticky bar: "i dont like seeing 2 searches there, and the bg for search of black". The Settings search filters the cards (the bar's substring match, plus the Settings search's own fuzzy match of a built-in's catalog row) and the bar has no search field. The bar is drawn outside the scroll area on the window's own surface with no fill: the old sticky copy floated over the scrolling cards and needed an opaque fill, near-black under glass (memory: no black on the glass design).
 use super::super::super::super::native_modal_kit::*;
-use super::super::super::catalog::SettingOption;
-use super::super::super::fields::{
-    DropdownAlign, DropdownRow, DropdownState, icon, searchable_dropdown, settings_icon,
-    settings_select, toggle_dropdown,
-};
 use super::super::super::model::SettingsTabId;
 use super::super::super::page::{CONTENT_GUTTER, CONTENT_MAX_WIDTH};
 use super::super::super::palette::SettingsPalette;
 use super::super::super::shell::BODY_PADDING;
 use super::ExtensionsTab;
 use super::data::{
-    EXTENSION_TYPE_FILTERS, ExtensionFilter, OfficialExtension, SourceFilter,
-    built_in_category_labels, built_in_filter_subject, custom_views, extension_type_label,
-    filter_store, official_extensions, store_categories, view_order_items,
+    ExtensionFilter, OfficialExtension, SourceFilter, built_in_category_labels,
+    built_in_filter_subject, custom_views, filter_store, official_extensions, store_categories,
+    view_order_items,
 };
 use gpui::{
-    AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    Styled as _, Window, div, px,
 };
-use gpui_component::h_flex;
 
 /// What every group of the page shows under the current search and filter.
 pub(crate) struct ExtensionCounts {
@@ -43,14 +36,6 @@ pub(crate) struct ExtensionCounts {
     pub(crate) any_section: bool,
     pub(crate) categories: Vec<String>,
     pub(crate) sources: Vec<SourceFilter>,
-}
-
-fn type_dropdown(page: &mut ExtensionsTab) -> &mut DropdownState {
-    &mut page.type_dropdown
-}
-
-fn category_dropdown(page: &mut ExtensionsTab) -> &mut DropdownState {
-    &mut page.category_dropdown
 }
 
 impl ExtensionsTab {
@@ -181,6 +166,47 @@ impl ExtensionsTab {
         }
     }
 
+    /// Each tab's count for the strip, in `PageTab::ALL` order: what it lists, or its matches
+    /// while a search is typed.
+    pub(crate) fn page_tab_counts(&self, cx: &gpui::App) -> Vec<usize> {
+        use super::page_tabs::PageTab;
+        let filter = self.page_filter(cx);
+        let built_in = |tab: PageTab| {
+            official_extensions()
+                .iter()
+                .filter(|extension| {
+                    tab.categories().contains(&extension.category.as_str())
+                        && self.official_matches(extension, &filter, cx)
+                })
+                .count()
+        };
+        let (installed, community) = if self.store.read(cx).request().gxserver_rpc_available {
+            let (installed, community) = filter_store(
+                &filter,
+                self.browser.catalog_entries(),
+                &self.browser.installed,
+            );
+            (installed.len(), community.len())
+        } else {
+            (0, 0)
+        };
+        let collab = usize::from(super::collab_card::collab_matches(&filter));
+        let custom = self
+            .ordered_custom_views(cx)
+            .iter()
+            .filter(|view| filter.matches(&view.filter_subject()))
+            .count();
+        PageTab::ALL
+            .iter()
+            .map(|tab| match tab {
+                PageTab::Views => built_in(*tab) + custom,
+                PageTab::Installed => installed + collab,
+                PageTab::Community => community,
+                _ => built_in(*tab),
+            })
+            .collect()
+    }
+
     /// `orderedCustomViews`: the custom views in the view order.
     pub(crate) fn ordered_custom_views(&self, cx: &gpui::App) -> Vec<super::data::CustomView> {
         let values = self.store.read(cx).values();
@@ -204,306 +230,50 @@ impl ExtensionsTab {
         cx.notify();
     }
 
-    pub(crate) fn toggle_type_dropdown(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let selected = EXTENSION_TYPE_FILTERS
-            .iter()
-            .position(|value| *value == self.filter.type_);
-        self.category_dropdown.open = false;
-        toggle_dropdown(self, type_dropdown, "Search...", selected, window, cx);
-    }
-
-    fn toggle_category_dropdown(
-        &mut self,
-        categories: &[String],
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let selected = if self.filter.category == "all" {
-            Some(0)
-        } else {
-            categories
-                .iter()
-                .position(|category| *category == self.filter.category)
-                .map(|index| index + 1)
-        };
-        self.type_dropdown.open = false;
-        toggle_dropdown(self, category_dropdown, "Search...", selected, window, cx);
-    }
-
-    /// CDXC:Extensions 2026-09-24 DECISION:
-    /// User: one filter bar (source, type, category, "N shown", the Settings search as its text) covers every extension on the Settings Extensions page, not only the Store list. Every group (built-in categories, installed, Store, the user's own views) is matched against the page's one filter and a group with no match disappears; the Settings-wide search still narrows the page first.
-    /// The bar's content (`.extensions-filter-bar`).
-    fn filter_bar_content(
+    /// CDXC:Extensions 2026-11-09 DECISION:
+    /// User, on the Extensions tabs page: tabs across the top (Q2040) for Built-in, Views, Panels
+    /// & menus, Installed, Community and Experimental, Experimental "the last one on the right" and
+    /// "Get more should be Community" (Q2041); one search box over every tab and no source, type
+    /// or category dropdowns (Q2042: the Settings search is that box); the page reopens on the
+    /// tab you had open (Q2044, `extensionsTab` in `settingsModalNavigation`). Each tab carries
+    /// its count, the matches while a search is typed, which shows every tab's matches at once.
+    /// The strip sits above the page's scroll area, in the page's column, like the filter bar it
+    /// replaces (CDXC:Extensions 2026-11-06).
+    pub(crate) fn render_page_tabs(
         &mut self,
         p: &SettingsPalette,
-        counts: &ExtensionCounts,
-        window: &mut Window,
+        counts: &[usize],
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let source_select = (counts.sources.len() > 1).then(|| {
-            let mut options = vec![SettingOption {
-                label: SourceFilter::All.label().to_string(),
-                value: SourceFilter::All.id().to_string(),
-            }];
-            options.extend(counts.sources.iter().map(|source| SettingOption {
-                label: source.label().to_string(),
-                value: source.id().to_string(),
-            }));
-            settings_select(
-                self,
-                p,
-                "extensions-source-filter",
-                &options,
-                self.filter.source.id(),
-                Some(128.0),
-                false,
-                None,
-                |page: &mut Self, value, _window, cx| {
-                    page.filter.source = SourceFilter::from_id(&value);
-                    cx.notify();
-                },
-                window,
-                cx,
-            )
-        });
-        let type_label = extension_type_label(&self.filter.type_);
-        let type_trigger = self.dropdown_trigger(
-            p,
-            "extensions-type-filter",
-            type_label,
-            128.0,
-            self.type_dropdown.trigger_bounds.clone(),
-            self.type_dropdown.open,
-            |page, window, cx| page.toggle_type_dropdown(window, cx),
-            cx,
-        );
-        let category_trigger = (!counts.categories.is_empty()).then(|| {
-            let categories = counts.categories.clone();
-            let label = if self.filter.category == "all" {
-                "All categories".to_string()
-            } else {
-                self.filter.category.clone()
-            };
-            // A Select of eight or more items is the searchable one; fewer stay a plain Select.
-            if categories.len() + 1 < 8 {
-                let mut options = vec![SettingOption {
-                    label: "All categories".to_string(),
-                    value: "all".to_string(),
-                }];
-                options.extend(categories.iter().map(|category| SettingOption {
-                    label: category.clone(),
-                    value: category.clone(),
-                }));
-                let value = self.filter.category.clone();
-                return settings_select(
-                    self,
-                    p,
-                    "extensions-category-plain",
-                    &options,
-                    &value,
-                    Some(160.0),
-                    false,
-                    None,
-                    |page: &mut Self, value, _window, cx| {
-                        page.filter.category = value;
-                        cx.notify();
-                    },
-                    window,
-                    cx,
-                );
-            }
-            self.dropdown_trigger(
-                p,
-                "extensions-category-filter",
-                label,
-                160.0,
-                self.category_dropdown.trigger_bounds.clone(),
-                self.category_dropdown.open,
-                move |page, window, cx| page.toggle_category_dropdown(&categories, window, cx),
-                cx,
-            )
-        });
-        let count_text = if counts.shown == counts.total {
-            format!("{} shown", counts.total)
-        } else {
-            format!("{} of {} shown", counts.shown, counts.total)
-        };
-        let type_menu = self.render_type_dropdown(p, window, cx);
-        let category_menu = self.render_category_dropdown(p, &counts.categories, window, cx);
-        h_flex()
-            .w_full()
-            .flex_wrap()
-            .items_center()
-            .gap(px(8.0))
-            .children(source_select)
-            .child(type_trigger)
-            .children(category_trigger)
-            .child(
-                div()
-                    .flex_1()
-                    .flex_shrink_0()
-                    .text_right()
-                    .whitespace_nowrap()
-                    .text_size(px(13.0))
-                    .line_height(px(18.57))
-                    .text_color(hsla(p.muted))
-                    .child(count_text),
-            )
-            .children(type_menu)
-            .children(category_menu)
-            .into_any_element()
-    }
-
-    /// A searchable select's trigger (`SelectTrigger` with the chevron of a searchable select).
-    #[allow(clippy::too_many_arguments)]
-    fn dropdown_trigger(
-        &mut self,
-        p: &SettingsPalette,
-        id: &'static str,
-        label: String,
-        width: f32,
-        bounds: std::rc::Rc<std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>>,
-        open: bool,
-        on_toggle: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let hover = p.raised_hover;
-        div()
-            .flex_shrink_0()
-            .w(px(width))
-            .on_children_prepainted(capture_child_bounds(bounds, 0))
-            .child(
-                h_flex()
-                    .id(id)
-                    .w_full()
-                    .h(px(32.0))
-                    .px(px(12.0))
-                    .gap(px(6.0))
-                    .items_center()
-                    .justify_between()
-                    .rounded(px(MODAL_RADIUS_CONTROL))
-                    .border_1()
-                    .border_color(hsla(if open { p.focus_border } else { p.hairline }))
-                    .bg(hsla(p.raised))
-                    .text_size(px(14.0))
-                    .line_height(px(20.0))
-                    .text_color(hsla(p.foreground))
-                    .cursor_pointer()
-                    .hover(move |this| this.bg(hsla(hover)))
-                    .on_click(cx.listener(move |page, _: &ClickEvent, window, cx| {
-                        on_toggle(page, window, cx);
-                    }))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .child(label),
-                    )
-                    .child(settings_icon(icon::CHEVRON_DOWN, 16.0, p.muted).flex_shrink_0()),
-            )
-            .into_any_element()
-    }
-
-    fn render_type_dropdown(
-        &mut self,
-        p: &SettingsPalette,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        if !self.type_dropdown.open {
-            return None;
-        }
-        let query = self.type_dropdown.query(cx);
-        let values: Vec<&'static str> = EXTENSION_TYPE_FILTERS
+        let searching = self.store.read(cx).is_searching();
+        let selected = super::page_tabs::PageTab::ALL
             .iter()
-            .copied()
-            .filter(|value| modal_select_filter_matches(&query, &extension_type_label(value)))
-            .collect();
-        let rows: Vec<DropdownRow> = values
+            .position(|tab| *tab == self.page_tab(cx))
+            .unwrap_or(0);
+        let items: Vec<ModalRailItem> = super::page_tabs::PageTab::ALL
             .iter()
-            .map(|value| DropdownRow::new(extension_type_label(value)))
+            .zip(counts)
+            .map(|(tab, count)| ModalRailItem {
+                label: tab.label().into(),
+                trailing: Some(count.to_string().into()),
+                dot: None,
+            })
             .collect();
-        searchable_dropdown(
-            p,
-            "extensions-type-menu",
-            &self.type_dropdown,
-            type_dropdown,
-            &rows,
-            "No results.",
-            DropdownAlign::End,
-            None,
-            false,
-            None,
-            move |page: &mut Self, index, _window, cx| {
-                if let Some(value) = values.get(index) {
-                    page.filter.type_ = value.to_string();
-                    cx.notify();
+        let strip = modal_bordered_segmented_control(
+            p.foreground,
+            p.hairline,
+            p.muted,
+            "extensions-page-tabs",
+            &items,
+            if searching { usize::MAX } else { selected },
+            |page: &mut Self, index, _window, cx| {
+                if let Some(tab) = super::page_tabs::PageTab::ALL.get(index) {
+                    page.set_page_tab(*tab, cx);
                 }
             },
-            window,
             cx,
         )
-    }
-
-    fn render_category_dropdown(
-        &mut self,
-        p: &SettingsPalette,
-        categories: &[String],
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        if !self.category_dropdown.open {
-            return None;
-        }
-        let query = self.category_dropdown.query(cx);
-        let mut values: Vec<(String, String)> =
-            vec![("all".to_string(), "All categories".to_string())];
-        values.extend(
-            categories
-                .iter()
-                .map(|category| (category.clone(), category.clone())),
-        );
-        values.retain(|(_, label)| modal_select_filter_matches(&query, label));
-        let rows: Vec<DropdownRow> = values
-            .iter()
-            .map(|(_, label)| DropdownRow::new(label.clone()))
-            .collect();
-        searchable_dropdown(
-            p,
-            "extensions-category-menu",
-            &self.category_dropdown,
-            category_dropdown,
-            &rows,
-            "No results.",
-            DropdownAlign::End,
-            None,
-            false,
-            None,
-            move |page: &mut Self, index, _window, cx| {
-                if let Some((value, _)) = values.get(index) {
-                    page.filter.category = value.clone();
-                    cx.notify();
-                }
-            },
-            window,
-            cx,
-        )
-    }
-
-    /// `.extensions-filter-bar` over the page's scroll area, in the page's column (the gutters
-    /// and the 924px width `settings_page` lays the sections out in): 8px above, 10px below, a
-    /// hairline under it, and no fill, so it sits on the window like the Settings search does.
-    pub(crate) fn render_filter_bar(
-        &mut self,
-        p: &SettingsPalette,
-        counts: &ExtensionCounts,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let content = self.filter_bar_content(p, counts, window, cx);
+        .w_full();
         div()
             .w_full()
             .flex_shrink_0()
@@ -513,14 +283,12 @@ impl ExtensionsTab {
             .pr(px(CONTENT_GUTTER + BODY_PADDING))
             .child(
                 div()
-                    .id("extensions-filter-bar")
+                    .id("extensions-page-tabs-bar")
                     .w_full()
                     .max_w(px(CONTENT_MAX_WIDTH))
                     .pt(px(8.0))
                     .pb(px(10.0))
-                    .border_b_1()
-                    .border_color(hsla(p.hairline))
-                    .child(content),
+                    .child(strip),
             )
             .into_any_element()
     }

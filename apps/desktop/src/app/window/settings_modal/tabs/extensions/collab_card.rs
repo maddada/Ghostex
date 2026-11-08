@@ -40,7 +40,7 @@ pub(crate) struct CollabCardState {
     error: Option<String>,
 }
 
-fn collab_matches(filter: &ExtensionFilter) -> bool {
+pub(crate) fn collab_matches(filter: &ExtensionFilter) -> bool {
     if !matches!(filter.source, SourceFilter::All | SourceFilter::BuiltIn)
         || filter.category != "all"
         || filter.type_ != "all"
@@ -55,7 +55,7 @@ fn collab_matches(filter: &ExtensionFilter) -> bool {
 }
 
 impl ExtensionsTab {
-    /// The Collab group of Built-in (one card), or `None` when the filter hides it.
+    /// The Collab group (one card) of the Installed tab, or `None` when the filter hides it.
     pub(crate) fn render_collab_group(
         &mut self,
         p: &SettingsPalette,

@@ -220,7 +220,7 @@ impl NativeAutomateView {
                 p,
                 ICON_CLOCK,
                 "All Automations is coming very soon",
-                "Enable Experimental Features in Settings to preview All Automations and project Automate pages before launch.",
+                "Turn on All Automations in Settings > Extensions > Experimental to preview it before launch.",
                 None,
             );
         }

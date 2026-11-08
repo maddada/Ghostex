@@ -44,15 +44,8 @@ pub(crate) fn terminal(platform: Platform) -> Section {
         row("showSessionIdInTerminalPanes", "Show session id in terminal panes", "Show the provider session id in the top-right corner of terminal panes."),
         row("promptEditorBackend", format!("Editor for {} and $EDITOR prompts", hotkey_label("ctrl+g", platform)), format!("Choose which editor {} uses when a terminal prompt asks for $EDITOR.", hotkey_label("ctrl+g", platform))).options(PROMPT_EDITOR_BACKEND_OPTIONS),
     ]);
-    // Shown only on macOS (Metal), and the Terminal page and search list it only while Enable
-    // Experimental Features is on (`setting_visible` and the search filter in the desktop's settings_modal/search.rs).
-    if platform == Platform::MacOs {
-        settings.push(row(
-            "terminalShadersEnabled",
-            "Custom shaders (experimental)",
-            "Apply the shaders from Ghostex's terminal config in order. macOS with Metal only; tested on Apple Silicon. Intel Mac rendering is not yet validated. Windows and Linux are unsupported. Turn off to restore ordinary rendering in the same sessions.",
-        ));
-    }
+    // Custom shaders (`terminalShadersEnabled`) is the Terminal shaders switch in Settings >
+    // Extensions > Experimental now (CDXC:Extensions 2026-11-09 in data/official_extensions.rs).
     section("terminal", "Terminal", settings)
 }
 

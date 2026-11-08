@@ -317,7 +317,8 @@ pub struct SidebarSettings {
     pub show_tag_menu_when_parking: bool,
     /// The hover strip's actions are repeated at the top of the row's context menu.
     pub show_session_card_hover_buttons_in_context_menu: bool,
-    pub show_beta_features: bool,
+    /// Keep Awake is on (Settings > Extensions > Experimental): the ⋯ menu offers it.
+    pub keep_awake_enabled: bool,
     pub hide_keep_awake_titlebar_control: bool,
     /// The project header offers New Browser Tab.
     pub browser_view_tab_hidden: bool,
@@ -378,7 +379,7 @@ impl Default for SidebarSettings {
             session_card_hover_buttons: Value::Null,
             show_tag_menu_when_parking: true,
             show_session_card_hover_buttons_in_context_menu: true,
-            show_beta_features: false,
+            keep_awake_enabled: false,
             hide_keep_awake_titlebar_control: false,
             browser_view_tab_hidden: false,
             expand_collapsed_projects_on_jump: true,
@@ -444,7 +445,7 @@ impl SidebarSettings {
                 "showSessionCardHoverButtonsInContextMenu",
                 defaults.show_session_card_hover_buttons_in_context_menu,
             ),
-            show_beta_features: boolean("showBetaFeatures", defaults.show_beta_features),
+            keep_awake_enabled: boolean("keepAwakeEnabled", defaults.keep_awake_enabled),
             hide_keep_awake_titlebar_control: boolean(
                 "hideKeepAwakeTitlebarControl",
                 defaults.hide_keep_awake_titlebar_control,

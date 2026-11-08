@@ -293,6 +293,9 @@ pub(crate) struct SettingsStore {
     /// The Windows Developer Mode notice of Agents and Integrations is folded to its icon
     /// (`windowsLinkNoticeCollapsed` in `settingsModalNavigation`, tabs/machine_picker.rs).
     windows_link_notice_collapsed: bool,
+    /// The Extensions page's open tab (`extensionsTab` in `settingsModalNavigation`; ids from
+    /// tabs/extensions/page_tabs.rs), reopened next time (User, Q2044).
+    extensions_tab: String,
 }
 
 impl EventEmitter<SettingsStoreEvent> for SettingsStore {}
@@ -340,6 +343,7 @@ impl SettingsStore {
             extensions_group_open: false,
             picked_machine: None,
             windows_link_notice_collapsed: false,
+            extensions_tab: String::new(),
         };
         store.picked_machine = store.request.initial_machine_id.clone();
         store.windows_link_notice_collapsed = store
@@ -347,6 +351,12 @@ impl SettingsStore {
             .get("windowsLinkNoticeCollapsed")
             .and_then(Value::as_bool)
             .unwrap_or(false);
+        store.extensions_tab = store
+            .value("settingsModalNavigation")
+            .get("extensionsTab")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
         store.active_tab = store.initial_tab();
         store.extensions_group_open = store
             .value("settingsModalNavigation")
@@ -724,7 +734,6 @@ impl SettingsStore {
     }
 
     fn refresh_search(&mut self) {
-        let show_experimental = self.bool("showBetaFeatures");
         let mut hidden_keys =
             ghostex_settings_catalog::built_in_extensions::hidden_setting_keys_with(|key| {
                 Some(self.bool(key))
@@ -735,12 +744,10 @@ impl SettingsStore {
         ));
         let tab_hidden_keys = hidden_keys.clone();
         if self.general_search.query != self.search_query
-            || self.general_search.show_experimental != show_experimental
             || self.general_search.hidden_keys != hidden_keys
             || self.general_search.sections.is_empty()
         {
-            self.general_search =
-                GeneralSearch::new(&self.search_query, show_experimental, hidden_keys);
+            self.general_search = GeneralSearch::new(&self.search_query, hidden_keys);
         }
         let debugging_mode = self.bool("debuggingMode");
         self.tab_searches = settings_catalog()
@@ -785,13 +792,23 @@ impl SettingsStore {
 
     /// `showOSIntegrationSettingsTab`.
     pub(crate) fn os_integration_visible(&self) -> bool {
-        self.bool("showBetaFeatures")
+        self.built_in_extension_on(ghostex_settings_catalog::built_in_extensions::OS_INTEGRATION)
+    }
+
+    /// Whether built-in extension `id` is on here (its switch, this platform).
+    pub(crate) fn built_in_extension_on(&self, id: &str) -> bool {
+        ghostex_settings_catalog::built_in_extensions::enabled_with(id, |key| Some(self.bool(key)))
+    }
+
+    /// Settings > General > Power: Keep Awake's own settings, shown while Keep Awake is on.
+    pub(crate) fn keep_awake_on(&self) -> bool {
+        self.built_in_extension_on("keepAwake")
     }
 
     /// CDXC:Connectors 2026-10-16 DECISION:
-    /// User: Connectors is experimental, so "hide all these under 'experimental' until i test it well and tell you": the Connectors page shows only while Enable Experimental Features is on, the same switch gxserver's Connectors routes follow (server/src/connectors/gate.rs).
+    /// User: Connectors is experimental, so "hide all these under 'experimental' until i test it well and tell you": the Connectors page shows only while its switch is on, the same switch gxserver's Connectors routes follow (server/src/connectors/gate.rs). Since 2026-11-09 that is its own switch in Settings > Extensions > Experimental, off by default, not Enable Experimental Features (gone).
     pub(crate) fn connectors_visible(&self) -> bool {
-        self.bool("showBetaFeatures")
+        self.built_in_extension_on(ghostex_settings_catalog::built_in_extensions::CONNECTORS)
     }
 
     /// A page a whole-feature built-in extension owns (Actions, Open In) leaves the rail and the
@@ -1056,6 +1073,7 @@ impl SettingsStore {
             "activeTab": self.active_tab.id(),
             "extensionsGroupOpen": self.extensions_group_open,
             "windowsLinkNoticeCollapsed": self.windows_link_notice_collapsed,
+            "extensionsTab": self.extensions_tab,
             "scrollTopByTab": Value::Object(tops),
             "version": 1,
         })
@@ -1099,6 +1117,21 @@ impl SettingsStore {
     /// The Extensions group's header: opens or closes the group and saves it.
     pub(crate) fn toggle_extensions_group(&mut self, cx: &mut Context<Self>) {
         self.extensions_group_open = !self.extensions_group_open;
+        self.persist_navigation(cx);
+        cx.notify();
+    }
+
+    /// The Extensions page's open tab id (empty: the first tab).
+    pub(crate) fn extensions_tab(&self) -> &str {
+        &self.extensions_tab
+    }
+
+    /// Opens Extensions tab `id` and saves it for the next visit.
+    pub(crate) fn set_extensions_tab(&mut self, id: &str, cx: &mut Context<Self>) {
+        if self.extensions_tab == id {
+            return;
+        }
+        self.extensions_tab = id.to_string();
         self.persist_navigation(cx);
         cx.notify();
     }

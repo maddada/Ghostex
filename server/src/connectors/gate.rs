@@ -1,31 +1,13 @@
-//! Whether Connectors is on: it is experimental, so it follows Enable Experimental Features
-//! (`showBetaFeatures`), and under that its built-in extension switch (`connectorsHidden`, on by
-//! default; CDXC:Extensions 2026-10-19 in packages/settings-catalog/src/data/official_extensions.rs).
+//! Whether Connectors is on: its built-in extension switch (`connectorsHidden`, off by default;
+//! CDXC:Extensions 2026-10-19 and 2026-11-09 in packages/settings-catalog/src/data/official_extensions.rs).
 //! The CLI hides and refuses its verbs, the routes refuse, and the Executor's idle-stop thread
 //! starts only once a Connectors route is actually served.
 
 use ghostex_settings_catalog::built_in_extensions::{self, CONNECTORS};
 use serde_json::Value;
 
-/// The setting that turns Connectors on.
-pub(crate) const CONNECTORS_SETTING_KEY: &str = "showBetaFeatures";
-
-/// What the CLI and the routes answer while Enable Experimental Features is off.
-const CONNECTORS_EXPERIMENTAL_MESSAGE: &str = "Connectors is experimental. Turn it on in Settings › General › Advanced › Experimental › Enable Experimental Features, or run: ghostex settings set showBetaFeatures true";
-
-fn experimental_on(settings: Option<&Value>) -> bool {
-    settings
-        .and_then(|settings| settings.get(CONNECTORS_SETTING_KEY))
-        .and_then(Value::as_bool)
-        == Some(true)
-}
-
-/// What the CLI and the routes answer while Connectors is off: how to open the experimental gate,
-/// or, with the gate open, how to turn its switch back on.
-pub(crate) fn connectors_off_message_in(settings: Option<&Value>) -> String {
-    if !experimental_on(settings) {
-        return CONNECTORS_EXPERIMENTAL_MESSAGE.to_string();
-    }
+/// What the CLI and the routes answer while Connectors is off: where its switch is.
+pub(crate) fn connectors_off_message_in(_settings: Option<&Value>) -> String {
     format!(
         "{} From a terminal: ghostex settings set connectorsHidden false",
         built_in_extensions::turned_off_message(CONNECTORS)
@@ -38,9 +20,15 @@ pub(crate) fn connectors_off_message(paths: &crate::paths::GxserverPaths) -> Str
 }
 
 /// CDXC:Connectors 2026-10-15 DECISION:
-/// User: Connectors should be on main "but should be experimental so not shown without that toggle enabled" (Enable Experimental Features, `showBetaFeatures`). While it is off, `ghostex connectors` is left out of `ghostex --help` and refuses, the Connectors routes refuse, and nothing Connectors-related runs in the background. A future Connectors page in the desktop or phone app must follow this same gate.
+/// User: Connectors should be on main "but should be experimental so not shown without that toggle enabled". While it is off, `ghostex connectors` is left out of `ghostex --help` and refuses, the Connectors routes refuse, and nothing Connectors-related runs in the background. A future Connectors page in the desktop or phone app must follow this same gate.
+///
+/// CDXC:Extensions 2026-11-09 DECISION:
+/// User (Q2043): Enable Experimental Features (`showBetaFeatures`) is gone and Connectors is its
+/// own switch in Settings > Extensions > Experimental, off by default. Someone who had the old
+/// switch on keeps Connectors as it was: settings reads apply
+/// `migrate_experimental_features_switch` (shared_settings_file.rs).
 pub(crate) fn connectors_enabled_in(settings: Option<&Value>) -> bool {
-    experimental_on(settings) && built_in_extensions::enabled_in_value(settings, CONNECTORS)
+    built_in_extensions::enabled_in_value(settings, CONNECTORS)
 }
 
 /// Whether Connectors is on, read fresh from this gxserver's settings file, so flipping the switch

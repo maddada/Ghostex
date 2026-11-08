@@ -198,6 +198,9 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "readAloud" => "titlebar/volume.svg",
         "sessionDetailsPanel" => "titlebar/panel-right.svg",
         "sessionNotes" => "modals/settings/note.svg",
+        "keepAwake" => "titlebar/coffee.svg",
+        "allAutomations" => "modals/settings/bolt.svg",
+        "terminalShaders" => "modals/settings/sparkles.svg",
         _ => "modals/settings/world.svg",
     }
 }

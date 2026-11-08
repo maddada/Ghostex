@@ -164,7 +164,11 @@ pub(super) fn read_settings_file() -> CliResult<Map<String, Value>> {
             &read.problems,
         );
     }
-    Ok(read.object.unwrap_or_default())
+    let mut object = read.object.unwrap_or_default();
+    // The experimental switches in place of Enable Experimental Features (CDXC:Extensions
+    // 2026-11-09 in the settings catalog), as the app and gxserver read them.
+    ghostex_settings_catalog::migrate_experimental_features_switch(&mut object);
+    Ok(object)
 }
 
 /// The catalog default of `entry` on this computer: a platform default (Enable transparency is

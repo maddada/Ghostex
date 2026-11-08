@@ -8,7 +8,7 @@ CDXC:Settings 2026-06-24-10:50:
 GPUI must read and persist the shared sidebar settings JSON through the central XDG/GHOSTEX_HOME path resolver. Keep this module as the single GPUI path/read/write contract so Settings UI parity handles `updateSettings` without introducing a second settings store.
 
 CDXC:Settings 2026-06-24-10:50:
-Rust should parse only the GPUI runtime fields it consumes today: debuggingMode, showBetaFeatures, sidebarDefaultWidthPx, projectSwitchKeepAliveMinutes, project-editor auto-sleep fields, legacy external-IDE command fields, and the supported embedded Ghostty surface font-size field. The raw JSON object is preserved for whole-object writes, but this service intentionally does not duplicate the full TypeScript `ghostexSettings` schema.
+Rust should parse only the GPUI runtime fields it consumes today: debuggingMode, the experimental switches (keepAwakeEnabled, allAutomationsEnabled), sidebarDefaultWidthPx, projectSwitchKeepAliveMinutes, project-editor auto-sleep fields, legacy external-IDE command fields, and the supported embedded Ghostty surface font-size field. The raw JSON object is preserved for whole-object writes, but this service intentionally does not duplicate the full TypeScript `ghostexSettings` schema.
 
 CDXC:Settings 2026-06-24-10:50:
 GPUI `updateSettings` handling needs a production write path: accept only JSON object payloads, create the shared state directory, write through an adjacent temp file then rename, skip byte-identical writes, and maintain a monotonic in-memory revision/hash/snapshot signal without logging paths, project names, URLs, commands, environment values, tokens, stdout/stderr, or user-owned content.
@@ -35,6 +35,7 @@ pub use appearance::effective_content_color_scheme;
 mod ghostty_themes;
 
 pub(crate) mod defaults;
+pub(crate) mod experimental_switches;
 pub(crate) mod ghostty_config_file;
 pub(crate) mod ghostty_config_migration;
 pub(crate) mod ghostty_config_values;

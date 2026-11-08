@@ -222,6 +222,9 @@ impl ExtensionsTab {
         let mut groups: Vec<AnyElement> = Vec::new();
         let filter = self.page_filter(cx);
         for category in official_categories() {
+            if !self.category_shown(&category.id, cx) {
+                continue;
+            }
             let visible: Vec<&OfficialExtension> = official_extensions()
                 .iter()
                 .filter(|extension| {
@@ -327,17 +330,21 @@ impl ExtensionsTab {
                 cells.push(GridCell { card, wide });
             }
             let first = groups.is_empty();
-            groups.push(card_group(
-                p,
-                category.label.clone(),
-                Some(visible.len()),
-                first,
-                card_grid(cells, None, columns),
-            ));
-        }
-        let first = groups.is_empty();
-        if let Some(group) = self.render_collab_group(p, &filter, columns, first, cx) {
-            groups.push(group);
+            // A tab of one category (Built-in, Experimental) shows its tiles under the section
+            // title alone; the group label would repeat it.
+            let single =
+                !self.store.read(cx).is_searching() && self.page_tab(cx).categories().len() == 1;
+            groups.push(if single {
+                card_grid(cells, None, columns)
+            } else {
+                card_group(
+                    p,
+                    category.label.clone(),
+                    Some(visible.len()),
+                    first,
+                    card_grid(cells, None, columns),
+                )
+            });
         }
         let loading = self.plugin_status_loading;
         let refresh = settings_sized_button(
@@ -353,12 +360,29 @@ impl ExtensionsTab {
             |page: &mut Self, _window, cx| page.request_plugin_status(cx),
             cx,
         );
+        let (title, description) = if self.store.read(cx).is_searching() {
+            ("Built-in", "Extensions Ghostex ships and maintains.")
+        } else {
+            match self.page_tab(cx) {
+                super::page_tabs::PageTab::Views => (
+                    "Built-in views",
+                    "Views Ghostex ships: project websites, code and files, and planning.",
+                ),
+                super::page_tabs::PageTab::PanelsMenus => (
+                    "Panels & menus",
+                    "Buttons in the work area header and entries in its ⋯ menu.",
+                ),
+                super::page_tabs::PageTab::Experimental => (
+                    "Experimental",
+                    "Early features. Each one is off until you turn it on.",
+                ),
+                _ => ("Built-in", "Parts of Ghostex you can switch off."),
+            }
+        };
         plain_section(
             p,
-            "Built-in",
-            div()
-                .child("Extensions Ghostex ships and maintains.")
-                .into_any_element(),
+            title,
+            div().child(description).into_any_element(),
             Some(refresh),
             v_flex().w_full().children(groups).into_any_element(),
         )
@@ -442,7 +466,22 @@ impl ExtensionsTab {
             .into_any_element();
         let body = self.render_store_list(p, window, cx);
         let from_folder = self.install_from_folder_button(p, cx);
-        plain_section(p, "Get more", description, Some(from_folder), body)
+        // "Get more should be Community" (User, Q2041); on the Installed tab the section is
+        // what you installed, with Install from folder… beside it.
+        let installed_tab = !self.store.read(cx).is_searching()
+            && self.page_tab(cx) == super::page_tabs::PageTab::Installed;
+        if installed_tab {
+            let description = div()
+                .child("Extensions you installed, and Collab, which Ghostex downloads when you turn it on.")
+                .into_any_element();
+            return plain_section(p, "Installed", description, Some(from_folder), body);
+        }
+        let title = if self.store.read(cx).is_searching() {
+            "Installed and Community"
+        } else {
+            "Community"
+        };
+        plain_section(p, title, description, None, body)
     }
 
     fn render_store_list(
@@ -504,12 +543,25 @@ impl ExtensionsTab {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let columns = grid_columns(page_column_width(window));
-        let (installed_matches, store_matches) = filter_store(
-            &self.page_filter(cx),
+        let filter = self.page_filter(cx);
+        let (mut installed_matches, mut store_matches) = filter_store(
+            &filter,
             self.browser.catalog_entries(),
             &self.browser.installed,
         );
-        if installed_matches.is_empty() && store_matches.is_empty() {
+        let installed_shown = self.tab_shown(super::page_tabs::PageTab::Installed, cx);
+        if !installed_shown {
+            installed_matches.clear();
+        }
+        if !self.tab_shown(super::page_tabs::PageTab::Community, cx) {
+            store_matches.clear();
+        }
+        let collab = if installed_shown {
+            self.render_collab_group(p, &filter, columns, installed_matches.is_empty(), cx)
+        } else {
+            None
+        };
+        if installed_matches.is_empty() && store_matches.is_empty() && collab.is_none() {
             return empty_state(
                 p,
                 super::super::super::fields::icon::SEARCH,
@@ -536,6 +588,7 @@ impl ExtensionsTab {
                 card_grid(cells, None, columns),
             ));
         }
+        groups.extend(collab);
         if !store_matches.is_empty() {
             let mut cells = Vec::new();
             for index in &store_matches {

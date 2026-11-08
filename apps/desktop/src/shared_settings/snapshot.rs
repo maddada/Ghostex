@@ -32,6 +32,9 @@ impl SharedSidebarSettingsSnapshot {
         // Every reader (the chats, the Settings page) sees Default to Detailed view filled in from
         // the default keys it replaced (CDXC:SessionChat 2026-11-02 in the settings catalog).
         ghostex_settings_catalog::migrate_chat_view_default(&mut object);
+        // Enable Experimental Features became one switch each (CDXC:Extensions 2026-11-09 in
+        // the settings catalog); saved once at start by experimental_switches.rs.
+        ghostex_settings_catalog::migrate_experimental_features_switch(&mut object);
         let content_hash = hash_settings_object(&object);
         Self {
             revision: 0,
@@ -46,6 +49,9 @@ impl SharedSidebarSettingsSnapshot {
         content_hash: u64,
     ) -> Self {
         ghostex_settings_catalog::migrate_chat_view_default(&mut object);
+        // Enable Experimental Features became one switch each (CDXC:Extensions 2026-11-09 in
+        // the settings catalog); saved once at start by experimental_switches.rs.
+        ghostex_settings_catalog::migrate_experimental_features_switch(&mut object);
         Self {
             revision,
             content_hash,
@@ -95,8 +101,9 @@ impl SharedSidebarSettingsSnapshot {
         }
     }
 
-    pub fn show_beta_features(&self) -> bool {
-        strict_bool_field(&self.object, "showBetaFeatures") == Some(true)
+    /// All Automations is on (Settings > Extensions > Experimental).
+    pub fn all_automations_enabled(&self) -> bool {
+        strict_bool_field(&self.object, "allAutomationsEnabled") == Some(true)
     }
 
     pub fn keep_awake_titlebar_settings(&self) -> SharedKeepAwakeTitlebarSettings {
@@ -108,7 +115,8 @@ impl SharedSidebarSettingsSnapshot {
         GPUI Keep Awake automation consumes the advanced shared Settings fields with the same strict boolean defaults and battery-threshold clamp as `ghostex-settings.ts`. Keep the parsed snapshot narrow and runtime-owned: renderer payloads do not supply commands, paths, shell text, probe output, or persisted Keep Awake state.
         */
         SharedKeepAwakeTitlebarSettings {
-            feature_enabled: self.show_beta_features(),
+            // Keep Awake's own switch in Settings > Extensions > Experimental.
+            feature_enabled: strict_bool_field(&self.object, "keepAwakeEnabled") == Some(true),
             hide_titlebar_control: strict_bool_field(&self.object, "hideKeepAwakeTitlebarControl")
                 .unwrap_or(DEFAULT_HIDE_KEEP_AWAKE_TITLEBAR_CONTROL),
             activate_on_external_display: strict_bool_field(

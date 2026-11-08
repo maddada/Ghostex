@@ -20,7 +20,7 @@ pub(crate) use voices::voice_options;
 /// CDXC:VoiceMode 2026-10-22 WHY: only macOS speaks for now. Read aloud is experimental, and the Windows speaker (WinRT `SpeechSynthesizer`, spec section 8.2) is not built yet, so a Windows computer tells its chats `available: false` and draws no Read aloud control. Linux never has a voice (CDXC:VoiceMode 2026-10-21 DECISION in packages/settings-catalog/src/general/chat.rs).
 pub(crate) const HAS_VOICE: bool = cfg!(target_os = "macos");
 
-/// Read aloud is on in this app's settings (its switch and its Enable Experimental Features gate)
+/// Read aloud is on in this app's settings (its switch in Settings > Extensions > Experimental)
 /// and this computer has a voice; contract section 2. A chat of a remote computer reads the same:
 /// it is this app's feature and this app's voice.
 pub(crate) fn available() -> bool {

@@ -57,6 +57,9 @@ pub(crate) fn save_settings_patch(
     let read = ghostex_paths::settings_file::read(&path)
         .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
     let mut settings = read.object.unwrap_or_default();
+    // Saved with the experimental switches in place of Enable Experimental Features, so the old
+    // key never overrides a switch saved here (CDXC:Extensions 2026-11-09 in the settings catalog).
+    ghostex_settings_catalog::migrate_experimental_features_switch(&mut settings);
     for (key, value) in patch {
         if value.is_null() {
             settings.remove(key);

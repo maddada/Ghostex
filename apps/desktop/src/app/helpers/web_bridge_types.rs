@@ -10,7 +10,8 @@ use std::rc::Rc;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SidebarRuntimeSettingsSnapshot {
     pub debugging_mode: bool,
-    pub show_beta_features: bool,
+    /// All Automations is on (Settings > Extensions > Experimental).
+    pub all_automations_enabled: bool,
     pub saved_settings_json: String,
 }
 

@@ -90,7 +90,7 @@ impl GpuiSettingsModalWindow {
         let store_subscription =
             cx.observe_in(&store, window, |shell: &mut Self, store, window, cx| {
                 let active = store.read(cx).active_tab();
-                // OS Integration and Connectors hide with Enable Experimental Features, and a page
+                // OS Integration and Connectors hide with their own switches, and a page
                 // of a built-in extension that was just turned off (Actions, Open In) hides with it.
                 if (active == SettingsTabId::OsIntegration
                     && !store.read(cx).os_integration_visible())

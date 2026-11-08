@@ -236,7 +236,6 @@ impl GhostexGpuiApp {
         hud_host.sources.settings = serde_json::from_str(&runtime_settings.saved_settings_json)
             .unwrap_or_else(|_| json!({}));
         hud_host.sources.debugging_mode = runtime_settings.debugging_mode;
-        hud_host.sources.show_beta_features = runtime_settings.show_beta_features;
         hud_host.sources.remote_recent_projects =
             self.gx_store.runtime_facts.remote_recent_projects.clone();
         hud_host.sources.active_project_id = self

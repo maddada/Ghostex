@@ -50,8 +50,8 @@ pub const GBOTS: &str = "gbots";
 /// Claude (claude.ai in a view opened from the sidebar's top bar, with an account bar to switch
 /// between the saved Claude accounts' sign-ins). Off by default.
 pub const CLAUDE_WEB: &str = "claudeWeb";
-/// Connectors (Settings > Connectors, the `ghostex connectors` verbs and routes). Gated by Enable
-/// Experimental Features as well as its switch.
+/// Connectors (Settings > Connectors, the `ghostex connectors` verbs and routes). Experimental, off
+/// by default.
 pub const CONNECTORS: &str = "connectors";
 /// The Session details panel (the panel beside a Claude chat, its context ring in the header, its
 /// Claude task-list row on Settings > Chat). Beta, off by default.
@@ -60,7 +60,7 @@ pub const SESSION_DETAILS: &str = "sessionDetailsPanel";
 /// line, the chat's Session note row, the note dialog, its hotkey, `ghostex session-note`). Off by
 /// default; the phone learns it from `builtInFeaturesOff`. Saved notes are kept while it is off.
 pub const SESSION_NOTES: &str = "sessionNotes";
-/// OS Integration (Settings > OS Integration). Gated by Enable Experimental Features.
+/// OS Integration (Settings > OS Integration). Experimental, off by default.
 pub const OS_INTEGRATION: &str = "osIntegration";
 /// Debugging (Settings > Debugging). Listed while its switch is on; never gated.
 pub const DEBUGGING: &str = "debugging";
@@ -211,7 +211,7 @@ pub fn disabled_features_with(read: impl Fn(&str) -> Option<bool>) -> Vec<&'stat
 }
 
 /// The setting that must also be on before built-in extension `id` shows at all (`gatedBy`:
-/// Enable Experimental Features for Connectors and OS Integration).
+/// none since Enable Experimental Features became one switch each on 2026-11-09).
 /// Its switch sits on top of that gate; while the gate is closed its Store card is left out.
 pub fn gate_key(id: &str) -> Option<&'static str> {
     entry(id)?.get("gatedBy").and_then(J::as_str)

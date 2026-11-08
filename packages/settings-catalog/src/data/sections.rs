@@ -24,12 +24,6 @@ use crate::json::J;
 /// CDXC:Settings 2026-06-16-09:20:
 /// Empty-sidebar double-click creation remains a low-frequency interaction preference and should hide behind Show Advanced. The menu-bar indicator is preset-owned and stays beside the sidebar preset controls.
 ///
-/// CDXC:Settings 2026-06-28-07:41:
-/// Enable Experimental Features is the user-facing name for the persisted
-/// showBetaFeatures gate. Show Advanced is a persisted browsing-density
-/// preference, so keep the experimental gate hidden from ordinary settings
-/// browsing until users enable advanced density or search for it.
-///
 /// CDXC:MarkedHandovers 2026-10-21 DECISION:
 /// User: "make this advanced" about Marked sections style; it joins the emoji and heading-strength rows behind Show Advanced.
 ///
@@ -127,7 +121,6 @@ pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "attentionNotificationActions",
     "dimSleepingSessions",
     "wakeSleepingSessionsOnSelect",
-    "showBetaFeatures",
     "fasterRendering",
     "markedHandoversStyle",
     "markedHandoversEmoji",
@@ -149,7 +142,6 @@ pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "terminalPaneHorizontalPaddingPx",
     "terminalPaneVerticalPaddingPx",
     "terminalBackgroundOpacity",
-    "terminalShadersEnabled",
     "terminalDevServerIgnoredPortRules",
     "resetExpirySystemNotifications",
     "actionCompletionSound",
@@ -539,7 +531,6 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "terminalMouseScrollMultiplierPrecision",
             "terminalMouseScrollMultiplierDiscrete",
             "terminalScrollToBottomWhenTyping",
-            "terminalShadersEnabled",
         ],
     ),
     (
@@ -612,7 +603,6 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
         &[
             "dimSleepingSessions",
             "wakeSleepingSessionsOnSelect",
-            "showBetaFeatures",
             "fasterRendering",
         ],
     ),
@@ -966,7 +956,6 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "terminalMouseScrollMultiplierPrecision",
             "terminalMouseScrollMultiplierDiscrete",
             "terminalScrollToBottomWhenTyping",
-            "terminalShadersEnabled",
         ],
     ),
     (

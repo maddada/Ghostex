@@ -19,6 +19,7 @@ mod delete_view;
 mod detail;
 mod filter_bar;
 mod folder_install;
+pub(crate) mod page_tabs;
 mod remembered_form;
 mod scope_editor;
 mod sections;
@@ -78,10 +79,9 @@ pub(crate) struct ExtensionsTab {
     pub(super) store: Entity<SettingsStore>,
     fields: FieldStates,
     pub(crate) browser: BrowserState,
-    /// The source, type and category filters; the text is the Settings search (`page_filter`).
+    /// The page's filter; only its text is set, from the Settings search (`page_filter`): the
+    /// tabs replaced the source, type and category dropdowns (CDXC:Extensions 2026-11-09).
     pub(crate) filter: ExtensionFilter,
-    pub(crate) type_dropdown: DropdownState,
-    pub(crate) category_dropdown: DropdownState,
     pub(crate) view_editor: Option<ViewEditorState>,
     /// The view a Delete is asking about (`delete_view.rs`).
     pub(crate) delete_view: Option<delete_view::DeleteViewState>,
@@ -155,8 +155,6 @@ impl ExtensionsTab {
             fields: FieldStates::default(),
             browser: BrowserState::default(),
             filter: ExtensionFilter::default(),
-            type_dropdown: DropdownState::default(),
-            category_dropdown: DropdownState::default(),
             view_editor: None,
             delete_view: None,
             delete_view_focus: cx.focus_handle(),
@@ -269,7 +267,7 @@ impl ExtensionsTab {
             && self.official_gate_open(key, cx)
     }
 
-    /// The setting gating the entry (`gatedBy`: Enable Experimental Features) is on;
+    /// The setting gating the entry (`gatedBy`; no entry has one since 2026-11-09) is on;
     /// while it is off the entry is not offered at all (CDXC:Extensions 2026-10-19).
     pub(crate) fn official_gate_open(&self, key: &str, cx: &App) -> bool {
         let store = self.store.read(cx);
@@ -325,6 +323,7 @@ impl ExtensionsTab {
                 .find(|view| view.id() == view_id)
         {
             self.targeted_view = Some(view_id.clone());
+            self.set_page_tab(page_tabs::PageTab::Views, cx);
             self.focus_view_editor.set(true);
             self.choosing_template = false;
             self.view_editor = Some(ViewEditorState::edit(&view));
@@ -334,6 +333,13 @@ impl ExtensionsTab {
             && let Some(title) = self.scope_editor_title(&key, cx)
         {
             self.targeted_scope = Some(key.clone());
+            let tab = data::official_extensions()
+                .iter()
+                .find(|extension| views_data::official_view_scope_key(&extension.id) == key)
+                .map_or(page_tabs::PageTab::Installed, |extension| {
+                    page_tabs::PageTab::of_category(&extension.category)
+                });
+            self.set_page_tab(tab, cx);
             self.center_scope_editor.set(true);
             let draft = view_scope(&values.value("viewScopes"), &key);
             self.scope_editor = Some(ScopeEditorState { draft, key, title });
@@ -378,25 +384,28 @@ impl ExtensionsTab {
             }
             "extensions-filter" => {
                 self.preview_applied = true;
-                self.filter.type_ = "view".into();
-                self.filter.category = "Project websites".into();
+                self.store
+                    .update(cx, |store, cx| store.set_search_query("git".into(), cx));
             }
-            "extensions-experimental" => {
+            "extensions-tab-views"
+            | "extensions-tab-panels"
+            | "extensions-tab-installed"
+            | "extensions-tab-community"
+            | "extensions-experimental" => {
                 self.preview_applied = true;
-                self.filter.category = "Experimental".into();
+                let tab = match state.as_str() {
+                    "extensions-tab-views" => page_tabs::PageTab::Views,
+                    "extensions-tab-panels" => page_tabs::PageTab::PanelsMenus,
+                    "extensions-tab-installed" => page_tabs::PageTab::Installed,
+                    "extensions-tab-community" => page_tabs::PageTab::Community,
+                    _ => page_tabs::PageTab::Experimental,
+                };
+                self.set_page_tab(tab, cx);
             }
             "extensions-empty" => {
                 self.preview_applied = true;
                 self.store
                     .update(cx, |store, cx| store.set_search_query("zzzz".into(), cx));
-            }
-            "extensions-select" => {
-                if self.type_dropdown.trigger_bounds.get().is_some() {
-                    self.preview_applied = true;
-                    self.toggle_type_dropdown(window, cx);
-                } else {
-                    cx.notify();
-                }
             }
             "extensions-scope-menu" => {
                 if self.scope_targets.trigger_bounds.get().is_some() {
@@ -459,10 +468,11 @@ impl ExtensionsTab {
                 }
                 self.preview_applied = true;
                 self.choosing_template = state == "extensions-templates";
-                let section = match state.as_str() {
-                    "extensions-store" => "store",
-                    _ => "customViews",
+                let (section, tab) = match state.as_str() {
+                    "extensions-store" => ("store", page_tabs::PageTab::Installed),
+                    _ => ("customViews", page_tabs::PageTab::Views),
                 };
+                self.set_page_tab(tab, cx);
                 let store = self.store.clone();
                 store.update(cx, |store, cx| {
                     store.scroll_to_section(SettingsTabId::Extensions, section, cx)
@@ -470,6 +480,29 @@ impl ExtensionsTab {
             }
             _ => self.preview_applied = true,
         }
+    }
+
+    /// The open tab (the one saved last time; Built-in at first).
+    pub(crate) fn page_tab(&self, cx: &App) -> page_tabs::PageTab {
+        page_tabs::PageTab::from_id(self.store.read(cx).extensions_tab())
+            .unwrap_or(page_tabs::PageTab::BuiltIn)
+    }
+
+    pub(crate) fn set_page_tab(&mut self, tab: page_tabs::PageTab, cx: &mut Context<Self>) {
+        self.store
+            .update(cx, |store, cx| store.set_extensions_tab(tab.id(), cx));
+        cx.notify();
+    }
+
+    /// Whether `tab`'s content shows: the open tab's, or every tab's while a search is typed
+    /// (User, Q2042: one search box over every tab).
+    pub(crate) fn tab_shown(&self, tab: page_tabs::PageTab, cx: &App) -> bool {
+        self.store.read(cx).is_searching() || self.page_tab(cx) == tab
+    }
+
+    /// Whether built-in category `category` shows (its tab is open or a search is typed).
+    pub(crate) fn category_shown(&self, category: &str, cx: &App) -> bool {
+        self.tab_shown(page_tabs::PageTab::of_category(category), cx)
     }
 
     /// Opens the install consent for a catalog entry.
@@ -552,7 +585,15 @@ impl Render for ExtensionsTab {
                 move |tab, _, cx| store.update(cx, |store, cx| store.set_active_tab(tab, cx)),
             )));
         }
-        if should_show_section(&search.section("viewOrder"), None)
+        // Each tab shows its own sections; a search shows every tab's matches (CDXC:Extensions
+        // 2026-11-09 in filter_bar.rs `render_page_tabs`).
+        let tab = self.page_tab(cx);
+        let views_shown = self.tab_shown(page_tabs::PageTab::Views, cx);
+        let store_shown = self.tab_shown(page_tabs::PageTab::Installed, cx)
+            || self.tab_shown(page_tabs::PageTab::Community, cx);
+        let built_in_shown = searching || !tab.categories().is_empty();
+        if views_shown
+            && should_show_section(&search.section("viewOrder"), None)
             && let Some(section) = self.render_views_section(&p, cx)
         {
             blocks.push(PageBlock::section("viewOrder", section));
@@ -564,15 +605,15 @@ impl Render for ExtensionsTab {
                 cx,
             )));
         }
-        if counts.built_in_visible {
+        if built_in_shown && counts.built_in_visible {
             let section = self.render_built_in_section(&p, window, cx);
             blocks.push(PageBlock::section("official", section));
         }
-        if counts.store_visible {
+        if store_shown && counts.store_visible {
             let section = self.render_store_section(&p, window, cx);
             blocks.push(PageBlock::section("store", section));
         }
-        if counts.custom_visible {
+        if views_shown && counts.custom_visible {
             let section = self.render_custom_views_section(&p, window, cx);
             blocks.push(PageBlock::section("customViews", section));
         }
@@ -589,9 +630,10 @@ impl Render for ExtensionsTab {
             blocks.push(PageBlock::plain(confirm));
         }
         let page = settings_page(&self.store, SettingsTabId::Extensions, &p, blocks, cx);
+        let tab_counts = self.page_tab_counts(cx);
         let bar = counts
             .any_section
-            .then(|| self.render_filter_bar(&p, &counts, window, cx));
+            .then(|| self.render_page_tabs(&p, &tab_counts, cx));
         v_flex()
             .size_full()
             .children(bar)
