@@ -23,6 +23,8 @@ use gpui::{
 use serde_json::json;
 use std::{cell::Cell, rc::Rc};
 
+/// Space between the rows of an opened turn's log.
+const LOG_GAP: f32 = 8.0;
 /// Space between the parts of a finished turn.
 const PART_GAP: f32 = 10.0;
 /// Space between two transcript list items, the gap every row wrapper ends with, which the live
@@ -116,15 +118,28 @@ impl NativeChatView {
                 log.push(notice);
             }
             self.in_work_fold = true;
+            // A row that opens on its tool card right under one that closes on its own is a row gap
+            // away from it, like any two one-line cards (`SINGLE_LINE_CARD.gap_above`); the log
+            // already puts its own 8px between rows.
+            let mut card_above = false;
             for message in work {
-                log.push(self.message_row(message, p, window, cx));
+                let row = self.message_row(message, p, window, cx);
+                let card_first = message["toolCard"].is_object()
+                    && super::transcript::text(message, "text").trim().is_empty();
+                let extra = SINGLE_LINE_CARD.gap_above(card_above, card_first, LOG_GAP) - LOG_GAP;
+                log.push(if extra > 0.0 {
+                    div().mt(px(extra * s)).child(row).into_any_element()
+                } else {
+                    row
+                });
+                card_above = message["toolCard"].is_object();
             }
             self.in_work_fold = false;
             if !log.is_empty() {
                 parts.push(disclosure_body(
                     p,
                     DisclosureRail::Work,
-                    8.0,
+                    LOG_GAP,
                     id.clone(),
                     "Collapse completed work",
                     log,
