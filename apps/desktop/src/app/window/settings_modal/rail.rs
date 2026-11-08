@@ -260,6 +260,13 @@ fn rail_fold(
 }
 
 /// A group's label above its pages (CDXC:Settings 2026-11-08 in model.rs).
+///
+/// CDXC:Settings 2026-11-08 DECISION:
+/// User: "Please more separation here the labels for different sections are blending with the
+/// different pages here". A label sat about as close to the last page of the group above as to its
+/// own first page, so it read as part of that group. A later group's label now opens with the
+/// rail's hairline (the one over the Extensions group at the bottom) and clearly more room above
+/// it than below, and its own pages sit tight under it, so each group reads as one block.
 fn render_tier_label(p: &SettingsPalette, tier: RailTier, spaced: bool) -> AnyElement {
     if tier == RailTier::Top {
         return div().into_any_element();
@@ -268,8 +275,12 @@ fn render_tier_label(p: &SettingsPalette, tier: RailTier, spaced: bool) -> AnyEl
         .w_full()
         .min_w_0()
         .pl(px(10.0))
-        .pb(px(2.0))
-        .when(spaced, |this| this.pt(px(10.0)))
+        .when(spaced, |this| {
+            this.mt(px(8.0))
+                .pt(px(12.0))
+                .border_t_1()
+                .border_color(hsla(p.hairline))
+        })
         .text_size(px(11.0))
         .line_height(px(14.0))
         .font_weight(FontWeight::MEDIUM)
