@@ -68,6 +68,8 @@ async fn run(state: &AppState, id: &str, source: &'static str) {
         update_tool(state, tool).await
     } else if let Some(extension) = id.strip_prefix("extension:") {
         update_extension(state, extension).await
+    } else if let Some(component) = id.strip_prefix(items::COMPONENT_ITEM_PREFIX) {
+        update_component(state, component).await
     } else if id == "app" {
         crate::app_update::request_app_update_install(state, source)
             .await
@@ -269,6 +271,82 @@ async fn update_tool(state: &AppState, tool: &str) -> Result<(), Outcome> {
 /// The extension's catalog install, as Settings > Extensions' Update runs it without a new
 /// approval: an update that asks for more (a background process, a remote website) is refused by
 /// the registry and left for the user to approve there.
+/// How long a component download and install may take.
+const COMPONENT_WAIT: Duration = Duration::from_secs(15 * 60);
+
+/// Installs the newer component this release sealed (Collab, GBots), the way its own Settings
+/// card does, and waits for it.
+async fn update_component(state: &AppState, component: &str) -> Result<(), Outcome> {
+    let started = Instant::now();
+    match component {
+        "collab" => {
+            use crate::collab_shim::install;
+            let Some(app_state) = crate::collab_shim::sidecar::app_state() else {
+                return Err(failed("Collab isn't ready yet. Try again in a moment."));
+            };
+            install::start_update(app_state).map_err(failed)?;
+            loop {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                let item = install::item();
+                match item["phase"].as_str() {
+                    Some("downloading" | "installing") => {
+                        if let Some(done) = item["doneBytes"].as_f64() {
+                            let total = item["totalBytes"].as_f64().unwrap_or(0.0);
+                            if total > 0.0 {
+                                store::set_phase(
+                                    &format!("{}collab", items::COMPONENT_ITEM_PREFIX),
+                                    &format!(
+                                        "Downloading\u{2026} {}%",
+                                        ((done / total) * 100.0).floor()
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                    Some("failed") => {
+                        return Err(failed(
+                            item["error"]
+                                .as_str()
+                                .unwrap_or("The Collab update failed."),
+                        ))
+                    }
+                    _ if install::update_available().is_none() => return Ok(()),
+                    _ => {}
+                }
+                if started.elapsed() > COMPONENT_WAIT {
+                    return Err(failed("The Collab update took too long."));
+                }
+            }
+        }
+        "gbots" => {
+            use crate::gbots::{download, runtime};
+            let _ = state;
+            download::retry_now();
+            if !download::ensure_downloading() {
+                return Err(failed("This Ghostex has no GBots runtime to install."));
+            }
+            loop {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                if runtime::installed_runtime().is_some() {
+                    return Ok(());
+                }
+                let status = download::status_value();
+                if status["phase"] == "failed" {
+                    return Err(failed(
+                        status["error"]
+                            .as_str()
+                            .unwrap_or("The GBots update failed."),
+                    ));
+                }
+                if started.elapsed() > COMPONENT_WAIT {
+                    return Err(failed("The GBots update took too long."));
+                }
+            }
+        }
+        _ => Err(failed("Ghostex doesn't know how to update this.")),
+    }
+}
+
 async fn update_extension(state: &AppState, extension: &str) -> Result<(), Outcome> {
     let registry = state.extension_registry.clone();
     let id = extension.to_string();

@@ -145,13 +145,173 @@ async fn collect(state: &AppState, fresh: bool) -> Vec<Value> {
         extension_items(state),
         app_item(state),
     );
+    let components = component_items(state);
     let mut items = Vec::new();
     items.push(app);
     items.extend(agents);
     items.extend(helpers);
     items.extend(tools);
     items.extend(extensions);
+    items.extend(components);
     items
+}
+
+/// The on-demand extension components gxserver installs itself, while one is installed here:
+/// Collab and GBots. An app update seals a newer component than the one on disk; Update installs
+/// it. (The desktop lists its own: the VS Code view's code-server and CEF, app/updates/items.rs.)
+///
+/// CDXC:Updates 2026-11-08 DECISION:
+/// User (#495, Q1733): every installed extension component with an update shows in the titlebar Updates dropdown and in Settings > Updates, with Update; GBots and Collab were missing. Uninstalled components don't show.
+pub(crate) fn component_items(state: &AppState) -> Vec<Value> {
+    let mut items = Vec::new();
+    items.extend(collab_item());
+    items.extend(gbots_item(state));
+    items
+}
+
+/// One component's row, from what is on disk and what this release sealed.
+#[allow(clippy::too_many_arguments)]
+fn component_item(
+    name: &str,
+    title: &str,
+    installed: Option<String>,
+    latest: Option<String>,
+    phase: &Value,
+    available: bool,
+    in_use: bool,
+) -> Value {
+    let mut item = item(
+        format!("{COMPONENT_ITEM_PREFIX}{name}"),
+        "component",
+        "extensions",
+        title.to_string(),
+        name,
+        "Extension".to_string(),
+        installed,
+        latest,
+    );
+    let (state, progress, error) = match phase["phase"].as_str() {
+        Some("downloading") => {
+            let done = phase["doneBytes"].as_f64().unwrap_or(0.0);
+            let total = phase["totalBytes"].as_f64().unwrap_or(0.0);
+            let progress = if total > 0.0 {
+                format!("Downloading\u{2026} {}%", ((done / total) * 100.0).floor())
+            } else {
+                "Downloading\u{2026}".to_string()
+            };
+            ("updating", Some(progress), None)
+        }
+        Some("installing") => ("updating", Some("Installing\u{2026}".to_string()), None),
+        Some("failed") if available => (
+            "failed",
+            None,
+            Some(
+                phase["error"]
+                    .as_str()
+                    .unwrap_or("The update failed.")
+                    .to_string(),
+            ),
+        ),
+        _ if available => ("available", None, None),
+        _ => ("upToDate", None, None),
+    };
+    item.insert("state".into(), json!(state));
+    item.insert(
+        "settledState".into(),
+        json!(if available { "available" } else { "upToDate" }),
+    );
+    if let Some(progress) = progress {
+        item.insert("progress".into(), json!(progress));
+    }
+    if let Some(error) = error {
+        item.insert("error".into(), json!(error));
+    }
+    if available && state == "available" {
+        item.insert(
+            "note".into(),
+            json!("This Ghostex brought a newer version. Update installs it."),
+        );
+    }
+    item.insert("canUpdate".into(), json!(true));
+    item.insert("topBar".into(), json!(true));
+    item.insert("inUse".into(), json!(in_use));
+    Value::Object(item)
+}
+
+/// The id prefix of [`component_items`]' rows (`component:` is the desktop's own).
+pub(super) const COMPONENT_ITEM_PREFIX: &str = "extensionComponent:";
+
+fn collab_item() -> Option<Value> {
+    use crate::collab_shim::install;
+    let installed = install::installed()?;
+    let component = install::item();
+    let update = install::update_available();
+    Some(component_item(
+        "collab",
+        install::TITLE,
+        Some(installed.version),
+        update
+            .clone()
+            .or_else(|| component["availableVersion"].as_str().map(str::to_string)),
+        &component,
+        update.is_some(),
+        component["running"] == true,
+    ))
+}
+
+fn gbots_item(state: &AppState) -> Option<Value> {
+    use crate::gbots::{download, runtime};
+    if !cfg!(unix) || !crate::gbots::settings::runs_here(&state.paths, &state.metadata.server_id) {
+        return None;
+    }
+    let sealed = runtime::sealed_component();
+    let latest = sealed
+        .as_ref()
+        .map(|component| component.component_version.clone());
+    let phase = download::status_value();
+    if let Some(current) = runtime::installed_runtime() {
+        return Some(component_item(
+            "gbots",
+            "GBots",
+            Some(current.version),
+            latest,
+            &json!({ "phase": "idle" }),
+            false,
+            crate::gbots::sidecar::is_running(),
+        ));
+    }
+    // The sealed runtime isn't on disk: an older one left by an app update means an update.
+    let older = older_gbots_version(
+        sealed
+            .as_ref()
+            .map(|component| component.component_version.as_str()),
+    )?;
+    Some(component_item(
+        "gbots",
+        "GBots",
+        Some(older),
+        latest,
+        &phase,
+        sealed.is_some(),
+        false,
+    ))
+}
+
+/// A GBots runtime of another component version on disk (never `dev`).
+fn older_gbots_version(sealed: Option<&str>) -> Option<String> {
+    let root = crate::gbots::runtime::component_root();
+    let platform = crate::gbots::runtime::platform_dir();
+    let mut versions: Vec<String> = std::fs::read_dir(&root)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .filter(|name| !name.starts_with('.') && name != "dev" && Some(name.as_str()) != sealed)
+        .filter(|name| {
+            crate::gbots::runtime::read_runtime(&root.join(name).join(&platform)).is_some()
+        })
+        .collect();
+    versions.sort();
+    versions.pop()
 }
 
 /// Which agents this computer uses: switched on in Settings > Agents, used in the last week, or

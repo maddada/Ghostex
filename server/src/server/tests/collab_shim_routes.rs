@@ -528,3 +528,220 @@ async fn a_sealed_install_refuses_an_archive_without_ghostexs_signature() {
         std::env::remove_var(key);
     }
 }
+
+/// A signed Collab archive of `version` for this platform, sealed into `manifest_path`, served
+/// from `base`'s folder (`files`).
+struct SignedRelease {
+    pair: ring::signature::Ed25519KeyPair,
+    files: Vec<(String, Vec<u8>)>,
+}
+
+impl SignedRelease {
+    fn new() -> Self {
+        let rng = ring::rand::SystemRandom::new();
+        let pkcs8 = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
+        Self {
+            pair: ring::signature::Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).unwrap(),
+            files: Vec::new(),
+        }
+    }
+
+    /// Builds the archive and returns the manifest's `components.collab` entry.
+    fn archive(&mut self, folder: &std::path::Path, version: &str) -> Value {
+        use base64::Engine as _;
+        use sha2::Digest as _;
+        let stage = folder.join(format!("stage-{version}"));
+        std::fs::create_dir_all(&stage).unwrap();
+        std::fs::write(
+            stage.join("ghostex-collab"),
+            format!("#!/bin/sh\n# {version}\nexit 0\n"),
+        )
+        .unwrap();
+        let archive = folder.join(format!("{version}.tar.gz"));
+        assert!(std::process::Command::new("tar")
+            .arg("-czf")
+            .arg(&archive)
+            .arg("-C")
+            .arg(&stage)
+            .arg(".")
+            .status()
+            .unwrap()
+            .success());
+        let bytes = std::fs::read(&archive).unwrap();
+        let sha256 = hex::encode(sha2::Sha256::digest(&bytes));
+        let platform = crate::components::platform_dir();
+        let asset = format!("collab-{version}-{platform}.tar.gz");
+        let statement = ghostex_gx_protocol::component_signing::component_signing_statement(
+            "collab",
+            version,
+            &platform,
+            &asset,
+            &sha256,
+            bytes.len() as u64,
+        );
+        let signature = base64::engine::general_purpose::STANDARD
+            .encode(self.pair.sign(statement.as_bytes()).as_ref());
+        self.files.push((asset.clone(), bytes.clone()));
+        json!({
+            "name": "collab", "componentVersion": version, "downloadTag": format!("collab-{version}"),
+            "githubRepo": "maddada/ghostex-components",
+            "platforms": {platform: {"assetName": asset, "sha256": sha256, "sizeBytes": bytes.len(), "signature": signature}}
+        })
+    }
+
+    fn public_key_hex(&self) -> String {
+        use ring::signature::KeyPair as _;
+        hex::encode(self.pair.public_key().as_ref())
+    }
+}
+
+fn seal(path: &std::path::Path, collab: &Value) {
+    std::fs::write(
+        path,
+        json!({"schemaVersion": 2, "version": "11.0.1", "githubRepo": "maddada/Ghostex", "assets": {}, "components": {"collab": collab}})
+            .to_string(),
+    )
+    .unwrap();
+    std::env::set_var("GHOSTEX_ON_DEMAND_MANIFEST", path);
+}
+
+fn collab_update_row(state: &Arc<AppState>) -> Option<Value> {
+    crate::updates::items::component_items(state)
+        .into_iter()
+        .find(|item| item["id"] == "extensionComponent:collab")
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_app_update_lists_the_newer_collab_in_updates_and_update_installs_it() {
+    let setup = setup();
+    let temp = setup._temp.path().to_path_buf();
+    let mut release = SignedRelease::new();
+    let old = release.archive(&temp, "1.0.0-old");
+    let new = release.archive(&temp, "1.0.1-new");
+    std::env::set_var(
+        "GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY",
+        release.public_key_hex(),
+    );
+    let base = serve_files(release.files.clone()).await;
+    std::env::set_var("GHOSTEX_ON_DEMAND_BASE_URL", &base);
+    std::env::set_var("GHOSTEX_COMPONENT_STORE_DIR", temp.join("components"));
+    std::env::remove_var("GHOSTEX_COLLAB_DEV_BINARY");
+    let manifest = temp.join("on-demand-resources.json");
+    let wait_installed = |version: &'static str| async move {
+        for _ in 0..300 {
+            if crate::collab_shim::install::installed()
+                .is_some_and(|installed| installed.version == version)
+                && crate::collab_shim::install::item()["phase"] == "idle"
+            {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        panic!("Collab {version} was not installed");
+    };
+
+    // Not installed: no row.
+    seal(&manifest, &old);
+    assert!(collab_update_row(&setup.state).is_none());
+
+    // Installed with this release's version: up to date.
+    crate::collab_shim::install::start_install(setup.state.clone(), Box::new(|_| {})).unwrap();
+    wait_installed("1.0.0-old").await;
+    let row = collab_update_row(&setup.state).expect("listed once installed");
+    assert_eq!(row["state"], "upToDate", "{row}");
+    assert_eq!(row["group"], "extensions");
+
+    // An app update sealed a newer Collab: listed with Update, and it lights the top bar.
+    seal(&manifest, &new);
+    let row = collab_update_row(&setup.state).expect("listed");
+    assert_eq!(row["state"], "available", "{row}");
+    assert_eq!(row["installed"], "1.0.0-old");
+    assert_eq!(row["latest"], "1.0.1-new");
+    assert_eq!(row["canUpdate"], true);
+    assert_eq!(row["topBar"], true);
+
+    // Update installs it (and drops the old one); the row is up to date again.
+    crate::collab_shim::install::start_update(setup.state.clone()).unwrap();
+    wait_installed("1.0.1-new").await;
+    assert!(!temp.join("components/collab/1.0.0-old").exists());
+    assert_eq!(
+        collab_update_row(&setup.state).expect("listed")["state"],
+        "upToDate"
+    );
+
+    // Uninstalled: gone from Updates.
+    crate::collab_shim::install::uninstall(&setup.state).unwrap();
+    assert!(collab_update_row(&setup.state).is_none());
+
+    for key in [
+        "GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY",
+        "GHOSTEX_ON_DEMAND_BASE_URL",
+        "GHOSTEX_ON_DEMAND_MANIFEST",
+        "GHOSTEX_COMPONENT_STORE_DIR",
+    ] {
+        std::env::remove_var(key);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[cfg(unix)]
+async fn gbots_shows_in_updates_while_an_older_runtime_is_on_disk() {
+    let setup = setup();
+    let temp = setup._temp.path().to_path_buf();
+    let store = temp.join("components");
+    std::env::set_var("GHOSTEX_COMPONENT_STORE_DIR", &store);
+    let platform = crate::components::platform_dir();
+    let runtime = |version: &str| {
+        let root = store.join("gbots").join(version).join(&platform);
+        std::fs::create_dir_all(root.join("server")).unwrap();
+        std::fs::write(root.join("server/openmausbot.js"), "").unwrap();
+        std::fs::write(
+            root.join("gbots-runtime.json"),
+            json!({"entry": "server/openmausbot.js", "componentVersion": version}).to_string(),
+        )
+        .unwrap();
+    };
+    let manifest = temp.join("on-demand-resources.json");
+    std::fs::write(
+        &manifest,
+        json!({"schemaVersion": 2, "version": "11.0.1", "githubRepo": "maddada/Ghostex", "assets": {}, "components": {"gbots": {
+            "name": "gbots", "componentVersion": "2.0.0-new", "downloadTag": "gbots-2.0.0-new", "githubRepo": "maddada/ghostex-components",
+            "platforms": {platform.clone(): {"assetName": format!("gbots-2.0.0-new-{platform}.tar.gz"), "sha256": "a".repeat(64), "sizeBytes": 1}}
+        }}})
+        .to_string(),
+    )
+    .unwrap();
+    std::env::set_var("GHOSTEX_ON_DEMAND_MANIFEST", &manifest);
+    let row = |state: &Arc<AppState>| {
+        crate::updates::items::component_items(state)
+            .into_iter()
+            .find(|item| item["id"] == "extensionComponent:gbots")
+    };
+
+    // GBots off here: never listed (unless this machine is someone's GBots computer).
+    runtime("1.0.0-old");
+    if !crate::gbots::settings::is_claimed_home() {
+        assert!(row(&setup.state).is_none());
+    }
+    // On here, with only the runtime an older release brought: Update is offered.
+    std::fs::create_dir_all(&setup.state.paths.app_config_dir).unwrap();
+    std::fs::write(
+        setup
+            .state
+            .paths
+            .app_config_dir
+            .join("native-sidebar-settings.json"),
+        json!({"gbotsEnabled": true}).to_string(),
+    )
+    .unwrap();
+    let listed = row(&setup.state).expect("listed");
+    assert_eq!(listed["state"], "available", "{listed}");
+    assert_eq!(listed["installed"], "1.0.0-old");
+    assert_eq!(listed["latest"], "2.0.0-new");
+    // This release's runtime installed: up to date.
+    runtime("2.0.0-new");
+    assert_eq!(row(&setup.state).expect("listed")["state"], "upToDate");
+
+    std::env::remove_var("GHOSTEX_COMPONENT_STORE_DIR");
+    std::env::remove_var("GHOSTEX_ON_DEMAND_MANIFEST");
+}

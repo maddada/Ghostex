@@ -89,6 +89,11 @@ fn sidecar() -> std::sync::MutexGuard<'static, Sidecar> {
     SIDECAR.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// gxserver's state, once the supervisor started (updates start a Collab update with it).
+pub(crate) fn app_state() -> Option<Arc<AppState>> {
+    STATE.get().cloned()
+}
+
 pub(crate) fn is_running() -> bool {
     let sidecar = sidecar();
     sidecar.status == Status::Running && sidecar.port.is_some()

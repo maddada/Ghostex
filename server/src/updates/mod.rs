@@ -9,7 +9,7 @@
 mod auto;
 mod http;
 mod install;
-mod items;
+pub(crate) mod items;
 mod missing;
 mod store;
 

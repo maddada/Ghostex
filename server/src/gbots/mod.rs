@@ -11,15 +11,15 @@
 mod accounts;
 mod client;
 mod create;
-mod download;
+pub(crate) mod download;
 mod endpoint;
 mod events;
 mod mirror;
 mod projects;
-mod runtime;
+pub(crate) mod runtime;
 mod send;
-mod settings;
-mod sidecar;
+pub(crate) mod settings;
+pub(crate) mod sidecar;
 
 pub(crate) use endpoint::{gbots_action, gbots_home_action};
 pub(crate) use mirror::{
