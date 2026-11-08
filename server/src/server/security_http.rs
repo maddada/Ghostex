@@ -234,7 +234,7 @@ enum EnrollRefusal {
 }
 
 /// `/api/enrollOwnerKey` and `/api/enrollApproverKey`. The first key of each kind is taken on
-/// the owner's word (first owner key: any local caller; first approver key: the desktop's owner
+/// the owner's word (first owner key: the token file only; first approver key: the desktop's owner
 /// session); every later key needs an approved `addApproverKey` signed by a key already there.
 fn enroll_key(
     state: &AppState,
@@ -261,6 +261,17 @@ fn enroll_key(
         return Ok(json!({ "key": known }));
     }
     let first = registry.is_empty();
+    /*
+    CDXC:Security 2026-11-08 WHY:
+    The first owner key is trusted on first use, so whoever enrolls it first becomes the owner of this gxserver: every later key, approval and owner session hangs off it. On a fresh gxserver (a headless box, a new install) a session's own token (an agent, a coordinator, a thread, Chief) could enroll one and take that role before the owner's app ever connected. Only the token file may enroll it: the path the owner's Ghostex app takes, on this computer (`owner_security::open_owner_session` with the local transport) or from another computer through its SSH tunnel, which carries this computer's token file. Same-user limit: the token file is `gxserver/auth/token`, mode 0600, so any program running as this OS user can read it and enroll first, an agent that reads the file itself included; this closes the session-token door, not that one.
+    */
+    if first && owner && !matches!(caller, Principal::LocalAgent) {
+        return Err(EnrollRefusal::Reply(
+            "forbidden",
+            "The first owner key is added by the Ghostex app, on this computer or from your own computer over SSH."
+                .to_string(),
+        ));
+    }
     if first && owner {
         let key = security
             .enroll_first_owner_key(key, now)

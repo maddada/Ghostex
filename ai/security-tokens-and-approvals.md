@@ -170,7 +170,7 @@ state.security.record_performed(grant.approval.action, grant.approval.target, &c
 | `/api/listApproverKeys` | none | owner's devices | `{ keys }` |
 | `/api/enrollApproverKey` | `{ key }` | owner's devices | `{ key }`: the first from the owner session, later ones after an approved `addApproverKey` |
 | `/api/removeApproverKey` | `{ keyId }` | owner's devices | `{ key }` |
-| `/api/enrollOwnerKey` | `{ key }` | any local caller (loopback only) | `{ key }`: the first is trusted on first use (user decision 1A), the same again is a no-op, another needs `addApproverKey` |
+| `/api/enrollOwnerKey` | `{ key }` | any local caller (loopback only); the first key only from the token file (the Ghostex app here, or another computer's app through its SSH tunnel), never a session's token | `{ key }`: the first is trusted on first use (user decision 1A), the same again is a no-op, another needs `addApproverKey`. Any program running as this OS user can read the token file, so it can still enroll first. |
 | `/api/ownerChallenge` | none | any local caller (loopback only) | `{ challenge, expiresAtMs }`, single use, 60 s |
 | `/api/openOwnerSession` | `{ keyId, challenge, signature }` | any local caller (loopback only) | `{ token, deviceId }` |
 | `/api/securityStatus` | none | any but guests | `{ serverId, caller, ownerKeys, approverKeys, pendingApprovals }` |
