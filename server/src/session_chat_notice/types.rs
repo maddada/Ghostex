@@ -286,6 +286,8 @@ pub struct SessionChatTerminalNotice {
     pub permission_request: Option<crate::session_chat_claude_permission::ClaudePermissionRequest>,
     /// The whole plan Claude's "Ready to code?" asks to approve, as Markdown from its plan file (`plan`); the screen shows only a scrolled window of it (session_chat_claude_plan.rs).
     pub plan: Option<String>,
+    /// When Claude Code blocks this prompt by itself because nobody answered (`autoBlockAt`, RFC3339): read off its countdown, which is no part of the prompt's identity (`split_claude_auto_block`).
+    pub auto_block_at: Option<String>,
     pub source: SessionChatTerminalNoticeSource,
     /// RFC3339 millis; also the client's dismissal key.
     pub detected_at: String,
@@ -324,6 +326,7 @@ impl SessionChatTerminalNotice {
             approval_command: None,
             permission_request: None,
             plan: None,
+            auto_block_at: None,
             source,
             detected_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             actions: Vec::new(),
@@ -368,6 +371,15 @@ impl SessionChatTerminalNotice {
         request: Option<crate::session_chat_claude_permission::ClaudePermissionRequest>,
     ) -> Self {
         self.permission_request = request;
+        self
+    }
+
+    /// The deadline `seconds` from now, when Claude's countdown showed one.
+    pub fn with_auto_block_in(mut self, seconds: Option<u64>) -> Self {
+        self.auto_block_at = seconds.map(|seconds| {
+            (chrono::Utc::now() + chrono::Duration::seconds(seconds as i64))
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        });
         self
     }
 
@@ -462,6 +474,11 @@ impl SessionChatTerminalNotice {
         if self.same_notice(previous) {
             if let Some(previous) = previous {
                 self.detected_at = previous.detected_at.clone();
+                // The countdown's deadline as first read: a later read of the same prompt lands a
+                // second either way, and must not make the frame news.
+                if self.auto_block_at.is_some() && previous.auto_block_at.is_some() {
+                    self.auto_block_at = previous.auto_block_at.clone();
+                }
             }
         }
     }
@@ -571,6 +588,9 @@ impl SessionChatTerminalNotice {
         }
         if let Some(plan) = self.plan.as_deref() {
             map.insert("plan".to_string(), json!(plan));
+        }
+        if let Some(at) = self.auto_block_at.as_deref() {
+            map.insert("autoBlockAt".to_string(), json!(at));
         }
         if self.passes_keys_through() {
             map.insert("passthrough".to_string(), json!(true));

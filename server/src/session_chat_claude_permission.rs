@@ -184,3 +184,71 @@ pub fn detect_claude_permission_request(screen: &str) -> Option<ClaudePermission
         question: lines[heading].trim().to_string(),
     })
 }
+
+/// The words Claude Code paints under an unattended session's prompt, before its time.
+const AUTO_BLOCK_LEAD: &str = "Claude Code will automatically block this request in ";
+/// The words that end it, after its time.
+const AUTO_BLOCK_TAIL: &str = "unattended session";
+/// The most screen rows one countdown wraps to on a narrow terminal.
+const AUTO_BLOCK_MAX_ROWS: usize = 4;
+
+/// The screen with Claude Code's auto-block countdown taken out, and the seconds it had left.
+///
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// User: "wtf is this pls fix i can't click yes". Claude Code 2.1.319 paints "⚠ Claude Code will automatically block this request in 1:45, to avoid holding up an unattended session" under a prompt nobody is watching and repaints the time every second (`autoDenyWindow` / `denialLimitFallback`; "about 3 minutes" or "about 40 seconds" in a narrow layout). It was read as part of the prompt's warning and detail, so every second the prompt counted as a new one: its `detectedAt` changed, the card's answer was refused with "The prompt changed before your answer arrived", a coordinator's relayed card got a new key, and an answered card came back. The countdown is no part of what the prompt asks, so it is cut out before the prompt is read, and only its deadline travels (`autoBlockAt`, which a repeat does not change: `carry_forward_detected_at`). The same command with the same rows is the same prompt for as long as it waits; anything else on it still makes a new one.
+pub fn split_claude_auto_block(screen: &str) -> (std::borrow::Cow<'_, str>, Option<u64>) {
+    if !screen.contains(AUTO_BLOCK_LEAD.trim_end()) {
+        return (std::borrow::Cow::Borrowed(screen), None);
+    }
+    let lines: Vec<&str> = screen.lines().collect();
+    let clean = |line: &str| normalize_spaces(&strip_ansi_sgr(line)).trim().to_string();
+    let Some(start) = lines
+        .iter()
+        .rposition(|line| clean(line).contains(AUTO_BLOCK_LEAD.trim_end()))
+    else {
+        return (std::borrow::Cow::Borrowed(screen), None);
+    };
+    let mut end = start;
+    let mut sentence = clean(lines[start]);
+    while !sentence.contains(AUTO_BLOCK_TAIL)
+        && end + 1 < lines.len()
+        && end + 1 - start < AUTO_BLOCK_MAX_ROWS
+    {
+        end += 1;
+        sentence.push(' ');
+        sentence.push_str(&clean(lines[end]));
+    }
+    if !sentence.contains(AUTO_BLOCK_TAIL) {
+        end = start;
+    }
+    let seconds = sentence
+        .split_once(AUTO_BLOCK_LEAD.trim_end())
+        .map(|(_, rest)| rest.trim_start())
+        .and_then(|rest| rest.split(',').next())
+        .and_then(auto_block_seconds);
+    let kept = lines[..start]
+        .iter()
+        .chain(lines[end + 1..].iter())
+        .copied()
+        .collect::<Vec<_>>()
+        .join("\n");
+    (std::borrow::Cow::Owned(kept), seconds)
+}
+
+/// "1:45", "about 3 minutes", "about 1 second" as seconds.
+fn auto_block_seconds(time: &str) -> Option<u64> {
+    let time = time.trim();
+    if let Some((minutes, seconds)) = time.split_once(':') {
+        return Some(
+            minutes.trim().parse::<u64>().ok()? * 60 + seconds.trim().parse::<u64>().ok()?,
+        );
+    }
+    let mut words = time.trim_start_matches("about").split_whitespace();
+    let count: u64 = words.next()?.parse().ok()?;
+    let unit = words.next()?;
+    Some(if unit.starts_with("minute") {
+        count * 60
+    } else {
+        count
+    })
+}
