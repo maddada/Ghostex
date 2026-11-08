@@ -137,7 +137,7 @@ fn poll(state: &AppState, observers: &mut Observers, compare: bool, drive: bool)
         super::opencode::refresh(&observers.sessions, opencode_on);
     }
     let mut events = if claude_on {
-        observers.claude.poll(&live)
+        observers.claude.poll(&live, &state.metadata.server_id)
     } else {
         Vec::new()
     };

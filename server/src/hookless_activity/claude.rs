@@ -192,8 +192,14 @@ impl SessionRecords {
 }
 
 impl ClaudeObserver {
-    pub(super) fn poll(&mut self, live: &[LiveRecord]) -> Vec<ActivityEvent> {
-        self.step(live, &mut pane_of)
+    /// Only panes of `server_id` (the `S..` of their zmx name `S..-P..-G..`) are followed.
+    ///
+    /// CDXC:AgentHooks 2026-11-08 FIX:
+    /// Two threads on 8 Nov saw a throwaway test gxserver (`cargo xtask test-server`) log `/api/ingestAgentHookEvent failed: Session P3lv0/G7d9n does not exist` for the user's real sessions. Its Claude observer reads every live `claude` record under `~/.claude` (a test server's own Claude sessions use that folder too), found the real server's panes above them, dropped the server id from their zmx names and drove their events into itself. Every gxserver on the computer did the same with every other server's panes, the real one included. The real server lost nothing: the hooks post to the base URL in their own session's environment and the test server only rejected what it drove. A pane whose zmx name names another server is now left to that server.
+    pub(super) fn poll(&mut self, live: &[LiveRecord], server_id: &str) -> Vec<ActivityEvent> {
+        self.step(live, &mut |pid| {
+            pane_of(pid).filter(|name| name.split('-').next() == Some(server_id))
+        })
     }
 
     /// The Ghostex panes (project id, session id) a live `claude` is shown in right now.
