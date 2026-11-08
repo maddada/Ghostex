@@ -7,6 +7,8 @@
 //! User: "make the chief row have an icon to its left and make it match the placement of the project header and match its style and not have border around it (should be exactly like the project header basically). Also when i have chiefs on multiple machines like we agreed we need to make the icon to the left of the chief turn to chevron just like projects have multiple sessions below them." The row is a project header's twin (project_header.rs: its box, height, insets, gutter, weight, hover and selected fill, no border), and other computers' Chiefs fold under it like a project's sessions. This supersedes the outlined row with a "+N" chip.
 //! CDXC:Chief 2026-11-08 DECISION:
 //! User (Q1882): line "Chief" up with project names. The flower sits in the project-icon column and "Chief" where project names start; the chevron gutter holds the project's fold chevron only while other computers have a Chief, and stays empty with one. Supersedes the flower in the gutter.
+//! CDXC:Chief 2026-11-08 DECISION:
+//! User: "We need a dimmed chevron here please so there's not just empty space on the left needlessly". With one Chief the gutter shows the project's chevron dimmed (`DIMMED_CHEVRON`), pointing right and doing nothing; it is the normal chevron once other computers' Chiefs can unfold under it. Supersedes the empty gutter with one Chief.
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -15,10 +17,12 @@ use gpui::{
 };
 use gpui_component::{h_flex, v_flex};
 
-/// Chief's name on its row and in its menu (Q1746).
-pub(crate) const CHIEF_LABEL: &str = "Chief";
+/// Chief's name on its row and in its menu ("Chief of Staff", Q1896; server/src/chief/mod.rs `CHIEF_TITLE`).
+pub(crate) const CHIEF_LABEL: &str = "Chief of Staff";
 /// The Ghostex flower in one colour (Q1735).
 pub(crate) const FLOWER_ICON: &str = "titlebar/ghostex-flower.svg";
+/// How much of the muted colour the chevron keeps while nothing can unfold under it.
+const DIMMED_CHEVRON: f32 = 0.35;
 /// The project header's fold chevron (`COMMAND_ICON_CHEVRON_RIGHT`).
 const CHEVRON_ICON: &str = "titlebar/chevron-right.svg";
 /// The project header's chevron gutter and how far its box reaches left into it
@@ -40,7 +44,7 @@ pub(crate) struct ChiefRowColors {
 /// Whether other computers' Chiefs fold under this computer's.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ChiefFold {
-    /// Only this computer has one: the gutter stays empty.
+    /// Only this computer has one: the gutter shows the chevron dimmed, and it does nothing.
     Single,
     /// Others do and are folded away: the project's chevron, pointing right.
     Folded,
@@ -68,8 +72,8 @@ pub(crate) fn chief_block(scale: f32) -> Div {
         .pb(px(10.0 * scale))
 }
 
-/// The selected computer's Chief, drawn as a project header: the fold chevron in the gutter (only
-/// with other computers' Chiefs), the flower in the project-icon column, "Chief", "Pick an agent"
+/// The selected computer's Chief, drawn as a project header: the fold chevron in the gutter
+/// (dimmed with no other computers' Chiefs), the flower in the project-icon column, "Chief", "Pick an agent"
 /// before its first open, its status dot. `outline` is drawn over
 /// it while its chat is open (the sidebar's selected outline).
 pub(crate) fn chief_header_row(
@@ -81,19 +85,21 @@ pub(crate) fn chief_header_row(
     outline: Option<AnyElement>,
     status: Option<AnyElement>,
 ) -> Stateful<Div> {
-    let chevron = (fold != ChiefFold::Single).then(|| {
-        svg()
-            .path(CHEVRON_ICON)
-            .size(px(16.0 * scale))
-            .text_color(colors.muted)
-            .with_transformation(gpui::Transformation::rotate(gpui::percentage(
-                if fold == ChiefFold::Unfolded {
-                    0.25
-                } else {
-                    0.0
-                },
-            )))
-    });
+    let chevron = svg()
+        .path(CHEVRON_ICON)
+        .size(px(16.0 * scale))
+        .text_color(if fold == ChiefFold::Single {
+            colors.muted.opacity(DIMMED_CHEVRON)
+        } else {
+            colors.muted
+        })
+        .with_transformation(gpui::Transformation::rotate(gpui::percentage(
+            if fold == ChiefFold::Unfolded {
+                0.25
+            } else {
+                0.0
+            },
+        )));
     h_flex()
         .id("native-sidebar-chief")
         .role(gpui::Role::TreeItem)
@@ -114,15 +120,13 @@ pub(crate) fn chief_header_row(
         .when(focused, |row| {
             row.bg(colors.selected_fill).children(outline)
         })
-        .when_some(chevron, |row, chevron| {
-            row.child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .top(px(7.0 * scale))
-                    .child(chevron),
-            )
-        })
+        .child(
+            div()
+                .absolute()
+                .left_0()
+                .top(px(7.0 * scale))
+                .child(chevron),
+        )
         .child(flower(16.0 * scale, colors.muted))
         .child(
             div()

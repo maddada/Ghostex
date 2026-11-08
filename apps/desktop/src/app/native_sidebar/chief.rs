@@ -134,9 +134,9 @@ impl GhostexGpuiApp {
                     .id("native-sidebar-chief-fold")
                     .role(gpui::Role::Button)
                     .aria_label(if expanded {
-                        "Fold the other computers' Chiefs"
+                        "Fold Chief of Staff on the other computers"
                     } else {
-                        "Show the other computers' Chiefs"
+                        "Show Chief of Staff on the other computers"
                     })
                     .absolute()
                     .left_0()
@@ -441,7 +441,7 @@ impl GhostexGpuiApp {
                     Err(error) => {
                         app.dispatch_gpui_app_modal_toast(
                             "warning",
-                            "Chief isn't available",
+                            "Chief of Staff isn't available",
                             &error.message,
                             cx,
                         );
@@ -458,7 +458,7 @@ impl GhostexGpuiApp {
                     app.focus_native_sidebar_chief(&row_id, cx);
                     return;
                 }
-                let mut items = vec![json!({ "label": "Which agent runs Chief?", "disabled": true })];
+                let mut items = vec![json!({ "label": "Which agent runs Chief of Staff?", "disabled": true })];
                 items.extend(app.native_sidebar.chief_agents.iter().map(|(agent_id, name)| {
                     json!({
                         "label": name,
@@ -468,7 +468,7 @@ impl GhostexGpuiApp {
                 if items.len() == 1 {
                     app.dispatch_gpui_app_modal_toast(
                         "warning",
-                        "No agent can run Chief",
+                        "No agent can run Chief of Staff",
                         "Set up Claude, Codex or another coordinator agent in Settings > Agents first.",
                         cx,
                     );
@@ -521,7 +521,7 @@ impl GhostexGpuiApp {
                 }
                 Err(error) => app.dispatch_gpui_app_modal_toast(
                     "warning",
-                    "Chief didn't start",
+                    "Chief of Staff didn't start",
                     &error.message,
                     cx,
                 ),

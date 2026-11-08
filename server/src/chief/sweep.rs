@@ -14,6 +14,8 @@ const POLL: Duration = Duration::from_secs(5);
 pub(crate) fn start_chief_sweep(state: Arc<AppState>) {
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
+        let renamer = state.clone();
+        let _ = tokio::task::spawn_blocking(move || rename_old_title(&renamer)).await;
         let mut was_on: Option<bool> = None;
         let mut poll = crate::ticks::steady_interval(POLL);
         loop {
@@ -46,4 +48,39 @@ pub(crate) fn start_chief_sweep(state: Arc<AppState>) {
             .await;
         }
     });
+}
+
+/// A Chief session created before the rename (Q1896) is still titled "Chief": it becomes "Chief of
+/// Staff" once, at gxserver start. A title the user gave it is left alone.
+fn rename_old_title(state: &AppState) {
+    let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let Some(record) = super::read_record(&db) else {
+        return;
+    };
+    let repository = crate::domain::DomainRepository::new(&db, &state.metadata.server_id);
+    let titled_old = repository
+        .get_session(&record.project_id, &record.session_id)
+        .ok()
+        .flatten()
+        .is_some_and(|session| {
+            session.get("title").and_then(serde_json::Value::as_str) == Some(super::OLD_CHIEF_TITLE)
+        });
+    if !titled_old {
+        return;
+    }
+    let mut params = Map::new();
+    params.insert("projectId".into(), json!(record.project_id));
+    params.insert("sessionId".into(), json!(record.session_id));
+    params.insert("title".into(), json!(super::CHIEF_TITLE));
+    if repository.update_session(&params).is_ok() {
+        let _ = crate::server::schedule_presentation_session_delta(
+            state,
+            &db,
+            &repository,
+            &record.project_id,
+            &record.session_id,
+        );
+    }
 }

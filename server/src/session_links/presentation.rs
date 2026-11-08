@@ -23,7 +23,8 @@ use crate::work_mode::{
 };
 
 use super::{
-    parse_github_url, stored_session_links, SessionLinkKind, SessionLinkRef, SessionLinkSource,
+    linear_issue_url, parse_github_url, stored_session_links, SessionLinkKind, SessionLinkRef,
+    SessionLinkSource,
 };
 
 /// Suggestions a session sends at most: the lists show five and a "Show all" row for the rest
@@ -326,11 +327,12 @@ fn entry_value(
                 }
                 LinearIssueRead::Unread => None,
             };
-            insert_text(
-                &mut output,
-                "url",
-                url.or_else(|| entry.url.clone()).as_deref(),
-            );
+            // A ticket Linear was never asked about (no key, or another workspace's) opens at the
+            // page its team's workspace gives it (linear_workspaces.rs).
+            let url = url
+                .or_else(|| entry.url.clone())
+                .or_else(|| linear_issue_url(identifier));
+            insert_text(&mut output, "url", url.as_deref());
         }
         SessionLinkRef::Command { source, id } => {
             // What the command's own caches keep, `Unavailable` with its last title included;

@@ -1,0 +1,24 @@
+{
+  "locale": "en-US",
+  "packageName": "io.ghostex",
+  "versionName": "11.0.0",
+  "name": "Ghostex: AI Coding Agents",
+  "shortDescription": "Follow your coding agents, answer them, and open their terminal.",
+  "privacyPolicyUrl": "https://ghostex.dev/privacy-policy",
+  "supportUrl": "https://ghostex.dev/support",
+  "marketingUrl": "https://ghostex.dev",
+  "category": "PRODUCTIVITY",
+  "categoryNote": "Google Play has no Developer tools category. Productivity matches the App Store secondary category. Tools is the other fit.",
+  "contentRating": "18+",
+  "designedForChildren": false,
+  "free": true,
+  "containsAds": false,
+  "inAppPurchases": false,
+  "releaseNotes": "release-notes.en-US.txt",
+  "fullDescription": "description.en-US.txt",
+  "graphics": {
+    "icon": "graphics/icon-512.png",
+    "featureGraphic": "graphics/feature-graphic.png",
+    "phoneScreenshots": "graphics/phone"
+  }
+}
