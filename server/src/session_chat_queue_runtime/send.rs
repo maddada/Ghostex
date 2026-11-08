@@ -213,7 +213,66 @@ fn with_playbook_note(text: &str, note: Option<&(String, String)>) -> String {
     }
 }
 
+/// One lock per session, held by a chat message send from its screen read to its last retype.
+fn session_send_lock(project_id: &str, session_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+    static LOCKS: std::sync::OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> =
+        std::sync::OnceLock::new();
+    let Ok(mut locks) = LOCKS.get_or_init(Default::default).lock() else {
+        return Arc::new(tokio::sync::Mutex::new(()));
+    };
+    // Locks nobody holds or waits on are dropped, so the map stays as small as the live sessions.
+    if locks.len() > 256 {
+        locks.retain(|_, lock| Arc::strong_count(lock) > 1);
+    }
+    locks
+        .entry(format!("{project_id}|{session_id}"))
+        .or_default()
+        .clone()
+}
+
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// GitHub #505/#506 (Windows 11, a coordinator): "a user message I type often fails with 'Your
+/// message didn't arrive. The agent got a different message instead and answered that' … almost
+/// every time a thread report is delivered to the coordinator at about the same moment as my
+/// message. The report is typed into the terminal first; my text is left unsent in the input
+/// box." The per-session job queue (session_chat_send/queue.rs) keeps one job's clear, paste and
+/// Return together, but one message is several jobs: the main one, then on a slow screen the late
+/// paste watch, the clear-and-retype and the heal's repaint-and-retype, each queued only after the
+/// one before failed. A report's send and the user's send took turns between those jobs, so a
+/// retype could clear or submit the other's text, and each read its screen and sampled the
+/// transcript for its delivery check before the other had typed anything, so the other's row read
+/// as "a different message instead". A whole send now holds this lock from its screen read to its
+/// last retype: the user's message and the report go out one after the other, in the order they
+/// arrived, and each reads the screen and the transcript as the previous one left them.
+/// SEE-ALSO: session_chat_watchdog/delivery_match.rs (a message Ghostex typed is never "a
+/// different message").
 pub(crate) async fn send_session_chat_message_with_draft(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    text: &str,
+    image_paths: &[String],
+    source: SessionChatMessageSource,
+    draft_version: Option<&crate::session_chat_draft_versions::DraftVersion>,
+    interrupt: bool,
+) -> std::result::Result<usize, DomainStateError> {
+    let lock = session_send_lock(project_id, session_id);
+    let _owned = lock.lock().await;
+    send_session_chat_message_locked(
+        state,
+        project_id,
+        session_id,
+        text,
+        image_paths,
+        source,
+        draft_version,
+        interrupt,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn send_session_chat_message_locked(
     state: &AppState,
     project_id: &str,
     session_id: &str,
@@ -1039,6 +1098,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
         &target.project_id,
         &target.session_id,
     );
+    crate::session_chat_watchdog::note_ghostex_typed(&target.project_id, &target.session_id, text);
     // The user sent something new and the agent took it, so an older failure's card and dot are
     // dealt with; its row keeps its own reason, Retry and Remove. A row the queue sent on its own
     // says nothing about what the user has seen.

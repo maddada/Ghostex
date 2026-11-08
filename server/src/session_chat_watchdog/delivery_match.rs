@@ -106,9 +106,74 @@ pub(super) fn poll_transcript_for_send(
         return true;
     }
     if scan_for_mismatch {
-        observe_mismatched_input(probe.transcript_agent, cursor, &appended, needle);
+        let typed_by_ghostex = ghostex_typed_texts(&probe.project_id, &probe.session_id);
+        observe_mismatched_input(
+            probe.transcript_agent,
+            cursor,
+            &appended,
+            needle,
+            &typed_by_ghostex,
+        );
     }
     false
+}
+
+/// How long a message Ghostex typed into a session is remembered as its own (`note_ghostex_typed`).
+const GHOSTEX_TYPED_MEMORY: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+const GHOSTEX_TYPED_PER_SESSION: usize = 32;
+
+type GhostexTyped =
+    Mutex<HashMap<String, std::collections::VecDeque<(String, std::time::Instant)>>>;
+
+fn ghostex_typed() -> &'static GhostexTyped {
+    static TYPED: OnceLock<GhostexTyped> = OnceLock::new();
+    TYPED.get_or_init(Default::default)
+}
+
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// GitHub #505/#506: a coordinator's user message and a thread report were sent at about the same
+/// moment, and the user's message got "Your message didn't arrive: the agent got a different
+/// message instead": the different message was the report, which Ghostex typed itself. A user row
+/// that is a message Ghostex typed into this session (a chat send, a queued row, a report, another
+/// agent's message) proves only that that message arrived, not that ours was replaced, so the
+/// mismatch scan passes over it and goes on looking for ours. A stray or empty submission, the
+/// failure this scan exists for, still counts. Called once a send's Return was written.
+pub(crate) fn note_ghostex_typed(project_id: &str, session_id: &str, text: &str) {
+    let text = normalize_watchdog_text(text);
+    if text.is_empty() {
+        return;
+    }
+    let Ok(mut typed) = ghostex_typed().lock() else {
+        return;
+    };
+    typed.retain(|_, sent| {
+        sent.retain(|(_, at)| at.elapsed() < GHOSTEX_TYPED_MEMORY);
+        !sent.is_empty()
+    });
+    let sent = typed
+        .entry(format!("{project_id}|{session_id}"))
+        .or_default();
+    if sent.len() >= GHOSTEX_TYPED_PER_SESSION {
+        sent.pop_front();
+    }
+    sent.push_back((text, std::time::Instant::now()));
+}
+
+fn ghostex_typed_texts(project_id: &str, session_id: &str) -> Vec<String> {
+    ghostex_typed()
+        .lock()
+        .ok()
+        .and_then(|typed| {
+            typed
+                .get(&format!("{project_id}|{session_id}"))
+                .map(|sent| {
+                    sent.iter()
+                        .filter(|(_, at)| at.elapsed() < GHOSTEX_TYPED_MEMORY)
+                        .map(|(text, _)| text.clone())
+                        .collect()
+                })
+        })
+        .unwrap_or_default()
 }
 
 fn user_message_matches(message: &SessionChatMessage, needle: &str) -> bool {
@@ -189,11 +254,19 @@ fn observe_mismatched_input(
     cursor: &mut WatchdogCursor,
     appended: &str,
     needle: &str,
+    typed_by_ghostex: &[String],
 ) {
     let mut mismatch: Option<bool> = None;
     let mut agent_answered = false;
     for line in appended.lines() {
         match classify_watchdog_record(agent, line) {
+            // Another message Ghostex typed here arrived; it did not take our place.
+            Some(WatchdogRecord::UserSubmission(text))
+                if mismatch.is_none()
+                    && !watchdog_text_matches(&text, needle)
+                    && typed_by_ghostex
+                        .iter()
+                        .any(|typed| typed != needle && watchdog_text_matches(&text, typed)) => {}
             Some(WatchdogRecord::UserSubmission(text)) => {
                 if mismatch.is_none() && !watchdog_text_matches(&text, needle) {
                     mismatch = Some(text.trim().is_empty());
