@@ -302,7 +302,7 @@ impl AutomationDialog {
             "automation-dialog-save",
             "Save",
             self.saving
-                .then(|| modal_spinner(self.palette.primary_foreground)),
+                .then(|| modal_spinner(self.palette.primary_button_text())),
             ModalButtonTone::Primary,
             self.saving,
             |this: &mut Self, window, cx| this.save(window, cx),

@@ -1961,7 +1961,7 @@ impl GpuiExportTranscriptModalWindow {
                     modal_icon(
                         if copied { ICON_CHECK_BUTTON } else { ICON_COPY },
                         15.0,
-                        p.primary_foreground,
+                        p.primary_button_text(),
                     )
                     .into_any_element(),
                 ),
@@ -1975,7 +1975,7 @@ impl GpuiExportTranscriptModalWindow {
                 &p,
                 "export-transcript-primary",
                 self.primary_label(),
-                self.busy().then(|| modal_spinner(p.primary_foreground)),
+                self.busy().then(|| modal_spinner(p.primary_button_text())),
                 ModalButtonTone::Primary,
                 !self.can_run(),
                 |this, _window, cx| this.run(cx),

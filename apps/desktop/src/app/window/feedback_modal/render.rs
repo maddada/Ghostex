@@ -200,7 +200,7 @@ impl GpuiFeedbackModalWindow {
                     &p,
                     "feedback-open-in-browser",
                     "Open a GitHub issue in your browser",
-                    self.busy.then(|| modal_spinner(p.primary_foreground)),
+                    self.busy.then(|| modal_spinner(p.primary_button_text())),
                     ModalButtonTone::Primary,
                     self.busy,
                     |this, _window, cx| this.open_offline_issue(cx),
@@ -226,7 +226,7 @@ impl GpuiFeedbackModalWindow {
 
     fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
-        let spinner = || self.busy.then(|| modal_spinner(p.primary_foreground));
+        let spinner = || self.busy.then(|| modal_spinner(p.primary_button_text()));
         let buttons = match &self.step {
             FeedbackStep::Compose => vec![
                 modal_action_button(

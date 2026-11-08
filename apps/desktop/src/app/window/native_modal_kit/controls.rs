@@ -298,14 +298,7 @@ fn modal_action_button_bound(
     let p = *p;
     let (fills, text) = match tone {
         ModalButtonTone::Neutral => (neutral_button_fills(p.light), p.foreground),
-        ModalButtonTone::Primary => (
-            ButtonFills {
-                rest: p.primary,
-                hover: p.primary_hover(),
-                pressed: css_mix(p.primary, 0.8, gpui::rgb(0xffffff)),
-            },
-            p.primary_foreground,
-        ),
+        ModalButtonTone::Primary => (p.primary_button_fills(), p.primary_button_text()),
         ModalButtonTone::Danger => (
             destructive_button_fills(p.destructive, p.light),
             p.destructive,

@@ -760,7 +760,8 @@ impl GpuiRemoteSetupModalWindow {
         let p = self.palette;
         let disabled = !self.gxserver_available || self.connecting;
         let connecting = self.connecting;
-        let hover = rgba_of(p.primary, p.primary.a * 0.8);
+        let fills = p.primary_button_fills();
+        let label = p.primary_button_text();
         h_flex()
             .id("remote-setup-connect")
             .flex_shrink_0()
@@ -770,15 +771,15 @@ impl GpuiRemoteSetupModalWindow {
             .items_center()
             .justify_center()
             .rounded(px(MODAL_RADIUS_CONTROL))
-            .bg(hsla(p.primary))
+            .bg(hsla(fills.rest))
             .text_size(px(14.0))
             .line_height(px(20.0))
-            .text_color(hsla(p.primary_foreground))
+            .text_color(hsla(label))
             .whitespace_nowrap()
             .when(disabled, |this| this.opacity(0.5).cursor_default())
             .when(!disabled, |this| {
                 this.cursor_pointer()
-                    .hover(move |this| this.bg(hsla(hover)))
+                    .hover(move |this| this.bg(hsla(fills.hover)))
                     .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
                         this.connect(cx);
                     }))
@@ -787,9 +788,9 @@ impl GpuiRemoteSetupModalWindow {
                 this.tooltip(|window, cx| Tooltip::new(NO_SERVER_MESSAGE).build(window, cx))
             })
             .child(if connecting {
-                self.render_spinner(p.primary_foreground)
+                self.render_spinner(label)
             } else {
-                modal_icon(ICON_QRCODE_BUTTON, 16.0, p.primary_foreground).into_any_element()
+                modal_icon(ICON_QRCODE_BUTTON, 16.0, label).into_any_element()
             })
             .child(if connecting { CONNECTING } else { CONNECT })
             .into_any_element()

@@ -1190,7 +1190,10 @@ impl GpuiCreateWorktreeModalWindow {
             (rgb(0x27272a), rgb(0xfafafa))
         };
         let (background, text, hover) = if primary {
-            (p.primary, p.primary_foreground, rgba_of(p.primary, 0.8))
+            {
+                let fills = p.primary_button_fills();
+                (fills.rest, p.primary_button_text(), fills.hover)
+            }
         } else {
             // `hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]`.
             (

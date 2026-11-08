@@ -77,13 +77,17 @@ pub(crate) fn sized_button_colors(
             destructive_button_fills(p.destructive, p.light),
             p.destructive,
         ),
+        SizedButtonVariant::Primary if p.modal.light => (
+            p.modal.primary_button_fills(),
+            p.modal.primary_button_text(),
+        ),
         SizedButtonVariant::Primary => (
             ButtonFills {
                 rest: p.primary,
                 hover: css_fade(p.primary, 0.8),
                 pressed: css_fade(p.primary, 0.7),
             },
-            p.modal.primary_foreground,
+            p.modal.primary_button_text(),
         ),
     }
 }

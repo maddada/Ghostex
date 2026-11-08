@@ -8,6 +8,7 @@ Environment:
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
     GHOSTEX_NATIVE_MODAL_DEMO_SIDEBAR_THEME=dark-green|...    (a dark theme's text colours)
     GHOSTEX_NATIVE_MODAL_DEMO_CHROME=<rrggbb>                 (tint the modal from a theme chrome)
+    GHOSTEX_NATIVE_MODAL_DEMO_GLASS=1                         (the frosted dialog palette, as under window glass)
     GHOSTEX_NATIVE_MODAL_DEMO_STATE=<per-modal state name>    (default: the opening state)
     GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND=1                    (open without taking focus, for screenshots)
     GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT=<png>                  (any preview, built with
@@ -222,13 +223,20 @@ fn demo_palette() -> ModalPalette {
         env("GHOSTEX_NATIVE_MODAL_DEMO_THEME") == "light",
         (!sidebar_theme.is_empty()).then_some(sidebar_theme.as_str()),
     );
-    match u32::from_str_radix(
+    let palette = match u32::from_str_radix(
         env("GHOSTEX_NATIVE_MODAL_DEMO_CHROME").trim_start_matches('#'),
         16,
     ) {
         Ok(chrome) => palette.tinted(gpui::rgb(chrome)),
         Err(_) => palette,
+    };
+    // The form dialogs' palette under window glass: the surface at the macOS frosted alpha (75%
+    // light, 60% dark, helpers/window_glass.rs), over whatever the snapshot is laid on.
+    if env("GHOSTEX_NATIVE_MODAL_DEMO_GLASS") == "1" {
+        let alpha = if palette.light { 0.75 } else { 0.6 };
+        return palette.frosted_dialog(native_modal_kit::rgba_of(palette.surface, alpha));
     }
+    palette
 }
 
 /// Opens one modal window the way the app does: centered, borderless, at the

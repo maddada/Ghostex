@@ -312,6 +312,40 @@ impl ModalPalette {
         css_mix(self.primary, 0.88, rgb(0xffffff))
     }
 
+    /// The main button's fill (Save, Create, Approve, Connect): in light a frosted grey, a step
+    /// stronger than [`neutral_button_fills`], never a near-black slab; in dark the light
+    /// `primary` fill. Checkboxes, slider ranges and links keep `primary`.
+    ///
+    /// CDXC:AppModal 2026-11-08 DECISION:
+    /// User's standing rule: never black or near-black fills on glass or transparent UI. The light
+    /// main button was `#262626` in every dialog and Settings page; it is now this grey, under
+    /// window glass and on the opaque light surface alike, so a light dialog looks the same with
+    /// glass on or off and the main button still stands out from Cancel (0.16 ink against 0.07).
+    /// Supersedes the notice modal's own light override (window/notice_modal.rs, same day).
+    pub(crate) fn primary_button_fills(&self) -> ButtonFills {
+        if self.light {
+            return ButtonFills {
+                rest: modal_rgba(0x000000, 0.16),
+                hover: modal_rgba(0x000000, 0.21),
+                pressed: modal_rgba(0x000000, 0.26),
+            };
+        }
+        ButtonFills {
+            rest: self.primary,
+            hover: self.primary_hover(),
+            pressed: css_mix(self.primary, 0.8, rgb(0xffffff)),
+        }
+    }
+
+    /// The label, icon and spinner colour on [`Self::primary_button_fills`].
+    pub(crate) fn primary_button_text(&self) -> Rgba {
+        if self.light {
+            self.foreground
+        } else {
+            self.primary_foreground
+        }
+    }
+
     /// The Windows modal window's system border: 16% ink over the surface, so it stays visible against the same-coloured app chrome.
     pub(crate) fn window_border(&self) -> Rgba {
         let ink = if self.light { 0x000000 } else { 0xffffff };

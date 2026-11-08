@@ -429,7 +429,8 @@ impl GpuiRenameSessionModalWindow {
             } else {
                 GENERATE_NAME
             },
-            self.generating.then(|| modal_spinner(p.primary_foreground)),
+            self.generating
+                .then(|| modal_spinner(p.primary_button_text())),
             ModalButtonTone::Primary,
             !self.can_generate(),
             |this, window, cx| this.generate_name(window, cx),

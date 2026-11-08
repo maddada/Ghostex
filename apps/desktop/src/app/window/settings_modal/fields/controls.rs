@@ -219,7 +219,7 @@ impl ButtonSize {
 /// The label colour of a button variant.
 fn button_text(p: &SettingsPalette, variant: ButtonVariant) -> gpui::Rgba {
     match variant {
-        ButtonVariant::Primary => p.modal.primary_foreground,
+        ButtonVariant::Primary => p.modal.primary_button_text(),
         ButtonVariant::Destructive | ButtonVariant::DestructiveDialog => p.destructive,
         _ => p.foreground,
     }
@@ -243,6 +243,9 @@ fn button_colors(p: &SettingsPalette, variant: ButtonVariant) -> ButtonFills {
             }
         }
         // `hover:bg-primary/80`.
+        // The kit's main button: a frosted grey in light (CDXC:AppModal 2026-11-08 in
+        // native_modal_kit/palette.rs), `hover:bg-primary/80` in dark.
+        ButtonVariant::Primary if p.modal.light => p.modal.primary_button_fills(),
         ButtonVariant::Primary => ButtonFills {
             rest: p.primary,
             hover: css_fade(p.primary, 0.8),
