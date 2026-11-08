@@ -88,11 +88,17 @@ impl GhostexGpuiApp {
             return None;
         }
         let scale = appearance.scale;
-        let local = snapshot.chiefs.iter().find(|chief| chief.is_local);
+        // The selected computer's Chief is the main row (this computer's with computers combined,
+        // the tab's own with Separate by machine); the others fold under "+N".
+        let selected = snapshot.selected_machine_id.as_str();
+        let local = snapshot
+            .chiefs
+            .iter()
+            .find(|chief| chief.machine_id == selected);
         let others: Vec<&NativeSidebarChief> = snapshot
             .chiefs
             .iter()
-            .filter(|chief| !chief.is_local)
+            .filter(|chief| chief.machine_id != selected)
             .collect();
         let expanded = self.native_sidebar.chief_others_expanded && !others.is_empty();
         let owner = self.native_sidebar.chief_row_bounds.clone();
@@ -212,11 +218,14 @@ impl GhostexGpuiApp {
                 })
             })
             .collect();
-        let has_chief = self
+        let has_chief = self.native_sidebar_main_chief().is_some();
+        let this_computer = self
             .native_sidebar
             .snapshot
             .as_ref()
-            .is_some_and(|snapshot| snapshot.chiefs.iter().any(|chief| chief.is_local));
+            .is_none_or(|snapshot| {
+                snapshot.selected_machine_id == ghostex_gx_core::LOCAL_MACHINE_ID
+            });
         let mut items = vec![
             json!({ "label": "New Chat", "icon": "plus", "disabled": !has_chief, "command": chief_command("newChat") }),
         ];
@@ -228,7 +237,7 @@ impl GhostexGpuiApp {
         items.push(json!({ "label": "Goal & Instructions…", "icon": "target", "disabled": !has_chief, "command": chief_command("goal") }));
         items.push(json!({ "label": "Memory…", "icon": "brain", "disabled": !has_chief, "command": chief_command("memory") }));
         // The page has no settings file of its own to turn the extension off in.
-        if cfg!(not(target_arch = "wasm32")) {
+        if cfg!(not(target_arch = "wasm32")) && this_computer {
             items.push(json!({ "separator": true }));
             items.push(json!({ "label": "Disable Extension", "icon": "power", "command": chief_command("disable") }));
         }
@@ -242,11 +251,7 @@ impl GhostexGpuiApp {
         window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let local = self
-            .native_sidebar
-            .snapshot
-            .as_ref()
-            .and_then(|snapshot| snapshot.chiefs.iter().find(|chief| chief.is_local).cloned());
+        let local = self.native_sidebar_main_chief();
         match command
             .get("op")
             .and_then(Value::as_str)
@@ -293,6 +298,69 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// The selected computer's Chief.
+    fn native_sidebar_main_chief(&self) -> Option<NativeSidebarChief> {
+        let snapshot = self.native_sidebar.snapshot.as_ref()?;
+        snapshot
+            .chiefs
+            .iter()
+            .find(|chief| chief.machine_id == snapshot.selected_machine_id)
+            .cloned()
+    }
+
+    /// Where `/api/chief` goes: `None` for this computer, the tunnel of the selected remote one.
+    /// `Err` when that computer is not connected.
+    fn native_sidebar_chief_target(
+        &self,
+    ) -> Result<Option<crate::app::model::GpuiRemoteGxserverRequestTarget>, ()> {
+        let machine_id = self
+            .native_sidebar
+            .snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.selected_machine_id.clone())
+            .unwrap_or_default();
+        if machine_id.is_empty() || machine_id == ghostex_gx_core::LOCAL_MACHINE_ID {
+            return Ok(None);
+        }
+        self.gpui_remote_gxserver_request_target(&machine_id)
+            .map(Some)
+            .ok_or(())
+    }
+
+    /// The sidebar id of session `project_id`/`session_id` on the selected computer.
+    fn native_sidebar_chief_row_id(&self, project_id: &str, session_id: &str) -> String {
+        let machine = match self.native_sidebar.snapshot.as_ref() {
+            Some(snapshot) if snapshot.selected_machine_id != ghostex_gx_core::LOCAL_MACHINE_ID => {
+                ghostex_gx_core::MachineId::Remote(snapshot.selected_machine_id.clone())
+            }
+            _ => ghostex_gx_core::MachineId::Local,
+        };
+        ghostex_gx_core::SessionKey {
+            machine,
+            project_id: project_id.to_string(),
+            session_id: session_id.to_string(),
+        }
+        .to_sidebar_session_id()
+    }
+
+    fn chief_target_or_toast(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<Option<crate::app::model::GpuiRemoteGxserverRequestTarget>> {
+        match self.native_sidebar_chief_target() {
+            Ok(target) => Some(target),
+            Err(()) => {
+                self.dispatch_gpui_app_modal_toast(
+                    "warning",
+                    "That computer is not connected",
+                    "",
+                    cx,
+                );
+                None
+            }
+        }
+    }
+
     /// Opens a Chief's chat like a click on its session card would.
     fn focus_native_sidebar_chief(
         &mut self,
@@ -332,10 +400,13 @@ impl GhostexGpuiApp {
             app.native_sidebar.chief_agent_id =
                 status["chief"]["agentId"].as_str().map(str::to_string);
         };
+        let Some(target) = self.chief_target_or_toast(cx) else {
+            return;
+        };
         let Some(window) = pick else {
             cx.spawn(async move |this, cx| {
                 let status =
-                    crate::app::gx_store::gx_rpc(None, "/api/chief", json!({ "op": "status" }))
+                    crate::app::gx_store::gx_rpc(target, "/api/chief", json!({ "op": "status" }))
                         .await;
                 if let Ok(status) = status {
                     let _ = this.update(cx, |app, _| remember(app, &status));
@@ -347,7 +418,7 @@ impl GhostexGpuiApp {
         let owner = self.native_sidebar.chief_row_bounds.clone();
         cx.spawn_in(window, async move |this, cx| {
             let status =
-                crate::app::gx_store::gx_rpc(None, "/api/chief", json!({ "op": "status" })).await;
+                crate::app::gx_store::gx_rpc(target, "/api/chief", json!({ "op": "status" })).await;
             let _ = this.update_in(cx, |app, window, cx| {
                 let status = match status {
                     Ok(status) => status,
@@ -367,11 +438,8 @@ impl GhostexGpuiApp {
                     status["chief"]["projectId"].as_str(),
                     status["chief"]["sessionId"].as_str(),
                 ) {
-                    app.focus_native_sidebar_chief(
-                        &ghostex_gx_core::SessionKey::local(project_id.to_string(), session_id.to_string())
-                            .to_sidebar_session_id(),
-                        cx,
-                    );
+                    let row_id = app.native_sidebar_chief_row_id(project_id, session_id);
+                    app.focus_native_sidebar_chief(&row_id, cx);
                     return;
                 }
                 let mut items = vec![json!({ "label": "Which agent runs Chief?", "disabled": true })];
@@ -417,8 +485,11 @@ impl GhostexGpuiApp {
 
     /// `open` (first open with the picked agent), `newChat` or `setAgent`, then opens the chat.
     fn change_native_sidebar_chief(&mut self, params: Value, cx: &mut gpui::Context<Self>) {
+        let Some(target) = self.chief_target_or_toast(cx) else {
+            return;
+        };
         cx.spawn(async move |this, cx| {
-            let answer = crate::app::gx_store::gx_rpc(None, "/api/chief", params).await;
+            let answer = crate::app::gx_store::gx_rpc(target, "/api/chief", params).await;
             let _ = this.update(cx, |app, cx| match answer {
                 Ok(result) => {
                     let chief = &result["chief"];
@@ -428,14 +499,8 @@ impl GhostexGpuiApp {
                     if let (Some(project_id), Some(session_id)) =
                         (chief["projectId"].as_str(), chief["sessionId"].as_str())
                     {
-                        app.focus_native_sidebar_chief(
-                            &ghostex_gx_core::SessionKey::local(
-                                project_id.to_string(),
-                                session_id.to_string(),
-                            )
-                            .to_sidebar_session_id(),
-                            cx,
-                        );
+                        let row_id = app.native_sidebar_chief_row_id(project_id, session_id);
+                        app.focus_native_sidebar_chief(&row_id, cx);
                     }
                 }
                 Err(error) => app.dispatch_gpui_app_modal_toast(

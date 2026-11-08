@@ -53,6 +53,9 @@ pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     "/api/readAgentHookStatus",
     "/api/installAgentHooks",
     "/api/uninstallAgentHooks",
+    // `ghostex chief send --computer <name>` reads that computer's Chief here (`status`); the
+    // handler refuses a peer anything but `status` and `guide` (chief/endpoint.rs).
+    "/api/chief",
     // Settings sync: one exchange trades both computers' synced settings (server/src/settings_sync/).
     "/api/settingsSyncExchange",
 ];
