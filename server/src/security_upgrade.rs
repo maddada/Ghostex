@@ -610,13 +610,15 @@ pub(crate) fn view_with_pairings(
             }));
         }
     }
-    let ssh_phones = if ssh_pending.is_some() || ssh.recent > 0 || ssh.paired_since_update > 0 {
+    /*
+    CDXC:Security 2026-11-09 DECISION:
+    Discord #ios (11.2.0): "in macos app it's asking me to pair my phone again (but says that I need to turn Easy Connect on, but I have my iphone connected through tailscale). I clicked on remind me later, and it still works." User: "shouldn't show it if you didn't use easy pass before." A phone that signs in over Tailscale or SSH keeps connecting after the update, so it never makes the notice open, the "can't connect until you pair it again" line show, or the count go up on its own: its row shows only once such a phone asks to pair (its words wait for Approve) or has paired. This replaces the 2026-11-08 decision above that opened the notice for phones seen over SSH lately.
+    */
+    let ssh_phones = if ssh_pending.is_some() || ssh.paired_since_update > 0 {
         let status = if ssh_pending.is_some() {
             RowStatus::Pending
-        } else if ssh.paired_since_update > 0 {
-            RowStatus::Paired
         } else {
-            RowStatus::Waiting
+            RowStatus::Paired
         };
         let mut row = json!({
             "id": "ssh-phones",
