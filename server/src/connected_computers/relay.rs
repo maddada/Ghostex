@@ -132,7 +132,7 @@ pub(crate) async fn relay(
     let outcome = tokio::task::spawn_blocking(move || {
         // The grant goes only to a listener of this account: the tunnel's port, once freed, could
         // be someone else's (ghostex_paths::loopback_owner).
-        ghostex_paths::loopback_owner::check_url(&url).map(|()| {
+        computer.check_listener(&url).map(|()| {
             forward(
                 &method,
                 &url,

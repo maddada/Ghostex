@@ -21,6 +21,10 @@
 //! Desktop's ports belong to the user on macOS.
 //! When nothing listens, the request goes ahead and fails on its own. No protocol change, so every
 //! gxserver version still works.
+//! On Windows a listener this account can't open (another account's, or one running with an
+//! administrator's full token) is refused in its own words (2026-11-08), since Windows can't say
+//! which it is; the one exception is the SSH way back of a connected computer
+//! (`check_ssh_way_back_url`).
 //! The check runs on every call (review 2026-11-05): an earlier 5-second trust let a reconnect
 //! during a gxserver restart skip it, the very moment another account can take the port. Only the
 //! pid found last time is remembered, and it is checked first (about 0.1 ms on macOS).
@@ -36,15 +40,33 @@ use std::sync::{Mutex, OnceLock};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForeignListener {
     pub port: u16,
+    pub listener: Listener,
+}
+
+/// What is known about a `ForeignListener`, for the refusal's wording.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Listener {
+    /// A process of another account.
+    OtherAccount,
     /// Ghostex's service itself runs as root there (started with sudo): macOS can't tell root's
     /// listener apart from another account's, so the refusal says which it most likely is.
-    pub root: bool,
+    RootService,
+    /// Windows: a process Windows won't show this account (another account's, or one run as
+    /// administrator), so its account can't be compared.
+    Hidden,
+    /// Windows: an SSH login to this computer holds the port (a remote forward of the OpenSSH
+    /// Server), and Windows won't show which account that login is.
+    SshLogin,
 }
 
 /// How a `ForeignListener` refusal starts, so a client that only has the text can tell it apart.
 const FOREIGN_LISTENER_PREFIX: &str = "Another account on this computer is listening on";
 /// How the refusal starts when Ghostex's service runs as root.
 const ROOT_LISTENER_PREFIX: &str = "Ghostex's service is running as root";
+/// How the refusal starts when Windows hides the listener's account.
+const HIDDEN_LISTENER_PREFIX: &str = "A program Ghostex can't identify is listening on";
+/// How the refusal starts when an SSH login holds the port.
+const SSH_LISTENER_PREFIX: &str = "An SSH login to this computer is listening on";
 /// Words every refusal has, old and new, for a client that only reads the text (the remote
 /// computer's token read in the desktop app greps for them).
 pub const REFUSAL_MARKER: &str = "so Ghostex did not send it the access token";
@@ -56,23 +78,48 @@ pub const FOREIGN_LISTENER_CODE: &str = "foreignListener";
 
 /// Whether an error message is a `ForeignListener` refusal.
 pub fn is_foreign_listener_message(message: &str) -> bool {
-    message.starts_with(FOREIGN_LISTENER_PREFIX) || message.starts_with(ROOT_LISTENER_PREFIX)
+    [
+        FOREIGN_LISTENER_PREFIX,
+        ROOT_LISTENER_PREFIX,
+        HIDDEN_LISTENER_PREFIX,
+        SSH_LISTENER_PREFIX,
+    ]
+    .iter()
+    .any(|prefix| message.starts_with(prefix))
+}
+
+/// How to name the program on `port`, in this platform's own terms.
+fn find_listener_hint(port: u16) -> String {
+    if cfg!(windows) {
+        format!("`Get-NetTCPConnection -LocalPort {port} -State Listen` shows its process id")
+    } else {
+        format!("an administrator can find it with `sudo lsof -nP -iTCP:{port} -sTCP:LISTEN`")
+    }
 }
 
 impl fmt::Display for ForeignListener {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.root {
-            return write!(
+        let port = self.port;
+        match self.listener {
+            Listener::RootService => write!(
                 formatter,
-                "{ROOT_LISTENER_PREFIX} (it was started with sudo) and listens on 127.0.0.1:{port}, {REFUSAL_MARKER}. Stop it (`sudo lsof -nP -iTCP:{port} -sTCP:LISTEN` names it), then start Ghostex again without sudo.",
-                port = self.port
-            );
+                "{ROOT_LISTENER_PREFIX} (it was started with sudo) and listens on 127.0.0.1:{port}, {REFUSAL_MARKER}. Stop it (`sudo lsof -nP -iTCP:{port} -sTCP:LISTEN` names it), then start Ghostex again without sudo."
+            ),
+            Listener::OtherAccount => write!(
+                formatter,
+                "{FOREIGN_LISTENER_PREFIX} 127.0.0.1:{port}, where Ghostex's service should be, {REFUSAL_MARKER}. Stop that program ({hint}), then start Ghostex again.",
+                hint = find_listener_hint(port)
+            ),
+            Listener::Hidden => write!(
+                formatter,
+                "{HIDDEN_LISTENER_PREFIX} 127.0.0.1:{port}, where Ghostex's service should be, {REFUSAL_MARKER}. It belongs to another account or runs as administrator, which Windows doesn't let Ghostex tell apart. Stop that program ({hint}), then start Ghostex again.",
+                hint = find_listener_hint(port)
+            ),
+            Listener::SshLogin => write!(
+                formatter,
+                "{SSH_LISTENER_PREFIX} 127.0.0.1:{port}, where Ghostex's service should be, {REFUSAL_MARKER}. Windows doesn't show which account that login is. Close that SSH connection, then start Ghostex again."
+            ),
         }
-        write!(
-            formatter,
-            "{FOREIGN_LISTENER_PREFIX} 127.0.0.1:{port}, where Ghostex's service should be, {REFUSAL_MARKER}. Stop that program (an administrator can find it with `sudo lsof -nP -iTCP:{port} -sTCP:LISTEN`), then start Ghostex again.",
-            port = self.port
-        )
     }
 }
 
@@ -85,6 +132,13 @@ enum Owner {
     Ours(Option<u32>),
     /// Another account (or the system).
     Other,
+    /// Windows: a process whose account Windows won't show this one.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    Hidden,
+    /// Windows: the OpenSSH Server holds the port for an SSH login whose account Windows won't
+    /// show (an administrator's SSH login runs elevated, out of a normal process's sight).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    SshLogin,
     /// Nothing listens.
     Nobody,
 }
@@ -106,6 +160,36 @@ pub fn check_url(url: &str) -> Result<(), ForeignListener> {
 
 /// Refuses when `host` is a loopback address and another account listens on `port`.
 pub fn check_host_port(host: &str, port: u16) -> Result<(), ForeignListener> {
+    check(host, port, false)
+}
+
+/// `check_url` for the way back of a computer that connected to this one over SSH (its `ssh -R`
+/// forward, which it registered here with this computer's token): on Windows the OpenSSH Server
+/// holds that port for the other computer's SSH login, and when that login is an administrator's
+/// Windows won't show its account, so a listener of the OpenSSH Server passes here.
+///
+/// CDXC:RemoteMachines 2026-11-08 WHY:
+/// A Mac connected to a Windows PC could not reach any session there: the PC's OpenSSH Server held
+/// the Mac's way back on 127.0.0.1:8875 in the per-login `sshd` process, which runs with the full
+/// administrator token of the account the Mac logs in as. A non-elevated gxserver of that same
+/// account cannot open the process (OpenProcess, WMI and WTS all say access denied), so the owner
+/// check called it another account and refused every send, read and start. Only this way back
+/// accepts it, and only when Windows' own process list shows the listener and its parents up to
+/// the `sshd` service are OpenSSH processes started in order (a reused pid can't pass); every other
+/// check, gxserver's own port included, still refuses it. What is left: an account that can log in
+/// over SSH here could take the port after the forward dies and before the registration lapses;
+/// the token it collects opens only the other computer's way-back listener, which sits on that
+/// computer's loopback.
+/// SEE-ALSO: server/src/connected_computers/registry.rs (`ConnectedComputer::check_listener`),
+/// apps/desktop/src/app/helpers/remote/reverse_tunnel.rs (opens the forward).
+pub fn check_ssh_way_back_url(url: &str) -> Result<(), ForeignListener> {
+    let Some((host, port)) = url_host_port(url) else {
+        return Ok(());
+    };
+    check(&host, port, true)
+}
+
+fn check(host: &str, port: u16, accept_ssh_login: bool) -> Result<(), ForeignListener> {
     if !is_loopback_host(host) {
         return Ok(());
     }
@@ -120,13 +204,15 @@ pub fn check_host_port(host: &str, port: u16) -> Result<(), ForeignListener> {
             _ => pids.remove(&port),
         };
     }
-    match owner {
-        Owner::Other => Err(ForeignListener {
-            port,
-            root: runs_as_root(port),
-        }),
-        Owner::Ours(_) | Owner::Nobody => Ok(()),
-    }
+    let listener = match owner {
+        Owner::Ours(_) | Owner::Nobody => return Ok(()),
+        Owner::SshLogin if accept_ssh_login => return Ok(()),
+        Owner::SshLogin => Listener::SshLogin,
+        Owner::Hidden => Listener::Hidden,
+        Owner::Other if runs_as_root(port) => Listener::RootService,
+        Owner::Other => Listener::OtherAccount,
+    };
+    Err(ForeignListener { port, listener })
 }
 
 /// Ghostex's service runs as root (a `sudo gxserver start`). Only macOS refuses root's
@@ -261,11 +347,16 @@ fn listener_owner(port: u16, known_pid: Option<u32>) -> Owner {
 
 #[cfg(windows)]
 fn listener_owner(port: u16, _known_pid: Option<u32>) -> Owner {
-    match windows::listening_pid(port) {
-        Some(pid) if windows::trusted_user(pid) => Owner::Ours(Some(pid)),
-        Some(_) => Owner::Other,
-        // No IPv4 listener there, or the table could not be read: the request goes ahead.
-        None => Owner::Nobody,
+    // No IPv4 listener there, or the table could not be read: the request goes ahead and fails
+    // on its own ("didn't answer"), never as another account's.
+    let Some(pid) = windows::listening_pid(port) else {
+        return Owner::Nobody;
+    };
+    match windows::process_user(pid) {
+        windows::ProcessUser::Trusted => Owner::Ours(Some(pid)),
+        windows::ProcessUser::Other => Owner::Other,
+        windows::ProcessUser::Hidden if windows::is_openssh_login(pid) => Owner::SshLogin,
+        windows::ProcessUser::Hidden => Owner::Hidden,
     }
 }
 
@@ -435,6 +526,11 @@ mod macos {
 
 #[cfg(windows)]
 mod windows {
+    use std::collections::HashMap;
+
+    use windows_sys::Wdk::System::SystemInformation::{
+        NtQuerySystemInformation, SystemProcessInformation,
+    };
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, NO_ERROR};
     use windows_sys::Win32::NetworkManagement::IpHelper::{
         GetExtendedTcpTable, MIB_TCPROW_OWNER_PID, TCP_TABLE_OWNER_PID_LISTENER,
@@ -444,9 +540,14 @@ mod windows {
         EqualSid, GetTokenInformation, IsWellKnownSid, TokenUser, WinLocalSystemSid, TOKEN_QUERY,
         TOKEN_USER,
     };
+    use windows_sys::Win32::System::Services::{
+        CloseServiceHandle, OpenSCManagerW, OpenServiceW, QueryServiceStatusEx, SC_MANAGER_CONNECT,
+        SC_STATUS_PROCESS_INFO, SERVICE_QUERY_STATUS, SERVICE_RUNNING, SERVICE_STATUS_PROCESS,
+    };
     use windows_sys::Win32::System::Threading::{
         GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
     };
+    use windows_sys::Win32::System::WindowsProgramming::SYSTEM_PROCESS_INFORMATION;
 
     /// The pid listening on 127.0.0.1 or 0.0.0.0 at `port`, from the IPv4 listener table.
     pub(super) fn listening_pid(port: u16) -> Option<u32> {
@@ -492,14 +593,23 @@ mod windows {
         }
     }
 
-    /// `pid` runs as the same user as this process, or as SYSTEM (which can read the token file
-    /// anyway).
-    pub(super) fn trusted_user(pid: u32) -> bool {
+    /// Whose process `pid` is, as far as Windows shows this account.
+    pub(super) enum ProcessUser {
+        /// This account, or SYSTEM (which can read the token file anyway).
+        Trusted,
+        /// Another account.
+        Other,
+        /// Windows won't open the process or its token for this account: another account's, or
+        /// one running with an administrator's full token (an administrator's SSH login, for one).
+        Hidden,
+    }
+
+    pub(super) fn process_user(pid: u32) -> ProcessUser {
         // SAFETY: the handles opened here are closed before returning.
         unsafe {
             let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
             if process.is_null() {
-                return false;
+                return ProcessUser::Hidden;
             }
             let theirs = token_user(process);
             CloseHandle(process);
@@ -508,12 +618,163 @@ mod windows {
                 (Some(theirs), Some(ours)) => {
                     let theirs_user = theirs.as_ptr() as *const TOKEN_USER;
                     let ours_user = ours.as_ptr() as *const TOKEN_USER;
-                    EqualSid((*theirs_user).User.Sid, (*ours_user).User.Sid) != 0
+                    if EqualSid((*theirs_user).User.Sid, (*ours_user).User.Sid) != 0
                         || IsWellKnownSid((*theirs_user).User.Sid, WinLocalSystemSid) != 0
+                    {
+                        ProcessUser::Trusted
+                    } else {
+                        ProcessUser::Other
+                    }
                 }
-                _ => false,
+                _ => ProcessUser::Hidden,
             }
         }
+    }
+
+    /// One process in Windows' process list.
+    struct ProcessEntry {
+        parent: u32,
+        /// Creation time (100 ns since 1601), to tell a parent from a later process that reused
+        /// its pid.
+        created: i64,
+        image: String,
+    }
+
+    /// The OpenSSH Server's own processes: the service, and the per-login processes it starts
+    /// (`sshd-session` and `sshd-auth` since OpenSSH 9.8).
+    fn is_openssh_image(image: &str) -> bool {
+        ["sshd.exe", "sshd-session.exe", "sshd-auth.exe"]
+            .iter()
+            .any(|name| image.eq_ignore_ascii_case(name))
+    }
+
+    /// `pid` is a process of this computer's OpenSSH Server: it and every parent up to the `sshd`
+    /// service (as the Service Control Manager names it) are OpenSSH processes, each started after
+    /// its parent. Windows' process list names every process's parent and start time without
+    /// opening it, and no account but an administrator can start a process under the service.
+    pub(super) fn is_openssh_login(pid: u32) -> bool {
+        let Some(service) = sshd_service_pid() else {
+            return false;
+        };
+        let processes = process_list();
+        let mut current = pid;
+        // The service, the login's monitor, the login's own process; two more for new layouts.
+        for _ in 0..5 {
+            let Some(entry) = processes.get(&current) else {
+                return false;
+            };
+            if !is_openssh_image(&entry.image) {
+                return false;
+            }
+            if current == service {
+                return current != pid;
+            }
+            let Some(parent) = processes.get(&entry.parent) else {
+                return false;
+            };
+            if parent.created > entry.created {
+                return false;
+            }
+            current = entry.parent;
+        }
+        false
+    }
+
+    /// The pid of the running `sshd` service.
+    fn sshd_service_pid() -> Option<u32> {
+        let name: Vec<u16> = "sshd".encode_utf16().chain(std::iter::once(0)).collect();
+        // SAFETY: the handles opened here are closed before returning; `status` is the size passed.
+        unsafe {
+            let manager = OpenSCManagerW(std::ptr::null(), std::ptr::null(), SC_MANAGER_CONNECT);
+            if manager.is_null() {
+                return None;
+            }
+            let service = OpenServiceW(manager, name.as_ptr(), SERVICE_QUERY_STATUS);
+            let mut status: SERVICE_STATUS_PROCESS = std::mem::zeroed();
+            let mut needed = 0u32;
+            let ok = !service.is_null()
+                && QueryServiceStatusEx(
+                    service,
+                    SC_STATUS_PROCESS_INFO,
+                    &mut status as *mut _ as *mut u8,
+                    std::mem::size_of::<SERVICE_STATUS_PROCESS>() as u32,
+                    &mut needed,
+                ) != 0;
+            if !service.is_null() {
+                CloseServiceHandle(service);
+            }
+            CloseServiceHandle(manager);
+            (ok && status.dwCurrentState == SERVICE_RUNNING && status.dwProcessId != 0)
+                .then_some(status.dwProcessId)
+        }
+    }
+
+    /// Every process's parent, creation time and image name, from `NtQuerySystemInformation`.
+    fn process_list() -> HashMap<u32, ProcessEntry> {
+        const STATUS_INFO_LENGTH_MISMATCH: i32 = 0xC000_0004_u32 as i32;
+        let mut size: u32 = 512 * 1024;
+        for _ in 0..5 {
+            let mut buffer = vec![0u64; size as usize / 8 + 1];
+            let mut needed = 0u32;
+            // SAFETY: the buffer holds at least `size` bytes.
+            let status = unsafe {
+                NtQuerySystemInformation(
+                    SystemProcessInformation,
+                    buffer.as_mut_ptr() as *mut _,
+                    size,
+                    &mut needed,
+                )
+            };
+            if status == STATUS_INFO_LENGTH_MISMATCH {
+                size = needed.max(size) + 64 * 1024;
+                continue;
+            }
+            if status < 0 {
+                return HashMap::new();
+            }
+            let mut processes = HashMap::new();
+            let base = buffer.as_ptr() as *const u8;
+            let mut offset = 0usize;
+            loop {
+                // SAFETY: the kernel wrote a chain of entries inside the buffer, each starting at
+                // the previous entry plus its NextEntryOffset (0 ends it); the image name's buffer
+                // points inside the same allocation.
+                let entry = unsafe { &*(base.add(offset) as *const SYSTEM_PROCESS_INFORMATION) };
+                // CreateTime and InheritedFromUniqueProcessId sit in the fields windows-sys
+                // leaves reserved (winternl.h): CreateTime at Reserved1[24..32], the parent in
+                // Reserved2.
+                let created =
+                    i64::from_ne_bytes(entry.Reserved1[24..32].try_into().unwrap_or([0; 8]));
+                let image = if entry.ImageName.Buffer.is_null() {
+                    String::new()
+                } else {
+                    // SAFETY: Length is the name's size in bytes at Buffer.
+                    String::from_utf16_lossy(unsafe {
+                        std::slice::from_raw_parts(
+                            entry.ImageName.Buffer,
+                            usize::from(entry.ImageName.Length) / 2,
+                        )
+                    })
+                };
+                processes.insert(
+                    entry.UniqueProcessId as usize as u32,
+                    ProcessEntry {
+                        parent: entry.Reserved2 as usize as u32,
+                        created,
+                        image,
+                    },
+                );
+                if entry.NextEntryOffset == 0 {
+                    break;
+                }
+                offset += entry.NextEntryOffset as usize;
+                if offset >= size as usize {
+                    break;
+                }
+            }
+            return processes;
+        }
+        HashMap::new()
     }
 
     /// The TOKEN_USER of a process, in a buffer that keeps its SID alive.

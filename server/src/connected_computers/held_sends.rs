@@ -491,7 +491,7 @@ fn deliver_in_order(computer: &ConnectedComputer, sends: Vec<HeldSend>) {
 fn deliver(computer: &ConnectedComputer, send: &HeldSend) -> Delivery {
     let base = &computer.base_url;
     // The token goes only to a listener of this account (ghostex_paths::loopback_owner).
-    if ghostex_paths::loopback_owner::check_url(base).is_err() {
+    if computer.check_listener(base).is_err() {
         return Delivery::Wait;
     }
     let agent = crate::http_agent::answering_agent();

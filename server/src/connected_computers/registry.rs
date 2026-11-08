@@ -68,6 +68,19 @@ impl ConnectedComputer {
         &self.token
     }
 
+    /// Whether `url` (at this computer's address) may get its token: only a listener of this
+    /// account, or, for a computer that connected in, the OpenSSH Server holding its SSH way back
+    /// (ghostex_paths::loopback_owner::check_ssh_way_back_url).
+    pub(crate) fn check_listener(
+        &self,
+        url: &str,
+    ) -> Result<(), ghostex_paths::loopback_owner::ForeignListener> {
+        match self.direction {
+            Direction::Inbound => ghostex_paths::loopback_owner::check_ssh_way_back_url(url),
+            Direction::Outbound => ghostex_paths::loopback_owner::check_url(url),
+        }
+    }
+
     /// What `listConnectedComputers` shows: never the token or the address it is reached at.
     pub(crate) fn public_view(&self) -> Value {
         json!({
