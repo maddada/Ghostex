@@ -1,9 +1,10 @@
-//! Ghostex Collab's relay connector: while Ghostex Collab is on and a chat is shared, gxserver
-//! keeps one outgoing WebSocket to the share relay (share.ghostex.dev, `server/share-relay`) and
+//! Ghostex Collab's relay connector: while a chat is shared, the component keeps one outgoing
+//! WebSocket to the share relay (share.ghostex.dev, `server/share-relay`) and
 //! registers each shared chat's route there. Each guest connection the relay hands over is
-//! unlocked with the share's key (`collab::tunnel`), asked for its name and code, and then carries
-//! the guest page's own gxserver calls: `http` requests and the chat's `/api/events` stream, which
-//! this connector replays against this gxserver with the share's token, never the main one.
+//! unlocked with the share's key (`tunnel.rs`), asked for its name and code, and then carries
+//! the guest page's own gxserver calls: `http` requests and the chat's `/api/events` stream. Reads
+//! are replayed against gxserver's loopback listener with the share's token, never the main one;
+//! writes are answered here (guest.rs).
 //!
 //! Guest frames (JSON, inside the lock):
 //! - guest → host: `{t:"hello"}`, `{t:"join", name, code}`, `{t:"http", id, path, body}`,
@@ -13,27 +14,30 @@
 //!   `{t:"http", id, status, body}`, `{t:"ws-open", id}`, `{t:"ws", id, text}`, `{t:"ws-close", id}`.
 //!
 //! CDXC:Collab 2026-11-07 DECISION:
-//! User (Q1611): "gxserver keeps one outgoing connection to it only while Collab is on and a chat is shared."
+//! User (Q1611): "gxserver keeps one outgoing connection to it only while Collab is on and a chat is shared." Since #495 (Q1730) the component holds it, and Collab is on while installed.
 //! SEE-ALSO: apps/gpui-web/www/src/collab/tunnel.js (the guest's half).
-
-use super::*;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine as _;
 use futures_util::{SinkExt, StreamExt};
+use ghostex_gx_protocol::collab_component::{HostCall, COLLAB_VIEWER_HEADER};
+use serde_json::{json, Value};
 use subtle::ConstantTimeEq;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
-use crate::collab::{self, shares, tunnel::HostCipher};
+use crate::host::share_title;
+use crate::shares;
+use crate::tunnel::HostCipher;
 
 static CONNECTED: AtomicBool = AtomicBool::new(false);
 
 /// Whether the relay connection is up (Settings > Collab and the Share popover show it).
-pub(crate) fn relay_connected() -> bool {
+pub fn relay_connected() -> bool {
     CONNECTED.load(Ordering::Relaxed)
 }
 
@@ -45,65 +49,59 @@ const MAX_HTTP_BODY: usize = 32 << 20;
 /// `page_pin::RECHECK_MS`).
 const PAGE_CHECK_EVERY: Duration = Duration::from_secs(5 * 60);
 
-pub(crate) fn start_collab_connector(state: Arc<AppState>) {
-    super::collab_http::approvals::start(state.clone());
-    start_page_checks(state.clone());
-    tokio::spawn(async move {
-        let mut failures = 0usize;
-        loop {
-            super::collab_http::end_shares_of_missing_chats(&state);
-            let config = collab::read_config(&state.paths);
-            let wanted = config.enabled && !shares::list().is_empty();
-            if !wanted {
-                CONNECTED.store(false, Ordering::Relaxed);
+/// The connector, for the life of the sidecar.
+pub async fn run_forever() {
+    start_page_checks();
+    let mut failures = 0usize;
+    loop {
+        let _ = tokio::task::spawn_blocking(crate::owner::end_shares_of_missing_chats).await;
+        let wanted = !shares::list().is_empty();
+        if !wanted {
+            CONNECTED.store(false, Ordering::Relaxed);
+            failures = 0;
+            let _ = tokio::time::timeout(Duration::from_secs(60), crate::changed()).await;
+            continue;
+        }
+        let relay = crate::config::relay_url();
+        // CDXC:Collab 2026-11-08 DECISION:
+        // User (#495, Q1722): the guest page is pinned to this release; a relay serving any other page gets no shared chat registered, so no guest reaches one through it.
+        if !crate::page_pin::ensure_verified(&relay).await {
+            CONNECTED.store(false, Ordering::Relaxed);
+            republish_all();
+            let wait = Duration::from_millis(crate::page_pin::RETRY_MS as u64);
+            let _ = tokio::time::timeout(wait, crate::changed()).await;
+            continue;
+        }
+        let url = format!("{}/h", relay.replacen("http", "ws", 1));
+        match tokio_tungstenite::connect_async(url.as_str()).await {
+            Ok((socket, _)) => {
                 failures = 0;
-                let _ = tokio::time::timeout(Duration::from_secs(60), collab::changed()).await;
-                continue;
-            }
-            let relay = collab::config::relay_url();
-            // CDXC:Collab 2026-11-08 DECISION:
-            // User (#495, Q1722): the guest page is pinned to this release; a relay serving any other page gets no shared chat registered, so no guest reaches one through it.
-            if !collab::page_pin::ensure_verified(&relay).await {
+                CONNECTED.store(true, Ordering::Relaxed);
+                republish_all();
+                run(socket).await;
                 CONNECTED.store(false, Ordering::Relaxed);
-                republish_all(&state);
-                let wait = Duration::from_millis(collab::page_pin::RETRY_MS as u64);
-                let _ = tokio::time::timeout(wait, collab::changed()).await;
-                continue;
+                republish_all();
             }
-            let url = format!("{}/h", relay.replacen("http", "ws", 1));
-            match tokio_tungstenite::connect_async(url.as_str()).await {
-                Ok((socket, _)) => {
-                    failures = 0;
-                    CONNECTED.store(true, Ordering::Relaxed);
-                    republish_all(&state);
-                    run(&state, socket).await;
-                    CONNECTED.store(false, Ordering::Relaxed);
-                    republish_all(&state);
-                }
-                Err(error) => {
-                    tracing_log(&format!("Ghostex Collab couldn't reach {url}: {error}"));
-                    let wait = RETRY_DELAYS[failures.min(RETRY_DELAYS.len() - 1)];
-                    failures += 1;
-                    let _ =
-                        tokio::time::timeout(Duration::from_secs(wait), collab::changed()).await;
-                }
+            Err(error) => {
+                tracing_log(&format!("Ghostex Collab couldn't reach {url}: {error}"));
+                let wait = RETRY_DELAYS[failures.min(RETRY_DELAYS.len() - 1)];
+                failures += 1;
+                let _ = tokio::time::timeout(Duration::from_secs(wait), crate::changed()).await;
             }
         }
-    });
+    }
 }
 
 /// While a chat is shared, the relay's guest page is downloaded and checked again every hour;
 /// a failed check wakes the connector, which then drops the relay connection.
-fn start_page_checks(state: Arc<AppState>) {
+fn start_page_checks() {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(PAGE_CHECK_EVERY).await;
-            let config = collab::read_config(&state.paths);
-            if config.enabled
-                && !shares::list().is_empty()
-                && !collab::page_pin::ensure_verified(&collab::config::relay_url()).await
+            if !shares::list().is_empty()
+                && !crate::page_pin::ensure_verified(&crate::config::relay_url()).await
             {
-                collab::notify_changed();
+                crate::notify_changed();
             }
         }
     });
@@ -113,9 +111,9 @@ fn tracing_log(message: &str) {
     eprintln!("[collab] {message}");
 }
 
-fn republish_all(state: &AppState) {
+fn republish_all() {
     for share in shares::list() {
-        crate::server::republish_session_chat(state, &share.project_id, &share.session_id);
+        crate::sync::chat_changed(&share.project_id, &share.session_id);
     }
 }
 
@@ -155,7 +153,6 @@ impl Drop for Conn {
 type GuestOut = mpsc::UnboundedSender<(u64, Value)>;
 
 async fn run(
-    state: &Arc<AppState>,
     socket: tokio_tungstenite::WebSocketStream<
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
@@ -178,14 +175,14 @@ async fn run(
     let mut routes: HashMap<String, String> = HashMap::new();
     let mut conns: HashMap<u64, Conn> = HashMap::new();
     let mut ping = tokio::time::interval(PING_EVERY);
-    reconcile(state, &relay_tx, &mut routes, &mut conns);
+    reconcile(&relay_tx, &mut routes, &mut conns);
     loop {
         tokio::select! {
             frame = stream.next() => {
                 let Some(Ok(frame)) = frame else { break };
                 let WsMessage::Text(text) = frame else { continue };
                 let Ok(frame) = serde_json::from_str::<Value>(text.as_str()) else { continue };
-                relay_frame(state, &relay_tx, &guest_tx, &routes, &mut conns, frame);
+                relay_frame(&relay_tx, &guest_tx, &routes, &mut conns, frame);
             }
             out = guest_rx.recv() => {
                 let Some((conn_id, plain)) = out else { break };
@@ -205,13 +202,13 @@ async fn run(
                     }
                 }
             }
-            _ = collab::changed() => {
-                if !reconcile(state, &relay_tx, &mut routes, &mut conns) { break; }
+            _ = crate::changed() => {
+                if !reconcile(&relay_tx, &mut routes, &mut conns) { break; }
             }
             _ = ping.tick() => {
                 let _ = relay_tx.send(json!({"op": "ping"}));
-                super::collab_http::end_shares_of_missing_chats(state);
-                if !reconcile(state, &relay_tx, &mut routes, &mut conns) { break; }
+                let _ = tokio::task::spawn_blocking(crate::owner::end_shares_of_missing_chats).await;
+                if !reconcile(&relay_tx, &mut routes, &mut conns) { break; }
             }
         }
     }
@@ -226,17 +223,15 @@ async fn run(
 /// Registers new shares, drops ended ones and guests the owner removed. `false` when nothing is
 /// shared any more, which ends the relay connection.
 fn reconcile(
-    state: &AppState,
     relay_tx: &mpsc::UnboundedSender<Value>,
     routes: &mut HashMap<String, String>,
     conns: &mut HashMap<u64, Conn>,
 ) -> bool {
-    let enabled = collab::read_config(&state.paths).enabled
-        && (collab::page_pin::unpinned()
-            || matches!(
-                collab::page_pin::state(),
-                collab::page_pin::PinState::Verified { .. }
-            ));
+    let enabled = crate::page_pin::unpinned()
+        || matches!(
+            crate::page_pin::state(),
+            crate::page_pin::PinState::Verified { .. }
+        );
     let live: Vec<shares::StoredShare> = if enabled { shares::list() } else { Vec::new() };
     let wanted: HashMap<String, &shares::StoredShare> = live
         .iter()
@@ -283,7 +278,6 @@ fn reconcile(
 }
 
 fn relay_frame(
-    state: &Arc<AppState>,
     relay_tx: &mpsc::UnboundedSender<Value>,
     guest_tx: &GuestOut,
     routes: &HashMap<String, String>,
@@ -324,8 +318,8 @@ fn relay_frame(
                 if let Some(viewer) = &conn.viewer {
                     if shares::leave(&conn.share_id, &viewer.id) {
                         if let Some(share) = shares::get(&conn.share_id) {
-                            let title = super::collab_http::share_title(state, &share);
-                            collab::audit::record(
+                            let title = share_title(&share);
+                            crate::audit::record(
                                 &share,
                                 &title,
                                 "left",
@@ -334,11 +328,8 @@ fn relay_frame(
                                 0,
                                 None,
                             );
-                            crate::server::republish_session_chat(
-                                state,
-                                &share.project_id,
-                                &share.session_id,
-                            );
+                            crate::sync::chat_changed(&share.project_id, &share.session_id);
+                            crate::notify_changed();
                         }
                     }
                 }
@@ -375,7 +366,7 @@ fn relay_frame(
             let Ok(message) = serde_json::from_slice::<Value>(&plain) else {
                 return;
             };
-            if !guest_message(state, guest_tx, conn_id, conn, message) {
+            if !guest_message(guest_tx, conn_id, conn, message) {
                 // Closed behind the answer that says why (a refusal), through the same queue, so
                 // the page reads the answer before the socket goes.
                 let _ = guest_tx.send((conn_id, Value::Null));
@@ -386,13 +377,7 @@ fn relay_frame(
 }
 
 /// One guest frame. `false` closes the connection.
-fn guest_message(
-    state: &Arc<AppState>,
-    guest_tx: &GuestOut,
-    conn_id: u64,
-    conn: &mut Conn,
-    message: Value,
-) -> bool {
+fn guest_message(guest_tx: &GuestOut, conn_id: u64, conn: &mut Conn, message: Value) -> bool {
     let reply = |value: Value| {
         let _ = guest_tx.send((conn_id, value));
     };
@@ -400,9 +385,9 @@ fn guest_message(
         reply(json!({"t": "denied", "reason": "ended"}));
         return false;
     };
-    let config = collab::read_config(&state.paths);
-    let owner = collab::config::owner_display_name(&config);
-    let title = super::collab_http::share_title(state, &share);
+    let config = crate::config::read_config();
+    let owner = crate::config::owner_display_name(&config);
+    let title = share_title(&share);
     match message["t"].as_str().unwrap_or_default() {
         "hello" => {
             reply(json!({
@@ -460,17 +445,14 @@ fn guest_message(
                 .collect();
             match shares::join(&share.id, &name, &device) {
                 Ok(viewer) => {
-                    collab::audit::record(&share, &title, "joined", &viewer.name, None, 0, None);
-                    let (joined_state, joined_share, joined_name) =
-                        (state.clone(), share.clone(), viewer.name.clone());
-                    tokio::task::spawn_blocking(move || {
-                        super::collab_http::notify_guest_joined(
-                            &joined_state,
-                            &joined_share,
-                            &joined_name,
-                        )
-                    });
-                    reply(json!({
+                    crate::audit::record(&share, &title, "joined", &viewer.name, None, 0, None);
+                    let joined = HostCall::NotifyGuestJoined {
+                        project_id: share.project_id.clone(),
+                        session_id: share.session_id.clone(),
+                        guest: viewer.name.clone(),
+                    };
+                    tokio::spawn(crate::host::call_async(joined));
+                    let welcome = json!({
                         "t": "welcome",
                         "viewerId": viewer.id,
                         "name": viewer.name,
@@ -479,14 +461,17 @@ fn guest_message(
                         "title": title,
                         "owner": owner,
                         "mode": share.mode.as_str(),
+                    });
+                    // gxserver learns the new guest before the page hears it may read: its first
+                    // read names this guest, and gxserver lets through only guests it knows.
+                    let welcome_tx = guest_tx.clone();
+                    conn.tasks.push(tokio::spawn(async move {
+                        let _ = tokio::task::spawn_blocking(crate::sync::drain).await;
+                        let _ = welcome_tx.send((conn_id, welcome));
                     }));
                     conn.viewer = Some(viewer);
-                    crate::server::republish_session_chat(
-                        state,
-                        &share.project_id,
-                        &share.session_id,
-                    );
-                    collab::notify_changed();
+                    crate::sync::chat_changed(&share.project_id, &share.session_id);
+                    crate::notify_changed();
                     true
                 }
                 Err(shares::JoinRefusal::Full) => {
@@ -513,11 +498,10 @@ fn guest_message(
             let id = message["id"].clone();
             let path = message["path"].as_str().unwrap_or_default().to_string();
             let body = message["body"].as_str().unwrap_or_default().to_string();
-            let state = state.clone();
             let guest_tx = guest_tx.clone();
             conn.tasks.retain(|task| !task.is_finished());
             conn.tasks.push(tokio::spawn(async move {
-                let (status, text) = guest_http(&state, &share, &viewer, &path, body).await;
+                let (status, text) = guest_http(&share, &viewer, &path, body).await;
                 let _ = guest_tx.send((
                     conn_id,
                     json!({"t": "http", "id": id, "status": status, "body": text}),
@@ -545,12 +529,12 @@ fn guest_message(
             }
             let (tx, rx) = mpsc::unbounded_channel::<String>();
             conn.sockets.insert(id, tx);
+            let host = crate::host::address();
             let url = format!(
-                "ws://{}:{}{}?protocolVersion={}&stream={}&authToken={}",
-                state.config.listeners.local.host,
-                state.config.listeners.local.port,
+                "{}{}?protocolVersion={}&stream={}&authToken={}",
+                host.base_url.replacen("http", "ws", 1),
                 ghostex_gx_protocol::GXSERVER_EVENTS_PATH,
-                GXSERVER_PROTOCOL_VERSION,
+                host.gxserver_protocol_version,
                 ghostex_gx_protocol::GXSERVER_EVENTS_STREAM_SESSION_CHAT,
                 share.token,
             );
@@ -578,40 +562,53 @@ fn guest_message(
 }
 
 async fn guest_http(
-    state: &Arc<AppState>,
     share: &shares::StoredShare,
     viewer: &shares::Viewer,
     path: &str,
     body: String,
 ) -> (u16, String) {
-    if !path.starts_with("/api/") || path.contains("..") || path.contains('?') {
-        return (
-            404,
-            json!({"ok": false, "error": "notFound", "message": "Not found."}).to_string(),
-        );
+    if crate::guest::GUEST_WRITE_PATHS.contains(&path) {
+        let body: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
+        let (status, answer) = crate::guest::answer(share, viewer, path, &body).await;
+        return (status, answer.to_string());
     }
-    let request = match axum::http::Request::builder()
-        .method(Method::POST)
-        .uri(path)
-        .header("content-type", "application/json")
-        .header("authorization", format!("Bearer {}", share.token))
-        .header(
-            "x-gxserver-protocol-version",
-            GXSERVER_PROTOCOL_VERSION.to_string(),
-        )
-        .header(super::collab_http::VIEWER_HEADER, viewer.id.as_str())
-        .body(Body::from(body))
-    {
-        Ok(request) => request,
-        Err(_) => return (400, String::new()),
-    };
-    let request_id = Uuid::new_v4().to_string();
-    let routed = super::route_http::route_http(state.clone(), request, request_id).await;
-    let status = routed.response.status().as_u16();
-    let bytes = to_bytes(routed.response.into_body(), MAX_HTTP_BODY)
-        .await
-        .unwrap_or_default();
-    (status, String::from_utf8_lossy(&bytes).to_string())
+    if !crate::guest::GUEST_READ_PATHS.contains(&path) {
+        let (status, answer) = crate::guest::refusal();
+        return (status, answer.to_string());
+    }
+    let host = crate::host::address();
+    let url = format!("{}{path}", host.base_url);
+    let (token, viewer_id) = (share.token.clone(), viewer.id.clone());
+    let protocol = host.gxserver_protocol_version.to_string();
+    tokio::task::spawn_blocking(move || {
+        let response = crate::http::loopback_agent()
+            .post(url.as_str())
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {token}"))
+            .header("x-gxserver-protocol-version", protocol.as_str())
+            .header(COLLAB_VIEWER_HEADER, viewer_id.as_str())
+            .send(body.as_bytes());
+        match response {
+            Ok(response) => {
+                let status = response.status().as_u16();
+                let mut bytes = Vec::new();
+                let _ = std::io::Read::read_to_end(
+                    &mut std::io::Read::take(
+                        response.into_body().into_reader(),
+                        MAX_HTTP_BODY as u64,
+                    ),
+                    &mut bytes,
+                );
+                (status, String::from_utf8_lossy(&bytes).to_string())
+            }
+            Err(_) => (
+                502,
+                json!({"ok": false, "error": "unavailable", "message": "The shared chat can't be reached right now."}).to_string(),
+            ),
+        }
+    })
+    .await
+    .unwrap_or((500, String::new()))
 }
 
 /// One guest WebSocket (the chat's stream), opened on this gxserver's own listener with the

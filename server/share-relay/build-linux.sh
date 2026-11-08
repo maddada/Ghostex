@@ -5,7 +5,7 @@
 #
 # The guest page (apps/gpui-web/www/dist, from `cargo xtask web-build`) is packed as one folder
 # named by its page hash, ready to unpack into the relay's --pages folder, with its manifest
-# beside it; the manifest is also copied to server/src/collab/guest_page.manifest, which is what
+# beside it; the manifest is also copied to server/collab/src/guest_page.manifest, which is what
 # a Ghostex release pins (commit it together with deploying the page).
 #
 # Usage: server/share-relay/build-linux.sh [x64|arm64|all|web]   (default: all)
@@ -58,8 +58,8 @@ if [[ -f "$WEB/index.html" ]]; then
 	COPYFILE_DISABLE=1 tar -C "$STAGE" -czf "dist/ghostex-share-relay-web-$VERSION.tar.gz" "$PAGE_HASH"
 	rm -rf "$STAGE"
 	(cd dist && shasum -a 256 "ghostex-share-relay-web-$VERSION.tar.gz" > "ghostex-share-relay-web-$VERSION.tar.gz.sha256")
-	cp "$MANIFEST" ../src/collab/guest_page.manifest
-	echo "built dist/ghostex-share-relay-web-$VERSION.tar.gz: page $PAGE_HASH (id ${PAGE_HASH:0:16}); server/src/collab/guest_page.manifest updated"
+	cp "$MANIFEST" ../collab/src/guest_page.manifest
+	echo "built dist/ghostex-share-relay-web-$VERSION.tar.gz: page $PAGE_HASH (id ${PAGE_HASH:0:16}); server/collab/src/guest_page.manifest updated"
 else
 	echo "no guest page at $WEB: run cargo xtask web-build first" >&2
 fi

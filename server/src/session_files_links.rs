@@ -79,7 +79,7 @@ pub(crate) async fn handle_read_session_files_links_http(
 
 /// Whether `path` (a file path, or a picture's address on this computer's loopback) is one the
 /// session's own chat shows: an attachment, a picture or a file it mentions. Ghostex Collab
-/// answers a guest's picture reads only for these (server/src/server/collab_http.rs).
+/// answers a guest's picture reads only for these (server/src/collab_shim/http.rs).
 pub(crate) async fn session_shows_path(
     state: &AppState,
     project_id: &str,
@@ -434,7 +434,7 @@ fn tool_read_images(messages: &[Value], cwd: Option<&str>) -> Vec<String> {
 
 /// Whether the session's agent opened the picture at `path` with a tool (a Read of a picture,
 /// Codex's view image): the chat shows it as a tile, so a Ghostex Collab guest may read it too
-/// (server/src/server/collab_http.rs).
+/// (server/src/collab_shim/http.rs).
 pub(crate) async fn session_read_image(
     state: &AppState,
     project_id: &str,

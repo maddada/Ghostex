@@ -11,7 +11,7 @@
 //! [`CHAT_FILE_MAX_BYTES`], and never writes it (no save, rename or delete takes an absolute path:
 //! `normalized_relative_path` refuses one). The caller is a gxserver client already allowed to
 //! read that session's chat; a Ghostex Collab guest cannot reach `runProjectDocsAction` at all
-//! (`collab::shares::GUEST_ENDPOINTS`). So the API opens no path the chat did not show, which
+//! (`collab_shim::registry::GUEST_READ_ENDPOINTS`). So the API opens no path the chat did not show, which
 //! keeps it from becoming a way to read arbitrary files.
 //! SEE-ALSO: server/src/server/project_docs_http.rs (where the scope is checked),
 //! apps/desktop/src/app/session_chat_context_menu/remote_files.rs (the desktop's chat link).

@@ -5,7 +5,7 @@
 //! link `/s/<page id>/#<key>` (11.0.0's links: `/s#<key>`), gets the guest page from this relay, hashes the key into the same route id and
 //! connects to `/g/<route>`. The relay pairs the two and copies frames between them. It never sees
 //! the key (browsers keep the `#fragment` to themselves), so it cannot read the frames: the page
-//! and gxserver encrypt them end to end with keys derived from it (`server/src/collab/tunnel.rs`
+//! and gxserver encrypt them end to end with keys derived from it (`server/collab/src/tunnel.rs`
 //! and `apps/gpui-web/www/src/collab/tunnel.js`).
 //!
 //! CDXC:Collab 2026-11-07 DECISION: the user picked Ghostex's own relay at share.ghostex.dev (Q1611): "gxserver keeps one outgoing connection to it only while Collab is on and a chat is shared ... the key after `#` never reaches a server, the relay sees only its hash and carries end-to-end encrypted traffic it can't read".
@@ -21,7 +21,7 @@
 //! manifest (every file's SHA-256 and path, `shasum -a 256` lines sorted by path). The relay
 //! hashes each folder when it starts and serves only folders whose files match their name, at
 //! `/s/<first 16 hex of the hash>/`. Each Ghostex release pins one page hash
-//! (`server/src/collab/page_pin.rs`) and checks this relay serves exactly that page before it
+//! (`server/collab/src/page_pin.rs`) and checks this relay serves exactly that page before it
 //! shares through it, so several releases' pages live here side by side.
 //!
 //! A guest's frames on `/g/<route>` are binary and opaque. `S` is a random host secret; the relay

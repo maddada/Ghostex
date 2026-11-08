@@ -2,7 +2,7 @@
 //! guest messages do (Send, Ask me, View only), who is watching with Remove, when the link ends,
 //! and Stop sharing. Before the chat is shared it offers Create link, and while Ghostex Collab is
 //! off, its switch. Everything is read from and saved to gxserver (`/api/collab`,
-//! server/src/server/collab_http.rs).
+//! server/collab/src/owner.rs).
 //!
 //! CDXC:Collab 2026-11-07 DECISION:
 //! User (Q1615): "Where Share lives: a button in the chat header", with its popover holding the link, code, expiry, mode, viewers and Stop sharing.

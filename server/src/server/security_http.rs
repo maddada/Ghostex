@@ -53,7 +53,7 @@ pub(crate) fn require_owner_presence(
 }
 
 /// The gate's decision without the HTTP answer, for a route that also needs the pending request
-/// itself (Collab finishes an approved action on its own, `collab_http.rs`). Answer with
+/// itself (Collab finishes an approved action on its own, `collab_shim/http.rs`). Answer with
 /// [`presence_outcome_response`].
 pub(crate) fn presence_outcome(
     state: &AppState,

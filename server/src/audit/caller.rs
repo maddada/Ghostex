@@ -96,8 +96,10 @@ impl Caller {
         {
             return Self::ConnectedComputer { server_id, name };
         }
-        if let Some(share) = crate::collab::shares::authorize_token(token) {
-            return Self::CollabGuest { share_id: share.id };
+        if let Some(share) = crate::collab_shim::registry::authorize_token(token) {
+            return Self::CollabGuest {
+                share_id: share.share_id,
+            };
         }
         Self::Unknown
     }

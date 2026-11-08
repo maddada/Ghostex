@@ -656,7 +656,7 @@ pub(crate) async fn handle_read_session_chat_http(
     crate::secret_requests::insert_secret_requests(&mut result, &project_id, &session_id);
     crate::coordinators::insert_relayed_answers(&mut result, &project_id, &session_id);
     crate::autopilot::insert_chat_autopilot(&mut result, &project_id, &session_id);
-    crate::collab::insert_chat_collab(&mut result, &project_id, &session_id);
+    crate::collab_shim::insert_chat_collab(&mut result, &project_id, &session_id);
     crate::agent_message_deliveries::insert_agent_message_deliveries(
         &mut result,
         &project_id,

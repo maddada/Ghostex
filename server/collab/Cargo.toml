@@ -1,0 +1,42 @@
+# CDXC:Collab 2026-11-08 DECISION:
+# User (#495, Q1730): Collab's working code is not in the app download. It is this separate
+# component, built and signed by .github/workflows/release-gpui-collab.yml, published to the
+# components repository and downloaded by gxserver only when the owner installs Collab in
+# Settings > Extensions with their signed approval. gxserver never depends on this crate; the two
+# talk over the local channel in packages/gx-protocol/src/collab_component.rs.
+[package]
+name = "ghostex-collab"
+version = "1.0.0"
+edition = "2021"
+description = "Ghostex Collab: share a chat through a link. The sidecar gxserver runs once Collab is installed."
+publish = false
+
+[[bin]]
+name = "ghostex-collab"
+path = "src/main.rs"
+
+[dependencies]
+aes-gcm = { version = "0.11", default-features = false, features = ["aes", "alloc"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+futures-util = "0.3"
+ghostex-gx-protocol = { path = "../../packages/gx-protocol" }
+hex = "0.4"
+rand = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+subtle = "2"
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+ureq = { version = "3.5", features = ["json"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

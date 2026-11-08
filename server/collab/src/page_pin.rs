@@ -170,7 +170,7 @@ fn now_ms() -> i64 {
 }
 
 fn fetch(url: &str) -> Result<Vec<u8>, String> {
-    let agent = crate::http_agent::answering_agent();
+    let agent = crate::http::answering_agent();
     let response = agent
         .get(url)
         .header("cache-control", "no-cache")

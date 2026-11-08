@@ -2,10 +2,11 @@
 //! (saved, so a gxserver restart keeps links working), and while it runs, who is watching, who is
 //! typing and the guest messages waiting for the owner (memory only).
 //!
-//! A share's token (`gxshare_…`) is what the relay connector (server/src/server/collab_connector.rs)
-//! calls this gxserver with on a guest's behalf. It never leaves gxserver and opens only that one
-//! chat: the routes in [`GUEST_ENDPOINTS`] for its own `projectId`/`sessionId`, and that chat's
-//! stream on `/api/events?stream=sessionChat`.
+//! A share's token (`gxshare_…`) is what the relay connector (connector.rs) replays a guest's
+//! reads to gxserver with. It never leaves this computer and opens only that one chat: gxserver
+//! lets it read that chat (`readSessionChat`, its resources, the pictures it shows, its pages) and
+//! follow its stream, and nothing else (server/src/collab_shim/registry.rs). Everything a guest
+//! writes is answered here, in the component (guest.rs).
 //!
 //! CDXC:Collab 2026-11-07 DECISION:
 //! User (Q1612, Q1617): the guest's page is "the GPUI web build in a guest mode that shows only that one chat (never the main token: a new share-scoped token, modelled on connected-computer peer grants that only allow listed endpoints)", and "a guest can never answer permission prompts or see anything but that chat".
@@ -17,11 +18,10 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use subtle::ConstantTimeEq;
 
-use super::config::{CollabConfig, GuestMode};
-use crate::paths::GxserverPaths;
+use crate::config::{CollabConfig, GuestMode};
 
 pub const SHARES_FILE: &str = "collab-shares.json";
 /// Guest messages waiting for the owner, per share, kept across restarts like the owner's own
@@ -47,25 +47,6 @@ pub const GUEST_MESSAGES_PER_MINUTE: usize = 6;
 pub const MAX_HELD: usize = 20;
 /// Pictures one guest may upload to a share.
 pub const MAX_GUEST_IMAGES: usize = 20;
-
-/// What a share token may call, always for its own chat only.
-///
-/// CDXC:Collab 2026-11-07 WHY: `readSessionChatImage` takes a file path, so a guest could read any picture on the owner's computer through it; a guest's read is answered only for a path the shared chat itself shows (`session_files_links::session_shows_path`) or one that guest uploaded (`saveSessionChatImage`). `readVisualPageThumbnail` stays out.
-pub const GUEST_ENDPOINTS: &[&str] = &[
-    "/api/readSessionChat",
-    "/api/readSessionChatImage",
-    "/api/readSessionChatResource",
-    "/api/saveSessionChatImage",
-    // Answered by Ghostex Collab, never by the owner's composer: a guest message, and the guest's
-    // typing (`setSessionChatDraft` from a guest never touches the owner's draft).
-    "/api/sendSessionChatMessage",
-    "/api/setSessionChatDraft",
-    "/api/collabTyping",
-    // A page the shared chat published or an HTML file it links to, and the guest's answers to
-    // a page (visual_pages/guest.rs).
-    "/api/collabGuestPage",
-    "/api/collabGuestPageAnswers",
-];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -137,10 +118,6 @@ fn registry() -> &'static Mutex<Registry> {
     REGISTRY.get_or_init(|| Mutex::new(Registry::default()))
 }
 
-fn paths() -> GxserverPaths {
-    super::state_paths()
-}
-
 fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
@@ -165,26 +142,23 @@ fn share_is_valid(share: &StoredShare) -> bool {
         && share.code.bytes().all(|byte| byte.is_ascii_digit())
         && share
             .expires_at_ms
-            .is_some_and(|at| at <= share.created_at_ms + super::config::MAX_SHARE_MS)
+            .is_some_and(|at| at <= share.created_at_ms + crate::config::MAX_SHARE_MS)
 }
 
 fn with_registry<T>(change: impl FnOnce(&mut Registry) -> T) -> T {
     let mut registry = registry().lock().unwrap_or_else(PoisonError::into_inner);
     if !registry.loaded {
         registry.loaded = true;
-        // Whatever reads a share first, the 11.0.1 move has run before the file is read.
-        super::migrate_at_start(&paths());
-        let stored: Vec<StoredShare> =
-            std::fs::read_to_string(paths().app_state_dir.join(SHARES_FILE))
-                .ok()
-                .and_then(|text| serde_json::from_str(&text).ok())
-                .unwrap_or_default();
+        let stored: Vec<StoredShare> = std::fs::read_to_string(crate::data_dir().join(SHARES_FILE))
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default();
         registry.shares = stored
             .into_iter()
             .filter(share_is_valid)
             .map(|share| (share.id.clone(), share))
             .collect();
-        for (share_id, messages) in read_held(&paths().app_state_dir) {
+        for (share_id, messages) in read_held(&crate::data_dir()) {
             if registry.shares.contains_key(&share_id) && !messages.is_empty() {
                 registry.live.entry(share_id).or_default().held = messages;
             }
@@ -220,7 +194,7 @@ fn save_held(registry: &Registry) {
         .filter(|(share_id, live)| !live.held.is_empty() && registry.shares.contains_key(*share_id))
         .map(|(share_id, live)| (share_id.clone(), live.held.clone()))
         .collect();
-    write_held(&paths().app_state_dir, &held);
+    write_held(&crate::data_dir(), &held);
 }
 
 /// The held messages kept in `folder`, per share.
@@ -251,10 +225,10 @@ fn write_held(folder: &std::path::Path, held: &BTreeMap<String, Vec<HeldMessage>
 }
 
 fn save(registry: &Registry) {
-    let paths = paths();
-    let _ = std::fs::create_dir_all(&paths.app_state_dir);
-    let target = paths.app_state_dir.join(SHARES_FILE);
-    let temporary = paths.app_state_dir.join(format!("{SHARES_FILE}.tmp"));
+    let folder = crate::data_dir();
+    let _ = std::fs::create_dir_all(&folder);
+    let target = folder.join(SHARES_FILE);
+    let temporary = folder.join(format!("{SHARES_FILE}.tmp"));
     let shares: Vec<&StoredShare> = registry.shares.values().collect();
     if std::fs::write(
         &temporary,
@@ -269,7 +243,7 @@ fn save(registry: &Registry) {
         }
         let _ = std::fs::rename(&temporary, &target);
     }
-    super::notify_changed();
+    crate::notify_changed();
 }
 
 /// The share of a chat, made with the config's choices when it has none.
@@ -289,7 +263,7 @@ pub fn share_session(config: &CollabConfig, project_id: &str, session_id: &str) 
             project_id: project_id.to_string(),
             session_id: session_id.to_string(),
             key: URL_SAFE_NO_PAD.encode(key),
-            route: super::tunnel::route_id(&key),
+            route: crate::tunnel::route_id(&key),
             host_secret: hex::encode(random_bytes::<32>()),
             token: format!("gxshare_{}", URL_SAFE_NO_PAD.encode(random_bytes::<32>())),
             code: new_code(),
@@ -365,8 +339,43 @@ pub fn set_mode(share_id: &str, mode: GuestMode) -> Option<StoredShare> {
     })
 }
 
-/// What a share token opens: its share, when the token is one and still live.
-pub fn authorize_token(token: &str) -> Option<StoredShare> {
+/// Every live share as gxserver needs it to let that share's guests read their one chat.
+pub fn scopes() -> Vec<ghostex_gx_protocol::collab_component::ShareScope> {
+    with_registry(|registry| {
+        registry
+            .shares
+            .values()
+            .map(|share| {
+                let live = registry.live.get(&share.id);
+                ghostex_gx_protocol::collab_component::ShareScope {
+                    share_id: share.id.clone(),
+                    project_id: share.project_id.clone(),
+                    session_id: share.session_id.clone(),
+                    token: share.token.clone(),
+                    viewer_ids: live
+                        .map(|live| live.viewers.keys().cloned().collect())
+                        .unwrap_or_default(),
+                    images: live
+                        .map(|live| {
+                            live.viewers
+                                .values()
+                                .flat_map(|viewer| viewer.images.iter().cloned())
+                                .chain(
+                                    live.held
+                                        .iter()
+                                        .flat_map(|held| held.image_paths.iter().cloned()),
+                                )
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                }
+            })
+            .collect()
+    })
+}
+
+/// A share token, compared in constant time (tests and the connector's own checks).
+pub fn by_token(token: &str) -> Option<StoredShare> {
     if !token.starts_with("gxshare_") {
         return None;
     }
@@ -631,21 +640,21 @@ pub fn next_typing_deadline(share_id: &str) -> Option<i64> {
 pub fn link(share: &StoredShare, relay_url: &str) -> String {
     format!(
         "{relay_url}/s/{}/#{}",
-        super::page_pin::page_id(),
+        crate::page_pin::page_id(),
         share.key
     )
 }
 
-/// `collab` on a chat frame and on `readSessionChat`: `{ shared: false }`, or who is watching,
-/// who is typing and the guest messages waiting. Never the link, the code or the token.
-pub fn insert_chat_collab(frame: &mut Map<String, Value>, project_id: &str, session_id: &str) {
-    let config = super::config::read_config(&paths());
-    let value = with_registry(|registry| {
+/// `collab` on a chat frame and on `readSessionChat` (gxserver puts it there, sync.rs pushes it):
+/// `{ shared: false }`, or who is watching, who is typing and the guest messages waiting. Never
+/// the link, the code or the token.
+pub fn chat_extras(project_id: &str, session_id: &str) -> Value {
+    let config = crate::config::read_config();
+    with_registry(|registry| {
         let Some(share) = registry
             .shares
             .values()
             .find(|share| share.project_id == project_id && share.session_id == session_id)
-            .filter(|_| config.enabled)
         else {
             return json!({ "shared": false });
         };
@@ -695,14 +704,13 @@ pub fn insert_chat_collab(frame: &mut Map<String, Value>, project_id: &str, sess
             "shared": true,
             "shareId": share.id,
             "mode": share.mode.as_str(),
-            "owner": super::config::owner_display_name(&config),
+            "owner": crate::config::owner_display_name(&config),
             "ownerTyping": live.is_some_and(|live| live.owner_typing_until_ms > now),
             "viewers": viewers,
             "held": held,
             "resolved": resolved,
         })
-    });
-    frame.insert("collab".to_string(), value);
+    })
 }
 
 /// One share's link and code: only in the answer to an approved `share` call, never in a read.
@@ -762,7 +770,7 @@ mod tests {
 
     #[test]
     fn shares_without_a_code_or_an_end_are_dropped() {
-        let day = super::super::config::MAX_SHARE_MS;
+        let day = crate::config::MAX_SHARE_MS;
         assert!(share_is_valid(&share("12345678", 0, Some(day))));
         assert!(!share_is_valid(&share("", 0, Some(day))));
         assert!(!share_is_valid(&share("123456", 0, Some(day))));

@@ -3,7 +3,8 @@
 mod account_login_thread;
 mod attention_stint;
 mod chat_linked_files;
-mod collab_routes;
+mod collab_component_e2e;
+mod collab_shim_routes;
 mod connected_computers_routes;
 mod draft_worktree_routes;
 mod easy_connect_addresses_routes;

@@ -2,14 +2,14 @@
 //! from <guest>" cards with Decline / Edit / Send, and on a guest's page their own messages
 //! waiting for the owner and what their chat box may do.
 //!
-//! gxserver puts `collab` on every chat frame (server/src/collab/shares.rs): `{ shared: false }`,
+//! gxserver puts `collab` on every chat frame (server/src/collab_shim/mod.rs, from the Collab component): `{ shared: false }`,
 //! or `{ shared, shareId, mode, owner, ownerTyping, viewers: [{ id, name, typing }], held: [{ id,
 //! viewerId, name, text, atMs }] }`. A guest's page says it is one once, with `setCollabGuest`
 //! (`{ viewerId, name }`, apps/gpui-web/src/app/collab_guest.rs); every other client is the owner.
 //!
 //! CDXC:Collab 2026-11-07 DECISION:
 //! User (Q1614): a new share starts in "approve each message (the owner gets a "Message from <guest>" card with Decline / Edit / Send)"; the other modes (straight to the agent, view only) are per chat. A guest "can never answer permission prompts" (Q1617), so a guest's chat shows "Waiting for <owner>" where the owner would answer.
-//! SEE-ALSO: apps/desktop/src/app/native_chat/collab.rs (desktop and web drawing), server/src/server/collab_http.rs (the calls).
+//! SEE-ALSO: apps/desktop/src/app/native_chat/collab.rs (desktop and web drawing), server/collab/src/owner.rs (the calls).
 
 use serde_json::{json, Value};
 

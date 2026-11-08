@@ -10,7 +10,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 
 use serde_json::{json, Value};
 
-use super::shares::StoredShare;
+use crate::shares::StoredShare;
 
 const AUDIT_FILE: &str = "collab-audit.jsonl";
 const KEEP_LINES: usize = 5_000;
@@ -21,7 +21,7 @@ fn lock() -> &'static Mutex<()> {
 }
 
 fn file() -> std::path::PathBuf {
-    super::state_paths().app_state_dir.join(AUDIT_FILE)
+    crate::data_dir().join(AUDIT_FILE)
 }
 
 /// Appends one entry; `event` is `joined`, `left`, `removed` or `message`, `outcome` (messages
@@ -47,7 +47,7 @@ pub fn record(
     let mut images = images;
     if let Some(text) = text {
         // Pictures pasted into the chat box are references in the words; the log counts them.
-        let (words, referenced) = super::split_image_references(text);
+        let (words, referenced) = crate::split_image_references(text);
         images += referenced.len();
         entry["text"] = json!(words.chars().take(4_000).collect::<String>());
     }

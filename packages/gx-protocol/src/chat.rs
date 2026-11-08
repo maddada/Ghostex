@@ -344,7 +344,7 @@ pub struct ChatSideState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub autopilot: Option<Value>,
     /// Ghostex Collab for this chat (`{ shared: false }` or who watches, who types and the guest
-    /// messages waiting; server/src/collab/shares.rs). Absent means unchanged.
+    /// messages waiting; server/collab/src/shares.rs). Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collab: Option<Value>,
     /// How the messages this session's agent sent with `ghostex agents send` and left waiting
