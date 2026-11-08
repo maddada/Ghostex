@@ -88,7 +88,8 @@ pub use links::{
     SuggestedSessionLink, SUGGESTED_SHOWN_FIRST,
 };
 pub use machine_connection::{
-    machine_state_copy, machine_state_is_busy, machine_state_is_failure, THIS_COMPUTER_NOTICE_STATE,
+    machine_state_copy, machine_state_is_busy, machine_state_is_failure, machine_state_short_word,
+    THIS_COMPUTER_NOTICE_STATE,
 };
 pub use machine_switch::{
     machine_switch_memory, plan_machine_switch_restore, MACHINE_SESSION_MEMORY_SPACE_ID,

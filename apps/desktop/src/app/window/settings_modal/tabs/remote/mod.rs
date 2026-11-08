@@ -190,6 +190,8 @@ impl From<PathCard> for RemoteSection {
 pub(super) struct GxserverInstall {
     pub(super) installed: bool,
     pub(super) version: Option<String>,
+    /// Ghostex installed it there, so the machine's status panel offers Reinstall.
+    pub(super) managed: bool,
 }
 
 pub(crate) struct RemoteTab {
@@ -958,6 +960,7 @@ impl RemoteTab {
             GxserverInstall {
                 installed: message.get("installed").and_then(Value::as_bool) == Some(true),
                 version,
+                managed: message.get("managed").and_then(Value::as_bool) == Some(true),
             },
         );
         cx.notify();
@@ -1092,7 +1095,12 @@ impl RemoteTab {
         }
         if matches!(
             state,
-            "remote-machines" | "remote-add-machine" | "remote-add-ec" | "remote-edit-machine"
+            "remote-machines"
+                | "remote-add-machine"
+                | "remote-add-ec"
+                | "remote-edit-machine"
+                | "remote-machine-failed"
+                | "remote-machine-failed-sheet"
         ) {
             self.section = RemoteSection::Machines;
         }
@@ -1188,13 +1196,13 @@ impl Render for RemoteTab {
                         .child(card),
                 );
             }
-            layout = layout.child(self.section_tabs(&t, cx));
+            layout = layout.child(self.section_tabs(&t, window, cx));
             layout = layout.child(match self.section {
                 RemoteSection::EasyConnect | RemoteSection::Tailscale => {
                     self.connect_section(&t, rpc, window, cx)
                 }
                 RemoteSection::Machines => {
-                    let section = machines::machines_section(self, &t, cx);
+                    let section = machines::machines_section(self, &t, window, cx);
                     div()
                         .w_full()
                         .on_children_prepainted(capture_child_bounds(
@@ -1267,19 +1275,29 @@ impl RemoteTab {
     /// The tab strip: each tab's name and its status (the card badge's dot and word for Easy
     /// Connect and Tailscale, "connected/saved" for Remote machines, "Unsaved" for Advanced while an
     /// edit is pending).
-    fn section_tabs(&mut self, t: &RemoteTokens, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn section_tabs(
+        &mut self,
+        t: &RemoteTokens,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
         let (connected, saved) = self.connected_machine_count(cx);
+        // CDXC:RemoteMachines 2026-11-08 WHY: in a narrow Settings window "Easy Connect · Running"
+        // filled its quarter of the strip edge to edge (the remote tile audit, finding 10). Below
+        // this width Easy Connect and Tailscale keep their status dot and drop the word.
+        let compact = window.viewport_size().width < px(1060.0);
         let tailscale = tailscale::tailscale_status_badge(self, cx);
         let easy_connect = easy_connect_status_badge(self.easy_connect.as_ref());
         let items: Vec<ModalRailItem> = RemoteSection::ALL
             .iter()
             .map(|section| {
                 let (trailing, dot): (Option<SharedString>, Option<gpui::Rgba>) = match section {
-                    RemoteSection::EasyConnect => {
-                        (Some(easy_connect.0.into()), Some(t.tone(easy_connect.1)))
-                    }
+                    RemoteSection::EasyConnect => (
+                        (!compact).then(|| easy_connect.0.into()),
+                        Some(t.tone(easy_connect.1)),
+                    ),
                     RemoteSection::Tailscale => tailscale
-                        .map(|(label, tone)| (Some(label.into()), Some(t.tone(tone))))
+                        .map(|(label, tone)| ((!compact).then(|| label.into()), Some(t.tone(tone))))
                         .unwrap_or((None, None)),
                     RemoteSection::Machines => (
                         (saved > 0).then(|| format!("{connected}/{saved}").into()),

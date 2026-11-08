@@ -115,6 +115,9 @@ pub(crate) struct GpuiRemoteMachineConfig {
     pub(crate) disabled: bool,
     /// The connect's shared SSH login (`GpuiRemoteSshConnectionShare`); set only on the copy one connect runs with.
     pub(crate) ssh_control_path: Option<String>,
+    /// The user asked to reinstall the Ghostex-installed gxserver there (Settings > Remote > the
+    /// machine's Reinstall): the connect replaces that package even when its build matches.
+    pub(crate) reinstall_package: bool,
 }
 
 impl GpuiRemoteMachineConfig {

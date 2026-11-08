@@ -150,6 +150,7 @@ impl GhostexGpuiApp {
                         div()
                             .flex_1()
                             .min_w_0()
+                            .truncate()
                             .text_size(px(12.5 * scale))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(appearance.foreground)
@@ -178,10 +179,21 @@ impl GhostexGpuiApp {
             )
             .when_some(notice.detail.clone(), |card, detail| {
                 card.child(
+                    // One line: the whole reason is the first thing in the machine's sheet, which
+                    // Details opens (User, Q2020: "title and one line, Details opens the sheet").
                     div()
+                        .id("native-sidebar-machine-notice-detail")
                         .pl(indent)
                         .mt(px(1.0 * scale))
+                        .min_w_0()
+                        .truncate()
                         .text_color(appearance.muted)
+                        .tooltip({
+                            let detail = detail.to_string();
+                            move |window, cx| {
+                                super::tooltips::sidebar_style_tooltip(detail.clone(), window, cx)
+                            }
+                        })
                         .child(detail),
                 )
             })
@@ -213,7 +225,7 @@ impl GhostexGpuiApp {
                     .child(
                         notice_button(
                             "native-sidebar-machine-notice-settings",
-                            "Remote Settings",
+                            "Details",
                             "titlebar/settings.svg",
                             false,
                             appearance,
@@ -221,7 +233,7 @@ impl GhostexGpuiApp {
                         .on_click(cx.listener(move |app, _, _, cx| {
                             cx.stop_propagation();
                             app.dispatch_native_sidebar_ui(
-                                json!({"type": "machineAction", "action": "configure", "machineId": configure_id}),
+                                json!({"type": "machineAction", "action": "details", "machineId": configure_id}),
                                 cx,
                             );
                         })),

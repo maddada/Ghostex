@@ -720,6 +720,7 @@ mod tests {
             wsl_distribution: None,
             disabled: false,
             ssh_control_path: None,
+            reinstall_package: false,
         };
         assert!(gpui_remote_ssh_shared_connection_arguments(&config).is_empty());
         config.ssh_control_path = Some("/state/remote-ssh/ab".to_string());

@@ -37,10 +37,11 @@ use super::resolve::text_field;
 pub const MACHINE_DISABLE_SETTINGS_SOURCE: &str = "settings:remoteMachines";
 
 /// Whether this renderer command is a machine tab action the store answers here: every
-/// `machineAction` that is not Configure, which is the TypeScript's `else`.
+/// `machineAction` that is not Configure or Details (both open Settings > Remote), which is the
+/// TypeScript's `else`.
 pub fn owns_machine_disable_command(command: &Value) -> bool {
     text_field(command, "type") == Some("machineAction")
-        && text_field(command, "action") != Some("configure")
+        && !matches!(text_field(command, "action"), Some("configure" | "details"))
 }
 
 /// The patch, given the saved settings' `remoteMachines` value as it is stored.

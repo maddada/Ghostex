@@ -33,6 +33,7 @@ pub(crate) fn gpui_cloud_box_machine_config(remote_machine_id: &str) -> GpuiRemo
         wsl_distribution: None,
         disabled: false,
         ssh_control_path: None,
+        reinstall_package: false,
     }
 }
 

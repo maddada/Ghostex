@@ -493,7 +493,7 @@ pub(crate) const GPUI_REMOTE_PACKAGE_INCOMPLETE_MARKER: &str =
     "__ghostex_remote_package_incomplete__";
 pub(crate) const GPUI_REMOTE_PACKAGE_INCOMPLETE_MESSAGE: &str = "The gxserver package for that machine is incomplete: zmx, ghostex or gxserver is missing or does not run, so the machine was left as it was. Update or reinstall Ghostex on this computer, then reconnect.";
 pub(crate) const GPUI_REMOTE_NO_SAVED_PASSWORD_MESSAGE: &str = "The machine refused the login: no SSH password is saved for it, and it accepted no SSH key from this computer. Enter its SSH password in Settings > Remote > this machine. On Windows, that is the account password, not the Windows Hello PIN.";
-pub(crate) const GPUI_REMOTE_RUNTIME_BROKEN_MESSAGE: &str = "gxserver runs on that machine, but its zmx program is missing or broken, so new sessions cannot start.";
+pub(crate) const GPUI_REMOTE_RUNTIME_BROKEN_MESSAGE: &str = "Ghostex on that machine answers, but it can't find its session program (zmx), so new sessions there can't start.";
 
 pub(crate) fn gpui_remote_sanitized_process_failure(
     default_message: &str,
@@ -1043,6 +1043,8 @@ pub(crate) enum GpuiRemoteManagedPackageUpdate {
     BuildIdentity,
     /// Its zmx or ghostex is missing, dangling or not executable, whatever its build.
     BrokenRuntime,
+    /// The user pressed Reinstall for the machine (`GpuiRemoteMachineConfig::reinstall_package`).
+    Requested,
 }
 
 /// The decision over [`gpui_remote_managed_gxserver_build_identity_command`]'s output and the
@@ -1120,6 +1122,8 @@ pub(crate) fn gpui_remote_installed_gxserver_version_command() -> &'static str {
         "GHOSTEX_REMOTE_IDENTITY_FILE=\"$(dirname \"$(dirname \"$GHOSTEX_REMOTE_RESOLVED_BIN\")\")/build-identity.json\"; ",
         "if [ ! -r \"$GHOSTEX_REMOTE_IDENTITY_FILE\" ] && [ -r \"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/build-identity.json\" ]; then GHOSTEX_REMOTE_IDENTITY_FILE=\"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/build-identity.json\"; fi; ",
         "if [ ! -r \"$GHOSTEX_REMOTE_IDENTITY_FILE\" ] && [ -r \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/build-identity.json\" ]; then GHOSTEX_REMOTE_IDENTITY_FILE=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/build-identity.json\"; fi; ",
+        // A package Ghostex installed there (the one Reinstall replaces), printed outside the markers.
+        "if [ -r \"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/build-identity.json\" ] || [ -r \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/build-identity.json\" ]; then printf '__GHOSTEX_REMOTE_GXSERVER_MANAGED__\\n'; fi; ",
         "printf '__GHOSTEX_REMOTE_GXSERVER_VERSION_START__\\n'; ",
         "if [ -r \"$GHOSTEX_REMOTE_IDENTITY_FILE\" ]; then cat \"$GHOSTEX_REMOTE_IDENTITY_FILE\"; elif [ -x \"$GXSERVER_BIN\" ]; then \"$GXSERVER_BIN\" --version 2>/dev/null || true; fi; ",
         "printf '\\n__GHOSTEX_REMOTE_GXSERVER_VERSION_END__\\n'"

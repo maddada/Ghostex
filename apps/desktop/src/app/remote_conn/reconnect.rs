@@ -78,7 +78,7 @@ impl GhostexGpuiApp {
                 self.stop_source_code_server_runtime(cx);
             }
         }
-        let Some(config) = config else {
+        let Some(mut config) = config else {
             self.dispatch_gpui_remote_machine_status(remote_machine_id.as_str(), "invalid", cx);
             self.dispatch_gpui_app_modal_toast(
                 "warning",
@@ -88,6 +88,12 @@ impl GhostexGpuiApp {
             );
             return;
         };
+        // Settings > Remote > the machine's Reinstall: replace the package Ghostex installed there.
+        config.reinstall_package = !automatic
+            && command
+                .get("reinstall")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true);
         if automatic && config.disabled {
             self.stop_gpui_remote_gxserver_connection(&remote_machine_id);
             self.dispatch_gpui_remote_machine_status(

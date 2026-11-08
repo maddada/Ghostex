@@ -1182,30 +1182,35 @@ mod pairing_code_tests {
     }
 }
 
+/// What a machine tile says instead of its SSH target or version.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct TileStatus {
+    pub(super) text: &'static str,
+    /// Drawn with a red dot.
+    pub(super) failed: bool,
+}
+
 /// What a machine tile says instead of its SSH target or version: that it is this computer, or
-/// why its connection is failing. `None` keeps the usual line.
+/// that its connection is failing. `None` keeps the usual line.
 ///
 /// CDXC:RemoteMachines 2026-10-28 WHY: a failing machine's tile said nothing (the tab only counted
 /// "0/1 connected"), so the reason was only visible in the sidebar (found testing on Linux; every
-/// platform). The tile now carries the same sanitized reason, or the state's own words when the
-/// app has none, and a machine that is this computer says so.
-pub(super) fn machine_tile_status(
-    state: Option<&str>,
-    this_computer: bool,
-    message: Option<&str>,
-) -> Option<String> {
+/// platform). A machine that is this computer says so.
+///
+/// CDXC:RemoteMachines 2026-11-08 DECISION: User (Q2024): the tile shows only the state's short
+/// words with a red dot (`machine_state_short_word`); the reason it used to wrap over six lines
+/// is the first thing in the machine's sheet (`machine_status_panel` in machines.rs).
+pub(super) fn machine_tile_status(state: Option<&str>, this_computer: bool) -> Option<TileStatus> {
     if this_computer && state == Some("connected") {
-        return Some("This is this computer".to_string());
+        return Some(TileStatus {
+            text: "This computer",
+            failed: false,
+        });
     }
     let state = state.filter(|state| ghostex_gx_core::machine_state_is_failure(state))?;
-    let (title, detail) = ghostex_gx_core::machine_state_copy(state);
-    let reason = message
-        .map(str::trim)
-        .filter(|message| !message.is_empty())
-        .or(detail);
-    Some(match reason {
-        Some(reason) => format!("{title}: {reason}"),
-        None => title.to_string(),
+    Some(TileStatus {
+        text: ghostex_gx_core::machine_state_short_word(state),
+        failed: true,
     })
 }
 
@@ -1215,27 +1220,15 @@ mod machine_tile_status_tests {
 
     #[test]
     fn a_failing_machine_says_why_and_this_computer_says_so() {
-        assert_eq!(
-            machine_tile_status(
-                Some("sshFailed"),
-                false,
-                Some("SSH could not resolve the remote host.")
-            )
-            .as_deref(),
-            Some("Cannot reach machine: SSH could not resolve the remote host.")
-        );
-        assert_eq!(
-            machine_tile_status(Some("authFailed"), false, None).as_deref(),
-            Some(
-                "Cannot sign in to machine: The machine rejected the saved SSH username, password or key."
-            )
-        );
-        assert_eq!(
-            machine_tile_status(Some("connected"), true, None).as_deref(),
-            Some("This is this computer")
-        );
-        assert_eq!(machine_tile_status(Some("connected"), false, None), None);
-        assert_eq!(machine_tile_status(Some("connecting"), false, None), None);
-        assert_eq!(machine_tile_status(None, false, None), None);
+        let text = |state, this_computer| {
+            machine_tile_status(Some(state), this_computer).map(|status| status.text)
+        };
+        assert_eq!(text("sshFailed", false), Some("Can't reach"));
+        assert_eq!(text("authFailed", false), Some("Sign-in refused"));
+        assert_eq!(text("installFailed", false), Some("Setup failed"));
+        assert_eq!(text("connected", true), Some("This computer"));
+        assert_eq!(text("connected", false), None);
+        assert_eq!(text("connecting", false), None);
+        assert_eq!(machine_tile_status(None, false), None);
     }
 }

@@ -174,6 +174,19 @@ fn plan_machine_action(view: &SidebarView, command: &Value) -> Option<SidebarAct
         "configure" => Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
             payload: json!({ "type": "open", "modal": "settings", "initialTab": "remote" }),
         })),
+        // A failing machine's notice: its own sheet in Settings > Remote, which leads with what
+        // failed and the fixes (CDXC:RemoteMachines 2026-11-08 in machine_connection.rs).
+        "details" => {
+            let machine_id = text_field(command, "machineId")?;
+            Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
+                payload: json!({
+                    "type": "open",
+                    "modal": "settings",
+                    "initialTab": "remote",
+                    "initialRemoteMachineId": machine_id,
+                }),
+            }))
+        }
         _ => {
             let _ = view;
             None

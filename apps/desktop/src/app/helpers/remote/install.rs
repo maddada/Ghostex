@@ -20,6 +20,8 @@ use crate::*;
 pub(crate) struct GpuiRemoteGxserverInstallProbe {
     pub(crate) installed: bool,
     pub(crate) version: Option<String>,
+    /// Ghostex installed that gxserver package (not a Ghostex app's own), so Reinstall can replace it.
+    pub(crate) managed: bool,
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
@@ -108,6 +110,9 @@ pub(crate) fn gpui_remote_gxserver_install_probe_from_result(
         return Some(GpuiRemoteGxserverInstallProbe {
             installed: true,
             version: gpui_extract_remote_installed_gxserver_version(result.stdout.as_str()),
+            managed: result
+                .stdout
+                .contains("__GHOSTEX_REMOTE_GXSERVER_MANAGED__"),
         });
     }
     (result.exit_code == GPUI_REMOTE_GXSERVER_NOT_INSTALLED_EXIT_CODE)
@@ -174,6 +179,15 @@ pub(crate) fn gpui_remote_managed_gxserver_package_update(
         installed_identity.stdout.as_str(),
         expected_identity.as_deref(),
     )
+    .or_else(|| {
+        // Reinstall replaces only a package Ghostex installed there: one that names its build.
+        (config.reinstall_package
+            && gpui_extract_remote_managed_gxserver_build_identity(
+                installed_identity.stdout.as_str(),
+            )
+            .is_some())
+        .then_some(GpuiRemoteManagedPackageUpdate::Requested)
+    })
 }
 
 /// The build identity of the package this app itself carries for `target`, in the order the install picks it.

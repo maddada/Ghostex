@@ -742,8 +742,16 @@ pub(super) fn preview_paste_easy_connect_code(
 pub(super) fn machines_section(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
+    window: &Window,
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
+    // Three tiles to a row in a narrow Settings window, so a name and its status stay readable
+    // (four truncated both to "Macbo…" and "Setu…"; the same width as the section tabs' switch).
+    let per_row = if window.viewport_size().width < px(1060.0) {
+        3
+    } else {
+        4
+    };
     let machines = tab.remote_machines(cx);
     // Every computer's pill.
     let local_name = crate::host_name::local_computer_name();
@@ -775,7 +783,7 @@ pub(super) fn machines_section(
     while tiles.peek().is_some() {
         let mut row = h_flex().w_full().gap(px(8.0)).items_stretch();
         let mut count = 0;
-        for tile in tiles.by_ref().take(4) {
+        for tile in tiles.by_ref().take(per_row) {
             row = row.child(
                 div()
                     .flex_1()
@@ -786,7 +794,7 @@ pub(super) fn machines_section(
             );
             count += 1;
         }
-        for _ in count..4 {
+        for _ in count..per_row {
             row = row.child(div().flex_1().flex_basis(px(0.0)).min_w_0());
         }
         rows.push(row);
@@ -859,15 +867,15 @@ fn tile_icon(t: &RemoteTokens, path: &'static str) -> AnyElement {
 }
 
 fn tile_text(t: &RemoteTokens, title: String, detail_text: String) -> AnyElement {
-    tile_text_wrapping(t, title, detail_text, false)
+    tile_text_with_dot(t, title, detail_text, false)
 }
 
-/// [`tile_text`] whose line may wrap: a failing machine's reason is read whole.
-fn tile_text_wrapping(
+/// [`tile_text`] whose one line leads with a red dot: a failing machine's short status.
+fn tile_text_with_dot(
     t: &RemoteTokens,
     title: String,
     detail_text: String,
-    wrap: bool,
+    dot: bool,
 ) -> AnyElement {
     v_flex()
         .flex_1()
@@ -884,7 +892,24 @@ fn tile_text_wrapping(
                 .text_color(hsla(t.foreground))
                 .child(title),
         )
-        .child(detail(t, detail_text, wrap))
+        .child(
+            h_flex()
+                .min_w_0()
+                .gap(px(6.0))
+                .items_center()
+                .when(dot, |line| line.child(status_dot(t)))
+                .child(detail(t, detail_text, false)),
+        )
+        .into_any_element()
+}
+
+/// The 7px red dot of a failing machine, in its tile and at the head of its status panel.
+fn status_dot(t: &RemoteTokens) -> AnyElement {
+    div()
+        .flex_shrink_0()
+        .size(px(7.0))
+        .rounded_full()
+        .bg(hsla(t.p.destructive))
         .into_any_element()
 }
 
@@ -944,7 +969,6 @@ fn machine_tile(
     let status = machine_tile_status(
         tab.connect_states.get(&id).map(String::as_str),
         tab.this_computer.contains(&id),
-        tab.status_messages.get(&id).map(String::as_str),
     );
     let hover = t.card(0.58);
     let open_machine = machine.clone();
@@ -977,17 +1001,18 @@ fn machine_tile(
                     tab.open_machine_dialog(Some(&open_machine), window, cx);
                 }))
                 .child(tile_icon(t, ICON_DEVICE_DESKTOP))
-                .child(tile_text_wrapping(
+                .child(tile_text_with_dot(
                     t,
                     name,
-                    // A failing machine's reason, or that it is this computer, comes first and
-                    // wraps; then a connected machine's Ghostex version (and its update) stands in
-                    // for the SSH target.
+                    // A failing machine's short status, or that it is this computer, comes first;
+                    // then a connected machine's Ghostex version (and its update) stands in for
+                    // the SSH target. The reason is in the machine's sheet, never in the tile.
                     status
-                        .clone()
+                        .as_ref()
+                        .map(|status| status.text.to_string())
                         .or_else(|| super::app_update::tile_update_line(tab, &id))
                         .unwrap_or_else(|| format_remote_machine_ssh_target(machine)),
-                    status.is_some(),
+                    status.as_ref().is_some_and(|status| status.failed),
                 )),
         )
         .children(super::app_update::tile_update_button(tab, t, &id, cx))
@@ -1364,6 +1389,11 @@ pub(super) fn machine_dialog(
     fields.push(advanced.into_any_element());
 
     let mut body = v_flex().w_full().min_w_0().gap(px(12.0)).pr(px(2.0));
+    if let Some(machine_id) = machine_id.as_deref()
+        && let Some(panel) = machine_status_panel(tab, t, &colors, machine_id, &title, cx)
+    {
+        body = body.child(panel);
+    }
     if is_new {
         body = body.child(div().mb(px(2.0)).child(raised_segmented(
             &p,
@@ -1611,6 +1641,144 @@ pub(super) fn machine_dialog(
         window,
         cx,
     ))
+}
+
+/// The first thing in a failing machine's sheet: what failed, why in a sentence, and the fixes.
+///
+/// CDXC:RemoteMachines 2026-11-08 DECISION: User (Q2018, Q2019 on the remote tile page): a
+/// machine's failure and its fix live at the top of the machine's own sheet, not in its tile. The
+/// panel has the state's title with the tile's red dot, the reason the app sent (or the state's
+/// own words), and Reconnect, Reinstall on <machine> (only for a gxserver package Ghostex installed
+/// there: the connect then replaces it even at the same build) and Copy details, which copies the
+/// state and the full reason for a bug report.
+fn machine_status_panel(
+    tab: &RemoteTab,
+    t: &RemoteTokens,
+    colors: &DialogColors,
+    machine_id: &str,
+    machine_name: &str,
+    cx: &mut Context<RemoteTab>,
+) -> Option<AnyElement> {
+    let state = tab
+        .connect_states
+        .get(machine_id)
+        .map(String::as_str)
+        .filter(|state| ghostex_gx_core::machine_state_is_failure(state))?;
+    if tab.this_computer.contains(machine_id) {
+        return None;
+    }
+    let (title, default_reason) = ghostex_gx_core::machine_state_copy(state);
+    let reason = tab
+        .status_messages
+        .get(machine_id)
+        .map(|message| message.trim().to_string())
+        .filter(|message| !message.is_empty())
+        .or_else(|| default_reason.map(str::to_string));
+    let managed = tab
+        .installs
+        .get(machine_id)
+        .is_some_and(|install| install.installed && install.managed);
+    let details = format!(
+        "{machine_name}: {title} ({state})\n{}",
+        reason.clone().unwrap_or_default()
+    );
+    let p = t.p.nested_dialog();
+    let copy_id = SharedString::from(format!("remote-machine-status-copy-{machine_id}"));
+    let copied = tab.copied.contains(&copy_id);
+    let reconnect_id = machine_id.to_string();
+    let reinstall_id = machine_id.to_string();
+    let mut actions = h_flex()
+        .w_full()
+        .flex_wrap()
+        .gap(px(6.0))
+        .pl(px(15.0))
+        .pt(px(4.0))
+        .child(settings_button_sized(
+            &p,
+            "remote-machine-status-reconnect",
+            "Reconnect",
+            Some(ICON_REFRESH),
+            ButtonVariant::Default,
+            ButtonSize::Sm,
+            false,
+            None,
+            move |tab: &mut RemoteTab, _window, cx| {
+                tab.post(
+                    json!({ "remoteMachineId": reconnect_id, "type": "reconnectRemoteMachine" }),
+                    cx,
+                );
+            },
+            cx,
+        ));
+    if managed {
+        actions = actions.child(settings_button_sized(
+            &p,
+            "remote-machine-status-reinstall",
+            format!("Reinstall on {machine_name}"),
+            Some(icon::DOWNLOAD),
+            ButtonVariant::Secondary,
+            ButtonSize::Sm,
+            false,
+            None,
+            move |tab: &mut RemoteTab, _window, cx| {
+                tab.post(
+                    json!({
+                        "reinstall": true,
+                        "remoteMachineId": reinstall_id,
+                        "type": "reconnectRemoteMachine",
+                    }),
+                    cx,
+                );
+            },
+            cx,
+        ));
+    }
+    actions = actions.child(settings_button_sized(
+        &p,
+        copy_id.clone(),
+        if copied { "Copied" } else { "Copy details" },
+        Some(ICON_COPY),
+        ButtonVariant::Secondary,
+        ButtonSize::Sm,
+        false,
+        None,
+        move |tab: &mut RemoteTab, _window, cx| tab.copy(copy_id.clone(), details.clone(), cx),
+        cx,
+    ));
+    Some(
+        v_flex()
+            .id("remote-machine-status-panel")
+            .w_full()
+            .gap(px(2.0))
+            .p(px(12.0))
+            .rounded(px(MODAL_RADIUS_CONTROL))
+            .border_1()
+            .border_color(hsla(colors.border))
+            .child(
+                h_flex()
+                    .gap(px(8.0))
+                    .items_center()
+                    .child(status_dot(t))
+                    .child(
+                        div()
+                            .text_size(px(14.0))
+                            .line_height(px(20.0))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(hsla(colors.foreground))
+                            .child(title),
+                    ),
+            )
+            .children(reason.map(|reason| {
+                div()
+                    .pl(px(15.0))
+                    .text_size(px(13.0))
+                    .line_height(px(19.0))
+                    .text_color(hsla(colors.muted))
+                    .child(reason)
+            }))
+            .child(actions)
+            .into_any_element(),
+    )
 }
 
 fn dialog_machine_id(tab: &RemoteTab) -> Option<String> {

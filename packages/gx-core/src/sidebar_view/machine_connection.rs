@@ -77,6 +77,36 @@ pub fn machine_state_copy(state: &str) -> (&'static str, Option<&'static str>) {
     }
 }
 
+/// The two-word status a machine's tile shows for its connection state.
+///
+/// CDXC:RemoteMachines 2026-11-08 DECISION: User (Q2024 on the remote tile page, after "please wtf
+/// is this fucking error" about a tile that held "Remote setup failed: gxserver runs on that
+/// machine, but its zmx program is missing or broken, so new sessions cannot start." in six
+/// wrapped lines): a machine tile never holds a paragraph. It shows these short words with a red dot
+/// for a failure; the title and the reason stay in the machine's sheet and the sidebar notice
+/// ([`machine_state_copy`]), which have room for them.
+pub fn machine_state_short_word(state: &str) -> &'static str {
+    match state {
+        "connected" => "Connected",
+        "installing" => "Installing…",
+        "downloadingRemoteServerPackage" => "Downloading…",
+        "disconnected" => "Not connected",
+        "installApprovalRequired" => "Setup needed",
+        "installFailed" => "Setup failed",
+        "authFailed" => "Sign-in refused",
+        "pairingRequired" => "Pair again",
+        "presentationSubscribeFailed" | "presentationStreamFailed" => "Reconnecting…",
+        // A gxserver of another protocol (`gpui_remote_protocol_mismatch_message`).
+        "unsupported" => "Needs update",
+        "unsupportedRemotePlatform" => "Unsupported",
+        "invalid" => "Incomplete",
+        "sshFailed" | "tunnelFailed" | "keychainFailed" | "tokenUnavailable" | "failed" => {
+            "Can't reach"
+        }
+        _ => "Connecting…",
+    }
+}
+
 /// The state word a "This is this computer" notice is shrunk against.
 pub const THIS_COMPUTER_NOTICE_STATE: &str = "thisComputer";
 

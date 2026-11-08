@@ -472,6 +472,7 @@ impl GhostexGpuiApp {
             let _ = this.update(cx, |this, cx| {
                 let mut message = serde_json::json!({
                     "installed": probe.installed,
+                    "managed": probe.managed,
                     "remoteMachineId": remote_machine_id,
                     "type": "remoteGxserverInstallState",
                 });

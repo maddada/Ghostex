@@ -16,7 +16,9 @@
 //! `remote-edit-machine` (the saved machine's dialog through `initialRemoteMachineId`),
 //! `remote-advanced` (Advanced open with the raw JSON), `remote-no-server` (no gxserver
 //! connection), and the deep links `remote-deeplink-ec` / `remote-deeplink-tailscale`
-//! (`initialRemoteSection`: the card opens and scrolls to the top). The page reads the other
+//! (`initialRemoteSection`: the card opens and scrolls to the top), `remote-machine-failed` (the
+//! Remote machines tab with Macbook's setup failed: its tile's short status) and
+//! `remote-machine-failed-sheet` (Macbook's sheet with the status panel, Reinstall included). The page reads the other
 //! states from `preview_state` (settings_modal/tabs/remote/mod.rs `apply_preview_state`).
 use serde_json::{Map, Value, json};
 use std::cell::RefCell;
@@ -33,6 +35,12 @@ struct RemoteFixture {
 
 thread_local! {
     static FIXTURE: RefCell<Option<RemoteFixture>> = const { RefCell::new(None) };
+    /// The story state, for the app answers that differ by state (a failing machine).
+    static STATE: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+fn failed_machine_state() -> bool {
+    STATE.with(|state| state.borrow().starts_with("remote-machine-failed"))
 }
 
 fn iso_now_minus_hours(hours: i64) -> String {
@@ -124,6 +132,19 @@ pub(super) fn story_settings(state: &str, settings: &mut Map<String, Value>) {
         return;
     }
     FIXTURE.with(|fixture| *fixture.borrow_mut() = Some(fixture_for(state)));
+    STATE.with(|stored| *stored.borrow_mut() = state.to_string());
+    if state.starts_with("remote-machine-failed") {
+        settings.insert(
+            "remoteMachines".into(),
+            json!([
+                { "id": "story-windows", "name": "Windows", "sshHost": "100.105.82.19", "sshPasswordSaved": true, "sshUser": "madda" },
+                { "id": "story-macbook", "name": "Macbook", "shortName": "MC", "sshHost": "100.77.81.4", "sshPasswordSaved": true, "sshUser": "madda" },
+                { "id": "story-repro", "name": "SSH repro test 2", "shortName": "R2", "sshHost": "localhost", "sshUser": "madda" },
+                { "id": "story-kubuntu", "name": "Kubuntu VM", "sshHost": "172.22.23.53", "sshUser": "madda", "disabled": true }
+            ]),
+        );
+        return;
+    }
     // Only the Remote story saves a machine; the SSH-off and Easy-Connect-off stories have none.
     if !matches!(
         state,
@@ -151,6 +172,7 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
         "remote-deeplink-tailscale" => message["initialRemoteSection"] = json!("tailscale"),
         // The story's `story-remote` id is not a `remote-*` id, so the normalized list renumbers it.
         "remote-edit-machine" => message["initialRemoteMachineId"] = json!("remote-1"),
+        "remote-machine-failed-sheet" => message["initialRemoteMachineId"] = json!("remote-2"),
         _ => {}
     }
     Some(message)
@@ -264,6 +286,13 @@ pub(super) fn answers(message: &Value) -> Vec<Value> {
     if message.get("type").and_then(Value::as_str) == Some("remoteAppUpdate")
         && message.get("op").and_then(Value::as_str) == Some("refreshAll")
     {
+        if failed_machine_state() {
+            return vec![json!({
+                "type": "remoteMachineConnectStates",
+                "states": { "remote-1": "connected", "remote-2": "installFailed", "remote-3": "connected" },
+                "messages": { "remote-2": "Ghostex on that machine answers, but it can't find its session program (zmx), so new sessions there can't start." },
+            })];
+        }
         return vec![json!({
             "type": "remoteMachineConnectStates",
             "states": { "remote-1": "connected", "remote-2": "sshFailed" },
@@ -275,8 +304,14 @@ pub(super) fn answers(message: &Value) -> Vec<Value> {
     let Some(id) = message.get("remoteMachineId").and_then(Value::as_str) else {
         return Vec::new();
     };
+    // Answers sent in one go reach the page as its last one only (the app's probes return one by
+    // one over SSH), so the failing-machine stories answer for Macbook alone.
+    if failed_machine_state() && id != "remote-2" {
+        return Vec::new();
+    }
     vec![json!({
         "installed": true,
+        "managed": failed_machine_state(),
         "remoteMachineId": id,
         "type": "remoteGxserverInstallState",
         "version": "0.9.3",
