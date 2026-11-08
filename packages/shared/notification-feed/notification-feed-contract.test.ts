@@ -30,6 +30,7 @@ describe('notification feed contract', () => {
       'Failed',
       'Reset expiring',
       'Reset used',
+      'Security',
     ]);
   });
 
@@ -46,14 +47,25 @@ describe('notification feed contract', () => {
     expect(normalizeNotificationFeedItem(row({}))).not.toHaveProperty('accountId');
   });
 
-  test('an unknown kind is still dropped and the count stays the daemon’s', () => {
+  test('an unknown kind is dropped and does not count, so the dot matches the list', () => {
     const state = normalizeNotificationFeedState({
       items: [row({ id: 'a', kind: 'failed' }), row({ id: 'b', kind: 'somethingNewer' })],
       unreadCount: 2,
-      nextUnreadId: 'a',
+      nextUnreadId: 'b',
     });
     expect(state.items.map((item) => item.id)).toEqual(['a']);
-    expect(state.unreadCount).toBe(2);
-    expect(state.nextUnreadId).toBe('a');
+    expect(state.unreadCount).toBe(1);
+    expect(state.nextUnreadId).toBeUndefined();
+  });
+
+  test('a security row is listed and counted', () => {
+    const state = normalizeNotificationFeedState({
+      items: [row({ id: 's', kind: 'security', sessionId: 'security:12', securityEntry: 12 })],
+      unreadCount: 1,
+      nextUnreadId: 's',
+    });
+    expect(state.items[0]?.securityEntry).toBe(12);
+    expect(state.unreadCount).toBe(1);
+    expect(state.nextUnreadId).toBe('s');
   });
 });

@@ -382,4 +382,58 @@ mod tests {
             Some("Windows is offline. Its notifications show again when it reconnects.")
         );
     }
+
+    #[test]
+    fn the_bell_counts_exactly_the_unread_rows_it_lists_on_every_computer() {
+        // Each daemon counts a row this client drops (a security row from an older client's
+        // point of view is the same shape: an unknown kind): the merged dot must still equal
+        // the merged Unread group.
+        let daemon_row = |id: &str, kind: &str, read: bool| {
+            json!({
+                "id": id, "projectId": "P1", "sessionId": format!("S-{id}"), "kind": kind,
+                "createdAt": "2026-11-08T02:58:38.000Z", "read": read,
+            })
+        };
+        let local = crate::notification_feed::notification_feed_state_message(&json!({
+            "items": [daemon_row("s1", "security", false), daemon_row("x1", "somethingNewer", false),
+                      daemon_row("d1", "finished", true)],
+            "unreadCount": 2,
+            "nextUnreadId": "x1",
+        }));
+        let remote = crate::notification_feed::notification_feed_state_message(&json!({
+            "items": [daemon_row("x2", "somethingNewer", false), daemon_row("d2", "finished", true)],
+            "unreadCount": 1,
+            "nextUnreadId": "x2",
+        }));
+        let machine = windows();
+        let feeds = [
+            MachineNotificationFeed {
+                machine: &MachineId::Local,
+                machine_name: "",
+                online: true,
+                message: Some(&local),
+            },
+            MachineNotificationFeed {
+                machine: &machine,
+                machine_name: "Windows",
+                online: true,
+                message: Some(&remote),
+            },
+        ];
+        let merged = merged_notification_feed_message(&feeds);
+        let listed_unread: Vec<&str> = merged["items"]
+            .as_array()
+            .expect("items")
+            .iter()
+            .filter(|item| item["read"] != Value::Bool(true))
+            .filter_map(|item| item["id"].as_str())
+            .collect();
+        assert_eq!(listed_unread, ["s1"]);
+        assert_eq!(merged["unreadCount"], 1);
+        assert_eq!(merged["localUnreadCount"], 1);
+        assert_eq!(merged["remoteUnreadCount"], 0);
+        // Neither daemon's jump target is a row the panel lists, so Next unread opens nothing
+        // hidden.
+        assert!(merged.get("nextUnreadId").is_none());
+    }
 }

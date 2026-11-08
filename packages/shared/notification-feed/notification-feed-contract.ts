@@ -29,9 +29,18 @@ export const NOTIFICATION_FEED_BODY_MAX_CHARS = 280;
  * sendFailed: a chat message could not be sent for good ("Not sent"); no other kind replaces it while it is unread.
  * failed: the agent's run ended on an error gxserver positively identified (a hook's failure event, account recovery giving up or its quick retries failing, a program's OSC 7501 error); the body is one fixed sentence.
  * resetExpiring / resetRedeemed: account rows about a saved account's banked usage reset; they carry `accountId`, and their `sessionId` names no session.
+ * security: a sensitive action recorded in the security log (server/src/audit/notify.rs); it carries `securityEntry`, and its `sessionId` names no session.
  */
 export type NotificationFeedKind =
-  'finished' | 'needsInput' | 'bell' | 'custom' | 'sendFailed' | 'failed' | 'resetExpiring' | 'resetRedeemed';
+  | 'finished'
+  | 'needsInput'
+  | 'bell'
+  | 'custom'
+  | 'sendFailed'
+  | 'failed'
+  | 'resetExpiring'
+  | 'resetRedeemed'
+  | 'security';
 
 export const NOTIFICATION_FEED_KINDS: readonly NotificationFeedKind[] = [
   'finished',
@@ -42,6 +51,7 @@ export const NOTIFICATION_FEED_KINDS: readonly NotificationFeedKind[] = [
   'failed',
   'resetExpiring',
   'resetRedeemed',
+  'security',
 ];
 
 export type NotificationFeedItem = {
@@ -59,6 +69,8 @@ export type NotificationFeedItem = {
   agentName?: string;
   /** Set on account rows: the saved account the row is about. */
   accountId?: string;
+  /** Set on security rows: the security log entry the row announces. */
+  securityEntry?: number;
   /** ISO timestamp. */
   createdAt: string;
   read: boolean;
@@ -135,6 +147,7 @@ export function normalizeNotificationFeedItem(value: unknown): NotificationFeedI
     kind,
     projectId,
     read: raw.read === true,
+    ...(typeof raw.securityEntry === 'number' ? { securityEntry: raw.securityEntry } : {}),
     sessionId,
     subtitle: readString(raw.subtitle) ?? '',
     title: readString(raw.title) ?? '',
@@ -149,12 +162,12 @@ export function normalizeNotificationFeedState(value: unknown): NotificationFeed
   const items = Array.isArray(raw.items)
     ? raw.items.map(normalizeNotificationFeedItem).filter((item): item is NotificationFeedItem => item !== undefined)
     : [];
-  const unreadCount =
-    typeof raw.unreadCount === 'number' && Number.isFinite(raw.unreadCount) && raw.unreadCount >= 0
-      ? Math.floor(raw.unreadCount)
-      : items.filter((item) => !item.read).length;
+  // The count is the unread rows kept here, never the daemon's number, so a row a client cannot
+  // show never lights the bell (gx-core notification_feed.rs, 2026-11-08).
+  const unread = items.filter((item) => !item.read);
   const nextUnreadId = readString(raw.nextUnreadId);
-  return { ...(nextUnreadId ? { nextUnreadId } : {}), items, unreadCount };
+  const nextIsListed = nextUnreadId !== undefined && unread.some((item) => item.id === nextUnreadId);
+  return { ...(nextIsListed ? { nextUnreadId } : {}), items, unreadCount: unread.length };
 }
 
 /** Human label for a kind, shared by every surface that lists the feed. */
@@ -176,5 +189,7 @@ export function notificationFeedKindLabel(kind: NotificationFeedKind): string {
       return 'Reset expiring';
     case 'resetRedeemed':
       return 'Reset used';
+    case 'security':
+      return 'Security';
   }
 }
