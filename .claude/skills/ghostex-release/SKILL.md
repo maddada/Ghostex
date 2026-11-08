@@ -86,8 +86,8 @@ only to get a phone JavaScript fix out).
 
 1. Commit and push the phone change (submodule first, then the pointer in the
    main repo, as in step 2). The dispatcher has `release:actions`' checks: `gh`
-   auth, branch `main`, a clean tree, `HEAD == origin/main`, and
-   `apps/mobile/app` checked out at the commit main records.
+   auth, a clean tree, `HEAD == origin/main` (on `main`, a worktree branch or a
+   detached HEAD), and `apps/mobile/app` checked out at the commit main records.
 2. `bun run release:ota -- --dry-run` prints what would publish: the main and
    phone commits, the version (the newest GitHub release, so phones read it as
    "that release plus a fix"), each platform's runtime version and what
@@ -140,7 +140,10 @@ version, never by re-tagging.
 ### 2. Commit and push everything, and fix the release point
 
 The dispatcher refuses unless `git status --porcelain --untracked-files=all`
-is empty **and** `HEAD == origin/main`. The coordinator meets this by
+is empty **and** `HEAD == origin/main`. The checkout may be `main`, a worktree
+branch or a detached HEAD, as long as it is exactly origin/main, so a thread
+can dispatch from its own worktree while the user's folder holds `main`. The
+coordinator meets this by
 committing and pushing all pending work first, not by waiting for an empty
 tree:
 

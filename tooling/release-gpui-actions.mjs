@@ -411,16 +411,21 @@ function expectedPlatforms(options) {
   ].filter(Boolean);
 }
 
+/**
+ * CDXC:Release 2026-11-08 WHY: the release is built from GitHub's main (`--ref main`, and the run refuses if main moved), so the local checkout only has to prove it IS that commit: a clean tree whose HEAD equals origin/main after a fetch. Requiring the local branch to be named `main` added nothing to that, and it forced 11.1.0's dispatch into a throwaway clone because `main` was checked out in the user's own folder; a worktree branch or a detached HEAD at origin/main now dispatches too.
+ */
 function validateLocalSource(version, { allowExistingTag, requireExistingTag = false }) {
   run('gh', ['auth', 'status'], { capture: false });
-  const branch = run('git', ['branch', '--show-current']);
-  if (branch !== 'main') throw new Error(`Release source must be main, got ${branch}`);
+  const branch = run('git', ['branch', '--show-current']) || 'detached HEAD';
   const status = run('git', ['status', '--porcelain', '--untracked-files=all']);
   if (status) throw new Error(`Release source is dirty:\n${status}`);
   run('git', ['fetch', 'origin', 'main', '--tags'], { capture: false });
   const head = run('git', ['rev-parse', 'HEAD']);
   const remoteMain = run('git', ['rev-parse', 'origin/main']);
-  if (head !== remoteMain) throw new Error(`Local main ${head} differs from origin/main ${remoteMain}`);
+  if (head !== remoteMain) {
+    throw new Error(`Release source (${branch}) is at ${head}; it must be origin/main ${remoteMain}`);
+  }
+  console.log(`Release source: ${branch} at origin/main ${head}`);
   const packageVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
   if (packageVersion !== version) throw new Error(`package.json is ${packageVersion}; expected ${version}`);
   const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');

@@ -182,14 +182,16 @@ function verifyExportCommand(options) {
 function validateLocalSource({ dryRun }) {
   run('gh', ['auth', 'status'], { capture: false });
   const problems = [];
-  const branch = run('git', ['branch', '--show-current']);
-  if (branch !== 'main') problems.push(`the release source must be main, got ${branch}`);
+  // A worktree branch or a detached HEAD may dispatch as long as it is origin/main itself
+  // (CDXC:Release 2026-11-08 in tooling/release-gpui-actions.mjs `validateLocalSource`).
+  const branch = run('git', ['branch', '--show-current']) || 'detached HEAD';
   const status = run('git', ['status', '--porcelain', '--untracked-files=all']);
   if (status) problems.push(`the release source is dirty:\n${status}`);
   run('git', ['fetch', 'origin', 'main', '--tags'], { capture: false });
   const head = run('git', ['rev-parse', 'HEAD']);
   const remoteMain = run('git', ['rev-parse', 'origin/main']);
-  if (head !== remoteMain) problems.push(`local main ${head} differs from origin/main ${remoteMain}`);
+  if (head !== remoteMain)
+    problems.push(`the release source (${branch}) is at ${head}; it must be origin/main ${remoteMain}`);
   const checkedOut = git(['rev-parse', 'HEAD'], { cwd: path.join(REPO_ROOT, MOBILE_APP) });
   if (checkedOut !== mobileCommitAt('HEAD')) {
     problems.push(
