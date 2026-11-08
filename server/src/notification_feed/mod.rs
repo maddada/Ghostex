@@ -12,6 +12,9 @@ pub(crate) mod producer;
 pub(crate) mod store;
 pub(crate) mod thread_read;
 
+#[cfg(test)]
+mod kinds_tests;
+
 pub(crate) use api::*;
 pub(crate) use failure::*;
 pub(crate) use producer::*;
