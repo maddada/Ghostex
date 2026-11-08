@@ -43,7 +43,7 @@ use connect::FlowState;
 use editor::EditorDraft;
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Context, Entity, FocusHandle, IntoElement,
-    ParentElement as _, Render, SharedString, Task, Window, div,
+    ParentElement as _, Render, SharedString, Styled as _, Task, Window, div,
 };
 use helper_tools::HelperToolsState;
 use manager::SetupDraft;
@@ -534,9 +534,24 @@ impl AccountsTab {
                 Some(super::super::fields::ListItemStatus::Warning),
                 None,
                 "Accounts could not be read",
+                // The reason in plain words; the CLI's own text ("cswap list failed: …") only
+                // under Details (User, Q2021 on the remote tile audit page).
                 Some(
-                    div()
-                        .child(widgets::account_text(&error, hide))
+                    gpui_component::v_flex()
+                        .gap(gpui::px(4.0))
+                        .child(div().child(
+                            if error.to_ascii_lowercase().contains("permission denied") {
+                                "Ghostex wasn't allowed to read your saved accounts."
+                            } else {
+                                "Ghostex couldn't read your saved accounts."
+                            },
+                        ))
+                        .child(super::super::fields::notice::raw_details(
+                            &p,
+                            "accounts-read-error",
+                            widgets::account_text(&error, hide),
+                            &self.store,
+                        ))
                         .into_any_element(),
                 ),
                 Some(retry),

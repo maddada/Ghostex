@@ -413,6 +413,7 @@ impl VoiceAgentTab {
         });
         let body = hex_body(
             p,
+            &self.store,
             &status,
             tail.map(|tail| (tail, plan.display)),
             (run_phase.as_deref() == Some("installing")).then_some(plan.display),
@@ -714,6 +715,7 @@ impl VoiceAgentTab {
 /// nothing to say) is just its buttons, on the right of the status line.
 fn hex_body(
     p: &SettingsPalette,
+    store: &gpui::Entity<super::super::super::store::SettingsStore>,
     status: &HexStatus,
     failure: Option<(String, &'static str)>,
     running_command: Option<&'static str>,
@@ -739,7 +741,14 @@ fn hex_body(
     v_flex()
         .w_full()
         .gap(px(10.0))
-        .children(status.help.clone().map(&muted_text))
+        // A failed install leads with its cause; its own help line only introduced the output.
+        .children(
+            status
+                .help
+                .clone()
+                .filter(|_| failure.is_none())
+                .map(&muted_text),
+        )
         .when(!status.steps.is_empty(), |this| {
             this.child(
                 v_flex().w_full().gap(px(4.0)).children(
@@ -754,13 +763,42 @@ fn hex_body(
         .when_some(running_command, |this, command| {
             this.child(command_block(p, command))
         })
+        // CDXC:Dictation 2026-11-08 WHY: the installer's raw output (Homebrew's "==> Fetching…",
+        // "Error: …") was the row's main content. The cause comes first in a sentence; the output
+        // is under Details with Copy (User, Q2021 on the remote tile audit page).
         .when_some(failure, |this, (tail, command)| {
-            this.child(output_block(p, &tail))
+            this.child(muted_text(install_failure_cause(&tail).to_string()))
+                .child(super::super::super::fields::notice::raw_details(
+                    p,
+                    "dictate-hex-install-output",
+                    tail,
+                    store,
+                ))
                 .child(muted_text("To install it yourself, run this:".to_string()))
                 .child(command_block(p, command))
         })
         .child(controls_row)
         .into_any_element()
+}
+
+/// Why Hex's installer stopped, in a sentence, from the lines it printed.
+fn install_failure_cause(output: &str) -> &'static str {
+    let output = output.to_ascii_lowercase();
+    if [
+        "failed to connect",
+        "could not resolve host",
+        "connection timed out",
+        "port 443",
+    ]
+    .iter()
+    .any(|sign| output.contains(sign))
+    {
+        "Hex's download couldn't reach github.com. Check this computer's internet connection, then try again."
+    } else if output.contains("permission denied") {
+        "Hex's installer wasn't allowed to write its files."
+    } else {
+        "Hex's installer stopped before Hex was installed."
+    }
 }
 
 /// One "1. Install Hex." line: the number in a muted column, the words in the body colour.
@@ -791,11 +829,6 @@ fn numbered_step(p: &SettingsPalette, number: usize, text: &str) -> AnyElement {
 /// A command in a monospace box that wraps, so the whole line can be read and copied by hand.
 fn command_block(p: &SettingsPalette, command: &str) -> AnyElement {
     mono_block(p, command.to_string(), p.foreground_alpha(0.9))
-}
-
-/// The installer's last lines, in the destructive colour's neighbour: plain text in a box.
-fn output_block(p: &SettingsPalette, text: &str) -> AnyElement {
-    mono_block(p, text.to_string(), p.muted)
 }
 
 fn mono_block(p: &SettingsPalette, text: String, color: gpui::Rgba) -> AnyElement {

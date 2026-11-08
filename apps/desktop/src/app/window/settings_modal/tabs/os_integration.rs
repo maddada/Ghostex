@@ -25,9 +25,6 @@ const ICON_CIRCLE_CHECK_FILLED: &str = "modals/settings/circle-check-filled.svg"
 const ICON_REFRESH: &str = "modals/settings/refresh.svg";
 const ICON_ALERT_TRIANGLE: &str = "modals/settings/alert-triangle.svg";
 
-/// `statusItems.slice(0, 6)`.
-const VISIBLE_STATUS_ITEMS: usize = 6;
-
 pub(crate) fn os_integration_tab_view(store: &Entity<SettingsStore>, cx: &mut App) -> AnyView {
     cx.new(|cx| OsIntegrationTab::new(store.clone(), cx)).into()
 }
@@ -365,7 +362,7 @@ impl Render for OsIntegrationTab {
                         .cloned()
                         .unwrap_or_default();
                     if !items.is_empty() {
-                        rows.push(status_notice(&p, &items));
+                        rows.push(status_notice(&p, &self.store, &items));
                     }
                     let bundle_id = status.get("bundleIdentifier").and_then(Value::as_str);
                     let flag = |key: &str| status.get(key).and_then(Value::as_bool) == Some(true);
@@ -428,9 +425,21 @@ impl Render for OsIntegrationTab {
 
 /// The notice over the diagnostics when handler updates need attention: a card child, so it takes
 /// the card's 14/20 inset as its own padding (`.settings-list-card > :not(.settings-list-row)`).
-fn status_notice(p: &super::super::palette::SettingsPalette, items: &[Value]) -> AnyElement {
-    let visible = items.iter().take(VISIBLE_STATUS_ITEMS);
-    let remaining = items.len().saturating_sub(VISIBLE_STATUS_ITEMS);
+///
+/// CDXC:OsIntegration 2026-11-08 WHY: the notice was a red-tinted block listing "Editor default
+/// .ts  Default change rejected" rows (the remote tile audit, finding 11). It is a neutral card
+/// with the title and one plain sentence; the per-handler rows are under Details with Copy (User,
+/// Q2021: raw text folds under Details).
+fn status_notice(
+    p: &super::super::palette::SettingsPalette,
+    store: &Entity<SettingsStore>,
+    items: &[Value],
+) -> AnyElement {
+    let rows = items
+        .iter()
+        .map(|item| format!("{}: {}", item_subject(item), item_reason(item)))
+        .collect::<Vec<_>>()
+        .join("\n");
     v_flex()
         .w_full()
         .gap(px(8.0))
@@ -438,8 +447,7 @@ fn status_notice(p: &super::super::palette::SettingsPalette, items: &[Value]) ->
         .py(px(14.0))
         .rounded(px(MODAL_RADIUS_CONTROL))
         .border_1()
-        .border_color(hsla(css_fade(p.destructive, 0.3)))
-        .bg(hsla(css_fade(p.destructive, 0.05)))
+        .border_color(hsla(p.hairline))
         .text_size(px(13.0))
         .line_height(px(18.0))
         .text_color(hsla(p.muted))
@@ -450,7 +458,7 @@ fn status_notice(p: &super::super::palette::SettingsPalette, items: &[Value]) ->
                 .child(div().mt(px(2.0)).flex_shrink_0().child(settings_icon(
                     ICON_ALERT_TRIANGLE,
                     16.0,
-                    p.destructive,
+                    p.muted,
                 )))
                 .child(
                     v_flex()
@@ -463,28 +471,14 @@ fn status_notice(p: &super::super::palette::SettingsPalette, items: &[Value]) ->
                                 .text_color(hsla(p.foreground))
                                 .child(notice_title(items)),
                         )
-                        .child(div().child(notice_description(items))),
+                        .child(div().child(notice_description(items)))
+                        .child(super::super::fields::notice::raw_details(
+                            p,
+                            "os-integration-handler-status",
+                            rows,
+                            store,
+                        )),
                 ),
-        )
-        .child(
-            v_flex()
-                .gap(px(4.0))
-                .children(visible.map(|item| {
-                    h_flex()
-                        .items_center()
-                        .justify_between()
-                        .gap(px(12.0))
-                        .child(div().child(item_subject(item)))
-                        .child(
-                            div()
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(hsla(p.foreground))
-                                .child(item_reason(item)),
-                        )
-                }))
-                .children((remaining > 0).then(|| {
-                    div().child(format!("{remaining} more handler updates need attention."))
-                })),
         )
         .into_any_element()
 }
