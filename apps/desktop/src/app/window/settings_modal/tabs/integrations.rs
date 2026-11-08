@@ -1639,12 +1639,7 @@ mod tests {
     /// works for a skill the uninstaller knows by id and by folder name.
     #[test]
     fn installed_skill_rows_can_be_uninstalled() {
-        // Known gap, not part of #489: the Secrets row's Uninstall does nothing.
-        const KNOWN_UNINSTALL_GAPS: &[&str] = &["secrets"];
         for skill in catalog_skills(true) {
-            if KNOWN_UNINSTALL_GAPS.contains(&skill.id.as_str()) {
-                continue;
-            }
             let name = gpui_bundled_agent_skill_name(&skill.id)
                 .unwrap_or_else(|| panic!("{}: Uninstall does not know this skill", skill.id));
             assert_eq!(name, skill.skill_name, "{}", skill.id);

@@ -27,6 +27,7 @@ pub(crate) fn gpui_bundled_agent_skill_name(skill_id: &str) -> Option<&'static s
         "generateTitle" => Some("ghostex-auto-rename-session"),
         "moveCodexSession" => Some("ghostex-move-codex-session"),
         "visuals" => Some("ghostex-visuals"),
+        "secrets" => Some("ghostex-secrets"),
         _ => None,
     }
 }
