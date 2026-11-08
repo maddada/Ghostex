@@ -56,6 +56,11 @@ if (!$ZigCommand) {
     $env:GHOSTEX_ZIG = $ZigCommand.Source
 }
 
+# CDXC:Security 2026-11-08 WHY: Launch-VsDevShell re-reads the environment from VsDevCmd's `set` output, which keeps only the first line of a multi-line variable, so the PEM component signing key reached Node as its BEGIN line and sealing CEF failed with "DECODER routines::unsupported" (11.1.0's first Windows builds). Escaping its newlines keeps it on one line; component-signing.mjs turns `\n` back into newlines.
+if ($env:GHOSTEX_COMPONENT_SIGNING_KEY -match "`n") {
+    $env:GHOSTEX_COMPONENT_SIGNING_KEY = $env:GHOSTEX_COMPONENT_SIGNING_KEY -replace "`r?`n", '\n'
+}
+
 # Use the installed C++ toolchain from a normal PowerShell window too.
 $VsArch = if ($Arch -eq 'arm64') { 'arm64' } else { 'amd64' }
 & (Join-Path $VsRoot 'Common7/Tools/Launch-VsDevShell.ps1') -Arch $VsArch -HostArch amd64 -SkipAutomaticLocation
