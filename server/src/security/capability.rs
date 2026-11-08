@@ -117,12 +117,13 @@ impl Principal {
                     | AgentWritableSettings
                     | RequestSensitiveAction
             ),
-            // Peers, guests and extensions keep their own endpoint allow-lists
-            // (`connected_computers/scope.rs`, `collab::shares::GUEST_ENDPOINTS`, the extension
-            // registry); none of them may ask for a sensitive action.
-            Self::Peer { .. } | Self::Guest { .. } | Self::Extension { .. } | Self::Anonymous => {
-                false
-            }
+            // Agents on a connected computer reach only `PEER_ALLOWED_ENDPOINTS`
+            // (connected_computers/scope.rs), among them answering a prompt and typing into a
+            // session here, so they may ask for those like an agent here does.
+            Self::Peer { .. } => capability == RequestSensitiveAction,
+            // Guests and extensions keep their own endpoint allow-lists
+            // (`collab::shares::GUEST_ENDPOINTS`, the extension registry) and never ask.
+            Self::Guest { .. } | Self::Extension { .. } | Self::Anonymous => false,
         }
     }
 
@@ -227,13 +228,14 @@ mod tests {
 
     #[test]
     fn outsiders_cannot_ask_for_sensitive_actions() {
+        assert!(Principal::Peer {
+            server_id: "S1".into(),
+            name: "Laptop".into(),
+        }
+        .has(Capability::RequestSensitiveAction));
         for caller in [
             Principal::Guest {
                 share_id: "x".into(),
-            },
-            Principal::Peer {
-                server_id: "S1".into(),
-                name: "Laptop".into(),
             },
             Principal::Extension {
                 extension_id: "e".into(),

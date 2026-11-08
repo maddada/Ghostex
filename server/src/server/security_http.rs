@@ -73,9 +73,37 @@ pub(crate) fn presence_outcome(
         Principal::LocalAgent => "A terminal on this computer".to_string(),
         other => other.kind().to_string(),
     };
-    state
+    let now = security::now_ms();
+    let refused_action = crate::audit::Action::new(action.action.as_str(), action.summary.clone());
+    let outcome = state
         .security
-        .require_owner_presence(caller, &label, action, presented, security::now_ms())
+        .require_owner_presence(caller, &label, action, presented, now);
+    // The security log (server/src/audit/): a new request is logged as pending, which also tells
+    // the phone; a spent approval is named by the entry the route's handler records for this
+    // request; a denial is logged where the owner says no (`/api/denyApprovalRequest`).
+    match &outcome {
+        PresenceOutcome::Pending(request) if request.created_at_ms == now => {
+            crate::audit::record(
+                crate::audit::Action::from_approval(request),
+                crate::audit::Actor::from(caller),
+                crate::audit::Outcome::Pending,
+                Some(crate::audit::ApprovalRef::from(request)),
+            );
+        }
+        PresenceOutcome::Granted(grant) => {
+            crate::audit::note_approval(crate::audit::ApprovalRef::from(&grant.approval));
+        }
+        PresenceOutcome::Refused { message } => {
+            crate::audit::record(
+                refused_action,
+                crate::audit::Actor::from(caller),
+                crate::audit::Outcome::Refused(message.clone()),
+                None,
+            );
+        }
+        _ => {}
+    }
+    outcome
 }
 
 /// The grant, or the 403 answer (`approvalRequired`, `approvalDenied`, `forbidden`) for the rest.
@@ -237,6 +265,17 @@ fn enroll_key(
         let key = security
             .enroll_first_owner_key(key, now)
             .map_err(|error| EnrollRefusal::Reply("badRequest", error.to_string()))?;
+        // Trusted on first use (user decision 1A), so the log is where a surprise shows.
+        crate::audit::record(
+            crate::audit::Action::new(
+                "ownerKey.add",
+                format!("Made {} the owner of Ghostex on this computer", key.label),
+            )
+            .target(key.key_id.clone()),
+            crate::audit::Actor::from(caller),
+            crate::audit::Outcome::Done,
+            None,
+        );
         return Ok(json!({ "key": key }));
     }
     if first && !matches!(caller, Principal::Owner { .. }) {
@@ -262,12 +301,31 @@ fn enroll_key(
         require_owner_presence(state, caller, action, body, endpoint_path, request_id)
             .map_err(EnrollRefusal::Response)?;
     }
+    let label = key.label.clone();
     let added = if owner {
         security.add_owner_key(key)
     } else {
         security.add_approver_key(key, now)
     }
     .map_err(|error| EnrollRefusal::Reply("badRequest", error.to_string()))?;
+    crate::audit::record(
+        crate::audit::Action::new(
+            if owner {
+                "ownerKey.add"
+            } else {
+                "approverKey.add"
+            },
+            if owner {
+                format!("Made {label} an owner of Ghostex on this computer")
+            } else {
+                format!("Let {label} approve requests for this computer")
+            },
+        )
+        .target(added.key_id.clone()),
+        crate::audit::Actor::from(caller),
+        crate::audit::Outcome::Done,
+        None,
+    );
     Ok(json!({ "key": added }))
 }
 
@@ -332,6 +390,12 @@ fn handle(
                 request: request.clone(),
                 by: caller.clone(),
             });
+            crate::audit::record(
+                crate::audit::Action::from_approval(&request),
+                crate::audit::Actor::from(caller),
+                crate::audit::Outcome::Denied,
+                Some(crate::audit::ApprovalRef::from(&request)),
+            );
             Ok(json!({ "request": request }))
         }
         security::APPROVER_KEYS_LIST_ENDPOINT => {
@@ -356,6 +420,16 @@ fn handle(
                 key: key.clone(),
                 by: caller.clone(),
             });
+            crate::audit::record(
+                crate::audit::Action::new(
+                    "approverKey.remove",
+                    format!("Removed {} as an approver", key.label),
+                )
+                .target(key.key_id.clone()),
+                crate::audit::Actor::from(caller),
+                crate::audit::Outcome::Done,
+                None,
+            );
             Ok(json!({ "key": key }))
         }
         security::OWNER_CHALLENGE_ENDPOINT => Ok(json!(security.owner_challenge(now))),

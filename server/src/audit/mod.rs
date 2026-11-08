@@ -37,7 +37,7 @@ mod notify;
 mod types;
 
 pub use caller::CALLER_SESSION_HEADER;
-pub(crate) use caller::{with_caller, Caller};
+pub(crate) use caller::{note_approval, with_caller, Caller};
 pub use chain::{AuditLog, ChainCheck, ChainProblem, StoredEntry};
 pub(crate) use http::{handle_security_log_http, SECURITY_LOG_ENDPOINT};
 pub(crate) use notify::install_notifier;
@@ -68,6 +68,12 @@ pub fn record(
     outcome: Outcome,
     approval: Option<ApprovalRef>,
 ) -> Option<StoredEntry> {
+    // An entry for a request the approvals gate let through names the approval that allowed it.
+    let approval = approval.or_else(caller::request_approval);
+    let outcome = match outcome {
+        Outcome::Done if approval.is_some() => Outcome::Approved,
+        other => other,
+    };
     match live_log().append(&action, &actor, &outcome, approval.as_ref()) {
         Ok(entry) => {
             notify::announce(&entry);

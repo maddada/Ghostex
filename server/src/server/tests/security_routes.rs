@@ -323,3 +323,60 @@ async fn sensitive_routes_ask_for_approval_and_closing_doors_never_does() {
     assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
     assert_eq!(body["error"], "forbidden");
 }
+
+/// Raw terminal input into another session asks (user decision of #495's follow-up); a
+/// session's own terminal doesn't.
+#[tokio::test]
+async fn typing_into_another_sessions_terminal_asks_and_ones_own_does_not() {
+    let (_temp, state) = temp_state();
+    let coordinator =
+        state
+            .security
+            .session_tokens
+            .mint_session("P1", "G1", SessionRole::Coordinator);
+    let asks = |body: &Value| body["error"] == "approvalRequired";
+
+    let (_, body) = post(
+        &state,
+        "/api/sendSessionText",
+        &coordinator,
+        json!({ "projectId": "P1", "sessionId": "G2", "text": "1" }),
+    )
+    .await;
+    assert!(asks(&body), "{body}");
+    assert_eq!(body["approval"]["action"], "typeIntoOtherSession");
+    // Escape to a session that is not one of its threads asks too.
+    let (_, body) = post(
+        &state,
+        "/api/sendSessionText",
+        &coordinator,
+        json!({ "projectId": "P1", "sessionId": "G2", "text": "\u{1b}" }),
+    )
+    .await;
+    assert!(asks(&body), "{body}");
+    let (_, body) = post(
+        &state,
+        "/api/sendSessionEnter",
+        &state.auth_token.clone(),
+        json!({ "projectId": "P1", "sessionId": "G2" }),
+    )
+    .await;
+    assert!(asks(&body), "{body}");
+    let (_, body) = post(
+        &state,
+        "/api/sendSessionText",
+        &coordinator,
+        json!({ "projectId": "P1", "sessionId": "G1", "text": "ls" }),
+    )
+    .await;
+    assert!(!asks(&body), "{body}");
+    let owner = state.security.session_tokens.mint_owner("mac");
+    let (_, body) = post(
+        &state,
+        "/api/sendSessionText",
+        &owner,
+        json!({ "projectId": "P1", "sessionId": "G2", "text": "1" }),
+    )
+    .await;
+    assert!(!asks(&body), "{body}");
+}

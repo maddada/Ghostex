@@ -27,17 +27,40 @@ pub enum Caller {
     CollabGuest {
         share_id: String,
     },
+    /// A session's own token or the desktop's owner session (crate::security, GitHub #495).
+    Principal(crate::security::Principal),
     /// No token this gxserver knows (the request is refused, or it is an open route).
     Unknown,
 }
 
 tokio::task_local! {
     static CALLER: Caller;
+    /// The signed approval the approvals gate spent on this request, if any: an entry the
+    /// handler records for it carries it and reads as approved.
+    static APPROVAL: std::cell::RefCell<Option<super::ApprovalRef>>;
 }
 
 /// Runs `future` with `caller` as the request's caller.
 pub(crate) async fn with_caller<F: Future>(caller: Caller, future: F) -> F::Output {
-    CALLER.scope(caller, future).await
+    CALLER
+        .scope(
+            caller,
+            APPROVAL.scope(std::cell::RefCell::new(None), future),
+        )
+        .await
+}
+
+/// The approvals gate spent `approval` on the request being served (security_gates.rs).
+pub(crate) fn note_approval(approval: super::ApprovalRef) {
+    let _ = APPROVAL.try_with(|slot| *slot.borrow_mut() = Some(approval));
+}
+
+/// The approval spent on the request being served, if any.
+pub(super) fn request_approval() -> Option<super::ApprovalRef> {
+    APPROVAL
+        .try_with(|slot| slot.borrow().clone())
+        .ok()
+        .flatten()
 }
 
 impl Caller {
@@ -46,6 +69,7 @@ impl Caller {
         headers: &HeaderMap,
         auth_token: &str,
         device_tokens: &crate::auth::DeviceApiTokens,
+        session_tokens: &crate::security::SessionTokens,
     ) -> Self {
         let Some(token) = bearer_token(headers) else {
             return Self::Unknown;
@@ -58,6 +82,9 @@ impl Caller {
                 .filter(|value| !value.is_empty() && value.len() <= 200)
                 .map(str::to_string);
             return Self::SharedToken { claimed_session };
+        }
+        if let Some(principal) = session_tokens.resolve(token) {
+            return Self::Principal(principal);
         }
         if device_tokens.accepts(token) {
             return Self::PairedDevice {
@@ -87,6 +114,7 @@ pub(super) fn current_actor() -> Actor {
             Actor::ConnectedComputer { server_id, name }
         }
         Caller::CollabGuest { share_id } => Actor::CollabGuest { name: share_id },
+        Caller::Principal(principal) => Actor::from(&principal),
         Caller::Unknown => Actor::Ghostex,
     }
 }
@@ -138,7 +166,12 @@ mod tests {
     async fn the_request_caller_names_the_actor() {
         let main = "m".repeat(43);
         let devices = crate::auth::DeviceApiTokens::default();
-        let caller = Caller::from_headers(&headers(&main, Some("S90:P1:G2")), &main, &devices);
+        let caller = Caller::from_headers(
+            &headers(&main, Some("S90:P1:G2")),
+            &main,
+            &devices,
+            &Default::default(),
+        );
         assert_eq!(
             caller,
             Caller::SharedToken {
@@ -161,13 +194,18 @@ mod tests {
         let device = crate::auth::mint_device_api_token();
         let devices = crate::auth::DeviceApiTokens::new([hash_device_api_token(&device)]);
         assert_eq!(
-            Caller::from_headers(&headers(&device, None), &main, &devices),
+            Caller::from_headers(
+                &headers(&device, None),
+                &main,
+                &devices,
+                &Default::default()
+            ),
             Caller::PairedDevice {
                 token_hash: hash_device_api_token(&device)
             }
         );
         assert_eq!(
-            Caller::from_headers(&headers("nope", None), &main, &devices),
+            Caller::from_headers(&headers("nope", None), &main, &devices, &Default::default()),
             Caller::Unknown
         );
     }

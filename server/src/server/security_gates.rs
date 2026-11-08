@@ -9,6 +9,7 @@
 //! | `/api/gbots` `action: "create"` | always (a new bot) |
 //! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a security-relaxing setting changes, or GBots goes on |
 //! | `/api/answerSessionChatPrompt` | anyone but the owner's devices answers another session's prompt |
+//! | `/api/sendSessionText`, `/api/sendSessionEnter`, `/api/sendSessionMessage` | anyone but the owner's devices types into a session that isn't their own, its threads included (a coordinator's Escape or Ctrl-C to its own thread doesn't ask) |
 //!
 //! Pairing and Collab routes are gated by their own threads with the same
 //! `require_owner_presence`.
@@ -34,23 +35,30 @@ pub(crate) fn gate(
     request_id: &str,
     body: &Value,
 ) -> Option<RoutedResponse> {
-    // Peers, guests and extensions keep their own endpoint allow-lists, checked at the auth gate.
-    if !matches!(
-        caller,
-        Principal::Owner { .. }
-            | Principal::Device { .. }
-            | Principal::Session { .. }
-            | Principal::LocalAgent
-    ) {
+    // Guests and extensions keep their own endpoint allow-lists, checked at the auth gate; agents
+    // on a connected computer keep theirs too, but answering a prompt or typing into a session
+    // here asks like it does for an agent here.
+    let peer = matches!(caller, Principal::Peer { .. });
+    if !peer
+        && !matches!(
+            caller,
+            Principal::Owner { .. }
+                | Principal::Device { .. }
+                | Principal::Session { .. }
+                | Principal::LocalAgent
+        )
+    {
         return None;
     }
-    if let RouteAccess::Needs(capability) = security::route_access(endpoint_path) {
-        if !caller.has(capability) {
-            return Some(forbidden(
-                endpoint_path,
-                request_id,
-                "Only your own computer or phone can do this.",
-            ));
+    if !peer {
+        if let RouteAccess::Needs(capability) = security::route_access(endpoint_path) {
+            if !caller.has(capability) {
+                return Some(forbidden(
+                    endpoint_path,
+                    request_id,
+                    "Only your own computer or phone can do this.",
+                ));
+            }
         }
     }
     let params = read_domain_rpc_params(body).ok()?;
@@ -63,11 +71,26 @@ pub(crate) fn gate(
         None => sensitive_action(state, caller, endpoint_path, &params),
     }?;
     match require_owner_presence(state, caller, action, body, endpoint_path, request_id) {
-        Ok(_) => {
+        Ok(grant) => {
             if let Some((server_id, _)) = computer {
                 state
                     .security
                     .approve_computer(&server_id, security::now_ms());
+            }
+            // These routes' handlers keep no security log entry of their own.
+            if matches!(
+                grant.approval.action,
+                SensitiveAction::AnswerOtherSessionPrompt
+                    | SensitiveAction::TypeIntoOtherSession
+                    | SensitiveAction::SettingsWeakenSecurity
+                    | SensitiveAction::GbotsEnable
+            ) {
+                crate::audit::record(
+                    crate::audit::Action::from_approval(&grant.approval),
+                    crate::audit::Actor::from(caller),
+                    crate::audit::Outcome::Approved,
+                    Some(crate::audit::ApprovalRef::from(&grant.approval)),
+                );
             }
             None
         }
@@ -174,6 +197,9 @@ fn sensitive_action(
             settings_action(params)
         }
         "/api/answerSessionChatPrompt" => prompt_action(caller, params),
+        "/api/sendSessionText" | "/api/sendSessionEnter" | "/api/sendSessionMessage" => {
+            input_action(state, caller, endpoint_path, params)
+        }
         _ => match security::route_access(endpoint_path) {
             RouteAccess::Presence(action) => Some(
                 ActionRequest::new(
@@ -339,6 +365,11 @@ pub(crate) fn setting_needs_approval(key: &str, value: &Value) -> bool {
 
 fn settings_action(params: &Map<String, Value>) -> Option<ActionRequest> {
     let patch = params.get("payload")?.get("patch")?.as_object()?;
+    // A setting the API may not write at all is refused by the route (settings_agent_writable.rs):
+    // asking the owner first would only spend an approval on a refusal.
+    if !crate::settings_agent_writable::refused_keys(patch).is_empty() {
+        return None;
+    }
     let gated: Map<String, Value> = patch
         .iter()
         .filter(|(key, value)| setting_needs_approval(key, value))
@@ -410,9 +441,108 @@ fn prompt_action(caller: &Principal, params: &Map<String, Value>) -> Option<Acti
     )
 }
 
+/// Escape and Ctrl-C: what `interrupt-session-chat` and `ghostex send-key escape|ctrl-c` send.
+fn is_interrupt(text: &str) -> bool {
+    matches!(text, "\u{1b}" | "\u{3}")
+}
+
+/*
+CDXC:Security 2026-11-08 DECISION:
+User (#495 follow-up): raw terminal input (send-text / send-key) into ANY other session needs approval, own threads included, since otherwise a coordinator could answer its threads' prompts by typing (decision 2). Interrupting a session (the Escape / Ctrl-C that interrupt-session-chat sends) stays allowed for a coordinator's own threads, because coordinators heal stuck threads with it; chat messages through the chat queue (`ghostex agents send`) are not raw input and stay as they are.
+*/
+fn input_action(
+    state: &AppState,
+    caller: &Principal,
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+) -> Option<ActionRequest> {
+    if caller.has(Capability::AnswerAnyPrompt) {
+        return None;
+    }
+    let session_id = text(params, "sessionId")?;
+    let project_id = text(params, "projectId").unwrap_or_default();
+    if let Principal::Session {
+        project_id: own_project,
+        session_id: own_session,
+        role,
+    } = caller
+    {
+        if own_session == session_id && (project_id.is_empty() || own_project == project_id) {
+            return None;
+        }
+        let typed = params
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if *role == security::SessionRole::Coordinator
+            && endpoint_path == "/api/sendSessionText"
+            && is_interrupt(typed)
+            && is_own_thread(state, own_project, own_session, project_id, session_id)
+        {
+            return None;
+        }
+    }
+    let shown = match endpoint_path {
+        "/api/sendSessionEnter" => "Enter".to_string(),
+        _ => {
+            let typed = params
+                .get("text")
+                .or_else(|| params.get("message"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let mut preview: String = typed.chars().take(120).collect();
+            if typed.chars().count() > 120 {
+                preview.push('…');
+            }
+            format!("\"{}\"", preview.escape_debug())
+        }
+    };
+    Some(
+        ActionRequest::new(
+            SensitiveAction::TypeIntoOtherSession,
+            format!("Type into the terminal of session {session_id}"),
+        )
+        .target(format!("{project_id}:{session_id}"))
+        .params(Value::Object(params.clone()))
+        .detail(format!("Typed: {shown}")),
+    )
+}
+
+/// Whether session `session_id` of `project_id` is a thread of coordinator `coordinator`.
+fn is_own_thread(
+    state: &AppState,
+    coordinator_project: &str,
+    coordinator_session: &str,
+    project_id: &str,
+    session_id: &str,
+) -> bool {
+    if project_id.is_empty() {
+        return false;
+    }
+    crate::storage::open_gxserver_database(&state.paths)
+        .ok()
+        .and_then(|db| crate::coordinators::read_thread(&db, project_id, session_id).ok())
+        .flatten()
+        .is_some_and(|thread| {
+            thread.coordinator_key()
+                == (
+                    coordinator_project.to_string(),
+                    coordinator_session.to_string(),
+                )
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_escape_and_ctrl_c_count_as_an_interrupt() {
+        assert!(is_interrupt("\u{1b}"));
+        assert!(is_interrupt("\u{3}"));
+        assert!(!is_interrupt("1"));
+        assert!(!is_interrupt("\u{1b}1"));
+    }
 
     #[test]
     fn security_relaxing_settings_are_found_in_the_catalog() {

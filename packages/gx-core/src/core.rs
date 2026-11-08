@@ -604,7 +604,6 @@ impl Core {
             | ServerEvent::RendererCommand(_)
             | ServerEvent::CloudBoxesChanged(_)
             | ServerEvent::SettingsSyncNote(_)
-            | ServerEvent::ApprovalRequestsChanged(_)
             | ServerEvent::SessionChatSnapshot(_)
             | ServerEvent::SessionChatReplaced(_)
             | ServerEvent::SessionChatAppended(_)

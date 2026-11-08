@@ -26,8 +26,12 @@ pub(super) async fn handle_http_request(
     let headers = request.headers().clone();
     let request_id = request_id(&headers);
     // Who asked, for the security log (server/src/audit/caller.rs).
-    let caller =
-        crate::audit::Caller::from_headers(&headers, &state.auth_token, &state.device_api_tokens);
+    let caller = crate::audit::Caller::from_headers(
+        &headers,
+        &state.auth_token,
+        &state.device_api_tokens,
+        &state.security.session_tokens,
+    );
     // Boxed: the routing future is large, and moving it through the caller scope by value took
     // over a megabyte of stack in debug builds (a route test overflowed).
     let mut routed = crate::audit::with_caller(

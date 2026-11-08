@@ -79,6 +79,9 @@ open_string_enum! {
         // Prompts
         /// Answer an approval prompt of a session that is not the caller's own thread.
         AnswerOtherSessionPrompt => "answerOtherSessionPrompt",
+        /// Type raw terminal input (text, Enter, a key) into a session that is not the caller's
+        /// own, its threads included; a coordinator interrupting its own thread doesn't ask.
+        TypeIntoOtherSession => "typeIntoOtherSession",
         // Approvers
         /// Add another approver key (a second desktop or a phone) after the first one.
         AddApproverKey => "addApproverKey",
