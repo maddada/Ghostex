@@ -56,6 +56,9 @@ pub(crate) struct SecurityNoticeRow {
 /// The phone pairing code the notice shows (the Show QR sheet's code).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SecurityNoticeCode {
+    /// Nothing asked for yet: the panel shows Show code, and no live code exists until it is
+    /// clicked (CDXC:RemotePairing 2026-11-08 FIX in app/security_upgrade_modal_lifecycle.rs).
+    Hidden,
     Loading,
     /// The QR payload.
     Ready(String),
@@ -85,6 +88,8 @@ pub(crate) enum SecurityUpgradeModalCommand {
     PairComputer(String),
     /// Settings > Remote, to turn on Easy Connect when no code can be made.
     OpenRemoteSettings,
+    /// Show code: make the live pairing code now; the notice stays open and shows it.
+    ShowCode,
     /// Remind me later (also Escape and the corner close).
     Later,
     Done,
@@ -142,9 +147,15 @@ impl GpuiSecurityUpgradeModalWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // Approving keeps the notice open: the row ticks off when the phone finishes pairing.
-        if !matches!(command, SecurityUpgradeModalCommand::ApprovePending(_)) {
-            window.remove_window();
+        // Approving keeps the notice open: the row ticks off when the phone finishes pairing. Show
+        // code keeps it open too, with the code on its way.
+        match command {
+            SecurityUpgradeModalCommand::ApprovePending(_) => {}
+            SecurityUpgradeModalCommand::ShowCode => {
+                self.state.code = SecurityNoticeCode::Loading;
+                cx.notify();
+            }
+            _ => window.remove_window(),
         }
         (self.host)(command, cx);
     }
@@ -245,6 +256,26 @@ impl GpuiSecurityUpgradeModalWindow {
                 .child(text)
         };
         match &self.state.code {
+            SecurityNoticeCode::Hidden => panel
+                .child(
+                    div()
+                        .rounded(px(8.0))
+                        .overflow_hidden()
+                        .child(qr_code(None, QR_SIZE)),
+                )
+                .child(caption(
+                    "Show the code when a phone is ready to scan it".into(),
+                ))
+                .child(small_button(
+                    &p,
+                    "security-upgrade-show-code",
+                    "Show code",
+                    |this: &mut Self, window, cx| {
+                        this.send(SecurityUpgradeModalCommand::ShowCode, window, cx)
+                    },
+                    cx,
+                ))
+                .into_any_element(),
             SecurityNoticeCode::Ready(_) => panel
                 .child(div().rounded(px(8.0)).overflow_hidden().child(qr_code(
                     self.qr.as_ref().and_then(|(_, grid)| grid.as_ref()),

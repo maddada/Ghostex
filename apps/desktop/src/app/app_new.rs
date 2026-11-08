@@ -493,6 +493,7 @@ impl GhostexGpuiApp {
                 app_toast_epoch: 0,
                 app_toast_id_counter: 0,
                 security_upgrade_notice_checked: false,
+                security_notice_code_shown: false,
                 agents_terminal_runtime_osc_states: HashMap::new(),
                 command_terminal_runtime_osc_states: HashMap::new(),
                 agents_gpui_engine_terminals: HashMap::new(),

@@ -16,6 +16,8 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 const POLL_EVERY: Duration = Duration::from_secs(3);
+/// How soon a click on Show code is noticed between rounds.
+const SHOW_CODE_TICK: Duration = Duration::from_millis(200);
 const NO_CODE: &str = "Turn on Easy Connect in Settings \u{203a} Remote to pair phones.";
 
 /// The pairing code from a `/api/remotePairingCode` answer.
@@ -55,7 +57,7 @@ impl GhostexGpuiApp {
         view: &Value,
         cx: &mut gpui::Context<Self>,
     ) {
-        let state = security_notice_state(view, SecurityNoticeCode::Loading);
+        let state = security_notice_state(view, SecurityNoticeCode::Hidden);
         // Computers over SSH need nothing, so they never open the notice by themselves.
         if state.phones.is_empty() && state.computers.is_empty() && state.ssh_phones.is_empty() {
             return;
@@ -73,27 +75,47 @@ impl GhostexGpuiApp {
             },
             cx,
         );
+        /*
+        CDXC:RemotePairing 2026-11-08 FIX:
+        User (GitHub #495, 11.1.1): the notice "no longer asks for a live pairing code (and so never
+        opens Easy Connect to new devices) until the user clicks to pair something". It used to ask
+        `/api/remotePairingCode` with `openTunnel` every 3 seconds from the moment it opened, which
+        put a live one-time code on screen and held Easy Connect open to new devices for as long as
+        the notice stayed up, against Settings > Remote's rule that the real QR shows only after a
+        click. It now opens with the code hidden behind Show code; the poll reads the rows alone
+        until that click (`security_notice_code_shown`), and asks for the code from then on.
+        */
+        self.security_notice_code_shown = false;
         cx.spawn(async move |this, cx| {
             loop {
                 let view = gx_rpc(None, SECURITY_NOTICE_ENDPOINT, json!({ "op": "read" })).await;
-                let code = gx_rpc(
-                    None,
-                    "/api/remotePairingCode",
-                    json!({ "openTunnel": true }),
-                )
-                .await
-                .map_err(|error| error.to_string());
+                let shown = this
+                    .update(cx, |app, _| app.security_notice_code_shown)
+                    .unwrap_or(false);
+                let code = if shown {
+                    let answer = gx_rpc(
+                        None,
+                        "/api/remotePairingCode",
+                        json!({ "openTunnel": true }),
+                    )
+                    .await
+                    .map_err(|error| error.to_string());
+                    security_notice_code(answer.as_ref().map_err(Clone::clone))
+                } else {
+                    SecurityNoticeCode::Hidden
+                };
                 let open = this
                     .update(cx, |app, cx| {
                         let kind = GpuiAppModalKind::SecurityUpgrade;
                         if app.native_app_modal_kind() != Some(kind) {
                             return false;
                         }
+                        // Show code was clicked while this round was out: keep its Loading.
+                        if !shown && app.security_notice_code_shown {
+                            return true;
+                        }
                         if let Ok(view) = &view {
-                            let state = security_notice_state(
-                                view,
-                                security_notice_code(code.as_ref().map_err(Clone::clone)),
-                            );
+                            let state = security_notice_state(view, code);
                             app.update_native_app_modal(
                                 kind,
                                 cx,
@@ -108,7 +130,18 @@ impl GhostexGpuiApp {
                 if !open {
                     break;
                 }
-                cx.background_executor().timer(POLL_EVERY).await;
+                // Right after Show code the next round asks at once; otherwise every 3 seconds.
+                let mut waited = Duration::ZERO;
+                while waited < POLL_EVERY {
+                    let asked_now = this
+                        .update(cx, |app, _| app.security_notice_code_shown && !shown)
+                        .unwrap_or(false);
+                    if asked_now {
+                        break;
+                    }
+                    cx.background_executor().timer(SHOW_CODE_TICK).await;
+                    waited += SHOW_CODE_TICK;
+                }
             }
         })
         .detach();
@@ -132,6 +165,11 @@ impl GhostexGpuiApp {
         command: SecurityUpgradeModalCommand,
         cx: &mut gpui::Context<Self>,
     ) {
+        // Show code: the poll asks for the live code from now on (the notice stays open).
+        if matches!(command, SecurityUpgradeModalCommand::ShowCode) {
+            self.security_notice_code_shown = true;
+            return;
+        }
         if let SecurityUpgradeModalCommand::ApprovePending(approval_id) = &command {
             // The system prompt, then the signed approval; never on the main thread.
             let approval_id = approval_id.clone();
@@ -169,7 +207,8 @@ impl GhostexGpuiApp {
             SecurityUpgradeModalCommand::OpenRemoteSettings => {
                 self.open_gpui_settings_tab("remote", None, cx);
             }
-            SecurityUpgradeModalCommand::ApprovePending(_) => {}
+            SecurityUpgradeModalCommand::ApprovePending(_)
+            | SecurityUpgradeModalCommand::ShowCode => {}
         }
     }
 

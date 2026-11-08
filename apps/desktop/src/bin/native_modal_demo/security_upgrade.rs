@@ -109,6 +109,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             SecurityUpgradeModalCommand::Later => eprintln!("later"),
             SecurityUpgradeModalCommand::Done => eprintln!("done"),
             SecurityUpgradeModalCommand::ApprovePending(id) => eprintln!("approve {id}"),
+            SecurityUpgradeModalCommand::ShowCode => eprintln!("show code"),
         }
         cx.quit();
     });
