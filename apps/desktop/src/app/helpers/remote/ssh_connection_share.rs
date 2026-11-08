@@ -280,18 +280,183 @@ pub(crate) fn gpui_remote_ssh_shared_connection_arguments(
     ]
 }
 
-/// The options that send one command over the connection the user signed in to, resolved from
-/// their own `~/.ssh/config`; empty unless the machine reuses an existing connection.
+/// The options that send one command over the connection the user signed in to, at the socket
+/// their own `~/.ssh/config` names once it passed `gpui_remote_ssh_reuse_control_socket`; empty
+/// (and nothing is run or read) unless the machine reuses an existing connection.
 ///
-/// `ControlMaster=no` is the whole point: ssh uses the master at the configured `ControlPath` and
-/// never creates, persists or exits one of its own (GitHub #496).
+/// CDXC:RemoteMachines 2026-11-08 DECISION:
+/// User, on merging GitHub #498: "make sure doesnt affect regular usage if disabled, make sure secure". With the setting off (the default) every ssh command, tunnel and connect is byte for byte what it was before #498 (`a_machine_without_the_setting_runs_ssh_as_before` below). With it on, Ghostex never makes a login of its own and only talks to a master the user opened: `ControlMaster=no` (never create, persist or exit a master), the verified `ControlPath` (a socket of the user's, in a folder no other user can change, so another local account cannot plant a master Ghostex would send its token and commands through), and `ProxyCommand=false`, which ssh runs only when it could not use the master, so a command whose master went away fails at once instead of falling back to a fresh login (measured with OpenSSH 10.3: without it ssh logs in again). Offered on macOS and Linux only: Windows OpenSSH cannot multiplex.
 pub(crate) fn gpui_remote_ssh_reuse_connection_arguments(
     config: &GpuiRemoteMachineConfig,
-) -> Vec<String> {
+) -> Result<Vec<String>, String> {
     if !config.reuse_ssh_connection {
-        return Vec::new();
+        return Ok(Vec::new());
     }
-    vec!["-o".to_string(), "ControlMaster=no".to_string()]
+    let socket = gpui_remote_ssh_reuse_control_socket(config)?;
+    Ok(gpui_remote_ssh_reuse_socket_options(socket.as_path()))
+}
+
+/// `ControlMaster=no`, the verified socket and `ProxyCommand=false` (see above).
+fn gpui_remote_ssh_reuse_socket_options(socket: &Path) -> Vec<String> {
+    let mut path = gpui_path_string(socket).replace('%', "%%");
+    if path.chars().any(char::is_whitespace) {
+        // ssh splits an `-o` value on whitespace unless it is quoted.
+        path = format!("\"{path}\"");
+    }
+    vec![
+        "-o".to_string(),
+        "ControlMaster=no".to_string(),
+        "-o".to_string(),
+        format!("ControlPath={path}"),
+        "-o".to_string(),
+        "ProxyCommand=false".to_string(),
+    ]
+}
+
+/// A `-O check|forward|cancel` request to the user's master: local to its socket, never the host.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn gpui_remote_ssh_reuse_control_request(
+    config: &GpuiRemoteMachineConfig,
+    request: &str,
+    forward: Option<(&str, &str)>,
+) -> Result<Vec<String>, String> {
+    let mut arguments = vec![
+        "-O".to_string(),
+        request.to_string(),
+        "-o".to_string(),
+        "BatchMode=yes".to_string(),
+    ];
+    arguments.extend(gpui_remote_ssh_reuse_connection_arguments(config)?);
+    if let Some((option, forward)) = forward {
+        arguments.extend([option.to_string(), forward.to_string()]);
+    }
+    arguments.extend(gpui_remote_ssh_target_arguments(config)?);
+    Ok(arguments)
+}
+
+/// Where the user's own master for this machine listens, from `ssh -G` (their config, resolved as
+/// their ssh would), once it is safe to use; `Err` is what the machine tells the user.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn gpui_remote_ssh_reuse_control_socket(
+    config: &GpuiRemoteMachineConfig,
+) -> Result<PathBuf, String> {
+    let mut arguments = vec!["-G".to_string()];
+    arguments.extend(gpui_remote_ssh_target_arguments(config)?);
+    let result = gpui_run_remote_process(
+        &gpui_remote_ssh_executable(),
+        &arguments,
+        None,
+        GPUI_REMOTE_SSH_CONTROL_TIMEOUT,
+    );
+    let target = config.ssh_target_host();
+    let Some(socket) = (result.exit_code == 0)
+        .then(|| gpui_remote_ssh_config_control_path(result.stdout.as_str()))
+        .flatten()
+    else {
+        return Err(format!(
+            "Reusing an SSH connection needs ControlPath and ControlMaster auto for {target} in your SSH config. Add them, sign in once in a terminal, then reconnect."
+        ));
+    };
+    match gpui_remote_ssh_control_socket_problem(socket.as_path(), unsafe { libc::geteuid() }) {
+        None => Ok(socket),
+        Some(GpuiRemoteControlSocketProblem::Missing) => Err(format!(
+            "No SSH connection to {target} is open. Sign in to it in a terminal ({}) and finish the prompt there, then reconnect.",
+            gpui_remote_ssh_sign_in_hint(config)
+        )),
+        Some(GpuiRemoteControlSocketProblem::Unsafe(reason)) => Err(format!(
+            "Ghostex only reuses an SSH connection whose socket sits in a folder only you can change. {reason} Point ControlPath for {target} at a private folder (for example ~/.ssh/sockets, chmod 700), then sign in again in a terminal."
+        )),
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub(crate) fn gpui_remote_ssh_reuse_control_socket(
+    _config: &GpuiRemoteMachineConfig,
+) -> Result<PathBuf, String> {
+    Err("Reusing an SSH connection needs macOS or Linux.".to_string())
+}
+
+/// The `controlpath` line of `ssh -G` output (tokens and `~` already expanded), unless it is unset.
+#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
+fn gpui_remote_ssh_config_control_path(ssh_g_output: &str) -> Option<PathBuf> {
+    ssh_g_output
+        .lines()
+        .find_map(|line| line.strip_prefix("controlpath "))
+        .map(str::trim)
+        .filter(|path| !path.is_empty() && *path != "none")
+        .map(PathBuf::from)
+}
+
+#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
+#[derive(Debug, PartialEq)]
+enum GpuiRemoteControlSocketProblem {
+    /// Nothing listens there: the user has not signed in (or the master exited).
+    Missing,
+    /// Something another account could have put there or could replace.
+    Unsafe(String),
+}
+
+/// Why the socket at `path` is not one Ghostex may send through for user `uid`, or `None`.
+///
+/// CDXC:RemoteMachines 2026-11-08 WHY:
+/// An ssh client does not check who runs the master behind a socket, so a socket another local account could create or swap (a shared folder such as `/tmp`, a world-writable folder, a socket that is not the user's) would carry Ghostex's commands and its gxserver token to that account. The socket must be the user's with no access for others, its folder the user's and writable by no one else, and every folder above it the user's or root's and, if others can write to it, sticky (so they cannot rename what is below).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn gpui_remote_ssh_control_socket_problem(
+    path: &Path,
+    uid: u32,
+) -> Option<GpuiRemoteControlSocketProblem> {
+    use std::os::unix::fs::{FileTypeExt as _, MetadataExt as _};
+    let unsafe_because = |reason: String| Some(GpuiRemoteControlSocketProblem::Unsafe(reason));
+    let shown = gpui_path_string(path);
+    let socket = match fs::symlink_metadata(path) {
+        Ok(socket) => socket,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Some(GpuiRemoteControlSocketProblem::Missing);
+        }
+        Err(_) => return unsafe_because(format!("Ghostex could not read {shown}.")),
+    };
+    if !socket.file_type().is_socket() {
+        return unsafe_because(format!("{shown} is not an SSH control socket."));
+    }
+    if socket.uid() != uid {
+        return unsafe_because(format!("{shown} belongs to another account."));
+    }
+    if socket.mode() & 0o077 != 0 {
+        return unsafe_because(format!("Other accounts can open {shown}."));
+    }
+    let Some(folder) = path
+        .parent()
+        .and_then(|folder| fs::canonicalize(folder).ok())
+    else {
+        return unsafe_because(format!("Ghostex could not read the folder of {shown}."));
+    };
+    let Ok(folder_metadata) = fs::metadata(&folder) else {
+        return unsafe_because(format!("Ghostex could not read the folder of {shown}."));
+    };
+    if folder_metadata.uid() != uid || folder_metadata.mode() & 0o022 != 0 {
+        return unsafe_because(format!(
+            "Other accounts can change the folder {}.",
+            gpui_path_string(&folder)
+        ));
+    }
+    for ancestor in folder.ancestors().skip(1) {
+        let Ok(metadata) = fs::metadata(ancestor) else {
+            return unsafe_because(format!(
+                "Ghostex could not read {}.",
+                gpui_path_string(ancestor)
+            ));
+        };
+        let owner_trusted = metadata.uid() == uid || metadata.uid() == 0;
+        let others_write = metadata.mode() & 0o022 != 0;
+        let sticky = metadata.mode() & 0o1000 != 0;
+        if !owner_trusted || (others_write && !sticky) {
+            return unsafe_because(format!(
+                "Other accounts can change {}, a folder above the socket.",
+                gpui_path_string(ancestor)
+            ));
+        }
+    }
+    None
 }
 
 /// Why a machine set to reuse an SSH connection cannot connect right now, or `None` when the
@@ -303,25 +468,17 @@ pub(crate) fn gpui_remote_ssh_reuse_connection_arguments(
 /// so the connect is refused before any of them runs. `ssh -O check` only asks the local master
 /// over its socket; it never dials the host. A config with no `ControlPath` is a different answer
 /// (there is nothing for the user's ssh to multiplex over), as is a socket that is not running.
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn gpui_remote_ssh_reuse_connection_refusal(
     config: &GpuiRemoteMachineConfig,
 ) -> Option<String> {
-    let target_arguments = match gpui_remote_ssh_target_arguments(config) {
-        Ok(target_arguments) => target_arguments,
-        // The first command reports the same refusal through the ordinary path.
+    // The socket is resolved and checked first (`gpui_remote_ssh_reuse_control_socket` says what
+    // is missing or unsafe), then the master behind it must answer.
+    let arguments = match gpui_remote_ssh_reuse_control_request(config, "check", None) {
+        Ok(arguments) => arguments,
         Err(message) => return Some(message),
     };
     let target = config.ssh_target_host();
-    let mut arguments = vec![
-        "-O".to_string(),
-        "check".to_string(),
-        "-o".to_string(),
-        "BatchMode=yes".to_string(),
-        "-o".to_string(),
-        "ControlMaster=no".to_string(),
-    ];
-    arguments.extend(target_arguments);
     let result = gpui_run_remote_process(
         &gpui_remote_ssh_executable(),
         &arguments,
@@ -331,22 +488,13 @@ pub(crate) fn gpui_remote_ssh_reuse_connection_refusal(
     if result.exit_code == 0 {
         return None;
     }
-    if result
-        .stderr
-        .to_ascii_lowercase()
-        .contains("no controlpath")
-    {
-        return Some(format!(
-            "Reusing an SSH connection needs ControlPath and ControlMaster auto for {target} in your SSH config. Add them, sign in once in a terminal, then reconnect."
-        ));
-    }
     Some(format!(
         "No SSH connection to {target} is open. Sign in to it in a terminal ({}) and finish the prompt there, then reconnect.",
         gpui_remote_ssh_sign_in_hint(config)
     ))
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub(crate) fn gpui_remote_ssh_reuse_connection_refusal(
     _config: &GpuiRemoteMachineConfig,
 ) -> Option<String> {
@@ -354,10 +502,7 @@ pub(crate) fn gpui_remote_ssh_reuse_connection_refusal(
 }
 
 /// `ssh [-p <port>] user@host`, the command the user runs to open the connection Ghostex reuses.
-#[cfg_attr(
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows")),
-    allow(dead_code)
-)]
+#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
 fn gpui_remote_ssh_sign_in_hint(config: &GpuiRemoteMachineConfig) -> String {
     match config.ssh_port {
         Some(port) => format!("ssh -p {port} {}", config.ssh_target_host()),
@@ -378,24 +523,14 @@ fn gpui_remote_ssh_sign_in_hint(config: &GpuiRemoteMachineConfig) -> String {
 /// tunnel ends. `ControlMaster=no` keeps a config with `ControlMaster yes` from turning this into
 /// a fresh login instead of a control request.
 /// SEE-ALSO: gpui_remote_ssh_tunnel_options (the tunnel a machine without the reuse setting gets).
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn gpui_remote_ssh_forward_in_existing_connection(
     config: &GpuiRemoteMachineConfig,
     option: &'static str,
     forward: &str,
 ) -> Result<Option<u16>, String> {
-    let target_arguments = gpui_remote_ssh_target_arguments(config)?;
-    let mut arguments = vec![
-        "-O".to_string(),
-        "forward".to_string(),
-        "-o".to_string(),
-        "BatchMode=yes".to_string(),
-        "-o".to_string(),
-        "ControlMaster=no".to_string(),
-        option.to_string(),
-        forward.to_string(),
-    ];
-    arguments.extend(target_arguments);
+    let arguments =
+        gpui_remote_ssh_reuse_control_request(config, "forward", Some((option, forward)))?;
     let result = gpui_run_remote_process(
         &gpui_remote_ssh_executable(),
         &arguments,
@@ -413,6 +548,15 @@ pub(crate) fn gpui_remote_ssh_forward_in_existing_connection(
         .flatten())
 }
 
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub(crate) fn gpui_remote_ssh_forward_in_existing_connection(
+    _config: &GpuiRemoteMachineConfig,
+    _option: &'static str,
+    _forward: &str,
+) -> Result<Option<u16>, String> {
+    Err("Reusing an SSH connection needs macOS or Linux.".to_string())
+}
+
 /// One forward this app asked someone else's multiplexing master for, taken back when the tunnel
 /// that asked for it ends.
 ///
@@ -426,10 +570,7 @@ pub(crate) fn gpui_remote_ssh_forward_in_existing_connection(
 /// which belongs to the user's other sessions.
 /// SEE-ALSO: ssh_exec.rs (`gpui_remote_ssh_tunnel_options`), tunnel_and_auth.rs, reverse_tunnel.rs,
 /// browser_tunnel.rs, source_code_server.rs.
-#[cfg_attr(
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows")),
-    allow(dead_code)
-)]
+#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
 pub(crate) struct GpuiRemoteSharedSshForward {
     config: GpuiRemoteMachineConfig,
     /// `-L`, `-R` or `-D`, the option the tunnel passed.
@@ -438,10 +579,7 @@ pub(crate) struct GpuiRemoteSharedSshForward {
     forward: String,
 }
 
-#[cfg_attr(
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows")),
-    allow(dead_code)
-)]
+#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
 impl GpuiRemoteSharedSshForward {
     /// The cleanup for a tunnel's forward; `None` unless the machine rides an existing connection,
     /// the only case with a master to take it back from.
@@ -464,22 +602,15 @@ impl Drop for GpuiRemoteSharedSshForward {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn gpui_remote_ssh_cancel_forward(forward: &GpuiRemoteSharedSshForward) {
-    let Ok(target_arguments) = gpui_remote_ssh_target_arguments(&forward.config) else {
+    let Ok(arguments) = gpui_remote_ssh_reuse_control_request(
+        &forward.config,
+        "cancel",
+        Some((forward.option, forward.forward.as_str())),
+    ) else {
         return;
     };
-    let mut arguments = vec![
-        "-O".to_string(),
-        "cancel".to_string(),
-        "-o".to_string(),
-        "BatchMode=yes".to_string(),
-        "-o".to_string(),
-        "ControlMaster=no".to_string(),
-        forward.option.to_string(),
-        forward.forward.clone(),
-    ];
-    arguments.extend(target_arguments);
     let _ = gpui_run_remote_process(
         &gpui_remote_ssh_executable(),
         &arguments,
@@ -488,7 +619,7 @@ fn gpui_remote_ssh_cancel_forward(forward: &GpuiRemoteSharedSshForward) {
     );
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn gpui_remote_ssh_cancel_forward(_forward: &GpuiRemoteSharedSshForward) {}
 
 /// A master login failure every later command would repeat: the machine refused the login or
@@ -601,6 +732,185 @@ mod tests {
                 "ControlPath=/state/remote-ssh/ab".to_string(),
             ]
         );
+    }
+
+    fn plain_machine() -> GpuiRemoteMachineConfig {
+        GpuiRemoteMachineConfig {
+            remote_machine_id: "remote-a".to_string(),
+            transport: GpuiRemoteMachineTransport::Ssh,
+            easy_connect_address: None,
+            easy_connect_ssh_port: 22,
+            ssh_host: "host".to_string(),
+            ssh_identity_file: None,
+            ssh_port: None,
+            ssh_user: Some("me".to_string()),
+            has_saved_password: false,
+            reuse_ssh_connection: false,
+            wsl_distribution: None,
+            disabled: false,
+            ssh_control_path: None,
+        }
+    }
+
+    /// GitHub #498: with the setting off nothing about ssh changes (user: "make sure doesnt
+    /// affect regular usage if disabled").
+    #[test]
+    fn a_machine_without_the_setting_runs_ssh_as_before() {
+        let config = plain_machine();
+        assert_eq!(
+            gpui_remote_ssh_reuse_connection_arguments(&config),
+            Ok(Vec::new())
+        );
+        assert!(
+            GpuiRemoteSharedSshForward::new(&config, "-L", "127.0.0.1:1:127.0.0.1:2").is_none()
+        );
+        // The tunnel options are exactly the list before #498.
+        let mut before = gpui_remote_ssh_client_options(false);
+        before.extend(
+            [
+                "-o",
+                "ControlMaster=no",
+                "-o",
+                "ControlPath=none",
+                "-o",
+                "ForkAfterAuthentication=no",
+            ]
+            .map(str::to_string),
+        );
+        assert_eq!(gpui_remote_ssh_tunnel_options(&config), before);
+        let mut saved_password = config.clone();
+        saved_password.has_saved_password = true;
+        let mut before = gpui_remote_ssh_client_options(true);
+        before.extend(
+            [
+                "-o",
+                "ControlMaster=no",
+                "-o",
+                "ControlPath=none",
+                "-o",
+                "ForkAfterAuthentication=no",
+            ]
+            .map(str::to_string),
+        );
+        assert_eq!(gpui_remote_ssh_tunnel_options(&saved_password), before);
+        // The terminal attach command carries none of the reuse options.
+        let attach = gpui_remote_ssh_shell_command(
+            &config,
+            &GpuiRemoteExecutionTarget::PosixHost,
+            "true",
+            false,
+            false,
+        )
+        .unwrap();
+        assert!(
+            !attach.contains("ControlPath") && !attach.contains("ProxyCommand"),
+            "{attach}"
+        );
+        // A saved machine without the key, or with it on Easy Connect or WSL, never reuses.
+        let settings = |machine: serde_json::Value| {
+            serde_json::json!({ "remoteMachines": [machine] })
+                .as_object()
+                .cloned()
+                .unwrap()
+        };
+        let plain =
+            settings(serde_json::json!({"id": "remote-a", "sshHost": "host", "sshUser": "me"}));
+        assert!(
+            !gpui_remote_machine_config_from_settings(&plain, "remote-a")
+                .unwrap()
+                .reuse_ssh_connection
+        );
+        let wsl = settings(serde_json::json!({
+            "id": "remote-a", "sshHost": "host", "wslDistribution": "Ubuntu", "reuseSshConnection": true
+        }));
+        assert!(
+            !gpui_remote_machine_config_from_settings(&wsl, "remote-a")
+                .unwrap()
+                .reuse_ssh_connection
+        );
+        let on = settings(serde_json::json!({
+            "id": "remote-a", "sshHost": "host", "reuseSshConnection": true
+        }));
+        assert_eq!(
+            gpui_remote_machine_config_from_settings(&on, "remote-a")
+                .unwrap()
+                .reuse_ssh_connection,
+            cfg!(any(target_os = "macos", target_os = "linux"))
+        );
+    }
+
+    #[test]
+    fn a_reused_connection_never_logs_in_by_itself() {
+        let options = gpui_remote_ssh_reuse_socket_options(Path::new("/Users/me/.ssh/s/%cm a"));
+        assert_eq!(
+            options,
+            [
+                "-o",
+                "ControlMaster=no",
+                "-o",
+                "ControlPath=\"/Users/me/.ssh/s/%%cm a\"",
+                "-o",
+                "ProxyCommand=false",
+            ]
+            .map(str::to_string)
+        );
+        assert_eq!(
+            gpui_remote_ssh_config_control_path(
+                "user me\ncontrolpath /Users/me/.ssh/s/ab\nport 22\n"
+            ),
+            Some(PathBuf::from("/Users/me/.ssh/s/ab"))
+        );
+        assert_eq!(
+            gpui_remote_ssh_config_control_path("controlpath none\n"),
+            None
+        );
+        assert_eq!(gpui_remote_ssh_config_control_path("user me\n"), None);
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn only_a_private_socket_of_the_users_is_reused() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let uid = unsafe { libc::geteuid() };
+        let folder = std::env::temp_dir().join(format!("gx-cm-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&folder);
+        fs::create_dir(&folder).unwrap();
+        fs::set_permissions(&folder, fs::Permissions::from_mode(0o700)).unwrap();
+        let socket = folder.join("m");
+        assert_eq!(
+            gpui_remote_ssh_control_socket_problem(&socket, uid),
+            Some(GpuiRemoteControlSocketProblem::Missing)
+        );
+        let _listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+        fs::set_permissions(&socket, fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(gpui_remote_ssh_control_socket_problem(&socket, uid), None);
+        // Another account's socket, or one others may open, is refused.
+        assert!(matches!(
+            gpui_remote_ssh_control_socket_problem(&socket, uid + 1),
+            Some(GpuiRemoteControlSocketProblem::Unsafe(_))
+        ));
+        fs::set_permissions(&socket, fs::Permissions::from_mode(0o666)).unwrap();
+        assert!(matches!(
+            gpui_remote_ssh_control_socket_problem(&socket, uid),
+            Some(GpuiRemoteControlSocketProblem::Unsafe(_))
+        ));
+        fs::set_permissions(&socket, fs::Permissions::from_mode(0o600)).unwrap();
+        // A folder others can write to (a shared /tmp-like folder) is refused.
+        fs::set_permissions(&folder, fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(matches!(
+            gpui_remote_ssh_control_socket_problem(&socket, uid),
+            Some(GpuiRemoteControlSocketProblem::Unsafe(_))
+        ));
+        fs::set_permissions(&folder, fs::Permissions::from_mode(0o700)).unwrap();
+        // A plain file is not a master.
+        let file = folder.join("f");
+        fs::write(&file, "").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(matches!(
+            gpui_remote_ssh_control_socket_problem(&file, uid),
+            Some(GpuiRemoteControlSocketProblem::Unsafe(_))
+        ));
+        let _ = fs::remove_dir_all(&folder);
     }
 
     #[test]

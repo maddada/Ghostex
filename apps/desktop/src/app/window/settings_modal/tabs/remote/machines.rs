@@ -1223,7 +1223,11 @@ pub(super) fn machine_dialog(
             ));
         // A Windows WSL machine's gxserver listens inside that distribution, where a forward in
         // the user's own SSH connection cannot land, so the setting is not offered for it.
-        if !easy_connect && draft.wsl_distribution.trim().is_empty() {
+        // Windows OpenSSH cannot multiplex, so the setting is macOS and Linux only.
+        if cfg!(any(target_os = "macos", target_os = "linux"))
+            && !easy_connect
+            && draft.wsl_distribution.trim().is_empty()
+        {
             // CDXC:RemoteMachines 2026-11-08 DECISION: GitHub #496, where the maintainer asked for
             // "an advanced toggle to be enabled in the remote tab": the machine can ride the SSH
             // connection the user already signed in to, so hosts that ask for a verification code

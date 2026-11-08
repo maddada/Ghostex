@@ -79,8 +79,10 @@ pub(crate) fn gpui_remote_machine_config_from_settings(
             .and_then(serde_json::Value::as_bool)
             == Some(true),
         // An Easy Connect machine is dialed on this computer's loopback forwarder and a Windows
-        // WSL machine runs gxserver inside its distribution, so neither reuses an SSH connection.
-        reuse_ssh_connection: transport == GpuiRemoteMachineTransport::Ssh
+        // WSL machine runs gxserver inside its distribution, so neither reuses an SSH connection;
+        // nor does any machine from Windows, whose OpenSSH cannot multiplex.
+        reuse_ssh_connection: cfg!(any(target_os = "macos", target_os = "linux"))
+            && transport == GpuiRemoteMachineTransport::Ssh
             && wsl_distribution.is_none()
             && machine
                 .get("reuseSshConnection")

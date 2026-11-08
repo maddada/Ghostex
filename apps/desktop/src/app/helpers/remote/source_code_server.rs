@@ -95,6 +95,8 @@ pub(crate) fn source_code_server_spawn_remote_runtime(
         let forward_cleanup =
             GpuiRemoteSharedSshForward::new(machine_config, "-L", local_forward.as_str());
         let mut arguments = gpui_remote_ssh_tunnel_options(machine_config);
+        // The verified socket and no fallback login, when the machine rides the user's master.
+        arguments.extend(gpui_remote_ssh_reuse_connection_arguments(machine_config)?);
         arguments.extend([
             "-o".to_string(),
             "ExitOnForwardFailure=yes".to_string(),
