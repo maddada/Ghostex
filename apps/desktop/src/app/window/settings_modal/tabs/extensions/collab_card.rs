@@ -218,6 +218,7 @@ impl ExtensionsTab {
                 extra: Some(extra),
                 scope_summary: None,
                 meta: meta.into(),
+                status: None,
                 actions,
                 editing: false,
                 enabled: installed,

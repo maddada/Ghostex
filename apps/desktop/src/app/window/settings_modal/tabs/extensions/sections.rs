@@ -243,10 +243,13 @@ impl ExtensionsTab {
                         .scope_editor
                         .as_ref()
                         .is_some_and(|editor| editor.key == scope_key);
+                // The type ends the (i) tooltip of a view, a header button or a menu item. A
+                // feature has none: "Feature · Every project" said the same thing on every card
+                // (User, Q2036).
                 let meta = if extension.placement == "sidebar" {
                     "Sidebar".to_string()
-                } else if extension.app_wide {
-                    format!("{} · Every project", category.type_label)
+                } else if extension.placement == "feature" {
+                    String::new()
                 } else {
                     category.type_label.clone()
                 };
@@ -308,7 +311,8 @@ impl ExtensionsTab {
                         scope_summary: scoped
                             .then(|| self.describe_scope(&scope_key, cx))
                             .flatten(),
-                        meta: runtime_meta.or(blocked_reason).unwrap_or(meta).into(),
+                        meta: meta.into(),
+                        status: runtime_meta.or(blocked_reason).map(Into::into),
                         actions,
                         editing,
                         enabled,
@@ -677,6 +681,7 @@ impl ExtensionsTab {
                 ]
                 .join(" · ")
                 .into(),
+                status: None,
                 actions,
                 editing,
                 enabled: extension.enabled(),
@@ -765,6 +770,7 @@ impl ExtensionsTab {
                 extra: None,
                 scope_summary: None,
                 meta: meta.join(" · ").into(),
+                status: None,
                 actions: vec![details],
                 editing: false,
                 enabled: true,
@@ -972,6 +978,7 @@ impl ExtensionsTab {
                 extra: None,
                 scope_summary: None,
                 meta: view.kind_label().into(),
+                status: None,
                 actions: vec![edit, remove],
                 editing: self
                     .view_editor

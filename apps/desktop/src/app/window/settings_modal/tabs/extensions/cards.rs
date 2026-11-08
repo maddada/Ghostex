@@ -18,8 +18,8 @@ use std::sync::Arc;
 
 /// `.extension-card-grid { gap: 0.625rem }`.
 const GRID_GAP: f32 = 10.0;
-/// The card's height with its title, no description (CDXC:Extensions 2026-11-08 in `grid_card`).
-pub(crate) const CARD_MIN_HEIGHT: f32 = 116.0;
+/// A tile's height: its icon and two lines (CDXC:Extensions 2026-11-09 in `grid_card`).
+pub(crate) const CARD_MIN_HEIGHT: f32 = 60.0;
 /// `EXTENSION_ICON_COLOR` (`#b9b9b9`; the light theme's `--extension-icon-color` is `#525252`).
 pub(crate) fn extension_icon_color(p: &SettingsPalette) -> gpui::Rgba {
     if p.light {
@@ -30,14 +30,10 @@ pub(crate) fn extension_icon_color(p: &SettingsPalette) -> gpui::Rgba {
 }
 
 /// The columns of `.extension-card-grid` for a grid `width` wide (its container queries).
+///
+/// Two tiles to a row (CDXC:Extensions 2026-11-09 in `grid_card`), one in a narrow column.
 pub(crate) fn grid_columns(width: f32) -> usize {
-    if width <= 360.0 {
-        1
-    } else if width <= 560.0 {
-        2
-    } else {
-        3
-    }
+    if width <= 420.0 { 1 } else { 2 }
 }
 
 /// The width of the page column the grids fill: the page column, or less in a narrow window
@@ -212,10 +208,14 @@ pub(crate) struct GridCardSpec {
     /// A small outlined label after the title ("Beta"), like a Settings row's badge.
     pub(crate) badge: Option<SharedString>,
     pub(crate) description: SharedString,
-    /// Extra content under the description (the chat bar option row).
+    /// Extra content under the tile's line (the chat bar option row).
     pub(crate) extra: Option<AnyElement>,
     pub(crate) scope_summary: Option<SharedString>,
+    /// The type or author ("View", "by Ghostex"): the end of the (i) tooltip.
     pub(crate) meta: SharedString,
+    /// What the reader must know now ("Turn on Main Hub first", a runtime's state): shown in
+    /// place of the description line.
+    pub(crate) status: Option<SharedString>,
     pub(crate) actions: Vec<AnyElement>,
     pub(crate) editing: bool,
     pub(crate) enabled: bool,
@@ -224,18 +224,17 @@ pub(crate) struct GridCardSpec {
 }
 
 /// CDXC:Extensions 2026-09-24 DECISION:
-/// User: every extension on the Settings Extensions page (built-in, installed, Store and the user's own views) is a card in a grid, three to a row, instead of a list row. One card shape serves all four so they read as one family: icon and the on/off switch (or Install) on top, title, description, an optional scope label, and a footer with the type or author on the left and the row actions, which appear on hover or focus. The switch is the state, so there is no status dot; a card that is off dims its icon.
-/// CDXC:Extensions 2026-11-07 WHY:
-/// A card's description wraps in full instead of stopping at three lines with an ellipsis: the GBots card cut off mid-word ("on any of your co…") and only a hover tooltip showed the rest. The grid keeps cards in a row the same height, so a longer description just makes its row taller, and there is no tooltip repeating the text.
+/// User: every extension on the Settings Extensions page (built-in, installed, Store and the user's own views) is a card in a grid instead of a list row. One card shape serves all four so they read as one family; the switch is the state, so there is no status dot; a card that is off dims its icon.
 /// CDXC:Extensions 2026-11-08 DECISION:
-/// User (Q2023 on the remote tile audit page, overriding a two-line clamp): "For extensions let's
-/// just show a tooltip for all of them: just show the title, and when I hover an (i) icon appears
-/// next to the title; hovering it shows the details of each one in the tooltip. It'll make
-/// extension cards simpler". Supersedes the 2026-11-07 full description: in a three-column grid
-/// it filled the cards with paragraphs cut off at the page's edge.
-/// `ExtensionGridCard`: icon and control on top, the title (its description behind the (i) that
-/// shows on hover), an optional scope label, and a footer with the meta text and the actions that
-/// appear on hover.
+/// User (Q2023 on the remote tile audit page): "just show the title, and when I hover an (i) icon
+/// appears next to the title; hovering it shows the details of each one in the tooltip".
+/// CDXC:Extensions 2026-11-09 DECISION:
+/// User, on the 116pt cards with "lots of empty space" ("gimme another look for these pls?"),
+/// picked small tiles with one line of description, two to a row (Q2035 C), for every section of
+/// the page (Q2039), without the "Feature · Every project" line (Q2036). A tile is the icon, the
+/// title line (badge, scope label and the (i) that appears on hover, whose tooltip has the whole
+/// description and the type or author), one line of description (or the status that matters now),
+/// then the actions that appear on hover and the switch.
 pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
     let group: SharedString = format!("extension-card-{}", spec.id).into();
     let hover_surface = p.raised_hover;
@@ -255,15 +254,100 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
             })
             .children(spec.actions)
     });
+    let tooltip = [spec.description.to_string(), spec.meta.to_string()]
+        .into_iter()
+        .filter(|text| !text.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let line = spec
+        .status
+        .clone()
+        .or_else(|| (!spec.description.is_empty()).then(|| spec.description.clone()));
+    let one_line = |text: SharedString, color: gpui::Rgba| {
+        div()
+            .min_w_0()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .text_ellipsis()
+            .text_size(px(12.5))
+            .line_height(px(17.0))
+            .text_color(hsla(color))
+            .child(text)
+    };
+    let title_line = h_flex()
+        .w_full()
+        .min_w_0()
+        .items_center()
+        .gap(px(6.0))
+        .child(
+            div()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(px(14.0))
+                .line_height(px(20.0))
+                .text_color(hsla(p.foreground))
+                .child(spec.title),
+        )
+        .children(spec.badge.map(|badge| {
+            div()
+                .flex_shrink_0()
+                .px(px(6.0))
+                .py(px(1.0))
+                .rounded(px(6.0))
+                .border_1()
+                .border_color(hsla(p.hairline))
+                .text_size(px(11.0))
+                .line_height(px(14.0))
+                .text_color(hsla(p.muted))
+                .child(badge)
+        }))
+        .children(spec.scope_summary.map(|summary| {
+            div()
+                .min_w_0()
+                .flex_shrink(1.0)
+                .px(px(6.0))
+                .py(px(1.0))
+                .rounded(px(5.0))
+                .bg(hsla(p.foreground_alpha(0.08)))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(px(11.5))
+                .line_height(px(15.0))
+                .text_color(hsla(p.foreground_alpha(0.8)))
+                .child(summary)
+        }))
+        .when(!tooltip.is_empty(), |this| {
+            this.child(
+                div()
+                    .id(SharedString::from(format!(
+                        "extension-card-description-{}",
+                        spec.id
+                    )))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .opacity(0.0)
+                    .group_hover(group.clone(), |this| this.opacity(1.0))
+                    .tooltip(tooltip_text(tooltip))
+                    .child(settings_icon(
+                        "modals/settings/info-circle.svg",
+                        14.0,
+                        p.muted,
+                    )),
+            )
+        });
     v_flex()
         .id(SharedString::from(format!("extension-card-{}", spec.id)))
         .group(group.clone())
         .w_full()
         .min_w_0()
         .min_h(px(CARD_MIN_HEIGHT))
-        .pt(px(12.0))
+        .justify_center()
         .px(px(12.0))
-        .pb(px(8.0))
+        .py(px(10.0))
         .rounded(px(MODAL_RADIUS_SECTION))
         .border_1()
         .border_color(hsla(if editing { ring } else { p.hairline }))
@@ -284,7 +368,7 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                 .w_full()
                 .min_w_0()
                 .items_center()
-                .gap(px(6.0))
+                .gap(px(10.0))
                 .children(spec.leading)
                 .child(
                     div()
@@ -294,106 +378,22 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                         .child(spec.icon),
                 )
                 .child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .child(title_line)
+                        .children(line.map(|line| one_line(line, p.muted))),
+                )
+                .children(actions)
+                .children(spec.control.map(|control| {
                     h_flex()
-                        .ml_auto()
                         .flex_shrink_0()
                         .items_center()
                         .gap(px(6.0))
-                        .children(spec.control),
-                ),
-        )
-        .child(
-            h_flex()
-                .mt(px(10.0))
-                .w_full()
-                .min_w_0()
-                .gap(px(6.0))
-                .child(
-                    div()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(px(14.0))
-                        .line_height(px(20.0))
-                        .text_color(hsla(p.foreground))
-                        .child(spec.title),
-                )
-                .when(!spec.description.is_empty(), |this| {
-                    this.child(
-                        div()
-                            .id(SharedString::from(format!(
-                                "extension-card-description-{}",
-                                spec.id
-                            )))
-                            .flex_shrink_0()
-                            .flex()
-                            .items_center()
-                            .opacity(0.0)
-                            .group_hover(group.clone(), |this| this.opacity(1.0))
-                            .tooltip(tooltip_text(spec.description.to_string()))
-                            .child(settings_icon(
-                                "modals/settings/info-circle.svg",
-                                14.0,
-                                p.muted,
-                            )),
-                    )
-                })
-                .children(spec.badge.map(|badge| {
-                    div()
-                        .flex_shrink_0()
-                        .px(px(6.0))
-                        .py(px(1.0))
-                        .rounded(px(6.0))
-                        .border_1()
-                        .border_color(hsla(p.hairline))
-                        .text_size(px(11.0))
-                        .line_height(px(14.0))
-                        .text_color(hsla(p.muted))
-                        .child(badge)
+                        .child(control)
                 })),
         )
         .children(spec.extra)
-        .children(spec.scope_summary.map(|summary| {
-            div()
-                .mt(px(8.0))
-                .max_w_full()
-                .flex_none()
-                .self_start()
-                .px(px(6.0))
-                .py(px(1.0))
-                .rounded(px(5.0))
-                .bg(hsla(p.foreground_alpha(0.08)))
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .text_size(px(12.0))
-                .line_height(px(17.14))
-                .text_color(hsla(p.foreground_alpha(0.8)))
-                .child(summary)
-        }))
-        .child(
-            h_flex()
-                .mt_auto()
-                .w_full()
-                .min_h(px(28.0))
-                .pt(px(8.0))
-                .items_center()
-                .gap(px(4.0))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(px(12.0))
-                        .line_height(px(17.14))
-                        .text_color(hsla(p.muted))
-                        .child(spec.meta),
-                )
-                .children(actions),
-        )
         .into_any_element()
 }
 

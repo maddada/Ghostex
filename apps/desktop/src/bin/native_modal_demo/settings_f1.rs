@@ -6,7 +6,8 @@
 //! (settings_fixture/extensions.json and accounts.json).
 //!
 //! States: `extensions` (the page), `extensions-store` (scrolled to the store), `extensions-views`
-//! (scrolled to Your views), `extensions-filter` (a filtered page), `extensions-empty` (a filter
+//! (scrolled to Your views), `extensions-filter` (a filtered page), `extensions-experimental` (the
+//! Experimental group alone), `extensions-empty` (a filter
 //! nothing matches), `extensions-loading`, `extensions-error`, `extensions-detail` (an installed
 //! extension's page), `extensions-store-detail` (a Store page with its README), `extensions-consent`
 //! (the install consent over the Store page), `extensions-folder-install` (Install from folder…'s

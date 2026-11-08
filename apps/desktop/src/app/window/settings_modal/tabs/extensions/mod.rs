@@ -381,6 +381,10 @@ impl ExtensionsTab {
                 self.filter.type_ = "view".into();
                 self.filter.category = "Project websites".into();
             }
+            "extensions-experimental" => {
+                self.preview_applied = true;
+                self.filter.category = "Experimental".into();
+            }
             "extensions-empty" => {
                 self.preview_applied = true;
                 self.store

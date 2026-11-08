@@ -147,7 +147,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     J::Obj(&[
         ("appWide", J::Bool(true)),
         ("description", J::Str("Your own team of bots under Chief of Staff in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub.")),
-        ("category", J::Str("features")),
+        ("category", J::Str("experimental")),
         ("id", J::Str("gbots")),
         ("placement", J::Str("feature")),
         ("requiresExtension", J::Str("chief")),
@@ -314,7 +314,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // SEE-ALSO: server/src/chief/ (the session, the head role, `chief_on`), packages/settings-catalog/src/data/defaults.rs (`mainHubHidden`), packages/settings-catalog/src/help/supplemental.rs.
     J::Obj(&[
         ("description", J::Str("The home for chats that don't belong to a project, with Chief of Staff, an agent that can see and steer all your other agents, pinned at the top.")),
-        ("category", J::Str("features")),
+        ("category", J::Str("experimental")),
         ("id", J::Str("chief")),
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("mainHubHidden")),
@@ -328,7 +328,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // SEE-ALSO: packages/gx-chat-core/src/read_aloud/ (the rules), server/src/ghostex_cli/sessions/mobile_summary.rs (`builtInFeatures`, how the phone learns the switch), docs/2026-10-20/voice-mode/read-aloud-client-contract.md.
     J::Obj(&[
         ("description", J::Str("Hear the agent's replies spoken aloud: Read aloud on a reply, and Auto-read in the chat's ⋯ menu, which speaks each finished reply of the chat you're looking at. Uses this device's own voices.")),
-        ("category", J::Str("features")),
+        ("category", J::Str("experimental")),
         ("id", J::Str("readAloud")),
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("readAloudHidden")),
@@ -381,7 +381,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // User (Q306): Connectors, OS Integration and Debugging join the Settings rail's Extensions group, and "for the ones that aren't in extensions already add them to extensions and allow disabling/enabling them". Q313: "Switch on top of the gate": each is on by default and its page shows only while its switch is on and its gate (`gatedBy`) is open: Enable Experimental Features for Connectors and OS Integration. Debugging has no gate (CDXC:Settings 2026-10-29 in rail.rs: Show Advanced never hides a page), only its switch. Its Store card is left out while the gate is closed. Turning Connectors off also turns off `ghostex connectors` and its gxserver routes (server/src/connectors/gate.rs, whose CDXC:Connectors 2026-10-15 decision still holds). New `…Hidden` keys default to false, so nobody's Settings changes.
     J::Obj(&[
         ("description", J::Str("Connect Gmail, Slack, Linear and more apps to a workspace so its agents can use them, from the Connectors page and the ghostex connectors commands.")),
-        ("category", J::Str("features")),
+        ("category", J::Str("experimental")),
         ("id", J::Str("connectors")),
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("connectorsHidden")),
@@ -392,7 +392,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     ]),
     J::Obj(&[
         ("description", J::Str("Make Ghostex your default editor, terminal-link handler and script runner, and check how this computer opens its files and links.")),
-        ("category", J::Str("features")),
+        ("category", J::Str("experimental")),
         ("id", J::Str("osIntegration")),
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("osIntegrationHidden")),
@@ -425,6 +425,14 @@ pub const GHOSTEX_OFFICIAL_EXTENSION_CATEGORIES: J = J::Arr(&[
     J::Obj(&[
         ("id", J::Str("features")),
         ("label", J::Str("Features")),
+        ("typeLabel", J::Str("Feature")),
+    ]),
+    // CDXC:Extensions 2026-11-09 DECISION: User (Q2038 on the Features list page): the features
+    // shown only while Experimental features is on get their own group, "move gbots there too
+    // please and main hub for now".
+    J::Obj(&[
+        ("id", J::Str("experimental")),
+        ("label", J::Str("Experimental")),
         ("typeLabel", J::Str("Feature")),
     ]),
     J::Obj(&[
