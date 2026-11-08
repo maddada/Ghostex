@@ -122,6 +122,30 @@ fn write(path: &Path, notice: &UpgradeNotice) -> Result<()> {
         .context("write the security upgrade notice")
 }
 
+/// The `/api/securityUpgradeNotice` route.
+#[inline(never)]
+pub(crate) fn handle_http(
+    paths: &GxserverPaths,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> crate::server::RoutedResponse {
+    use axum::http::StatusCode;
+    let params = crate::domain::read_domain_rpc_params(body).unwrap_or_default();
+    match handle_endpoint(paths, &params) {
+        Ok(result) => crate::server::routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            crate::protocol::rpc_success(request_id, result),
+        ),
+        Err(error) => crate::server::routed_json(
+            Some(endpoint_path),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            crate::protocol::rpc_error("internalError", format!("{error:#}"), Some(request_id)),
+        ),
+    }
+}
+
 /// `op: "read"` (default): `show`, `phones`, `computers`. `op: "dismiss"`: marks it seen.
 pub(crate) fn handle_endpoint(
     paths: &GxserverPaths,
