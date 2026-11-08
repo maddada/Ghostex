@@ -194,15 +194,39 @@ pub fn path_noun(path: &str) -> &'static str {
     }
 }
 
-/// `/(?:^|[\\/])SKILL\.md$/i`, or a Claude Code command `/[\\/]commands[\\/][^\\/]+\.md$/i`.
-fn is_skill_file(path: &str) -> bool {
+/// `/(?:^|[\\/])SKILL\.md$/i`, or a Claude Code command: `/[\\/]commands[\\/][^\\/]+\.md$/i`, or
+/// any `.md` file a `$`/`/` pill `label` names as a plugin command (`plugin:name`), since a plugin's
+/// commands can sit in any folder its plugin.json names.
+/// SEE-ALSO: `is_skill_file` in `server/src/session_chat_skill_invocation.rs` must accept exactly the
+/// same links (CDXC:AgentSkills 2026-11-08).
+fn is_skill_file(label: &str, path: &str) -> bool {
     let lowered = crate::transcript::jsstr::ascii_lower(path);
     if lowered == "skill.md" {
         return true;
     }
     lowered.ends_with("/skill.md")
         || lowered.ends_with("\\skill.md")
-        || (lowered.ends_with(".md") && lowered.rsplit(['/', '\\']).nth(1) == Some("commands"))
+        || (lowered.ends_with(".md")
+            && (lowered.rsplit(['/', '\\']).nth(1) == Some("commands")
+                || label
+                    .strip_prefix(['$', '/'])
+                    .is_some_and(is_plugin_command_name)))
+}
+
+/// `plugin:name` or `plugin:folder:name`, as Claude Code names a plugin's commands: segments of
+/// `[A-Za-z0-9_-]`, the last not all digits, so `/notes.md:12` is not one.
+fn is_plugin_command_name(name: &str) -> bool {
+    let segments = name.split(':').collect::<Vec<_>>();
+    segments.len() >= 2
+        && segments.iter().all(|segment| {
+            !segment.is_empty()
+                && segment.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                })
+        })
+        && !segments
+            .last()
+            .is_some_and(|last| last.chars().all(|character| character.is_ascii_digit()))
 }
 
 /// `/^https?:\/\//i`.
@@ -430,7 +454,9 @@ pub fn reference_kind(label: &str, path: &str) -> ReferenceKind {
     }
     let explicit = explicit_reference_kind(crate::transcript::jsstr::js_trim(label));
     if let Some(kind) = explicit {
-        if kind != ReferenceKind::Skill || is_skill_file(path) {
+        if kind != ReferenceKind::Skill
+            || is_skill_file(crate::transcript::jsstr::js_trim(label), path)
+        {
             return kind;
         }
     }
@@ -721,7 +747,7 @@ pub fn composer_references(text: &str) -> Vec<ComposerReference> {
             continue;
         }
         let kind = reference_kind(&label, &destination.path);
-        if label.starts_with('$') && !is_skill_file(&destination.path) {
+        if label.starts_with('$') && !is_skill_file(&label, &destination.path) {
             continue;
         }
         references.push(ComposerReference {

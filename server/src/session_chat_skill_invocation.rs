@@ -77,7 +77,7 @@ fn skill_link_at(chars: &[char], start: usize) -> Option<(String, usize)> {
         return None;
     }
     let (destination, end) = link_destination(chars, index + 2)?;
-    is_skill_file(&destination).then_some((name, end))
+    is_skill_file(&name, &destination).then_some((name, end))
 }
 
 /// The raw `(...)` half of a Markdown link starting after its `(`, in the angle-bracketed or the
@@ -129,12 +129,34 @@ fn link_destination(chars: &[char], start: usize) -> Option<(String, usize)> {
     None
 }
 
-/// A destination naming a `SKILL.md` file or a Claude Code command (`…/commands/<name>.md`),
-/// whichever separator the platform used.
-fn is_skill_file(destination: &str) -> bool {
+/// A destination naming a `SKILL.md` file, or a Claude Code command: an `.md` file in a
+/// `commands` folder, or any `.md` file the pill names as a plugin command (`plugin:name`), since a
+/// plugin's commands can sit in any folder its plugin.json names. Either separator counts.
+///
+/// CDXC:AgentSkills 2026-11-08 WHY:
+/// A plugin command picked from `commands/git/push.md` or a manifest path such as `extras/deploy.md` reached Claude as the Markdown link instead of `/plugin:name`. The name must look like a plugin command (segments of `[A-Za-z0-9_-]`, the last not all digits), so a file link labelled `/notes.md:12` stays a link.
+/// SEE-ALSO: `is_skill_file` in `packages/gx-chat-core/src/composer/reference_pills.rs` must accept exactly the same links.
+fn is_skill_file(name: &str, destination: &str) -> bool {
     let lowered = destination.to_ascii_lowercase();
     lowered == "skill.md"
         || lowered.ends_with("/skill.md")
         || lowered.ends_with("\\skill.md")
-        || (lowered.ends_with(".md") && lowered.rsplit(['/', '\\']).nth(1) == Some("commands"))
+        || (lowered.ends_with(".md")
+            && (lowered.rsplit(['/', '\\']).nth(1) == Some("commands")
+                || is_plugin_command_name(name)))
+}
+
+/// `plugin:name` or `plugin:folder:name`, as Claude Code names a plugin's commands.
+fn is_plugin_command_name(name: &str) -> bool {
+    let segments = name.split(':').collect::<Vec<_>>();
+    segments.len() >= 2
+        && segments.iter().all(|segment| {
+            !segment.is_empty()
+                && segment.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                })
+        })
+        && !segments
+            .last()
+            .is_some_and(|last| last.chars().all(|character| character.is_ascii_digit()))
 }
