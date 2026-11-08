@@ -2,7 +2,7 @@
 //! native-modal-demo can draw the app's real row.
 use gpui::{
     InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Styled as _, div, img,
-    prelude::FluentBuilder as _, px, rgb,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     h_flex,
@@ -66,7 +66,7 @@ pub(crate) fn titlebar_popup_extension_menu_row(
                 .px(px(6.0))
                 .py(px(2.0))
                 .rounded(px(3.0))
-                .bg(rgb(0xffffff).opacity(0.07))
+                .bg(titlebar_active_segment_color())
                 .text_size(px(10.0))
                 .text_color(titlebar_inactive_text_color())
                 .child(placement_label),
