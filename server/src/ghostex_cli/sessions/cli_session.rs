@@ -15,9 +15,14 @@ pub(super) fn to_cli_session(
 ) -> Value {
     let p = |key: &str| presentation_session.and_then(|value| value.get(key));
     let s = |key: &str| session.get(key);
-    let lifecycle_state = js_string(s("lifecycleState"));
+    let raw_lifecycle_state = js_string(s("lifecycleState"));
     let provider_state =
         js_string(s("providerState").and_then(|value| value.get("lifecycleState")));
+    let lifecycle_state = if provider_state == "missing" && raw_lifecycle_state == "running" {
+        "sleeping".to_string()
+    } else {
+        raw_lifecycle_state
+    };
     let activity = normalize_cli_session_activity(p("activity"));
     let status: Value = if lifecycle_state == "sleeping" {
         json!("sleep")
