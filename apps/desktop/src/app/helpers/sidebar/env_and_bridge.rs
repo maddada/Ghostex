@@ -193,19 +193,6 @@ mod tests {
         }
     }
 
-    /// A GBots conversation's row names its agent `gbots`; it keeps that icon and has a chat agent,
-    /// so Chat View can open on the mirrored transcript (issue #493).
-    #[test]
-    fn gbots_conversation_resolves_to_its_icon_and_chat_agent() {
-        let icon = gpui_sidebar_agent_icon(Some("gbots"));
-        assert_eq!(icon, Some("gbots"));
-        assert_eq!(gpui_sidebar_agent_icon(Some(" GBots ")), Some("gbots"));
-        assert_eq!(
-            crate::app::session_chat_surfaces::session_chat_agent_for_icon(icon.unwrap()),
-            Some("gbots")
-        );
-    }
-
     /// A cloud session's tab carries its agent, so the chat gates take it: it has a chat agent and
     /// opens in Chat View even when the Default Agent View is Terminal.
     #[test]

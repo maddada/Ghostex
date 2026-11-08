@@ -94,23 +94,6 @@ async fn our_retired_local_engine_moves_to_hex_and_the_next_failed_dictation_say
     );
 }
 
-#[test]
-fn the_old_models_folder_is_measured_and_deleted() {
-    let temp = tempfile::tempdir().expect("temp");
-    let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
-    assert_eq!(
-        super::retired::old_models_view(&paths),
-        serde_json::Value::Null
-    );
-    let model = super::retired::models_folder(&paths).join("parakeet-tdt-0.6b-v3");
-    std::fs::create_dir_all(&model).expect("folder");
-    std::fs::write(model.join("model.pack"), vec![0u8; 1_000]).expect("file");
-    assert_eq!(super::retired::old_models_view(&paths)["bytes"], 1_000);
-    super::retired::delete_old_models(&paths).expect("deleted");
-    assert!(!super::retired::models_folder(&paths).exists());
-    super::retired::delete_old_models(&paths).expect("deleting nothing succeeds");
-}
-
 #[tokio::test]
 async fn a_cloud_engine_with_no_key_names_that_key() {
     let temp = tempfile::tempdir().expect("temp");

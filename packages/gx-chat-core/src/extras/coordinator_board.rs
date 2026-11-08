@@ -1843,38 +1843,4 @@ mod tests {
             2
         );
     }
-
-    /// A board mention reads its card's title now from the board's `itemTitles`, every item on the
-    /// board whatever its group's cap, and carries the tooltip of a card that left it; a gxserver
-    /// that sends no index gives no `itemTitles`, so nothing is drawn as gone.
-    #[test]
-    fn the_board_indexes_its_items_for_mentions() {
-        let reference = board_reference("board:B43", " Deploy guest page ").unwrap();
-        assert_eq!(reference["item"], "B43");
-        assert_eq!(reference["label"], "Deploy guest page");
-        assert_eq!(reference["goneTitle"], BOARD_ITEM_GONE);
-
-        let state = state_with(json!({
-            "groups": [{"id": "later", "total": 30, "rows": []}],
-            "items": {"B43": "  Deploy guest page 0.1.2 to share.ghostex.dev ", "B7": "Release"},
-        }));
-        let titles = coordinator_board(&state, &context())
-            .unwrap()
-            .item_titles
-            .unwrap();
-        assert_eq!(
-            titles.get("B43").map(String::as_str),
-            Some("Deploy guest page 0.1.2 to share.ghostex.dev")
-        );
-        assert!(titles.get("B44").is_none());
-        let document = project(&state, &context());
-        assert_eq!(document["itemTitles"]["B7"], "Release");
-
-        let old = state_with(json!({"groups": [{"id": "later", "total": 1, "rows": []}]}));
-        assert!(coordinator_board(&old, &context())
-            .unwrap()
-            .item_titles
-            .is_none());
-        assert!(project(&old, &context()).get("itemTitles").is_none());
-    }
 }

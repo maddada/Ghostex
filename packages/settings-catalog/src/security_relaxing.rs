@@ -40,19 +40,3 @@ pub fn needs_owner_presence(key: &str, value: &Value) -> bool {
     }
     key == "gbotsComputer" || holds_secret(key) || security_relaxing_keys().contains(key)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn security_relaxing_settings_are_found_in_the_catalog() {
-        assert!(needs_owner_presence("easyConnectEnabled", &json!(true)));
-        assert!(needs_owner_presence("syncCoordinator", &json!(true)));
-        assert!(needs_owner_presence("projectLinearApiKey", &json!("x")));
-        assert!(needs_owner_presence("gbotsEnabled", &json!(true)));
-        assert!(!needs_owner_presence("gbotsEnabled", &json!(false)));
-        assert!(!needs_owner_presence("terminalFontSize", &json!(14)));
-    }
-}

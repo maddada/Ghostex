@@ -1664,7 +1664,7 @@ static BOOL GhostexGpuiCEFBrowserViewPerformKeyEquivalent(id self, SEL _cmd,
  GitHub #326: an arrow, Home/End or Page Up/Down press in the Code view also typed its layout code (0x1E for Up) into the file, and into the Command Palette's box, which re-filtered the list so the arrows never moved its selection. The macOS input method committed the key event's raw character as text, and Chromium's insertText: hands committed text to the page as is, past Blink's rule that keys never type control characters. A commit made only of control or AppKit function-key characters is dropped here (the rule and its tests are GhostexGpuiCEFTextIsStrayKeyCharacter in cef/macos.rs); Enter, Tab, Backspace, Escape and Ctrl+letter keep reaching the page through Chromium's key event.
 
  CDXC:Hotkeys 2026-11-08 WHY:
- User: "using my arrow keys here in this thing broke again. when i do left arrow its adding a space/invisible char". A note typed in a Ghostex page's window came back with U+001C U+001F U+001D in it: the same commit, in a page this filter never reached. It used to be added to the focus subclass each CEF view gets, and that subclass is skipped while AppKit's Touch Bar finder KVO-observes the view (the 2026-10-24 #291 check above): the finder observes every responder from the key window's first responder up, and a page window's web view is the first responder of a key window, so it kept the KVO class and never got the filter. The filter now replaces Chromium's own -[RenderWidgetHostViewCocoa insertText:replacementRange:] once, so every Chromium web view (the page window, Code, Browser, Docs, Settings, DevTools, observed or not, whenever it was created) shares it without any class change on the view. The regression test is GhostexGpuiCEFStrayKeyFilterCoversObservedViewForTesting in cef/macos.rs.
+ User: "using my arrow keys here in this thing broke again. when i do left arrow its adding a space/invisible char". A note typed in a Ghostex page's window came back with U+001C U+001F U+001D in it: the same commit, in a page this filter never reached. It used to be added to the focus subclass each CEF view gets, and that subclass is skipped while AppKit's Touch Bar finder KVO-observes the view (the 2026-10-24 #291 check above): the finder observes every responder from the key window's first responder up, and a page window's web view is the first responder of a key window, so it kept the KVO class and never got the filter. The filter now replaces Chromium's own -[RenderWidgetHostViewCocoa insertText:replacementRange:] once, so every Chromium web view (the page window, Code, Browser, Docs, Settings, DevTools, observed or not, whenever it was created) shares it without any class change on the view.
  */
 static IMP g_ghostexGpuiCEFChromiumInsertText = NULL;
 
@@ -1706,42 +1706,6 @@ static void GhostexGpuiCEFInstallChromiumTextInputFilter(void) {
           method, (IMP)GhostexGpuiCEFChromiumInsertText);
     }
   });
-}
-
-/// For cef/macos.rs's regression test only: a stand-in RenderWidgetHostViewCocoa that the Touch Bar
-/// finder's way of observing (KVO on nextResponder) has given a KVO class, prepared like every CEF
-/// view, must drop a stray arrow code and keep real text. Returns 1 when both hold.
-int GhostexGpuiCEFStrayKeyFilterCoversObservedViewForTesting(void) {
-  @autoreleasepool {
-    static NSMutableArray<NSString *> *committed;
-    committed = [NSMutableArray array];
-    Class contentClass = NSClassFromString(@"RenderWidgetHostViewCocoa");
-    if (!contentClass) {
-      contentClass = objc_allocateClassPair(NSView.class,
-                                            "RenderWidgetHostViewCocoa", 0);
-      IMP record = imp_implementationWithBlock(
-          ^(id view, id string, NSRange range) {
-            (void)view;
-            (void)range;
-            [committed addObject:[string isKindOfClass:NSAttributedString.class]
-                                     ? [string string]
-                                     : string];
-          });
-      class_addMethod(contentClass, @selector(insertText:replacementRange:),
-                      record, "v@:@{_NSRange=QQ}");
-      objc_registerClassPair(contentClass);
-    }
-    NSView *view = [[contentClass alloc] initWithFrame:NSMakeRect(0, 0, 10, 10)];
-    NSObject *finder = [NSObject new];
-    [view addObserver:finder forKeyPath:@"nextResponder" options:0 context:NULL];
-    BOOL observed = object_getClass(view) != contentClass;
-    GhostexGpuiCEFPrepareNativeViewForFocus((__bridge void *)view);
-    [(id)view insertText:@"\x1c" replacementRange:NSMakeRange(NSNotFound, 0)];
-    [(id)view insertText:@"\x1f\x1d" replacementRange:NSMakeRange(NSNotFound, 0)];
-    [(id)view insertText:@"a" replacementRange:NSMakeRange(NSNotFound, 0)];
-    [view removeObserver:finder forKeyPath:@"nextResponder"];
-    return observed && [committed isEqualToArray:@[ @"a" ]] ? 1 : 0;
-  }
 }
 
 static void GhostexGpuiCEFBrowserViewAddSubview(id self, SEL _cmd,

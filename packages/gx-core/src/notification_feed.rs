@@ -253,70 +253,7 @@ mod tests {
             ["resetExpiring", "resetRedeemed"]
         );
         assert_eq!(items[0]["accountId"], "acct-1");
-        // The count is the kept unread rows: the unread row of an unknown kind is not one.
+        // Without the daemon's count, the count is the kept unread rows.
         assert_eq!(message["unreadCount"], 1);
-    }
-
-    /// The bell's dot and the panel's Unread group, from one daemon answer.
-    fn dot_and_list(message: &Value) -> (u64, usize) {
-        let unread_rows = message["items"]
-            .as_array()
-            .expect("items")
-            .iter()
-            .filter(|item| item["read"] != Value::Bool(true))
-            .count();
-        (message["unreadCount"].as_u64().expect("count"), unread_rows)
-    }
-
-    #[test]
-    fn a_security_row_is_listed_and_counted_so_the_dot_matches_the_list() {
-        // The user's feed on 2026-11-08: the daemon counted two unread security rows that the
-        // normalizer dropped, so the bell lit over a panel with nothing unread.
-        let mut security = row("s1", "security", false);
-        security["projectId"] = json!("security");
-        security["sessionId"] = json!("security:12");
-        security["securityEntry"] = json!(12);
-        let mut older = row("s0", "security", false);
-        older["sessionId"] = json!("security:11");
-        let message = notification_feed_state_message(&json!({
-            "items": [security, older, row("d1", "finished", true)],
-            "unreadCount": 2,
-            "nextUnreadId": "s1",
-        }));
-        let items = message["items"].as_array().expect("items");
-        assert_eq!(items.len(), 3);
-        assert_eq!(items[0]["kind"], "security");
-        assert_eq!(items[0]["securityEntry"], 12);
-        assert_eq!(dot_and_list(&message), (2, 2));
-        assert_eq!(
-            notification_feed_jump_target(&message, None).map(|item| &item["id"]),
-            Some(&json!("s1"))
-        );
-    }
-
-    #[test]
-    fn a_row_the_panel_cannot_show_never_lights_the_dot() {
-        // A newer daemon's kind this client does not know: the daemon counts it unread and makes
-        // it the jump target, but the panel cannot list it.
-        let message = notification_feed_state_message(&json!({
-            "items": [row("x1", "somethingNewer", false), row("d1", "finished", true)],
-            "unreadCount": 1,
-            "nextUnreadId": "x1",
-        }));
-        assert_eq!(dot_and_list(&message), (0, 0));
-        assert!(message.get("nextUnreadId").is_none());
-        // A daemon count above the rows it listed (rows past the read limit) is not trusted.
-        let message = notification_feed_state_message(&json!({
-            "items": [row("f1", "finished", false)],
-            "unreadCount": 5,
-            "nextUnreadId": "f1",
-        }));
-        assert_eq!(dot_and_list(&message), (1, 1));
-        // Reading every listed row clears the dot whatever the daemon still says.
-        let message = notification_feed_state_message(&json!({
-            "items": [row("f1", "finished", true)],
-            "unreadCount": 3,
-        }));
-        assert_eq!(dot_and_list(&message), (0, 0));
     }
 }

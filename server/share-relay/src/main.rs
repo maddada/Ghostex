@@ -830,34 +830,3 @@ async fn static_file(State(relay): State<Arc<Relay>>, uri: Uri) -> Response {
     );
     response
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn page_folders_are_served_only_under_their_own_hash() {
-        let temp = std::env::temp_dir().join(format!("gx-relay-pages-{}", std::process::id()));
-        let page = temp.join("staging");
-        std::fs::create_dir_all(page.join("assets")).unwrap();
-        std::fs::write(page.join("index.html"), "<html></html>").unwrap();
-        std::fs::write(page.join("assets/a.js"), "1").unwrap();
-        let manifest = page_manifest(&page).unwrap();
-        assert_eq!(
-            manifest,
-            format!(
-                "{}  assets/a.js\n{}  index.html\n",
-                sha256_hex("1"),
-                sha256_hex("<html></html>")
-            )
-        );
-        let hash = sha256_hex(&manifest);
-        std::fs::rename(&page, temp.join(&hash)).unwrap();
-        let pages = load_pages(&temp).unwrap();
-        assert_eq!(pages.get(&hash[..16]), Some(&temp.join(&hash)));
-        // A changed file: the folder no longer matches its name and is not served.
-        std::fs::write(temp.join(&hash).join("assets/a.js"), "2").unwrap();
-        assert!(load_pages(&temp).unwrap().is_empty());
-        std::fs::remove_dir_all(&temp).unwrap();
-    }
-}

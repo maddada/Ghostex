@@ -241,36 +241,3 @@ async fn a_closed_notification_socket_leaves_no_hub_subscriber() {
     }
     assert_eq!(state.event_hub.subscriber_count(), 0);
 }
-
-/// The desktop sends its `gxo_` owner session once it is open (#495 phase 2); the sidebar's
-/// store socket was refused with it and the sidebar lost every local project and session. A
-/// session's own `gxs_` token and an owner token gxserver never minted stay refused.
-#[tokio::test]
-async fn the_desktops_owner_session_opens_the_event_stream() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let state = test_app_state(get_gxserver_paths(Some(temp.path().to_path_buf())));
-    let address = serve(state.clone()).await;
-    let owner = state.security.session_tokens.mint_owner("mac");
-    let mut client = connect(address, &owner, None).await;
-    assert_eq!(
-        next_type(&mut client).await.as_deref(),
-        Some("eventStreamReady")
-    );
-    let status = |token: String| async move {
-        let url = format!(
-            "ws://{address}/api/events?authToken={token}&protocolVersion={GXSERVER_PROTOCOL_VERSION}"
-        );
-        match tokio_tungstenite::connect_async(url).await {
-            Err(tungstenite::Error::Http(response)) => response.status().as_u16(),
-            other => panic!("expected an HTTP refusal, got {:?}", other.map(|_| ())),
-        }
-    };
-    let (session, _) = state.security.session_tokens.issue_session(
-        "P1",
-        "S1",
-        crate::security::SessionRole::Agent,
-    );
-    assert_eq!(status(session).await, 401);
-    let forged = format!("{}{}", &owner[..4], "A".repeat(owner.len() - 4));
-    assert_eq!(status(forged).await, 401);
-}

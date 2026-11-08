@@ -25,8 +25,6 @@ mod session_tokens;
 pub use approvals::{
     params_digest, ActionRequest, ApprovalError, ApprovalStore, APPROVED_TTL_MS, PENDING_TTL_MS,
 };
-#[cfg(test)]
-pub(crate) use approver_keys::test_keys;
 pub use approver_keys::{
     approver_key_id, key_id_of, verify_approval_signature, ApproverKeyError, ApproverKeys,
 };

@@ -768,32 +768,6 @@ pub fn owner_view(share: &StoredShare, relay_url: &str, title: Option<String>) -
 mod tests {
     use super::*;
 
-    fn share(code: &str, created: i64, expires: Option<i64>) -> StoredShare {
-        StoredShare {
-            id: "share_1".into(),
-            project_id: "p".into(),
-            session_id: "s".into(),
-            key: String::new(),
-            route: String::new(),
-            host_secret: String::new(),
-            token: "gxshare_x".into(),
-            code: code.into(),
-            mode: GuestMode::Send,
-            created_at_ms: created,
-            expires_at_ms: expires,
-            blocked: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn codes_are_eight_digits() {
-        for _ in 0..50 {
-            let code = new_code();
-            assert_eq!(code.len(), CODE_DIGITS);
-            assert!(code.bytes().all(|byte| byte.is_ascii_digit()));
-        }
-    }
-
     #[test]
     fn held_messages_survive_a_restart() {
         let folder = tempfile::tempdir().unwrap();

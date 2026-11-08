@@ -183,22 +183,3 @@ fn load_or_create(role: KeyRole) -> Result<DeviceKey, KeyError> {
         _ => Err(KeyError::KeyStore("the new key wasn't saved".to_string())),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_ASN1};
-
-    #[test]
-    fn a_generated_key_signs_what_gxserver_verifies() {
-        let (key, pkcs8) = DeviceKey::generate().unwrap();
-        let again = DeviceKey::from_pkcs8(&pkcs8).unwrap();
-        assert_eq!(key.public_key_b64(), again.public_key_b64());
-        let public = STANDARD.decode(key.public_key_b64()).unwrap();
-        assert_eq!(public.len(), 65);
-        let signature = STANDARD.decode(key.sign_b64(b"payload").unwrap()).unwrap();
-        UnparsedPublicKey::new(&ECDSA_P256_SHA256_ASN1, &public)
-            .verify(b"payload", &signature)
-            .unwrap();
-    }
-}

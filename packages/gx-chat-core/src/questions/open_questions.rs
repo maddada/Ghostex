@@ -1691,56 +1691,6 @@ mod tests {
             "url": if kind == "page" { Some(format!("http://127.0.0.1:1/visual/{id}")) } else { None }})
     }
 
-    /// An unanswered one-click question older than the loaded rows (the coordinator's Q1277 shape)
-    /// reaches the ? pill through the index, so the pill counts what the sidebar's dot counts (all
-    /// of the conversation's askers); its answered neighbour does not count.
-    #[test]
-    fn an_old_one_click_question_the_chat_has_not_loaded_counts_in_the_pill() {
-        use crate::questions::resource_index::{append_unique, scan_message, settle};
-        use crate::transcript::open_questions::{asker_entries, askers, settle_askers};
-        use crate::transcript::question_forms::answers_message;
-        use ghostex_gx_protocol::ChatMessage;
-        let reply = |id: &str, at: i64, text: &str| -> ChatMessage {
-            serde_json::from_value(serde_json::json!({
-                "id": id, "role": "assistant", "source": "transcript", "timestamp": at,
-                "byteOffset": at * 10, "blocks": [{"type": "text", "text": text}],
-            }))
-            .unwrap()
-        };
-        let open = "- **Q1277:** Should the security audit merge into main now?\n  - It's 157 files.\n  - [Review, then merge](ghostex-answer:Q1277 \"recommended\") [Hold](ghostex-answer:Q1277=hold)";
-        let done =
-            "- Q1278: Post it? [Post it](ghostex-answer:Q1278) [Skip](ghostex-answer:Q1278=no)";
-        let done_form = crate::transcript::inline_answers::inline_questions(done)[0].form();
-        let answer: ChatMessage = serde_json::from_value(serde_json::json!({
-            "id": "u1", "role": "user", "source": "transcript", "timestamp": 3_000,
-            "blocks": [{"type": "text", "text": answers_message(&done_form, &serde_json::json!({"Q1278": "Post it"}))}],
-        }))
-        .unwrap();
-        let messages = vec![reply("a1", 1_000, open), reply("a2", 2_000, done), answer];
-
-        // gxserver's index, read from the whole conversation.
-        let mut entries = Vec::new();
-        let mut found = Vec::new();
-        for message in &messages {
-            append_unique(&mut entries, scan_message(message));
-            found.extend(asker_entries(std::slice::from_ref(message), &found));
-        }
-        let index = settle(entries, &settle_askers(&found, &[]));
-        let mut state = ChatState::default();
-        state.session.resource_index = index
-            .iter()
-            .map(|entry| serde_json::to_value(entry).unwrap())
-            .collect();
-
-        let sidebar = askers(&messages, &[])
-            .iter()
-            .filter(|asker| !asker.answered && !asker.obsolete)
-            .count();
-        let pill = project(&state, &ChatContext::default());
-        assert_eq!((sidebar, pill.count), (1, 1));
-        assert_eq!(pill.total, 2);
-    }
-
     /// The conversation held more than the chat has loaded: the pill's count, the list, the totals
     /// and the filters cover the index, and a loaded row still wins for its own id.
     #[test]

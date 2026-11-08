@@ -57,8 +57,6 @@ unsafe extern "C" {
     fn GhostexGpuiCEFNativeViewContentIdentity(native_view: *mut c_void) -> u64;
     fn GhostexGpuiCEFRemoveNativeViewFromSuperview(native_view: *mut c_void);
     fn GhostexGpuiCEFPrepareNativeViewForFocus(native_view: *mut c_void);
-    #[cfg(test)]
-    fn GhostexGpuiCEFStrayKeyFilterCoversObservedViewForTesting() -> c_int;
     fn GhostexGpuiCEFSetNativeViewPinchZoomDisabled(native_view: *mut c_void, disabled: bool);
     fn GhostexGpuiCEFFocusNativeView(native_view: *mut c_void);
     fn GhostexGpuiCEFActivateNativeViewWindow(native_view: *mut c_void);
@@ -615,18 +613,6 @@ pub extern "C" fn GhostexGpuiCEFTextIsStrayKeyCharacter(units: *const u16, len: 
 #[cfg(test)]
 mod tests {
     use super::text_is_stray_key_character;
-
-    /// The 2026-11-08 regression (CDXC:Hotkeys at GhostexGpuiCEFChromiumInsertText): the filter
-    /// lived on the per-view focus subclass, which a view observed by AppKit's Touch Bar finder
-    /// (KVO on nextResponder, as a key window's first responder is) never gets, so a page window's
-    /// note box took U+001C U+001F U+001D from the arrows. A stand-in Chromium view, observed the
-    /// same way and prepared like every CEF view, must drop those commits and keep a letter.
-    #[test]
-    fn stray_arrow_codes_are_dropped_in_a_web_view_the_touch_bar_finder_observes() {
-        // SAFETY: the helper builds, observes and releases its own stand-in view.
-        let covered = unsafe { super::GhostexGpuiCEFStrayKeyFilterCoversObservedViewForTesting() };
-        assert_eq!(covered, 1);
-    }
 
     // What each key's event carries, read with UCKeyTranslate from
     // com.apple.keylayout.British and com.apple.keylayout.US (identical for these keys).

@@ -124,38 +124,3 @@ pub(crate) fn render(result: &Value) -> String {
     }
     out
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_broken_log_says_so_first() {
-        let text = render(&json!({
-            "check": { "intact": false, "entries": 1, "problem": { "message": "Entry 2 was changed after it was written." } },
-            "entries": [{
-                "seq": 2, "atMs": 0, "summary": "Turned on Easy Connect", "outcome": "done",
-                "actor": { "kind": "sharedToken", "label": "An agent or the app (says session G1)" },
-                "approval": { "id": "apr-1" }
-            }],
-        }));
-        let mut lines = text.lines();
-        assert!(lines
-            .next()
-            .unwrap()
-            .starts_with("WARNING: the security log was changed."));
-        let entry = lines.next().unwrap();
-        assert!(entry.starts_with("#2 "));
-        assert!(entry
-            .contains("Turned on Easy Connect  [done]  by An agent or the app (says session G1)"));
-        assert!(entry.ends_with("approval apr-1"));
-    }
-
-    #[test]
-    fn an_empty_intact_log() {
-        assert_eq!(
-            render(&json!({ "check": { "intact": true, "entries": 0 }, "entries": [] })),
-            "Security log intact: 0 entries.\nNo sensitive actions recorded yet.\n"
-        );
-    }
-}

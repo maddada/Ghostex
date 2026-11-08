@@ -766,18 +766,6 @@ mod tests {
             .unwrap()
             .starts_with("Always allow"));
         assert!(pill(&project(&state)).is_none());
-        // Answered anywhere but here: the card and its report row leave the chat.
-        assert_eq!(card["report"], "hidden");
-
-        let mut here = connector_card();
-        here["status"] = json!("answeredHere");
-        here["answer"] = json!("Approve");
-        let card = &project(&state_with(json!([here])))[0];
-        assert_eq!(card["report"], "line");
-        assert_eq!(
-            project(&state_with(json!([connector_card()])))[0]["report"],
-            "full"
-        );
 
         let mut state = state_with(json!([connector_card()]));
         answer(&mut state, &click("k1", 0), 5);

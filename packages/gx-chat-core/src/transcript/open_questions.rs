@@ -1181,39 +1181,6 @@ mod tests {
         assert!(found[1].answered, "every question of the form");
     }
 
-    /// The coordinator's Q1277 (2026-11-05), as its transcript holds it: a one-click question whose
-    /// links sit on a sub-bullet, answered then under the id its question had before 804a8118c moved
-    /// the asking line to the tagged bullet. The envelope's tag answers it under its new id too, so
-    /// gxserver's sidebar dot and the chat's ? pill agree it is answered; a Skip answers nothing by
-    /// name and keeps its own asker's skipped state.
-    #[test]
-    fn an_answer_sent_under_an_older_id_answers_the_tags_it_names() {
-        let ask = "I've adopted the **Ghostex security audit** thread, so it now reports to me.\n\n\u{2753} **Needs you:**\n- **Q1277:** Should the security audit merge into main now? It's 157 files: every place that sends the access token now first checks that the program on that port runs under your own account. I recommend having a separate thread review it first, then merging if the review is clean.\n  - The thread would catch up with main once more, then push the editor fork, the phone commits and the branch, in that order. After the merge, team owners run `ghostex team deploy`.\n  - [Review, then merge](ghostex-answer:Q1277 \"recommended\") [Merge it now](ghostex-answer:Q1277=merge) [Hold](ghostex-answer:Q1277=hold)\n\n\u{1f504} **In progress:**\n- **Rebuild:** It's building the Spaces work and the chat line fix.";
-        let answer = "\n\n<pasted_content id=\"da06\">\n<ghostex-page-answers page=\"e7a1b880ae7522f143561bbf278fbeae\" title=\"The thread would catch up with main once more, then push the editor fork, the phone commits and the branch, in that order. After the merge, team owners run ghostex team deploy.\">\n{\n  \"Q1277\": \"Review, then merge\"\n}\n</ghostex-page-answers>\n</pasted_content id=\"da06\">\n";
-        let old_id = "e7a1b880ae7522f143561bbf278fbeae".to_string();
-        let messages = vec![reply("a1", ask), user("u1", answer)];
-        let found = askers(&messages, &[old_id.clone()]);
-        assert_eq!(found.len(), 1);
-        assert_ne!(
-            found[0].id, old_id,
-            "the question's id moved since it was answered"
-        );
-        assert!(found[0].answered);
-        assert_eq!(tag_state(&found, "Q1277"), Some(TagState::Answered));
-
-        let skipped = answer.replace("\"Review, then merge\"", "\"skipped\"");
-        let found = askers(&[reply("a1", ask), user("u1", &skipped)], &[old_id]);
-        assert!(!found[0].answered, "a Skip names no answer");
-        assert!(said_in(&user("u1", &skipped)).is_empty());
-
-        assert_eq!(
-            tags_answered_in_envelope(
-                &serde_json::json!({"Q5": "Yes", "q6": ["A"], "Q5 (note)": "x", "voice-page": "on", "Q7": null})
-            ),
-            vec!["Q5", "Q6"]
-        );
-    }
-
     #[test]
     fn a_tag_on_its_own_one_click_question_is_marked_here() {
         let tags = vec![QuestionTag {

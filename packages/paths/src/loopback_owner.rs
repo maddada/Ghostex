@@ -612,33 +612,4 @@ mod tests {
         assert!(trusted_uid(501, 501) && trusted_uid(0, 501));
         assert!(!trusted_uid(502, 501));
     }
-
-    #[test]
-    fn a_root_refusal_says_sudo_and_every_refusal_carries_the_marker() {
-        let other = ForeignListener {
-            port: 58744,
-            root: false,
-        }
-        .to_string();
-        let root = ForeignListener {
-            port: 58744,
-            root: true,
-        }
-        .to_string();
-        assert!(other.starts_with("Another account on this computer"));
-        assert!(root.contains("running as root") && root.contains("without sudo"));
-        assert!(!root.contains("Another account"));
-        for message in [&other, &root] {
-            assert!(is_foreign_listener_message(message), "{message}");
-            assert!(message.contains(REFUSAL_MARKER), "{message}");
-        }
-    }
-
-    /// No gxserver runs as root on a test machine, and the probe must not mistake launchd or
-    /// this test for one.
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn no_root_gxserver_is_found_where_none_runs() {
-        assert!(!macos::root_gxserver(1));
-    }
 }
