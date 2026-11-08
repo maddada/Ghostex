@@ -57,7 +57,7 @@ pub(crate) fn refusal_message(keys: &[String]) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     format!(
-        "Only you can change {named}, in Ghostex's Settings window. Agents and the ghostex CLI can't change it."
+        "Only you can change this in Ghostex's Settings window, not an agent or the ghostex CLI: {named}."
     )
 }
 
