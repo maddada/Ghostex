@@ -29,5 +29,11 @@ pub(crate) use sweep::start_chief_sweep;
 /// The playbook Chief follows, printed by `ghostex chief guide` (and `/api/chief` `guide`).
 pub(crate) const CHIEF_PLAYBOOK: &str = include_str!("playbook.md");
 
-/// Chief's name in the sidebar, the breadcrumb and its session title (Q1746).
-pub(crate) const CHIEF_TITLE: &str = "Chief";
+/// Chief's name in the sidebar, the breadcrumb and its session title.
+///
+/// CDXC:Chief 2026-11-08 DECISION:
+/// User (Q1896): the name users see is "Chief of Staff" (it was "Chief", Q1746) everywhere: the row on the desktop and the phone, its session title and breadcrumb, the Extensions card, its menus, notifications and Help. Internal ids, the `chiefHidden` setting and the `ghostex chief` command keep their names so nothing breaks.
+pub(crate) const CHIEF_TITLE: &str = "Chief of Staff";
+/// The session title Chief was created with before the rename; sweep.rs renames such a session
+/// once (a title the user gave it stays).
+pub(crate) const OLD_CHIEF_TITLE: &str = "Chief";

@@ -15,7 +15,7 @@ use super::{
     rpc::{call_gxserver_rpc, CliError, CliResult},
 };
 
-const HELP: &str = "Chief: the Ghostex-wide coordinator pinned under the Spaces bar.
+const HELP: &str = "Chief of Staff: the Ghostex-wide coordinator pinned under the Spaces bar.
 
 USAGE
   ghostex chief status [--computer <name>] [--json]
@@ -25,13 +25,13 @@ USAGE
   ghostex chief set-agent <agent-id> [--json]
   ghostex chief send [--computer <name>] \"<text>\"
 
-status says whether Chief is on, which session it is and which agent runs it.
-guide prints the playbook Chief follows. open starts Chief on the agent you
+status says whether Chief of Staff is on, which session it is and which agent runs it.
+guide prints the playbook Chief of Staff follows. open starts Chief of Staff on the agent you
 pick (the first time only); new-chat starts it fresh, keeping its memory and
 threads; set-agent moves it to another agent the same way. Only you can run
-those three, from your own terminal or Chief's menu in the sidebar. send
-messages Chief (another computer's with --computer), which is how one Chief
-hands work to the Chief of the computer it runs on.
+those three, from your own terminal or Chief of Staff's menu in the sidebar. send
+messages Chief of Staff (another computer's with --computer), which is how one Chief of Staff
+hands work to the Chief of Staff of the computer it runs on.
 ";
 
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
@@ -114,33 +114,33 @@ fn change(op: &str, params: Value, flags: &Flags, json_output: bool) -> CliResul
     let text = |key: &str| chief[key].as_str().unwrap_or_default().to_string();
     match result["status"].as_str() {
         Some("existing") => println!(
-            "Chief is already running on {} ({}:{}).",
+            "Chief of Staff is already running on {} ({}:{}).",
             text("agentId"),
             text("projectId"),
             text("sessionId")
         ),
         Some("replaced") => println!(
-            "Chief started a new chat on {}; its memory and threads came along.",
+            "Chief of Staff started a new chat on {}; its memory and threads came along.",
             text("agentId")
         ),
-        _ => println!("Chief started on {}.", text("agentId")),
+        _ => println!("Chief of Staff started on {}.", text("agentId")),
     }
     Ok(())
 }
 
 fn print_status(status: &Value) {
     if status["enabled"].as_bool() != Some(true) {
-        println!("Chief is turned off. Turn it on in Settings > Extensions.");
+        println!("Chief of Staff is turned off. Turn it on in Settings > Extensions.");
         return;
     }
     match status.get("chief").filter(|chief| chief.is_object()) {
         Some(chief) => println!(
-            "Chief runs on {} ({}).",
+            "Chief of Staff runs on {} ({}).",
             chief["agentId"].as_str().unwrap_or_default(),
             status["globalRef"].as_str().unwrap_or_default()
         ),
         None => {
-            println!("Chief hasn't been opened yet. Pick its agent with: ghostex chief open --agent <agent-id>");
+            println!("Chief of Staff hasn't been opened yet. Pick its agent with: ghostex chief open --agent <agent-id>");
             let agents: Vec<&str> = status["agents"]
                 .as_array()
                 .map(|rows| {
@@ -170,14 +170,16 @@ fn send(rest: &[String], raw: &Flags, flags: &Flags) -> CliResult<()> {
         .map(|name| format!(" on {name}"))
         .unwrap_or_default();
     if status["enabled"].as_bool() != Some(true) {
-        return Err(CliError::Other(format!("Chief{where_} is turned off.")));
+        return Err(CliError::Other(format!(
+            "Chief of Staff{where_} is turned off."
+        )));
     }
     let reference = status["globalRef"]
         .as_str()
         .filter(|reference| !reference.is_empty())
         .ok_or_else(|| {
             CliError::Other(format!(
-                "Chief{where_} hasn't been opened yet, so there is no one to send to."
+                "Chief of Staff{where_} hasn't been opened yet, so there is no one to send to."
             ))
         })?
         .to_string();

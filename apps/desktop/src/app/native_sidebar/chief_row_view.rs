@@ -17,8 +17,8 @@ use gpui::{
 };
 use gpui_component::{h_flex, v_flex};
 
-/// Chief's name on its row and in its menu (Q1746).
-pub(crate) const CHIEF_LABEL: &str = "Chief";
+/// Chief's name on its row and in its menu ("Chief of Staff", Q1896; server/src/chief/mod.rs `CHIEF_TITLE`).
+pub(crate) const CHIEF_LABEL: &str = "Chief of Staff";
 /// The Ghostex flower in one colour (Q1735).
 pub(crate) const FLOWER_ICON: &str = "titlebar/ghostex-flower.svg";
 /// How much of the muted colour the chevron keeps while nothing can unfold under it.
