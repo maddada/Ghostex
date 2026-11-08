@@ -7,6 +7,7 @@
 **Ghostex 11.1.0 is out.** A security update that puts you in charge of everything sensitive, with safer pairing for phones and computers (including over SSH and Tailscale); Collab becomes an extension you install, with a new Share popover; Chief, one agent per computer you can ask about anything; calmer notifications; a calm card when a computer is offline, with messages held until it is back; Settings in six groups; and many fixes.
 
 ### 🔐 Security update
+
 - **You approve what matters:** turning on Easy Connect, letting a computer connect, Autopilot's approvals and limits, GBots, settings that loosen security, and an agent answering, stopping or typing into another session all wait for your approval with Touch ID, Windows Hello or your system password, or Face ID or the fingerprint on your phone.
 - **Agents and scripts can ask but never approve:** every session gets its own key when it starts, the `ghostex` CLI waits for your approval and then repeats the call, and settings only you may change can't be written through the API.
 - **Settings > Security keeps a security log** of every sensitive action, chained so an edited or removed entry is flagged; `ghostex security log` shows it in a terminal, and only the important entries reach the bell and the phone.
@@ -15,12 +16,14 @@
 - **After updating, a one-time notice lists the phones and computers that connect through Easy Connect and must pair again**, with the pairing QR right there, ticking each one off as it pairs; phones and computers on Tailscale, your network or SSH keep working.
 
 ### 📲 Pairing phones and computers
+
 - **Each phone pairs with its own device key** kept in the Secure Enclave or Android Keystore: it waits as Pending with three words, and you approve it on the computer, or on a phone already paired, only when the words match. Removing a phone cuts it off at once.
 - **Computers pair the same way:** paste a Show QR code into Add a machine, check the three words on both screens and approve.
 - **Phones that sign in over Tailscale, your network or SSH pair once too**, with the same three matching words; until then answers, Stop and typing from that phone wait for your approval. Run in terminal on the phone uses the phone's own key.
 - **Pairing again needs the new phone app** (Android in this release, iPhone on TestFlight).
 
 ### 🤝 Ghostex Collab
+
 - **Collab is now an extension:** the Ghostex you download doesn't contain it until you install it from Settings > Extensions (or right in the Share popover), with Touch ID; Settings > Collab and Share appear once it is installed, and Uninstall ends every share.
 - **The new Share popover is the live panel:** the link and code, who is watching and who is waiting, a Link lasts chip with 1 hour, 4 hours, 24 hours or Until I stop it, Review for a guest's waiting message, and Stop sharing that says who gets disconnected. The phone's Share sheet matches.
 - **Every share, Send mode and guest message you send on asks for your approval**, links need an eight-digit code, and the guest page is pinned to the exact version your Ghostex trusts.
@@ -28,16 +31,19 @@
 - **Collab and GBots show in Settings > Updates and the Updates menu** with Update when a new version is out.
 
 ### 🌸 Chief
+
 - **Chief is one agent per computer you can ask about anything:** any session, agent, project or computer, and Ghostex itself. Its row with the Ghostex flower sits under the Spaces bar, on the computer and the phone.
 - **Chief reads every session and steers them for you** (messages, interrupts, answers prompts) without asking each time, hands project work to that project's coordinator, and leaves security, sharing and pairing to you. "Ask anything about Ghostex" in the Help menu opens its chat.
 - **Each computer has its own Chief**, and you can turn it off in Settings > Extensions > Chief.
 
 ### 🔔 Notifications
+
 - **Alerts come only when a session needs you:** a thread finishing stays quiet, a coordinator alerts only when its handover needs you, and every red dot alerts unless Autopilot heals it.
 - **The phone's bell is an inbox of sessions** under Needs you, Done and Failed, one row each, and Android's persistent notification follows it, thanks to @cagatay-io.
 - **The bell's dot counts only the rows its panel lists.**
 
 ### 🌐 Remote computers
+
 - **A calm "Windows PC is offline · last seen 2h ago" card** sits above the chat box when a computer is off or asleep, with Retry; a message you send then waits and goes out by itself when the computer is back, with Cancel.
 - **Machines that ask for a verification code (2FA) connect:** turn on Reuse an existing SSH connection in the machine's Advanced settings and sign in once in a terminal, thanks to @chen1plus.
 - **Updates covers every connected computer**, with Install for what one of them is missing.
@@ -45,17 +51,20 @@
 - **Easy Connect recovers faster** after a stall or a network change on the phone.
 
 ### 🧭 Coordinators
+
 - **Playbook overrides replace editing the playbook**, and the coordinator picks which memory notes go into a thread's brief.
 - **A coordinator links its own threads on another computer**, and a thread's brief there waits out a folder-trust prompt (#497, #502).
 - **The Start menu lists Global Actions under a Global heading** (#501).
 
 ### 💬 Chat
+
 - **The agent's reply fades in, and a long one stops the chat at its top** so you read from the start.
 - **Opening a tool group or any fold at the bottom of the chat scrolls to show its end.**
 - **A board card mention is its own teal chip with the card's title**, dimmed once the card leaves the board.
 - **The model menu shows tabs only for agents you turned on**, its long tooltips stay inside the menu, and the "Not applied" reason shows in full, thanks to @cagatay-io.
 
 ### ⚙️ Settings and the window
+
 - **Settings lists its pages in six labelled groups**: Working, Appearance, Voice, Agents & Accounts, Connections, and Privacy & System; every page opens with a one-line intro.
 - **Frame the work area is on for new installs**, and macOS keeps the window buttons when the sidebar is collapsed (Settings > Interface > Advanced).
 - **The floating sidebar runs the full height, floats as a card inside the frame and keeps its traffic lights crisp**, thanks to @zxcvbinz.
@@ -64,6 +73,7 @@
 - **Files groups filtered and searched files by folder**, and the Changes view can hide test files, on the computer and the phone.
 
 ### 🩹 Fixes and polish
+
 - **A Mac that runs gxserver without the Ghostex app can install skills**, thanks to @sebastianarena.
 - **Automatic account switches no longer hold back an account with room**, and a switch whose agent won't return to the shell reloads the session on the new account.
 - **The Gemini account shows Antigravity's Claude and GPT limits**, matching agy's /usage.
