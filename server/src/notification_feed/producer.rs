@@ -173,8 +173,37 @@ fn record_attention_row(
                 .map(str::to_string),
         },
     )?;
-    crate::push::announce_feed_row(state, &repository, session, &row);
+    // CDXC:Notifications 2026-11-08: the row is the bell's either way; an attention the rule says
+    // does not alert (a thread's finished turn, a coordinator's with nothing for the user, an
+    // approval Autopilot answers) is written already read and goes to no phone, so the bell, the
+    // phone and the computer's sound agree (packages/gx-core/src/alert_rule.rs).
+    if attention_row_alerts(&db, session, project_id, session_id) {
+        crate::push::announce_feed_row(state, &repository, session, &row);
+    } else if let Some(id) = row.get("id").and_then(Value::as_str) {
+        super::store::mark_notification_feed_row_read(&db, id)?;
+    }
     Ok(true)
+}
+
+/// The same verdict the presentation stamps on this attention (`attention.alerts`), read from the
+/// live session the endpoint just stored.
+fn attention_row_alerts(
+    db: &rusqlite::Connection,
+    session: &Value,
+    project_id: &str,
+    session_id: &str,
+) -> bool {
+    let now = crate::presentation::now_iso();
+    let attention = crate::presentation::attention_state(session, &now);
+    let role = crate::presentation::recorded_alert_role(db, project_id, session_id);
+    let awaiting_approval = crate::session_approval::session_awaits_approval(session, &now);
+    crate::presentation::attention_state_alerts(
+        role,
+        &attention,
+        awaiting_approval,
+        project_id,
+        session_id,
+    )
 }
 
 /// A session row's title (the session's title) and subtitle (its project's name).

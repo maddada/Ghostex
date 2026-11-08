@@ -296,6 +296,66 @@ impl GhostexGpuiApp {
         self.titlebar_actions_snapshot.clone()
     }
 
+    /// The Global Actions the Start menu lists under its "Global" heading; empty while the Actions
+    /// extension is off, like the project's own.
+    pub(crate) fn visible_gpui_titlebar_global_actions(&self) -> Vec<GpuiTitlebarAction> {
+        if !self.built_in_extension_enabled(ghostex_settings_catalog::built_in_extensions::ACTIONS)
+        {
+            return Vec::new();
+        }
+        gpui_titlebar_global_actions_from_sidebar_hud(
+            self.gx_store.runtime_facts.hud().map(|hud| hud.as_ref()),
+        )
+    }
+
+    /// A Start menu Global Action row: resolved by `plan_sidebar_command_run` with the global
+    /// scope, as a project row's pinned Global Action and `ghostex run-action <id> --scope global`
+    /// are, and run in the active project (a Terminal Action in its folder).
+    ///
+    /// CDXC:AgentLauncher 2026-11-08 WHY: the Action runner records what it ran as the project's
+    /// last-used Start Action, which is what the Start button's one click repeats. Only the
+    /// project's own Actions may take that place, so the project's choice is put back after a
+    /// Global run instead of being replaced by an id the button cannot find.
+    pub(crate) fn run_gpui_titlebar_global_action(
+        &mut self,
+        command_id: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !self.built_in_extension_enabled(ghostex_settings_catalog::built_in_extensions::ACTIONS)
+        {
+            return;
+        }
+        let plan = ghostex_gx_core::plan_sidebar_command_run(
+            self.gx_store.runtime_facts.hud().map(|hud| hud.as_ref()),
+            &serde_json::json!({ "commandId": command_id, "scope": "global" }),
+            self.gx_store.core.focus().active_project.as_ref(),
+        );
+        let payload = match plan {
+            ghostex_gx_core::SidebarCommandRun::Unsupported => return,
+            ghostex_gx_core::SidebarCommandRun::OpenSettings => {
+                self.open_gpui_settings_actions_modal_from_titlebar(window, cx);
+                return;
+            }
+            ghostex_gx_core::SidebarCommandRun::Run { action, .. } => action,
+        };
+        let Ok(action) = gpui_sidebar_command_action_from_json(&payload.to_string()) else {
+            return;
+        };
+        let project_choice = self.active_action_command_id.clone();
+        self.run_gpui_titlebar_action(action, window, cx);
+        if self.active_action_command_id != project_choice {
+            if let Some(choice) = project_choice.as_deref() {
+                self.persist_gpui_titlebar_project_selection(
+                    GPUI_TITLEBAR_ACTION_SELECTIONS_SETTINGS_KEY,
+                    choice,
+                );
+            }
+            self.active_action_command_id = project_choice;
+            cx.notify();
+        }
+    }
+
     /// The settings poll's read of the titlebar's Actions: only when the sidebar HUD moved since
     /// `seen`, the HUD the last such read went with.
     ///

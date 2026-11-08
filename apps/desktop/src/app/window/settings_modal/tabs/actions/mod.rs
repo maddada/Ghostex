@@ -574,7 +574,7 @@ impl Render for ActionsTab {
                 CommandScope::Global,
                 &ordered_global,
                 "Global Actions",
-                "Global actions apply to every project and are stored by the Ghostex daemon, so they follow you to every app that connects to it. They appear in the tab strip above your tabs.",
+                "Global actions apply to every project and are stored by the Ghostex daemon, so they follow you to every app that connects to it. They appear under Global in every project's Start menu.",
                 "No global actions configured",
                 "Add a terminal or browser action that should be available in every project.",
                 cx,

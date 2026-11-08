@@ -109,6 +109,17 @@ pub(crate) fn insert_notification_feed_row(
         .ok_or_else(|| DomainStateError::not_found("Notification was not stored."))
 }
 
+/// Marks one row read as it is written: a row the alert rule keeps quiet (CDXC:Notifications
+/// 2026-11-08 in packages/gx-core/src/alert_rule.rs) stays in the bell without lighting it.
+pub(crate) fn mark_notification_feed_row_read(db: &Connection, id: &str) -> DomainResult<()> {
+    db.execute(
+        "UPDATE notification_feed SET readAt = ?1 WHERE id = ?2 AND readAt IS NULL",
+        params![now_iso(), id],
+    )
+    .map_err(sql_error)?;
+    Ok(())
+}
+
 /// Insert a row beside the session's unread rows instead of superseding them: only an earlier
 /// unread row with the same title goes. For news about a chat that is not about its agent (a
 /// Ghostex Collab guest joining, `collab_shim::http`, `notify_guest_joined`), which must not hide an

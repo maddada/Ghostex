@@ -10,6 +10,7 @@
 mod account_reset;
 pub(crate) mod account_usage;
 pub(crate) mod action_execution;
+pub(crate) mod actions_menu_rows;
 pub(crate) mod browser_device_menu;
 pub(crate) mod browser_menu;
 pub(crate) mod browser_toolbar_buttons;

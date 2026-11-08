@@ -93,7 +93,8 @@ impl GxStoreHost {
                 | Effect::ReportAgentActivity { .. }
                 | Effect::AcknowledgeCoordinatorThreads { .. }
                 | Effect::SessionAttentionRaised { .. }
-                | Effect::SessionStuckRaised { .. }) => self.app_effects.push(effect),
+                | Effect::SessionStuckRaised { .. }
+                | Effect::SessionBlockedRaised { .. }) => self.app_effects.push(effect),
                 // The core's effect list grows with each milestone; a new one is wired when the
                 // milestone that introduces it lands.
                 _ => {}
@@ -146,7 +147,8 @@ impl GhostexGpuiApp {
             | Effect::ReportAgentActivity { .. }
             | Effect::AcknowledgeCoordinatorThreads { .. }
             | Effect::SessionAttentionRaised { .. }
-            | Effect::SessionStuckRaised { .. }) => {
+            | Effect::SessionStuckRaised { .. }
+            | Effect::SessionBlockedRaised { .. }) => {
                 self.gx_store_perform_attention_effect(effect, cx)
             }
             Effect::MachineLive { machine } => {

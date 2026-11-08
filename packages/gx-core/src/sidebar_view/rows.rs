@@ -243,11 +243,21 @@ pub(crate) fn session_row(
         context.debugging_mode,
         context.always_show_state_tooltip,
     );
-    // The red dot says something went wrong; hovering the row says what.
+    // The red dot says something went wrong; hovering the row says what. A blocked session
+    // (out of usage on every account, an error recovery could not get past) is one of them
+    // (CDXC:Notifications 2026-11-08 in alert_rule.rs).
     let failure = session
         .model_selection_failure
         .as_deref()
-        .or(session.send_failure.as_deref());
+        .or(session.send_failure.as_deref())
+        .or(session
+            .blocked_since
+            .as_ref()
+            .and(session.blocked_reason.as_deref())
+            .or(session
+                .blocked_since
+                .as_ref()
+                .map(|_| "Blocked: it needs you to carry on.")));
     let tooltip = match failure {
         Some(reason) if tooltip.is_empty() => reason.to_string(),
         Some(reason) => format!("{reason}\n\n{tooltip}"),

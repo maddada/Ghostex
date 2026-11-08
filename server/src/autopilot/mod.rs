@@ -148,3 +148,66 @@ pub fn take_signalled() -> HashSet<(String, String)> {
 pub async fn signalled() {
     signals().1.notified().await;
 }
+
+fn left_for_user_marks() -> &'static Mutex<HashSet<(String, String)>> {
+    static LEFT: OnceLock<Mutex<HashSet<(String, String)>>> = OnceLock::new();
+    LEFT.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// Autopilot's rules gave up on a session (`Act::Park`): until it moves again, its red dot is the
+/// user's and alerts (CDXC:Notifications 2026-11-08 in packages/gx-core/src/alert_rule.rs).
+pub fn note_left_for_user(project_id: &str, session_id: &str) {
+    left_for_user_marks()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert((project_id.to_string(), session_id.to_string()));
+}
+
+/// The session moved again (its stuck stretch ended): Autopilot heals its next one first.
+pub fn clear_left_for_user(project_id: &str, session_id: &str) {
+    left_for_user_marks()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .remove(&(project_id.to_string(), session_id.to_string()));
+}
+
+pub fn left_for_user(project_id: &str, session_id: &str) -> bool {
+    left_for_user_marks()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .contains(&(project_id.to_string(), session_id.to_string()))
+}
+
+/// Whether Autopilot is healing this session's not-moving red dot, so it does not alert yet: the
+/// switch covers it, its rules have not left it for the user, and the user did not take it back.
+pub fn heals_stuck(project_id: &str, session_id: &str) -> bool {
+    current().covers(
+        project_id,
+        remembered_main_project(project_id).as_deref(),
+        session_id,
+    ) && !left_for_user(project_id, session_id)
+        && !user_has_it(
+            project_id,
+            session_id,
+            chrono::Utc::now().timestamp_millis(),
+        )
+}
+
+/// Whether Autopilot answers this session's approval cards itself: it covers the session, may
+/// answer approvals, and on Everything settles every one (approves it, or declines a hard limit),
+/// where Heal and decide leaves some for the user. Not while the user took the session back.
+pub fn answers_approvals(project_id: &str, session_id: &str) -> bool {
+    let config = current();
+    config.answer_approvals
+        && config.tier == Tier::Everything
+        && config.covers(
+            project_id,
+            remembered_main_project(project_id).as_deref(),
+            session_id,
+        )
+        && !user_has_it(
+            project_id,
+            session_id,
+            chrono::Utc::now().timestamp_millis(),
+        )
+}

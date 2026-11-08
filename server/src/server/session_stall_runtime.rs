@@ -118,8 +118,17 @@ fn text_field(session: &Value, key: &str) -> String {
         .to_string()
 }
 
-/// Redraws every session whose stuck state changed, and puts one notification in the bell for each
-/// that became stuck.
+/// Redraws every session whose stuck state changed, and alerts (one notification in the bell, a
+/// push to the phones, the computer's sound through `stuckSince`) for each that became stuck with
+/// nobody healing it.
+///
+/// CDXC:Notifications 2026-11-08 DECISION:
+/// "red dot on any session needs to notify if autopilot isn't enabled and we don't resolve it
+/// ourselves": a session Autopilot covers keeps its red dot but alerts only when Autopilot's rules
+/// leave it for the user (`announce_left_for_user`), never while Autopilot interrupts or reloads
+/// it; one that moves again is Autopilot's to heal again next time. A session Ghostex's restarts
+/// gave up on alerts at once (packages/gx-core/src/alert_rule.rs, the rule; `stuck_handled_by` in
+/// server/src/presentation/attention_alerts.rs, the same test the presentation stamps).
 pub(crate) fn publish_stuck_changes(
     state: &AppState,
     db: &rusqlite::Connection,
@@ -130,28 +139,15 @@ pub(crate) fn publish_stuck_changes(
     for (project_id, session_id) in changes.became_stuck.iter().chain(&changes.cleared) {
         let _ = schedule_presentation_session_delta(state, db, repository, project_id, session_id);
     }
-    let body = match owner {
-        // A thread is stuck either working without output or idle although its background job
-        // waits (coordinators/idle_wait.rs); either way its nudge came first.
-        QuietOwner::Threads => {
-            "Not moving: no progress even after Ghostex nudged it. Its coordinator was told."
-                .to_string()
-        }
-        QuietOwner::Sessions => format!(
-            "Not moving: no new output for {} minutes. It may be stuck on a hung command.",
-            coordinators::minutes_of(
-                i64::from(coordinators::SESSION_STUCK_ROUNDS) * coordinators::quiet_round_ms()
-            )
-        ),
-        QuietOwner::Heal => "Stopped and couldn't restart: it ended unexpectedly and Ghostex couldn't keep it running. Open it to start it again.".to_string(),
-    };
+    for (project_id, session_id) in &changes.cleared {
+        crate::autopilot::clear_left_for_user(project_id, session_id);
+    }
     for (project_id, session_id) in &changes.became_stuck {
-        let mut params = Map::new();
-        params.insert("projectId".to_string(), json!(project_id));
-        params.insert("sessionId".to_string(), json!(session_id));
-        params.insert("body".to_string(), json!(body));
-        let _ =
-            crate::notification_feed::create_notification_endpoint(state, repository, db, &params);
+        let healing = owner != QuietOwner::Heal
+            && crate::presentation::stuck_handled_by(project_id, session_id).is_some();
+        if !healing {
+            announce_stuck(state, db, repository, owner, project_id, session_id);
+        }
         let _ = state.logger.log_routine(
             crate::logging::DiagnosticLogScenario::ServerLifecycle,
             GxserverLogInput {
@@ -167,10 +163,81 @@ pub(crate) fn publish_stuck_changes(
                     "sessionId": session_id,
                     "thread": owner == QuietOwner::Threads,
                     "selfHeal": owner == QuietOwner::Heal,
+                    "autopilotHeals": healing,
                 })),
             },
         );
     }
+}
+
+/// Autopilot's rules left a session for the user (`Act::Park`): from now on its red dot is the
+/// user's, so a session stuck now alerts at once and its row drops `stuckHandledBy`.
+pub(crate) fn announce_left_for_user(state: &AppState, project_id: &str, session_id: &str) {
+    let already = crate::autopilot::left_for_user(project_id, session_id);
+    crate::autopilot::note_left_for_user(project_id, session_id);
+    let stuck_now = crate::coordinators::session_stuck_since(project_id, session_id).is_some();
+    if already || !stuck_now {
+        return;
+    }
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let owner = if crate::coordinators::watched_as_thread(project_id, session_id) {
+        QuietOwner::Threads
+    } else {
+        QuietOwner::Sessions
+    };
+    let _ = schedule_presentation_session_delta(state, &db, &repository, project_id, session_id);
+    announce_stuck(state, &db, &repository, owner, project_id, session_id);
+}
+
+/// The stuck session's alert: its bell row, and the push that carries it to the phones.
+fn announce_stuck(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    owner: QuietOwner,
+    project_id: &str,
+    session_id: &str,
+) {
+    let body = match owner {
+        // A thread is stuck either working without output or idle although its background job
+        // waits (coordinators/idle_wait.rs); either way its nudge came first.
+        QuietOwner::Threads => {
+            "Not moving: no progress even after Ghostex nudged it. Its coordinator was told."
+                .to_string()
+        }
+        QuietOwner::Sessions => format!(
+            "Not moving: no new output for {} minutes. It may be stuck on a hung command.",
+            coordinators::minutes_of(
+                i64::from(coordinators::SESSION_STUCK_ROUNDS) * coordinators::quiet_round_ms()
+            )
+        ),
+        QuietOwner::Heal => "Stopped and couldn't restart: it ended unexpectedly and Ghostex couldn't keep it running. Open it to start it again.".to_string(),
+    };
+    let mut params = Map::new();
+    params.insert("projectId".to_string(), json!(project_id));
+    params.insert("sessionId".to_string(), json!(session_id));
+    params.insert("body".to_string(), json!(body));
+    let Ok(created) =
+        crate::notification_feed::create_notification_endpoint(state, repository, db, &params)
+    else {
+        return;
+    };
+    let (Some(id), Ok(Some(session))) = (
+        created.pointer("/notification/id").and_then(Value::as_str),
+        repository.get_session(project_id, session_id),
+    ) else {
+        return;
+    };
+    crate::push::announce_blocked(
+        state,
+        repository,
+        &session,
+        id,
+        crate::push::BlockedWhy::Stuck,
+    );
 }
 
 #[cfg(test)]

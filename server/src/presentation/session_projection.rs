@@ -244,14 +244,24 @@ pub(crate) fn project_presentation_session(
     // thread idle although a background job waits for it, so the sidebar draws the red
     // not-moving dot (server/src/coordinators/stall.rs, idle_wait.rs).
     if matches!(lifecycle_state.as_str(), "running" | "sleeping") {
-        if let Some(since) = crate::coordinators::session_stuck_since(
-            &string_field(session, "projectId").unwrap_or_default(),
-            &string_field(session, "sessionId").unwrap_or_default(),
-        )
-        .and_then(crate::coordinators::iso_from_ms)
+        let project_id = string_field(session, "projectId").unwrap_or_default();
+        let session_id = string_field(session, "sessionId").unwrap_or_default();
+        if let Some(since) = crate::coordinators::session_stuck_since(&project_id, &session_id)
+            .and_then(crate::coordinators::iso_from_ms)
         {
             output.insert("stuckSince".to_string(), Value::String(since));
+            // CDXC:Notifications 2026-11-08: the red dot shows, but alerts only once nobody heals
+            // it (packages/gx-core/src/alert_rule.rs).
+            if let Some(by) = super::stuck_handled_by(&project_id, &session_id) {
+                output.insert("stuckHandledBy".to_string(), Value::String(by.to_string()));
+            }
         }
+    }
+    // Present only while blocked: every account out of usage, or an error recovery could not get
+    // past (CDXC:Notifications 2026-11-08 in packages/gx-core/src/alert_rule.rs).
+    if let Some((since, reason)) = super::blocked_state(session) {
+        output.insert("blockedSince".to_string(), Value::String(since));
+        output.insert("blockedReason".to_string(), Value::String(reason));
     }
     // Present only while true (CDXC:SessionStatus 2026-10-31 in server/src/session_approval.rs).
     if crate::session_approval::session_awaits_answer(session) {

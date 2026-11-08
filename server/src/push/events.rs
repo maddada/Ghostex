@@ -22,6 +22,60 @@ pub(crate) fn announce_feed_row(
         Some("failed") => AlertKind::Failed,
         _ => return,
     };
+    enqueue_row_alert(state, repository, session, row, kind);
+}
+
+/// Why a red-dot row goes to the phones (`announce_red_dot`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BlockedWhy {
+    /// Not moving, and nobody heals it.
+    Stuck,
+    /// Every account is out of usage.
+    Usage,
+}
+
+/// CDXC:Notifications 2026-11-08 DECISION:
+/// The red dot alerts on the phone too ("red dot on any session needs to notify ... getting
+/// blocked cuz account ran out of usage ... notify and play a sound always"): the bell row of a
+/// session that became stuck with nobody healing it, or that waits with every account out of usage,
+/// goes out as a push under the phone's Error switch. The row is the feed's `custom` row, which the
+/// phone's own feed reader does not announce, so the push is its only alert there.
+/// SEE-ALSO: packages/gx-core/src/alert_rule.rs (the rule).
+pub(crate) fn announce_blocked(
+    state: &AppState,
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    notification_id: &str,
+    why: BlockedWhy,
+) {
+    let project_id = session["projectId"].as_str().unwrap_or_default();
+    let subtitle = repository
+        .get_project(project_id)
+        .ok()
+        .flatten()
+        .and_then(|project| project["name"].as_str().map(str::to_string))
+        .unwrap_or_default();
+    let row = serde_json::json!({
+        "id": notification_id,
+        "projectId": project_id,
+        "sessionId": session["sessionId"],
+        "subtitle": subtitle,
+        "createdAt": chrono::Utc::now().to_rfc3339(),
+    });
+    let kind = match why {
+        BlockedWhy::Stuck => AlertKind::Stuck,
+        BlockedWhy::Usage => AlertKind::Blocked,
+    };
+    enqueue_row_alert(state, repository, session, &row, kind);
+}
+
+fn enqueue_row_alert(
+    state: &AppState,
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    row: &Value,
+    kind: AlertKind,
+) {
     let text = |key: &str| row.get(key).and_then(Value::as_str).unwrap_or_default();
     let occurred_at_ms = chrono::DateTime::parse_from_rfc3339(text("createdAt"))
         .map(|at| at.timestamp_millis())

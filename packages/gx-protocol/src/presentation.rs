@@ -461,6 +461,13 @@ pub struct AttentionState {
         skip_serializing_if = "is_false"
     )]
     pub handover_needs_you: bool,
+    /// gxserver's verdict on whether this attention plays a sound and shows a system notification
+    /// or phone push (gx-core `alert_rule::should_alert`, with Alert me for at All): false for a
+    /// coordinator's thread finishing, a coordinator finishing with nothing for the user, or an
+    /// approval Autopilot answers. Clients apply their own Alert me for on top. Absent on an older
+    /// daemon, where a client decides from the row itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alerts: Option<bool>,
 }
 
 /// Health of the zmx title watcher.
@@ -934,6 +941,18 @@ pub struct PresentationSession {
     /// not-moving dot and play the not-moving sound when it appears.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stuck_since: Option<String>,
+    /// Who is healing a stuck session, so its red dot does not alert yet: `autopilot` while
+    /// Autopilot covers it and has not left it for the user. Absent otherwise and on older daemons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stuck_handled_by: Option<String>,
+    /// Since when the session is blocked on something Ghostex could not get past itself: every
+    /// account out of usage, or an API, login or overload error its recovery could not retry past.
+    /// Clients draw the red dot with `blocked_reason` and alert when it appears. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_since: Option<String>,
+    /// Why the session is blocked, in a few plain words; present with `blocked_since`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_reason: Option<String>,
     /// A running session holds a question card (an ask-user tool call) only the user can answer,
     /// also while its agent reads as working. Absent (false) otherwise and on daemons without
     /// [`PresentationCapabilities::awaiting_answer`]. Independent of `pending_question_count`.

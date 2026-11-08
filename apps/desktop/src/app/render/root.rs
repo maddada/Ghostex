@@ -839,6 +839,11 @@ impl Render for GhostexGpuiApp {
                 }),
             )
             .on_action(
+                cx.listener(|this, action: &RunGpuiTitlebarGlobalAction, window, cx| {
+                    this.run_gpui_titlebar_global_action(&action.command_id, window, cx);
+                }),
+            )
+            .on_action(
                 cx.listener(|this, action: &RunGpuiTitlebarGitMenuAction, _window, cx| {
                     this.run_gpui_titlebar_git_menu_row(action.row_index as usize, cx);
                 }),

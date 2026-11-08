@@ -6,6 +6,7 @@
 // keeps resolving without per-call-site qualification. If two submodules ever
 // define the same name, drop the glob for one of them here and qualify its
 // call sites instead.
+pub mod attention_alerts;
 pub mod fork_branches;
 pub mod fork_family;
 mod fork_family_cache;
@@ -20,6 +21,7 @@ mod tests;
 pub mod title_normalization;
 pub mod util;
 
+pub(crate) use attention_alerts::*;
 pub(crate) use fork_branches::*;
 pub(crate) use fork_family::*;
 pub(crate) use fork_family_cache::*;

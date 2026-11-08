@@ -15,6 +15,7 @@
 
 mod active_project_context;
 mod agentbox;
+pub mod alert_rule;
 mod app_lifecycle;
 mod attention;
 pub mod bot_feed;

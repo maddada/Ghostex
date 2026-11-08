@@ -268,6 +268,7 @@ fn finished_attention_keeps_its_stint_start() {
         finished["attention"],
         json!({
             "acknowledged": false,
+            "alerts": true,
             "enteredAt": iso(T0 + 30_000),
             "eventId": event_id,
             "kind": "finished",
