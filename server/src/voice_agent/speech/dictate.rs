@@ -3,9 +3,7 @@
 
 use serde_json::{json, Value};
 
-use super::catalog;
 use super::hex;
-use super::models;
 use super::settings::{self, DictateSettings, Engine};
 use crate::paths::GxserverPaths;
 use crate::server::AppState;
@@ -80,7 +78,7 @@ pub(crate) fn alias_pairs(settings: &DictateSettings) -> Vec<(String, String)> {
 
 pub(crate) fn provider_of(engine: Engine) -> Option<Provider> {
     match engine {
-        Engine::Local | Engine::Hex => None,
+        Engine::Hex => None,
         Engine::OpenAi => Some(Provider::OpenAi),
         Engine::Xai => Some(Provider::Xai),
     }
@@ -89,10 +87,6 @@ pub(crate) fn provider_of(engine: Engine) -> Option<Provider> {
 /// The tooltip's first line after "Dictate · ".
 pub(crate) fn engine_label(settings: &DictateSettings) -> String {
     match settings.engine {
-        Engine::Local => format!(
-            "Local, {}",
-            catalog::model(&settings.local_model).map_or("model", |spec| spec.short_title)
-        ),
         Engine::OpenAi => "OpenAI gpt-4o-transcribe".to_string(),
         Engine::Xai => "xAI speech to text".to_string(),
         Engine::Hex => match &settings.hex_model {
@@ -120,10 +114,6 @@ pub(crate) fn hex_state_for(
     (settings.engine == Engine::Hex).then(|| hex::state(&paths.home_dir))
 }
 
-fn gigabytes(bytes: u64) -> String {
-    format!("{:.2} GB", bytes as f64 / 1e9)
-}
-
 /// Why the chosen engine can't transcribe right now: `(code, sentence)`. `hex_state` is Hex's
 /// state when the caller already asked it (it is asked here otherwise, blocking).
 pub(crate) fn engine_problem(
@@ -142,40 +132,20 @@ pub(crate) fn engine_problem(
         };
         return hex::problem(state, settings.hex_model.as_deref());
     }
-    match provider_of(settings.engine) {
-        None => {
-            let spec = catalog::model(&settings.local_model)?;
-            if models::is_ready(paths, spec) {
-                return None;
-            }
-            Some(match models::progress(spec) {
-                Some(percent) => (
-                    "modelDownloading",
-                    format!("{} is downloading ({percent}%).", spec.short_title),
-                ),
-                None => (
-                    "modelMissing",
-                    format!(
-                        "Not downloaded yet. Click to download ({})",
-                        gigabytes(spec.download_bytes())
-                    ),
-                ),
-            })
-        }
-        Some(provider) => match keys::key_state(paths, provider) {
-            KeyState::Saved => None,
-            KeyState::Unreadable => Some((
-                "keyUnreadable",
-                format!(
-                    "The saved {} API key can't be read anymore. Paste it again in Settings.",
-                    provider.label()
-                ),
-            )),
-            KeyState::Missing => Some((
-                "noKey",
-                format!("Add your {} API key in Settings.", provider.label()),
-            )),
-        },
+    let provider = provider_of(settings.engine)?;
+    match keys::key_state(paths, provider) {
+        KeyState::Saved => None,
+        KeyState::Unreadable => Some((
+            "keyUnreadable",
+            format!(
+                "The saved {} API key can't be read anymore. Paste it again in Settings.",
+                provider.label()
+            ),
+        )),
+        KeyState::Missing => Some((
+            "noKey",
+            format!("Add your {} API key in Settings.", provider.label()),
+        )),
     }
 }
 
@@ -189,7 +159,6 @@ pub(crate) fn engine_view(
     json!({
         "engine": settings.engine.id(),
         "label": engine_label_with(settings, hex_state),
-        "modelId": (settings.engine == Engine::Local).then_some(settings.local_model.as_str()),
         "ready": problem.is_none(),
         "problem": problem.map(|(code, message)| json!({"code": code, "message": message})),
         "polish": settings.polish.enabled && super::cleanup::polish_available(state),

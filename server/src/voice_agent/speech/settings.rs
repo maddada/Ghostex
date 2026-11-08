@@ -1,5 +1,5 @@
-//! Dictate's settings on this computer: which engine transcribes, the local model, the language
-//! hint, the dictionary and the clean-up switches. gxserver keeps them in its own file
+//! Dictate's settings on this computer: which engine transcribes (Hex, OpenAI or xAI), the Hex
+//! model, the language hint, the dictionary and the clean-up switches. gxserver keeps them in its own file
 //! (`<gxserver state>/voice-agent/dictate-settings.json`) and is their only writer.
 //!
 //! CDXC:Dictate 2026-11-05 WHY:
@@ -12,13 +12,12 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use super::catalog;
+use super::languages;
 use crate::paths::GxserverPaths;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum Engine {
-    Local,
     #[serde(rename = "openai")]
     OpenAi,
     Xai,
@@ -29,7 +28,6 @@ pub(crate) enum Engine {
 impl Engine {
     pub(crate) fn id(self) -> &'static str {
         match self {
-            Engine::Local => "local",
             Engine::OpenAi => "openai",
             Engine::Xai => "xai",
             Engine::Hex => "hex",
@@ -38,7 +36,6 @@ impl Engine {
 
     fn from_id(id: &str) -> Option<Engine> {
         match id {
-            "local" => Some(Engine::Local),
             "openai" => Some(Engine::OpenAi),
             "xai" => Some(Engine::Xai),
             "hex" => Some(Engine::Hex),
@@ -71,7 +68,6 @@ pub(crate) const POLISH_MODEL: &str = "claude-sonnet-5-5";
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DictateSettings {
     pub(crate) engine: Engine,
-    pub(crate) local_model: String,
     /// The Hex model id (`GET /models`); `None` uses Hex's first ready model.
     #[serde(default)]
     pub(crate) hex_model: Option<String>,
@@ -83,6 +79,16 @@ pub(crate) struct DictateSettings {
     #[serde(default = "yes")]
     pub(crate) remove_fillers: bool,
     pub(crate) polish: Polish,
+    /// The Dictation page still owes the notice that our local engine is gone (`retired.rs`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub(crate) local_retired_notice: bool,
+    /// The next dictation that can't be transcribed still owes that notice.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub(crate) local_retired_dictation_notice: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 fn yes() -> bool {
@@ -93,11 +99,10 @@ const MAX_WORDS: usize = 200;
 const MAX_ALIASES: usize = 8;
 
 impl DictateSettings {
-    /// A new install's settings: the engine is the saved key's (xAI first, then OpenAI), else the
-    /// local model.
+    /// A new install's settings: the engine is the saved key's (xAI first, then OpenAI), else Hex.
     ///
-    /// CDXC:Dictate 2026-11-05 DECISION:
-    /// User (Q1259 "default to b", Q1272): the engine is an explicit choice of Local, OpenAI or xAI with no automatic switching. A new install picks it once, the key when one exists and the local model otherwise, and then keeps it: adding a key later doesn't switch. AI polish is on for a new install, with Claude Sonnet 5.5 (Q1273). Supersedes CDXC:VoiceMode 2026-10-30 (Q781, "the xAI key when it is set, otherwise the OpenAI key" at every transcription): that order now only picks a new install's engine.
+    /// CDXC:Dictate 2026-11-08 DECISION:
+    /// User (Q1259 "default to b", Q1272): the engine is an explicit choice with no automatic switching. A new install picks it once, the key when one exists and otherwise Hex, the recommended engine since our local model was retired (Q1709, `retired.rs`), and then keeps it: adding a key later doesn't switch. AI polish is on for a new install, with Claude Sonnet 5.5 (Q1273). Supersedes the 2026-11-05 version, whose keyless default was the local model.
     pub(crate) fn first_run(xai_key: bool, openai_key: bool) -> DictateSettings {
         DictateSettings {
             engine: if xai_key {
@@ -105,9 +110,8 @@ impl DictateSettings {
             } else if openai_key {
                 Engine::OpenAi
             } else {
-                Engine::Local
+                Engine::Hex
             },
-            local_model: catalog::PARAKEET_ID.to_string(),
             hex_model: None,
             language: "auto".to_string(),
             dictionary: Vec::new(),
@@ -118,6 +122,8 @@ impl DictateSettings {
                 model: POLISH_MODEL.to_string(),
                 prompt: None,
             },
+            local_retired_notice: false,
+            local_retired_dictation_notice: false,
         }
     }
 
@@ -133,17 +139,26 @@ impl DictateSettings {
         for (key, value) in patch {
             match key.as_str() {
                 "engine" => {
-                    next.engine = value
-                        .as_str()
-                        .and_then(Engine::from_id)
-                        .ok_or("engine must be local, openai, xai or hex.")?;
+                    next.engine = value.as_str().and_then(Engine::from_id).ok_or(
+                        if value.as_str() == Some("local") {
+                            "Ghostex no longer has its own speech model: pick hex, openai or xai."
+                        } else {
+                            "engine must be hex, openai or xai."
+                        },
+                    )?;
                 }
                 "localModel" => {
-                    let id = value.as_str().unwrap_or_default();
-                    if catalog::model(id).is_none() {
-                        return Err(format!("{id} is not a local model Dictate offers."));
+                    return Err(
+                        "Ghostex no longer has its own speech model: pick Hex as the engine."
+                            .to_string(),
+                    )
+                }
+                "localRetiredNotice" => {
+                    // Clients only dismiss it.
+                    if value.as_bool() != Some(false) {
+                        return Err("localRetiredNotice can only be set to false.".to_string());
                     }
-                    next.local_model = id.to_string();
+                    next.local_retired_notice = false;
                 }
                 "hexModel" => {
                     next.hex_model = match value {
@@ -158,7 +173,7 @@ impl DictateSettings {
                         .unwrap_or_default()
                         .trim()
                         .to_ascii_lowercase();
-                    if code != "auto" && !catalog::WHISPER_LANGUAGES.contains(&code.as_str()) {
+                    if code != "auto" && !languages::LANGUAGES.contains(&code.as_str()) {
                         return Err(format!("{code} is not a language Dictate knows."));
                     }
                     next.language = code;
@@ -275,12 +290,31 @@ fn lock() -> std::sync::MutexGuard<'static, ()> {
     LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// Saved settings, with a retired engine moved to Hex: `(settings, moved)`.
+///
+/// A file whose engine is `local` (our retired engine, `retired.rs`) moves to Hex, never to a
+/// key's paid engine, and owes the notice on the Dictation page and with the next dictation
+/// that can't be transcribed. Its `localModel` is dropped.
+pub(crate) fn parse(text: &str) -> Option<(DictateSettings, bool)> {
+    let mut value: Value = serde_json::from_str(text).ok()?;
+    let object = value.as_object_mut()?;
+    let moved = object.get("engine").and_then(Value::as_str) == Some("local");
+    if moved {
+        object.insert("engine".to_string(), Value::String("hex".to_string()));
+        object.insert("localRetiredNotice".to_string(), Value::Bool(true));
+        object.insert("localRetiredDictationNotice".to_string(), Value::Bool(true));
+    }
+    object.remove("localModel");
+    let settings = serde_json::from_value::<DictateSettings>(value).ok()?;
+    Some((settings, moved))
+}
+
 /// Whether the saved settings pick Hex, without writing a new install's settings.
 pub(crate) fn uses_hex(paths: &GxserverPaths) -> bool {
     fs::read_to_string(file(paths))
         .ok()
-        .and_then(|text| serde_json::from_str::<DictateSettings>(&text).ok())
-        .is_some_and(|settings| settings.engine == Engine::Hex)
+        .and_then(|text| parse(&text))
+        .is_some_and(|(settings, _)| settings.engine == Engine::Hex)
 }
 
 /// The saved settings, or a new install's (written at once, so the first choice is kept).
@@ -291,10 +325,13 @@ pub(crate) fn read(
     has_keys: impl FnOnce() -> (bool, bool),
 ) -> DictateSettings {
     let _guard = lock();
-    if let Some(saved) = fs::read_to_string(file(paths))
+    if let Some((saved, moved)) = fs::read_to_string(file(paths))
         .ok()
-        .and_then(|text| serde_json::from_str::<DictateSettings>(&text).ok())
+        .and_then(|text| parse(&text))
     {
+        if moved {
+            let _ = write_locked(paths, &saved);
+        }
         return saved;
     }
     let (xai, openai) = has_keys();
@@ -315,6 +352,20 @@ pub(crate) fn update(
     write_locked(paths, &next)
         .map_err(|error| format!("Couldn't save Dictate's settings: {error}"))?;
     Ok(next)
+}
+
+/// Marks the dictation's notice said (`retired.rs`), keeping everything else as saved.
+pub(crate) fn dictation_notice_said(paths: &GxserverPaths) {
+    let _guard = lock();
+    if let Some((mut saved, _)) = fs::read_to_string(file(paths))
+        .ok()
+        .and_then(|text| parse(&text))
+    {
+        if saved.local_retired_dictation_notice {
+            saved.local_retired_dictation_notice = false;
+            let _ = write_locked(paths, &saved);
+        }
+    }
 }
 
 fn write_locked(paths: &GxserverPaths, settings: &DictateSettings) -> std::io::Result<()> {

@@ -69,6 +69,8 @@ pub(crate) fn apply_aliases(text: &str, dictionary: &[DictionaryWord]) -> String
 
 /// The transcript without "um", "uh" and stutters, for English (or auto-detected) speech; other
 /// languages keep their text, since the rules are English ones.
+///
+/// CDXC:Dictate 2026-11-08 WHY: telmo stays a dependency for its filler rules alone, built without default features so it pulls in no other crate; the speech engine it also holds went with our local engine (`retired.rs`).
 pub(crate) fn remove_fillers(text: &str, language: Option<&str>) -> String {
     let language = language.unwrap_or("en");
     match telmo::Fillers::for_language(language) {

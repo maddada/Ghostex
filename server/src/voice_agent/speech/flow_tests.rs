@@ -1,5 +1,6 @@
-//! A dictation goes to the engine Dictate's settings name and nowhere else: Local with no model
-//! downloaded says so, and a cloud engine with no key says which key, never trying another.
+//! A dictation goes to the engine Dictate's settings name and nowhere else: Hex that isn't ready
+//! says so (once with the notice for someone who used our retired local engine), and a cloud
+//! engine with no key says which key, never trying another.
 
 use serde_json::json;
 
@@ -53,24 +54,61 @@ fn choose(paths: &crate::paths::GxserverPaths, engine: &str) {
 }
 
 #[tokio::test]
-async fn local_with_no_model_downloaded_says_so_and_tries_nothing_else() {
+async fn our_retired_local_engine_moves_to_hex_and_the_next_failed_dictation_says_why_once() {
     let temp = tempfile::tempdir().expect("temp");
     let state = test_state(&temp);
-    choose(&state.paths, "local");
-    record(&state.paths, "local-1");
-    let recording = transcribe::transcribe(&state, "local-1")
+    let file = super::settings::file(&state.paths);
+    std::fs::create_dir_all(file.parent().expect("folder")).expect("folder");
+    std::fs::write(
+        &file,
+        r#"{"engine":"local","localModel":"parakeet-tdt-0.6b-v3","language":"auto","polish":{"enabled":false,"model":"claude-sonnet-5-5"}}"#,
+    )
+    .expect("old settings");
+    record(&state.paths, "hex-1");
+    let first = transcribe::transcribe(&state, "hex-1")
         .await
         .expect("answered");
-    assert_eq!(recording.status, Status::Failed);
-    let error = recording.error.expect("a reason");
-    assert_eq!(error.code, "modelMissing");
-    assert_eq!(error.provider.as_deref(), Some("local"));
+    assert_eq!(first.status, Status::Failed);
+    let error = first.error.expect("a reason");
+    assert_eq!(
+        error.provider.as_deref(),
+        Some("hex"),
+        "never a paid engine"
+    );
+    assert!(error.code.starts_with("hex"), "{}", error.code);
     assert!(
-        error.message.contains("Parakeet TDT 0.6B v3"),
+        error.message.starts_with(super::retired::NOTICE),
         "{}",
         error.message
     );
-    assert!(error.message.contains("0.72 GB"), "{}", error.message);
+    record(&state.paths, "hex-2");
+    let second = transcribe::transcribe(&state, "hex-2")
+        .await
+        .expect("answered");
+    let error = second.error.expect("a reason");
+    assert_eq!(error.provider.as_deref(), Some("hex"));
+    assert!(
+        !error.message.contains(super::retired::NOTICE),
+        "said once: {}",
+        error.message
+    );
+}
+
+#[test]
+fn the_old_models_folder_is_measured_and_deleted() {
+    let temp = tempfile::tempdir().expect("temp");
+    let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+    assert_eq!(
+        super::retired::old_models_view(&paths),
+        serde_json::Value::Null
+    );
+    let model = super::retired::models_folder(&paths).join("parakeet-tdt-0.6b-v3");
+    std::fs::create_dir_all(&model).expect("folder");
+    std::fs::write(model.join("model.pack"), vec![0u8; 1_000]).expect("file");
+    assert_eq!(super::retired::old_models_view(&paths)["bytes"], 1_000);
+    super::retired::delete_old_models(&paths).expect("deleted");
+    assert!(!super::retired::models_folder(&paths).exists());
+    super::retired::delete_old_models(&paths).expect("deleting nothing succeeds");
 }
 
 #[tokio::test]
@@ -97,14 +135,15 @@ fn the_tooltip_names_the_engine_and_model_and_what_is_missing() {
     let temp = tempfile::tempdir().expect("temp");
     let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
     let mut settings = super::settings::DictateSettings::first_run(false, false);
+    assert_eq!(super::dictate::engine_label(&settings), "Hex");
+    let not_running = super::hex::State::NotRunning;
     assert_eq!(
-        super::dictate::engine_label(&settings),
-        "Local, Parakeet v3"
+        super::dictate::engine_problem(&paths, &settings, Some(&not_running)),
+        Some((
+            "hexNotRunning",
+            "Hex isn't running on this computer. Open Hex.".to_string()
+        ))
     );
-    let (code, message) =
-        super::dictate::engine_problem(&paths, &settings, None).expect("not downloaded");
-    assert_eq!(code, "modelMissing");
-    assert_eq!(message, "Not downloaded yet. Click to download (0.72 GB)");
     settings.engine = super::settings::Engine::Xai;
     assert_eq!(
         super::dictate::engine_label(&settings),

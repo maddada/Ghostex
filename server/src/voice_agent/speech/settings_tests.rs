@@ -1,5 +1,6 @@
-//! Dictate's settings: the first-run engine is picked once from the saved keys and then kept, AI
-//! polish starts on, and a client's patch is checked before it is saved.
+//! Dictate's settings: the first-run engine is picked once from the saved keys (Hex without one)
+//! and then kept, AI polish starts on, a client's patch is checked before it is saved, and a
+//! computer whose engine was our retired local model moves to Hex with a one-time notice.
 
 use serde_json::{json, Map, Value};
 
@@ -10,22 +11,21 @@ fn patch(value: Value) -> Map<String, Value> {
 }
 
 #[test]
-fn a_new_install_takes_the_xai_key_then_the_openai_key_then_local() {
+fn a_new_install_takes_the_xai_key_then_the_openai_key_then_hex() {
     assert_eq!(DictateSettings::first_run(true, true).engine, Engine::Xai);
     assert_eq!(
         DictateSettings::first_run(false, true).engine,
         Engine::OpenAi
     );
-    assert_eq!(
-        DictateSettings::first_run(false, false).engine,
-        Engine::Local
-    );
+    assert_eq!(DictateSettings::first_run(false, false).engine, Engine::Hex);
 }
 
 #[test]
-fn a_new_install_has_parakeet_auto_language_fillers_off_the_text_and_polish_on() {
+fn a_new_install_has_auto_language_fillers_off_the_text_and_polish_on() {
     let settings = DictateSettings::first_run(false, false);
-    assert_eq!(settings.local_model, "parakeet-tdt-0.6b-v3");
+    assert_eq!(settings.hex_model, None);
+    assert!(!settings.local_retired_notice);
+    assert!(!settings.local_retired_dictation_notice);
     assert_eq!(settings.language, "auto");
     assert_eq!(settings.language_hint(), None);
     assert!(settings.remove_fillers);
@@ -40,7 +40,7 @@ fn the_first_choice_is_kept_when_a_key_is_added_later() {
     let temp = tempfile::tempdir().expect("temp");
     let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
     let first = settings::read(&paths, || (false, false));
-    assert_eq!(first.engine, Engine::Local);
+    assert_eq!(first.engine, Engine::Hex);
     assert!(
         settings::file(&paths).is_file(),
         "written on the first read"
@@ -52,7 +52,7 @@ fn the_first_choice_is_kept_when_a_key_is_added_later() {
     });
     assert_eq!(
         later.engine,
-        Engine::Local,
+        Engine::Hex,
         "a key added later doesn't switch"
     );
     assert!(!asked, "keys are only asked about on the first read");
@@ -66,7 +66,6 @@ fn a_patch_is_saved_and_read_back() {
         &paths,
         &patch(json!({
             "engine": "openai",
-            "localModel": "whisper-base",
             "language": "DE",
             "removeFillers": false,
             "polish": {"enabled": false},
@@ -76,7 +75,6 @@ fn a_patch_is_saved_and_read_back() {
     )
     .expect("saved");
     assert_eq!(saved.engine, Engine::OpenAi);
-    assert_eq!(saved.local_model, "whisper-base");
     assert_eq!(saved.language, "de");
     assert!(!saved.remove_fillers);
     assert!(!saved.polish.enabled);
@@ -99,7 +97,15 @@ fn bad_values_are_refused_with_a_sentence() {
     let base = DictateSettings::first_run(false, false);
     for (bad, says) in [
         (json!({"engine": "google"}), "engine must be"),
-        (json!({"localModel": "whisper-tiny"}), "not a local model"),
+        (
+            json!({"engine": "local"}),
+            "no longer has its own speech model",
+        ),
+        (
+            json!({"localModel": "whisper-base"}),
+            "no longer has its own speech model",
+        ),
+        (json!({"localRetiredNotice": true}), "only be set to false"),
         (json!({"language": "xx"}), "not a language"),
         (json!({"removeFillers": "yes"}), "true or false"),
         (json!({"polish": {"model": "gpt-5"}}), "claude-sonnet-5-5"),
@@ -166,8 +172,44 @@ fn hex_is_an_engine_with_its_own_model_choice() {
         .patched(&patch(json!({"hexModel": "a b&c"})))
         .is_err());
     assert!(settings.patched(&patch(json!({"hexModel": ""}))).is_err());
-    // Settings saved before Hex existed still read.
-    let old = r#"{"engine":"local","localModel":"parakeet-tdt-0.6b-v3","language":"auto","polish":{"enabled":true,"model":"claude-sonnet-5-5"}}"#;
-    let read: DictateSettings = serde_json::from_str(old).expect("old settings");
-    assert_eq!(read.hex_model, None);
+}
+
+#[test]
+fn a_computer_on_our_retired_local_engine_moves_to_hex_and_owes_the_notice_once() {
+    let temp = tempfile::tempdir().expect("temp");
+    let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let file = settings::file(&paths);
+    std::fs::create_dir_all(file.parent().expect("folder")).expect("folder");
+    std::fs::write(
+        &file,
+        r#"{"engine":"local","localModel":"parakeet-tdt-0.6b-v3","language":"de","polish":{"enabled":true,"model":"claude-sonnet-5-5"}}"#,
+    )
+    .expect("old settings");
+    assert!(settings::uses_hex(&paths));
+    // A saved key never takes over: the move is to Hex, not to a paid engine.
+    let moved = settings::read(&paths, || (true, true));
+    assert_eq!(moved.engine, Engine::Hex);
+    assert_eq!(moved.language, "de", "the rest is kept");
+    assert!(moved.local_retired_notice);
+    assert!(moved.local_retired_dictation_notice);
+    let written = std::fs::read_to_string(&file).expect("written back");
+    assert!(!written.contains("localModel"), "{written}");
+    assert!(written.contains(r#""engine": "hex""#), "{written}");
+    // Read again: still Hex, the notices still owed until they are said.
+    assert_eq!(settings::read(&paths, || (true, true)), moved);
+    settings::dictation_notice_said(&paths);
+    let said = settings::read(&paths, || (true, true));
+    assert!(!said.local_retired_dictation_notice);
+    assert!(said.local_retired_notice, "the page's notice is separate");
+    let dismissed = settings::update(&paths, &patch(json!({"localRetiredNotice": false})), || {
+        (true, true)
+    })
+    .expect("dismissed");
+    assert!(!dismissed.local_retired_notice);
+    assert!(
+        !std::fs::read_to_string(&file)
+            .expect("saved")
+            .contains("localRetired"),
+        "no notice fields once both are said"
+    );
 }

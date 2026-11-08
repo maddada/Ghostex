@@ -1,6 +1,6 @@
 //! The second half of Dictate: a saved recording (`recordings.rs`) turned into text by the engine
-//! Dictate's settings name (`speech/settings.rs`): a local model on this computer
-//! (`speech/engine.rs`), Hex 3's local API on this computer (`speech/hex.rs`), or a batch speech-to-text, xAI's (`POST /v1/stt`) or OpenAI's
+//! Dictate's settings name (`speech/settings.rs`): Hex 3's local API on this computer
+//! (`speech/hex.rs`), or a batch speech-to-text, xAI's (`POST /v1/stt`) or OpenAI's
 //! (`POST /v1/audio/transcriptions`), both of which take the `.m4a` or `.wav` as it is. The text
 //! then goes through the clean-up (`speech/cleanup.rs`: aliases, fillers, AI polish). A failure is kept on the recording with a sentence that says
 //! what went wrong and what to do; the audio stays whatever happens, so Transcribe again works once
@@ -205,9 +205,6 @@ async fn call_once(
         .map(str::to_string)
         .or_else(|| recording.language.clone());
     let provider = match settings.engine {
-        Engine::Local => {
-            return transcribe_locally(paths, settings, &audio_path, language, words).await
-        }
         Engine::Hex => {
             return transcribe_with_hex(paths, recording, settings, &audio_path, language).await
         }
@@ -272,78 +269,6 @@ fn no_key(provider: Provider) -> String {
     )
 }
 
-fn local_problem(code: &str, message: impl Into<String>) -> Problem {
-    Problem {
-        code: code.to_string(),
-        message: message.into(),
-        provider: Some("local".to_string()),
-        detail: None,
-    }
-}
-
-/// Transcribes with the local model the settings name. Never falls back to a key.
-async fn transcribe_locally(
-    paths: &crate::paths::GxserverPaths,
-    settings: &DictateSettings,
-    audio_path: &std::path::Path,
-    language: Option<String>,
-    words: &[String],
-) -> Outcome {
-    let Some(spec) = super::speech::model_spec(&settings.local_model) else {
-        return Outcome::Final(local_problem(
-            "modelMissing",
-            "Pick a local model for Dictate in Settings, then transcribe again.",
-        ));
-    };
-    if !super::speech::model_ready(paths, spec) {
-        return Outcome::Final(match super::speech::model_progress(spec) {
-            Some(percent) => local_problem(
-                "modelDownloading",
-                format!("{} is still downloading ({percent}%). Transcribe again when it's done.", spec.title),
-            ),
-            None => local_problem(
-                "modelMissing",
-                format!(
-                    "{} isn't downloaded yet. Download it in Settings ({:.2} GB), then transcribe again.",
-                    spec.title,
-                    spec.download_bytes() as f64 / 1e9
-                ),
-            ),
-        });
-    }
-    if !audio_path.is_file() {
-        return Outcome::Final(problem(
-            "audioMissing",
-            None,
-            "The recording's audio file is gone, so it can't be transcribed.",
-        ));
-    }
-    let dir = super::speech::model_dir(paths, spec.id);
-    let audio = audio_path.to_path_buf();
-    let words = words.to_vec();
-    let aliases = dictate::alias_pairs(settings);
-    let result = tokio::task::spawn_blocking(move || {
-        let hints = super::speech::Hints {
-            language: language.as_deref(),
-            words: &words,
-            aliases: &aliases,
-        };
-        super::speech::transcribe_locally(spec, &dir, &audio, &hints)
-    })
-    .await
-    .unwrap_or_else(|error| Err(error.to_string()));
-    match result {
-        Ok(text) => Outcome::Text(text),
-        Err(detail) => Outcome::Final(
-            local_problem(
-                "localFailed",
-                format!("{} couldn't transcribe this recording. Transcribe again; if it keeps failing, pick another engine.", spec.title),
-            )
-            .with_detail(Some(detail)),
-        ),
-    }
-}
-
 /// Transcribes with Hex 3's local API (`speech/hex.rs`). Never falls back to another engine.
 async fn transcribe_with_hex(
     paths: &crate::paths::GxserverPaths,
@@ -381,9 +306,20 @@ async fn transcribe_with_hex(
             )
         }
     };
+    // Someone whose engine was our retired local model hears why it is Hex now, once.
+    let message = if settings.local_retired_dictation_notice && !failure.transient {
+        let paths = paths.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            super::speech::settings::dictation_notice_said(&paths)
+        })
+        .await;
+        format!("{} {}", super::speech::retired::NOTICE, failure.message)
+    } else {
+        failure.message
+    };
     let problem = Problem {
         code: failure.code.to_string(),
-        message: failure.message,
+        message,
         provider: Some("hex".to_string()),
         detail: None,
     }

@@ -10,7 +10,7 @@
 //! Errors are `{"code": "…"}`.
 //!
 //! CDXC:Dictate 2026-11-07 DECISION:
-//! User: a fourth Dictate engine, Hex, beside Local, OpenAI and xAI, on every system Hex 3 ships for (macOS on Apple silicon, Windows and Linux). The settings row says where the user stands in plain words (Hex 3 not found with the link to install it, Hex not running, or ready with a model picker of the models Hex has ready); a 409 or a dead port gives a clear error that says what to do in Hex, never a silent failure or a hang. The token is never logged or shown, and an `apiVersion` Ghostex doesn't know is refused with a clear message. Our local engine stays until Hex is proven.
+//! User: a Dictate engine, Hex, on every system Hex 3 ships for (macOS on Apple silicon, Windows and Linux). The settings row says where the user stands in plain words (Hex 3 not found with the link to install it, Hex not running, or ready with a model picker of the models Hex has ready); a 409 or a dead port gives a clear error that says what to do in Hex, never a silent failure or a hang. The token is never logged or shown, and an `apiVersion` Ghostex doesn't know is refused with a clear message. Since 2026-11-08 (Q1709, CDXC:Dictate in retired.rs) Hex is the recommended engine and our own local engine is gone.
 //! SEE-ALSO: server/src/managed_tools/hex.rs (finding and installing Hex), apps/desktop/src/app/window/settings_modal/tabs/voice_dictate.rs and apps/mobile/app/src/screens/settings/VoicePage.rntl.tsx (the settings rows).
 
 use std::fmt;
@@ -160,7 +160,7 @@ impl HexModel {
                     Err(format!(
                         "{} in Hex doesn't transcribe {}. Pick another Hex model, or set Dictate's language to Auto, then transcribe again.",
                         self.name,
-                        super::catalog::LANGUAGE_LABELS
+                        super::languages::LANGUAGE_LABELS
                             .iter()
                             .find(|(known, _)| *known == code)
                             .map_or(code, |(_, label)| label)
@@ -617,7 +617,7 @@ fn wav_bytes(audio: &Path) -> Result<Vec<u8>, Failure> {
         return Err(gone());
     }
     if audio.extension().is_some_and(|ext| ext == "m4a") {
-        let wav = super::engine::decode_m4a(audio).map_err(|detail| {
+        let wav = decode_m4a(audio).map_err(|detail| {
             Failure::final_(
                 "badAudio",
                 "Ghostex couldn't prepare the recording for Hex. Transcribe again.",
@@ -629,6 +629,29 @@ fn wav_bytes(audio: &Path) -> Result<Vec<u8>, Failure> {
         return bytes.map_err(|_| gone());
     }
     std::fs::read(audio).map_err(|_| gone())
+}
+
+/// `path` decoded to a 16 kHz mono WAV beside it with macOS's `afconvert`, which made it.
+fn decode_m4a(path: &Path) -> Result<PathBuf, String> {
+    let afconvert = Path::new("/usr/bin/afconvert");
+    if !afconvert.is_file() {
+        return Err("This recording is AAC, which only macOS can decode here.".to_string());
+    }
+    let wav = path.with_extension(format!("{}.16k.wav", uuid::Uuid::new_v4().simple()));
+    let status = std::process::Command::new(afconvert)
+        .args(["-f", "WAVE", "-d", "LEI16@16000", "-c", "1"])
+        .arg(path)
+        .arg(&wav)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_err(|error| format!("Couldn't decode the recording: {error}"))?;
+    if !status.success() {
+        let _ = std::fs::remove_file(&wav);
+        return Err("Couldn't decode the recording.".to_string());
+    }
+    Ok(wav)
 }
 
 /// Transcribes `audio` with Hex. Blocking: run it off the async runtime.

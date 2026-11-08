@@ -907,15 +907,12 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/deleteDictation" => remote_allowed(path),
         /*
         CDXC:Dictate 2026-11-05 WHY:
-        Dictate's engine, models and clean-up belong to the computer whose gxserver transcribes, and the phone changes them per computer (Q1275), so every client may read and change them; no key is read or written here.
+        Dictate's engine, its old models and clean-up belong to the computer whose gxserver transcribes, and the phone changes them per computer (Q1275), so every client may read and change them; no key is read or written here.
         */
         "/api/readDictateSettings"
         | "/api/setDictateSettings"
         | "/api/readDictateEngine"
-        | "/api/listSpeechModels"
-        | "/api/downloadSpeechModel"
-        | "/api/cancelSpeechModelDownload"
-        | "/api/deleteSpeechModel"
+        | "/api/deleteOldSpeechModels"
         | "/api/skipDictationPolish" => remote_allowed(path),
         /*
         CDXC:Connectors 2026-10-15 WHY:
