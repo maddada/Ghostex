@@ -8,6 +8,67 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>11.2.0</title>
+            <pubDate>Sun, 08 Nov 2026 18:34:50 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.2.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>110200</sparkle:version>
+            <sparkle:shortVersionString>11.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 11.2.0
+
+## 11.2.0 - 2026-11-08
+
+**Ghostex 11.2.0 is out.** Bots get your connected apps and sign-ins, pasted images send with your message, agents work across your projects without asking again, approvals open as centred dialogs, remote computers connect more smoothly, and Settings gets tidier.
+
+### 🤖 Bots
+
+- **GBots bots get every app you connect in Settings > Connectors** and your gh and Google sign-ins, with the same Ask, Allow and Never rules, and they answer setup questions with Ghostex's own screens.
+- **Bot chats stay calm:** no Autopilot nudges, and a Ghostex message never becomes a bot chat's title.
+- **One sidebar session per bot chat**, and a renamed bot chat keeps its name without "/rename" being typed to the bot.
+
+### 💬 Chat
+
+- **Enter waits for a pasted image and sends your text and the image together**, on the desktop, the web and the phone, and pasting is faster.
+- **Tool cards stay one line** with the running call in the header ("+2 more"), and open when a call waits for your approval.
+- **Red error lines are one-line cards**, and several pictures in one message show without "[Image #2]".
+- **A queued Codex message never leaves a stuck "left the queue" card** (#509).
+- **The Summary and Detailed view chips show their icon**, turning into the × to close, and handover headings below a one-click answer are styled again.
+
+### 🔐 Approvals and agents
+
+- **Agents work across your projects again without asking:** they message, start, type into, interrupt and answer sessions in any project, while pairing, Collab, security settings and starting an agent with approvals off still ask you.
+- **Every notice with a button is a centred dialog**, one at a time ("1 of 3"), and an "Approvals waiting" pill brings back the ones you put aside. Copy details sits with the buttons, and light dialogs' main buttons are frosted grey.
+- **A Claude Code prompt with the auto-block countdown is answered on the first click**, and an answered card dims with "Sending…".
+
+### 🌐 Remote computers
+
+- **A computer added with its password connects right away** (#508), and an Easy Connect computer that must pair again says so instead of retrying.
+- **A connected computer asks once to act as you**, not on every connect; a computer that is really this one never asks to let itself in, and an approved request takes effect at once.
+- **Settings > Remote has a Current machine card** with this computer's name, short name and SSH access, and it no longer checks SSH every 10 seconds.
+- **Windows can message a Mac when signed in as an administrator.**
+
+### ⚙️ Settings and the window
+
+- **Theme presets sit in one compact sideways row**, colour rows stack in a narrow window, and the Settings rail's groups read in sentence case with more room.
+- **Settings > Dictation explains Hex clearly**, with Install Hex (the official installer, after you confirm with Touch ID) and a link to anoma.ly/hex.
+- **View playbook shows the playbook your coordinators follow**, from the New Coordinator dialog, Settings and the right-click editor.
+- **macOS: full screen with transparency shows your blurred desktop picture** instead of black.
+- **macOS: Login Items lists Ghostex's helpers as Ghostex**, and Ghostex stops rewriting them on every start (#510).
+- **Main Hub (beta) in Settings > Extensions**, off by default.
+
+### 🩹 Fixes and polish
+
+- **A session whose terminal ended outside Ghostex shows as sleeping and reopens** (#512), thanks to @bet4it.
+- **Chief is now Chief of Staff.**
+- **macOS: programs in your sessions reach the local network again** (#504).
+- **Coordinators: a message and a thread report sent at the same moment both arrive** (#505, #506), and a finished report no longer raises a false "not moving".
+- **Pins are one filled and outline pair everywhere**, and right-clicking a pinned extension's header icon offers Unpin and Disable.
+- **The extensions menu's Terminal chip reads in the light theme**, the × on toasts and board cards is easier to see, and Linear tickets linked by their ID open in the right workspace.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v11.2.0/ghostex-11.2.0-arm64.dmg" length="58399605" type="application/octet-stream" sparkle:edSignature="26Z3i+Cwf2YccMmlneDl+oSGjkfywAjEXZLPgu2IDl6PI0jhlzoOpyCSW/K4YkxwwkGQjcyQCIRTw2cwrqA+CA=="/>
+        </item>
+        <item>
             <title>11.1.1</title>
             <pubDate>Sun, 08 Nov 2026 13:16:35 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v11.1.1</sparkle:fullReleaseNotesLink>
@@ -447,90 +508,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.48.0/ghostex-10.48.0-arm64.dmg" length="54905753" type="application/octet-stream" sparkle:edSignature="nqzxSw5autxznB8px2433+qgfrv9tKUWMUJumQuW5bCfaGt6bqa0FJ8zqwpiDe46KeHcZrwHTbI0Bv7LQD3HAQ=="/>
         </item>
         <item>
-            <title>10.47.0</title>
-            <pubDate>Thu, 05 Nov 2026 02:38:01 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.47.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>104700</sparkle:version>
-            <sparkle:shortVersionString>10.47.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 10.47.0
-
-## 10.47.0 - 2026-11-05
-
-**Ghostex 10.47.0 is out.** Ghostex runs much lighter in the background on Windows and macOS, coordinators get a work board, agents' questions take one-click answers, the iPhone gets Voice mode, and the Unified sidebar, the new session picker and the new chat's tray are easier to use.
-
-### ⚡ Faster and lighter
-
-- **Windows: the Ghostex server uses far less CPU in the background,** from 2 to 3.6 cores down to about 0.13 on a busy computer with several sessions.
-- **Windows: reading a terminal no longer starts a helper program each time,** and background helpers no longer open a hidden console window of their own.
-- **Windows: Git is asked about a project again only after its files change,** for session status and diff counts, and the status line runs your command without extra launchers.
-- **macOS: the Ghostex server reads running sessions and saved logins itself** instead of starting a helper program several times a second, and finds agent CLIs without starting a login shell.
-- **Git answers are kept until the folder's files change,** so idle projects no longer run Git every few seconds.
-- **Ghostex starts far fewer GitHub CLI calls** for Claude cloud sessions, session links and branch pull request badges.
-- **A damaged line in an agent's transcript no longer makes Ghostex read the whole transcript again,** and scrolling back through a long chat's history reads only what it hasn't read yet.
-- **The Unified sidebar redraws once a second instead of 30 times while agents work,** with the classic sidebar's steady status dots.
-- **macOS: the Ghostex server raises its open-file limit,** so busy computers no longer fail sends and reads with "Too many open files".
-
-### 🧭 Coordinators
-
-- **A coordinator chat has a work board:** its lines of work grouped To do, Needs you, Blocked, Moving, Done and Backlog, placed from its threads, questions and pull request checks; open it from the Board pill above the chat box as a side list or a full overlay, and on the phone as a sheet.
-- **Board cards say what to do:** a Needs you card offers one-click answers or Answer and Approve in the thread, Done folds into a slim rail, and × twice moves a card to Removed.
-- **Clicking a board card puts it in the chat box as a pill,** and clicking that pill in a sent message opens the board at the card.
-- **A coordinator's threads on other computers show in its Workers list and under it in the sidebar** with the computer's name, and open on their own computer.
-- **A worker waiting for approval shows a red tag and a red dot in the Workers list.**
-
-### 💬 Chat
-
-- **Answer an agent's question with one click:** answer choices in its reply show as buttons under the question, and picking another one corrects the answer you sent.
-- **The new chat's tray is one breadcrumb** (project › computer › where › branch) that centres or wraps onto two aligned rows when narrow, with ⌥O, ⌥M, ⌥W and ⌥B to change each part.
-- **A Saved draft pill replaces the "Another saved draft is available" row:** it sits at the start of the pill strip, and clicking it previews the draft with Dismiss and Use draft.
-- **The + mention menu lists sessions on your connected computers** with their computer and project, and a mention pill for one opens it on its own computer.
-- **When the Ghostex server restarts, the chat waits quietly and carries on;** only a real outage shows "Couldn't reach Ghostex. It may be restarting." with Retry.
-- **Links in questions show their words with a dotted underline** in the text colour, also in the answered card, the ? list and Resources.
-- **Every pill shows its status the same way,** as small coloured dots with counts after its label, with no corner dots.
-- **The working bar and tool rows never show a tool's raw JSON;** an unknown tool shows its name in words.
-- **Marked handovers gain Comms, Held for release and Suggestions sections,** and what needs you (Read this, Blocked, Suggestions, Needs you) always comes last.
-- **The floating Ghostex button's panel, count tray and docked tab are frosted glass** when Glass is on.
-
-### 🗂️ Sidebar and new sessions
-
-- **Unified cards say Untracked for folders without Git,** always keep three rows, and show the links card when you hover.
-- **The Unified sidebar hides a disconnected computer's cards until it reconnects,** and leaves a coordinator's workers out, with a crew count on the coordinator's card instead.
-- **Right-click a Unified project header for the project menu, and drag a card into the main area** to split or open it, like a Project sidebar row.
-- **Reveal Active Session opens the Working shelf, project group or filter that hides the card** and flashes it, and a thin divider sets Drafts apart from the sessions below.
-- **The new session picker shows computers under the project name,** search starts a session in a found project, projects with the same name merge one way, and Cloud Box shows only once it is set up.
-
-### 📱 On the phone
-
-- **iPhone: Voice mode is here** (#412): talk with an agent in a call that the lock screen, the Dynamic Island and the green call pill show with Mute and End, and in a push-to-talk call a Live Activity on the lock screen gives you Talk and Send with the phone locked; it uses Bluetooth or CarPlay when connected and offers to hold the conversation when a phone call comes in.
-- **iPhone: screens with a header no longer crash on iOS 27.0.**
-- **The phone gets the coordinator board, one-click answers, the Saved draft pill, mentions of remote sessions and the quiet reconnect line.**
-
-### 📄 Pages
-
-- **Text you type in a page is never lost,** even when you quit Ghostex, reload the page or the Ghostex server restarts.
-- **Tooltips inside pages are frosted glass** instead of solid black or white.
-- **The page window stops at its ends instead of showing grey when you scroll past them,** and blurs the wallpaper by the same amount every time.
-
-### 🎫 Work mode
-
-- **A workspace's ticket command can be its primary tracker,** with its open tickets on the Work list, picked with `ghostex issues tracker <id>`, thanks to @lardissone (#411).
-- **Link a session to a ticket command's tickets by hand** with `ghostex link-session --ticket`, or Link to on the Work page, thanks to @lardissone (#414).
-
-### 🩹 Fixes and polish
-
-- **macOS: dead keys compose in terminal panes** with layouts such as U.S. International, thanks to @sebastianarena (#417).
-- **Windows: switching accounts works in a forked Claude session,** thanks to @DaveW001 (#415).
-- **Create Linear Ticket… shows only where Linear applies,** when the workspace picked Linear or a project or workspace Linear key is set.
-- **Opening a worker on another computer connects that computer first** if only its saved copy is known.
-- **A connected workspace's GitHub sign-in counts only when it holds a token,** and Settings says when its sign-in needs redoing.
-- **The Ghostex server ends session keepers left behind by a deleted Ghostex server** when it starts.
-- **Resources' row buttons line up,** so orphaned rows' × sits under the session rows' ×.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.47.0/ghostex-10.47.0-arm64.dmg" length="52831287" type="application/octet-stream" sparkle:edSignature="2O4VTl/i8m40mZm14mcWaPUaKOZXTLg39h9jP1WkvXPeDCt1a/BE8SHI8iq7LTe4tPyVcWrt2/bepygvcqrbDA=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -542,6 +519,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: kSlhFT+3gHYJqQSHG7BcqcPzEC//wlsPtTR42KHEXoCUSI70beLd0KM8odau/VMEc2Y6VK71DhObPaPkLjTZDw==
-length: 51667
+edSignature: coMg3mgXLpCgvwfa1NErNseFzfvfCrXWiWwjN2nHC9H8sYOMoNtnXoYpXbsvLKvVbs/x8Tfos7K95AACfkQVAA==
+length: 48612
 -->
