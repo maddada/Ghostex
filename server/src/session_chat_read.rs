@@ -722,14 +722,22 @@ pub(crate) async fn handle_read_session_chat_http(
         } else {
             crate::session_chat::SEED_OPTION_DETECTION_DEADLINE
         };
-        let detection = match tokio::time::timeout(
-            detection_deadline,
-            detector.detect(&project_id, &session_id, terminal_agent.as_deref(), false),
-        )
-        .await
-        {
+        // CDXC:SessionChat 2026-11-08 WHY:
+        // User: "scroll up a lot in this long chat we're in and then click on the Needs you question pill and it takes like 5 seconds before it jumps to it". Every read waited for the screen probe, which on a running agent took the whole half-second deadline, so each older page and each jump paid it before the transcript was even read. A page of history (`beforeOffset`) shows rows, not the screen: it answers with the last settled reading at once, exactly as a read whose probe missed the deadline does, and only the live tail read waits for the screen.
+        let probe = async {
+            if before_offset.is_some() {
+                return Err(());
+            }
+            tokio::time::timeout(
+                detection_deadline,
+                detector.detect(&project_id, &session_id, terminal_agent.as_deref(), false),
+            )
+            .await
+            .map_err(|_| ())
+        };
+        let detection = match probe.await {
             Ok(detection) => detection,
-            Err(_) => {
+            Err(()) => {
                 let mut cached = detector.cached(&project_id, &session_id);
                 if cached.options.is_none() {
                     // Nothing cached yet (the first read after a gxserver start): the launch
