@@ -341,6 +341,112 @@ jobs:
           cargo xtask typecheck
           bun run release:test
 
+  # CDXC:Release 2026-11-08 DECISION:
+  # User (Q1923): "add a Linux compile check to the release's pre-publish checks, so Linux-only code paths fail before any platform builds". 11.1.1's Linux builds failed on a Linux-only path (#503's Display scale row in the native-modal-demo bin) that no macOS check compiles, after Android, macOS and Windows had already published, so the tag was public and Linux had to be rebuilt from restored sources. Every publish stage now waits for this check as it waits for `gates`, so such a failure stops the release before anything is public and a plain `--reuse-from-run` redispatch fixes it. It runs beside the builds, not in front of them (see CDXC:WindowsValidationIsNotAGate below): it only delays a publish stage when it outlasts that platform's build. It restores the Linux release kache stores read-only (their build scripts and proc macros hit; a `check` is otherwise a different compile) and saves nothing, because the repository's Actions cache is already at its 10 GB limit and a new store would evict the release builds' stores.
+  linux_check:
+    name: linux_check (${{ matrix.crate }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - crate: desktop
+            directory: apps/desktop
+            kache_store_set: linux-x64-1
+          - crate: gxserver
+            directory: server
+            kache_store_set: gxserver-linux-x64-1
+    env:
+      CEF_PATH: ${{ github.workspace }}/apps/desktop/build/cef-cache
+      CARGO_INCREMENTAL: '0'
+      ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ matrix.kache_store_set }}-${{ github.sha }}
+          restore-keys: kache-${{ matrix.kache_store_set }}-
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
+      - name: Resolve dependency cache keys
+        id: cache_keys
+        run: |
+          {
+            printf 'cef=%s\n' "$(git rev-parse HEAD:.dependencies/cef-rs)"
+            printf 'zig=%s\n' "$(git rev-parse HEAD:.dependencies/ghostty)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore Cargo registry cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-reg-linux-${{ hashFiles('apps/desktop/Cargo.lock', 'server/Cargo.lock') }}
+          restore-keys: cargo-reg-linux-
+      - name: Restore CEF distribution cache
+        if: ${{ matrix.crate == 'desktop' }}
+        uses: actions/cache/restore@v6
+        with:
+          path: apps/desktop/build/cef-cache
+          key: cef-linux-x64-${{ steps.cache_keys.outputs.cef }}
+      - name: Restore Zig package cache
+        if: ${{ matrix.crate == 'desktop' }}
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            build/zig-global-cache
+            ~/.cache/zig
+          key: zig-linux-x64-${{ steps.cache_keys.outputs.zig }}
+          restore-keys: zig-linux-x64-
+      - name: Install native build dependencies
+        if: ${{ matrix.crate == 'desktop' }}
+        run: |
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y cmake ninja-build pkg-config libasound2-dev libfontconfig1-dev libfreetype-dev libx11-dev libxcb1-dev libxkbcommon-x11-dev
+      - name: Install pinned Zig toolchain
+        if: ${{ matrix.crate == 'desktop' }}
+        run: |
+          tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.17.1
+          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.17.1/bin/zig"
+          [[ "$($ZIG_BIN version)" == "0.17.1" ]]
+          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
+      # The desktop crate builds against the pinned zed / cef-rs / gpui-component checkouts; it never
+      # reads the VS Code source (the Windows release job skips it too). gxserver needs no submodule.
+      - name: Prepare pinned source references
+        if: ${{ matrix.crate == 'desktop' }}
+        env:
+          GHOSTEX_RELEASE_SKIP_VSCODE_SOURCE: '1'
+        run: tooling/release-gpui/prepare-references.sh
+      - name: Pre-fetch Zig package dependencies
+        if: ${{ matrix.crate == 'desktop' }}
+        run: tooling/release-gpui/fetch-zig-deps.sh ghostty
+      # Every target: the app and its bins (native-modal-demo, the CEF helper and bootstrap, the
+      # smoke and demo bins) and the tests, as Linux compiles them.
+      - name: cargo check --all-targets (${{ matrix.crate }})
+        working-directory: ${{ matrix.directory }}
+        env:
+          GHOSTEX_GPUI_MARKETING_VERSION: ${{ inputs.version }}
+        run: cargo check --locked --all-targets
+      - name: Report kache statistics
+        if: ${{ always() && steps.kache.conclusion == 'success' }}
+        run: kache stats
+
   # CDXC:WindowsValidationIsNotAGate 2026-09-01:
   # There is deliberately no `validate_windows` job here any more.
   #
@@ -647,6 +753,7 @@ jobs:
         !inputs.build_only &&
         needs.prepare.result == 'success' &&
         needs.gates.result == 'success' &&
+        needs.linux_check.result == 'success' &&
         needs.prepare.outputs.job_macos != 'skip' &&
         ((needs.prepare.outputs.job_gxserver_x64 == 'build' && needs.gxserver_x64.result == 'success') || (needs.prepare.outputs.job_gxserver_x64 != 'build' && needs.gxserver_x64.result == 'skipped')) &&
         ((needs.prepare.outputs.job_gxserver_arm64 == 'build' && needs.gxserver_arm64.result == 'success') || (needs.prepare.outputs.job_gxserver_arm64 != 'build' && needs.gxserver_arm64.result == 'skipped')) &&
@@ -656,6 +763,7 @@ jobs:
     needs:
       - prepare
       - gates
+      - linux_check
       - gxserver_x64
       - gxserver_arm64
       - reuse
@@ -682,6 +790,7 @@ jobs:
         !inputs.build_only &&
         needs.prepare.result == 'success' &&
         needs.gates.result == 'success' &&
+        needs.linux_check.result == 'success' &&
         needs.prepare.outputs.job_android != 'skip' &&
         ((needs.prepare.outputs.reuse_count != '0' && needs.reuse.result == 'success') || (needs.prepare.outputs.reuse_count == '0' && needs.reuse.result == 'skipped')) &&
         ((needs.prepare.outputs.job_android == 'build' && needs.android.result == 'success') || (needs.prepare.outputs.job_android != 'build' && needs.android.result == 'skipped'))
@@ -689,6 +798,7 @@ jobs:
     needs:
       - prepare
       - gates
+      - linux_check
       - reuse
       - android
     uses: ./.github/workflows/release-gpui-publish.yml
@@ -733,6 +843,7 @@ jobs:
         !inputs.build_only &&
         needs.prepare.result == 'success' &&
         needs.gates.result == 'success' &&
+        needs.linux_check.result == 'success' &&
         needs.prepare.outputs.job_linux_x64 != 'skip' &&
         ((needs.prepare.outputs.job_gxserver_x64 == 'build' && needs.gxserver_x64.result == 'success') || (needs.prepare.outputs.job_gxserver_x64 != 'build' && needs.gxserver_x64.result == 'skipped')) &&
         ((needs.prepare.outputs.reuse_count != '0' && needs.reuse.result == 'success') || (needs.prepare.outputs.reuse_count == '0' && needs.reuse.result == 'skipped')) &&
@@ -741,6 +852,7 @@ jobs:
     needs:
       - prepare
       - gates
+      - linux_check
       - gxserver_x64
       - reuse
       - linux_x64
@@ -762,6 +874,7 @@ jobs:
         !inputs.build_only &&
         needs.prepare.result == 'success' &&
         needs.gates.result == 'success' &&
+        needs.linux_check.result == 'success' &&
         needs.prepare.outputs.job_linux_arm64 != 'skip' &&
         ((needs.prepare.outputs.job_gxserver_arm64 == 'build' && needs.gxserver_arm64.result == 'success') || (needs.prepare.outputs.job_gxserver_arm64 != 'build' && needs.gxserver_arm64.result == 'skipped')) &&
         ((needs.prepare.outputs.reuse_count != '0' && needs.reuse.result == 'success') || (needs.prepare.outputs.reuse_count == '0' && needs.reuse.result == 'skipped')) &&
@@ -770,6 +883,7 @@ jobs:
     needs:
       - prepare
       - gates
+      - linux_check
       - gxserver_arm64
       - reuse
       - linux_arm64
@@ -793,6 +907,7 @@ jobs:
         !inputs.build_only &&
         needs.prepare.result == 'success' &&
         needs.gates.result == 'success' &&
+        needs.linux_check.result == 'success' &&
         needs.prepare.outputs.job_windows_x64 != 'skip' &&
         ((needs.prepare.outputs.job_gxserver_x64 == 'build' && needs.gxserver_x64.result == 'success') || (needs.prepare.outputs.job_gxserver_x64 != 'build' && needs.gxserver_x64.result == 'skipped')) &&
         ((needs.prepare.outputs.reuse_count != '0' && needs.reuse.result == 'success') || (needs.prepare.outputs.reuse_count == '0' && needs.reuse.result == 'skipped')) &&
@@ -802,6 +917,7 @@ jobs:
     needs:
       - prepare
       - gates
+      - linux_check
       - gxserver_x64
       - reuse
       - windows_x64
@@ -824,6 +940,7 @@ jobs:
         !inputs.build_only &&
         needs.prepare.result == 'success' &&
         needs.gates.result == 'success' &&
+        needs.linux_check.result == 'success' &&
         needs.prepare.outputs.job_windows_arm64 != 'skip' &&
         ((needs.prepare.outputs.job_gxserver_arm64 == 'build' && needs.gxserver_arm64.result == 'success') || (needs.prepare.outputs.job_gxserver_arm64 != 'build' && needs.gxserver_arm64.result == 'skipped')) &&
         ((needs.prepare.outputs.reuse_count != '0' && needs.reuse.result == 'success') || (needs.prepare.outputs.reuse_count == '0' && needs.reuse.result == 'skipped')) &&
@@ -833,6 +950,7 @@ jobs:
     needs:
       - prepare
       - gates
+      - linux_check
       - gxserver_arm64
       - reuse
       - windows_arm64
