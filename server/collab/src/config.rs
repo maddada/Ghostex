@@ -45,7 +45,11 @@ impl GuestMode {
     }
 }
 
-/// How long a new share's link works: an hour by default, a day at most, never "until stopped".
+/// How long a new share's link works: an hour by default, 4 hours, a day, or until the owner stops
+/// sharing.
+///
+/// CDXC:Collab 2026-11-08 DECISION:
+/// User (Q1785): "add \"until i stop it\" as an option please here and in settings". A link that never runs out is created with the same Touch ID approval as any link (the approval card says it stays live until you stop it), and the Share popover's status band says so plainly. This supersedes #495's "24 h max, no never" for links the owner chooses to keep; the code is still always asked, and Stop sharing or deleting the chat ends it at once.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Expiry {
@@ -53,9 +57,10 @@ pub enum Expiry {
     Hour,
     FourHours,
     Day,
+    UntilStopped,
 }
 
-/// The longest a share may live, whatever the files say.
+/// The longest a link that runs out may live, whatever the files say.
 pub const MAX_SHARE_MS: i64 = 24 * 3_600_000;
 
 impl Expiry {
@@ -64,6 +69,7 @@ impl Expiry {
             "hour" => Some(Self::Hour),
             "fourHours" => Some(Self::FourHours),
             "day" => Some(Self::Day),
+            "untilStopped" => Some(Self::UntilStopped),
             _ => None,
         }
     }
@@ -73,14 +79,17 @@ impl Expiry {
             Self::Hour => "hour",
             Self::FourHours => "fourHours",
             Self::Day => "day",
+            Self::UntilStopped => "untilStopped",
         }
     }
 
-    pub fn millis(self) -> i64 {
+    /// How long a link lives; `None` until the owner stops sharing.
+    pub fn millis(self) -> Option<i64> {
         match self {
-            Self::Hour => 3_600_000,
-            Self::FourHours => 4 * 3_600_000,
-            Self::Day => MAX_SHARE_MS,
+            Self::Hour => Some(3_600_000),
+            Self::FourHours => Some(4 * 3_600_000),
+            Self::Day => Some(MAX_SHARE_MS),
+            Self::UntilStopped => None,
         }
     }
 }
@@ -195,9 +204,12 @@ pub fn apply_patch(config: &mut CollabConfig, patch: &Value) -> Result<(), Strin
     }
     let expiry = match patch.get("expiry") {
         None => None,
-        Some(value) => Some(value.as_str().and_then(Expiry::parse).ok_or_else(|| {
-            "expiry is hour, fourHours or day (a link lasts a day at most).".to_string()
-        })?),
+        Some(value) => Some(
+            value
+                .as_str()
+                .and_then(Expiry::parse)
+                .ok_or_else(|| "expiry is hour, fourHours, day or untilStopped.".to_string())?,
+        ),
     };
     let mode = match patch.get("mode") {
         None => None,
@@ -286,7 +298,10 @@ mod tests {
             &json!({"expiry": "day", "mode": "view", "ownerName": "Sam"}),
         )
         .unwrap();
-        assert_eq!(config.expiry.millis(), MAX_SHARE_MS);
+        assert_eq!(config.expiry.millis(), Some(MAX_SHARE_MS));
+        apply_patch(&mut config, &json!({"expiry": "untilStopped"})).unwrap();
+        assert_eq!(config.expiry, Expiry::UntilStopped);
+        assert_eq!(config.expiry.millis(), None);
         assert_eq!(config.mode, GuestMode::View);
     }
 

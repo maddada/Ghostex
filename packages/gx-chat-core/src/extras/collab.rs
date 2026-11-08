@@ -212,6 +212,17 @@ pub fn project(state: &ChatState) -> Value {
     if !available(state) {
         return Value::Null;
     }
+    if !running(state) {
+        // Share shows its Install (the popover and the phone's sheet read `installed`).
+        let collab = state.session.collab.as_ref();
+        return json!({
+            "shared": false,
+            "available": false,
+            "installed": collab.and_then(|collab| collab.get("installed")).cloned().unwrap_or(Value::Bool(false)),
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+        });
+    }
     let Some(collab) = shared(state) else {
         // The phone's Share sheet makes the share from these.
         return json!({
@@ -328,10 +339,21 @@ pub fn project(state: &ChatState) -> Value {
 /// The pill's id in `chatPills`.
 pub const COLLAB_PILL: &str = "collab";
 
-/// Whether this computer can share the chat: gxserver said something about Collab, and not that
-/// Collab isn't installed (`available: false`, server/src/collab_shim/mod.rs). Collab is an
-/// extension since 11.0.1 (#495): without it there is no Share button, pill or sheet.
+/// Whether Share shows for this chat: gxserver said something about Collab, and either Collab
+/// runs here or it doesn't but the owner didn't pick "Don't show Share" (`available: false` with
+/// `hideShare`, server/src/collab_shim/mod.rs). Without Collab, Share opens the popover's Install.
+///
+/// CDXC:Collab 2026-11-08 DECISION:
+/// User (Q1782): "Show it until you dismiss it": Share shows before Collab is installed, its popover offers Install and "Don't show Share".
 fn available(state: &ChatState) -> bool {
+    state.session.collab.as_ref().is_some_and(|collab| {
+        collab.get("available") != Some(&Value::Bool(false))
+            || collab.get("hideShare") != Some(&Value::Bool(true))
+    })
+}
+
+/// Collab runs on this computer (not just Share showing its Install).
+fn running(state: &ChatState) -> bool {
     state
         .session
         .collab
@@ -581,7 +603,7 @@ mod held_answers_tests {
     }
 
     #[test]
-    fn no_share_without_collab_installed() {
+    fn share_shows_its_install_until_dont_show_share() {
         let mut state = ChatState::default();
         state.session.boot_config = Some(crate::event::StartConfig {
             touch_composer: true,
@@ -590,8 +612,14 @@ mod held_answers_tests {
         state.session.collab = Some(json!({"shared": false, "available": true}));
         assert!(pill(&state).is_some());
         assert_eq!(project(&state)["shared"], false);
-        // gxserver says Collab isn't installed (or stopped): no pill, no Share, no sheet.
-        state.session.collab = Some(json!({"shared": false, "available": false}));
+        // Collab isn't installed: Share still shows, for its Install...
+        state.session.collab =
+            Some(json!({"shared": false, "available": false, "installed": false}));
+        assert!(pill(&state).is_some());
+        assert_eq!(project(&state)["available"], false);
+        // ...until the owner picks "Don't show Share".
+        state.session.collab =
+            Some(json!({"shared": false, "available": false, "hideShare": true}));
         assert!(pill(&state).is_none());
         assert!(project(&state).is_null());
     }

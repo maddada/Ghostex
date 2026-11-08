@@ -144,6 +144,8 @@ pub(crate) fn item() -> Value {
         "status": sidecar["status"],
         "statusError": sidecar["error"],
         "running": super::sidecar::is_running(),
+        // "Don't show Share" (the not-installed Share popover): Extensions offers to show it again.
+        "shareHidden": super::share_hidden(),
     })
 }
 

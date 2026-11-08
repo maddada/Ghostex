@@ -274,3 +274,39 @@ async fn gxserver_learns_the_shares_and_each_chats_part() {
         matches!(calls.last(), Some(HostCall::SetChatExtras { extras, .. }) if extras["shared"] == false)
     );
 }
+
+#[tokio::test]
+async fn a_link_that_lasts_until_stopped_says_so_and_still_needs_approval() {
+    let _serial = serial();
+    FakeHost::install(friendly);
+    let reply = owner(
+        json!({"op": "set", "patch": {"expiry": "untilStopped"}}),
+        None,
+    )
+    .await;
+    assert_eq!(reply.result.unwrap()["config"]["expiry"], "untilStopped");
+    let call = json!({"op": "share", "projectId": "p", "sessionId": "s"});
+    let need = owner(call.clone(), None)
+        .await
+        .needs_presence
+        .expect("asks");
+    assert_eq!(need.action, SensitiveAction::CollabShareChat);
+    assert!(
+        need.detail.contains("until you stop sharing"),
+        "{}",
+        need.detail
+    );
+    assert!(shares::list().is_empty());
+    let reply = owner(call.clone(), grant(SensitiveAction::CollabShareChat, "s")).await;
+    let share = &reply.result.unwrap()["share"];
+    assert!(share["expiresAtMs"].is_null(), "{share}");
+    // Showing the link again later says it lasts until stopped, too.
+    let need = owner(call, None).await.needs_presence.expect("asks again");
+    assert!(
+        need.detail.contains("until you stop sharing"),
+        "{}",
+        need.detail
+    );
+    let _ = crate::config::update_config(|config| config.expiry = crate::config::Expiry::Hour);
+    shares::stop_all();
+}

@@ -135,14 +135,15 @@ fn new_code() -> String {
     )
 }
 
-/// A share as the 11.0.1 rules allow it: a code, and an end at most a day after it was made. A
-/// file edited to say otherwise (no code, no end) is not trusted: that share is dropped.
+/// A share as the rules allow it: a code, and either no end (it lasts until the owner stops it,
+/// Q1785) or an end at most a day after it was made. A file edited to say otherwise (no code, a
+/// longer end) is not trusted: that share is dropped.
 fn share_is_valid(share: &StoredShare) -> bool {
     share.code.len() == CODE_DIGITS
         && share.code.bytes().all(|byte| byte.is_ascii_digit())
         && share
             .expires_at_ms
-            .is_some_and(|at| at <= share.created_at_ms + crate::config::MAX_SHARE_MS)
+            .is_none_or(|at| at <= share.created_at_ms + crate::config::MAX_SHARE_MS)
 }
 
 fn with_registry<T>(change: impl FnOnce(&mut Registry) -> T) -> T {
@@ -274,7 +275,7 @@ pub fn share_session(config: &CollabConfig, project_id: &str, session_id: &str) 
                 GuestMode::Approve
             },
             created_at_ms: now,
-            expires_at_ms: Some(now + config.expiry.millis()),
+            expires_at_ms: config.expiry.millis().map(|ms| now + ms),
             blocked: Vec::new(),
         };
         registry.shares.insert(share.id.clone(), share.clone());
@@ -721,8 +722,19 @@ pub fn owner_secrets(share: &StoredShare, relay_url: &str) -> Value {
 /// One share as the owner's Share popover and Settings > Collab show it. No link or code: those
 /// come once, with the approval that shared the chat (`owner_secrets`).
 pub fn owner_view(share: &StoredShare, relay_url: &str, title: Option<String>) -> Value {
-    let (viewers, held) = with_registry(|registry| {
+    let (viewers, held, waiting_viewer_ids) = with_registry(|registry| {
         let live = registry.live.get(&share.id);
+        // Whose messages wait, for the popover's "Message waiting" and Review.
+        let mut waiting: Vec<String> = live
+            .map(|live| {
+                live.held
+                    .iter()
+                    .map(|held| held.viewer_id.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        waiting.sort();
+        waiting.dedup();
         let viewers: Vec<Value> = live
             .map(|live| {
                 live.viewers
@@ -731,7 +743,11 @@ pub fn owner_view(share: &StoredShare, relay_url: &str, title: Option<String>) -
                     .collect()
             })
             .unwrap_or_default();
-        (viewers, live.map(|live| live.held.len()).unwrap_or(0))
+        (
+            viewers,
+            live.map(|live| live.held.len()).unwrap_or(0),
+            waiting,
+        )
     });
     json!({
         "shareId": share.id,
@@ -744,6 +760,7 @@ pub fn owner_view(share: &StoredShare, relay_url: &str, title: Option<String>) -
         "expiresAtMs": share.expires_at_ms,
         "viewers": viewers,
         "held": held,
+        "waitingViewerIds": waiting_viewer_ids,
     })
 }
 
@@ -769,12 +786,13 @@ mod tests {
     }
 
     #[test]
-    fn shares_without_a_code_or_an_end_are_dropped() {
+    fn shares_without_a_code_or_past_a_day_are_dropped() {
         let day = crate::config::MAX_SHARE_MS;
         assert!(share_is_valid(&share("12345678", 0, Some(day))));
         assert!(!share_is_valid(&share("", 0, Some(day))));
         assert!(!share_is_valid(&share("123456", 0, Some(day))));
-        assert!(!share_is_valid(&share("12345678", 0, None)));
+        // No end: it lasts until the owner stops sharing.
+        assert!(share_is_valid(&share("12345678", 0, None)));
         assert!(!share_is_valid(&share("12345678", 0, Some(day + 1))));
     }
 

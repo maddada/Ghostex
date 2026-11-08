@@ -162,6 +162,7 @@ fn not_running_read() -> Value {
         "installed": item["installed"],
         "running": false,
         "component": item,
+        "shareHidden": super::share_hidden(),
     })
 }
 
@@ -173,6 +174,26 @@ async fn owner_call(
     params: Map<String, Value>,
 ) -> RoutedResponse {
     let op = text(&params, "op").unwrap_or_else(|| "read".to_string());
+    // "Don't show Share" (and showing it again): gxserver's own, with or without the component.
+    if op == "hideShare" {
+        let hidden = params
+            .get("hidden")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        return match super::set_share_hidden(&state.paths, hidden) {
+            Ok(()) => {
+                super::republish_followed(state);
+                ok(endpoint_path, request_id, json!({ "shareHidden": hidden }))
+            }
+            Err(error) => fail(
+                endpoint_path,
+                request_id,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internalError",
+                format!("Couldn't save that: {error}"),
+            ),
+        };
+    }
     if !sidecar::is_running() {
         return if op == "read" {
             ok(endpoint_path, request_id, not_running_read())
@@ -296,6 +317,8 @@ pub(crate) async fn forward_owner(
                     "approvals".to_string(),
                     Value::Array(approvals::asked_by(state, caller)),
                 );
+                object.insert("shareHidden".to_string(), json!(super::share_hidden()));
+                object.insert("component".to_string(), install::item());
             }
         }
         return Ok(result);

@@ -70,7 +70,12 @@ pub(crate) fn insert_chat_collab(
     if !sidecar::is_running() {
         frame.insert(
             "collab".to_string(),
-            json!({ "shared": false, "available": false }),
+            json!({
+                "shared": false,
+                "available": false,
+                "installed": install::installed().is_some(),
+                "hideShare": share_hidden(),
+            }),
         );
         return;
     }
@@ -122,6 +127,34 @@ pub(crate) fn chat_deleted(project_id: &str, session_id: &str) {
     );
 }
 
+/// The owner's "Don't show Share" (the not-installed Share popover, Q1782): Share stays out of
+/// chats on this computer until Collab is installed or the owner shows it again (Settings >
+/// Extensions > Collab). Kept in gxserver's state so it works without the component.
+const SHARE_HIDDEN_FILE: &str = "collab-share-hidden";
+
+static SHARE_HIDDEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub(crate) fn share_hidden() -> bool {
+    SHARE_HIDDEN.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub(crate) fn set_share_hidden(
+    paths: &crate::paths::GxserverPaths,
+    hidden: bool,
+) -> std::io::Result<()> {
+    let file = paths.app_state_dir.join(SHARE_HIDDEN_FILE);
+    if hidden {
+        std::fs::create_dir_all(&paths.app_state_dir)?;
+        std::fs::write(&file, "1")?;
+    } else if let Err(error) = std::fs::remove_file(&file) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            return Err(error);
+        }
+    }
+    SHARE_HIDDEN.store(hidden, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
 /// Files 11.0.0's Collab (and 11.0.1's before the split) kept in gxserver's state folder.
 const LEGACY_FILES: &[&str] = &[
     "collab.json",
@@ -136,6 +169,10 @@ const LEGACY_FILES: &[&str] = &[
 /// gxserver's state folder are removed once, at start, so no old share or switch survives; the
 /// component keeps its own files in its own folder (sidecar.rs `data_dir`).
 pub(crate) fn migrate_at_start(paths: &crate::paths::GxserverPaths) {
+    SHARE_HIDDEN.store(
+        paths.app_state_dir.join(SHARE_HIDDEN_FILE).exists(),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     let mut removed = false;
     for name in LEGACY_FILES {
         removed |= std::fs::remove_file(paths.app_state_dir.join(name)).is_ok();
@@ -159,6 +196,7 @@ mod tests {
 
     #[test]
     fn old_collab_files_are_removed_and_collab_starts_not_installed() {
+        let _lock = test_lock();
         let temp = tempfile::tempdir().unwrap();
         let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
         std::fs::create_dir_all(&paths.app_state_dir).unwrap();
@@ -169,15 +207,15 @@ mod tests {
         for name in ["collab.json", "collab-shares.json", "collab-held.json"] {
             assert!(!paths.app_state_dir.join(name).exists(), "{name}");
         }
-        let _lock = test_lock();
         assert!(!sidecar::is_running());
         let mut frame = Map::new();
         frame.insert("collab".into(), json!({"shared": true}));
         insert_chat_collab(&mut frame, "p", "s");
         assert_eq!(
-            frame["collab"],
-            json!({"shared": false, "available": false}),
-            "no Collab part without the component"
+            frame["collab"]["available"], false,
+            "no Collab without the component"
         );
+        assert_eq!(frame["collab"]["installed"], false);
+        assert_eq!(frame["collab"]["shared"], false);
     }
 }

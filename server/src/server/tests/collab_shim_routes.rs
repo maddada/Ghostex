@@ -745,3 +745,48 @@ async fn gbots_shows_in_updates_while_an_older_runtime_is_on_disk() {
     std::env::remove_var("GHOSTEX_COMPONENT_STORE_DIR");
     std::env::remove_var("GHOSTEX_ON_DEMAND_MANIFEST");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn dont_show_share_hides_share_until_collab_is_installed_or_shown_again() {
+    let setup = setup();
+    let state = &setup.state;
+    let frame = || {
+        let mut frame = serde_json::Map::new();
+        collab_shim::insert_chat_collab(&mut frame, "p", "s");
+        frame["collab"].clone()
+    };
+    assert_eq!(frame()["hideShare"], false);
+    assert_eq!(frame()["installed"], false);
+    // Without the component, the not-installed popover's "Don't show Share" still saves.
+    let (status, body) = post_to(
+        state,
+        "/api/collab",
+        &setup.owner,
+        json!({"op": "hideShare", "hidden": true}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(frame()["hideShare"], true);
+    let (_, body) = post_to(state, "/api/collab", &setup.owner, json!({"op": "read"})).await;
+    assert_eq!(body["result"]["shareHidden"], true);
+    assert!(state
+        .paths
+        .app_state_dir
+        .join("collab-share-hidden")
+        .exists());
+    // Kept across a restart of gxserver.
+    crate::collab_shim::set_share_hidden(&state.paths, false).unwrap();
+    std::fs::write(state.paths.app_state_dir.join("collab-share-hidden"), "1").unwrap();
+    crate::collab_shim::migrate_at_start(&state.paths);
+    assert_eq!(frame()["hideShare"], true);
+    // Shown again (Settings > Extensions > Collab).
+    let (status, _) = post_to(
+        state,
+        "/api/collab",
+        &setup.owner,
+        json!({"op": "hideShare", "hidden": false}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(frame()["hideShare"], false);
+}

@@ -233,18 +233,31 @@ async fn handle_op(run: &mut Run<'_>, params: &Map<String, Value>) -> Result<Val
             let (summary, detail) = match &existing {
                 Some(share) => (
                     format!("Show the link and code for {}", quoted(&title)),
-                    format!(
-                        "Whoever gets them can join the shared chat until {}.",
-                        chrono::DateTime::from_timestamp_millis(share.expires_at_ms.unwrap_or(0))
-                            .map(|at| at.with_timezone(&chrono::Local).format("%H:%M").to_string())
-                            .unwrap_or_else(|| "it ends".to_string())
-                    ),
+                    match share.expires_at_ms {
+                        Some(at) => format!(
+                            "Whoever gets them can join the shared chat until {}.",
+                            chrono::DateTime::from_timestamp_millis(at)
+                                .map(|at| at
+                                    .with_timezone(&chrono::Local)
+                                    .format("%H:%M")
+                                    .to_string())
+                                .unwrap_or_else(|| "it ends".to_string())
+                        ),
+                        None => {
+                            "Whoever gets them can join the shared chat until you stop sharing."
+                                .to_string()
+                        }
+                    },
                 ),
                 None => (
                     format!("Share {} through a link", quoted(&title)),
                     format!(
-                        "Anyone with the link and its code can follow this chat for {}{}.",
-                        ends_in_words(config.expiry.millis()),
+                        "Anyone with the link and its code can follow this chat {}{}.",
+                        match config.expiry.millis() {
+                            Some(ms) => format!("for {}", ends_in_words(ms)),
+                            // CDXC:Collab 2026-11-08 DECISION: User (Q1785) "until i stop it": the approval card says it plainly.
+                            None => "until you stop sharing: the link doesn't run out".to_string(),
+                        },
                         if config.mode == GuestMode::View {
                             ", without writing"
                         } else {
