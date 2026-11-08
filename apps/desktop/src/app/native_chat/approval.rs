@@ -14,7 +14,10 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> AnyElement {
         let card = &self.snapshot["questionCard"];
-        let busy = card["busy"] == true;
+        // An answered approval waits here, dimmed and held, until its prompt is gone
+        // (`approvalPending`, the chat core's questions/pending_approval.rs).
+        let pending = self.snapshot["approvalPending"]["card"] == "prompt";
+        let busy = pending || card["busy"] == true;
         let title = Some(text(card, "approvalTitle"))
             .filter(|title| !title.is_empty())
             .unwrap_or_else(|| "Approval request".to_string());
@@ -38,7 +41,13 @@ impl NativeChatView {
             body.push(super::question::reconnecting_note(p));
         }
         let mut footer_start = Vec::new();
-        if !summary.is_empty() {
+        if pending {
+            footer_start.push(super::tone_card::pending_answer_note(
+                "approval-answer-pending",
+                &text(&self.snapshot["approvalPending"], "sending"),
+                p,
+            ));
+        } else if !summary.is_empty() {
             footer_start.push(
                 self.tone_button(
                     "approval-copy",
@@ -107,8 +116,8 @@ impl NativeChatView {
                 look: tone_look("approval", p),
                 title,
                 detail: text(card, "approvalDetail"),
-                trailing: vec![dismiss],
-                body,
+                trailing: if pending { Vec::new() } else { vec![dismiss] },
+                body: super::tone_card::dim_pending(body, pending),
                 footer_start,
                 footer_note: None,
                 footer_end,

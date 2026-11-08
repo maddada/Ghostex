@@ -419,7 +419,10 @@ fn answer_prompt(state: &mut ChatState, answer: &Value) -> Vec<Effect> {
     if crate::questions::terminal_picker::is_navigation_answer(answer) {
         return send_navigation(state, answer);
     }
-    if state.questions.answering {
+    if state.questions.answering
+        || crate::questions::pending_approval::holds_notice(state)
+        || crate::questions::pending_approval::holds_prompt(state)
+    {
         return Vec::new();
     }
     let kind = answer
@@ -429,6 +432,9 @@ fn answer_prompt(state: &mut ChatState, answer: &Value) -> Vec<Effect> {
         .to_string();
     state.questions.answering = true;
     state.questions.notice_error = None;
+    state.questions.settled_approval = None;
+    state.questions.pending_approval =
+        crate::questions::pending_approval::begin(state, &kind, answer);
     // CDXC:SessionChat 2026-09-16 DECISION: User: picking an option is optimistic: the card disappears at once while the answer is sent in the background; it only comes back, with its failure line, when the daemon proves the answer did not land.
     // A picker answer hides the card at once: gxserver keeps reporting the detection until the
     // agent's screen catches up, and the user has already chosen.

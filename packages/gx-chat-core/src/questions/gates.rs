@@ -34,6 +34,10 @@ pub fn notice_visible(state: &ChatState) -> bool {
     let Some(notice) = TerminalNotice::parse(state.session.terminal_notice.as_ref()) else {
         return false;
     };
+    // An answered approval stays drawn, dimmed, until its prompt is gone (pending_approval.rs).
+    if crate::questions::pending_approval::holds_notice(state) {
+        return true;
+    }
     let questions = &state.questions;
     let key = notice_dismiss_key(Some(&notice));
     if key == questions.answered_notice_key || key == questions.released_notice_key {
@@ -70,6 +74,9 @@ pub fn question_card_visible(
     prompt: Option<&InteractivePrompt>,
     notice: Option<&TerminalNotice>,
 ) -> bool {
+    if crate::questions::pending_approval::holds_prompt(state) {
+        return true;
+    }
     let questions = &state.questions;
     let key = prompt_key(prompt);
     if key.is_none() || key == questions.dismissed_prompt {

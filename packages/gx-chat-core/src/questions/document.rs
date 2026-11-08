@@ -52,6 +52,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         _ => Tri::Null,
     };
     into.notice_visible = gates::notice_visible(state);
+    into.approval_pending = crate::questions::pending_approval::project(state);
     // CDXC:SessionChat 2026-10-31 WHY: a failed row's own line carries Retry too, so while the card that stands for it is on screen the row says only that it was not sent. Two buttons that do the same thing would be one too many (GitHub #374).
     into.send_failure_card_prompt_id = notice
         .as_ref()

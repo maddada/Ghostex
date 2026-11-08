@@ -107,7 +107,16 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.side_chats_panel = Tri::Value(side_chats_panel);
     into.secret_requests = Tri::Value(secret_requests::project(state));
     into.collab = Tri::Value(crate::extras::collab::project(state));
-    into.relayed_answer_lines = Tri::Value(relayed_approvals::audit_lines(state));
+    // An approval answered in this chat leaves its "Approved" / "Denied" line after the
+    // coordinator's (questions/pending_approval.rs), so the newest answer is the one drawn.
+    let mut answer_lines = relayed_approvals::audit_lines(state);
+    if let (Some(lines), Some(settled)) = (
+        answer_lines.as_array_mut(),
+        state.questions.settled_approval.as_ref(),
+    ) {
+        lines.push(settled.clone());
+    }
+    into.relayed_answer_lines = Tri::Value(answer_lines);
     into.side_chat_of = Tri::Value(side_chats::bar(
         state.session.side_chat_of.as_ref(),
         &state.identity.project_id,

@@ -66,6 +66,10 @@ impl NativeChatView {
         );
         let choices = notice["choices"].as_array().cloned().unwrap_or_default();
         let answerable = !choices.is_empty();
+        // An answered approval waits here, dimmed and held, until its prompt is gone
+        // (`approvalPending`, the chat core's questions/pending_approval.rs).
+        let pending = snapshot["approvalPending"]["card"] == "notice";
+        let held = pending || snapshot["questionCard"]["busy"] == true;
         // A tabbed Claude panel with option rows (`/plugin`'s install scope) shows its details
         // above the rows and never folds them away (terminal_prompts.rs `highlighted_row`).
         let panel = notice["dialog"]["presentation"]["blocks"]
@@ -180,6 +184,12 @@ impl NativeChatView {
         let approval = notice["approval"].is_object();
         if approval {
             body.extend(self.permission_details(&notice["approval"], collapsed, &key, p, cx));
+            if let Some(line) = notice["autoBlockAt"]
+                .as_str()
+                .and_then(|at| super::tone_card::auto_block_line(at, p))
+            {
+                body.push(line);
+            }
         }
         // The plan "Ready to code?" asks to approve, whole: Claude's pane shows only a screenful of
         // it (`plan` in the chat core's questions/document.rs).
@@ -285,7 +295,7 @@ impl NativeChatView {
                         format!("notice-choice:{}", choice["index"]),
                         choice,
                         shortcut,
-                        snapshot["questionCard"]["busy"] == true,
+                        held,
                         rate_limit,
                         Some(json!({"type":"answer","answer":choice["answer"]})),
                         None,
@@ -305,7 +315,7 @@ impl NativeChatView {
                     shortcut,
                     collapsed,
                     true,
-                    snapshot["questionCard"]["busy"] == true,
+                    held,
                     json!({"type":"answer","answer":choice["answer"]}),
                     p,
                     cx,
@@ -481,10 +491,14 @@ impl NativeChatView {
                         None,
                         kind,
                         None,
-                        false,
+                        held,
                         p,
                     )
-                    .on_click(cx.listener(move |this, _, _, cx| this.invoke(answer.clone(), cx)))
+                    .when(!held, |button| {
+                        button.on_click(
+                            cx.listener(move |this, _, _, cx| this.invoke(answer.clone(), cx)),
+                        )
+                    })
                     .into_any_element(),
                 );
             }
@@ -571,8 +585,16 @@ impl NativeChatView {
                 },
                 detail: text(&notice["approval"], "source"),
                 trailing,
-                body,
-                footer_start: Vec::new(),
+                body: super::tone_card::dim_pending(body, pending),
+                footer_start: if pending {
+                    vec![super::tone_card::pending_answer_note(
+                        "notice-answer-pending",
+                        &text(&snapshot["approvalPending"], "sending"),
+                        p,
+                    )]
+                } else {
+                    Vec::new()
+                },
                 footer_note: None,
                 // The notice's own actions sit at the footer's right end, ahead of its dialog
                 // buttons and Dismiss.

@@ -154,6 +154,12 @@ impl NativeChatView {
                     .into_any_element(),
             );
         }
+        if let Some(line) = card["autoBlockAt"]
+            .as_str()
+            .and_then(|at| super::tone_card::auto_block_line(at, p))
+        {
+            body.push(line);
+        }
         let error = text(card, "error");
         if !error.is_empty() {
             body.push(
@@ -166,12 +172,16 @@ impl NativeChatView {
         }
         let busy = card["busy"] == true;
         let footer_end = self.relayed_buttons(card, place, busy, p, cx);
+        // The answer on its way: the card dims and holds with "Sending…" until gxserver applied
+        // it, then reads as answered here (CDXC:SessionChat 2026-11-08 in the chat core's
+        // questions/pending_approval.rs).
+        let body = super::tone_card::dim_pending(body, busy);
         let open_thread = json!({
             "type": "openCoordinatorThread",
             "projectId": text(card, "projectId"),
             "sessionId": text(card, "sessionId"),
         });
-        let footer_start = vec![
+        let mut footer_start = vec![
             div()
                 .id(gpui::SharedString::from(format!(
                     "relay-open:{place}:{key}"
@@ -191,6 +201,13 @@ impl NativeChatView {
                 }))
                 .into_any_element(),
         ];
+        if busy {
+            footer_start = vec![super::tone_card::pending_answer_note(
+                "relay-pending",
+                "Sending…",
+                p,
+            )];
+        }
         self.tone_card(
             ToneCardParts {
                 look: super::tone_card::ToneLook {

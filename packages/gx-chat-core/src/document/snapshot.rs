@@ -175,6 +175,11 @@ pub struct Document {
     pub send_failure_card_prompt_id: Option<String>,
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub notice_error: Tri<String>,
+    /// The approval answer the drawn notice or approval card waits on: `{ label, card, sending }`
+    /// (`card` is `notice` or `prompt`), drawn dimmed with a spinner; `null` otherwise
+    /// (`questions/pending_approval.rs`).
+    #[serde(default)]
+    pub approval_pending: Value,
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub operation_error: Tri<String>,
     /// The refusal's own code, so the composer can draw `composerNotReady` instead of an error

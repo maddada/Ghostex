@@ -440,6 +440,8 @@ pub fn project(state: &ChatState) -> Value {
                 "report": report_look(&status),
                 "codeLabel": code_label,
                 "reason": reason,
+                // When Claude Code blocks it by itself (server/src/session_chat_claude_permission.rs).
+                "autoBlockAt": card["notice"]["autoBlockAt"].clone(),
                 "choices": choices(card)
                     .into_iter()
                     .map(|choice| json!({

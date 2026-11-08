@@ -188,6 +188,7 @@ fn answer_settled(state: &mut ChatState, outcome: &RpcOutcome) -> Vec<Effect> {
             }
         }
     }
+    crate::questions::pending_approval::answered(state, matches!(outcome, RpcOutcome::Ok { .. }));
     let still_current = match request.content_key.as_ref() {
         Some(content_key) => state.questions.question_content_key.as_ref() == Some(content_key),
         None => true,

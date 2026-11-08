@@ -90,6 +90,7 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
         }
     }
 
+    crate::questions::pending_approval::sync(state);
     effects.extend(crate::questions::forms::sync(state));
     effects.extend(crate::questions::recorded_answers::sync(state));
     crate::questions::later::settle(state);

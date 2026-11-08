@@ -12,6 +12,7 @@ use super::{
     appearance::{ChatAppearance, ChatButtonFills, ChatFilledButton as _},
     state::NativeChatView,
 };
+use crate::app::helpers::ThrottledAnimationExt as _;
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -578,4 +579,89 @@ impl NativeChatView {
         }
         Some(toggle.into_any_element())
     }
+}
+
+/// CDXC:SessionChat 2026-11-08 DECISION: an answered approval card stays drawn, dimmed, with its
+/// buttons held and a spinner beside "Sending…", until its prompt is gone
+/// (packages/gx-chat-core/src/questions/pending_approval.rs). The same spinner as "Loading
+/// transcript…", still when the system asks for reduced motion.
+pub(super) fn pending_answer_note(id: &'static str, words: &str, p: &ChatAppearance) -> AnyElement {
+    let s = p.scale;
+    let glyph = gpui::svg()
+        .path("titlebar/loader2.svg")
+        .size(px(14.0 * s))
+        .flex_shrink_0()
+        .text_color(p.muted);
+    let glyph = if crate::app::helpers::gpui_macos_reduce_motion_enabled() {
+        glyph.into_any_element()
+    } else {
+        glyph
+            .with_throttled_animation(id, std::time::Duration::from_millis(900), |svg, delta| {
+                svg.with_transformation(gpui::Transformation::rotate(gpui::radians(
+                    delta * std::f32::consts::TAU,
+                )))
+            })
+            .into_any_element()
+    };
+    div()
+        .id(id)
+        .role(gpui::Role::Status)
+        .aria_label(words.to_string())
+        .flex()
+        .items_center()
+        .gap(px(6.0 * s))
+        .text_size(px(13.0 * s))
+        .text_color(p.muted)
+        .child(glyph)
+        .child(words.to_string())
+        .into_any_element()
+}
+
+/// The card's body, dimmed while its answer is on its way.
+pub(super) fn dim_pending(body: Vec<AnyElement>, pending: bool) -> Vec<AnyElement> {
+    if !pending {
+        return body;
+    }
+    body.into_iter()
+        .map(|part| {
+            div()
+                .w_full()
+                .min_w_0()
+                .opacity(0.5)
+                .child(part)
+                .into_any_element()
+        })
+        .collect()
+}
+
+/// When Claude Code blocks an unattended prompt by itself (`autoBlockAt`, read off its countdown by
+/// gxserver: CDXC:SessionChat 2026-11-08 in server/src/session_chat_claude_permission.rs), as one
+/// still line with the clock time: the card never re-renders for a ticking timer.
+pub(super) fn auto_block_line(at: &str, p: &ChatAppearance) -> Option<AnyElement> {
+    let time = chrono::DateTime::parse_from_rfc3339(at)
+        .ok()?
+        .with_timezone(&chrono::Local)
+        .format("%-I:%M %p")
+        .to_string();
+    let s = p.scale;
+    Some(
+        div()
+            .id("approval-auto-block")
+            .flex()
+            .items_center()
+            .gap(px(6.0 * s))
+            .text_size(px(12.5 * s))
+            .text_color(p.muted)
+            .child(
+                gpui::svg()
+                    .path("titlebar/clock.svg")
+                    .size(px(13.0 * s))
+                    .flex_shrink_0()
+                    .text_color(p.muted),
+            )
+            .child(format!(
+                "Claude Code blocks this at {time} if nobody answers"
+            ))
+            .into_any_element(),
+    )
 }
