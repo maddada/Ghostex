@@ -69,7 +69,15 @@ impl NativeChatView {
                 "hasRuntime": self.runtime.is_some(),
             }),
         );
-        if !self.composer_ready || self.draft.trim().is_empty() {
+        if !self.composer_ready {
+            return;
+        }
+        // A picture still on its way: the message waits for it (composer_attach.rs).
+        let requested = if interrupt { "interrupt" } else { mode };
+        if self.hold_send_for_attachments(requested, cx) {
+            return;
+        }
+        if self.draft.trim().is_empty() {
             return;
         }
         if mode != "send" && self.snapshot["queue"]["capabilities"]["canQueue"] != true {

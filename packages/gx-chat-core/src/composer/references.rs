@@ -213,6 +213,29 @@ pub fn insert_answer_attachments(
     edit
 }
 
+/// `insertAttachments`: one reference per attached path at `[start, end)` (UTF-16 offsets), each
+/// after the last. The desktop chat box calls it itself for a paste it saved, so the references
+/// land without two trips through the chat host (CDXC:Clipboard on `paste_attachments` in
+/// apps/desktop/src/app/native_chat/clipboard.rs).
+pub fn insert_path_references(
+    current: &str,
+    paths: &[&str],
+    start: usize,
+    end: usize,
+) -> ComposerEdit {
+    let mut edit = ComposerEdit {
+        text: current.to_string(),
+        caret: start,
+    };
+    let mut finish = end;
+    for path in paths {
+        let reference = native_path_reference(path, &edit.text);
+        edit = insert_reference(&edit.text, &reference, edit.caret, finish);
+        finish = edit.caret;
+    }
+    edit
+}
+
 /// Inserts `reference` at `[start, end)`, adding the spaces the sentence around it needs.
 pub fn insert_reference(current: &str, reference: &str, start: usize, end: usize) -> ComposerEdit {
     let indexed = Utf16Text::new(current);

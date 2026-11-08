@@ -14,7 +14,7 @@ use crate::composer::layout::{
 use crate::composer::links::{classify_link_href, file_position_from_href, LinkTarget};
 use crate::composer::queue::{is_queue_row_busy, move_queue_row};
 use crate::composer::reference_pills::{composer_references, ReferenceKind};
-use crate::composer::references::{insert_reference, native_path_reference, remove_reference};
+use crate::composer::references::{insert_path_references, remove_reference};
 use crate::composer::submission::{restore_undelivered_text, SubmissionMode};
 use crate::composer::suggestions::{
     complete_composer_mention, composer_native_command, suggestion_popup, suggestion_replacement,
@@ -747,25 +747,22 @@ fn attachments_finished(state: &mut ChatState, action: &UserAction) -> Vec<Effec
 }
 
 fn insert_attachments(action: &UserAction) -> Vec<Effect> {
-    let mut text = text_param(action).to_string();
-    let mut caret = usize_param(action, "start");
-    let mut end = usize_param(action, "end");
-    for path in action
+    let paths: Vec<&str> = action
         .param("paths")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
-    {
-        let reference = native_path_reference(path, &text);
-        let edit = insert_reference(&text, &reference, caret, end);
-        text = edit.text;
-        caret = edit.caret;
-        end = caret;
-    }
+        .collect();
+    let edit = insert_path_references(
+        text_param(action),
+        &paths,
+        usize_param(action, "start"),
+        usize_param(action, "end"),
+    );
     vec![Effect::SetComposerText {
-        content: text,
-        caret: Some(caret),
+        content: edit.text,
+        caret: Some(edit.caret),
         from_history: false,
     }]
 }

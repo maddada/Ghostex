@@ -81,7 +81,7 @@ impl Render for MaximizedComposer {
                         .iter()
                         .map(|path| path.to_string_lossy().into_owned())
                         .collect::<Vec<_>>();
-                    chat.invoke(serde_json::json!({"type":"attachPaths","paths":paths}), cx);
+                    chat.attach_to_composer(Vec::new(), paths, cx);
                     cx.stop_propagation();
                 }))
                 .child(

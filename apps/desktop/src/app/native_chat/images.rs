@@ -947,6 +947,28 @@ impl NativeChatView {
         .detach();
     }
 
+    /// A picture this view just saved to `path` (a composer paste), kept with the bytes it already
+    /// holds so its tile does not read the file back from the session's machine.
+    pub(super) fn seed_chat_image(
+        &mut self,
+        path: &str,
+        image: gpui::Image,
+        cx: &mut Context<Self>,
+    ) {
+        let key = source_id("read", path);
+        let known = matches!(
+            self.images
+                .entries
+                .borrow()
+                .get(&key)
+                .map(|kept| &kept.value),
+            Some(ChatImageEntry::Ready(_))
+        );
+        if !known {
+            self.store_chat_image(key, Ok(image), cx);
+        }
+    }
+
     fn store_chat_image(
         &mut self,
         key: u64,

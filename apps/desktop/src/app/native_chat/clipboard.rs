@@ -89,6 +89,7 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        super::paste_watch::paste_arrived();
         if let Some(started) = self.paste_started.take() {
             crate::app::helpers::gpui_note_clipboard_read("chatPaste", started, Some(clipboard));
         }
@@ -142,14 +143,8 @@ impl NativeChatView {
             }
             PasteInto::Form { key, modal, .. } => self.form_paste_started(key, *modal, cx),
             PasteInto::Composer => {
-                // The uploading tile shows on this frame, not after the chat host's turn.
-                self.paste_tiles.started();
-                cx.notify();
-                if images.is_empty() {
-                    self.invoke(json!({"type":"attachPaths","paths":external_paths}), cx);
-                    return true;
-                }
-                self.invoke(json!({"type":"attachmentsStarted"}), cx);
+                self.attach_to_composer(images, external_paths, cx);
+                return true;
             }
         }
         let config = self.config.clone();
@@ -203,16 +198,8 @@ impl NativeChatView {
                     window,
                     cx,
                 ),
-                PasteInto::Composer => {
-                    // The core asks for the references (`attachmentReferences`) only when there
-                    // are paths.
-                    chat.paste_tiles.finished(!paths.is_empty());
-                    cx.notify();
-                    chat.invoke(
-                        json!({"type":"attachmentsFinished","paths":paths,"error":error}),
-                        cx,
-                    )
-                }
+                // Taken by `attach_to_composer` above (composer_attach.rs).
+                PasteInto::Composer => {}
             });
         })
         .detach();

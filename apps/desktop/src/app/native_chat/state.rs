@@ -135,6 +135,10 @@ pub(crate) struct NativeChatView {
     /// The composer pastes this view has started and the chat host may not have counted yet
     /// (clipboard.rs `PasteTiles`).
     pub(super) paste_tiles: super::clipboard::PasteTiles,
+    /// A send from the chat box waiting for a paste or drop to land (`composer_attach.rs`): its mode.
+    pub(super) held_send: Option<String>,
+    /// The timer that looks at a held send again while a clipboard read is pending.
+    pub(super) held_send_recheck: Option<gpui::Task<()>>,
     /// The chat box's height tween and the arrival fade of the controls an expansion brings back.
     pub(super) composer_animation: super::composer_animation::ComposerAnimation,
     /// Whether this session's status line holds its row of space, remembered across view
@@ -472,6 +476,8 @@ impl NativeChatView {
             composer_held_key: None,
             paste_started: None,
             paste_tiles: Default::default(),
+            held_send: None,
+            held_send_recheck: None,
             composer_animation: Default::default(),
             context_status_scroll: Default::default(),
             bounds: Default::default(),
@@ -745,7 +751,13 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         if callback == "onSessionChatAttachmentsPicked" {
-            self.invoke(json!({"type":"attachPaths","paths":payload["paths"]}), cx);
+            let paths = payload["paths"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|path| path.as_str().map(str::to_owned))
+                .collect();
+            self.attach_to_composer(Vec::new(), paths, cx);
         }
     }
 
@@ -766,7 +778,7 @@ impl NativeChatView {
         self.replace_draft(&next, false, false, cx);
     }
 
-    fn replace_draft(
+    pub(super) fn replace_draft(
         &mut self,
         content: &str,
         history: bool,

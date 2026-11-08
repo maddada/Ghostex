@@ -94,6 +94,7 @@ impl Render for NativeChatView {
         if self.maximized_window.is_none() {
             self.ensure_input(window, cx);
         }
+        self.release_held_send(window, cx);
         self.sync_form_inputs(window, cx);
         self.sync_chat_zoom();
         let p = ChatAppearance::current(&self.snapshot).on_window_glass(
@@ -262,7 +263,7 @@ impl Render for NativeChatView {
                     .iter()
                     .map(|path| path.to_string_lossy().into_owned())
                     .collect::<Vec<_>>();
-                chat.invoke(serde_json::json!({"type":"attachPaths","paths":paths}), cx);
+                chat.attach_to_composer(Vec::new(), paths, cx);
                 cx.stop_propagation();
             }))
             .when_some(error_card, |this, card| {

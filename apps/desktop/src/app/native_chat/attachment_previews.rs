@@ -265,6 +265,15 @@ impl NativeChatView {
                             ),
                     ),
             );
+            // Enter was pressed while the picture was still on its way (composer_attach.rs).
+            if answer_key.is_none() && self.held_send.is_some() {
+                row = row.child(
+                    div()
+                        .text_size(px(12.0 * s))
+                        .text_color(p.muted)
+                        .child("Sends once the image is attached"),
+                );
+            }
         }
         Some(row.into_any_element())
     }
