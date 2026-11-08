@@ -1403,6 +1403,10 @@ done
 # CDXC:Cli 2026-07-13: `ghostex` is the native Rust CLI from the
 # app-owned gxserver package; `gx` is a bundle-internal symlink to it.
 # Since 2026-10-23 `ghostex` is a link to that package's gxserver, which runs as the CLI under this name (CDXC:Release in server/src/main.rs).
+# CDXC:Build 2026-11-08 FIX: PR #481 removed the `mkdir -p "$CLI_DIR/skills"` that used to create
+# CLI/ before these links, so a freshly staged bundle had no CLI/ and every build after it failed at
+# the ghostex link ("No such file or directory"). Create the folder explicitly.
+mkdir -p "$CLI_DIR"
 find "$CLI_DIR" -mindepth 1 -maxdepth 1 ! -name ghostex ! -name gx ! -name skills -exec rm -rf {} + 2>/dev/null || true
 ln -sfh ../Web/gxserver/bin/gxserver "$CLI_DIR/ghostex"
 ln -sfh "ghostex" "$CLI_DIR/gx"
