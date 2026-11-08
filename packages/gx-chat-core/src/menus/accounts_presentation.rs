@@ -285,6 +285,9 @@ pub struct SwitchProgress {
     pub to_account_id: Option<String>,
     pub updated_at: String,
     pub reason: Option<String>,
+    /// The agent would not exit to its shell, so gxserver restarted the session on the new account
+    /// the way Full Reload does (server/src/accounts/restart.rs).
+    pub reloaded: bool,
 }
 
 impl SwitchProgress {
@@ -309,6 +312,7 @@ impl SwitchProgress {
             to_account_id: text("toAccountId"),
             updated_at: text("updatedAt").unwrap_or_default(),
             reason: text("reason").filter(|reason| !reason.is_empty()),
+            reloaded: object.get("reloaded").and_then(serde_json::Value::as_bool) == Some(true),
         })
     }
 }
@@ -466,11 +470,40 @@ pub fn switch_card_presentation(
     } else {
         format!("Switching {provider_name} account")
     };
+    let find = |id: Option<&String>| {
+        id.and_then(|id| {
+            accounts
+                .iter()
+                .find(|account| account.id.as_deref() == Some(id.as_str()))
+        })
+    };
+    let to = switch_card_account(
+        find(progress.to_account_id.as_ref()),
+        &progress.provider,
+        if verified {
+            "Active account"
+        } else {
+            "Switching to"
+        },
+        true,
+        now_ms,
+    );
     let lede = if phase == "failed" {
         if verified {
             "The account is ready, but continuation needs attention."
         } else {
             "The new account isn\u{2019}t ready yet."
+        }
+        .to_string()
+    } else if settled && progress.reloaded {
+        // CDXC:AgentProviders 2026-11-08 DECISION: User: "Auto heal this!!" A switch that had to
+        // restart the session because the agent would not exit says so in one quiet line, not as
+        // an error.
+        let note = format!("Switched to {} with a reload.", to.label);
+        if progress.source == "automatic" {
+            format!("{note} Your task is continuing.")
+        } else {
+            note
         }
     } else if settled {
         if progress.source == "automatic" {
@@ -478,20 +511,13 @@ pub fn switch_card_presentation(
         } else {
             "Ready whenever you are. Send your next message."
         }
+        .to_string()
     } else if finishing {
-        "Loading your conversation on the new account."
+        "Loading your conversation on the new account.".to_string()
     } else if progress.source == "automatic" {
-        "Usage limit reached. Continuing on an available account."
+        "Usage limit reached. Continuing on an available account.".to_string()
     } else {
-        "Your conversation will be ready for your next message."
-    }
-    .to_string();
-    let find = |id: Option<&String>| {
-        id.and_then(|id| {
-            accounts
-                .iter()
-                .find(|account| account.id.as_deref() == Some(id.as_str()))
-        })
+        "Your conversation will be ready for your next message.".to_string()
     };
     let steps = if phase == "failed" {
         None
@@ -544,18 +570,79 @@ pub fn switch_card_presentation(
             false,
             now_ms,
         ),
-        to: switch_card_account(
-            find(progress.to_account_id.as_ref()),
-            &progress.provider,
-            if verified {
-                "Active account"
-            } else {
-                "Switching to"
-            },
-            true,
-            now_ms,
-        ),
+        to,
         steps,
         failure,
     })
+}
+
+#[cfg(test)]
+mod reload_note_tests {
+    use super::*;
+    use crate::menus::account_switch::{
+        AccountSwitchState, SWITCH_ACKNOWLEDGEMENT_MS, SWITCH_RELOAD_NOTE_MS,
+    };
+
+    const NOW: i64 = 1_800_000_000_000;
+
+    fn progress(source: &str, reloaded: bool) -> SwitchProgress {
+        SwitchProgress::from_value(&serde_json::json!({
+            "id": "switch-1", "provider": "claude", "source": source, "phase": "success",
+            "accountReady": true, "fromAccountId": "claude-4", "toAccountId": "claude-5",
+            "updatedAt": crate::menus::time::iso_from_millis(NOW), "reloaded": reloaded,
+        }))
+        .expect("progress")
+    }
+
+    fn accounts() -> Vec<Account> {
+        vec![Account {
+            id: Some("claude-5".into()),
+            provider: Some("claude".into()),
+            email: Some("sharptabs.com@gmail.com".into()),
+            ..Account::default()
+        }]
+    }
+
+    #[test]
+    fn a_switch_that_needed_a_reload_says_so_in_one_quiet_line() {
+        let card = switch_card_presentation(&progress("manual", true), &accounts(), true, NOW)
+            .expect("card");
+        assert_eq!(card.heading, "Account switched");
+        assert_eq!(
+            card.lede,
+            "Switched to sharptabs.com@gmail.com with a reload."
+        );
+        assert_eq!(card.failure, None);
+        let card = switch_card_presentation(&progress("automatic", true), &accounts(), true, NOW)
+            .expect("card");
+        assert_eq!(
+            card.lede,
+            "Switched to sharptabs.com@gmail.com with a reload. Your task is continuing."
+        );
+    }
+
+    #[test]
+    fn an_in_place_switch_keeps_its_usual_line() {
+        let card = switch_card_presentation(&progress("manual", false), &accounts(), true, NOW)
+            .expect("card");
+        assert_eq!(card.lede, "Ready whenever you are. Send your next message.");
+    }
+
+    #[test]
+    fn the_reload_note_stays_long_enough_to_read() {
+        let mut state = AccountSwitchState::default();
+        let reloaded = progress("manual", true);
+        state.observe(Some(&progress("manual", true)), false, NOW);
+        assert_eq!(
+            state.observe(Some(&reloaded), true, NOW),
+            Some(NOW + SWITCH_RELOAD_NOTE_MS)
+        );
+        let mut state = AccountSwitchState::default();
+        let plain = progress("manual", false);
+        state.observe(Some(&plain), false, NOW);
+        assert_eq!(
+            state.observe(Some(&plain), true, NOW),
+            Some(NOW + SWITCH_ACKNOWLEDGEMENT_MS)
+        );
+    }
 }

@@ -8,6 +8,16 @@ use crate::session_chat_send::{
     SESSION_CHAT_INTERRUPT,
 };
 
+/// Why an account switch's exit gave up: the agent kept the terminal past the time limit.
+pub(crate) const AGENT_DID_NOT_EXIT: &str =
+    "The agent did not exit back to the shell, so the resume command was not typed.";
+
+/// Whether `error` is the exit giving up with the agent still holding the terminal, the one failure a
+/// stop-and-restart of the session gets past (accounts/restart.rs).
+pub(crate) fn did_not_exit(error: &SessionChatSendError) -> bool {
+    error.failure == SessionChatSendFailure::ComposerNotReady && error.message == AGENT_DID_NOT_EXIT
+}
+
 /// Account switching deliberately cancels the old agent regardless of its screen.
 /// Each interrupt is a separate stdin write; consecutive Ctrl+C presses must land inside the CLI's double-interrupt window.
 ///
@@ -84,7 +94,7 @@ pub(crate) async fn interrupt_until_exited(
         if Instant::now() >= deadline {
             return Err(error(
                 SessionChatSendFailure::ComposerNotReady,
-                "The agent did not exit back to the shell, so the resume command was not typed.",
+                AGENT_DID_NOT_EXIT,
             ));
         }
         if cancelled() {

@@ -314,11 +314,15 @@ pub(crate) fn start(
             source,
             result,
             started,
+            endpoint::cycle,
         )
         .await;
     });
     Ok(())
 }
+
+/// Puts a session to sleep or wakes it (`endpoint::cycle`); tests stand in for the zmx daemon.
+type Cycle = fn(&AppState, &DomainRepository<'_>, &Value, &str) -> Result<(), DomainStateError>;
 
 /// The agent a restart started, so a switch that fails after it started can tell which login runs.
 struct StartedLogin {
@@ -338,7 +342,54 @@ async fn finish(
     source: SwitchSource,
     result: Result<(), SessionChatSendError>,
     started: Instant,
+    cycle: Cycle,
 ) {
+    let (result, account_settings) = match result {
+        Err(error) if super::exit::did_not_exit(&error) => {
+            let reload_state = state.clone();
+            let (project, session, reload_attempt) =
+                (project_id.clone(), session_id.clone(), attempt.clone());
+            let settings = account_settings.clone();
+            let reloaded = tokio::task::spawn_blocking(move || {
+                reload_on_selected_account(
+                    &reload_state,
+                    &project,
+                    &session,
+                    &reload_attempt,
+                    &settings,
+                    cycle,
+                )
+            })
+            .await
+            .unwrap_or_else(|_| Err(ReloadOutcome::Failed("the reload stopped".to_string())));
+            match reloaded {
+                Ok(settings) => {
+                    log(
+                        &state,
+                        LogLevel::Info,
+                        "accountSwitchReloaded",
+                        Some(error.message),
+                        started.elapsed().as_millis(),
+                        &project_id,
+                        &session_id,
+                    );
+                    (Ok(()), settings)
+                }
+                Err(ReloadOutcome::Superseded) => return,
+                Err(ReloadOutcome::Failed(reason)) => (
+                    Err(SessionChatSendError {
+                        failure: error.failure,
+                        message: format!(
+                            "{} Restarting the session on the new account failed too: {reason}.",
+                            error.message
+                        ),
+                    }),
+                    account_settings,
+                ),
+            }
+        }
+        other => (other, account_settings),
+    };
     let runs_on_selected_login = result.is_err()
         && super::restart_verification::runs_on_selected_login(
             &started_login.zmx_name,
@@ -453,6 +504,85 @@ async fn finish(
     }
 }
 
+enum ReloadOutcome {
+    /// Another switch took over the session meanwhile; it reports its own result.
+    Superseded,
+    Failed(String),
+}
+
+/// CDXC:AgentProviders 2026-11-08 WHY:
+/// User: "it kept failing to switch (said failed to return to shell something something). but after i right clicked on the session and picked full reload it reloaded with sharptabs.com@gmail.com account and all works!!!! pls fix this case! Auto heal this!!" The coordinator G9jt7 hit its weekly limit on account 4; Claude Code showed "Usage limit reached · continuing automatically at 2pm · esc to cancel", the switch's Escape cancelled that (04:28:51 UTC), but the CLI never gave the terminal back to the shell within the 15 seconds, so three switches in a row ended in "The agent did not exit back to the shell" and the session stayed on the exhausted login. When the exit gives up, the switch now does what Full Reload does, on its own: the session is recorded on the selected account, put to sleep (which stops the stuck agent with its daemon) and woken, so it resumes the same conversation on the new login. It then finishes like an in-place switch: the same continuation rules (the "." after an automatic or forced switch, nothing after a manual one) and a quiet "with a reload" on the switch card instead of a failure. Only a reload that fails itself ends in the failure card.
+/// SEE-ALSO: server/src/session_chat_agent_restart.rs (the same sleep and wake), server/src/accounts/endpoint.rs (`select`'s cold path for a session whose daemon is gone).
+fn reload_on_selected_account(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    attempt: &str,
+    account_settings: &Value,
+    cycle: Cycle,
+) -> Result<Value, ReloadOutcome> {
+    let failed = |reason: &dyn std::fmt::Display| ReloadOutcome::Failed(reason.to_string());
+    let _gate = state.accounts.mutation_gate();
+    let db = open_gxserver_database(&state.paths).map_err(|error| failed(&error))?;
+    let repo = DomainRepository::new(&db, &state.metadata.server_id);
+    let row = repo
+        .get_session(project_id, session_id)
+        .map_err(|error| failed(&error.message))?
+        .ok_or_else(|| failed(&"the session no longer exists"))?;
+    if row
+        .pointer("/runtimeSettings/accountSwitchAttempt")
+        .and_then(Value::as_str)
+        != Some(attempt)
+    {
+        return Err(ReloadOutcome::Superseded);
+    }
+    let mut runtime = row["runtimeSettings"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    let previous = Value::Object(runtime.clone());
+    // The wake launches whatever account the row names, so the row names the selected one first.
+    apply_account_settings(&mut runtime, account_settings);
+    if let Some(progress) = runtime
+        .get_mut("accountSwitch")
+        .and_then(Value::as_object_mut)
+    {
+        progress.insert("reloaded".into(), json!(true));
+    }
+    let row = endpoint::update_session_changes(&repo, &row, &runtime, Map::new())
+        .map_err(|error| failed(&error.message))?;
+    if let Err(error) = cycle(state, &repo, &row, "/api/sleepSession") {
+        // The stuck agent still runs on the previous login, so the row keeps naming it.
+        let mut runtime = row["runtimeSettings"]
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        apply_account_settings(&mut runtime, &previous);
+        let _ = endpoint::update_session_changes(&repo, &row, &runtime, Map::new());
+        return Err(failed(&format!(
+            "the session could not be stopped ({})",
+            error.message
+        )));
+    }
+    crate::session_chat_options::forget_session_chat_options(state, project_id, session_id);
+    cycle(state, &repo, &row, "/api/wakeSession").map_err(|error| {
+        failed(&format!(
+            "the session could not be started again ({})",
+            error.message
+        ))
+    })?;
+    // A wake may still move the session to another account with room (wake_account.rs); the switch
+    // reports the account the agent was started on.
+    let woken = repo
+        .get_session(project_id, session_id)
+        .ok()
+        .flatten()
+        .unwrap_or(row);
+    let mut started_on = Map::new();
+    apply_account_settings(&mut started_on, &woken["runtimeSettings"]);
+    Ok(Value::Object(started_on))
+}
+
 /// CDXC:AgentProviders 2026-11-01 WHY:
 /// The session's recorded account must always be the one its agent runs on. A switch that failed after the selected login started (its input box never showed: a login or setup prompt, a dialog) used to keep the previous account recorded while the CLI ran on the new one, so the sidebar, usage and the next switch all described the wrong login. When the new agent is verified to run on the selected login, that account is recorded and the switch still asks for attention.
 fn record_started_account(
@@ -526,3 +656,7 @@ fn log(
         details: Some(json!({ "projectId": project_id, "sessionId": session_id })),
     });
 }
+
+#[cfg(test)]
+#[path = "restart_tests.rs"]
+mod tests;

@@ -358,6 +358,8 @@ pub(super) fn switch_session(
         "forced": force,
         "interruptedTurn": interrupted,
         "continueSent": force && status == "switched",
+        // The agent kept the terminal, so the switch restarted the session (accounts/restart.rs).
+        "reloaded": row.pointer("/runtimeSettings/accountSwitch/reloaded") == Some(&json!(true)),
     });
     if phase == "failed" {
         result["error"] = row

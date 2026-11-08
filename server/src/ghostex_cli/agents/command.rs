@@ -94,12 +94,19 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                     identity::text(account, "email")
                 );
                 let reference = identity::text(&result["session"], "globalRef");
+                // The agent would not exit to its shell, so the switch restarted the session like
+                // Full Reload (accounts/restart.rs).
+                let restarted = if result["reloaded"] == true {
+                    "its agent did not exit, so the session was reloaded on the same conversation"
+                } else {
+                    "its agent restarted on the same conversation"
+                };
                 println!(
                     "{}",
                     match identity::text(&result, "status") {
                         "unchanged" => format!("{reference} already runs on {target}."),
                         "switched" if result["forced"] == true => format!(
-                            "{reference} now runs on {target}; its agent restarted on the same conversation{}, and \".\" was sent so it carries on.",
+                            "{reference} now runs on {target}; {restarted}{}, and \".\" was sent so it carries on.",
                             if result["interruptedTurn"] == true {
                                 " (its running turn was interrupted)"
                             } else {
@@ -107,7 +114,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                             }
                         ),
                         "switched" => format!(
-                            "{reference} now runs on {target}; its agent restarted on the same conversation."
+                            "{reference} now runs on {target}; {restarted}."
                         ),
                         "switchedWhileAsleep" => format!(
                             "{reference} is asleep; it starts on {target} the next time it wakes (a message to it wakes it)."

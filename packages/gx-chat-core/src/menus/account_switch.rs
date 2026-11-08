@@ -20,6 +20,9 @@ use crate::menus::time::parse_iso_millis;
 /// How long a success stays on screen once the account is ready.
 pub const SWITCH_ACKNOWLEDGEMENT_MS: i64 = 1_800;
 
+/// How long a success that needed a reload stays, long enough to read its one line.
+pub const SWITCH_RELOAD_NOTE_MS: i64 = 6_000;
+
 /// A completed switch older than this is history, not something to announce again.
 pub const SWITCH_RECENT_MS: i64 = 5_000;
 
@@ -95,8 +98,12 @@ impl AccountSwitchState {
                         }
                     }
                     _ => {
-                        self.acknowledge =
-                            Some((progress.id.clone(), now_ms + SWITCH_ACKNOWLEDGEMENT_MS));
+                        let shown = if progress.reloaded {
+                            SWITCH_RELOAD_NOTE_MS
+                        } else {
+                            SWITCH_ACKNOWLEDGEMENT_MS
+                        };
+                        self.acknowledge = Some((progress.id.clone(), now_ms + shown));
                     }
                 }
             }
