@@ -7,11 +7,11 @@ HOW TO REVIEW
 2. If you already tapped "Connect your computer", open the card titled "Try a demo computer" and tap "Open demo".
 3. The Sessions list for "Demo computer" opens.
 4. Open the Atlas API rate-limit chat (the session titled "Rate limit the public API") or "A weekend in Lisbon". Send a message. A canned reply streams back. Nothing is sent to a model or a server.
-5. Tap "Terminal view" in the header. The terminal is a script, not a live shell. Type ls, pwd, git status, or help.
-6. Tap "New session" and pick Atlas API, Side project, or Wander. The new chat answers the same way.
-7. On the Atlas API project, open Actions and choose "Open preview". Web Preview shows a page bundled with the app. It does not load the internet.
+5. In that chat, tap "Terminal view" in the header. The terminal is a script, not a live shell. Type ls, pwd, git status, or help.
+6. To start a new session, tap the agent button in a project's header (Atlas API, Side project, or Wander), or the arrow beside it to pick another agent. The new chat answers the same way.
+7. On the Atlas API project, tap its "…" (options) button, choose "Actions…", then "Open preview". Web Preview shows a page bundled with the app. It does not load the internet.
 8. Settings > Voice explains that voice is off for the demo computer. Dictate and the voice agent need a real computer.
-9. Settings > Live Activity shows sample data from the demo sessions, on this phone only.
+9. Settings > Live Activity notes that the demo sessions can appear in the Live Activity, on this phone only.
 10. Remove the demo from Settings > Demo computer > Remove demo computer. Pairing a real computer is separate.
 
 OVER-THE-AIR UPDATES
@@ -19,6 +19,7 @@ The app uses expo-updates. Updates are code-signed and served from https://ota.g
 
 BACKGROUND MODES
 The audio and voip background modes are used for the hands-free voice agent. The voice agent uses CallKit so a voice conversation with the user's agent continues when the screen locks. Voice is not available in demo mode.
+The remote-notification background mode lets a push from the user's own computer wake the app briefly to refresh its Live Activity and widgets. The demo sends no pushes.
 
 AGE RATING
 The age rating is 16+ because Web Preview can show arbitrary web content from the user's own dev server (unrestricted web access). In the demo, Web Preview shows only the bundled page.
