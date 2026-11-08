@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 use super::gx_rpc;
 use crate::GhostexGpuiApp;
-use crate::app::window::{SecurityNoticeRow, SecurityNoticeRowStatus};
+use crate::app::window::{NoticeDevice, SecurityNoticeRow, SecurityNoticeRowStatus};
 
 pub(crate) const SECURITY_NOTICE_ENDPOINT: &str = "/api/securityUpgradeNotice";
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
@@ -52,6 +52,10 @@ fn approval_id(row: &Value) -> Option<String> {
     row["approvalId"].as_str().map(str::to_string)
 }
 
+fn pending_id(row: &Value) -> Option<String> {
+    row["pendingId"].as_str().map(str::to_string)
+}
+
 /// The notice's rows from `/api/securityUpgradeNotice`. `last_connected` answers a computer's
 /// last connection by its Settings > Remote id; a computer last connected over a month before the
 /// update is left out.
@@ -75,6 +79,16 @@ pub(crate) fn notice_rows(
             SecurityNoticeRow {
                 id: text(row, "id"),
                 name: text(row, "name"),
+                kind_label: format!(
+                    "{} \u{b7} Easy Connect",
+                    if kind.is_empty() {
+                        "Phone"
+                    } else {
+                        kind.as_str()
+                    }
+                ),
+                device: NoticeDevice::EasyConnectPhone,
+                pending_id: pending_id(row),
                 detail: match used {
                     Some(used) if !kind.is_empty() => format!("{kind} \u{b7} {used}"),
                     Some(used) => used,
@@ -97,6 +111,9 @@ pub(crate) fn notice_rows(
                 return None;
             }
             Some(SecurityNoticeRow {
+                kind_label: "Computer \u{b7} Easy Connect".to_string(),
+                device: NoticeDevice::EasyConnectComputer,
+                pending_id: None,
                 detail: match last {
                     Some(at) => format!("Easy Connect \u{b7} connected {}", ago(at, now_ms)),
                     None => "Easy Connect".to_string(),
@@ -125,6 +142,12 @@ pub(crate) fn ssh_rows(view: &Value) -> (Vec<SecurityNoticeRow>, Vec<SecurityNot
             let pending_name = text(row, "name");
             let status = status(row);
             SecurityNoticeRow {
+                kind_label: match row["kind"].as_str().filter(|kind| !kind.is_empty()) {
+                    Some(kind) => format!("{kind} \u{b7} Tailscale or SSH"),
+                    None => "Phone \u{b7} Tailscale or SSH".to_string(),
+                },
+                device: NoticeDevice::SshPhone,
+                pending_id: pending_id(row),
                 id: crate::app::window::SSH_PHONES_ROW_ID.to_string(),
                 name: if status == SecurityNoticeRowStatus::Pending && !pending_name.is_empty() {
                     pending_name
@@ -153,6 +176,9 @@ pub(crate) fn ssh_rows(view: &Value) -> (Vec<SecurityNoticeRow>, Vec<SecurityNot
         .map(|row| SecurityNoticeRow {
             id: text(row, "id"),
             name: text(row, "name"),
+            kind_label: "Computer \u{b7} SSH".to_string(),
+            device: NoticeDevice::SshComputer,
+            pending_id: None,
             detail: "May ask once: Touch ID to let its agents connect".to_string(),
             status: SecurityNoticeRowStatus::Info,
             words: Vec::new(),

@@ -538,7 +538,12 @@ fn copy_text_button(
     Some(settings_button_sized(
         &t.p,
         id,
-        if copied { "Copied" } else { "Copy as text" },
+        // Q1879: an Easy Connect code is called that everywhere; the Tailscale code keeps its label.
+        match (copied, card) {
+            (true, _) => "Copied",
+            (false, PathCard::EasyConnect) => "Copy Easy Connect code",
+            (false, PathCard::Tailscale) => "Copy as text",
+        },
         Some(if copied {
             ICON_CIRCLE_CHECK_FILLED
         } else {
@@ -602,7 +607,7 @@ fn phone_panel(tab: &mut RemoteTab, t: &RemoteTokens, cx: &mut Context<RemoteTab
                 "Click the QR here and point the phone at it. If it can’t scan, click ",
                 Emph::Plain,
             ),
-            ("Copy as text", Emph::Strong),
+            ("Copy Easy Connect code", Emph::Strong),
             (
                 " under the QR and paste the code on the phone.",
                 Emph::Plain,
@@ -711,7 +716,7 @@ fn computer_panel(
             ("Click ", Emph::Plain),
             ("Show QR", Emph::Strong),
             (" below, then ", Emph::Plain),
-            ("Copy as text", Emph::Strong),
+            ("Copy Easy Connect code", Emph::Strong),
             (". The code works once, for 5 minutes.", Emph::Plain),
         ],
         vec![

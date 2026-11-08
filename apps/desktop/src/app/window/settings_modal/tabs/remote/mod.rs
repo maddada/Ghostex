@@ -24,6 +24,23 @@
 //! a phone pairs) and a slow one (10s: SSH access, Tailscale and the paired devices, which shell
 //! out on the daemon), each guarded so a slow daemon never stacks requests; both stop as soon as
 //! the page is left or Settings closes (`use-remote-access.ts` (deleted 2026-10-01)).
+/// `/api/pairComputer`'s params for an Easy Connect code pasted from another computer's Show QR
+/// sheet; `None` for a code without its one-time secret (the pair-again notice uses it too).
+pub(crate) fn easy_connect_pairing_params(code: &str) -> Option<serde_json::Value> {
+    model::computer_pairing_params(code)
+}
+
+/// `machine` (a `remoteMachines` entry) with `code` as its new Easy Connect code, saved the way
+/// the machine dialog saves it; `None` when the code doesn't read.
+pub(crate) fn machine_with_easy_connect_code(
+    machine: &serde_json::Value,
+    code: &str,
+) -> Option<serde_json::Value> {
+    let mut draft = model::machine_draft_from_settings(machine);
+    model::apply_easy_connect_code(&mut draft, code);
+    model::normalize_remote_machine_draft(&draft)
+}
+
 mod advanced;
 mod app_update;
 mod easy_connect;

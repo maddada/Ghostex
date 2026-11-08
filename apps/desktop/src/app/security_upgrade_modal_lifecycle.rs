@@ -1,6 +1,7 @@
-//! Open, poll and answer the 11.0.1 security notice (window/security_upgrade_modal.rs): while it is
-//! open the app reads the rows' status and the pairing code every 3 seconds, so a phone ticks off
-//! as it pairs again and the code stays fresh.
+//! Open, poll and answer the pair-again notice (window/security_upgrade_modal.rs): while it is open
+//! the app reads the rows' status every 3 seconds, so a device ticks off as it pairs again, and,
+//! while an Easy Connect phone's page is open, the pairing code too. It also runs Deny and an Easy
+//! Connect computer's pairing (`/api/pairComputer`, then the machine's new code saved).
 //!
 //! Pairing v2 (GitHub #495): the code is `/api/remotePairingCode` with `openTunnel: true`, the call
 //! the Show QR sheet in Settings > Remote makes, which answers with a code only to the owner's
@@ -18,24 +19,43 @@ use std::time::Duration;
 const POLL_EVERY: Duration = Duration::from_secs(3);
 /// How soon a click on Show code is noticed between rounds.
 const SHOW_CODE_TICK: Duration = Duration::from_millis(200);
+const COMPUTER_PAIRING_POLL: Duration = Duration::from_millis(1500);
+/// `/api/pairComputer` opens a tunnel and waits for the other computer's answer.
+const COMPUTER_PAIRING_START_TIMEOUT: Duration = Duration::from_secs(60);
+/// Approving can wait on the other computer's Windows administrator prompt.
+const COMPUTER_PAIRING_STATUS_TIMEOUT: Duration = Duration::from_secs(190);
 const NO_CODE: &str = "Turn on Easy Connect in Settings \u{203a} Remote to pair phones.";
 
-/// The pairing code from a `/api/remotePairingCode` answer.
-pub(crate) fn security_notice_code(answer: Result<&Value, String>) -> SecurityNoticeCode {
+/// The pairing code from a `/api/remotePairingCode` answer, and its text for Copy Easy Connect code
+/// (the bare `ghostex-ec1:` code, with its one-time secret since the QR payload is there).
+pub(crate) fn security_notice_code(
+    answer: Result<&Value, String>,
+) -> (SecurityNoticeCode, Option<String>) {
     match answer {
         Ok(answer) => match answer
             .pointer("/easyConnect/payload")
             .and_then(Value::as_str)
             .filter(|payload| !payload.is_empty())
         {
-            Some(payload) => SecurityNoticeCode::Ready(payload.to_string()),
-            None => SecurityNoticeCode::Unavailable(NO_CODE.to_string()),
+            Some(payload) => (
+                SecurityNoticeCode::Ready(payload.to_string()),
+                answer
+                    .pointer("/easyConnect/text")
+                    .and_then(Value::as_str)
+                    .filter(|text| !text.is_empty())
+                    .map(str::to_string),
+            ),
+            None => (SecurityNoticeCode::Unavailable(NO_CODE.to_string()), None),
         },
-        Err(error) => SecurityNoticeCode::Unavailable(error),
+        Err(error) => (SecurityNoticeCode::Unavailable(error), None),
     }
 }
 
-fn security_notice_state(view: &Value, code: SecurityNoticeCode) -> SecurityUpgradeModalState {
+fn security_notice_state(
+    view: &Value,
+    (code, code_text): (SecurityNoticeCode, Option<String>),
+    computer_pairing: Vec<(String, NoticeComputerPairing)>,
+) -> SecurityUpgradeModalState {
     let (phones, computers) = notice_rows(
         view,
         &remote_last_connected_ms,
@@ -48,6 +68,8 @@ fn security_notice_state(view: &Value, code: SecurityNoticeCode) -> SecurityUpgr
         ssh_phones,
         ssh_computers,
         code,
+        code_text,
+        computer_pairing,
     }
 }
 
@@ -57,7 +79,8 @@ impl GhostexGpuiApp {
         view: &Value,
         cx: &mut gpui::Context<Self>,
     ) {
-        let state = security_notice_state(view, SecurityNoticeCode::Hidden);
+        self.security_notice_computer_pairing.clear();
+        let state = security_notice_state(view, (SecurityNoticeCode::Hidden, None), Vec::new());
         // Computers over SSH need nothing, so they never open the notice by themselves.
         if state.phones.is_empty() && state.computers.is_empty() && state.ssh_phones.is_empty() {
             return;
@@ -102,7 +125,7 @@ impl GhostexGpuiApp {
                     .map_err(|error| error.to_string());
                     security_notice_code(answer.as_ref().map_err(Clone::clone))
                 } else {
-                    SecurityNoticeCode::Hidden
+                    (SecurityNoticeCode::Hidden, None)
                 };
                 let open = this
                     .update(cx, |app, cx| {
@@ -115,7 +138,11 @@ impl GhostexGpuiApp {
                             return true;
                         }
                         if let Ok(view) = &view {
-                            let state = security_notice_state(view, code);
+                            let state = security_notice_state(
+                                view,
+                                code,
+                                app.security_notice_computer_pairing.clone(),
+                            );
                             app.update_native_app_modal(
                                 kind,
                                 cx,
@@ -165,10 +192,34 @@ impl GhostexGpuiApp {
         command: SecurityUpgradeModalCommand,
         cx: &mut gpui::Context<Self>,
     ) {
-        // Show code: the poll asks for the live code from now on (the notice stays open).
-        if matches!(command, SecurityUpgradeModalCommand::ShowCode) {
-            self.security_notice_code_shown = true;
-            return;
+        match command {
+            // An Easy Connect phone's page: the poll asks for the live code while it is open.
+            SecurityUpgradeModalCommand::ShowCode => {
+                self.security_notice_code_shown = true;
+                return;
+            }
+            SecurityUpgradeModalCommand::HideCode => {
+                self.security_notice_code_shown = false;
+                return;
+            }
+            // Deny needs no approval: `/api/removePairedDevice` with a pending id denies it.
+            SecurityUpgradeModalCommand::DenyPending(pending_id) => {
+                cx.spawn(async move |_, _| {
+                    let _ = gx_rpc(
+                        None,
+                        "/api/removePairedDevice",
+                        json!({ "deviceId": pending_id }),
+                    )
+                    .await;
+                })
+                .detach();
+                return;
+            }
+            SecurityUpgradeModalCommand::PairComputer { machine_id, code } => {
+                self.pair_security_notice_computer(machine_id, code, cx);
+                return;
+            }
+            _ => {}
         }
         if let SecurityUpgradeModalCommand::ApprovePending(approval_id) = &command {
             // The system prompt, then the signed approval; never on the main thread.
@@ -201,32 +252,170 @@ impl GhostexGpuiApp {
         match command {
             SecurityUpgradeModalCommand::Later => answer("later"),
             SecurityUpgradeModalCommand::Done => answer("done"),
-            SecurityUpgradeModalCommand::PairComputer(machine_id) => {
-                self.open_gpui_settings_remote_machine(&machine_id, cx);
-            }
             SecurityUpgradeModalCommand::OpenRemoteSettings => {
                 self.open_gpui_settings_tab("remote", None, cx);
             }
-            SecurityUpgradeModalCommand::ApprovePending(_)
-            | SecurityUpgradeModalCommand::ShowCode => {}
+            _ => {}
         }
     }
 
-    /// Settings > Remote with that computer's edit dialog open (`initialRemoteMachineId`).
-    fn open_gpui_settings_remote_machine(
+    fn set_security_notice_computer_pairing(
         &mut self,
         machine_id: &str,
+        pairing: NoticeComputerPairing,
+    ) {
+        self.security_notice_computer_pairing
+            .retain(|(id, _)| id != machine_id);
+        self.security_notice_computer_pairing
+            .push((machine_id.to_string(), pairing));
+    }
+
+    /*
+    CDXC:RemotePairing 2026-11-08 DECISION:
+    User (11.1.1, Q1876 A): an Easy Connect computer's page in the notice takes the other
+    computer's Easy Connect code and pairs right there, as Settings > Remote's machine dialog does
+    (`/api/pairComputer`, then `/api/computerPairingStatus` until the owner approves on the other
+    computer), and once approved saves that machine's entry with the new code, so its row ticks off.
+    */
+    fn pair_security_notice_computer(
+        &mut self,
+        machine_id: String,
+        code: String,
         cx: &mut gpui::Context<Self>,
     ) {
-        let modal = GpuiAppModalKind::Settings;
-        let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
-        let open_message = json!({
-            "initialRemoteMachineId": machine_id,
-            "initialTab": "remote",
-            "modal": modal.modal_id(),
-            "type": "open",
-            "latestSidebarStateMessage": sidebar_state_message.clone(),
-        });
-        self.open_gpui_app_modal_window(modal, open_message, sidebar_state_message, None, cx);
+        let Some(params) =
+            crate::app::window::settings_modal::tabs::remote::easy_connect_pairing_params(&code)
+        else {
+            self.set_security_notice_computer_pairing(
+                &machine_id,
+                NoticeComputerPairing::Failed(
+                    "That isn't a whole Easy Connect code. On the other computer, open Show QR and copy the Easy Connect code again.".to_string(),
+                ),
+            );
+            return;
+        };
+        self.set_security_notice_computer_pairing(&machine_id, NoticeComputerPairing::Starting);
+        cx.spawn(async move |this, cx| {
+            let started = crate::app::gx_store::gx_rpc_with_timeout(
+                None,
+                "/api/pairComputer",
+                params,
+                COMPUTER_PAIRING_START_TIMEOUT,
+            )
+            .await;
+            let failed = |message: String| NoticeComputerPairing::Failed(message);
+            let (pending_id, words, computer) = match started {
+                Ok(value) => {
+                    let words: Vec<String> = value["words"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|word| word.as_str().map(str::to_string))
+                        .collect();
+                    match value["pendingId"].as_str() {
+                        Some(pending_id) if words.len() == 3 => (
+                            pending_id.to_string(),
+                            words,
+                            value["computerName"]
+                                .as_str()
+                                .unwrap_or("the other computer")
+                                .to_string(),
+                        ),
+                        _ => {
+                            let _ = this.update(cx, |app, _| {
+                                app.set_security_notice_computer_pairing(
+                                    &machine_id,
+                                    failed("The other computer sent an unreadable answer.".into()),
+                                )
+                            });
+                            return;
+                        }
+                    }
+                }
+                Err(error) => {
+                    let _ = this.update(cx, |app, _| {
+                        app.set_security_notice_computer_pairing(
+                            &machine_id,
+                            failed(error.to_string()),
+                        )
+                    });
+                    return;
+                }
+            };
+            let _ = this.update(cx, |app, _| {
+                app.set_security_notice_computer_pairing(
+                    &machine_id,
+                    NoticeComputerPairing::Waiting {
+                        words,
+                        computer: computer.clone(),
+                    },
+                )
+            });
+            loop {
+                cx.background_executor()
+                    .timer(COMPUTER_PAIRING_POLL)
+                    .await;
+                let answer = crate::app::gx_store::gx_rpc_with_timeout(
+                    None,
+                    "/api/computerPairingStatus",
+                    json!({ "pendingId": pending_id }),
+                    COMPUTER_PAIRING_STATUS_TIMEOUT,
+                )
+                .await;
+                let outcome = match answer.as_ref().ok().and_then(|value| value["status"].as_str()) {
+                    Some("pending") => continue,
+                    Some("approved") => NoticeComputerPairing::Paired,
+                    Some("denied") => failed(format!(
+                        "{computer} denied this computer. Show a new code there and try again."
+                    )),
+                    _ => match answer {
+                        Err(error) => failed(error.to_string()),
+                        Ok(_) => failed(format!(
+                            "Nobody approved this computer on {computer} in time. Show a new code there and try again."
+                        )),
+                    },
+                };
+                let _ = this.update(cx, |app, cx| {
+                    if outcome == NoticeComputerPairing::Paired {
+                        app.save_security_notice_computer_code(&machine_id, &code, cx);
+                    }
+                    app.set_security_notice_computer_pairing(&machine_id, outcome);
+                });
+                break;
+            }
+        })
+        .detach();
+    }
+
+    /// The paired machine's Settings > Remote entry with its new Easy Connect code.
+    fn save_security_notice_computer_code(
+        &mut self,
+        machine_id: &str,
+        code: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let saved = crate::shared_settings::shared_sidebar_settings_snapshot();
+        let machines: Vec<Value> = saved
+            .object()
+            .get("remoteMachines")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|machine| {
+                if machine.get("id").and_then(Value::as_str) == Some(machine_id) {
+                    crate::app::window::settings_modal::tabs::remote::machine_with_easy_connect_code(
+                        &machine, code,
+                    )
+                    .unwrap_or(machine)
+                } else {
+                    machine
+                }
+            })
+            .collect();
+        self.handle_gpui_app_modal_update_settings_patch_message(
+            &json!({ "patch": { "remoteMachines": machines } }),
+            cx,
+        );
     }
 }
