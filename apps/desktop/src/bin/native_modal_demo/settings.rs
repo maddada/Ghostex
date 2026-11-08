@@ -177,6 +177,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             SettingsModalCommand::PickSystemColor { key, initial } => {
                 eprintln!("system colour panel: {key} from {initial}")
             }
+            SettingsModalCommand::ApproveRequest { id, reply } => {
+                eprintln!("approve request {id} (Touch ID in the app)");
+                cx.defer(move |cx| reply(Ok(serde_json::json!({ "approved": true })), cx));
+            }
             SettingsModalCommand::GxserverRpc {
                 path,
                 params,

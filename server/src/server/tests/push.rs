@@ -103,6 +103,7 @@ fn insert_paired_device(state: &AppState, device_id: &str) {
             api_token_hash: None,
             paired_at: "2026-10-31T10:00:00.000Z".to_string(),
             last_seen_at: None,
+            ..Default::default()
         })
         .expect("insert paired device");
 }
@@ -121,6 +122,7 @@ fn insert_phone_with_api_token(state: &AppState, device_id: &str) -> String {
             api_token_hash: Some(crate::auth::hash_device_api_token(&token)),
             paired_at: "2026-11-07T10:00:00.000Z".to_string(),
             last_seen_at: None,
+            ..Default::default()
         })
         .expect("insert paired device");
     crate::remote_access::reload_device_api_tokens(&db, &state.device_api_tokens)
@@ -795,6 +797,7 @@ async fn push_token_store_repairing_a_phone_revokes_the_replaced_pairing() {
                 api_token_hash: None,
                 paired_at: "2026-11-05T10:00:00.000Z".to_string(),
                 last_seen_at: None,
+                ..Default::default()
             })
             .expect("insert paired device");
     };

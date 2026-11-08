@@ -171,4 +171,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0059_paired_device_api_token",
     "0060_coordinator_board_tag",
     "0061_tailcat_relay",
+    "0062_pairing_v2_device_keys",
 ];

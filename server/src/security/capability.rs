@@ -165,7 +165,9 @@ pub enum RouteAccess {
 /// [`super::require_owner_presence`] from its handler for the sensitive part.
 pub fn route_access(path: &str) -> RouteAccess {
     match path {
-        "/api/health" | "/api/pairDevice" => RouteAccess::Public,
+        "/api/health" | "/api/pairDevice" | "/api/pairingStatus" | "/api/renewDeviceToken" => {
+            RouteAccess::Public
+        }
         super::APPROVALS_LIST_ENDPOINT
         | super::APPROVALS_APPROVE_ENDPOINT
         | super::APPROVALS_DENY_ENDPOINT

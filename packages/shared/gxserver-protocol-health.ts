@@ -120,12 +120,34 @@ export interface GxserverPairedDevice {
   sshKeyFingerprint: string;
   /** The phone's Easy Connect client key; null for a phone paired by an older Ghostex app. */
   tailcatClientKey: string | null;
+  /**
+   * `paired`, or `legacy`: paired before 11.0.1, with no access left, listed until it pairs again
+   * or is removed (GitHub #495). Absent from an older Ghostex.
+   */
+  status?: 'paired' | 'legacy';
+  /** The device key its token is bound to (pairing v2). */
+  deviceKeyId?: string | null;
+  /** When its device token lapses unless the device key renews it. */
+  tokenExpiresAt?: string | null;
+}
+
+/** A phone waiting for the owner's approval, with the words both screens show (pairing v2). */
+export interface GxserverPendingDevice {
+  id: string;
+  name: string;
+  platform: string;
+  words: readonly string[];
+  /** The `pairingApproveDevice` approval request to approve (signed) or deny. */
+  approvalId: string;
+  requestedAtMs: number;
+  expiresAtMs: number;
 }
 
 // M2 (paired devices + pairing registration): served by
 // `server/src/remote_access/{paired_devices,pair_device}.rs`.
 export interface GxserverPairedDevicesResult {
   devices: readonly GxserverPairedDevice[];
+  pending?: readonly GxserverPendingDevice[];
 }
 
 export interface GxserverRemovePairedDeviceParams {
@@ -134,6 +156,7 @@ export interface GxserverRemovePairedDeviceParams {
 
 export interface GxserverRemovePairedDeviceResult {
   devices: readonly GxserverPairedDevice[];
+  pending?: readonly GxserverPendingDevice[];
 }
 
 export interface GxserverPairDeviceParams {
@@ -142,14 +165,47 @@ export interface GxserverPairDeviceParams {
   platform: string;
   sshPublicKey: string;
   tailcatClientKey?: string;
+  /** Pairing v2: the phone's P-256 device key (`ecdsaP256Sha256`, 65-byte point, base64). */
+  deviceKey: { algorithm: 'ecdsaP256Sha256'; publicKey: string };
+  /** The phone's biometric-locked approver key, enrolled when the pairing is approved. */
+  approverKey?: { algorithm: string; publicKey: string; presence: string };
 }
 
+/** Pairing v2: the phone is Pending until the owner compares the words and approves. */
 export interface GxserverPairDeviceResult {
-  deviceId: string;
+  status: 'pending';
+  pendingId: string;
+  words: readonly string[];
+  expiresAtMs: number;
   user: string;
   computerName: string;
-  /** The phone's own API token; removing the device revokes it. Only its hash is stored. */
+}
+
+/** `/api/pairingStatus` and `/api/renewDeviceToken`: signed by the device key. */
+export interface GxserverSignedDeviceAsk {
+  /** `pendingId` (pairingStatus) or `deviceId` (renewDeviceToken). */
+  pendingId?: string;
+  deviceId?: string;
+  timestampMs: number;
+  /** ASN.1 DER ECDSA P-256 signature, base64, over the payload in packages/gx-protocol/src/pairing.rs. */
+  signature: string;
+}
+
+export interface GxserverPairingStatusResult {
+  status: 'pending' | 'approved' | 'denied' | 'expired';
+  deviceId?: string;
+  /** The phone's own API token, bound to its device key; only its hash is stored. */
+  deviceApiToken?: string;
+  deviceTokenExpiresAtMs?: number;
+  user?: string;
+  computerName?: string;
+  easyConnectAddresses?: unknown;
+}
+
+export interface GxserverRenewDeviceTokenResult {
+  deviceId: string;
   deviceApiToken: string;
+  deviceTokenExpiresAtMs: number;
 }
 
 export interface GxserverPairedDeviceSeenParams {

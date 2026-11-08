@@ -34,7 +34,7 @@ every route as `RouteHttpRequest::caller`.
 | Principal | Token | Notes |
 | --- | --- | --- |
 | `Owner { device_id }` | `gxo_…`, in the desktop app's memory only | Opened with the owner key (`/api/openOwnerSession`). gxserver keeps only its hash (newest four per device), so it survives a gxserver restart. |
-| `Device { device_id }` | `gxd_…` today | A paired phone. Pairing v2 replaces the token; until then `device_id` is `token:<first 12 hex of the hash>`. |
+| `Device { device_id }` | `gxd_…`, bound to the phone's device key | A paired phone; `device_id` is its row in Paired devices (pairing v2, see below). |
 | `Session { project_id, session_id, role }` | `gxs_…`, in the session's `GHOSTEX_SESSION_TOKEN` | Issued when an agent or terminal starts (zmx and wmx), the same token again when that session starts again, revoked when the session is deleted (and by a 5-minute sweep for sessions deleted another way). `role` from the coordinator markers: `agent`, `coordinator`, `thread`. The `ghostex` CLI inside a session sends it. |
 | `LocalAgent` | the token file `gxserver/auth/token` | Agent level plus thread management (user decision 3A). Hooks, plugins, older sessions and the CLI in the user's own terminal use it. |
 | `Peer { server_id, name }` | a connected computer's grant | Keeps `PEER_ALLOWED_ENDPOINTS`. May ask (answering a prompt or typing into a session here go through the same gate as an agent here). |
@@ -252,6 +252,37 @@ approval on their computer or phone (the request is an agent's, so it shows as a
 runs the tool again with the approval (calls that already went through are not repeated) and
 announces the result; a denial or a lapse is announced too. Test:
 `server/src/server/tests/voice_caller_token.rs`.
+
+## Pairing v2 (devices)
+
+Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairing.rs`.
+
+- `/api/remotePairingCode` gives a code (the one-time nonce) only to `Principal::Owner` with
+  `openTunnel: true` (the desktop's Show QR sheet is open); everyone else gets the Easy Connect
+  details with empty `payload`/`text` and no `secret`. A code lives 5 minutes and is single-use.
+- `/api/pairDevice` (public) takes `deviceKey` (P-256, `ecdsaP256Sha256`) and optionally the
+  phone's `approverKey`, consumes the code, and answers `{ status: "pending", pendingId, words }`.
+  It creates a `pairingApproveDevice` approval request (target: the pending id; the detail names
+  the three words) with `Principal::Anonymous` as requester. Nothing is granted yet.
+- Words: SHA-256 of `ghostex-pairing-words-v1\n<nonce>\n<deviceKey.publicKey>`, first three bytes,
+  each an index into `PAIRING_WORDS` (256 words). The phone computes them itself.
+- `/api/pairingStatus` (public) `{ pendingId, timestampMs, signature }`, signed by the device key
+  over `ghostex-pairing-status-v1\n<pendingId>\n<timestampMs>`. The ask that finds the approval
+  signed spends it and writes the pairing: the restricted SSH line, the device row with its key, a
+  `gxd_` token (30 days) and, if sent, the phone's approver key (enrolled with the same approval).
+- `/api/renewDeviceToken` (public) `{ deviceId, timestampMs, signature }` over
+  `ghostex-device-token-v1\n<deviceId>\n<timestampMs>`: a fresh token, the old one stops working.
+- `/api/pairedDevices` lists `pending` (with words) beside `devices` (`status`: `paired` or
+  `legacy`). `/api/removePairedDevice` revokes a device (key line, token, push, allow-list entry,
+  approver key) or denies a pending one; it never needs approval.
+- Computers pair the same way (`kind: "computer"` on `/api/pairDevice`, sent by the connecting
+  computer's gxserver from `/api/pairComputer`, `remote_access/computer_pairing.rs`): Pending, three
+  words, the signed approval; what it grants is only the computer's tailcat client key on the
+  allow-list (no SSH line, no token: a computer signs in with its own SSH login and reaches
+  gxserver through connected-computer grants). An empty Easy Connect allow-list is closed.
+- Rows from before 11.0.1 are `legacy`: no token, SSH line removed at start where no Windows
+  administrator prompt is needed. `remote_access::has_active_easy_connect_devices(&db)` and
+  `easy_connect_devices_to_pair_again(&db)` are for the one-time re-pair notice.
 
 ## Not covered yet
 

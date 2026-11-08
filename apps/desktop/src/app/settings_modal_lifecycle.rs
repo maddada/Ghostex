@@ -243,6 +243,20 @@ impl GhostexGpuiApp {
                 })
                 .detach();
             }
+            SettingsModalCommand::ApproveRequest { id, reply } => {
+                // The system prompt, then the signed approval; never on the main thread.
+                let background = cx.background_executor().clone();
+                cx.spawn(async move |_, cx| {
+                    let result = background
+                        .spawn(async move {
+                            crate::app::owner_security::approve_local_request_id(&id)
+                                .map(|()| serde_json::json!({ "approved": true }))
+                        })
+                        .await;
+                    cx.update(|cx| reply(result, cx));
+                })
+                .detach();
+            }
             SettingsModalCommand::RemoteGxserverRpc {
                 machine_id,
                 path,

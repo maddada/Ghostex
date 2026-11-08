@@ -1,9 +1,12 @@
 use axum::http::StatusCode;
 use serde_json::{json, Value};
 
+use ghostex_gx_protocol::pairing::PairingStatus;
+
 use crate::{
     domain::read_domain_rpc_params,
     protocol::{rpc_error, rpc_success},
+    security::Principal,
     server::{routed_json, AppState, RoutedResponse},
     storage::open_gxserver_database,
     tailcat::{
@@ -29,6 +32,7 @@ long as the user takes.
 */
 pub(crate) async fn handle_remote_access_http(
     state: &AppState,
+    caller: &Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -51,6 +55,8 @@ pub(crate) async fn handle_remote_access_http(
     let pairing_runtime = state.remote_pairing_runtime.clone();
     let device_tokens = state.device_api_tokens.clone();
     let logger = state.logger.clone();
+    let security = state.security.clone();
+    let caller = caller.clone();
     // Read here: the security log is written from the blocking pool, where the request's caller
     // is not visible.
     let actor = crate::audit::Actor::current();
@@ -94,14 +100,26 @@ pub(crate) async fn handle_remote_access_http(
             })
             .await
         }
+        /*
+        CDXC:RemotePairing 2026-11-08 DECISION:
+        User (GitHub #495, Q1721): "No API returns a pairing secret; only the desktop Show QR sheet
+        makes one." The review found this route handing the one-time secret (and so a pairing) to
+        any caller with the main token, every agent included. Now only the desktop app's owner
+        session gets a code, and only while its Show QR sheet (or the 11.0.1 notice's QR) is open
+        (`openTunnel`, which both send); the code lives five minutes and pairs nothing by itself (the phone waits as
+        Pending for a signed approval). Every other caller, and the desktop with the sheet closed,
+        gets the Easy Connect details without a code (empty `payload`, a `text` code with no `secret`, which a computer connects with and a phone can't pair with),
+        and the live code lapses by itself. The Tailscale half carries no secret and is unchanged.
+        */
         "/api/remotePairingCode" => {
-            // The Show QR dialog is open: a new phone must get through the allow-list to pair.
             let open_tunnel = params
                 .get("openTunnel")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
+            let show_code = open_tunnel && may_show_pairing_code(&caller);
             tokio::task::spawn_blocking(move || {
-                if open_tunnel {
+                if show_code {
+                    // The Show QR dialog is open: a new phone must get through the allow-list to pair.
                     hold_tailcat_pairing_window_open(&paths, &tailcat_runtime);
                 }
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
@@ -112,8 +130,16 @@ pub(crate) async fn handle_remote_access_http(
                     (pairing_qr_address(&status), public_pairing_address(&status))
                 {
                     let db = open_gxserver_database(&paths)?;
-                    let secret = pairing_runtime.ensure_secret(&db)?;
-                    log_new_pairing_code(&secret.secret_hash, actor);
+                    // A closed sheet doesn't drop the live code: the 11.0.1 notice shows the same
+                    // code while Settings > Remote polls without `openTunnel`, and the code lapses by
+                    // itself within five minutes.
+                    let secret = if show_code {
+                        let secret = pairing_runtime.ensure_secret(&db)?;
+                        log_new_pairing_code(&secret.secret_hash, actor);
+                        Some(secret.secret)
+                    } else {
+                        None
+                    };
                     let code = EasyConnectCode {
                         v: 1,
                         address: text_address,
@@ -121,20 +147,14 @@ pub(crate) async fn handle_remote_access_http(
                         user: identity.username.clone(),
                         port: tailcat_gxserver_api_port(),
                         ssh_port,
-                        secret: Some(secret.secret.clone()),
+                        secret,
                         // The phone learns a code expired from `/api/pairDevice`; leaving the
                         // time out of the QR keeps it smaller.
                         expires_at: None,
                     };
-                    let text = encode_easy_connect_code(&code);
-                    // The QR names our relay when it answers; Copy as text keeps the public address.
-                    let qr_code = EasyConnectCode {
-                        address: qr_address,
-                        ..code.clone()
-                    };
                     result.insert(
                         "easyConnect".to_string(),
-                        json!({ "payload": easy_connect_pairing_link(&qr_code), "text": text, "code": code }),
+                        easy_connect_pairing_entry(code, qr_address),
                     );
                 }
                 if let Some((host, ip)) = cached_tailscale_status().reachable_address() {
@@ -156,13 +176,24 @@ pub(crate) async fn handle_remote_access_http(
             })
             .await
         }
+        // `pending`: phones waiting for approval, with the words to compare (pairing v2).
         "/api/pairedDevices" => {
             tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
-                Ok(json!({ "devices": list_paired_devices_json(&db)? }))
+                Ok(json!({
+                    "devices": list_paired_devices_json(&db)?,
+                    "pending": waiting_devices(&pairing_runtime, &security),
+                }))
             })
             .await
         }
+        /*
+        CDXC:RemotePairing 2026-11-08 DECISION:
+        User (GitHub #495, Q1721): "One-tap revoke." Removing is always allowed (it only closes a
+        door), from the desktop or any paired phone: the device's SSH key line, its token, its push
+        registration, its tailcat allow-list entry and its approver key go at once. A Pending
+        device's id denies its approval request and drops it.
+        */
         "/api/removePairedDevice" => {
             let device_id = match read_device_id(&params) {
                 Ok(device_id) => device_id,
@@ -170,7 +201,29 @@ pub(crate) async fn handle_remote_access_http(
             };
             tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
-                let Some(removed) = remove_paired_device(
+                let now = crate::security::now_ms();
+                if let Some(pending) = pairing_runtime.pending(&device_id, now) {
+                    pairing_runtime.remove_pending(&device_id);
+                    crate::audit::record(
+                        crate::audit::Action::new("pairing.deny", "Denied a phone waiting to pair")
+                            .target(pending.name.clone()),
+                        actor,
+                        crate::audit::Outcome::Done,
+                        None,
+                    );
+                    if let Ok(request) = security.approvals.deny(&pending.approval_id, &caller, now)
+                    {
+                        security.publish(crate::security::SecurityEvent::ApprovalDenied {
+                            request,
+                            by: caller.clone(),
+                        });
+                    }
+                    return Ok(json!({
+                        "devices": list_paired_devices_json(&db)?,
+                        "pending": waiting_devices(&pairing_runtime, &security),
+                    }));
+                }
+                let Some(device) = remove_paired_device(
                     &paths,
                     &db,
                     &tailcat_runtime,
@@ -180,14 +233,19 @@ pub(crate) async fn handle_remote_access_http(
                 else {
                     return Err(RemoteAccessHttpError::unknown_device(&device_id));
                 };
+                forget_approver_key(&security, &device, &caller);
+                // A revoke never needs approval, so it has no SensitiveAction; the log still says it.
                 crate::audit::record(
                     crate::audit::Action::new("pairing.remove", "Removed a paired phone")
-                        .target(removed.name),
+                        .target(device.name.clone()),
                     actor,
                     crate::audit::Outcome::Done,
                     None,
                 );
-                Ok(json!({ "devices": list_paired_devices_json(&db)? }))
+                Ok(json!({
+                    "devices": list_paired_devices_json(&db)?,
+                    "pending": waiting_devices(&pairing_runtime, &security),
+                }))
             })
             .await
         }
@@ -225,57 +283,143 @@ pub(crate) async fn handle_remote_access_http(
             tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
                 let device_name = params.device_name.clone();
-                let outcome = pair_device(
-                    &paths,
-                    &db,
-                    &tailcat_runtime,
-                    &pairing_runtime,
-                    &device_tokens,
-                    &logger,
-                    params,
-                );
-                // The phone pairing calls with the code alone; the log names it.
-                let actor = match actor {
-                    crate::audit::Actor::Ghostex => crate::audit::Actor::PairedDevice {
-                        id: outcome
-                            .as_ref()
-                            .ok()
-                            .map(|outcome| outcome.device_id.clone()),
-                        name: device_name.clone(),
-                    },
-                    actor => actor,
-                };
+                let started = begin_pairing(&db, &pairing_runtime, &security, params);
+                // The phone asks with the code alone; the log names it.
                 crate::audit::record(
-                    crate::audit::Action::new("pairing.pair", "A phone paired with this computer")
-                        .target(device_name),
-                    actor,
-                    match &outcome {
-                        Ok(_) => crate::audit::Outcome::Done,
-                        Err(PairDeviceError::RateLimited) => {
-                            crate::audit::Outcome::Refused("Too many pairing attempts.".to_string())
-                        }
-                        Err(PairDeviceError::CodeExpired) => crate::audit::Outcome::Refused(
-                            "The pairing code was wrong, used or expired.".to_string(),
-                        ),
-                        Err(PairDeviceError::BadRequest(message)) => {
-                            crate::audit::Outcome::Refused(message.clone())
-                        }
-                        Err(PairDeviceError::ApprovalDeclined) => crate::audit::Outcome::Denied,
-                        Err(PairDeviceError::Internal(error)) => {
-                            crate::audit::Outcome::Failed(format!("{error:#}"))
-                        }
+                    crate::audit::Action::new(
+                        "pairing.request",
+                        "A new phone asked to pair with this computer",
+                    )
+                    .target(device_name.clone()),
+                    crate::audit::Actor::PairedDevice {
+                        id: None,
+                        name: device_name,
+                    },
+                    match &started {
+                        Ok(_) => crate::audit::Outcome::Pending,
+                        Err(error) => pair_device_error_outcome(error),
                     },
                     None,
                 );
-                let outcome = outcome?;
-                let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
+                let started = started?;
+                // The phone waits through the tunnel; keep a locked Easy Connect open to it.
+                hold_tailcat_pairing_window_open(&paths, &tailcat_runtime);
                 Ok(json!({
-                    "deviceId": outcome.device_id,
-                    "user": outcome.user,
-                    "computerName": outcome.computer_name,
-                    "deviceApiToken": outcome.device_api_token,
-                    "easyConnectAddresses": easy_connect_addresses(&status),
+                    "status": PairingStatus::Pending,
+                    "pendingId": started.pending_id,
+                    "words": started.words,
+                    "expiresAtMs": started.expires_at_ms,
+                    "user": started.user,
+                    "computerName": started.computer_name,
                 }))
+            })
+            .await
+        }
+        "/api/pairingStatus" => {
+            let ask = match parse_signed_ask(&params) {
+                Ok(ask) => ask,
+                Err(error) => {
+                    return RemoteAccessHttpError::from(error)
+                        .into_response(endpoint_path, request_id)
+                }
+            };
+            tokio::task::spawn_blocking(move || {
+                let db = open_gxserver_database(&paths)?;
+                let context = PairingContext {
+                    paths: &paths,
+                    db: &db,
+                    tailcat_runtime: &tailcat_runtime,
+                    pairing_runtime: &pairing_runtime,
+                    device_tokens: &device_tokens,
+                    security: &security,
+                    logger: &logger,
+                    append_key: &append_authorized_key,
+                    remove_key: &remove_authorized_key,
+                };
+                let answer = pairing_status(&context, ask)?;
+                if answer.status == PairingStatus::Pending {
+                    hold_tailcat_pairing_window_open(&paths, &tailcat_runtime);
+                }
+                let mut result = json!({ "status": answer.status });
+                if let (Some(object), Some(Value::Object(approved))) =
+                    (result.as_object_mut(), answer.approved)
+                {
+                    object.extend(approved);
+                    let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
+                    object.insert(
+                        "easyConnectAddresses".to_string(),
+                        json!(easy_connect_addresses(&status)),
+                    );
+                }
+                Ok(result)
+            })
+            .await
+        }
+        // The connecting computer's side of pairing through Easy Connect (computer_pairing.rs).
+        "/api/pairComputer" => {
+            let code = match super::computer_pairing::parse_computer_pairing_code(&params) {
+                Ok(code) => code,
+                Err(error) => {
+                    return RemoteAccessHttpError::bad_request(format!("{error:#}"))
+                        .into_response(endpoint_path, request_id)
+                }
+            };
+            tokio::task::spawn_blocking(move || {
+                let name = code.name.clone();
+                let started = super::computer_pairing::start_computer_pairing(&paths, code);
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "pairing.computerRequest",
+                        "Asked another computer to let this one connect through Easy Connect",
+                    )
+                    .target(name),
+                    actor,
+                    match &started {
+                        Ok(_) => crate::audit::Outcome::Pending,
+                        Err(error) => crate::audit::Outcome::Failed(format!("{error:#}")),
+                    },
+                    None,
+                );
+                started.map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
+            })
+            .await
+        }
+        "/api/computerPairingStatus" | "/api/cancelComputerPairing" => {
+            let Some(pending_id) = params
+                .get("pendingId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+            else {
+                return RemoteAccessHttpError::bad_request("pendingId is required.")
+                    .into_response(endpoint_path, request_id);
+            };
+            let cancel = endpoint_path == "/api/cancelComputerPairing";
+            tokio::task::spawn_blocking(move || {
+                if cancel {
+                    super::computer_pairing::cancel_computer_pairing(&pending_id);
+                    return Ok(json!({ "status": "cancelled" }));
+                }
+                super::computer_pairing::computer_pairing_status(&pending_id)
+                    .map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
+            })
+            .await
+        }
+        "/api/renewDeviceToken" => {
+            let ask = match parse_signed_ask(&params) {
+                Ok(ask) => ask,
+                Err(error) => {
+                    return RemoteAccessHttpError::from(error)
+                        .into_response(endpoint_path, request_id)
+                }
+            };
+            tokio::task::spawn_blocking(move || {
+                let db = open_gxserver_database(&paths)?;
+                Ok(renew_device_token(
+                    &db,
+                    &pairing_runtime,
+                    &device_tokens,
+                    ask,
+                )?)
             })
             .await
         }
@@ -299,6 +443,46 @@ pub(crate) async fn handle_remote_access_http(
     }
 }
 
+/// The devices waiting for approval whose request still waits: one denied on an approval card (or
+/// lapsed) leaves the list at once, before the device itself hears it.
+pub(crate) fn waiting_devices(
+    pairing_runtime: &RemotePairingRuntime,
+    security: &crate::security::SecurityState,
+) -> Vec<ghostex_gx_protocol::pairing::PendingDevice> {
+    let now = crate::security::now_ms();
+    pairing_runtime
+        .list_waiting(now)
+        .into_iter()
+        .filter(|device| {
+            security
+                .approvals
+                .read(&device.approval_id, &Principal::Anonymous, now)
+                .is_some_and(|request| {
+                    request.status == ghostex_gx_protocol::approval::ApprovalStatus::Pending
+                })
+        })
+        .collect()
+}
+
+/// How a refused or failed pairing step reads in the security log.
+fn pair_device_error_outcome(error: &PairDeviceError) -> crate::audit::Outcome {
+    use crate::audit::Outcome;
+    match error {
+        PairDeviceError::RateLimited => Outcome::Refused("Too many pairing attempts.".to_string()),
+        PairDeviceError::CodeExpired => {
+            Outcome::Refused("The pairing code was wrong, used or expired.".to_string())
+        }
+        PairDeviceError::BadRequest(message) | PairDeviceError::BadSignature(message) => {
+            Outcome::Refused(message.clone())
+        }
+        PairDeviceError::NeedsAppUpdate => {
+            Outcome::Refused("The phone's Ghostex is too old to pair.".to_string())
+        }
+        PairDeviceError::ApprovalDeclined => Outcome::Denied,
+        PairDeviceError::Internal(error) => Outcome::Failed(format!("{error:#}")),
+    }
+}
+
 /// Logs a pairing code once per code: the Show QR sheet polls `/api/remotePairingCode` while it
 /// is open, and the same code comes back until it is used or expires.
 fn log_new_pairing_code(secret_hash: &str, actor: crate::audit::Actor) {
@@ -316,6 +500,30 @@ fn log_new_pairing_code(secret_hash: &str, actor: crate::audit::Actor) {
         crate::audit::Outcome::Done,
         None,
     );
+}
+
+/// The Easy Connect half of `/api/remotePairingCode`: `payload` (the QR link) only when `code`
+/// carries a secret (the Show QR sheet), empty otherwise; `text` (Copy as text, and the code another
+/// computer connects with, which needs no secret) carries the secret only in that same case.
+pub(crate) fn easy_connect_pairing_entry(code: EasyConnectCode, qr_address: String) -> Value {
+    let payload = if code.secret.is_some() {
+        // The QR names our relay when it answers; Copy as text keeps the public address.
+        let qr_code = EasyConnectCode {
+            address: qr_address,
+            ..code.clone()
+        };
+        easy_connect_pairing_link(&qr_code)
+    } else {
+        String::new()
+    };
+    let text = encode_easy_connect_code(&code);
+    json!({ "payload": payload, "text": text, "code": code })
+}
+
+/// Only the desktop app's own owner session (GitHub #495 Phase 2: minted after it proved the
+/// owner key, held in its memory) may get a pairing code.
+pub(crate) fn may_show_pairing_code(caller: &Principal) -> bool {
+    matches!(caller, Principal::Owner { .. })
 }
 
 fn read_device_id(body: &Value) -> Result<String, RemoteAccessHttpError> {
@@ -379,6 +587,16 @@ impl From<anyhow::Error> for RemoteAccessHttpError {
 impl From<PairDeviceError> for RemoteAccessHttpError {
     fn from(error: PairDeviceError) -> Self {
         match error {
+            PairDeviceError::NeedsAppUpdate => Self {
+                status: StatusCode::UPGRADE_REQUIRED,
+                code: PAIR_DEVICE_NEEDS_UPDATE_ERROR,
+                message: "Update Ghostex on this phone to pair it: this computer now pairs phones with their own device key, which this version of the app can't make.".to_string(),
+            },
+            PairDeviceError::BadSignature(message) => Self {
+                status: StatusCode::UNAUTHORIZED,
+                code: PAIRING_SIGNATURE_ERROR,
+                message,
+            },
             PairDeviceError::RateLimited => Self {
                 status: StatusCode::TOO_MANY_REQUESTS,
                 code: PAIR_DEVICE_RATE_LIMITED_ERROR,

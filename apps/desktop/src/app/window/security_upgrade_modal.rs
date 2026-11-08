@@ -32,6 +32,9 @@ const QR_PANEL_WIDTH: f32 = 196.0;
 pub(crate) enum SecurityNoticeRowStatus {
     Waiting,
     Paired,
+    /// Scanned the new code and waits for the owner's approval (pairing v2): the row shows the
+    /// three words and Approve.
+    Pending,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -41,6 +44,9 @@ pub(crate) struct SecurityNoticeRow {
     /// "iPhone · used 2 hours ago", "Mac · connected today".
     pub(crate) detail: String,
     pub(crate) status: SecurityNoticeRowStatus,
+    /// A `Pending` phone's three words, and its approval request.
+    pub(crate) words: Vec<String>,
+    pub(crate) approval_id: Option<String>,
 }
 
 /// The phone pairing code the notice shows (the Show QR sheet's code).
@@ -63,6 +69,9 @@ pub(crate) struct SecurityUpgradeModalState {
 /// What the notice asks its host to do. The notice removes its own window before `Later` and
 /// `Done`; `PairComputer` and `OpenRemoteSettings` close it too, so Settings is not hidden by it.
 pub(crate) enum SecurityUpgradeModalCommand {
+    /// Approve a phone waiting with its three words (Touch ID / Windows Hello / the system
+    /// password, then the signed approval); the notice stays open and ticks the row off.
+    ApprovePending(String),
     /// Open that computer's entry in Settings > Remote, to paste its new code.
     PairComputer(String),
     /// Settings > Remote, to turn on Easy Connect when no code can be made.
@@ -124,7 +133,10 @@ impl GpuiSecurityUpgradeModalWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        window.remove_window();
+        // Approving keeps the notice open: the row ticks off when the phone finishes pairing.
+        if !matches!(command, SecurityUpgradeModalCommand::ApprovePending(_)) {
+            window.remove_window();
+        }
         (self.host)(command, cx);
     }
 
@@ -281,6 +293,34 @@ impl GpuiSecurityUpgradeModalWindow {
                 .text_color(hsla(p.muted))
                 .child("Waiting")
                 .into_any_element(),
+            SecurityNoticeRowStatus::Pending => {
+                let approval_id = row.approval_id.clone().unwrap_or_default();
+                h_flex()
+                    .flex_shrink_0()
+                    .gap(px(8.0))
+                    .items_center()
+                    .child(
+                        div()
+                            .text_size(px(13.0))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(hsla(p.foreground))
+                            .child(row.words.join(" \u{b7} ")),
+                    )
+                    .child(small_button(
+                        &p,
+                        format!("security-upgrade-approve-{}", row.id),
+                        "Approve",
+                        move |this: &mut Self, window, cx| {
+                            this.send(
+                                SecurityUpgradeModalCommand::ApprovePending(approval_id.clone()),
+                                window,
+                                cx,
+                            )
+                        },
+                        cx,
+                    ))
+                    .into_any_element()
+            }
         };
         h_flex()
             .w_full()

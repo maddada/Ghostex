@@ -28,6 +28,8 @@ pub mod coordinator;
 pub mod de;
 pub mod delta;
 pub mod event;
+/// Pairing v2 (GitHub #495): device keys, Pending and the three match words; used module-qualified.
+pub mod pairing;
 pub mod peek;
 pub mod presentation;
 pub mod rpc;

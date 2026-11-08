@@ -43,6 +43,10 @@ pub(super) async fn route_control_http(
         crate::security_upgrade::SECURITY_UPGRADE_NOTICE_ENDPOINT => {
             crate::security_upgrade::handle_http(
                 &state.paths,
+                &crate::remote_access::waiting_devices(
+                    &state.remote_pairing_runtime,
+                    &state.security,
+                ),
                 endpoint.path,
                 request_id,
                 &body_json,
@@ -60,9 +64,14 @@ pub(super) async fn route_control_http(
         | "/api/pairedDevices"
         | "/api/removePairedDevice"
         | "/api/pairDevice"
+        | "/api/pairingStatus"
+        | "/api/renewDeviceToken"
+        | "/api/pairComputer"
+        | "/api/computerPairingStatus"
+        | "/api/cancelComputerPairing"
         | "/api/pairedDeviceSeen"
         | "/api/easyConnectAddresses" => {
-            handle_remote_access_http(&state, endpoint.path, request_id, &body_json).await
+            handle_remote_access_http(&state, &caller, endpoint.path, request_id, &body_json).await
         }
         path if super::COLLAB_ENDPOINTS.contains(&path) => {
             super::handle_collab_http(&state, &caller, endpoint.path, request_id, &body_json).await

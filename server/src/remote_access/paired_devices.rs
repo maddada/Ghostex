@@ -2,17 +2,20 @@ use anyhow::Result;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
-use crate::auth::DeviceApiTokens;
+use crate::auth::{DeviceApiTokens, DeviceTokenEntry};
 use crate::paths::GxserverPaths;
+use crate::security::{Principal, SecurityEvent, SecurityState};
 use crate::tailcat::{
     apply_tailcat_state_update, read_tailcat_status_payload, TailcatRuntime, TailcatStateUpdate,
 };
 
 use super::authorized_keys::{remove_authorized_key, AdministratorApprovalDeclined};
-use super::repository::{RemotePairedDeviceRecord, RemotePairingRepository};
+use super::repository::{PairedDeviceStatus, RemotePairedDeviceRecord, RemotePairingRepository};
 use crate::push::{remove_device_push_registrations, PushRegistrationStore};
 
 /// Wire shape of `GxserverPairedDevice` in `packages/shared/gxserver-protocol-health.ts`.
+/// `status` is `paired`, or `legacy` for a phone paired before 11.0.1 that must pair again (it
+/// has no access left; Remove takes it off the list).
 pub fn paired_device_json(device: &RemotePairedDeviceRecord) -> Value {
     json!({
         "id": device.id,
@@ -22,7 +25,99 @@ pub fn paired_device_json(device: &RemotePairedDeviceRecord) -> Value {
         "lastSeenAt": device.last_seen_at,
         "sshKeyFingerprint": device.ssh_key_fingerprint,
         "tailcatClientKey": device.tailcat_client_key,
+        "status": device.status.as_str(),
+        "deviceKeyId": device.device_key.as_ref().map(|key| key.key_id.as_str()),
+        "tokenExpiresAt": device.api_token_expires_at,
     })
+}
+
+/*
+CDXC:RemotePairing 2026-11-08 DECISION:
+User (GitHub #495 rollout): "old pairings stop working in 11.0.1" and a one-time notice asks users
+with active Easy Connect devices to pair them again. Migration 0062 made every earlier row `legacy`
+and dropped its token; at each start gxserver also removes those rows' unrestricted SSH key lines
+from the file this account's sshd reads, without ever showing a Windows administrator prompt (a
+line in `administrators_authorized_keys` waits for the user's Remove, which may prompt). The rows
+stay listed as "pair again" until the phone pairs again (the new pairing replaces them, matched by
+its tailcat key) or the user removes them. Returns how many lines were removed.
+*/
+pub fn retire_legacy_pairings(db: &Connection) -> Result<usize> {
+    retire_legacy_pairings_using(
+        db,
+        super::authorized_keys::remove_authorized_key_without_prompt,
+    )
+}
+
+pub(crate) fn retire_legacy_pairings_using(
+    db: &Connection,
+    mut remove_quietly: impl FnMut(&str) -> Result<Option<bool>>,
+) -> Result<usize> {
+    let repository = RemotePairingRepository::new(db);
+    let mut removed = 0;
+    for device in repository.list_devices()? {
+        if device.status != PairedDeviceStatus::Legacy || device.legacy_key_line_removed {
+            continue;
+        }
+        match remove_quietly(&device.id) {
+            Ok(Some(was_there)) => {
+                removed += usize::from(was_there);
+                repository.mark_legacy_key_line_removed(&device.id)?;
+            }
+            // Needs a Windows administrator prompt, or the file couldn't be read: the line stays
+            // until the user removes the row.
+            Ok(None) | Err(_) => {}
+        }
+    }
+    Ok(removed)
+}
+
+/// Whether this computer has any Easy Connect devices, paired before 11.0.1 (`legacy`, which
+/// must pair again) or since. For the one-time 11.0.1 "pair your devices again" notice: show it
+/// only when this is true.
+pub fn has_active_easy_connect_devices(db: &Connection) -> Result<bool> {
+    Ok(!RemotePairingRepository::new(db).list_devices()?.is_empty())
+}
+
+/// The names of the devices paired before 11.0.1 that must pair again, newest first.
+pub fn easy_connect_devices_to_pair_again(db: &Connection) -> Result<Vec<String>> {
+    Ok(RemotePairingRepository::new(db)
+        .list_devices()?
+        .into_iter()
+        .filter(|device| device.status == PairedDeviceStatus::Legacy)
+        .map(|device| device.name)
+        .collect())
+}
+
+/// Removes the approver key a device enrolled when its pairing was approved (revoking a device
+/// takes away its power to approve too).
+pub fn forget_approver_key(
+    security: &SecurityState,
+    device: &RemotePairedDeviceRecord,
+    by: &Principal,
+) {
+    let mut key_ids: Vec<String> = security
+        .approver_keys
+        .list()
+        .into_iter()
+        .filter(|key| key.device_id == device.id)
+        .map(|key| key.key_id)
+        .collect();
+    key_ids.extend(device.approver_key_id.clone());
+    key_ids.sort();
+    key_ids.dedup();
+    let mut removed = false;
+    for key_id in key_ids {
+        if let Some(key) = security.approver_keys.remove(&key_id) {
+            removed = true;
+            security.publish(SecurityEvent::ApproverKeyRemoved {
+                key,
+                by: by.clone(),
+            });
+        }
+    }
+    if removed {
+        let _ = security.save();
+    }
 }
 
 pub fn list_paired_devices_json(db: &Connection) -> Result<Value> {
@@ -68,6 +163,16 @@ pub(crate) fn remove_paired_device_using(
     let Some(device) = repository.find_device(device_id)? else {
         return Ok(None);
     };
+    // A computer paired through Easy Connect has no SSH key line (its fingerprint is empty), and
+    // looking for one could show a Windows administrator prompt for nothing.
+    let has_key_line = !device.ssh_key_fingerprint.is_empty();
+    let remove_key = |id: &str| {
+        if has_key_line {
+            remove_key(id)
+        } else {
+            Ok(false)
+        }
+    };
     remove_key(&device.id).map_err(|error| {
         match error.downcast_ref::<AdministratorApprovalDeclined>() {
             Some(declined) => anyhow::anyhow!(
@@ -112,7 +217,12 @@ pub fn replace_earlier_pairings_of_same_phone(
         if device.id == new_device_id || device.tailcat_client_key.as_deref() != Some(client_key) {
             continue;
         }
-        if let Err(error) = remove_key_line(&device.id) {
+        let removed = if device.ssh_key_fingerprint.is_empty() {
+            Ok(false)
+        } else {
+            remove_key_line(&device.id)
+        };
+        if let Err(error) = removed {
             on_kept(&device, &error);
             continue;
         }
@@ -131,9 +241,30 @@ pub fn replace_earlier_pairings_of_same_phone(
     Ok(replaced)
 }
 
-/// Mirrors the stored device token hashes into the set every request is checked against.
+/// Mirrors the stored device tokens (paired v2 devices only) into the map every request is
+/// checked against, with the device each names and when it lapses.
 pub fn reload_device_api_tokens(db: &Connection, device_tokens: &DeviceApiTokens) -> Result<()> {
-    device_tokens.replace(RemotePairingRepository::new(db).list_api_token_hashes()?);
+    let entries = RemotePairingRepository::new(db)
+        .list_api_tokens()?
+        .into_iter()
+        .map(|(hash, device_id, expires_at)| {
+            let expires_at_ms = expires_at
+                .as_deref()
+                .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
+                // An unreadable expiry lapses at once rather than never.
+                .map_or_else(
+                    || expires_at.as_ref().map(|_| 0),
+                    |time| Some(time.timestamp_millis().max(0) as u64),
+                );
+            (
+                hash,
+                DeviceTokenEntry {
+                    device_id: Some(device_id),
+                    expires_at_ms,
+                },
+            )
+        });
+    device_tokens.replace_entries(entries);
     Ok(())
 }
 
@@ -148,9 +279,9 @@ pub fn touch_paired_device_seen(
     repository.touch_device_seen(device_id)
 }
 
-/// Adds `client_key` to the tailcat allow-list only while that list is
-/// already non-empty: an empty list means "allow any client" and turning it
-/// into a one-entry list would lock every other client out.
+/// Adds a newly paired phone's `client_key` to the tailcat allow-list. Since an empty list means
+/// closed (CDXC:RemotePairing 2026-11-08 in tailcat/supervisor.rs) the key always goes on, and a
+/// `none` placeholder makes way for it. Returns whether the list changed.
 pub fn add_tailcat_client_key_when_allow_listed(
     paths: &GxserverPaths,
     db: &Connection,
@@ -158,11 +289,9 @@ pub fn add_tailcat_client_key_when_allow_listed(
     client_key: &str,
 ) -> Result<bool> {
     let allowed = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
-    if allowed.is_empty() || allowed.iter().any(|key| key == client_key) {
+    let Some(allowed_client_keys) = allow_list_with_client_key(allowed, client_key) else {
         return Ok(false);
-    }
-    let mut allowed_client_keys = allowed;
-    allowed_client_keys.push(client_key.to_string());
+    };
     apply_tailcat_state_update(
         paths,
         db,
@@ -174,8 +303,20 @@ pub fn add_tailcat_client_key_when_allow_listed(
     Ok(true)
 }
 
-/// tailcat's `--allow` entry that admits no client (`tailcat serve --allow=none`).
-const TAILCAT_ALLOW_NONE: &str = "none";
+/// The allow-list with `client_key` added (and `none` dropped), or `None` when it is listed already.
+fn allow_list_with_client_key(allowed: Vec<String>, client_key: &str) -> Option<Vec<String>> {
+    if allowed.iter().any(|key| key == client_key) {
+        return None;
+    }
+    let mut keys: Vec<String> = allowed
+        .into_iter()
+        .filter(|key| key != TAILCAT_ALLOW_NONE)
+        .collect();
+    keys.push(client_key.to_string());
+    Some(keys)
+}
+
+use crate::tailcat::TAILCAT_ALLOW_NONE;
 
 /*
 CDXC:RemotePairing 2026-11-05 WHY:
@@ -197,10 +338,9 @@ fn allow_list_without_client_key(allowed: Vec<String>, client_key: &str) -> Opti
         .into_iter()
         .filter(|key| key != client_key)
         .collect();
-    // "Only paired devices can connect" is a non-empty list, and an empty one admits anyone with
-    // the code, so removing the last listed phone used to turn it off silently (security review
-    // 2026-11-05). The list keeps tailcat's `none` instead: no client is allowed until the next
-    // phone pairs (the pairing window lifts the list) and is added beside it.
+    // An empty list is closed since 2026-11-08 (tailcat/supervisor.rs); `none` keeps saying so
+    // plainly to an older gxserver that still read an empty list as open (security review
+    // 2026-11-05). The next phone that pairs replaces it.
     if allowed_client_keys.is_empty() {
         allowed_client_keys.push(TAILCAT_ALLOW_NONE.to_string());
     }
@@ -257,6 +397,10 @@ mod tests {
             "../storage/migrations/0059_paired_device_api_token.sql"
         ))
         .expect("api token column");
+        db.execute_batch(include_str!(
+            "../storage/migrations/0062_pairing_v2_device_keys.sql"
+        ))
+        .expect("pairing v2 columns");
         db
     }
 
@@ -271,6 +415,7 @@ mod tests {
                 api_token_hash: None,
                 paired_at: "2026-11-05T00:00:00Z".to_string(),
                 last_seen_at: None,
+                ..Default::default()
             })
             .expect("insert device");
     }
@@ -311,12 +456,89 @@ mod tests {
     }
 
     #[test]
+    fn a_paired_phone_always_goes_on_the_allow_list_even_an_empty_one() {
+        assert_eq!(
+            allow_list_with_client_key(Vec::new(), "key-a"),
+            Some(keys(&["key-a"]))
+        );
+        assert_eq!(
+            allow_list_with_client_key(keys(&[TAILCAT_ALLOW_NONE]), "key-a"),
+            Some(keys(&["key-a"]))
+        );
+        assert_eq!(allow_list_with_client_key(keys(&["key-a"]), "key-a"), None);
+    }
+
+    #[test]
+    fn an_empty_allow_list_is_served_closed_except_in_the_pairing_window() {
+        use crate::tailcat::served_allow_list;
+        assert_eq!(served_allow_list(&[], false), keys(&[TAILCAT_ALLOW_NONE]));
+        assert_eq!(
+            served_allow_list(&keys(&[""]), false),
+            keys(&[TAILCAT_ALLOW_NONE])
+        );
+        assert_eq!(
+            served_allow_list(&keys(&["key-a"]), false),
+            keys(&["key-a"])
+        );
+        assert!(served_allow_list(&keys(&["key-a"]), true).is_empty());
+        assert!(served_allow_list(&[], true).is_empty());
+    }
+
+    #[test]
     fn an_unlisted_key_leaves_the_allow_list_alone() {
         assert_eq!(
             allow_list_without_client_key(keys(&["none"]), "key-a"),
             None
         );
         assert_eq!(allow_list_without_client_key(Vec::new(), "key-a"), None);
+    }
+
+    #[test]
+    fn rows_paired_before_11_0_1_become_legacy_and_lose_their_token() {
+        let db = Connection::open_in_memory().expect("in-memory database");
+        db.execute_batch(
+            "CREATE TABLE remote_paired_devices (
+               id TEXT PRIMARY KEY CHECK (id <> ''),
+               name TEXT NOT NULL,
+               platform TEXT NOT NULL,
+               sshKeyFingerprint TEXT NOT NULL,
+               tailcatClientKey TEXT,
+               pairedAt TEXT NOT NULL,
+               lastSeenAt TEXT
+             );",
+        )
+        .unwrap();
+        db.execute_batch(include_str!(
+            "../storage/migrations/0059_paired_device_api_token.sql"
+        ))
+        .unwrap();
+        db.execute(
+            "INSERT INTO remote_paired_devices (id, name, platform, sshKeyFingerprint, pairedAt, apiTokenHash)
+             VALUES ('old', 'iPhone', 'ios', 'SHA256:x', '2026-10-01', 'hash')",
+            [],
+        )
+        .unwrap();
+        // The 11.0.1 notice reads names before 0062 runs; they must read on the old schema.
+        assert_eq!(
+            RemotePairingRepository::new(&db)
+                .list_device_names()
+                .unwrap(),
+            vec!["iPhone".to_string()]
+        );
+        db.execute_batch(include_str!(
+            "../storage/migrations/0062_pairing_v2_device_keys.sql"
+        ))
+        .unwrap();
+        let row = RemotePairingRepository::new(&db)
+            .find_device("old")
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.status, PairedDeviceStatus::Legacy);
+        assert_eq!(row.api_token_hash, None);
+        assert!(!row.legacy_key_line_removed);
+        let tokens = DeviceApiTokens::default();
+        reload_device_api_tokens(&db, &tokens).unwrap();
+        assert!(!tokens.accepts("gxd_anything"));
     }
 
     #[test]

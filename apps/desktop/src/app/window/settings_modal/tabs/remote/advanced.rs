@@ -271,7 +271,7 @@ fn advanced_rows(
         row_main(
             t,
             "Allowed client keys",
-            Some("Empty allows any device that scanned the code. Paired devices are listed on the Easy Connect tab."),
+            Some("Empty lets no device in; paired phones are added by themselves and listed on the Easy Connect tab. Add a computer that connects with Easy Connect here."),
         ),
         Some(compact_button(
             &t.p,

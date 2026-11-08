@@ -736,8 +736,10 @@ fn computer_panel(
         .child("To add this computer on another computer, copy its Easy Connect code below.")
         .child(list);
     if paired_only(tab) {
+        // Pairing v2 (CDXC:RemotePairing 2026-11-08 in server/src/remote_access/computer_pairing.rs):
+        // the other computer pairs like a phone, with the code from this computer's Show QR window.
         meta = meta.child(
-            "Only paired devices can connect, so first run tailcat genkey --client --key=client-default on the other computer and add the key it prints under Advanced → Allowed client keys.",
+            "Only paired devices can connect, so click Show QR here, then Copy as text, and paste that code on the other computer. Both screens show three words; approve the other computer here if they match.",
         );
     }
     if let Some(code) = &code {
@@ -789,11 +791,10 @@ fn computer_panel(
         .into_any_element()
 }
 
-/// "Only paired devices can connect" is on: the allow-list holds at least one key.
-pub(super) fn paired_only(tab: &RemoteTab) -> bool {
-    tab.easy_connect
-        .as_ref()
-        .is_some_and(|status| !status.allowed_client_keys.is_empty())
+/// "Only paired devices can connect": always, since an empty allow-list is closed
+/// (CDXC:RemotePairing 2026-11-08 in server/src/tailcat/supervisor.rs).
+pub(super) fn paired_only(_tab: &RemoteTab) -> bool {
+    true
 }
 
 /// `.settings-remote-off-block`: the faded QR placeholder and the Turn on button.
@@ -887,6 +888,11 @@ pub(super) fn qr_preview_dialog(
     };
     let grid = tab.qr_for(tailscale, &payload);
     let copy = copy_text_button(tab, t, "remote-qr-copy-text", card, cx);
+    // Pairing v2 (GitHub #495): a phone that scanned this code waits here with its three words.
+    let waiting = (!tailscale)
+        .then(|| tab.pending_devices.first().cloned())
+        .flatten();
+    let approving = tab.approving_device.is_some();
     let qr_size = QR_PREVIEW_SIZE
         .min(window.viewport_size().height.as_f32() - QR_PREVIEW_CHROME_HEIGHT)
         .max(QR_PLACEHOLDER_SIZE)
@@ -992,6 +998,54 @@ pub(super) fn qr_preview_dialog(
                 )
                 .children(copy.map(|button| div().pt(px(8.0)).child(button))),
         )
+        .children(waiting.map(|device| {
+            v_flex()
+                .w_full()
+                .items_center()
+                .gap(px(4.0))
+                .p(px(12.0))
+                .rounded(px(MODAL_RADIUS_CONTROL))
+                .border_1()
+                .border_color(hsla(colors.border))
+                .text_center()
+                .child(
+                    div()
+                        .text_color(hsla(colors.muted))
+                        .child(format!("{} is waiting. Check it shows:", device.name)),
+                )
+                .child(
+                    div()
+                        .text_size(px(18.0))
+                        .line_height(px(26.0))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(hsla(colors.foreground))
+                        .child(device.words.join(" · ")),
+                )
+                .child(
+                    div()
+                        .text_size(px(13.0))
+                        .line_height(px(18.57))
+                        .text_color(hsla(colors.muted))
+                        .child("If they match, approve it. If the words differ, deny it under Paired devices."),
+                )
+                .child({
+                    let approval_id = device.approval_id.clone();
+                    settings_button_sized(
+                        &t.p,
+                        "remote-qr-approve-pending",
+                        if approving { "Approving…" } else { "Approve" },
+                        None,
+                        ButtonVariant::Default,
+                        ButtonSize::Default,
+                        approving,
+                        None,
+                        move |tab: &mut RemoteTab, _window, cx| {
+                            tab.approve_pending_device(approval_id.clone(), cx)
+                        },
+                        cx,
+                    )
+                })
+        }))
         .into_any_element();
     Some(dialog_overlay(
         "remote-qr-preview-overlay",

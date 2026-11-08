@@ -82,8 +82,36 @@ pub(crate) struct MachineDialog {
     advanced_open: bool,
     focus: FocusHandle,
     inputs: DialogInputs,
+    /// Pairing this computer with the one behind the code (pairing v2, GitHub #495).
+    pairing: Option<ComputerPairing>,
+    /// Asks where that pairing stands every `COMPUTER_PAIRING_POLL`; dropped with the dialog.
+    pairing_poll: Option<gpui::Task<()>>,
+    /// A code was pasted in this dialog; a saved machine's old code (whose secret is long spent)
+    /// never pairs again by itself.
+    code_edited: bool,
     _subscriptions: Vec<Subscription>,
 }
+
+/*
+CDXC:RemotePairing 2026-11-08 DECISION:
+User (GitHub #495): "Computers connecting through Easy Connect must not need their key added by hand under Advanced: give them the same flow as phones." Adding (or saving) an Easy Connect machine with a code from the other computer's Show QR window first pairs this computer with it through this computer's gxserver (`/api/pairComputer`, server/src/remote_access/computer_pairing.rs): the dialog shows three words, the other computer shows the same three under Paired devices, and once the owner approves there with Touch ID, Windows Hello or the system password this computer's Easy Connect key is on its allow-list and the machine is saved. A code without its secret (an older Copy code) saves as before, for a computer whose key is already listed.
+*/
+#[derive(Clone, Debug, PartialEq)]
+enum ComputerPairing {
+    Starting,
+    Waiting {
+        pending_id: String,
+        words: Vec<String>,
+        computer: String,
+    },
+    Failed(String),
+}
+
+const COMPUTER_PAIRING_POLL: std::time::Duration = std::time::Duration::from_millis(1500);
+/// `/api/pairComputer` opens a tunnel and waits for the other computer's answer.
+const COMPUTER_PAIRING_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+/// Approving can wait on the other computer's Windows administrator prompt.
+const COMPUTER_PAIRING_STATUS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(190);
 
 impl RemoteTab {
     /// Opens the dialog on `machine` (edit) or empty (Add a machine), replacing a dialog the last
@@ -254,14 +282,163 @@ impl RemoteTab {
             advanced_open,
             focus,
             inputs,
+            pairing: None,
+            pairing_poll: None,
+            code_edited: false,
             _subscriptions: subscriptions,
         });
         cx.notify();
     }
 
     fn close_machine_dialog(&mut self, cx: &mut Context<Self>) {
+        // A computer still waiting for approval stops waiting (its request lapses there).
+        if let Some(Some(ComputerPairing::Waiting { pending_id, .. })) = self
+            .machine_dialog
+            .as_ref()
+            .map(|dialog| dialog.pairing.clone())
+        {
+            self.rpc(
+                "/api/cancelComputerPairing",
+                json!({ "pendingId": pending_id }),
+                super::RPC_TIMEOUT,
+                cx,
+                |_, _, _| {},
+            );
+        }
         self.machine_dialog = None;
         cx.notify();
+    }
+
+    /// Starts pairing this computer with the one in the dialog's code (CDXC:RemotePairing
+    /// 2026-11-08 above), saving the machine once that computer's owner approves.
+    fn start_computer_pairing(&mut self, params: Value, cx: &mut Context<Self>) {
+        let Some(dialog) = self.machine_dialog.as_mut() else {
+            return;
+        };
+        dialog.pairing = Some(ComputerPairing::Starting);
+        cx.notify();
+        self.rpc(
+            "/api/pairComputer",
+            params,
+            COMPUTER_PAIRING_START_TIMEOUT,
+            cx,
+            |this, result, cx| {
+                let Some(dialog) = this.machine_dialog.as_mut() else {
+                    return;
+                };
+                if dialog.pairing != Some(ComputerPairing::Starting) {
+                    return;
+                }
+                let words: Option<Vec<String>> = result.as_ref().ok().and_then(|value| {
+                    value.get("words")?.as_array().map(|words| {
+                        words
+                            .iter()
+                            .filter_map(|word| word.as_str().map(str::to_string))
+                            .collect()
+                    })
+                });
+                let pending_id = result
+                    .as_ref()
+                    .ok()
+                    .and_then(|value| value.get("pendingId")?.as_str().map(str::to_string));
+                dialog.pairing = Some(match (result, pending_id, words) {
+                    (Ok(value), Some(pending_id), Some(words)) => ComputerPairing::Waiting {
+                        pending_id,
+                        words,
+                        computer: value
+                            .get("computerName")
+                            .and_then(Value::as_str)
+                            .unwrap_or("the other computer")
+                            .to_string(),
+                    },
+                    (Err(error), _, _) => ComputerPairing::Failed(error),
+                    _ => ComputerPairing::Failed(
+                        "The other computer sent an unreadable answer.".to_string(),
+                    ),
+                });
+                if matches!(dialog.pairing, Some(ComputerPairing::Waiting { .. })) {
+                    dialog.pairing_poll = Some(cx.spawn(async move |this, cx| {
+                        loop {
+                            cx.background_executor().timer(COMPUTER_PAIRING_POLL).await;
+                            let Ok(keep_going) =
+                                this.update(cx, |this, cx| this.poll_computer_pairing(cx))
+                            else {
+                                break;
+                            };
+                            if !keep_going {
+                                break;
+                            }
+                        }
+                    }));
+                }
+                cx.notify();
+            },
+        );
+    }
+
+    /// One ask; `false` once nothing is waiting any more.
+    fn poll_computer_pairing(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(Some(ComputerPairing::Waiting { pending_id, .. })) = self
+            .machine_dialog
+            .as_ref()
+            .map(|dialog| dialog.pairing.clone())
+        else {
+            return false;
+        };
+        if self.computer_pairing_in_flight {
+            return true;
+        }
+        self.computer_pairing_in_flight = true;
+        let asked = pending_id.clone();
+        self.rpc(
+            "/api/computerPairingStatus",
+            json!({ "pendingId": pending_id }),
+            COMPUTER_PAIRING_STATUS_TIMEOUT,
+            cx,
+            move |this, result, cx| {
+                this.computer_pairing_in_flight = false;
+                let Some(dialog) = this.machine_dialog.as_mut() else {
+                    return;
+                };
+                let still_this = matches!(
+                    &dialog.pairing,
+                    Some(ComputerPairing::Waiting { pending_id, .. }) if *pending_id == asked
+                );
+                if !still_this {
+                    return;
+                }
+                let status = result
+                    .as_ref()
+                    .ok()
+                    .and_then(|value| value.get("status")?.as_str().map(str::to_string));
+                match (status.as_deref(), result) {
+                    (Some("pending"), _) => {}
+                    (Some("approved"), _) => {
+                        dialog.pairing = None;
+                        dialog.pairing_poll = None;
+                        this.store_dialog_machine(cx);
+                    }
+                    (Some("denied"), _) => {
+                        dialog.pairing = Some(ComputerPairing::Failed(
+                            "The other computer denied this one. Show a new code there and try again.".to_string(),
+                        ));
+                        dialog.pairing_poll = None;
+                    }
+                    (_, Err(error)) => {
+                        dialog.pairing = Some(ComputerPairing::Failed(error));
+                        dialog.pairing_poll = None;
+                    }
+                    _ => {
+                        dialog.pairing = Some(ComputerPairing::Failed(
+                            "Nobody approved this computer in time. Show a new code on the other computer and try again.".to_string(),
+                        ));
+                        dialog.pairing_poll = None;
+                    }
+                }
+                cx.notify();
+            },
+        );
+        true
     }
 
     /// One field's `onChange`: the draft follows it, clipped to its `maxLength` (and digits only
@@ -291,6 +468,7 @@ impl RemoteTab {
         };
         match field {
             DraftField::Code => {
+                dialog.code_edited = true;
                 apply_easy_connect_code(&mut dialog.draft, &next);
                 // The code brings the name, user and port with it.
                 let draft = dialog.draft.clone();
@@ -388,8 +566,29 @@ impl RemoteTab {
         cx.notify();
     }
 
-    /// `saveMachine`: replaces or appends the machine, then sends a password still in the field.
+    /// Save: an Easy Connect code from the other computer's Show QR window pairs first.
     fn save_dialog_machine(&mut self, cx: &mut Context<Self>) {
+        let Some(dialog) = self.machine_dialog.as_ref() else {
+            return;
+        };
+        if matches!(
+            dialog.pairing,
+            Some(ComputerPairing::Starting | ComputerPairing::Waiting { .. })
+        ) {
+            return;
+        }
+        if dialog.draft.easy_connect
+            && dialog.code_edited
+            && let Some(params) = computer_pairing_params(&dialog.draft.easy_connect_code)
+        {
+            self.start_computer_pairing(params, cx);
+            return;
+        }
+        self.store_dialog_machine(cx);
+    }
+
+    /// `saveMachine`: replaces or appends the machine, then sends a password still in the field.
+    fn store_dialog_machine(&mut self, cx: &mut Context<Self>) {
         let Some(dialog) = self.machine_dialog.as_ref() else {
             return;
         };
@@ -1366,6 +1565,20 @@ pub(super) fn machine_dialog(
         body = body.child(section);
     }
 
+    if let Some(pairing) = tab
+        .machine_dialog
+        .as_ref()
+        .and_then(|dialog| dialog.pairing.clone())
+    {
+        body = body.child(computer_pairing_panel(t, &pairing));
+    }
+    let pairing_busy = tab.machine_dialog.as_ref().is_some_and(|dialog| {
+        matches!(
+            dialog.pairing,
+            Some(ComputerPairing::Starting | ComputerPairing::Waiting { .. })
+        )
+    });
+
     let mut footer = h_flex().w_full().items_center().justify_end().gap(px(8.0));
     if let Some(machine_id) = dialog_machine_id(tab) {
         footer = footer.child(div().mr_auto().child(settings_button_sized(
@@ -1397,11 +1610,17 @@ pub(super) fn machine_dialog(
         .child(settings_button_sized(
             &p,
             "remote-machine-save",
-            if is_new { "Add machine" } else { "Save" },
+            if pairing_busy {
+                "Waiting for approval…"
+            } else if is_new {
+                "Add machine"
+            } else {
+                "Save"
+            },
             None,
             ButtonVariant::Default,
             ButtonSize::Default,
-            !can_save,
+            !can_save || pairing_busy,
             Some(save_reason.into()),
             |tab: &mut RemoteTab, _window, cx| tab.save_dialog_machine(cx),
             cx,
@@ -1487,4 +1706,50 @@ fn dialog_machine_id(tab: &RemoteTab) -> Option<String> {
     tab.machine_dialog
         .as_ref()
         .and_then(|dialog| dialog.machine_id.clone())
+}
+
+/// The dialog's pairing line: the three words to compare, or why pairing stopped.
+fn computer_pairing_panel(t: &RemoteTokens, pairing: &ComputerPairing) -> AnyElement {
+    let frame = v_flex()
+        .w_full()
+        .gap(px(4.0))
+        .p(px(12.0))
+        .rounded(px(MODAL_RADIUS_CONTROL))
+        .border_1()
+        .border_color(hsla(t.edge(0.70)));
+    match pairing {
+        ComputerPairing::Starting => frame
+            .child(detail(t, "Asking the other computer to let this one in…", true))
+            .into_any_element(),
+        ComputerPairing::Waiting {
+            words, computer, ..
+        } => frame
+            .items_center()
+            .child(detail(
+                t,
+                format!("Approve this computer on {computer}. Check it shows the same three words:"),
+                true,
+            ))
+            .child(
+                div()
+                    .text_size(px(18.0))
+                    .line_height(px(26.0))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(hsla(t.foreground))
+                    .child(words.join(" · ")),
+            )
+            .child(detail(
+                t,
+                "It's under Settings > Remote > Paired devices there, waiting for Touch ID, Windows Hello or the system password.",
+                true,
+            ))
+            .into_any_element(),
+        ComputerPairing::Failed(message) => frame
+            .child(
+                div()
+                    .text_color(hsla(t.p.destructive))
+                    .child(message.clone()),
+            )
+            .into_any_element(),
+    }
 }

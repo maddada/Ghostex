@@ -1,4 +1,5 @@
 pub mod authorized_keys;
+pub mod computer_pairing;
 pub mod easy_connect_addresses;
 pub mod http;
 pub mod identity;

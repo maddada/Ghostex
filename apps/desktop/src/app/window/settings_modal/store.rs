@@ -1162,6 +1162,24 @@ pub(crate) fn store_gxserver_rpc(
     );
 }
 
+/// [`SettingsModalCommand::ApproveRequest`]: `reply` runs on the main thread once it is approved
+/// or with why not.
+pub(crate) fn store_approve_request(
+    store: &Entity<SettingsStore>,
+    id: String,
+    reply: impl FnOnce(Result<Value, String>, &mut App) + 'static,
+    cx: &mut App,
+) {
+    let host = store.read(cx).host.clone();
+    host(
+        SettingsModalCommand::ApproveRequest {
+            id,
+            reply: Box::new(reply),
+        },
+        cx,
+    );
+}
+
 /// [`store_gxserver_rpc`] on the machine the page shows: this computer's gxserver for `None`, else
 /// that remote machine's (`SettingsModalCommand::RemoteGxserverRpc`).
 pub(crate) fn store_machine_gxserver_rpc(

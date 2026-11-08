@@ -192,11 +192,8 @@ impl TailcatRuntime {
             );
             return;
         }
-        let allowed_client_keys = if self.pairing_window_open() {
-            Vec::new()
-        } else {
-            state.allowed_client_keys.clone()
-        };
+        let allowed_client_keys =
+            served_allow_list(&state.allowed_client_keys, self.pairing_window_open());
         let spec = TailcatServeSpec {
             lane: TailcatLane::Public,
             addr_file: tailcat_address_file(paths),
@@ -264,7 +261,10 @@ impl TailcatRuntime {
     }
 
     /*
-    CDXC:RemotePairing 2026-10-25 DECISION:
+    CDXC:RemotePairing 2026-11-08 DECISION:
+    User (GitHub #495 security decision): an empty Easy Connect allow-list means closed, no longer "open to anyone with the code". This replaces the 2026-10-25 "Only paired devices can connect" on/off switch below: the allow-list is always in force (`served_allow_list`), every paired phone's key goes on it when its pairing is approved, a computer that connects with Easy Connect needs its key added under Advanced, and the only time the list is lifted is the pairing window (the Show QR sheet open, or a phone waiting as Pending), which the paragraph below describes and which now opens even when the list is empty.
+
+    CDXC:RemotePairing 2026-10-25 DECISION (superseded on/off part, see above):
     User (security audit, Q4 "per-device tokens and a tunnel allow-list"): with "Only paired devices can connect" on, Easy Connect admits only the client keys on the allow-list, so a removed phone can no longer even reach this computer. A new phone has no listed key yet and must reach `/api/pairDevice` through the tunnel, so while the Show QR dialog is open the desktop asks to hold pairing open and the allow-list is lifted; it returns 60 seconds after the last ask, by which time the new phone's key is on the list. Lifting and restoring the list restarts the helper, which drops paired phones' tunnels once each way; they reconnect by themselves.
     SEE-ALSO: server/src/remote_access/http.rs (`/api/remotePairingCode` `openTunnel`), apps/desktop/src/app/window/settings_modal/tabs/remote/paired_devices.rs (the switch).
     */
@@ -274,7 +274,7 @@ impl TailcatRuntime {
         state: &TailcatState,
         hold: Duration,
     ) {
-        if !state.enabled || state.allowed_client_keys.is_empty() {
+        if !state.enabled {
             return;
         }
         let was_open = {
@@ -585,6 +585,28 @@ fn read_address_blob(addr_file: &std::path::Path) -> Option<String> {
         None
     } else {
         Some(token)
+    }
+}
+
+/// tailcat's `--allow` entry that admits no client (`tailcat serve --allow=none`).
+pub(crate) const TAILCAT_ALLOW_NONE: &str = "none";
+
+/// The `--allow` list a helper is started with: nothing (any client) only while the pairing window
+/// is open; otherwise the saved keys, and an empty list is closed (`none`), never open
+/// (CDXC:RemotePairing 2026-11-08 above).
+pub(crate) fn served_allow_list(saved: &[String], pairing_window_open: bool) -> Vec<String> {
+    if pairing_window_open {
+        return Vec::new();
+    }
+    let keys: Vec<String> = saved
+        .iter()
+        .filter(|key| !key.trim().is_empty())
+        .cloned()
+        .collect();
+    if keys.is_empty() {
+        vec![TAILCAT_ALLOW_NONE.to_string()]
+    } else {
+        keys
     }
 }
 

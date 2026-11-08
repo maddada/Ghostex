@@ -3,10 +3,9 @@
 //! CDXC:RemotePairing 2026-09-03:
 //! The friendly face of the pairing registry: one row per device with its platform glyph, when it paired, and whether it checked in within the last three minutes. Remove asks for confirmation inline, naming the device, and then posts `/api/removePairedDevice`, which also drops the device's SSH key.
 use super::super::super::super::native_modal_kit::*;
-use super::super::super::fields::{switch_control, toggle_from_row};
 use super::RemoteTab;
 use super::model::{
-    format_paired_device_detail, is_paired_device_connected_now, is_phone_platform,
+    PendingDevice, format_paired_device_detail, is_paired_device_connected_now, is_phone_platform,
 };
 use super::style::*;
 use gpui::prelude::FluentBuilder as _;
@@ -14,7 +13,6 @@ use gpui::{
     AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div, px,
 };
 use gpui_component::{h_flex, v_flex};
-use serde_json::json;
 
 /// `.settings-remote-rows`: a bordered list whose rows divide with hairlines.
 pub(super) fn rows_frame(t: &RemoteTokens, rows: Vec<AnyElement>) -> AnyElement {
@@ -204,6 +202,20 @@ pub(super) fn paired_devices_list(
             })
             .collect(),
     };
+    let mut rows = rows;
+    let pending: Vec<AnyElement> = tab
+        .pending_devices
+        .clone()
+        .into_iter()
+        .map(|device| pending_device_row(tab, t, rpc, device, cx))
+        .collect();
+    if !pending.is_empty() {
+        // An empty-list placeholder makes no sense beside a phone that is pairing.
+        if tab.paired_devices.as_ref().is_some_and(Vec::is_empty) {
+            rows.clear();
+        }
+        rows.splice(0..0, pending);
+    }
     let paired_only = paired_only_row(tab, t, rpc, cx);
     v_flex()
         .w_full()
@@ -216,72 +228,144 @@ pub(super) fn paired_devices_list(
 }
 
 /*
-CDXC:RemotePairing 2026-10-25 DECISION:
-User (security audit, Q4 "per-device tokens and a tunnel allow-list"): "Only paired devices can connect" is the friendly face of the allow-list. Turning it on lists every paired phone's Easy Connect key (plus any key already on the list), so a phone removed above can no longer reach this computer at all; turning it off empties the list, which lets in anyone with the code again. It is off until the user turns it on, because computers that connect with Easy Connect, and phones paired by an older Ghostex app, have no listed key and would be locked out: the row names those phones, and the Connect a computer panel says how to add a computer's key. New phones still pair while the QR is showing (CDXC:RemotePairing 2026-10-25 in server/src/tailcat/supervisor.rs).
+CDXC:RemotePairing 2026-11-08 DECISION:
+User (GitHub #495, Q1721): a phone that scanned the QR is Pending until the owner compares three words shown on both screens and approves with Touch ID, Windows Hello or the system password. The row shows the words; Approve here (or on the approval card) runs Touch ID, Windows Hello or the system password and signs the approval (`owner_security`), so an agent driving the GUI can't click it through. Deny needs no approval: it only closes a door.
+*/
+fn pending_device_row(
+    tab: &RemoteTab,
+    t: &RemoteTokens,
+    rpc: bool,
+    device: PendingDevice,
+    cx: &mut Context<RemoteTab>,
+) -> AnyElement {
+    let glyph = if is_phone_platform(&device.platform) {
+        ICON_DEVICE_MOBILE
+    } else {
+        ICON_DEVICE_LAPTOP
+    };
+    let removing = tab.removing_device.as_deref() == Some(device.id.as_str());
+    let main = v_flex()
+        .min_w_0()
+        .gap(px(3.0))
+        .child(
+            h_flex()
+                .items_center()
+                .gap(px(6.0))
+                .text_size(px(14.0))
+                .line_height(px(20.0))
+                .text_color(hsla(t.foreground))
+                .child(super::super::super::fields::settings_icon(
+                    glyph,
+                    15.0,
+                    t.foreground,
+                ))
+                .child(device.name.clone())
+                .child(detail(t, "· waiting for your approval", false)),
+        )
+        .child(
+            div()
+                .text_size(px(15.0))
+                .line_height(px(22.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(hsla(t.foreground))
+                .child(device.words.join(" · ")),
+        )
+        .child(detail(
+            t,
+            if is_phone_platform(&device.platform) {
+                "Approve only if the phone shows the same three words. Deny it if you didn't just scan the code."
+            } else {
+                "A computer asks to connect through Easy Connect. Approve only if it shows the same three words. Deny it if you didn't just paste this computer's code there."
+            },
+            true,
+        ))
+        .into_any_element();
+    let id: SharedString = device.id.clone().into();
+    let deny_id = device.id.clone();
+    let approving = tab.approving_device.as_deref() == Some(device.approval_id.as_str());
+    let approve_id = device.approval_id.clone();
+    let approve = compact_button(
+        &t.p,
+        SharedString::from(format!("remote-pending-{id}-approve")),
+        "Approve",
+        approving.then(|| {
+            spinner(
+                SharedString::from(format!("remote-pending-{id}-approve-spinner")),
+                14.0,
+                t.muted,
+                900,
+            )
+        }),
+        Look::Filled,
+        24.0,
+        14.0,
+        None,
+        !rpc || tab.approving_device.is_some() || removing,
+        None,
+        move |tab: &mut RemoteTab, _window, cx| {
+            tab.approve_pending_device(approve_id.clone(), cx);
+        },
+        cx,
+    );
+    let deny = compact_button(
+        &t.p,
+        SharedString::from(format!("remote-pending-{id}-deny")),
+        "Deny",
+        removing.then(|| {
+            spinner(
+                SharedString::from(format!("remote-pending-{id}-spinner")),
+                14.0,
+                t.muted,
+                900,
+            )
+        }),
+        Look::Filled,
+        24.0,
+        14.0,
+        Some(t.muted),
+        !rpc || removing,
+        None,
+        move |tab: &mut RemoteTab, _window, cx| {
+            tab.remove_paired_device(deny_id.clone(), cx);
+        },
+        cx,
+    );
+    let value = h_flex()
+        .flex_shrink_0()
+        .items_center()
+        .gap(px(6.0))
+        .child(approve)
+        .child(deny)
+        .into_any_element();
+    remote_row(main, Some(value))
+}
+
+/*
+CDXC:RemotePairing 2026-11-08 DECISION:
+User (GitHub #495 security decision): an empty Easy Connect allow-list means closed, replacing the 2026-10-25 on/off switch that was here (its "off" emptied the list, which let in anyone with the code). "Only paired devices can connect" is now always so: the row says it and has no switch. Every paired phone's key goes on the list when its pairing is approved; a computer that connects with Easy Connect needs its key added under Advanced; phones paired before 11.0.1 must pair again. New phones still get in while the QR is showing (CDXC:RemotePairing in server/src/tailcat/supervisor.rs).
 */
 fn paired_only_row(
     tab: &RemoteTab,
     t: &RemoteTokens,
-    rpc: bool,
-    cx: &mut Context<RemoteTab>,
+    _rpc: bool,
+    _cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
-    let listed = tab
-        .easy_connect
-        .as_ref()
-        .map(|status| status.allowed_client_keys.clone())
-        .unwrap_or_default();
     let devices = tab.paired_devices.clone().unwrap_or_default();
-    let device_keys: Vec<String> = devices
-        .iter()
-        .filter_map(|device| device.tailcat_client_key.clone())
-        .collect();
     let without_key: Vec<String> = devices
         .iter()
-        .filter(|device| device.tailcat_client_key.is_none())
+        .filter(|device| device.tailcat_client_key.is_none() && !device.legacy)
         .map(|device| device.name.clone())
         .collect();
-    let on = !listed.is_empty();
-    let can_turn_on = !device_keys.is_empty();
-    let detail_text: SharedString = if !without_key.is_empty() {
+    let detail_text: SharedString = if without_key.is_empty() {
+        "Easy Connect lets in only paired phones and the keys listed under Advanced. A new phone gets in while the QR is showing; a computer that connects with Easy Connect needs its key added under Advanced.".into()
+    } else {
         format!(
-            "{} paired with an older Ghostex app and {} not listed; pair {} again to keep {} in.",
+            "Easy Connect lets in only paired phones and the keys listed under Advanced. {} paired with an older Ghostex app and can't connect; pair {} again.",
             without_key.join(", "),
-            if without_key.len() == 1 { "is" } else { "are" },
-            if without_key.len() == 1 { "it" } else { "them" },
             if without_key.len() == 1 { "it" } else { "them" },
         )
         .into()
-    } else if !on && !can_turn_on {
-        "Pair a phone first. Until this is on, anyone with this computer's Easy Connect code can reach its sign-in.".into()
-    } else {
-        "A removed phone can no longer reach this computer. Computers that connect with Easy Connect need their key added under Advanced.".into()
     };
-    let switch = switch_control(
-        &t.p,
-        "remote-paired-only-switch",
-        "Only paired devices can connect",
-        on,
-        !rpc || tab.easy_connect.is_none() || (!on && !can_turn_on),
-        None,
-        move |tab: &mut RemoteTab, checked, _window, cx| {
-            let keys: Vec<String> = if checked {
-                let mut keys = listed.clone();
-                for key in &device_keys {
-                    if !keys.contains(key) {
-                        keys.push(key.clone());
-                    }
-                }
-                keys
-            } else {
-                Vec::new()
-            };
-            tab.set_easy_connect_state(
-                json!({ "allowedClientKeys": keys, "kind": "setAllowedClientKeys" }),
-                cx,
-            );
-        },
-        cx,
-    );
     let main = v_flex()
         .min_w_0()
         .gap(px(3.0))
@@ -294,11 +378,5 @@ fn paired_only_row(
         )
         .child(detail(t, detail_text, true))
         .into_any_element();
-    let press = switch.press();
-    toggle_from_row(
-        &t.p,
-        "remote-paired-only-row",
-        remote_row(main, Some(switch.into_any_element())),
-        press,
-    )
+    remote_row(main, None)
 }

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -8,7 +9,12 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::repository::RemotePairingRepository;
+use ghostex_gx_protocol::approval::ApproverKey;
+use ghostex_gx_protocol::pairing::PendingDevice;
+use serde_json::Value;
+
+use super::repository::{RemotePairingRepository, StoredDeviceKey};
+use crate::security::ActionRequest;
 
 /*
 CDXC:RemotePairing 2026-09-03:
@@ -58,7 +64,14 @@ pub const EASY_CONNECT_COMPACT_CODE_PREFIX: &str = "GHOSTEX-EC2:";
 const TAILCAT_ADDRESS_PREFIX: &str = "tc";
 const BASE32_ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
-pub const REMOTE_PAIRING_SECRET_TTL: Duration = Duration::minutes(15);
+/*
+CDXC:RemotePairing 2026-11-08 DECISION:
+User (GitHub #495, Q1721): a pairing code is short-lived and single-use, and only the desktop's
+own Show QR sheet makes one. Five minutes (was 15): the sheet rotates the code by itself while it
+stays open, and the code alone no longer pairs anything (the phone waits as Pending for the owner's
+signed approval), so a short life costs nothing.
+*/
+pub const REMOTE_PAIRING_SECRET_TTL: Duration = Duration::minutes(5);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -194,6 +207,71 @@ impl RemotePairingSecret {
 #[derive(Clone, Default)]
 pub struct RemotePairingRuntime {
     live_secret: Arc<Mutex<Option<RemotePairingSecret>>>,
+    /// Phones waiting for approval (pairing v2), by pending id. In memory on purpose, like the
+    /// approval requests they wait on: a restart drops both and the phone scans again.
+    pending: Arc<Mutex<HashMap<String, PendingPairing>>>,
+    /// The last renewal timestamp each device key signed, so a renewal can't be replayed.
+    renewals: Arc<Mutex<HashMap<String, u64>>>,
+}
+
+/// A phone that scanned the QR and waits for the owner to approve it.
+#[derive(Clone, Debug)]
+pub struct PendingPairing {
+    pub id: String,
+    pub name: String,
+    pub platform: String,
+    /// Empty for a computer.
+    pub ssh_public_key: String,
+    pub kind: super::pair_device::PairingDeviceKind,
+    pub tailcat_client_key: Option<String>,
+    pub device_key: StoredDeviceKey,
+    pub approver_key: Option<ApproverKey>,
+    pub words: Vec<String>,
+    /// What the owner approves; spent with exactly these facts.
+    pub action: ActionRequest,
+    pub approval_id: String,
+    pub requested_at_ms: u64,
+    pub expires_at_ms: u64,
+    /// The newest signed ask's timestamp; older or equal ones are refused.
+    pub last_ask_ms: u64,
+    pub state: PendingState,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PendingState {
+    Waiting,
+    /// The approval was spent and the pairing is being written (a Windows administrator prompt
+    /// can hold it); a second ask meanwhile hears "pending".
+    Finalizing,
+    /// Paired: the answer is kept briefly for a phone whose reply was lost.
+    Finished {
+        answer: Value,
+        at_ms: u64,
+    },
+}
+
+impl PendingPairing {
+    pub fn summary(&self) -> PendingDevice {
+        PendingDevice {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            platform: self.platform.clone(),
+            words: self.words.clone(),
+            approval_id: self.approval_id.clone(),
+            requested_at_ms: self.requested_at_ms,
+            expires_at_ms: self.expires_at_ms,
+        }
+    }
+
+    fn is_live(&self, now_ms: u64) -> bool {
+        match &self.state {
+            PendingState::Finished { at_ms, .. } => {
+                now_ms < at_ms + super::pair_device::FINISHED_PAIRING_RETENTION_MS
+            }
+            PendingState::Finalizing => true,
+            PendingState::Waiting => now_ms < self.expires_at_ms,
+        }
+    }
 }
 
 impl RemotePairingRuntime {
@@ -228,6 +306,84 @@ impl RemotePairingRuntime {
     /// the stored row, so the next poll mints a new code.
     pub fn forget_secret(&self) {
         *self.live_secret.lock().expect("remote pairing secret lock") = None;
+    }
+
+    fn pending_map(&self) -> std::sync::MutexGuard<'_, HashMap<String, PendingPairing>> {
+        self.pending
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub fn insert_pending(&self, pending: PendingPairing) {
+        self.pending_map().insert(pending.id.clone(), pending);
+    }
+
+    /// The live entry for `id`; lapsed entries are dropped on the way.
+    pub fn pending(&self, id: &str, now_ms: u64) -> Option<PendingPairing> {
+        let mut map = self.pending_map();
+        map.retain(|_, pending| pending.is_live(now_ms));
+        map.get(id).cloned()
+    }
+
+    /// The phones still waiting for approval, oldest first.
+    pub fn list_waiting(&self, now_ms: u64) -> Vec<PendingDevice> {
+        let mut map = self.pending_map();
+        map.retain(|_, pending| pending.is_live(now_ms));
+        let mut waiting: Vec<_> = map
+            .values()
+            .filter(|pending| pending.state == PendingState::Waiting)
+            .map(PendingPairing::summary)
+            .collect();
+        waiting.sort_by_key(|pending| pending.requested_at_ms);
+        waiting
+    }
+
+    pub fn pending_count(&self, now_ms: u64) -> usize {
+        self.list_waiting(now_ms).len()
+    }
+
+    pub fn note_ask(&self, id: &str, timestamp_ms: u64) {
+        if let Some(pending) = self.pending_map().get_mut(id) {
+            pending.last_ask_ms = pending.last_ask_ms.max(timestamp_ms);
+        }
+    }
+
+    /// Marks `id` as being written; `false` when another ask already is.
+    pub fn start_finalizing(&self, id: &str) -> bool {
+        match self.pending_map().get_mut(id) {
+            Some(pending) if pending.state == PendingState::Waiting => {
+                pending.state = PendingState::Finalizing;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn finish_pending(&self, id: &str, answer: Value, now_ms: u64) {
+        if let Some(pending) = self.pending_map().get_mut(id) {
+            pending.state = PendingState::Finished {
+                answer,
+                at_ms: now_ms,
+            };
+        }
+    }
+
+    pub fn remove_pending(&self, id: &str) -> Option<PendingPairing> {
+        self.pending_map().remove(id)
+    }
+
+    /// Records a renewal's timestamp; `false` for one no newer than the last accepted.
+    pub fn accept_renewal_timestamp(&self, device_id: &str, timestamp_ms: u64) -> bool {
+        let mut renewals = self
+            .renewals
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let last = renewals.entry(device_id.to_string()).or_insert(0);
+        if timestamp_ms <= *last {
+            return false;
+        }
+        *last = timestamp_ms;
+        true
     }
 }
 

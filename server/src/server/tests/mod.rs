@@ -14,6 +14,7 @@ pub(crate) mod helpers;
 mod notification_failures;
 mod omp_subagent_viewer;
 mod omp_waits;
+mod pairing_v2;
 mod project_directories;
 mod protocol_and_routes;
 mod push;

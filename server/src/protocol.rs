@@ -1084,6 +1084,10 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/pairedDevices"
         | "/api/removePairedDevice"
         | "/api/pairedDeviceSeen"
+        // CDXC:RemotePairing 2026-11-08 WHY: this computer asks another to let it connect through Easy Connect (remote_access/computer_pairing.rs); it opens a tunnel from here, so only this computer's own clients may start it.
+        | "/api/pairComputer"
+        | "/api/computerPairingStatus"
+        | "/api/cancelComputerPairing"
         /*
         CDXC:RemotePairing 2026-11-06 WHY:
         A paired phone asks for this computer's Easy Connect addresses with its device token, through the tunnel, which lands on the local listener; the addresses dial this computer, so like the tailcat status they never reach the remote listener.
@@ -1140,7 +1144,15 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         stays FullLocal: only the loopback API listener (and the tunnel that
         forwards to it) serves it, never the remote listener.
         */
-        "/api/pairDevice" => descriptor(
+        /*
+        CDXC:RemotePairing 2026-11-08 DECISION:
+        Pairing v2 (GitHub #495): a pending phone asks where its pairing stands, and a paired phone
+        renews its device token, before it holds a working token, so like `/api/pairDevice` these
+        take no bearer token; each ask is signed by the phone's device key instead (checked
+        against the key it paired with, timestamps fresh and only ever newer) and the answer
+        carries a token only for that key. FullLocal like `/api/pairDevice`.
+        */
+        "/api/pairDevice" | "/api/pairingStatus" | "/api/renewDeviceToken" => descriptor(
             path,
             ApiPermission::FullLocal,
             false,
