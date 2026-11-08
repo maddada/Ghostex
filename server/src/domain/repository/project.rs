@@ -364,6 +364,9 @@ impl<'a> DomainRepository<'a> {
     }
 
     pub fn list_projects(&self) -> DomainResult<Vec<Value>> {
+        if let Some(set) = super::project_cache::cached_projects(self.db, true) {
+            return Ok(set.projects.clone());
+        }
         let mut statement = self
             .db
             .prepare_cached("SELECT * FROM projects ORDER BY updatedAt DESC, projectId ASC")
@@ -382,6 +385,13 @@ impl<'a> DomainRepository<'a> {
     /// CDXC:StateSync 2026-10-23 WHY:
     /// A project's restorable session history is its largest column (130 KB on the machine this was profiled on), and every full read parsed it, including the session deltas and the sidebar HUD reads that only want the project's settings. The history is still part of `get_project`/`list_projects`, which updates, trusted titles and the presentation's domain projects need.
     pub fn list_projects_without_session_history(&self) -> DomainResult<Vec<Value>> {
+        if let Some(set) = super::project_cache::cached_projects(self.db, true) {
+            return Ok(set
+                .projects
+                .iter()
+                .map(super::project_cache::without_session_history)
+                .collect());
+        }
         let mut statement = self
             .db
             .prepare_cached(&format!(
@@ -402,6 +412,11 @@ impl<'a> DomainRepository<'a> {
         &self,
         project_id: &str,
     ) -> DomainResult<Option<Value>> {
+        if let Some(set) = super::project_cache::cached_projects(self.db, false) {
+            return Ok(set
+                .get(project_id)
+                .map(super::project_cache::without_session_history));
+        }
         let row = self
             .db
             .prepare_cached(&format!(
@@ -459,6 +474,9 @@ impl<'a> DomainRepository<'a> {
     }
 
     pub fn get_project(&self, project_id: &str) -> DomainResult<Option<Value>> {
+        if let Some(set) = super::project_cache::cached_projects(self.db, false) {
+            return Ok(set.get(project_id).cloned());
+        }
         let row = self
             .db
             .prepare_cached("SELECT * FROM projects WHERE projectId = ?1")

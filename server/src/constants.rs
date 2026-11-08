@@ -172,4 +172,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0060_coordinator_board_tag",
     "0061_tailcat_relay",
     "0062_pairing_v2_device_keys",
+    "0063_projects_revision",
 ];
