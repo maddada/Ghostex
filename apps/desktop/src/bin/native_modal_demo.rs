@@ -299,10 +299,37 @@ fn snapshot_after_wait(window: WindowHandle<Root>, path: String, cx: &mut App) {
         .ok()
         .and_then(|ms| ms.trim().parse::<u64>().ok())
         .unwrap_or(2500);
+    // GHOSTEX_NATIVE_MODAL_DEMO_HOVER=<x>,<y>: point there before drawing, for a hover or tooltip.
+    let hover = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_HOVER")
+        .ok()
+        .and_then(|spot| {
+            let (x, y) = spot.split_once(',')?;
+            Some(point(
+                px(x.trim().parse().ok()?),
+                px(y.trim().parse().ok()?),
+            ))
+        });
     cx.spawn(async move |cx| {
         cx.background_executor()
             .timer(std::time::Duration::from_millis(wait))
             .await;
+        if let Some(position) = hover {
+            // Through the plain window handle: a typed update would hold the root the event reads.
+            let _ = cx.update_window(window.into(), |_, window, cx| {
+                window.dispatch_event(
+                    gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent {
+                        position,
+                        pressed_button: None,
+                        modifiers: gpui::Modifiers::default(),
+                    }),
+                    cx,
+                );
+                window.refresh();
+            });
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(1500))
+                .await;
+        }
         let _ = window.update(cx, |_, window, _| window.refresh());
         cx.background_executor()
             .timer(std::time::Duration::from_millis(300))

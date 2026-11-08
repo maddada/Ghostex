@@ -14,6 +14,7 @@ use gpui::{
     IntoElement, KeyDownEvent, ParentElement as _, Render, Rgba, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
+use gpui_component::tooltip::Tooltip;
 use gpui_component::{h_flex, v_flex};
 use std::rc::Rc;
 
@@ -21,7 +22,7 @@ pub(crate) const NOTICE_MODAL_WIDTH: f32 = 440.0;
 /// First-frame height only; the window is resized to the measured layout on the first prepaint.
 pub(crate) const NOTICE_MODAL_INITIAL_HEIGHT: f32 = 200.0;
 
-/// Between the words, the who-asked panel, Copy details and the hint.
+/// Between the words, the who-asked panel and the hint.
 const NOTICE_CONTENT_GAP: f32 = 16.0;
 /// The window padding, the gap above the footer and the footer row, added to the content column.
 const NOTICE_FIT_EXTRA_HEIGHT: f32 =
@@ -198,7 +199,7 @@ impl GpuiNoticeModalWindow {
             .into_any_element()
     }
 
-    fn header(&self, item: &NoticeModalItem, cx: &mut Context<Self>) -> AnyElement {
+    fn header(&self, item: &NoticeModalItem) -> AnyElement {
         let p = self.palette;
         let count = (self.items.len() > 1).then(|| {
             div()
@@ -241,8 +242,7 @@ impl GpuiNoticeModalWindow {
                         item.message
                             .clone()
                             .map(|message| Self::text(13.0, 20.0, p.muted, message)),
-                    )
-                    .children(self.copy_details(item, cx)),
+                    ),
             )
             .into_any_element()
     }
@@ -285,43 +285,66 @@ impl GpuiNoticeModalWindow {
         )
     }
 
-    /// Copy details: a small button under the words, so the footer keeps at most two buttons. It
-    /// reads Copied, with a check, once pressed.
-    fn copy_details(&self, item: &NoticeModalItem, cx: &mut Context<Self>) -> Option<AnyElement> {
+    /// Copy details, in the button row, never a small button of its own.
+    ///
+    /// CDXC:AppModal 2026-11-08 DECISION:
+    /// User, answering the notices page (Q1948): never show Copy details as a small separate
+    /// button. A dialog with one button gets Copy details as a second full button on the same row,
+    /// left of it, each half the width; a dialog that already has two buttons gets it as an
+    /// icon-only button (copy icon, "Copy details" on hover), leftmost on the row. Once pressed it
+    /// reads Copied, with a check.
+    fn copy_details_button(
+        &self,
+        item: &NoticeModalItem,
+        icon_only: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let text = item.copy_text.clone()?;
         let p = self.palette;
         let copied = self.copied.as_deref() == Some(item.id.as_str());
         let id = item.id.clone();
+        let copy = move |this: &mut Self, cx: &mut Context<Self>| {
+            cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
+            this.copied = Some(id.clone());
+            cx.notify();
+        };
+        let icon = if copied {
+            modal_icon(ICON_COPIED, 16.0, p.success)
+        } else {
+            modal_icon(ICON_COPY, 16.0, p.foreground)
+        };
+        if !icon_only {
+            return Some(modal_action_button(
+                &p,
+                "notice-modal-copy-details",
+                if copied { "Copied" } else { "Copy details" },
+                Some(icon.into_any_element()),
+                ModalButtonTone::Neutral,
+                false,
+                move |this: &mut Self, _, cx| copy(this, cx),
+                cx,
+            ));
+        }
+        let fills = neutral_button_fills(p.light);
+        let tip: &'static str = if copied { "Copied" } else { "Copy details" };
         Some(
-            h_flex()
+            div()
                 .id("notice-modal-copy-details")
                 .role(gpui::Role::Button)
                 .aria_label("Copy details")
-                .self_start()
-                .mt(px(6.0))
-                .h(px(28.0))
-                .px(px(10.0))
-                .gap(px(6.0))
+                .flex()
+                .flex_none()
                 .items_center()
+                .justify_center()
+                .size(px(MODAL_FOOTER_BUTTON_HEIGHT))
                 .rounded(px(MODAL_RADIUS_CONTROL))
-                .border_1()
-                .border_color(hsla(p.hairline))
-                .bg(hsla(p.raised))
-                .text_size(px(12.0))
-                .text_color(hsla(p.foreground))
+                .bg(hsla(fills.rest))
                 .cursor_pointer()
-                .hover(move |button| button.bg(hsla(p.raised_hover)))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
-                    this.copied = Some(id.clone());
-                    cx.notify();
-                }))
-                .child(if copied {
-                    modal_icon(ICON_COPIED, 14.0, p.success)
-                } else {
-                    modal_icon(ICON_COPY, 14.0, p.muted)
-                })
-                .child(if copied { "Copied" } else { "Copy details" })
+                .hover(move |button| button.bg(hsla(fills.hover)))
+                .active(move |button| button.bg(hsla(fills.pressed)))
+                .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+                .on_click(cx.listener(move |this, _, _, cx| copy(this, cx)))
+                .child(icon)
                 .into_any_element(),
         )
     }
@@ -354,7 +377,13 @@ impl GpuiNoticeModalWindow {
                 ),
             ]);
         }
-        let mut buttons = vec![modal_action_button(
+        // Copy details joins the row: a full half-width button beside a lone Close, an icon
+        // button ahead of Close and the notice's own button (`copy_details_button`).
+        let mut buttons: Vec<AnyElement> = self
+            .copy_details_button(item, item.action_label.is_some(), cx)
+            .into_iter()
+            .collect();
+        buttons.push(modal_action_button(
             &p,
             "notice-modal-close",
             "Close",
@@ -367,7 +396,7 @@ impl GpuiNoticeModalWindow {
             false,
             |this: &mut Self, _, cx| this.close_current(cx),
             cx,
-        )];
+        ));
         if let Some(label) = item.action_label.clone() {
             buttons.push(modal_action_button(
                 &p,
@@ -390,7 +419,7 @@ impl Render for GpuiNoticeModalWindow {
         let Some(item) = self.items.first().cloned() else {
             return div().id("ghostex-gpui-notice-modal").size_full();
         };
-        let mut content = vec![self.header(&item, cx)];
+        let mut content = vec![self.header(&item)];
         content.extend(self.source(&item));
         content.extend(
             item.hint
