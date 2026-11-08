@@ -106,6 +106,7 @@ pub mod session_chat_app_command;
 pub mod session_chat_approval_call;
 pub(crate) mod session_chat_async_questions;
 pub mod session_chat_branch;
+pub(crate) mod session_chat_branch_facts;
 pub(crate) mod session_chat_catch_up;
 pub(crate) mod session_chat_claude_background;
 pub(crate) mod session_chat_claude_bypass_consent;
