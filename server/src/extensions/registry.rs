@@ -12,7 +12,7 @@ use super::{
     stage_zip_payload, store_entry_for_install, validate_extension_id, write_store, ExtensionBadge,
     ExtensionCatalogSnapshot, ExtensionError, ExtensionInstallApproval, ExtensionLaunchContext,
     ExtensionResult, ExtensionRuntime, ExtensionRuntimeStatus, ExtensionStatePatch,
-    InstalledExtension,
+    ExtensionStoreEntry, InstalledExtension,
 };
 
 #[derive(Clone)]
@@ -149,9 +149,13 @@ impl ExtensionRegistry {
                 }
             })?;
         let mut store = read_store(&self.store_file)?;
-        let state = store
-            .entry(id.to_string())
-            .or_insert_with(|| default_store_entry(&manifest));
+        // A payload that was never installed through Ghostex gets no store entry here either, so
+        // it can't be turned into one `start` would run (see `start`).
+        let state = store.get_mut(id).ok_or_else(|| {
+            ExtensionError::bad_request(format!(
+                "Extension {id:?} wasn't installed through Ghostex. Install it in Settings > Extensions."
+            ))
+        })?;
         apply_state_patch(&manifest, state, patch)?;
         if !state.enabled {
             self.runtime.stop(id)?;
@@ -260,10 +264,15 @@ impl ExtensionRegistry {
                 continue;
             }
             let manifest = read_manifest(&entry.path(), Some(&id))?;
+            // A payload never installed through Ghostex lists as off: it can't start or be
+            // served (see `start`), only uninstalled.
             let state = store
                 .get(&id)
                 .cloned()
-                .unwrap_or_else(|| default_store_entry(&manifest));
+                .unwrap_or_else(|| ExtensionStoreEntry {
+                    enabled: false,
+                    ..default_store_entry(&manifest)
+                });
             installed.push(InstalledExtension {
                 runtime: self.runtime_status(&id, &manifest, &state),
                 badge: self.runtime.badge(&id),
@@ -289,10 +298,15 @@ impl ExtensionRegistry {
                 ExtensionError::not_found(format!("Extension {id:?} is not installed."))
             }
         })?;
+        // Never served for a payload that wasn't installed through Ghostex (see `start`).
         let state = read_store(&self.store_file)?
             .get(id)
             .cloned()
-            .unwrap_or_else(|| default_store_entry(&manifest));
+            .ok_or_else(|| {
+                ExtensionError::not_found(format!(
+                    "Extension {id:?} wasn't installed through Ghostex."
+                ))
+            })?;
         if !state.enabled {
             return Err(ExtensionError::not_found(format!(
                 "Extension {id:?} is disabled."
@@ -383,10 +397,15 @@ impl ExtensionRegistry {
                 ExtensionError::not_found(format!("Extension {id:?} is not installed."))
             }
         })?;
-        let state = read_store(&self.store_file)?
-            .get(id)
-            .cloned()
-            .unwrap_or_else(|| default_store_entry(&manifest));
+        // CDXC:Extensions 2026-11-08 DECISION:
+        // GitHub #495 follow-up (Q1860, "settings only"): only an extension installed through
+        // Ghostex has a store entry, so a payload put into the extensions folder some other way is
+        // never started, whoever asks. The owner installs it from Settings > Extensions.
+        let state = read_store(&self.store_file)?.get(id).cloned().ok_or_else(|| {
+            ExtensionError::bad_request(format!(
+                "Extension {id:?} wasn't installed through Ghostex, so it can't start. Install it in Settings > Extensions."
+            ))
+        })?;
         if !state.enabled {
             return Err(ExtensionError::bad_request(format!(
                 "Extension {id:?} is disabled."

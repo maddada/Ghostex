@@ -449,6 +449,7 @@ pub(crate) fn domain_error_response(
 ) -> RoutedResponse {
     let status = match error.code {
         "badRequest" => StatusCode::BAD_REQUEST,
+        "forbidden" => StatusCode::FORBIDDEN,
         "notFound" => StatusCode::NOT_FOUND,
         "corruptState" => StatusCode::CONFLICT,
         "conflict" => StatusCode::CONFLICT,

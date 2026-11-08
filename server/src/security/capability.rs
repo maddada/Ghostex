@@ -91,6 +91,11 @@ pub enum Capability {
     /// Answer a secret request and have gxserver read a secret provider reference (1Password)
     /// for the caller. The owner's devices only: a secret is only ever given by the user.
     OwnerSecrets,
+    /// Turn on and set up what only the owner may (#495 follow-up, "settings only"): install an
+    /// extension, add or change a secret provider, join or connect a team and its keys, and the
+    /// other owner-only switches `security_gates::owner_only_refusal` lists. The owner's devices
+    /// only; everyone else is refused and pointed to the Settings page.
+    OwnerSetup,
 }
 
 impl Capability {
@@ -107,6 +112,7 @@ impl Capability {
         Self::RequestSensitiveAction,
         Self::DecideApprovals,
         Self::OwnerSecrets,
+        Self::OwnerSetup,
     ];
 }
 
@@ -144,7 +150,9 @@ impl Principal {
                 }
                 ManageOwnThreads => matches!(role, SessionRole::Coordinator | SessionRole::Head),
                 AnswerAnyPrompt | SteerAnySession => *role == SessionRole::Head,
-                ManageAnyThreads | OwnerSettings | DecideApprovals | OwnerSecrets => false,
+                ManageAnyThreads | OwnerSettings | DecideApprovals | OwnerSecrets | OwnerSetup => {
+                    false
+                }
             },
             // The design's "CLI in your own terminal" column: thread management stays, the rest
             // is an agent's.
@@ -265,6 +273,19 @@ pub fn route_access(path: &str) -> RouteAccess {
         "/api/answerSecretRequest" | "/api/checkSecretReference" => {
             RouteAccess::Needs(Capability::OwnerSecrets)
         }
+        // Settings only (#495 follow-up): installing an extension, the secret provider, and joining
+        // or setting up a team. `/api/connectTeamSync` asks instead (security_gates.rs): it is
+        // `ghostex team deploy`'s last step, which Settings sends the owner to a terminal for. The refusal points to the Settings page
+        // (`security_gates::owner_setup_message`); the calls that are owner-only only for some of
+        // their params are refused in `security_owner_only.rs`.
+        "/api/installExtension"
+        | "/api/saveSecretProvider"
+        | "/api/removeSecretProvider"
+        | "/api/joinTeamSync"
+        | "/api/createTeamSyncInvite"
+        | "/api/setTeamLinearKey"
+        | "/api/setOwnLinearKey"
+        | "/api/setSlackFlowSettings" => RouteAccess::Needs(Capability::OwnerSetup),
         // `/api/registerConnectedComputer` and `/api/issueComputerGrant` ask in
         // server/security_gates.rs, once per computer for 30 days, not on every renewal, and
         // never with Agent access off.

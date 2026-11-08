@@ -38,14 +38,20 @@ Usage:
 Commands:
   list [--json]                         List installed extensions and state
   catalog [--json]                      Fetch the configured extension catalog
-  install <id> [--json]                 Install an extension from the catalog
-  install-local <path> [--json]         Validate and install a local extension folder
+  install <id> [--json]                 Install an extension from the catalog (the user only)
+  install-local <path> [--json]         Install a local extension folder (the user only)
   uninstall <id> [--json]               Remove an installed extension
   state <id> [--set k=v] [--json]       Read or update extension state
+
+Only the user installs extensions, from Settings > Extensions, where Ghostex shows what each
+one may do before it is installed. The CLI, agents and other computers are refused: tell the
+user which extension to install there.
 
 State keys:
   enabled, pinned, placement, terminalPlacement,
   preferences.<name>, preferences, grantedPermissions
+Turning an extension on and granting it a permission are the user's too (Settings >
+Extensions); turning one off and the other keys stay open.
 "
     .to_string()
 }
@@ -869,7 +875,8 @@ Never print, echo, copy or commit the value. The user may answer with a 1Passwor
 (op://vault/item/field) when a 1Password provider is set up; Ghostex reads it for them.
 
 providers: the 1Password accounts Ghostex reads saved keys and tokens from (Settings >
-Secrets). They need the 1Password CLI (op) signed in on this computer. check reads one
+Secrets). They need the 1Password CLI (op) signed in on this computer. Only the user adds,
+changes or removes one, in Settings > Secrets; add and remove are refused here. check reads one
 reference (1Password may ask to unlock) and says only whether it worked; only the user can
 run it, from Settings > Secrets, so the CLI is refused. Only the user answers a secret
 request, from Ghostex on their computer or phone."#

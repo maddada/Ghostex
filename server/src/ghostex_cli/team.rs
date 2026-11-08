@@ -264,9 +264,9 @@ fn deploy(flags: &Flags) -> CliResult<()> {
         "slackInteractivityUrl": site.as_ref().map(|site| format!("{site}/slack/interactivity")),
         "linearWebhookUrl": site.as_ref().map(|site| format!("{site}/linear/webhook")),
         "next": if connection.is_some() {
-            "Create the Slack app from `ghostex team slack-manifest`, store its secrets with `ghostex team slack-connect` and a Linear key with `ghostex team linear-connect`, set the working channel with `ghostex team flow set --working-channel <ID>`, then share `ghostex team invite`."
+            "Create the Slack app from `ghostex team slack-manifest`, store its secrets with `ghostex team slack-connect`, then in Settings > Workspaces set the team's Linear key and working channel and copy an invite link to share."
         } else {
-            "The functions were updated. This deployment already had a team: join it with an invite link (ghostex team join) if this workspace is not connected yet."
+            "The functions were updated. This deployment already had a team: join it with an invite link in Settings > Workspaces if this workspace is not connected yet."
         },
     }));
     Ok(())

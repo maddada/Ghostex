@@ -12,6 +12,9 @@
 //! | `/api/interruptSessionChat` | anyone but the owner's devices and Chief stops a session that is neither their own nor one of their threads |
 //! | `/api/sendSessionText`, `/api/sendSessionEnter`, `/api/sendSessionMessage` | anyone but the owner's devices and Chief types into a session that isn't their own, its threads included (a coordinator's Escape or Ctrl-C to its own thread doesn't ask) |
 //!
+//! What only the owner's devices may do at all, with no approval to ask for, is refused before
+//! these (`security_owner_only.rs`).
+//!
 //! Which callers skip those three is `Principal::skips_approval` (security/capability.rs); Chief
 //! (the head role, settled per request by `crate::chief::settle_principal`) skips them and nothing
 //! else.
@@ -63,6 +66,9 @@ pub(crate) fn gate(
             if !caller.has(capability) {
                 let message = match capability {
                     security::Capability::OwnerSecrets => OWNER_SECRETS_MESSAGE,
+                    security::Capability::OwnerSetup => {
+                        super::security_owner_only::owner_setup_message(endpoint_path)
+                    }
                     _ => "Only your own computer or phone can do this.",
                 };
                 return Some(forbidden(endpoint_path, request_id, message));
@@ -72,6 +78,11 @@ pub(crate) fn gate(
     let params = read_domain_rpc_params(body).ok()?;
     if owner_secret_refused(caller, endpoint_path, &params) {
         return Some(forbidden(endpoint_path, request_id, OWNER_SECRETS_MESSAGE));
+    }
+    if let Some(message) =
+        super::security_owner_only::owner_only_refusal(state, caller, endpoint_path, &params)
+    {
+        return Some(forbidden(endpoint_path, request_id, message));
     }
     if chief_turned_off_for(state, caller, endpoint_path, &params) {
         return Some(routed_json(
@@ -117,6 +128,7 @@ pub(crate) fn gate(
                     | SensitiveAction::InterruptOtherSession
                     | SensitiveAction::SettingsWeakenSecurity
                     | SensitiveAction::GbotsEnable
+                    | SensitiveAction::TeamSyncConnect
             ) {
                 crate::audit::record(
                     crate::audit::Action::from_approval(&grant.approval),
@@ -359,6 +371,7 @@ fn sensitive_action(
             input_action(state, caller, endpoint_path, params)
         }
         "/api/interruptSessionChat" => interrupt_action(state, caller, params),
+        "/api/connectTeamSync" => team_connect_action(caller, params),
         _ => match security::route_access(endpoint_path) {
             RouteAccess::Presence(action) => Some(
                 ActionRequest::new(
@@ -488,6 +501,29 @@ fn autopilot_action(params: &Map<String, Value>) -> Option<ActionRequest> {
         )
         .params(Value::Object(params.clone()))
     })
+}
+
+/*
+CDXC:TeamSync 2026-11-08 DECISION:
+#495 follow-up (Q1865, "settings only"): joining a team, invites, the team's Linear keys and its Slack flow are the owner's devices' alone (security_owner_only.rs); linking a Slack user stays open, since it needs the one-time code Slack sends only that user. Connecting with a token made elsewhere is `ghostex team deploy`'s last step, and Settings > Workspaces sends the owner to a terminal for it (deploying needs their Convex CLI login), so it asks with Touch ID instead of being refused; the card names the backend's address, so a connection to a backend the owner didn't deploy is visible before it happens.
+*/
+fn team_connect_action(caller: &Principal, params: &Map<String, Value>) -> Option<ActionRequest> {
+    if caller.is_owner_device() {
+        return None;
+    }
+    let url = text(params, "deploymentUrl").unwrap_or_default();
+    let workspace = text(params, "workspaceId").unwrap_or_default();
+    Some(
+        ActionRequest::new(
+            SensitiveAction::TeamSyncConnect,
+            format!("Connect this computer to the team backend at {url}"),
+        )
+        .target(url.to_string())
+        .params(Value::Object(params.clone()))
+        .detail(format!(
+            "Workspace {workspace}. Its team's Slack requests can then start sessions on this computer."
+        )),
+    )
 }
 
 /// Whether changing setting `key` to `value` needs the owner's approval (the rule the desktop's

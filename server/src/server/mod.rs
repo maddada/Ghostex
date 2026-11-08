@@ -155,6 +155,7 @@ pub mod project_paths;
 mod route_http;
 mod security_gates;
 mod security_http;
+mod security_owner_only;
 mod session_auto_sleep_sweep;
 mod session_links_sync;
 mod session_remove;

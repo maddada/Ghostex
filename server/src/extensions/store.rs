@@ -87,7 +87,7 @@ pub(crate) fn default_store_entry(manifest: &ExtensionManifest) -> ExtensionStor
 /// The stored state for a payload being installed over `previous`.
 ///
 /// CDXC:Extensions 2026-10-25 WHY:
-/// Every install used to grant whatever the new payload's manifest declared, so clicking Update (which skipped the consent dialog) silently granted newly declared permissions such as exec, and a reinstall brought back permissions the user had revoked (security audit 2026-10-25). Grants now come from the approval the consent dialog sends (only permissions it listed), or, for an update without one, from the previous grants the new version still declares; a first install without an approval (`ghostex extensions install` or install-local, typed by the user) still grants what it declares.
+/// Every install used to grant whatever the new payload's manifest declared, so clicking Update (which skipped the consent dialog) silently granted newly declared permissions such as exec, and a reinstall brought back permissions the user had revoked (security audit 2026-10-25). Grants now come from the approval the consent dialog sends (only permissions it listed), or, for an update without one, from the previous grants the new version still declares; a first install without an approval gets no permissions (2026-11-08, GitHub #495 follow-up: installs are the owner's alone, from Settings > Extensions, and its consent dialog always sends one).
 pub(crate) fn store_entry_for_install(
     manifest: &ExtensionManifest,
     previous: Option<&ExtensionStoreEntry>,
@@ -107,7 +107,9 @@ pub(crate) fn store_entry_for_install(
             .copied()
             .filter(|permission| manifest.permissions.contains(permission))
             .collect(),
-        (None, None) => manifest.permissions.clone(),
+        // An install with no consent gets no permissions (#495 follow-up): only the owner
+        // installs, from Settings > Extensions, whose consent dialog sends the approval.
+        (None, None) => Vec::new(),
     };
     let Some(previous) = previous else {
         return entry;

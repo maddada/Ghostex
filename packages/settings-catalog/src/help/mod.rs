@@ -133,6 +133,24 @@ fn agent_denied_key(key: &str) -> bool {
 /// Tabs whose rows are account or pairing state, never plain preferences.
 const AGENT_DENIED_TABS: &[&str] = &["accounts", "remote"];
 
+/*
+CDXC:Security 2026-11-08 DECISION:
+User (#495 follow-up, Q1866 "settings only"): the keys that loosen security, which an agent could still write through `ghostex settings set` or `updateSettingsPatch`, are the owner's alone: agents are refused and pointed to the Settings page, and the owner changes them in Settings with no prompt. Checked against the whole agent-writable list on 8 Nov: full access for every agent, Workspaces (the team backend and Slack requests), keeping Cloud Box keys on phones, trusting every project folder, Connectors (agents reach the owner's connected accounts), the commands Ghostex itself runs (title generation, worktree setup, the custom editor), paste protection, and the Bot automations feed (whole agent reports). Settings that ask the owner already (GBots, Sync) keep asking.
+*/
+/// Keys only the owner changes, in Settings: each loosens security.
+const USER_ONLY_KEYS: &[&str] = &[
+    "agentAcceptAllEnabled",
+    "workspacesHidden",
+    "cloudBoxesPhoneStartEnabled",
+    "trustProjectFoldersAutomatically",
+    "connectorsHidden",
+    "customSessionTitleGenerationCommand",
+    "globalWorktreeCommand",
+    "customDefaultEditorCommand",
+    "terminalClipboardPasteProtection",
+    "botAutomationsHidden",
+];
+
 fn number_range(key: &str) -> Option<NumberRange> {
     let range = |min: f64, max: f64| NumberRange {
         min,
@@ -237,8 +255,10 @@ fn catalog_entry(row: &SettingRow, location: &Location) -> CatalogEntry {
         value_type,
         ValueType::Boolean | ValueType::Number | ValueType::String | ValueType::Enum
     );
-    let agent_writable =
-        primitive && !AGENT_DENIED_TABS.contains(&location.tab.0) && !agent_denied_key(row.key);
+    let agent_writable = primitive
+        && !AGENT_DENIED_TABS.contains(&location.tab.0)
+        && !agent_denied_key(row.key)
+        && !USER_ONLY_KEYS.contains(&row.key);
     CatalogEntry {
         key: row.key.to_string(),
         title: row.title.clone(),

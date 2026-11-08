@@ -509,7 +509,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "issues source [set <path> [--switch] | check | clear | credential <name> [--clear]] [--workspace name|id]",
-            "A workspace's ticket command, a program that describes its own tracker: show it, set or re-check its path (it runs the command's info and keeps the id it answers with; --switch accepts a new id), clear it (its credentials stay), or store one of its credentials from stdin (--clear removes it). Only this computer can set it, and a team workspace can't",
+            "A workspace's ticket command, a program that describes its own tracker: show it, set or re-check its path (it runs the command's info and keeps the id it answers with; --switch accepts a new id), clear it (its credentials stay), or store one of its credentials from stdin (--clear removes it). Only this computer can set it, and a team workspace can't. While credentials are stored, only the user sets a new path: clear them first, then set the path and store them again",
         ),
         format_help_command(
             "issues tracker [linear|github|<command id>] [--workspace name|id | --project-id id | --path path]",
@@ -541,15 +541,15 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "team join <invite link> [--name n] [--slack-user U… --slack-code gxl_…] | status | invite | identity [--slack-user U… --slack-code gxl_…] [--linear-user id] | threads <ticket> | ping | leave | deploy [--team-name n] [--project slug] [--convex-team slug] [--dev]  (each takes --workspace name|id)",
-            "Connect a Work workspace to its team's Convex project: join with an invite link, or deploy Ghostex's functions with your Convex CLI login",
+            "Connect a Work workspace to its team's Convex project: join with an invite link, or deploy Ghostex's functions with your Convex CLI login. Joining and invites are the user's, in Settings > Workspaces; the CLI is refused. deploy's last step (connecting this workspace) waits for the user's approval on their computer or phone. status, threads, ping and leave stay open",
         ),
         format_help_command(
             "team flow [show] | set [--working-channel C…] [--watch-only C1,C2] [--default-run cloud|local] [--linear-team KEY] [--qc-owner U…] [--instructions-file path] | map <channel> --repo owner/name [--project name] [--linear-team KEY] [--linear-project name] | unmap <channel>",
-            "Read or change the team's Slack flow: the working channel, watch-only channels, which repo each channel's work goes to, where new work runs, and the team instructions",
+            "Read or change the team's Slack flow: the working channel, watch-only channels, which repo each channel's work goes to, where new work runs, and the team instructions. Only the user changes it, in Settings > Workspaces; set, map and unmap are refused here",
         ),
         format_help_command(
             "team slack-manifest [--name n] | slack-connect [--dev] | linear-connect [--remove] | own-linear-key on|off",
-            "Print the Slack app manifest for this team; store the Slack bot token and signing secret on the team's Convex project (read from stdin); owners set or remove the team's Linear key (read from stdin); own-linear-key on creates the Slack tickets you request with this workspace's Linear key instead",
+            "Print the Slack app manifest for this team; store the Slack bot token and signing secret on the team's Convex project (read from stdin); owners set or remove the team's Linear key (read from stdin); own-linear-key on creates the Slack tickets you request with this workspace's Linear key instead. linear-connect and own-linear-key are the user's, in Settings > Workspaces; the CLI is refused",
         ),
         format_help_command(
             "slack post [--session <session>] \"<text>\" [--final]",

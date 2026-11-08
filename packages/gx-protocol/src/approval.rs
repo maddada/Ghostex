@@ -93,6 +93,11 @@ open_string_enum! {
         /// (the target is the component's name, such as `collab`). Updating an installed one,
         /// turning it off and uninstalling it never ask.
         InstallExtensionComponent => "installExtensionComponent",
+        // Teams
+        /// Connect a workspace to a team backend with a token made elsewhere
+        /// (`ghostex team deploy`'s last step), by anyone but the owner's devices; the target is
+        /// the backend's address. Joining, invites and the team's keys are the owner's alone.
+        TeamSyncConnect => "teamSyncConnect",
     }
 }
 
