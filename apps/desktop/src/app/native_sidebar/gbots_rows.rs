@@ -1,7 +1,8 @@
 //! Main Hub's GBots section: the GBots heading under Chief of Staff, then one row per GBot (its
 //! icon in its colour, its name, a status dot while a chat works or waits) whose chats fold under
-//! it like a project's sessions. A bot row's menu has New Chat, GBot Settings…, Memory… and Remove GBot…;
-//! the heading's has New GBot….
+//! it like a project's sessions. A bot row's menu has New Chat, GBot Settings…, Memory…,
+//! Department… and Remove GBot…; the heading's has New GBot…. Department sub-headings are
+//! gbots_departments.rs.
 //!
 //! CDXC:GBots 2026-11-09 DECISION:
 //! User (Q2101 A, Q2102 A, Q2104 A): GBots sit under Chief of Staff in Main Hub, between Chief of Staff and Main Hub's loose sessions; a bot is marked by "an icon and a colour"; its settings open "in their own window from its row" (right-click, GBot Settings…). A bot's chats are ordinary session rows (their own menus, status and click), folding under the bot's row the way a project's sessions fold under its header.
@@ -28,6 +29,8 @@ pub(crate) struct GbotLook {
     pub(crate) icon: String,
     pub(crate) color: gpui::Hsla,
     pub(crate) paused: bool,
+    /// It leads its department (a small crown after its name).
+    pub(crate) is_lead: bool,
 }
 
 impl NativeSidebarGroup {
@@ -46,11 +49,12 @@ impl NativeSidebarGroup {
             icon: if icon.is_empty() { "robot" } else { icon }.to_string(),
             color,
             paused: gbot.get("paused").and_then(Value::as_bool) == Some(true),
+            is_lead: gbot.get("isLead").and_then(Value::as_bool) == Some(true),
         })
     }
 
     /// The machine tab this group is on (`local` for this computer).
-    fn machine_id(&self) -> String {
+    pub(super) fn machine_id(&self) -> String {
         self.remote_machine_context
             .as_ref()
             .and_then(|context| context.get("machineId"))
@@ -95,22 +99,25 @@ pub(crate) fn gbots_on() -> bool {
 
 /// What a folded GBots heading shows of the bots under it.
 #[derive(Default)]
-struct FoldedSummary {
-    bots: usize,
-    working: bool,
-    attention: bool,
-    background_work: bool,
-    question: bool,
-    approval: bool,
+pub(super) struct FoldedSummary {
+    pub(super) bots: usize,
+    pub(super) working: bool,
+    pub(super) attention: bool,
+    pub(super) background_work: bool,
+    pub(super) question: bool,
+    pub(super) approval: bool,
 }
 
 impl FoldedSummary {
-    fn any(&self) -> bool {
+    pub(super) fn any(&self) -> bool {
         self.working || self.attention || self.background_work || self.question || self.approval
     }
 }
 
-fn folded_summary(snapshot: &NativeSidebarSnapshot, group_ids: &[String]) -> FoldedSummary {
+pub(super) fn folded_summary(
+    snapshot: &NativeSidebarSnapshot,
+    group_ids: &[String],
+) -> FoldedSummary {
     let mut summary = FoldedSummary {
         bots: group_ids.len(),
         ..FoldedSummary::default()
@@ -130,7 +137,7 @@ fn folded_summary(snapshot: &NativeSidebarSnapshot, group_ids: &[String]) -> Fol
     summary
 }
 
-fn gbots_command(op: &str, extra: Value) -> Value {
+pub(super) fn gbots_command(op: &str, extra: Value) -> Value {
     let mut command = json!({ "type": "gbots", "op": op });
     if let (Some(command), Some(extra)) = (command.as_object_mut(), extra.as_object()) {
         command.extend(extra.clone());
@@ -145,6 +152,7 @@ fn gbot_menu(look: &GbotLook, machine_id: &str) -> Value {
         { "label": "New Chat", "icon": "plus", "disabled": look.paused, "command": gbots_command("newChat", target.clone()) },
         { "label": "GBot Settings…", "icon": "settings", "command": gbots_command("settings", target.clone()) },
         { "label": "Memory…", "icon": "brain", "command": gbots_command("memory", target.clone()) },
+        { "label": "Department…", "icon": "users", "command": gbots_command("department", target.clone()) },
         { "separator": true },
         { "label": "Remove GBot…", "icon": "trash", "command": gbots_command("remove", target) },
     ])
@@ -174,14 +182,18 @@ impl GhostexGpuiApp {
             .disclosures
             .present(&key, section.collapsed)
             .then(|| {
+                // The GBots of no department, then each department's sub-heading and bots
+                // (gbots_departments.rs).
                 let rows = v_flex()
                     .w_full()
-                    .children(section.group_ids.iter().filter_map(|group_id| {
-                        let group = snapshot
-                            .groups
-                            .iter()
-                            .find(|group| &group.group_id == group_id)?;
-                        Some(self.render_native_gbot_block(group, appearance, cx))
+                    .children(self.render_native_gbot_blocks(
+                        &section.loose_group_ids,
+                        snapshot,
+                        appearance,
+                        cx,
+                    ))
+                    .children(section.departments.iter().map(|department| {
+                        self.render_native_gbots_department(department, snapshot, appearance, cx)
                     }))
                     .into_any_element();
                 self.render_native_disclosure(key, rows, cx)
@@ -321,6 +333,26 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
+    /// The bot blocks of `group_ids`, in that order.
+    pub(super) fn render_native_gbot_blocks(
+        &self,
+        group_ids: &[String],
+        snapshot: &NativeSidebarSnapshot,
+        appearance: &SidebarAppearance,
+        cx: &mut gpui::Context<Self>,
+    ) -> Vec<AnyElement> {
+        group_ids
+            .iter()
+            .filter_map(|group_id| {
+                let group = snapshot
+                    .groups
+                    .iter()
+                    .find(|group| &group.group_id == group_id)?;
+                Some(self.render_native_gbot_block(group, appearance, cx))
+            })
+            .collect()
+    }
+
     /// One bot: its row and, while it is open or folding, its chats.
     fn render_native_gbot_block(
         &self,
@@ -389,11 +421,14 @@ impl GhostexGpuiApp {
         .iter()
         .any(|key| count(key));
         let fold_id = group.group_id.clone();
-        let tooltip = if look.title.is_empty() {
+        let mut tooltip = if look.title.is_empty() {
             look.name.clone()
         } else {
             format!("{} · {}", look.name, look.title)
         };
+        if look.is_lead {
+            tooltip.push_str(" · Leads its department");
+        }
         let owner = super::menus::MenuOwner::default();
         let menu_owner = owner.clone();
         h_flex()
@@ -437,7 +472,18 @@ impl GhostexGpuiApp {
                             .into_any_element()
                     }),
             )
-            .child(div().flex_1().min_w_0().truncate().child(look.name.clone()))
+            .child(div().min_w_0().truncate().child(look.name.clone()))
+            // Its department's lead: a small crown after the name.
+            .when(look.is_lead, |row| {
+                row.child(
+                    svg()
+                        .flex_shrink_0()
+                        .size(px(12.0 * scale))
+                        .path("titlebar/coordinator-crown.svg")
+                        .text_color(appearance.muted),
+                )
+            })
+            .child(div().flex_1())
             .when(look.paused, |row| {
                 row.child(
                     div()
@@ -534,6 +580,19 @@ impl GhostexGpuiApp {
         match text("op").as_str() {
             "newGbot" => self.open_gpui_new_gbot_modal(cx),
             "settings" => self.open_gpui_gbot_settings_modal(bot_id, machine, cx),
+            "department" => self.open_gpui_gbot_settings_modal_on(
+                bot_id,
+                machine,
+                crate::app::window::GbotSettingsTab::Department,
+                cx,
+            ),
+            "removeDepartment" => self.remove_native_sidebar_gbots_department(
+                machine,
+                text("departmentId"),
+                text("name"),
+                window,
+                cx,
+            ),
             "memory" => self.open_gpui_gbot_settings_modal_on(
                 bot_id,
                 machine,

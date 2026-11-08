@@ -163,6 +163,11 @@ pub(crate) fn undo_problem(
             change.after_raw.as_ref(),
         );
     }
+    if super::departments::is_department_change(&change.kind) {
+        return Ok(Some(
+            "A department change is undone by changing the department again: `ghostex gbots department edit`.".to_string(),
+        ));
+    }
     let current = read_bot(db, &change.subject_id)?;
     let name = change
         .after
@@ -206,6 +211,20 @@ pub(crate) fn change_summary(db: &Connection, change: &Change) -> Result<Value, 
             "undoProblem": problem,
             "routine": routine,
             "bot": read_bot(db, bot_id)?.as_ref().map(bot_summary),
+        }));
+    }
+    if super::departments::is_department_change(&change.kind) {
+        let shown = change.after_raw.as_ref().or(change.before_raw.as_ref());
+        return Ok(json!({
+            "changeId": change.change_id,
+            "kind": change.kind,
+            "departmentId": change.subject_id,
+            "name": shown.and_then(|department| department.get("name")).cloned(),
+            "by": change.by,
+            "at": change.at,
+            "undoneAt": change.undone_at,
+            "undoable": false,
+            "undoProblem": undo_problem(db, change)?,
         }));
     }
     let current = read_bot(db, &change.subject_id)?;

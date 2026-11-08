@@ -67,13 +67,20 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     let mut home_groups: BTreeSet<&str> = BTreeSet::new();
     // GBots' groups, drawn only in Main Hub's GBots section (gbots.rs), in bot-name order.
     let mut gbot_groups: Vec<&str> = Vec::new();
+    let mut gbot_looks: BTreeMap<&str, &ghostex_gx_protocol::presentation::PresentationGbotsBot> =
+        BTreeMap::new();
     for plan in input.plans {
         if let Some(project) = &plan.project {
             if project.is_home && plan.kind == GroupKind::Project {
                 home_groups.insert(plan.group_id.as_str());
             }
-            if project.gbot.is_some() && plan.kind == GroupKind::Project {
+            if let Some(gbot) = project
+                .gbot
+                .as_ref()
+                .filter(|_| plan.kind == GroupKind::Project)
+            {
                 gbot_groups.push(plan.group_id.as_str());
+                gbot_looks.insert(plan.group_id.as_str(), gbot);
             }
             projects_by_group.insert(
                 plan.group_id.as_str(),
@@ -384,7 +391,13 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             id: group_id.clone(),
         });
     }
-    let gbots = gbots_section(&home_ids, &rendered_ids, &gbot_groups, input.ui);
+    let gbots = gbots_section(
+        &home_ids,
+        &rendered_ids,
+        &gbot_groups,
+        &gbot_looks,
+        input.ui,
+    );
     for section in gbots.iter().filter(|section| {
         !section.collapsed
             && !input
@@ -393,7 +406,15 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 .collapsed_groups
                 .contains(&section.home_group_id)
     }) {
-        order.extend(section.group_ids.iter().map(|group_id| OrderItem {
+        // A folded department hides its bots' rows from the walk too.
+        let drawn = section.loose_group_ids.iter().chain(
+            section
+                .departments
+                .iter()
+                .filter(|department| !department.collapsed)
+                .flat_map(|department| department.group_ids.iter()),
+        );
+        order.extend(drawn.map(|group_id| OrderItem {
             kind: OrderKind::Project,
             id: group_id.clone(),
         }));
@@ -783,6 +804,7 @@ fn gbots_section(
     home_ids: &[String],
     rendered_ids: &[String],
     gbot_groups: &[&str],
+    gbot_looks: &BTreeMap<&str, &ghostex_gx_protocol::presentation::PresentationGbotsBot>,
     ui: &SidebarUiState,
 ) -> Vec<super::gbots::GbotsSectionView> {
     let Some(home) = home_ids
@@ -799,12 +821,50 @@ fn gbots_section(
     if group_ids.is_empty() {
         return Vec::new();
     }
+    // The groups come in drawing order (gbots.rs `order_gbot_projects`): the loose bots, then
+    // each department's bots together.
+    let mut loose_group_ids = Vec::new();
+    let mut departments: Vec<super::gbots::GbotsDepartmentView> = Vec::new();
+    for group_id in &group_ids {
+        let look = gbot_looks.get(group_id.as_str());
+        let Some((department_id, bot)) = look.and_then(|bot| {
+            bot.department_id
+                .as_ref()
+                .filter(|id| !id.is_empty())
+                .map(|id| (id.clone(), *bot))
+        }) else {
+            loose_group_ids.push(group_id.clone());
+            continue;
+        };
+        if let Some(department) = departments
+            .iter_mut()
+            .find(|department| department.department_id == department_id)
+        {
+            department.group_ids.push(group_id.clone());
+            continue;
+        }
+        let storage_id = super::gbots::gbots_department_storage_id(home, &department_id);
+        departments.push(super::gbots::GbotsDepartmentView {
+            name: bot
+                .department_name
+                .clone()
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| "Department".to_string()),
+            icon: bot.department_icon.clone().filter(|icon| !icon.is_empty()),
+            collapsed: ui.collapse.collapsed_groups.contains(&storage_id),
+            storage_id,
+            department_id,
+            group_ids: vec![group_id.clone()],
+        });
+    }
     let storage_id = super::gbots::gbots_section_storage_id(home);
     vec![super::gbots::GbotsSectionView {
         home_group_id: home.clone(),
         collapsed: ui.collapse.collapsed_groups.contains(&storage_id),
         storage_id,
         group_ids,
+        loose_group_ids,
+        departments,
     }]
 }
 

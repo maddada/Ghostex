@@ -25,6 +25,7 @@ pub(crate) fn refresh_presented_bots(db: &Connection) {
     let Ok(bots) = list_bots(db) else {
         return;
     };
+    let departments = super::departments::list_departments(db).unwrap_or_default();
     let map = bots
         .into_iter()
         .map(|bot| {
@@ -38,8 +39,19 @@ pub(crate) fn refresh_presented_bots(db: &Connection) {
                 "agentId": bot.agent_id,
             });
             if let Some(object) = look.as_object_mut() {
-                if let Some(department) = bot.department_id {
-                    object.insert("departmentId".into(), json!(department));
+                // Its department's name, icon and place, so every client draws Main Hub's
+                // department sub-headings from the bots alone (gx-core sidebar_view/gbots.rs).
+                if let Some(department) = bot.department_id.as_deref().and_then(|id| {
+                    departments
+                        .iter()
+                        .find(|department| department.department_id == id)
+                }) {
+                    object.insert("departmentId".into(), json!(department.department_id));
+                    object.insert("departmentName".into(), json!(department.name));
+                    if !department.icon.is_empty() {
+                        object.insert("departmentIcon".into(), json!(department.icon));
+                    }
+                    object.insert("departmentOrder".into(), json!(department.sort_order));
                 }
                 if bot.is_lead {
                     object.insert("isLead".into(), json!(true));

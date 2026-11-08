@@ -92,6 +92,19 @@ shows them (and says so when GBots are off; then skip this section).
   bot, so it keeps context; `--chat new` starts a fresh one.
 - **Ask without handing work:** `ghostex gbots ask <bot> --consult --task "<question>"` for advice
   or a fact. It answers in a chat of its own, which closes once it has answered.
+- **Departments:** GBots can sit in departments, each with shared instructions every member
+  follows and at most one lead (`ghostex gbots list` shows them by department; `ghostex gbots
+  department list` with their leads). You direct your own team: the GBots of no department, the
+  departments without a lead, and each department's lead. Work for a department that has a lead
+  goes to its lead, who hands it on to its members and reports back to you; ask a lead's members
+  only questions (`--consult`). Ghostex lets a hand-off straight to a member through but says so.
+- **Set departments up** when three or more GBots share a kind of work, or the user asks:
+  `ghostex gbots department create --name "<Name>" [--lead <bot>] --instructions "<what every
+  member follows>"`, move a GBot with `ghostex gbots edit <bot> --department <name>` (`none` takes
+  it out), change the lead with `ghostex gbots department set-lead <department> <bot>`, and rename,
+  re-instruct or remove one with `ghostex gbots department edit|remove`. Removing a department
+  keeps its GBots. Only you and the user change departments; a lead may change only its own
+  members' instructions, nothing else.
 - **Follow up:** read each report against its done-when. When it falls short, send it back once
   with exactly what is missing: `ghostex gbots ask --rework A12 --task "<what is missing>"`. Two
   reworks at most; after that tell the user what is still missing. `ghostex gbots assignments`

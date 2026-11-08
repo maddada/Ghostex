@@ -158,6 +158,15 @@ pub struct PresentationGbotsBot {
     pub agent_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub department_id: Option<String>,
+    /// Its department's name, icon and place among the departments, so clients draw Main Hub's
+    /// department sub-headings from the bots alone; absent with no department.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub department_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub department_icon: Option<String>,
+    #[serde(default)]
+    pub department_order: i64,
+    /// It leads its department (drawn with a small crown).
     #[serde(default, skip_serializing_if = "is_false")]
     pub is_lead: bool,
     #[serde(default, skip_serializing_if = "is_false")]

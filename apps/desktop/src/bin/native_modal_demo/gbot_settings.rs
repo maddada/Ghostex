@@ -1,8 +1,9 @@
 //! A GBot's settings window preview. States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): default (the
 //! Profile tab), `instructions` (the Instructions tab with the SOUL.md notice), `memory` (the
 //! Memory tab), `memory-full` (the Memory tab nearly full, with an undoable change), `memory-edit`
-//! (the memory editor whose save is refused because the GBot wrote meanwhile), `failed` (Save
-//! answers with gxserver's refusal after a second).
+//! (the memory editor whose save is refused because the GBot wrote meanwhile), `department` (the
+//! Department tab, Researcher leading Research), `failed` (Save answers with gxserver's refusal
+//! after a second).
 use super::gbot_settings_modal::*;
 use gpui::{App, AppContext as _};
 use serde_json::json;
@@ -21,7 +22,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "agentId": "claude",
         "model": null,
         "approval": "ask",
-        "departmentId": null,
+        "departmentId": (demo.state == "department").then_some("d_research"),
+        "departmentName": (demo.state == "department").then_some("Research"),
+        "isLead": demo.state == "department",
         "soulDriftMessage": (demo.state == "instructions").then_some(
             "SOUL.md was edited outside Ghostex, so Researcher still follows the instructions saved in Ghostex. Save new instructions with `ghostex gbots edit Researcher --soul-file <file>`."
         ),
@@ -72,6 +75,12 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 }
                 reply.finish(Ok(routines_fixture()), cx)
             }
+            GbotSettingsModalCommand::Departments { ops, reply, .. } => {
+                for op in &ops {
+                    eprintln!("department {op}");
+                }
+                reply.finish(Ok(departments_fixture()), cx)
+            }
             GbotSettingsModalCommand::Reveal { path } => eprintln!("reveal {path}"),
             GbotSettingsModalCommand::Cancel => {
                 eprintln!("cancel");
@@ -81,6 +90,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         },
     );
     let config = GbotSettingsModalConfig {
+        departments: (demo.state == "department").then(departments_fixture),
         memory: demo
             .state
             .starts_with("memory")
@@ -92,11 +102,12 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             "instructions" => GbotSettingsTab::Instructions,
             "memory" | "memory-full" | "memory-edit" => GbotSettingsTab::Memory,
             "routines" => GbotSettingsTab::Routines,
+            "department" => GbotSettingsTab::Department,
             _ => GbotSettingsTab::Profile,
         },
     };
     // The memory states open tall, so one snapshot shows the whole tab.
-    let height = if demo.state.starts_with("memory") {
+    let height = if demo.state.starts_with("memory") || demo.state == "department" {
         1480.0
     } else {
         GBOT_SETTINGS_MODAL_INITIAL_HEIGHT
@@ -181,5 +192,32 @@ fn memory_fixture(state: &str) -> serde_json::Value {
             { "id": "m4", "at": "2026-11-08T16:31:00Z", "byLabel": "Chief of Staff", "what": "Added a note to lisbon" },
             { "id": "m3", "at": "2026-11-08T10:02:00Z", "byLabel": "Researcher", "what": "Forgot a note", "undone": true },
         ],
+    })
+}
+
+/// The Department tab's read: two departments, Researcher leading Research.
+fn departments_fixture() -> serde_json::Value {
+    json!({
+        "departments": { "departments": [
+            {
+                "departmentId": "d_research", "name": "Research", "icon": "",
+                "instructions": "Cite a source for every fact.\nSay how sure you are.",
+                "lead": { "botId": "bot-demo", "name": "Researcher" },
+                "members": [
+                    { "botId": "bot-demo", "name": "Researcher", "isLead": true },
+                    { "botId": "b2", "name": "Scout", "isLead": false },
+                ],
+            },
+            {
+                "departmentId": "d_writing", "name": "Writing", "icon": "",
+                "instructions": "Plain words, short sentences.",
+                "lead": { "botId": "b3", "name": "Writer" },
+                "members": [
+                    { "botId": "b3", "name": "Writer", "isLead": true },
+                    { "botId": "b4", "name": "Editor", "isLead": false },
+                ],
+            },
+        ]},
+        "bot": { "botId": "bot-demo", "departmentId": "d_research", "isLead": true },
     })
 }

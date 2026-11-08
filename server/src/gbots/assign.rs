@@ -522,13 +522,55 @@ pub(super) fn ask(
         &session_text(&session, "sessionId"),
     );
     let status = if started { "started" } else { "pending" };
-    Ok(json!({
+    let mut answer = json!({
         "assignment": assignment_summary(&assignment, Some(&bot.name)),
         "bot": bot_summary(&bot),
         "chat": chat_summary(&state.metadata.server_id, &session),
         "status": status,
         "reportsBack": sender.session().is_some(),
-    }))
+    });
+    if let Some(note) = chief_direction_note(db, &sender, &bot, consult)? {
+        answer["note"] = json!(note);
+    }
+    Ok(answer)
+}
+
+/// For Chief of Staff handing work straight to a member of a department that has a lead: the line
+/// that says to go through the lead next time.
+///
+/// CDXC:GBots 2026-11-09 WHY:
+/// Chief of Staff directs its own team: the GBots of no department, the departments without a lead, and each department's lead; a led department's members get their work from their lead, and Chief of Staff only asks them questions. The plan lets Chief of Staff hand any GBot work (section 1.5), so a direct hand-off still goes through and only this note (and the playbook) steer it to the lead.
+fn chief_direction_note(
+    db: &Connection,
+    sender: &Sender,
+    bot: &Bot,
+    consult: bool,
+) -> Result<Option<String>, DomainStateError> {
+    if consult || bot.is_lead || !matches!(sender, Sender::Chief(..)) {
+        return Ok(None);
+    }
+    let Some(department) = bot
+        .department_id
+        .as_deref()
+        .map(|id| super::departments::read_department(db, id))
+        .transpose()?
+        .flatten()
+    else {
+        return Ok(None);
+    };
+    let Some(lead) = department
+        .lead_bot_id
+        .as_deref()
+        .map(|id| read_bot(db, id))
+        .transpose()?
+        .flatten()
+    else {
+        return Ok(None);
+    };
+    Ok(Some(format!(
+        "{} is in {}, which {} leads: hand {}'s work to {} next time, and ask {} only questions.",
+        bot.name, department.name, lead.name, department.name, lead.name, bot.name
+    )))
 }
 
 /// `op: ask` with `rework`: sends the corrections into the assignment's chat.

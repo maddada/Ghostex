@@ -75,7 +75,9 @@ pub use draft_arrivals::{
     DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
 };
 pub use drop_landing::{DropLanding, DropWrites, TreeDropTarget};
-pub use gbots::{gbots_section_storage_id, GbotsSectionView};
+pub use gbots::{
+    gbots_department_storage_id, gbots_section_storage_id, GbotsDepartmentView, GbotsSectionView,
+};
 pub use inputs::{
     BrowserTabInput, CloseAfterDoneInput, DelayedSendInput, MachineTabInput, PinnedSessionOrder,
     ProjectDiffStats, SectionCollapse, SectionId, SessionSortMode, SidebarCollapseState,

@@ -1,8 +1,10 @@
-//! The native GBot Settings window (a GBot's Profile, Instructions and Memory).
+//! The native GBot Settings window (a GBot's Profile, Instructions, Department, Memory and
+//! Routines).
 //!
 //! Like every native modal view, it depends only on gpui, gpui-component, serde_json, the shared
 //! modal kit and Settings' palette, so the `native-modal-demo` binary and the web build can
 //! include it.
+mod department;
 mod memory;
 mod memory_model;
 mod model;
@@ -14,6 +16,8 @@ mod routines;
 mod window;
 
 // The modal demo binary answers memory commands without naming the reply type.
+#[allow(unused_imports)]
+pub(crate) use department::GbotDepartmentReply;
 #[allow(unused_imports)]
 pub(crate) use memory::GbotMemoryReply;
 pub(crate) use model::{

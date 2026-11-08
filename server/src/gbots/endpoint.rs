@@ -6,8 +6,10 @@
 //! | `show` | `bot` | anyone here |
 //! | `chats` | `bot` | anyone here |
 //! | `brief` | `bot?` (a bot's own chat needs none) | the bot's own chats, you, Chief of Staff |
-//! | `create` | `name`, `title?`, `description?`, `soul?`, `icon?`, `color?`, `agentId?`, `model?`, `effort?`, `approval?` | you, Chief of Staff |
-//! | `edit` | `bot` and the fields to change | you, Chief of Staff |
+//! | `create` | `name`, `title?`, `description?`, `soul?`, `icon?`, `color?`, `agentId?`, `model?`, `effort?`, `approval?`, `department?`, `lead?` | you, Chief of Staff |
+//! | `edit` | `bot` and the fields to change; `department` (a department, or "" for none) and `lead` move it | you, Chief of Staff; a department's lead for its members' `soul` only |
+//! | `departments`, `department` | `department` | anyone here |
+//! | `departmentCreate`, `departmentEdit`, `departmentRemove` | departments.rs | you, Chief of Staff |
 //! | `remove` | `bot` | you, Chief of Staff |
 //! | `newChat` | `bot`, `task?` | you, Chief of Staff |
 //! | `closeChat` | `chat` (a session ref) | you; Chief of Staff for the chats it opened |
@@ -79,7 +81,7 @@ impl Asker {
     }
 
     /// `createdBy` and `openedBy`.
-    fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         if self == Self::Chief {
             "chief"
         } else {
@@ -193,13 +195,26 @@ fn run(
             create(state, &db, &repository, asker, params)
         }
         "edit" => {
+            let mut by = asker.label().to_string();
             if !asker.may_manage() {
-                return Err(forbidden(
-                    "Only you and Chief of Staff can change a GBot. Ask Chief of Staff to.",
-                ));
+                // A department's lead changes its own members' instructions (department_ops.rs).
+                let own = own_bot(&db, caller)?;
+                super::department_ops::check_lead_edit(&db, own.as_ref(), params)?;
+                if let Some(own) = own {
+                    by = format!("bot:{}", own.bot_id);
+                }
             }
-            edit(state, &db, &repository, asker, params)
+            edit(state, &db, &repository, asker, &by, params)
         }
+        op if super::department_ops::handles(op) => super::department_ops::run(
+            state,
+            &db,
+            &repository,
+            asker.may_manage(),
+            asker.label(),
+            op,
+            params,
+        ),
         "remove" => {
             if !asker.may_manage() {
                 return Err(forbidden(
@@ -292,7 +307,17 @@ fn run(
                     ] {
                         restore.insert(key.into(), value);
                     }
-                    edit(state, &db, &repository, asker, &restore)
+                    // Its department too, unless that department is gone since.
+                    let department = before
+                        .department_id
+                        .as_deref()
+                        .and_then(|id| super::departments::read_department(&db, id).ok().flatten());
+                    restore.insert(
+                        "department".into(),
+                        json!(department.map(|department| department.department_id).unwrap_or_default()),
+                    );
+                    restore.insert("lead".into(), json!(before.is_lead));
+                    edit(state, &db, &repository, asker, asker.label(), &restore)
                 },
             )
         }
@@ -307,7 +332,7 @@ fn run(
         // A GBot's routines (routines.rs).
         op if op.starts_with("routine") => super::routines::run(state, &db, &repository, caller, asker, op, params),
         other => Err(DomainStateError::bad_request(format!(
-            "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat, closeChat, ask, assignments, changes, change, undo or a memory op (memoryShow, memoryAdd, …)."
+            "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat, closeChat, ask, assignments, changes, change, undo, a department op (departments, departmentCreate, …), a memory op (memoryShow, memoryAdd, …) or a routine op."
         ))),
     }
 }
@@ -317,10 +342,18 @@ fn list(
     db: &Connection,
     repository: &DomainRepository<'_>,
 ) -> Result<Value, DomainStateError> {
+    let departments = super::departments::list_departments(db)?;
     let bots = list_bots(db)?
         .iter()
         .map(|bot| {
             let mut summary = bot_summary(bot);
+            summary["departmentName"] = json!(bot
+                .department_id
+                .as_deref()
+                .and_then(|id| departments
+                    .iter()
+                    .find(|department| department.department_id == id))
+                .map(|department| department.name.clone()));
             summary["folder"] = json!(super::folder::bot_folder(&state.paths, &bot.bot_id));
             summary["openChats"] = json!(super::session::bot_chats(repository, bot)
                 .map(|chats| chats.len())
@@ -328,7 +361,10 @@ fn list(
             summary
         })
         .collect::<Vec<_>>();
-    Ok(json!({ "bots": bots }))
+    Ok(json!({
+        "bots": bots,
+        "departments": super::departments::list(db)?["departments"].take(),
+    }))
 }
 
 fn show(
@@ -341,6 +377,17 @@ fn show(
     let mut summary = bot_summary(&bot);
     summary["soul"] = json!(bot.soul);
     summary["folder"] = json!(super::folder::bot_folder(&state.paths, &bot.bot_id));
+    if let Some(department) = bot
+        .department_id
+        .as_deref()
+        .map(|id| super::departments::read_department(db, id))
+        .transpose()?
+        .flatten()
+    {
+        summary["department"] =
+            super::departments::department_summary(&department, &list_bots(db)?);
+        summary["departmentName"] = json!(department.name);
+    }
     let drift = super::folder::soul_drift(&state.paths, &bot);
     summary["soulDrift"] = json!(drift);
     if let Some(drift) = drift {
@@ -430,7 +477,7 @@ fn brief(
             ))
         }
     };
-    let team = list_bots(db)?;
+    let team = super::brief::Team::load(db)?;
     Ok(json!({
         "bot": bot_summary(&bot),
         "brief": super::brief::brief_text(&state.paths, &bot, &team),
@@ -512,6 +559,12 @@ fn create(
         updated_at: now,
     };
     fields.apply(&mut bot, &others)?;
+    let placement = super::departments::Placement::from_params(db, params)?;
+    if placement.lead == Some(true) && placement.department.as_ref().is_none_or(Option::is_none) {
+        return Err(DomainStateError::bad_request(
+            "A GBot leads the department it is in: pass --department with --lead.",
+        ));
+    }
     let folder =
         super::folder::create_folder(&state.paths, &bot).map_err(|error| DomainStateError {
             code: "internalError",
@@ -535,6 +588,9 @@ fn create(
         .unwrap_or_default()
         .to_string();
     update_bot(db, &bot)?;
+    if placement.apply(db, &bot)? {
+        bot = read_bot(db, &bot.bot_id)?.unwrap_or(bot);
+    }
     let change_id = record_change(db, "botAdded", &bot.bot_id, None, Some(&bot), asker.label())?;
     super::brief::refresh_all_instruction_files(&state.paths, db);
     let mut summary = bot_summary(&bot);
@@ -552,10 +608,12 @@ fn edit(
     db: &Connection,
     repository: &DomainRepository<'_>,
     asker: Asker,
+    by: &str,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     let before = require_bot(db, required(params, "bot")?)?;
     let fields = BotFields::from_params(params);
+    let placement = super::departments::Placement::from_params(db, params)?;
     check_approval(asker, &fields)?;
     if let Some(agent_id) = fields.agent_id.as_deref() {
         super::session::check_agent(
@@ -566,34 +624,48 @@ fn edit(
     let others = list_bots(db)?;
     let mut bot = before.clone();
     fields.apply(&mut bot, &others)?;
+    let persona_changed = bot != before;
+    if persona_changed {
+        bot.updated_at = now_iso();
+        update_bot(db, &bot)?;
+    }
+    if placement.apply(db, &bot)? {
+        bot = read_bot(db, &bot.bot_id)?.unwrap_or(bot);
+    }
     if bot == before {
         return Ok(json!({ "bot": bot_summary(&bot), "changed": false }));
     }
-    bot.updated_at = now_iso();
-    update_bot(db, &bot)?;
+    let moved = bot.department_id != before.department_id || bot.is_lead != before.is_lead;
     if bot.soul != before.soul {
         super::folder::write_soul(&state.paths, &bot).map_err(|error| DomainStateError {
             code: "internalError",
             message: format!("Saved, but SOUL.md could not be written: {error}"),
         })?;
     }
-    // Open chats are told to read their brief again (memory/notify.rs).
-    if bot.soul != before.soul {
+    // Open chats are told to read their brief again (memory/notify.rs): its own instructions, or
+    // its department's, changed.
+    if bot.soul != before.soul || bot.department_id != before.department_id {
         super::memory::tell_open_chats(state, repository, &bot);
     }
     if bot.name != before.name && !bot.project_id.is_empty() {
         super::project::rename_bot_project(state, db, repository, &bot)?;
     }
-    let change_id = record_change(
-        db,
-        "botEdited",
-        &bot.bot_id,
-        Some(&before),
-        Some(&bot),
-        asker.label(),
-    )?;
+    let change_id = record_change(db, "botEdited", &bot.bot_id, Some(&before), Some(&bot), by)?;
     super::presentation::refresh_presented_bots(db);
     super::brief::refresh_all_instruction_files(&state.paths, db);
+    if moved {
+        // Another bot may have stopped leading the department this one now leads.
+        let others: Vec<String> = list_bots(db)?
+            .into_iter()
+            .filter(|other| {
+                other.department_id.is_some()
+                    && (other.department_id == bot.department_id
+                        || other.department_id == before.department_id)
+            })
+            .map(|other| other.bot_id)
+            .collect();
+        super::department_ops::redraw(state, db, repository, &others);
+    }
     if !bot.project_id.is_empty() {
         let _ = crate::server::schedule_presentation_project_delta(
             state,
@@ -630,6 +702,7 @@ fn remove(
         }
     }
     delete_bot(db, &bot.bot_id)?;
+    super::departments::sync_leads(db)?;
     let change_id = record_change(
         db,
         "botRemoved",

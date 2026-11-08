@@ -101,6 +101,7 @@ impl GhostexGpuiApp {
     ) {
         let config = GbotSettingsModalConfig {
             memory,
+            departments: None,
             agents: gbot_agent_choices(status.as_ref(), &record.agent_id),
             record,
             palette: self.gpui_native_panel_palette(),
@@ -173,6 +174,9 @@ impl GhostexGpuiApp {
             GbotSettingsModalCommand::Routines { bot_id, op, reply } => {
                 run_gbot_routine_op(remote.clone(), op, bot_id, reply, cx)
             }
+            GbotSettingsModalCommand::Departments { bot_id, ops, reply } => {
+                run_gbot_department_ops(remote.clone(), ops, bot_id, reply, cx)
+            }
             GbotSettingsModalCommand::Reveal { path } => {
                 app.reveal_gbot_memory_file(remote.is_some(), &path, cx)
             }
@@ -238,6 +242,46 @@ fn run_gbot_memory_op(
             Err(message) => Err(message),
         };
         let _ = cx.update(|cx| reply.finish(shown, cx));
+    })
+    .detach();
+}
+
+/// Runs department ops `ops` in order (stopping at the first refusal), then reads the departments
+/// and the GBot again, and hands the window `{departments, bot}` or the refusal.
+fn run_gbot_department_ops(
+    remote: Option<GpuiRemoteGxserverRequestTarget>,
+    ops: Vec<Value>,
+    bot_id: String,
+    reply: GbotDepartmentReply,
+    cx: &mut gpui::Context<GhostexGpuiApp>,
+) {
+    cx.spawn(async move |_this, cx| {
+        let mut result = Ok(());
+        for op in ops {
+            result = gx_rpc(remote.clone(), "/api/gbots", op)
+                .await
+                .map(|_| ())
+                .map_err(|error| error.message);
+            if result.is_err() {
+                break;
+            }
+        }
+        let read = match result {
+            Ok(()) => {
+                let departments =
+                    gx_rpc(remote.clone(), "/api/gbots", json!({ "op": "departments" })).await;
+                let shown =
+                    gx_rpc(remote, "/api/gbots", json!({ "op": "show", "bot": bot_id })).await;
+                match (departments, shown) {
+                    (Ok(departments), Ok(shown)) => {
+                        Ok(json!({ "departments": departments, "bot": shown["bot"] }))
+                    }
+                    (Err(error), _) | (_, Err(error)) => Err(error.message),
+                }
+            }
+            Err(message) => Err(message),
+        };
+        let _ = cx.update(|cx| reply.finish(read, cx));
     })
     .detach();
 }

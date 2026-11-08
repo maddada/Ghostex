@@ -579,15 +579,21 @@ pub(crate) fn machine_key(machine_id: &str) -> MachineId {
     }
 }
 
-/// For a GBot's chat, the fold that hides its bot: Main Hub's group, else the GBots heading
-/// (gbots.rs), whichever is folded.
+/// For a GBot's chat, the fold that hides its bot: Main Hub's group, the GBots heading or its
+/// department's sub-heading (gbots.rs), whichever is folded first.
 fn folded_gbots_fold(view: &SidebarView, group_id: &str, inputs: &SidebarInputs) -> Option<String> {
     let section = view
         .gbots
         .iter()
         .find(|section| section.group_ids.iter().any(|id| id == group_id))?;
     let collapsed = &inputs.ui.collapse.collapsed_groups;
+    let department = section
+        .departments
+        .iter()
+        .find(|department| department.group_ids.iter().any(|id| id == group_id))
+        .map(|department| department.storage_id.clone());
     [section.home_group_id.clone(), section.storage_id.clone()]
         .into_iter()
+        .chain(department)
         .find(|fold| collapsed.contains(fold))
 }

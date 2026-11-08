@@ -15,6 +15,9 @@
 //!   current and puts bot chats to sleep when GBots go off.
 //! - [`assign`]: `ghostex gbots ask`, work handed to a bot or a question asked of it, reported back
 //!   the coordinator-thread way; [`assignments`] is its table.
+//! - [`departments`]: GBots grouped under a name with shared instructions and a lead;
+//!   [`department_ops`] is their `/api/gbots` ops and the lead's right to change its members'
+//!   instructions.
 //! - [`changes`]: the change journal read back, Undo, Chief of Staff's caps; [`card`]: the "GBot
 //!   added" card.
 //! - [`endpoint`]: `/api/gbots`.
@@ -30,6 +33,8 @@ mod assignments;
 mod brief;
 mod card;
 mod changes;
+mod department_ops;
+mod departments;
 mod endpoint;
 mod feature;
 mod folder;

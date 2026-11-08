@@ -30,14 +30,16 @@ const SAVING: &str = "Saving…";
 pub(crate) enum GbotSettingsTab {
     Profile,
     Instructions,
+    Department,
     Memory,
     Routines,
 }
 
 impl GbotSettingsTab {
-    pub(crate) const ALL: [Self; 4] = [
+    pub(crate) const ALL: [Self; 5] = [
         Self::Profile,
         Self::Instructions,
+        Self::Department,
         Self::Memory,
         Self::Routines,
     ];
@@ -46,6 +48,7 @@ impl GbotSettingsTab {
         match self {
             Self::Profile => "Profile",
             Self::Instructions => "Instructions",
+            Self::Department => "Department",
             Self::Memory => "Memory",
             Self::Routines => "Routines",
         }
@@ -55,6 +58,7 @@ impl GbotSettingsTab {
         match self {
             Self::Profile => "titlebar/user.svg",
             Self::Instructions => "titlebar/file-text.svg",
+            Self::Department => "titlebar/users.svg",
             Self::Memory => "titlebar/brain.svg",
             Self::Routines => "titlebar/clock.svg",
         }
@@ -112,6 +116,13 @@ pub(crate) enum GbotSettingsModalCommand {
         op: Option<Value>,
         reply: super::routines::GbotRoutinesReply,
     },
+    /// The Department tab (department.rs): each of `ops` in order (none for a plain read), then
+    /// `{departments, bot}` as they are afterwards, or the first refusal.
+    Departments {
+        bot_id: String,
+        ops: Vec<Value>,
+        reply: super::department::GbotDepartmentReply,
+    },
     /// Shows a memory file in Finder.
     Reveal {
         path: String,
@@ -130,6 +141,8 @@ pub(crate) struct GbotSettingsModalConfig {
     pub(crate) tab: GbotSettingsTab,
     /// A `memoryShow` answer already read (opening on the Memory tab), so the tab draws at once.
     pub(crate) memory: Option<Value>,
+    /// The Department tab's `{departments, bot}` already read, so the tab draws at once.
+    pub(crate) departments: Option<Value>,
 }
 
 pub(crate) struct GpuiGbotSettingsModalWindow {
@@ -155,6 +168,7 @@ pub(crate) struct GpuiGbotSettingsModalWindow {
     pub(super) memory: GbotMemoryTab,
     pub(super) pending_memory_op: Option<MemoryOpTag>,
     pub(super) routines: super::routines::GbotRoutinesTab,
+    pub(super) department: super::department::GbotDepartmentTab,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
 }
@@ -235,6 +249,37 @@ impl GpuiGbotSettingsModalWindow {
                 },
             ));
         }
+        let department = super::department::GbotDepartmentTab::new(
+            record.department_id.clone(),
+            record.is_lead,
+            window,
+            cx,
+        );
+        // Its fields enable Save Department and Add as they are typed in.
+        subscriptions.push(cx.subscribe_in(
+            &department.name_input,
+            window,
+            |_this: &mut Self, _, _: &InputEvent, _, cx| cx.notify(),
+        ));
+        subscriptions.push(cx.subscribe_in(
+            &department.new_name_input,
+            window,
+            |_this: &mut Self, _, _: &InputEvent, _, cx| cx.notify(),
+        ));
+        subscriptions.push(cx.subscribe_in(
+            &department.instructions_input,
+            window,
+            |_this: &mut Self, _, _: &InputEvent, _, cx| cx.notify(),
+        ));
+        let mut department = department;
+        if let Some(answer) = config.departments.clone() {
+            department.requested = true;
+            department.preload(answer);
+        } else if config.tab == GbotSettingsTab::Department {
+            cx.defer_in(window, |this: &mut Self, window, cx| {
+                this.ensure_department(window, cx)
+            });
+        }
         let palette = SettingsPalette::resolve(&config.palette);
         let mut memory = GbotMemoryTab::new(window, cx);
         if let Some(view) = config
@@ -276,6 +321,7 @@ impl GpuiGbotSettingsModalWindow {
             memory,
             pending_memory_op: None,
             routines: Default::default(),
+            department,
             focus_handle,
             _subscriptions: subscriptions,
         }
@@ -315,6 +361,9 @@ impl GpuiGbotSettingsModalWindow {
         }
         if tab == GbotSettingsTab::Routines {
             self.ensure_routines(window, cx);
+        }
+        if tab == GbotSettingsTab::Department {
+            self.ensure_department(window, cx);
         }
         if tab == GbotSettingsTab::Instructions {
             self.soul_input
@@ -501,6 +550,7 @@ impl Render for GpuiGbotSettingsModalWindow {
         let page = match self.tab {
             GbotSettingsTab::Profile => self.render_profile(window, cx),
             GbotSettingsTab::Instructions => self.render_instructions(window, cx),
+            GbotSettingsTab::Department => self.render_department(window, cx),
             GbotSettingsTab::Memory => self.render_memory(window, cx),
             GbotSettingsTab::Routines => self.render_routines(cx),
         };
@@ -554,6 +604,9 @@ impl ModalCornerClose for GpuiGbotSettingsModalWindow {
 
     /// Unsaved edits or a save on its way keep the window open on a click away.
     fn keeps_open_on_click_away(&self, _window: &Window, cx: &App) -> bool {
-        self.saving || !self.changes().is_empty() || self.memory_edited(cx)
+        self.saving
+            || !self.changes().is_empty()
+            || self.memory_edited(cx)
+            || self.department_edited(cx)
     }
 }

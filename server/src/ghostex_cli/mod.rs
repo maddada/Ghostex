@@ -30,6 +30,7 @@ pub mod editors;
 pub mod extensions;
 mod feedback;
 mod gbots_cli;
+mod gbots_department_cli;
 mod gbots_memory_cli;
 mod gbots_routine_cli;
 pub mod guide;

@@ -18,7 +18,8 @@ USAGE
   ghostex gbots show <bot> [--json]              One GBot: instructions, folder, open chats
   ghostex gbots create --name <name> [--title <role>] [--description <text>]
                        [--soul-file <file> | --soul <text>] [--agent <id>] [--model <m>]
-                       [--effort <e>] [--icon <icon>] [--color <colour>] [--json]
+                       [--effort <e>] [--icon <icon>] [--color <colour>]
+                       [--department <department> [--lead]] [--json]
   ghostex gbots edit <bot> [any create flag]     Change a GBot (new chats pick it up)
   ghostex gbots remove <bot>                     Close its chats, remove it, folder to the Trash
   ghostex gbots chats <bot> [--json]             Its open chats and who opened them
@@ -46,14 +47,16 @@ USAGE
 const HELP_TAIL: &str = "
   <bot> is a GBot's name or id. Colours: periwinkle, sky, mint, gold, coral, lavender, pink, rose.
   Icons are Ghostex icon names (robot, search, pencil, …). Only you and Chief of Staff add, change
-  and remove GBots; adding one from a terminal asks for your approval first. Chief of Staff and a
-  department's lead hand a GBot work; any other GBot or coordinator may only ask it a question. Turn on Main Hub and
+  and remove GBots and departments; adding a GBot from a terminal asks for your approval first.
+  Chief of Staff and a department's lead hand a GBot work, and a lead changes its own members'
+  instructions; any other GBot or coordinator may only ask it a question. Turn on Main Hub and
   GBots in Settings > Extensions. Add --computer <name> to run a command on another computer.
 ";
 
 fn help() -> String {
     format!(
-        "{HELP_HEAD}{}{}{HELP_TAIL}",
+        "{HELP_HEAD}{}{}{}{HELP_TAIL}",
+        super::gbots_department_cli::DEPARTMENT_HELP,
         super::gbots_memory_cli::MEMORY_HELP,
         super::gbots_routine_cli::ROUTINE_HELP
     )
@@ -131,6 +134,9 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "memory" => return super::gbots_memory_cli::run_memory(rest, &flags),
         "prefs" => return super::gbots_memory_cli::run_prefs(rest, &flags),
         "routine" | "routines" => return super::gbots_routine_cli::run_routine(rest, &flags),
+        "department" | "departments" => {
+            return super::gbots_department_cli::run_department(rest, &flags)
+        }
         _ => {}
     }
     let answer = match verb {
@@ -151,6 +157,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             let mut params = Map::new();
             params.insert("op".into(), json!("create"));
             bot_fields(&flags, &mut params)?;
+            super::gbots_department_cli::placement_flags(&flags, &mut params)?;
             gbots(Value::Object(params), &flags)?
         }
         "edit" => {
@@ -158,6 +165,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             params.insert("op".into(), json!("edit"));
             params.insert("bot".into(), json!(bot_arg(rest, verb)?));
             bot_fields(&flags, &mut params)?;
+            super::gbots_department_cli::placement_flags(&flags, &mut params)?;
             gbots(Value::Object(params), &flags)?
         }
         "remove" => gbots(
@@ -247,14 +255,43 @@ fn print_answer(verb: &str, answer: &Value) {
             if bots.is_empty() {
                 println!("No GBots yet. Add one with `ghostex gbots create --name <name>`.");
             }
-            for bot in bots {
+            let row = |bot: &Value| {
+                let lead = if bot["isLead"].as_bool() == Some(true) {
+                    "\tlead"
+                } else {
+                    ""
+                };
                 println!(
-                    "{}\t{}\t{}\t{} open chats",
-                    text(&bot, "name"),
-                    text(&bot, "botId"),
-                    text(&bot, "title"),
+                    "{}\t{}\t{}\t{} open chats{lead}",
+                    text(bot, "name"),
+                    text(bot, "botId"),
+                    text(bot, "title"),
                     bot["openChats"].as_u64().unwrap_or(0)
                 );
+            };
+            // The GBots of no department first, then each department's, its lead first (the
+            // order Main Hub draws them in).
+            for bot in bots.iter().filter(|bot| bot["departmentId"].is_null()) {
+                row(bot);
+            }
+            for department in answer["departments"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+            {
+                let id = text(&department, "departmentId");
+                let mut members: Vec<&Value> = bots
+                    .iter()
+                    .filter(|bot| text(bot, "departmentId") == id)
+                    .collect();
+                members.sort_by_key(|bot| bot["isLead"].as_bool() != Some(true));
+                println!("\n{}:", text(&department, "name"));
+                if members.is_empty() {
+                    println!("(no GBots yet)");
+                }
+                for bot in members {
+                    row(bot);
+                }
             }
         }
         "show" => {
@@ -265,12 +302,15 @@ fn print_answer(verb: &str, answer: &Value) {
                 ("Description", "description"),
                 ("Agent", "agentId"),
                 ("Approval", "approval"),
+                ("Department", "departmentName"),
                 ("Look", "icon"),
                 ("Folder", "folder"),
                 ("Created by", "createdBy"),
             ] {
                 let value = if key == "icon" {
                     format!("{} {}", text(bot, "icon"), text(bot, "color"))
+                } else if key == "departmentName" && bot["isLead"].as_bool() == Some(true) {
+                    format!("{} (its lead)", text(bot, key))
                 } else {
                     text(bot, key).to_string()
                 };
@@ -322,6 +362,9 @@ fn print_answer(verb: &str, answer: &Value) {
                 "it takes it once its agent is ready"
             };
             println!("{what} in chat {chat}: {state}.");
+            if let Some(note) = answer["note"].as_str() {
+                println!("Note: {note}");
+            }
             if answer["reportsBack"].as_bool() == Some(true) {
                 println!("Its report comes back to you when it finishes; end your turn now instead of waiting.");
             } else {

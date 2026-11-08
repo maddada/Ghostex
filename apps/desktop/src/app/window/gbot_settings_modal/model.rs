@@ -102,6 +102,9 @@ pub(crate) struct GbotSettingsRecord {
     pub(crate) model: String,
     pub(crate) approval: String,
     pub(crate) department_id: Option<String>,
+    /// Its department's name and whether it leads it (the Department tab changes them).
+    pub(crate) department_name: Option<String>,
+    pub(crate) is_lead: bool,
     /// Why SOUL.md no longer matches the saved instructions (gxserver's sentence).
     pub(crate) soul_drift_message: Option<String>,
 }
@@ -138,6 +141,8 @@ impl GbotSettingsRecord {
             model: optional("model").unwrap_or_default(),
             approval: optional("approval").unwrap_or_else(|| "ask".to_string()),
             department_id: optional("departmentId"),
+            department_name: optional("departmentName"),
+            is_lead: bot.get("isLead").and_then(Value::as_bool) == Some(true),
             soul_drift_message: optional("soulDriftMessage"),
         })
     }

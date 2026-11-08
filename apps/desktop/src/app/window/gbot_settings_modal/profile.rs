@@ -2,7 +2,7 @@
 //! it runs on, its approval level and its department.
 use super::super::native_modal_kit::*;
 use super::model::*;
-use super::parts::{page_header, read_only, row, section, wide_row};
+use super::parts::{page_header, row, section, wide_row};
 use super::window::GpuiGbotSettingsModalWindow;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -66,17 +66,7 @@ impl GpuiGbotSettingsModalWindow {
                     modal_text_input(&kit, &self.model_input, self.saving, window, cx),
                 ),
                 self.render_approval(cx),
-                row(
-                    &p,
-                    "Department",
-                    read_only(
-                        &p,
-                        self.draft
-                            .department_id
-                            .clone()
-                            .unwrap_or_else(|| "None".to_string()),
-                    ),
-                ),
+                row(&p, "Department", self.render_department_link(cx)),
             ],
         );
         let column = v_flex()

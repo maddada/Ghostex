@@ -161,6 +161,10 @@ export interface GxserverPresentationProject {
     colorHex: string;
     agentId: string;
     departmentId?: string;
+    /** Its department's name, icon and place, for Main Hub's department sub-headings; absent with no department. */
+    departmentName?: string;
+    departmentIcon?: string;
+    departmentOrder?: number;
     isLead?: true;
     paused?: true;
   };
