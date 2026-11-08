@@ -39,11 +39,22 @@ pub(crate) fn form<'a>(state: &'a ChatState, id: &str) -> Option<&'a QuestionFor
 
 /// The answers the transcript already carries for this form.
 pub(crate) fn received_answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a Value> {
-    state
+    let in_transcript = state
         .transcript_view
         .page_answers
         .iter()
-        .find(|answers| answers.page_id == id)
+        .find(|answers| answers.page_id == id);
+    received_answers_from(state, id, in_transcript)
+}
+
+/// [`received_answers`], given the answers the transcript carries for `id` (the first of
+/// `page_answers` with its id).
+fn received_answers_from<'a>(
+    state: &'a ChatState,
+    id: &str,
+    in_transcript: Option<&'a crate::transcript::page_answers::PageAnswers>,
+) -> Option<&'a Value> {
+    in_transcript
         .or_else(|| crate::questions::resource_modal::fetched_answers(state, id))
         .map(|answers| &answers.answers)
         .or_else(|| crate::questions::recorded_answers::answers(state, id))
@@ -723,6 +734,16 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
     let removed = crate::questions::later::removed_ids(state);
     let index = state.session.resource_index.view();
     let on_the_way = crate::questions::open_questions::answers_on_the_way(state);
+    // The transcript's answers by form, the first for each id as `received_answers` finds them:
+    // searched once rather than once per form.
+    let mut in_transcript = std::collections::HashMap::new();
+    for answers in &state.transcript_view.page_answers {
+        in_transcript
+            .entry(answers.page_id.as_str())
+            .or_insert(answers);
+    }
+    let received_answers =
+        |state, id: &str| received_answers_from(state, id, in_transcript.get(id).copied());
     all_forms(state)
         .map(|form| {
             let entry = state.questions.forms.get(&form.id);
@@ -803,8 +824,7 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
                 phase
             };
             let takes_notes = takes_notes(form);
-            let mut value = serde_json::to_value(form).unwrap_or_default();
-            crate::questions::form_links::add_links(&mut value);
+            let mut value = linked_form(form);
             if let Some(object) = value.as_object_mut() {
                 object.insert("state".to_string(), json!(phase));
                 object.insert("canSend".to_string(), json!(phase == "open"));
@@ -856,6 +876,40 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
             (form.id.clone(), value)
         })
         .collect()
+}
+
+thread_local! {
+    /// Each form as the document carries it before its state is added, with the form it was made
+    /// from, by id. The worker drives every open chat on one thread.
+    static LINKED_FORMS: std::cell::RefCell<std::collections::HashMap<String, (QuestionForm, Value)>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// How many forms `LINKED_FORMS` holds before it starts again: a few long chats' worth.
+const LINKED_FORMS_KEPT: usize = 4_096;
+
+/// The form as JSON with its Q-tag links added (`form_links::add_links`), which depends on the
+/// form alone.
+///
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// Every chat event assembles the document again, and this wrote every form of the chat out to
+/// JSON and scanned its text for links each time: on a coordinator chat with ~500 forms it was the
+/// largest part of an idle tick. It is kept per form and reused while the form is equal.
+fn linked_form(form: &QuestionForm) -> Value {
+    LINKED_FORMS.with_borrow_mut(|kept| {
+        if let Some((source, value)) = kept.get(&form.id) {
+            if source == form {
+                return value.clone();
+            }
+        }
+        let mut value = serde_json::to_value(form).unwrap_or_default();
+        crate::questions::form_links::add_links(&mut value);
+        if kept.len() >= LINKED_FORMS_KEPT {
+            kept.clear();
+        }
+        kept.insert(form.id.clone(), (form.clone(), value.clone()));
+        value
+    })
 }
 
 /// `formToggle {form}`: opens an answered form's full view, or collapses it again.

@@ -32,6 +32,8 @@ pub struct ContentScan {
     rows: HashMap<String, (usize, Vec<ContentItem>)>,
     /// Every page that asks nothing and every chart, in transcript order.
     pub items: Vec<ContentItem>,
+    /// The composition the scan last read (`compose_generation`, and its length).
+    checked: Option<(u64, usize)>,
 }
 
 /// The id a chart's card is flashed by: its block's source, trimmed, hashed (FNV-1a, 32 bits). The
@@ -94,9 +96,19 @@ fn read(message: &ChatMessage) -> Vec<ContentItem> {
 }
 
 /// Brings the scan up to date with the transcript.
+///
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// This runs on every chat event, and walked every reply of the transcript each time to see whether
+/// it changed: on a 19,000-row chat that was a fifth of an idle tick's cost. The composed list only
+/// changes with a new composition, which moves `compose_generation`, so an unchanged one is skipped.
 pub fn refresh(state: &mut ChatState) {
     let messages = &state.messages.composed;
     let scan = &mut state.questions.content;
+    let checked = (state.messages.compose_generation, messages.len());
+    if scan.checked == Some(checked) {
+        return;
+    }
+    scan.checked = Some(checked);
     let mut items = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for message in messages
