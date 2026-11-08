@@ -399,7 +399,7 @@ fn sounds_section(
         let spec = g.spec(
             "attentionAlertsFor",
             "Alert me for",
-            "Needs you only plays the finished sound and shows the system notification only when an agent asks you something, waits for approval, or ends with Blocked or Needs you, and a coordinator's threads stay quiet. The bell keeps every row either way.",
+            "A coordinator's threads finishing, and a coordinator that only finished, stay quiet under both choices, and a red dot (an approval, a stuck or blocked session) always alerts. All plays the finished sound and shows the system notification whenever any other agent finishes; Needs you only does that only when it asks you something, waits for approval, or ends with Blocked or Needs you. The bell keeps every row either way.",
         );
         rows.extend(page.segmented(
             g,
