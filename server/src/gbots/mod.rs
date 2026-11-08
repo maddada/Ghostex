@@ -9,6 +9,7 @@
 //! SEE-ALSO: tooling/gbots/ (the runtime build), server/src/session_chat_decode_gbots.rs (the transcript), packages/gx-core/src/sidebar_view/inputs.rs (`BotsSource`), apps/desktop/src/app/native_sidebar/bots.rs (the Bots button).
 
 mod accounts;
+mod bot_tools;
 mod client;
 mod create;
 pub(crate) mod download;

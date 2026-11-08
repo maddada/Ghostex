@@ -499,11 +499,33 @@ pub(crate) fn calling_conversation(state: &AppState, cwd: &str) -> Option<Value>
             .find(|(bot_id, _)| in_folder(bot_id))?
             .clone(),
     };
+    let (project, session) = conversation_session(state, &bot_id, &thread_id)?;
+    let project_id = text(&project, "projectId");
+    let session_id = text(&session, "sessionId");
+    Some(json!({
+        "globalRef": format!("{}:{project_id}:{session_id}", state.metadata.server_id),
+        "projectId": project_id,
+        "projectName": text(&project, "name"),
+        "sessionId": session_id,
+        // Who a thread's message card says it is from: the bot, not its conversation.
+        "title": text(&project, "name"),
+        "agentId": super::GBOTS_AGENT_ID,
+        "agentName": text(&project, "name"),
+        "agentSessionId": thread_id,
+    }))
+}
+
+/// The bot's project and the session of its conversation `thread_id`.
+pub(crate) fn conversation_session(
+    state: &AppState,
+    bot_id: &str,
+    thread_id: &str,
+) -> Option<(Value, Value)> {
     with_repository(state, |_, repository| {
         let project = repository
             .list_projects()?
             .into_iter()
-            .find(|project| gbots_bot_id(project) == Some(bot_id.as_str()));
+            .find(|project| gbots_bot_id(project) == Some(bot_id));
         let Some(project) = project else {
             return Ok(None);
         };
@@ -512,20 +534,7 @@ pub(crate) fn calling_conversation(state: &AppState, cwd: &str) -> Option<Value>
             .list_sessions(Some(&project_id))?
             .into_iter()
             .find(|session| session_thread(session).is_some_and(|(_, thread)| thread == thread_id))
-            .map(|session| {
-                let session_id = text(&session, "sessionId");
-                json!({
-                    "globalRef": format!("{}:{project_id}:{session_id}", state.metadata.server_id),
-                    "projectId": project_id,
-                    "projectName": text(&project, "name"),
-                    "sessionId": session_id,
-                    // Who a thread's message card says it is from: the bot, not its conversation.
-                    "title": text(&project, "name"),
-                    "agentId": super::GBOTS_AGENT_ID,
-                    "agentName": text(&project, "name"),
-                    "agentSessionId": thread_id,
-                })
-            }))
+            .map(|session| (project, session)))
     })
     .ok()
     .flatten()

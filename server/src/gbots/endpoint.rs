@@ -152,9 +152,17 @@ fn run(state: &AppState, params: &Map<String, Value>) -> Result<Value, DomainSta
             super::create::create_bot(state, params).map_err(refused)
         }
         "agentArgv" => {
-            let argv =
-                super::accounts::agent_argv(state, &text(params, "agent")).map_err(refused)?;
-            Ok(json!({ "argv": argv }))
+            let agent = text(params, "agent");
+            let argv = super::accounts::agent_argv(state, &agent).map_err(refused)?;
+            let mut answer = super::bot_tools::turn_extras(
+                state,
+                &agent,
+                &text(params, "botId"),
+                &text(params, "threadId"),
+                &text(params, "cwd"),
+            );
+            answer["argv"] = json!(argv);
+            Ok(answer)
         }
         "retryDownload" => {
             super::download::retry_now();

@@ -24,7 +24,10 @@ pub(crate) use cards::{
     hold_waiting_card as hold_waiting_connector_card,
     release_waiting_card as release_waiting_connector_card,
 };
-pub(crate) use launch::{with_connector_tools, CONNECTORS_MCP_SERVER_NAME};
+pub(crate) use launch::{
+    connector_tool_args, with_connector_tools, CONNECTORS_MCP_SERVER_NAME,
+    CONNECTORS_SESSION_REF_ENV,
+};
 pub(crate) use revision::bump_tools_revision;
 // The Session details panel lists the apps of the workspace a session's agent gets.
 pub(crate) use session::resolve_cached as resolve_connector_session;

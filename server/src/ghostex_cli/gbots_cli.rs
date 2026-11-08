@@ -229,28 +229,61 @@ fn agent(args: &[String]) -> CliResult<()> {
         Some("--") => args[2..].to_vec(),
         _ => args[1..].to_vec(),
     };
-    let prefix: Vec<String> = call_gxserver_rpc(
+    let turn = is_turn(&engine, &rest);
+    let (bot_id, thread_id) = if turn {
+        turn_conversation(&rest)
+    } else {
+        (None, None)
+    };
+    let answer = call_gxserver_rpc(
         "/api/gbots",
-        &json!({ "action": "agentArgv", "agent": engine }),
+        &json!({
+            "action": "agentArgv",
+            "agent": engine,
+            "botId": bot_id,
+            "threadId": thread_id,
+            "cwd": std::env::current_dir().unwrap_or_default(),
+        }),
         &Flags::default(),
     )
-    .ok()
-    .and_then(|answer| {
-        answer["argv"].as_array().map(|argv| {
-            argv.iter()
-                .filter_map(|part| part.as_str().map(str::to_string))
-                .collect()
-        })
-    })
-    .unwrap_or_default();
+    .ok();
+    let strings = |value: &Value| -> Vec<String> {
+        value
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|part| part.as_str().map(str::to_string))
+            .collect()
+    };
+    let prefix = answer
+        .as_ref()
+        .map(|answer| strings(&answer["argv"]))
+        .unwrap_or_default();
     let mut argv = if prefix.is_empty() {
-        vec![engine]
+        vec![engine.clone()]
     } else {
         prefix
     };
+    let mut rest = rest;
+    let mut env: Vec<(String, String)> = Vec::new();
+    // What a session's launch adds (server/src/gbots/bot_tools.rs), for a bot's turns only: the
+    // runtime also runs the CLI to check its version, sign-in and models.
+    if let Some(answer) = answer.as_ref().filter(|_| turn) {
+        if let Some(note) = answer["note"].as_str().filter(|note| !note.is_empty()) {
+            add_note(&engine, &mut rest, note);
+        }
+        rest.extend(strings(&answer["args"]));
+        env.extend(
+            answer["env"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter_map(|(name, value)| Some((name.clone(), value.as_str()?.to_string()))),
+        );
+    }
     argv.extend(rest);
     let mut command = std::process::Command::new(&argv[0]);
-    command.args(&argv[1..]);
+    command.args(&argv[1..]).envs(env);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt as _;
@@ -267,4 +300,123 @@ fn agent(args: &[String]) -> CliResult<()> {
             .map_err(|error| CliError::Other(format!("Could not run {}: {error}", argv[0])))?;
         std::process::exit(status.code().unwrap_or(1));
     }
+}
+
+/// Whether the runtime starts a bot's turn: Claude in print mode with the runtime's MCP config
+/// (every turn has its permission server), or Codex's app-server with the runtime's agents server.
+fn is_turn(engine: &str, args: &[String]) -> bool {
+    match engine {
+        "claude" => {
+            args.iter().any(|arg| arg == "-p" || arg == "--print")
+                && args.iter().any(|arg| arg == "--mcp-config")
+        }
+        _ => {
+            args.first().map(String::as_str) == Some("app-server")
+                && (std::env::var_os("OMB_THREAD_ID").is_some()
+                    || args
+                        .iter()
+                        .any(|arg| arg.starts_with("mcp_servers.agents.")))
+        }
+    }
+}
+
+/// The bot and conversation the runtime runs this turn for, as it tells its own agents server:
+/// in the environment (Codex hands it on by name), else in Claude's `--mcp-config` file.
+fn turn_conversation(args: &[String]) -> (Option<String>, Option<String>) {
+    let from_env = |key: &str| std::env::var(key).ok().filter(|value| !value.is_empty());
+    let (mut bot, mut thread) = (from_env("OMB_BOT_ID"), from_env("OMB_THREAD_ID"));
+    if thread.is_some() {
+        return (bot, thread);
+    }
+    let mut configs = args
+        .windows(2)
+        .filter(|pair| pair[0] == "--mcp-config")
+        .map(|pair| pair[1].clone());
+    while let (None, Some(config)) = (&thread, configs.next()) {
+        let text = if config.trim_start().starts_with('{') {
+            config
+        } else {
+            std::fs::read_to_string(&config).unwrap_or_default()
+        };
+        if let Ok(value) = serde_json::from_str::<Value>(&text) {
+            thread = find_string(&value, "OMB_THREAD_ID");
+            bot = bot.or_else(|| find_string(&value, "OMB_BOT_ID"));
+        }
+    }
+    (bot, thread)
+}
+
+fn find_string(value: &Value, key: &str) -> Option<String> {
+    match value {
+        Value::Object(map) => map
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|found| !found.is_empty())
+            .map(str::to_string)
+            .or_else(|| map.values().find_map(|child| find_string(child, key))),
+        Value::Array(items) => items.iter().find_map(|child| find_string(child, key)),
+        _ => None,
+    }
+}
+
+/// Adds the Ghostex note to the turn's system prompt without replacing the runtime's: Claude
+/// keeps only its last `--append-system-prompt-file`, so the runtime's file is joined with the
+/// note in a file beside it (in the runtime's private folder, removed with it); Codex's runtime
+/// puts configured developer instructions after the bot's, so the note goes there unless the
+/// command already sets them.
+fn add_note(engine: &str, args: &mut Vec<String>, note: &str) {
+    if engine == "codex" {
+        if !args
+            .iter()
+            .any(|arg| arg.starts_with("developer_instructions="))
+        {
+            args.push("-c".to_string());
+            args.push(format!("developer_instructions={}", toml_string(note)));
+        }
+        return;
+    }
+    if let Some(at) = args
+        .iter()
+        .position(|arg| arg == "--append-system-prompt-file")
+        .filter(|at| *at + 1 < args.len())
+    {
+        let path = std::path::PathBuf::from(&args[at + 1]);
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        let joined = path.with_file_name("ghostex-note.md");
+        if std::fs::write(&joined, format!("{text}\n\n{note}")).is_ok() {
+            args[at + 1] = joined.to_string_lossy().into_owned();
+        }
+        return;
+    }
+    if let Some(at) = args
+        .iter()
+        .position(|arg| arg == "--append-system-prompt")
+        .filter(|at| *at + 1 < args.len())
+    {
+        args[at + 1] = format!("{}\n\n{note}", args[at + 1]);
+        return;
+    }
+    args.push("--append-system-prompt".to_string());
+    args.push(note.to_string());
+}
+
+/// `text` as a TOML basic string, which Codex parses a `-c` value as.
+fn toml_string(text: &str) -> String {
+    let mut value = String::from("\"");
+    for character in text.chars() {
+        match character {
+            '"' => value.push_str("\\\""),
+            '\\' => value.push_str("\\\\"),
+            '\n' => value.push_str("\\n"),
+            '\t' => value.push_str("\\t"),
+            c if (c as u32) < 0x20 || c == '\u{7f}' => {
+                value.push_str(&format!("\\u{:04X}", c as u32))
+            }
+            c => value.push(c),
+        }
+    }
+    value.push('"');
+    value
 }

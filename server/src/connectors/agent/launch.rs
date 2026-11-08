@@ -19,11 +19,17 @@ use crate::paths::{get_gxserver_paths, GxserverPaths};
 /// The MCP server's name in Claude and Codex: its tools read `mcp__ghostex-connectors__<tool>`.
 pub(crate) const CONNECTORS_MCP_SERVER_NAME: &str = "ghostex-connectors";
 
+/// The session a GBots bot's turn serves (`server:project:session`), which the bot's wrapper sets
+/// for the connector server alone: the bot's own `ghostex` CLI keeps finding its caller the GBots
+/// way (ghostex_cli/agents/identity.rs `gbot_caller`).
+pub(crate) const CONNECTORS_SESSION_REF_ENV: &str = "GHOSTEX_CONNECTORS_SESSION_REF";
+
 /// The variables the `ghostex connectors mcp` process reads to learn its session and reach
 /// gxserver.
-const MCP_SESSION_ENV: [&str; 4] = [
+const MCP_SESSION_ENV: [&str; 5] = [
     "GHOSTEX_SESSION_ID",
     "GHOSTEX_GLOBAL_SESSION_REF",
+    CONNECTORS_SESSION_REF_ENV,
     "GHOSTEX_GXSERVER_BASE_URL",
     "GHOSTEX_GXSERVER_AUTH_TOKEN_FILE",
 ];
@@ -76,39 +82,66 @@ pub(crate) fn with_connector_tools(agent_id: &str, icon: Option<&str>, command: 
     if !matches!(family.as_str(), "claude" | "codex") {
         return command.to_string();
     }
+    match connector_tool_args(&family) {
+        Some(args) => format!(
+            "{} {}",
+            command.trim_end(),
+            args.iter()
+                .map(|arg| {
+                    let plain = arg
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'));
+                    if plain {
+                        arg.clone()
+                    } else {
+                        quote_shell_arg(arg)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+        None => command.to_string(),
+    }
+}
+
+/// The arguments that give a `claude` or `codex` (`family`) the connector tools while Connectors
+/// is on, one argument per item; `None` for any other family, while Connectors is off, or when
+/// Claude's config file can't be written. GBots bots' turns get them this way
+/// (gbots/bot_tools.rs), sessions through [`with_connector_tools`].
+pub(crate) fn connector_tool_args(family: &str) -> Option<Vec<String>> {
+    if !matches!(family, "claude" | "codex") {
+        return None;
+    }
     let paths = get_gxserver_paths(None);
     if !super::super::connectors_enabled(&paths) {
-        return command.to_string();
+        return None;
     }
-    let command = command.trim_end();
-    match family.as_str() {
+    match family {
         "claude" => {
             let config = mcp_config_file(&paths);
-            if write_mcp_config(&config).is_err() {
-                return command.to_string();
-            }
-            format!(
-                "{command} --mcp-config {} --allowedTools mcp__{CONNECTORS_MCP_SERVER_NAME}",
-                quote_shell_arg(&config.to_string_lossy())
-            )
+            write_mcp_config(&config).ok()?;
+            Some(vec![
+                "--mcp-config".to_string(),
+                config.to_string_lossy().into_owned(),
+                "--allowedTools".to_string(),
+                format!("mcp__{CONNECTORS_MCP_SERVER_NAME}"),
+            ])
         }
         _ => {
-            let setting = |key: &str, value: String| {
-                format!(
-                    "-c {}",
-                    quote_shell_arg(&format!(
-                        "mcp_servers.{CONNECTORS_MCP_SERVER_NAME}.{key}={value}"
-                    ))
-                )
-            };
             let json_text = |value: Value| serde_json::to_string(&value).unwrap_or_default();
-            format!(
-                "{command} {} {} {} {}",
-                setting("command", json_text(json!(cli_executable()))),
-                setting("args", json_text(json!(MCP_ARGS))),
-                setting("env_vars", json_text(json!(MCP_SESSION_ENV))),
-                setting("tool_timeout_sec", "1900".to_string()),
-            )
+            let mut args = Vec::new();
+            for (key, value) in [
+                ("command", json_text(json!(cli_executable()))),
+                ("args", json_text(json!(MCP_ARGS))),
+                ("env_vars", json_text(json!(MCP_SESSION_ENV))),
+                ("tool_timeout_sec", "1900".to_string()),
+            ] {
+                args.push("-c".to_string());
+                args.push(format!(
+                    "mcp_servers.{CONNECTORS_MCP_SERVER_NAME}.{key}={value}"
+                ));
+            }
+            Some(args)
         }
     }
 }

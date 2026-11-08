@@ -15,8 +15,8 @@ mod workspace;
 pub(crate) use agent::*;
 pub(crate) use api::*;
 pub(crate) use cli::{
-    set_connector_cli_client, sign_in_connector_cli, sign_out_connector_cli, with_project_cli_env,
-    with_project_cli_env_for_resume,
+    project_cli_env, set_connector_cli_client, sign_in_connector_cli, sign_out_connector_cli,
+    with_project_cli_env, with_project_cli_env_for_resume,
 };
 pub(crate) use composio::{serve_oauth_redirect, OAUTH_REDIRECT_PATH};
 pub(crate) use events::*;
