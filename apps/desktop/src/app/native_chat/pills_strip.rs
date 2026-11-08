@@ -2,7 +2,7 @@
 //! with a hairline under it and the box's top corners, holding the chat's pills on the right: the
 //! armed timers, the ? (a question waits), Resources, Workers, Links, Tasks, Subagents and
 //! Background, and the ↓ jump-to-bottom at the left of them while the strip shows. Pills that don't
-//! fit scroll sideways, each fading out as the edge cuts it (`pill_opacities`). With no pill there is no strip; it grows
+//! fit scroll sideways, each fading out before an edge that hides more reaches it (`pill_opacities`). With no pill there is no strip; it grows
 //! in and shrinks away with the chat box's own ease. Each pill opens its menu above the box, lined up
 //! with the pill.
 //!
@@ -71,8 +71,8 @@ pub(super) struct PillsStripCells {
     scroll: ScrollHandle,
     /// Each scrolling pill's border box at the last paint, in row order.
     pill_bounds: Rc<RefCell<Vec<Bounds<Pixels>>>>,
-    /// How much of itself each scrolling pill (row order) keeps at the last paint, 1.0 unless the
-    /// scroll's edge cuts it (`pill_opacities`).
+    /// How much of itself each scrolling pill (row order) keeps at the last paint, less than 1.0
+    /// toward an edge that hides more (`pill_opacities`).
     opacities: Rc<RefCell<Vec<f32>>>,
     /// Whether the strip showed at the last render, and the last change: when it was first drawn,
     /// which way, and a counter naming its animation.
@@ -379,7 +379,7 @@ impl NativeChatView {
         })
     }
 
-    /// The scrolling pills, each measured for `opacities`, and dimmed while the scroll's edge cuts it.
+    /// The scrolling pills, each measured for `opacities`, and faded toward an edge that hides more.
     ///
     /// CDXC:SessionChat 2026-11-07 WHY:
     /// On window glass the box's fill is a 6% white wash, so the 24px fade into it hid nothing: with Saved draft and the ↓ showing, the last pill ended in a hard cut at the box's edge ("How to u…") and nothing said more pills (Stashed) sat past it. A fade can only ramp into a solid colour, so a pill the edge cuts is also drawn faint, which reads as fading out on glass too; opaque themes keep the colour fade over it. A vertical wheel turn still moves the strip sideways (GPUI's x-only scroller).
@@ -423,10 +423,10 @@ impl NativeChatView {
     }
 
     /// The pills' scroll: right-aligned while they fit, scrolling sideways when they don't, each
-    /// pill fading out (`pill_opacities`) as an edge cuts it.
+    /// pill fading out (`pill_opacities`) before an edge that hides more reaches it.
     ///
     /// CDXC:SessionChat 2026-11-08 DECISION:
-    /// User, of the strip scrolled sideways, a dark gradient band over a clipped stub of the previous pill at its left edge: "This effect we show here for the pills bar above the composer is bad man, please fix this". The colour band is gone: on window glass the box's fill is see-through, so a fade painted in the band's colour read as a dark smear. Each pill fades itself instead (solid while whole, gone once four fifths of it are cut), so a pill leaves the edge softly and no half-pill stub is left; the same on the right edge and on glass and opaque themes alike. Supersedes 2026-10-28's 24px colour fade and 2026-11-07's flat dimming of a cut pill below. The phone (PillsStrip.tsx) is opaque and keeps its colour fade.
+    /// User, of the strip scrolled sideways, a dark gradient band over a clipped stub of the previous pill at its left edge: "This effect we show here for the pills bar above the composer is bad man, please fix this". The colour band is gone: on window glass the box's fill is see-through, so a fade painted in the band's colour read as a dark smear. Each pill fades itself instead, over 24px before the edge (solid further in, gone as its near edge reaches the clip), so a pill is never cut: no half-pill stub, no clipped border showing as a hairline above and below the row, no word ending in a hard cut. The user then pointed at exactly those hairlines and at a right-edge pill's text cut hard (Back|), so the fade is by distance from the edge, the same on both. Glass and opaque themes alike. Supersedes 2026-10-28's 24px colour fade and 2026-11-07's flat dimming of a cut pill below. The phone matches in PillsStrip.tsx.
     ///
     /// CDXC:SessionChat 2026-10-28 DECISION:
     /// User, of the pills' row: "I don't like how the background gets cut off on the right. I think we can do something better than that to show that it's going off screen. I don't like inner shadow." The pills scroll inside the strip, inset from the box's rounded edge, and fade into the band's colour over 24px at an edge that hides more of them (the right edge until scrolled to the end, the left once scrolled); no fade while everything shows. The phone matches in PillsStrip.tsx.
@@ -467,7 +467,13 @@ impl NativeChatView {
             .child(
                 canvas(
                     move |view, _, cx| {
-                        let next = pill_opacities(&pill_bounds.borrow(), view);
+                        let offset = -f32::from(scroll.offset().x);
+                        let more = (
+                            offset > 0.5,
+                            f32::from(scroll.max_offset().x) - offset > 0.5,
+                        );
+                        let next =
+                            pill_opacities(&pill_bounds.borrow(), view, more, px(PILLS_FADE * s));
                         if *opacities.borrow() != next {
                             *opacities.borrow_mut() = next;
                             cx.notify(chat);
@@ -482,26 +488,30 @@ impl NativeChatView {
     }
 }
 
-/// How much of itself each pill keeps inside `view`: 1.0 while it shows whole, less the more the
-/// strip's edge cuts it, 0.0 once it is out of view. A pill the edge runs through thus fades out
-/// before it leaves, with no band painted over it (the box's fill may be see-through glass, so nothing
-/// can fade into it), and a sliver of one left at the edge is nearly gone. Steps of 1/16 keep a
+/// How much of itself each pill keeps inside `view`, fading out toward an edge that hides more
+/// pills (`more` is left then right): the pill's near edge `fade` away from that edge or more is
+/// solid, and it ramps to nothing as that edge reaches it, so a pill is gone before the edge can
+/// cut it. No pill ever ends in a clipped border or word, and no band is painted over any (the
+/// box's fill may be see-through glass, so nothing can fade into it). An edge with nothing more
+/// past it fades nothing, so the right-aligned pills at rest stay solid. Steps of 1/16 keep a
 /// scroll from redrawing at every pixel.
-fn pill_opacities(pills: &[Bounds<Pixels>], view: Bounds<Pixels>) -> Vec<f32> {
+fn pill_opacities(
+    pills: &[Bounds<Pixels>],
+    view: Bounds<Pixels>,
+    more: (bool, bool),
+    fade: Pixels,
+) -> Vec<f32> {
     pills
         .iter()
         .map(|pill| {
-            let width = f32::from(pill.size.width);
-            if width <= 0.0 {
-                return 1.0;
+            let mut keep = 1.0_f32;
+            if more.0 {
+                keep = keep.min(f32::from(pill.left() - view.left()) / f32::from(fade));
             }
-            let shown = f32::from(pill.right().min(view.right()) - pill.left().max(view.left()));
-            let shown = (shown / width).clamp(0.0, 1.0);
-            // A pill is solid while whole, fades as the edge cuts it and is gone once four fifths
-            // of it are, so no clipped stub shows at the edge while what is left still hints
-            // that more pills sit past it.
-            let ramp = ((shown - 0.2) / 0.8).clamp(0.0, 1.0);
-            let keep = ramp * ramp;
+            if more.1 {
+                keep = keep.min(f32::from(view.right() - pill.right()) / f32::from(fade));
+            }
+            let keep = keep.clamp(0.0, 1.0);
             (keep * 16.0).round() / 16.0
         })
         .collect()
@@ -562,15 +572,25 @@ mod tests {
     }
 
     #[test]
-    fn a_pill_the_edge_runs_through_fades_with_what_it_hides() {
+    fn a_pill_fades_out_before_the_edge_that_hides_more_reaches_it() {
         let view = rect(100.0, 300.0);
+        let fade = px(24.0);
         let pills = [
             rect(40.0, 50.0),  // wholly left of the view
-            rect(80.0, 50.0),  // 30 of 50 in view, cut by the left edge
-            rect(150.0, 80.0), // wholly inside
-            rect(360.0, 80.0), // half in view, cut by the right edge
-            rect(450.0, 80.0), // wholly right of the view
+            rect(88.0, 50.0),  // cut by the left edge
+            rect(106.0, 50.0), // 6px from the left edge
+            rect(150.0, 80.0), // well inside
+            rect(340.0, 50.0), // 10px from the right edge
+            rect(360.0, 80.0), // cut by the right edge
         ];
-        assert_eq!(pill_opacities(&pills, view), [0.0, 0.25, 1.0, 0.125, 0.0]);
+        assert_eq!(
+            pill_opacities(&pills, view, (true, true), fade),
+            [0.0, 0.0, 0.25, 1.0, 0.4375, 0.0]
+        );
+        // Nothing hidden past an edge: nothing fades there.
+        assert_eq!(
+            pill_opacities(&pills[2..3], view, (false, true), fade),
+            [1.0]
+        );
     }
 }
