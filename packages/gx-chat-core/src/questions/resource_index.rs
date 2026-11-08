@@ -231,12 +231,15 @@ pub fn settle_loaded(askers: &mut [Asker], index: &[Value]) {
     if index.is_empty() {
         return;
     }
-    let forms = settled_by_index(index, "form");
-    let pages = settled_by_index(index, "page");
+    settle_loaded_by(askers, &IndexView::new(index));
+}
+
+/// [`settle_loaded`] with the index's lookups already built (`ResourceIndex::view`).
+pub fn settle_loaded_by(askers: &mut [Asker], view: &IndexView) {
     for asker in askers.iter_mut() {
         let settled = match asker.kind {
-            AskerKind::Form => &forms,
-            AskerKind::Page => &pages,
+            AskerKind::Form => &view.forms,
+            AskerKind::Page => &view.pages,
         };
         match settled.get(asker.id.as_str()) {
             Some(&"answered") => asker.answered = true,

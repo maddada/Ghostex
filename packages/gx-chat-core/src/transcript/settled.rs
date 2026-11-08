@@ -739,17 +739,23 @@ impl SettledPrefix {
         let mut found = if later_found {
             settle_askers(&scans.found, &answered)
         } else {
+            let answered: std::collections::HashSet<&str> =
+                answered.iter().map(String::as_str).collect();
             self.prefix_askers
                 .iter()
                 .cloned()
                 .map(|mut asker| {
-                    asker.answered = answered.contains(&asker.id) || asker.answered_in_words();
+                    asker.answered =
+                        answered.contains(asker.id.as_str()) || asker.answered_in_words();
                     asker
                 })
                 .collect()
         };
         mark_skipped(&mut found, &sent);
-        crate::questions::resource_index::settle_loaded(&mut found, &state.session.resource_index);
+        crate::questions::resource_index::settle_loaded_by(
+            &mut found,
+            state.session.resource_index.view(),
+        );
         crate::transcript::open_questions::share_answers(&mut found);
         // `mark_inherited`, with the prefix's times kept rather than searched for.
         if let Some(forked_at) = state.session.forked_at {

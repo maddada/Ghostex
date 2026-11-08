@@ -15,6 +15,8 @@
 //! CDXC:SessionChat 2026-10-14 SEE-ALSO:
 //! questions/open_questions.rs steps the pill and lands the jumps (the document's `openQuestions`); apps/desktop/src/app/native_chat/open_questions.rs and apps/mobile/app/src/chat/native/transcript/OpenQuestions.tsx draw the pill and the highlight; server/src/ghostex_cli/show.rs writes a page block's `"questions"`; skills/ghostex-visuals/SKILL.md teaches tags and `withdraw`. Change them together.
 
+use std::collections::HashSet;
+
 use ghostex_gx_protocol::{ChatMessage, ChatRole};
 use serde_json::Value;
 
@@ -388,51 +390,48 @@ pub fn asks_questions(message: &ChatMessage) -> bool {
 /// The askers `found` holds, each marked answered, superseded, obsolete and withdrawn by what came
 /// after it: the deciding half of [`askers`].
 pub fn settle_askers(found: &[Found], answered: &[String]) -> Vec<Asker> {
+    // CDXC:SessionChat 2026-11-08 WHY:
+    // Each asker searched everything after it, three times per tag, and every pass over a long chat
+    // settles them again: a coordinator chat with ~500 forms spent a large share of each new row and
+    // each backfill pass here. One walk from the newest entry back gathers what comes after each
+    // one (tags compared ASCII-case-insensitively, as `same_tag` does), which reads the same.
+    let answered: HashSet<&str> = answered.iter().map(String::as_str).collect();
+    let (mut asked_later, mut withdrawn_later, mut said_later) =
+        (HashSet::new(), HashSet::new(), HashSet::new());
     let mut askers = Vec::new();
-    for (index, entry) in found.iter().enumerate() {
-        let Found::Asker(asker) = entry else {
-            continue;
-        };
-        let asked_again = |tag: &str| {
-            found[index + 1..].iter().any(|later| match later {
-                Found::Asker(later) => later.tags.iter().any(|known| same_tag(known, tag)),
-                Found::Withdraw(tags) => tags.iter().any(|known| same_tag(known, tag)),
-                Found::Said(_) => false,
-            })
-        };
-        let withdrawn_later = |tag: &str| {
-            found[index + 1..].iter().any(|later| {
-                matches!(later, Found::Withdraw(tags) if tags.iter().any(|known| same_tag(known, tag)))
-            })
-        };
-        let said_later = |tag: &str| {
-            found[index + 1..].iter().any(|later| {
-                matches!(later, Found::Said(tags) if tags.iter().any(|known| same_tag(known, tag)))
-            })
-        };
-        let mut asker = asker.clone();
-        asker.superseded = asker
-            .tags
-            .iter()
-            .filter(|tag| asked_again(tag))
-            .cloned()
-            .collect();
-        asker.said = asker
-            .tags
-            .iter()
-            .filter(|tag| said_later(tag))
-            .cloned()
-            .collect();
-        asker.answered = answered.contains(&asker.id) || asker.answered_in_words();
-        asker.obsolete = !asker.tags.is_empty() && asker.superseded.len() == asker.tags.len();
-        asker.withdrawn = asker
-            .tags
-            .iter()
-            .filter(|tag| withdrawn_later(tag))
-            .cloned()
-            .collect();
-        askers.push(asker);
+    for entry in found.iter().rev() {
+        match entry {
+            Found::Asker(asker) => {
+                let mut asker = asker.clone();
+                let later = |seen: &HashSet<String>| -> Vec<String> {
+                    asker
+                        .tags
+                        .iter()
+                        .filter(|tag| seen.contains(&tag.to_ascii_lowercase()))
+                        .cloned()
+                        .collect()
+                };
+                asker.superseded = later(&asked_later);
+                asker.said = later(&said_later);
+                asker.withdrawn = later(&withdrawn_later);
+                asker.answered = answered.contains(asker.id.as_str()) || asker.answered_in_words();
+                asker.obsolete =
+                    !asker.tags.is_empty() && asker.superseded.len() == asker.tags.len();
+                asked_later.extend(asker.tags.iter().map(|tag| tag.to_ascii_lowercase()));
+                askers.push(asker);
+            }
+            Found::Withdraw(tags) => {
+                for tag in tags {
+                    asked_later.insert(tag.to_ascii_lowercase());
+                    withdrawn_later.insert(tag.to_ascii_lowercase());
+                }
+            }
+            Found::Said(tags) => {
+                said_later.extend(tags.iter().map(|tag| tag.to_ascii_lowercase()));
+            }
+        }
     }
+    askers.reverse();
     share_answers(&mut askers);
     askers
 }
@@ -446,7 +445,8 @@ pub fn settle_askers(found: &[Found], answered: &[String]) -> Vec<Asker> {
 /// User, of a one-click question (Q1652) the coordinator asked in two messages and the reader answered on the first copy, whose later copy still drew the ? chip, the open pill and a count: "why this showing as unanswered even tho i did answer". A tag answered anywhere is answered everywhere: every copy of it, in any message, earlier or later than the one answered, shows as answered, and the ? pill's count, "Previous question" and gxserver's sidebar count drop it. Refines the 2026-10-14 superseding rule for answers: asking a tag again still moves where it waits, but no longer reopens it once answered.
 /// SEE-ALSO: questions/inline_answers.rs `owner` (which copy a one-click pill follows), server/src/session_chat_open_questions.rs.
 pub fn share_answers(askers: &mut [Asker]) {
-    let mut answered: Vec<(String, bool)> = Vec::new();
+    // Each answered tag, ASCII-lowercased as `same_tag` compares, and whether it was skipped.
+    let mut answered: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
     for asker in askers.iter() {
         let tags = asker
             .tags
@@ -454,11 +454,11 @@ pub fn share_answers(askers: &mut [Asker]) {
             .filter(|tag| asker.answered || asker.said.iter().any(|known| same_tag(known, tag)));
         for tag in tags {
             let skipped = asker.answered && asker.skipped.iter().any(|known| same_tag(known, tag));
-            match answered.iter_mut().find(|(known, _)| same_tag(known, tag)) {
+            answered
+                .entry(tag.to_ascii_lowercase())
                 // Answered anywhere with words beats skipped somewhere else.
-                Some((_, known_skipped)) => *known_skipped &= skipped,
-                None => answered.push((tag.clone(), skipped)),
-            }
+                .and_modify(|known_skipped| *known_skipped &= skipped)
+                .or_insert(skipped);
         }
     }
     if answered.is_empty() {
@@ -469,8 +469,7 @@ pub fn share_answers(askers: &mut [Asker]) {
             continue;
         }
         for tag in asker.tags.clone() {
-            let Some((_, skipped)) = answered.iter().find(|(known, _)| same_tag(known, &tag))
-            else {
+            let Some(skipped) = answered.get(&tag.to_ascii_lowercase()) else {
                 continue;
             };
             if !asker.said.iter().any(|known| same_tag(known, &tag)) {
@@ -502,8 +501,14 @@ pub fn mark_skipped(
     answers: &[crate::transcript::page_answers::PageAnswers],
 ) {
     use crate::transcript::question_forms::{NOTE_SUFFIX, SKIPPED};
+    // The first answers sent for each id, as a search from the front finds them.
+    let mut by_id: std::collections::HashMap<&str, &crate::transcript::page_answers::PageAnswers> =
+        std::collections::HashMap::new();
+    for sent in answers {
+        by_id.entry(sent.page_id.as_str()).or_insert(sent);
+    }
     for asker in askers.iter_mut() {
-        let Some(sent) = answers.iter().find(|sent| sent.page_id == asker.id) else {
+        let Some(sent) = by_id.get(asker.id.as_str()) else {
             continue;
         };
         let Some(values) = sent.answers.as_object() else {
