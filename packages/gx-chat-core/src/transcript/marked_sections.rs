@@ -350,7 +350,15 @@ fn skip_block(lines: &[&str], index: usize) -> Option<usize> {
             }
             end += 1;
         }
-        return Some(lines.len());
+        // A mark with no closing line is a line of its own (the inline answers' `answers:`).
+        //
+        // CDXC:MarkedHandovers 2026-11-08 WHY:
+        // User: "why do i see emojis here even tho i shouldn't since i have emojis disabled?" A
+        // reply with a one-click answer line ([In 11.1.2](ghostex-answer:Q1981)) above its
+        // handover drew ✅ Done, 🧪 Untested and ❓ Needs you plain, emoji and all: the answers
+        // mark has no closing line, so it was read as a block running to the end of the reply,
+        // and every section after it went unmarked.
+        return Some(index + 1);
     }
     let (character, run, _) = fence_open(line)?;
     let close = lines[index + 1..]
