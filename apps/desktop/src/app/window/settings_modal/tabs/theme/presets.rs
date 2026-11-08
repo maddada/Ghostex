@@ -14,13 +14,14 @@
 //! packages/settings-catalog/src/data/theme_presets.rs.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::catalog::{module, settings_catalog};
-use super::super::super::fields::{settings_icon, settings_section_heading, tooltip_text};
+use super::super::super::fields::{settings_icon, settings_section, tooltip_text};
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::SettingsValues;
 use super::ThemeTab;
 use super::colours::{
     COLOURFULNESS_LAST_POSITION, Rgb, colourfulness_patch, foreground_for, preview_colours,
 };
+use super::controls::{CARD_INSET_X, CARD_INSET_Y};
 use super::controls::{ICON_DARK, ICON_LIGHT};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -185,7 +186,7 @@ impl ThemeTab {
     /// The Presets group: the heading, then every preset in one row that scrolls sideways.
     ///
     /// CDXC:Theming 2026-11-08 DECISION:
-    /// User, of the preset panel: "Please make these a scrollable sideways (1 line) list and make each one 1 word max. it's ugly now please make it nicer area. also takes too much space". The presets sit in one row under the heading with no card around them, about a card and its label tall. Labels are one word (the family's own word plus the moon or sun where a family is only Dark and Light). A thin hairline separates families, and a small quiet caption names a family above its first card only where no card says it (Catppuccin, Tokyo Night, Kanagawa): a caption over "Solarized" would say it twice. The row scrolls with a sideways swipe, Shift and the wheel, or a finger; a vertical swipe or wheel turn still scrolls the page. Like the chat box's pills (pills_strip.rs), an edge that hides more fades into the page and dims the cards it cuts, so nothing paints a dark band on glass. On open the row brings the picked card into view.
+    /// User, of the preset panel: "Please make these a scrollable sideways (1 line) list and make each one 1 word max. it's ugly now please make it nicer area. also takes too much space". The presets sit in one row under the heading, about a card and its label tall. (2026-11-08, User: "presets works well but please put them in a card like the ones below have": the row sits in the same section card as Colours and Transparency and scrolls inside it, its cards passing under the card's edges, where the fades sit in the card's fill.) Labels are one word (the family's own word plus the moon or sun where a family is only Dark and Light). A thin hairline separates families, and a small quiet caption names a family above its first card only where no card says it (Catppuccin, Tokyo Night, Kanagawa): a caption over "Solarized" would say it twice. The row scrolls with a sideways swipe, Shift and the wheel, or a finger; a vertical swipe or wheel turn still scrolls the page. Like the chat box's pills (pills_strip.rs), an edge that hides more fades into the card and dims the cards it cuts, so nothing paints a dark band on glass. On open the row brings the picked card into view.
     pub(super) fn presets_section(
         &mut self,
         p: &SettingsPalette,
@@ -254,7 +255,7 @@ impl ThemeTab {
         let cut_cell = self.presets_row.cut.clone();
         let measure = scroll.clone();
         let wheel = scroll.clone();
-        let edge = hsla(p.surface);
+        let edge = hsla(p.raised);
         let body = div()
             .relative()
             .w_full()
@@ -268,9 +269,11 @@ impl ThemeTab {
                     .overflow_x_scroll()
                     .restrict_scroll_to_axis()
                     .track_scroll(&scroll)
-                    // Room for the picked card's ring and the focus ring, which draw outside it.
-                    .px(px(ROW_INSET))
-                    .py(px(ROW_INSET))
+                    // The section card's inner padding, inside the scroll so the cards pass under
+                    // the card's edges; it also leaves room for the picked and focus rings.
+                    .px(px(CARD_INSET_X))
+                    .pt(px(CARD_INSET_Y - 2.0))
+                    .pb(px(CARD_INSET_Y))
                     .gap(px(CARD_GAP))
                     .children(items),
             )
@@ -345,22 +348,14 @@ impl ThemeTab {
                 .size_full(),
             )
             .into_any_element();
-        Some(
-            v_flex()
-                .w_full()
-                .gap(px(8.0))
-                .child(settings_section_heading(
-                    p,
-                    "Presets",
-                    Some(
-                        "Sets the colours below together. You can change each of them afterwards."
-                            .into(),
-                    ),
-                    None,
-                ))
-                .child(body)
-                .into_any_element(),
+        settings_section(
+            p,
+            "Presets",
+            Some("Sets the colours below together. You can change each of them afterwards.".into()),
+            None,
+            vec![body],
         )
+        .map(IntoElement::into_any_element)
     }
 }
 
@@ -385,8 +380,6 @@ const CARD_GAP: f32 = 8.0;
 const FAMILY_GAP: f32 = 12.0;
 const CAPTION_HEIGHT: f32 = 13.0;
 const CARD_TOP: f32 = 3.0;
-/// The scroller's inner margin: the picked ring draws 3.5px and the focus ring 4px outside a card.
-const ROW_INSET: f32 = 4.0;
 /// The width of an edge's fade.
 const EDGE_FADE: f32 = 28.0;
 /// How much of itself a card keeps while an edge cuts it.
