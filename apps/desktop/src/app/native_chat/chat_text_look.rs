@@ -1,5 +1,6 @@
 //! The colours, fonts and sizes of the chat's body text: your messages, an agent's thinking and its
-//! reply, at the Text strength and Show thinking in grey settings.
+//! reply, at the Text strength and Show thinking in grey settings (Text strength alone sets how
+//! bright a reply reads; Grey thinking only greys the thinking).
 //!
 //! The file depends only on gpui, serde_json and the chat core, so Settings includes it as its own
 //! module for the preview on the Interface page (`settings_modal/tabs/theme/chat_preview.rs`): the
@@ -125,19 +126,19 @@ impl ChatTextColors {
         }
     }
 
-    /// An agent's reply before Text strength: the full foreground while Grey thinking is on, so the
-    /// two read apart.
-    pub(crate) fn reply_base(&self, muted_thinking: bool) -> Hsla {
-        if muted_thinking {
-            self.foreground
-        } else {
-            self.prose
-        }
+    /// An agent's reply before Text strength: the standard prose colour, whether or not Grey
+    /// thinking is on.
+    ///
+    /// CDXC:SessionChat 2026-11-09 DECISION:
+    /// User: "text strength slider in settings doesn't do anything for the agent replies please fix". With Show thinking in grey on, a reply used to start from the full foreground (#fcfcfc in dark mode), so the slider had nothing left to raise and did nothing for replies. A reply now always starts from the standard prose colour and Text strength alone takes it up to full white or black; Grey thinking only greys the thinking, so the two still read apart once the reply is raised.
+    /// SEE-ALSO: apps/mobile/app/src/chat/native/transcript/MessageRow.tsx (`proseColor`).
+    pub(crate) fn reply_base(&self) -> Hsla {
+        self.prose
     }
 
     /// An agent's reply at Text strength `percent`.
-    pub(crate) fn reply_prose(&self, muted_thinking: bool, percent: u8) -> Hsla {
-        self.strengthened(self.reply_base(muted_thinking), percent)
+    pub(crate) fn reply_prose(&self, percent: u8) -> Hsla {
+        self.strengthened(self.reply_base(), percent)
     }
 }
 
@@ -151,30 +152,29 @@ mod tests {
             let colors = ChatTextColors::for_variant(light);
             for muted in [false, true] {
                 let thinking = colors.thinking(muted);
-                assert_ne!(colors.reply_prose(muted, 100), thinking, "{light} {muted}");
+                assert_ne!(colors.reply_prose(100), thinking, "{light} {muted}");
                 // Thinking's colour takes no strength to compute at all.
                 assert_eq!(colors.thinking(muted), thinking);
             }
             assert_ne!(colors.user_prose(100), colors.user_prose(0));
-            assert_ne!(colors.reply_prose(false, 100), colors.reply_prose(false, 0));
+            assert_ne!(colors.reply_prose(100), colors.reply_prose(0));
         }
     }
 
     #[test]
     fn full_strength_is_full_white_in_dark_mode_and_full_black_in_light_mode() {
-        let dark = gpui::Rgba::from(ChatTextColors::for_variant(false).reply_prose(false, 100));
+        let dark = gpui::Rgba::from(ChatTextColors::for_variant(false).reply_prose(100));
         assert!(dark.r > 0.99 && dark.g > 0.99 && dark.b > 0.99);
-        let light = gpui::Rgba::from(ChatTextColors::for_variant(true).reply_prose(false, 100));
+        let light = gpui::Rgba::from(ChatTextColors::for_variant(true).reply_prose(100));
         assert!(light.r < 0.01 && light.g < 0.01 && light.b < 0.01);
     }
 
     #[test]
-    fn grey_thinking_mutes_thinking_and_lifts_the_reply() {
+    fn grey_thinking_mutes_thinking_and_leaves_the_reply_to_text_strength() {
         let colors = ChatTextColors::for_variant(false);
         assert_eq!(colors.thinking(true), colors.muted);
-        assert_eq!(colors.reply_base(true), colors.foreground);
         assert_eq!(colors.thinking(false), colors.primary);
-        assert_eq!(colors.reply_base(false), colors.prose);
+        assert_eq!(colors.reply_base(), colors.prose);
     }
 
     #[test]

@@ -50,8 +50,8 @@ pub(crate) struct ChatAppearance {
     /// SEE-ALSO: apps/mobile/app/src/chat/native/transcript/Transcript.tsx (`workOpen`).
     pub(crate) work_open: bool,
     pub(crate) file_previews: bool,
-    /// Grey thinking (`sessionChatMutedThinking`): thinking takes the muted text colour and replies
-    /// the full foreground, so the two read apart (`thinking_lane`, `reply_lane`).
+    /// Grey thinking (`sessionChatMutedThinking`): thinking takes the muted text colour, so it reads
+    /// apart from a reply (`thinking_lane`); how bright a reply reads is Text strength's alone.
     pub(crate) muted_thinking: bool,
     pub(crate) transcript_width: Option<f32>,
     /// How marked sections in agents' replies are drawn.
@@ -129,7 +129,7 @@ impl ChatAppearance {
     /// headline. Light mode always mutes it; dark mode draws it like the answer unless Grey
     /// thinking is on.
     ///
-    /// CDXC:SessionChat 2026-10-16 DECISION: User, on a tester's request to draw the agent's thinking grey and its output white as terminals do: "Sure please do it as a toggle (disabled by default) so we can check how it looks." With `sessionChatMutedThinking` on, thinking takes the theme's muted text colour (`muted`) and an agent's replies its full foreground (`reply_lane`), so the pair reads apart in dark and light themes; off keeps the unified look.
+    /// CDXC:SessionChat 2026-10-16 DECISION: User, on a tester's request to draw the agent's thinking grey and its output white as terminals do: "Sure please do it as a toggle (disabled by default) so we can check how it looks." With `sessionChatMutedThinking` on, thinking takes the theme's muted text colour (`muted`) and an agent's replies its full foreground, so the pair reads apart in dark and light themes; off keeps the unified look. Superseded for replies on 2026-11-09 (`ChatTextColors::reply_base`): the reply's brightness is Text strength's alone.
     /// SEE-ALSO: apps/mobile/app/src/chat/native/transcript/MessageRow.tsx (`thinkingTone`, the reply's `proseColor`), packages/settings-catalog/src/data/defaults.rs.
     pub(crate) fn thinking_lane(&self) -> Self {
         let tone = self.text_colors().thinking(self.muted_thinking);
@@ -143,22 +143,14 @@ impl ChatAppearance {
         lane
     }
 
-    /// The look of an agent's reply prose: the full foreground while Grey thinking is on
-    /// (`thinking_lane`), raised by Text strength. Unchanged when neither applies.
+    /// The look of an agent's reply prose, raised by Text strength (`ChatTextColors::reply_base`
+    /// says why Grey thinking no longer lifts it). Unchanged at the default 0%.
     pub(crate) fn reply_lane(&self) -> Option<Self> {
-        (self.muted_thinking || self.text_strength > 0).then(|| {
+        (self.text_strength > 0).then(|| {
             let mut lane = self.clone();
-            let text = self.text_colors();
-            let prose = text.reply_base(self.muted_thinking);
+            lane.prose = self.strengthened(self.prose);
             // A reply's headings stay at least as bright as its prose.
-            let primary = if self.muted_thinking {
-                self.foreground
-            } else {
-                self.primary
-            };
-            lane.code_text = prose;
-            lane.prose = self.strengthened(prose);
-            lane.primary = self.strengthened(primary);
+            lane.primary = self.strengthened(self.primary);
             lane
         })
     }

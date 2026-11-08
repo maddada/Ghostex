@@ -112,7 +112,7 @@ pub(super) fn chat_preview(
         .unwrap_or(100.0) as f32,
     );
     let (_, background, _) = preview_colours(values, !light);
-    let reply = colors.reply_prose(muted_thinking, strength);
+    let reply = colors.reply_prose(strength);
     let line = move |color: Hsla| {
         div()
             .min_w_0()
@@ -142,7 +142,7 @@ pub(super) fn chat_preview(
         .font_weight(FontWeight::NORMAL)
         .text_size(px(PROSE_SIZE * inline_code_font_scale() * scale))
         // Text strength leaves code at the reply's own colour.
-        .text_color(colors.reply_base(muted_thinking))
+        .text_color(colors.reply_base())
         .child("greet_user(name)");
     let answer = h_flex()
         .flex_wrap()
