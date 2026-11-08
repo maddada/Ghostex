@@ -4,7 +4,9 @@
 //! it by path.
 //!
 //! CDXC:Chief 2026-11-08 DECISION:
-//! User: "make the chief row have an icon to its left and make it match the placement of the project header and match its style and not have border around it (should be exactly like the project header basically). Also when i have chiefs on multiple machines like we agreed we need to make the icon to the left of the chief turn to chevron just like projects have multiple sessions below them." The row is a project header's twin (project_header.rs: its box, height, insets, gutter, weight, hover and selected fill, no border): the gutter where a project draws its chevron holds the flower while there is one Chief and the project's fold chevron once other computers have one, and those Chiefs fold under it like a project's sessions. This supersedes the outlined row with a "+N" chip.
+//! User: "make the chief row have an icon to its left and make it match the placement of the project header and match its style and not have border around it (should be exactly like the project header basically). Also when i have chiefs on multiple machines like we agreed we need to make the icon to the left of the chief turn to chevron just like projects have multiple sessions below them." The row is a project header's twin (project_header.rs: its box, height, insets, gutter, weight, hover and selected fill, no border), and other computers' Chiefs fold under it like a project's sessions. This supersedes the outlined row with a "+N" chip.
+//! CDXC:Chief 2026-11-08 DECISION:
+//! User (Q1882): line "Chief" up with project names. The flower sits in the project-icon column and "Chief" where project names start; the chevron gutter holds the project's fold chevron only while other computers have a Chief, and stays empty with one. Supersedes the flower in the gutter.
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -27,7 +29,7 @@ const INSET: f32 = GUTTER - 3.0;
 /// The sidebar colours the row is drawn in (appearance.rs).
 #[derive(Clone, Copy)]
 pub(crate) struct ChiefRowColors {
-    /// The gutter's flower and chevron, and the first-open hint (`muted`).
+    /// The flower, the fold chevron and the first-open hint (`muted`).
     pub(crate) muted: Hsla,
     /// The hover fill of a project header and a session card (`session_hover`).
     pub(crate) hover: Hsla,
@@ -38,7 +40,7 @@ pub(crate) struct ChiefRowColors {
 /// Whether other computers' Chiefs fold under this computer's.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ChiefFold {
-    /// Only this computer has one: the gutter holds the flower.
+    /// Only this computer has one: the gutter stays empty.
     Single,
     /// Others do and are folded away: the project's chevron, pointing right.
     Folded,
@@ -66,8 +68,9 @@ pub(crate) fn chief_block(scale: f32) -> Div {
         .pb(px(10.0 * scale))
 }
 
-/// The selected computer's Chief, drawn as a project header: the flower or the fold chevron in the
-/// gutter, "Chief", "Pick an agent" before its first open, its status dot. `outline` is drawn over
+/// The selected computer's Chief, drawn as a project header: the fold chevron in the gutter (only
+/// with other computers' Chiefs), the flower in the project-icon column, "Chief", "Pick an agent"
+/// before its first open, its status dot. `outline` is drawn over
 /// it while its chat is open (the sidebar's selected outline).
 pub(crate) fn chief_header_row(
     scale: f32,
@@ -78,9 +81,8 @@ pub(crate) fn chief_header_row(
     outline: Option<AnyElement>,
     status: Option<AnyElement>,
 ) -> Stateful<Div> {
-    let gutter = match fold {
-        ChiefFold::Single => flower(16.0 * scale, colors.muted).into_any_element(),
-        ChiefFold::Folded | ChiefFold::Unfolded => svg()
+    let chevron = (fold != ChiefFold::Single).then(|| {
+        svg()
             .path(CHEVRON_ICON)
             .size(px(16.0 * scale))
             .text_color(colors.muted)
@@ -91,8 +93,7 @@ pub(crate) fn chief_header_row(
                     0.0
                 },
             )))
-            .into_any_element(),
-    };
+    });
     h_flex()
         .id("native-sidebar-chief")
         .role(gpui::Role::TreeItem)
@@ -113,7 +114,16 @@ pub(crate) fn chief_header_row(
         .when(focused, |row| {
             row.bg(colors.selected_fill).children(outline)
         })
-        .child(div().absolute().left_0().top(px(7.0 * scale)).child(gutter))
+        .when_some(chevron, |row, chevron| {
+            row.child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .top(px(7.0 * scale))
+                    .child(chevron),
+            )
+        })
+        .child(flower(16.0 * scale, colors.muted))
         .child(
             div()
                 .flex_1()
