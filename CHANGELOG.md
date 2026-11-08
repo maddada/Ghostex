@@ -9,7 +9,7 @@
 ### 🔐 Security and pairing
 
 - **A connected computer asks once:** one approval card per pair of computers, never a PIN prompt every minute, and with Agent access off it never asks at all.
-- **The pair-again notice lists each device on its own row** with one status and a page per device, and tells you the good news: the security review is done and pairing again takes a moment. It asks for a pairing code only after you press Show code.
+- **The pair-again notice lists each device on its own row** with one status and a page per device, and tells you the good news: the security review is done and pairing again takes a moment. A phone's pairing code is made only while its page is open.
 - **Phones that sign in over SSH or Tailscale pair with matching words**, a re-paired computer counts as paired, and a phone you deny is told so. Every Easy Connect copy gives a code that can pair.
 - **Some things are yours alone, in Settings:** installing or turning on an extension and its permissions, secret providers, joining or setting up a team, and the settings that loosen security. Agents can't ask for these; they point you to the page.
 - **Install from folder… in Settings > Extensions** installs an extension from a folder, with the permissions you tick.
@@ -23,7 +23,7 @@
 - **The handover headings are coloured:** Needs you pink like the sidebar's question dot, Blocked red like its red dot, and Kicked off sky blue.
 - **A message held because the agent's input box is off screen heals itself**, reloading the agent after a few minutes when nothing else brings the box back, and Claude Code's rating survey no longer holds a message for hours.
 - **An automatic reload or restart waits while the agent still has background jobs running.**
-- **Chief's row is drawn like a project header**, its name lined up with the projects and its flower turning into the fold chevron, on the computer and the phone.
+- **Chief's row is drawn like a project header**, its name and flower lined up with the projects, with a fold chevron to its left when other computers have a Chief, on the computer and the phone.
 - **Clicking a Global Action in the Start menu runs it** (#501).
 - **A coordinator's thread on a connected computer starts in a worktree without stopping at the folder-trust question** (#502), and a stale "not moving" report is dropped instead of arriving late.
 
