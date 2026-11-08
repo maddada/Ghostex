@@ -146,10 +146,17 @@ pub(crate) struct FloatingRevealState {
 
 /// macOS: (whether the window shows its own traffic lights, whether its top-left keeps room for
 /// them). Shown while the sidebar is docked, and in full screen, where macOS needs them for the title
-/// bar that slides down over the window; room is kept only outside full screen (CDXC:Titlebar
-/// 2026-11-07 DECISION in helpers/work_area_frame.rs).
-fn window_controls_state(sidebar_collapsed: bool, fullscreen: bool) -> (bool, bool) {
-    let shown = cfg!(target_os = "macos") && (!sidebar_collapsed || fullscreen);
+/// bar that slides down over the window, and with the sidebar collapsed when
+/// `showWindowButtonsWhenSidebarCollapsed` keeps them (CDXC:Titlebar 2026-11-08 DECISION in
+/// helpers/work_area_frame.rs); room is kept only outside full screen (CDXC:Titlebar 2026-11-07
+/// DECISION in helpers/work_area_frame.rs).
+fn window_controls_state(
+    sidebar_collapsed: bool,
+    fullscreen: bool,
+    keep_when_collapsed: bool,
+) -> (bool, bool) {
+    let shown =
+        cfg!(target_os = "macos") && (!sidebar_collapsed || fullscreen || keep_when_collapsed);
     (shown, shown && !fullscreen)
 }
 
@@ -273,16 +280,26 @@ impl GhostexGpuiApp {
         (sidebar + rail + column).clamp(1.0, span)
     }
 
-    /// macOS: the main window shows its own traffic lights. They hide with the sidebar, except in
-    /// full screen, where macOS shows them only with the menu bar and the floating sidebar does
+    /// macOS: the main window shows its own traffic lights. They hide with the sidebar unless
+    /// Settings keeps them (`showWindowButtonsWhenSidebarCollapsed`), and show in full screen, where macOS shows them only with the menu bar and the floating sidebar does
     /// not carry them. Always false on Windows and Linux, which have no lights on the left.
     pub(crate) fn window_controls_shown(&self) -> bool {
-        window_controls_state(self.sidebar_collapsed, self.main_window_fullscreen).0
+        window_controls_state(
+            self.sidebar_collapsed,
+            self.main_window_fullscreen,
+            crate::app::helpers::show_window_buttons_when_sidebar_collapsed(),
+        )
+        .0
     }
 
     /// The window's top-left keeps room for its traffic lights (`sidebar_toggle_leading_x`).
     pub(crate) fn window_controls_reserved(&self) -> bool {
-        window_controls_state(self.sidebar_collapsed, self.main_window_fullscreen).1
+        window_controls_state(
+            self.sidebar_collapsed,
+            self.main_window_fullscreen,
+            crate::app::helpers::show_window_buttons_when_sidebar_collapsed(),
+        )
+        .1
     }
 
     /// The floating panel carrying `content` runs the window's full height and shows the main
@@ -353,10 +370,19 @@ mod tests {
     #[test]
     fn only_the_docked_window_outside_full_screen_keeps_room_for_the_lights() {
         let mac = cfg!(target_os = "macos");
-        // (sidebar collapsed, full screen) -> (lights shown, room kept)
-        assert_eq!(window_controls_state(false, false), (mac, mac));
-        assert_eq!(window_controls_state(true, false), (false, false));
-        assert_eq!(window_controls_state(false, true), (mac, false));
-        assert_eq!(window_controls_state(true, true), (mac, false));
+        // (sidebar collapsed, full screen, kept when collapsed) -> (lights shown, room kept)
+        assert_eq!(window_controls_state(false, false, false), (mac, mac));
+        assert_eq!(window_controls_state(true, false, false), (false, false));
+        assert_eq!(window_controls_state(false, true, false), (mac, false));
+        assert_eq!(window_controls_state(true, true, false), (mac, false));
+    }
+
+    #[test]
+    fn keeping_the_lights_with_the_sidebar_collapsed_reserves_their_room() {
+        let mac = cfg!(target_os = "macos");
+        assert_eq!(window_controls_state(true, false, true), (mac, mac));
+        // Docked and full screen are the same either way.
+        assert_eq!(window_controls_state(false, false, true), (mac, mac));
+        assert_eq!(window_controls_state(true, true, true), (mac, false));
     }
 }

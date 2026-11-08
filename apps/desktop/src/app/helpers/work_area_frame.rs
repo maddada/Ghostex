@@ -19,6 +19,13 @@ use crate::app::helpers::*;
 /// User: "make frame around work area toggle enabled by default for new users please". Supersedes the off default above: a new install starts with the frame on, and anyone who already had a settings file keeps it off, because the first start of this version writes `workAreaFrame` false into their file (shared_settings/work_area_frame_default.rs). The setting is read as on when the file does not carry it.
 static WORK_AREA_FRAME: AtomicBool = AtomicBool::new(true);
 
+/// `showWindowButtonsWhenSidebarCollapsed` (on when unset), the sub-setting of the frame row in
+/// Settings > Interface > Advanced.
+///
+/// CDXC:Titlebar 2026-11-08 DECISION:
+/// User: "please add setting under this [Frame the work area] to show traffic lights on macos when sidebar is collapsed (default to yes). only show this sub setting on macos". On, the window's traffic lights stay in its top left with the sidebar collapsed, whether or not the frame is on, and the header's toggle keeps the docked sidebar's room for them (`window_controls_state` in floating_reveal/model.rs); the floating sidebar then carries no lights of its own. Off is what the 2026-11-06 and 2026-11-07 decisions made of it: the lights hide with the sidebar and show in the floating sidebar's top row. Full screen is unchanged either way. Supersedes, as a default, those decisions' always-hidden lights.
+static SHOW_WINDOW_BUTTONS_WHEN_SIDEBAR_COLLAPSED: AtomicBool = AtomicBool::new(true);
+
 /// The gutter between the card and the window's edges (and the sidebar), in points.
 pub(crate) const WORK_AREA_FRAME_MARGIN: f32 = 6.0;
 
@@ -33,8 +40,16 @@ pub(crate) const WORK_AREA_FRAME_RADIUS: f32 = 16.5 - WORK_AREA_FRAME_MARGIN;
 pub(crate) const WORK_AREA_FRAME_INNER_RADIUS: f32 =
     WORK_AREA_FRAME_RADIUS - WORK_AREA_FRAME_BORDER;
 
-/// Reads `workAreaFrame` (on when unset: the catalog default).
+/// Reads `workAreaFrame` and `showWindowButtonsWhenSidebarCollapsed` (both on when unset: the
+/// catalog defaults).
 pub(crate) fn refresh_work_area_frame(object: &serde_json::Map<String, serde_json::Value>) {
+    SHOW_WINDOW_BUTTONS_WHEN_SIDEBAR_COLLAPSED.store(
+        object
+            .get("showWindowButtonsWhenSidebarCollapsed")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(true),
+        Ordering::Relaxed,
+    );
     WORK_AREA_FRAME.store(
         object
             .get("workAreaFrame")
@@ -42,6 +57,12 @@ pub(crate) fn refresh_work_area_frame(object: &serde_json::Map<String, serde_jso
             .unwrap_or(true),
         Ordering::Relaxed,
     );
+}
+
+/// Whether the window's traffic lights stay with the sidebar collapsed. The setting exists on macOS
+/// only.
+pub(crate) fn show_window_buttons_when_sidebar_collapsed() -> bool {
+    cfg!(target_os = "macos") && SHOW_WINDOW_BUTTONS_WHEN_SIDEBAR_COLLAPSED.load(Ordering::Relaxed)
 }
 
 /// Whether the work area is drawn as a card. The setting exists on macOS only.

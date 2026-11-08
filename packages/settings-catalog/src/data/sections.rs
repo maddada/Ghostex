@@ -52,6 +52,8 @@ use crate::json::J;
 /// CDXC:Settings 2026-10-29 DECISION:
 /// User: "remove show advanced from bottom left ... group advanced settings at the bottom of each page together" in a section "collapsed by default ... called Advanced". The Show Advanced switch and `showAdvancedSettings` are gone; these keys now name the rows each page folds into its Advanced section at the bottom (apps/desktop settings_modal/search.rs `RowTier`). Search still finds them in place.
 pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
+    "workAreaFrame",
+    "showWindowButtonsWhenSidebarCollapsed",
     "closeEmptySessionsOnNew",
     "worktreeSessionsInProject",
     "pinnedSessionOrder",
@@ -415,6 +417,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "showActivePaneOutline",
             "workspaceActivePaneBorderColor",
             "workAreaFrame",
+            "showWindowButtonsWhenSidebarCollapsed",
             "appIconSourceId",
         ],
     ),
@@ -659,6 +662,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "showActivePaneOutline",
             "workspaceActivePaneBorderColor",
             "workAreaFrame",
+            "showWindowButtonsWhenSidebarCollapsed",
         ],
     ),
     ("sidebarTags", &["sidebarSessionTagListItems"]),
@@ -840,6 +844,7 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "showActivePaneOutline",
             "workspaceActivePaneBorderColor",
             "workAreaFrame",
+            "showWindowButtonsWhenSidebarCollapsed",
             "appIconSourceId",
         ],
     ),

@@ -45,6 +45,12 @@ const ROWS: &[RowAvailability] = &[
         only_on: &[Platform::MacOs],
         hidden_while: None,
     },
+    // CDXC:Settings 2026-11-08 WHY: Windows and Linux have no window buttons on the left to keep or hide, so the row exists on macOS only.
+    RowAvailability {
+        key: "showWindowButtonsWhenSidebarCollapsed",
+        only_on: &[Platform::MacOs],
+        hidden_while: None,
+    },
     // CDXC:ManagedTools 2026-10-14 DECISION: User: "SpaceO is macOS-only for now"; its Integrations rows leave Settings, its search and the Help files on Windows and Linux.
     RowAvailability {
         key: "spaceo",

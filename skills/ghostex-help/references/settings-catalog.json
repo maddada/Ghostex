@@ -8449,6 +8449,23 @@
       "sectionTitle": "Interface",
       "type": "boolean",
       "default": true,
+      "advanced": true,
+      "agentWritable": true,
+      "availability": "Only on macOS."
+    },
+    {
+      "key": "showWindowButtonsWhenSidebarCollapsed",
+      "title": "Show the window buttons when the sidebar is collapsed",
+      "subtitle": "Keep the red, yellow and green window buttons in the window's top left while the sidebar is collapsed. Off hides them until you open the floating sidebar, which carries them in its top row. Full screen keeps its own title bar either way.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "boolean",
+      "default": true,
+      "advanced": true,
       "agentWritable": true,
       "availability": "Only on macOS."
     },
