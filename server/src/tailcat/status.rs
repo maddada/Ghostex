@@ -87,7 +87,16 @@ pub fn apply_tailcat_state_update(
     let mut state = read_tailcat_state_or_default(&repository)?;
     match update {
         TailcatStateUpdate::SetEnabled { enabled } => state.enabled = enabled,
-        TailcatStateUpdate::SetPorts { ports } => state.ports = normalize_tailcat_ports(ports),
+        TailcatStateUpdate::SetPorts { ports } => {
+            if let Some(port) = ports.iter().find(|port| !tailcat_port_allowed(**port)) {
+                anyhow::bail!(
+                    "Easy Connect serves only SSH (port {}) and Ghostex (port {}); port {port} can't be added.",
+                    crate::remote_access::ssh_status::DEFAULT_SSH_PORT,
+                    tailcat_gxserver_api_port()
+                );
+            }
+            state.ports = normalize_tailcat_ports(ports)
+        }
         TailcatStateUpdate::SetAllowedClientKeys {
             allowed_client_keys,
         } => state.allowed_client_keys = normalize_tailcat_client_keys(allowed_client_keys),
@@ -280,5 +289,41 @@ mod tests {
         let payload = read_tailcat_status_payload(&paths, &db, &runtime);
         assert!(!payload.relay.running);
         assert_eq!(payload.relay.mode, TailcatRelayMode::Custom);
+    }
+
+    #[test]
+    fn easy_connect_serves_only_ssh_and_gxserver() {
+        let (_temp, paths, db) = temp_db();
+        let runtime = TailcatRuntime::new();
+        let api = tailcat_gxserver_api_port();
+        let refused = apply_tailcat_state_update(
+            &paths,
+            &db,
+            &runtime,
+            TailcatStateUpdate::SetPorts {
+                ports: vec![22, 5900],
+            },
+        );
+        assert!(refused
+            .unwrap_err()
+            .to_string()
+            .contains("port 5900 can't be added"));
+        let record = apply_tailcat_state_update(
+            &paths,
+            &db,
+            &runtime,
+            TailcatStateUpdate::SetPorts { ports: vec![22] },
+        )
+        .expect("ssh only");
+        assert_eq!(tailcat_served_ports(&record.state), {
+            let mut both = vec![22, api];
+            both.sort_unstable();
+            both
+        });
+        // A list saved before the limit is served without the other ports.
+        let mut old = record.state.clone();
+        old.ports = vec![22, 3000, 5900];
+        assert!(!tailcat_served_ports(&old).contains(&3000));
+        assert!(!tailcat_served_ports(&old).contains(&5900));
     }
 }

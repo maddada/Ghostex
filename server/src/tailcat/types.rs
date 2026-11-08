@@ -119,9 +119,20 @@ pub fn tailcat_gxserver_api_port() -> u16 {
 
 /// CDXC:RemotePairing 2026-10-02 WHY: Native Windows gxserver listens on 58746, not 58744, and both the Easy Connect code and the stored port list hardcoded 58744, so the phone's tunnel reached a port nothing listened on and pairing failed with "unexpected end of stream". The API port is always served because the pairing code always points at it; a stored list written with the wrong port, or a user edit that drops it, must not break pairing.
 pub fn tailcat_served_ports(state: &TailcatState) -> Vec<u16> {
-    let mut ports = state.ports.clone();
+    let mut ports: Vec<u16> = state
+        .ports
+        .iter()
+        .copied()
+        .filter(|port| tailcat_port_allowed(*port))
+        .collect();
     ports.push(tailcat_gxserver_api_port());
     super::repository::normalize_tailcat_ports(ports)
+}
+
+/// CDXC:Security 2026-11-08 WHY: Easy Connect is a way in from the internet, and every port it serves is open to whoever is on its allow-list (or anyone, while the list is empty). The design review (GitHub #495, section 5) limits it to what the phone uses: SSH and gxserver's own API. The phone reaches other ports (web previews of dev servers) through its SSH connection's forwards, not through Easy Connect's ports. A port list saved before this is served without the other ports.
+pub fn tailcat_port_allowed(port: u16) -> bool {
+    port == crate::remote_access::ssh_status::DEFAULT_SSH_PORT
+        || port == tailcat_gxserver_api_port()
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
