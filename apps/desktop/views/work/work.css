@@ -1916,6 +1916,18 @@ a:hover {
   flex: 1 1 0;
 }
 
+/* No near-black fill in light: the primary (Undo) is a frosted grey a step stronger than Close. */
+html[data-workarea-theme="light"] .w-ask .w-btn--primary {
+  background: rgba(0, 0, 0, 0.14);
+  border-color: transparent;
+  color: var(--w-text);
+}
+
+html[data-workarea-theme="light"] .w-ask .w-btn--primary:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.19);
+  filter: none;
+}
+
 .w-toast-close {
   display: inline-flex;
   border: 0;

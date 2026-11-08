@@ -120,6 +120,8 @@ impl GhostexGpuiApp {
                 )
             })
             .child(div().flex_1())
+            // Approvals put aside with Escape or Close, as on the desktop (notice_modal_host.rs).
+            .children(self.render_approvals_waiting_pill(false, cx))
             // Start and Open follow the Actions and Open In extensions, as the desktop header does.
             .when(
                 Self::web_built_in_enabled(ghostex_settings_catalog::built_in_extensions::ACTIONS),

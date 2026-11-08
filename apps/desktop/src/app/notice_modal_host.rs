@@ -5,10 +5,19 @@
 //!
 //! SEE-ALSO: apps/desktop/src/app/window/notice_modal.rs (the CDXC:AppModal 2026-11-08 DECISION).
 
-use gpui::{Entity, WindowHandle};
-use gpui_component::Root;
+use gpui::{
+    AnyElement, Entity, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, WindowHandle, px,
+};
+use gpui_component::tooltip::Tooltip;
+use gpui_component::{Root, h_flex};
 
 use crate::GhostexGpuiApp;
+use crate::app::consts::TITLEBAR_CONTROL_HEIGHT;
+use crate::app::helpers::{
+    chrome_uses_light_appearance, titlebar_active_text_color, titlebar_popup_menu_hover_color,
+    titlebar_svg_icon,
+};
 use crate::app::window::notice_modal::{
     GpuiNoticeModalWindow, NoticeModalCommand, NoticeModalHost, NoticeModalItem, NoticeModalTone,
 };
@@ -192,6 +201,8 @@ impl GhostexGpuiApp {
 
     /// Shows the waiting notices that are not put aside, or closes the modal when none is left.
     pub(crate) fn sync_app_notice_window(&mut self, cx: &mut gpui::Context<Self>) {
+        // The header's Approvals waiting pill counts the approvals put aside.
+        cx.notify();
         let notices = &self.app_notices;
         let items: Vec<NoticeModalItem> = notices
             .queue
@@ -254,5 +265,78 @@ impl GhostexGpuiApp {
             return;
         }
         self.run_gpui_app_toast_action(&action, cx);
+    }
+
+    /// The approvals put aside with Escape, Close or the corner X that still wait.
+    pub(crate) fn app_notices_set_aside_count(&self) -> usize {
+        let notices = &self.app_notices;
+        notices
+            .set_aside
+            .iter()
+            .filter(|id| notices.queue.iter().any(|notice| &notice.id == *id))
+            .count()
+    }
+
+    /// The Approvals waiting pill: every approval put aside comes back in the notice modal.
+    pub(crate) fn app_notices_reopen(&mut self, cx: &mut gpui::Context<Self>) {
+        self.app_notices.set_aside.clear();
+        self.sync_app_notice_window(cx);
+    }
+
+    /// "2 approvals waiting" in the work area header while approvals put aside still wait; nothing
+    /// when none does. `compact` (a narrow header) keeps the icon and the number.
+    ///
+    /// CDXC:AppModal 2026-11-08 DECISION: User (via the coordinator, answering whether set-aside
+    /// approvals need a place to reopen them): "Yes to the pill". An approval closed without an
+    /// answer stays waiting; this pill, desktop and browser alike, reopens the notice modal on
+    /// it, and goes when no approval is put aside.
+    pub(crate) fn render_approvals_waiting_pill(
+        &self,
+        compact: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
+        let count = self.app_notices_set_aside_count();
+        if count == 0 {
+            return None;
+        }
+        let text = titlebar_active_text_color();
+        let hover = titlebar_popup_menu_hover_color();
+        // The notice modal's warning amber, so the waiting approval catches the eye.
+        let amber: gpui::Hsla = if chrome_uses_light_appearance() {
+            gpui::rgb(0xb45309).into()
+        } else {
+            gpui::rgb(0xfbbf24).into()
+        };
+        let label: SharedString = if compact {
+            count.to_string().into()
+        } else if count == 1 {
+            "1 approval waiting".into()
+        } else {
+            format!("{count} approvals waiting").into()
+        };
+        Some(
+            h_flex()
+                .id("header-approvals-waiting")
+                .flex_none()
+                .h(px(TITLEBAR_CONTROL_HEIGHT))
+                .px(px(8.0))
+                .gap(px(5.0))
+                .items_center()
+                .rounded_full()
+                .bg(hover.opacity(1.6))
+                .text_size(px(12.0))
+                .text_color(text)
+                .whitespace_nowrap()
+                .cursor_pointer()
+                .hover(move |pill| pill.bg(hover.opacity(2.6)))
+                .child(titlebar_svg_icon("titlebar/shield-check.svg", 14.0, amber))
+                .child(label)
+                .tooltip(|window, cx| {
+                    Tooltip::new("Approvals you closed are still waiting. Click to answer them.")
+                        .build(window, cx)
+                })
+                .on_click(cx.listener(|app, _, _, cx| app.app_notices_reopen(cx)))
+                .into_any_element(),
+        )
     }
 }

@@ -327,7 +327,7 @@ impl GpuiNoticeModalWindow {
     }
 
     fn footer(&self, item: &NoticeModalItem, cx: &mut Context<Self>) -> AnyElement {
-        let p = self.palette;
+        let p = footer_palette(self.palette);
         if item.tone == NoticeModalTone::Approval {
             return modal_footer(vec![
                 modal_action_button(
@@ -381,6 +381,22 @@ impl GpuiNoticeModalWindow {
             ));
         }
         modal_footer(buttons)
+    }
+}
+
+/// The footer's palette. In light the primary button (Approve, Undo, Open Accounts) is a frosted
+/// grey a step stronger than the neutral one, with dark text, instead of the kit's near-black fill.
+///
+/// CDXC:AppModal 2026-11-08 DECISION: the user's standing rule is no black or near-black fills on
+/// glass or transparent UI; the notice's light primary is grey. Dark keeps the kit's light fill.
+fn footer_palette(palette: ModalPalette) -> ModalPalette {
+    if !palette.light {
+        return palette;
+    }
+    ModalPalette {
+        primary: modal_rgba(0x000000, 0.16),
+        primary_foreground: palette.foreground,
+        ..palette
     }
 }
 
