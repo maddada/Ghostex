@@ -81,7 +81,7 @@
 
 <h3 align="center">💬 Chat &amp;&nbsp;CLI&nbsp;views</h3>
 
-<p align="center">Talk to Claude Code, Codex, or any other agent in a proper chat GUI: clickable images, readable diffs, queued prompts, sub-agents in view, and a full editor for long messages. If you ever need the raw CLI, it is one hotkey away and your draft comes&nbsp;with&nbsp;you.</p>
+<p align="center">Talk to Claude Code, Codex, or any other agent in a proper chat GUI: clickable images, readable diffs, queued prompts, sub-agents in view, and a full editor for long messages. If you ever need the raw CLI, it is one hotkey away.</p>
 
 <p align="center"><img src="media/readme/gx-diff.png" alt="A chat showing the agent's code change as a diff" width="70%" /></p>
 
