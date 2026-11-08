@@ -49,7 +49,7 @@ pub fn ghostex_skills(state: &ChatState) -> Vec<GhostexSkill> {
 }
 
 /// `insertSkill`: the skill's pill at the caret (`text`, `start`, `end` from the view), spelled
-/// the way the `$` picker writes it for this agent. Nothing is sent.
+/// `/name` as the `/` list writes it for every agent. Nothing is sent.
 pub fn insert_skill(state: &ChatState, action: &UserAction) -> Vec<Effect> {
     let param = |name: &str| action.param(name);
     let name = param("name").and_then(Value::as_str).unwrap_or_default();
@@ -63,7 +63,7 @@ pub fn insert_skill(state: &ChatState, action: &UserAction) -> Vec<Effect> {
     };
     let text = param("text").and_then(Value::as_str).unwrap_or_default();
     let offset = |name: &str| param(name).and_then(Value::as_u64).unwrap_or_default() as usize;
-    let mention = linked_skill_mention(skill, state.session.agent.as_deref());
+    let mention = linked_skill_mention(skill);
     let edit = insert_reference(text, &mention, offset("start"), offset("end"));
     vec![Effect::SetComposerText {
         content: edit.text,

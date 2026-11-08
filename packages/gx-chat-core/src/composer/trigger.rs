@@ -35,6 +35,9 @@ pub struct ComposerTrigger {
     pub start: usize,
     /// Draft offset just past the token (the caret), in UTF-16 code units.
     pub end: usize,
+    /// A skill trigger typed with `/` rather than `$`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub slash: bool,
 }
 
 /// One skill the `$` picker can offer.
@@ -71,7 +74,7 @@ pub fn detect_composer_trigger(text: &str, caret: Option<usize>) -> Option<Compo
     }
     let start = (index + 1) as usize;
     let token = indexed.slice(start, cursor);
-    let kind = if token.starts_with('$') {
+    let kind = if token.starts_with('$') || is_slash_skill_token(&token) {
         TriggerKind::Skill
     } else if token.starts_with('@') {
         TriggerKind::Path
@@ -82,10 +85,22 @@ pub fn detect_composer_trigger(text: &str, caret: Option<usize>) -> Option<Compo
     };
     Some(ComposerTrigger {
         kind,
+        slash: token.starts_with('/'),
         query: token.chars().skip(1).collect(),
         start: indexed.offset(start),
         end: indexed.offset(cursor),
     })
+}
+
+/// A `/` token that can still be a skill name: `/`, `/rel`, `/plugin:name`, but not a path such as
+/// `/usr/bin` or `/C:\`, which has a second separator.
+///
+/// CDXC:AgentSkills 2026-11-08 DECISION:
+/// User (Q2012 to Q2016 on the reference syntax page): one Ghostex syntax, `/` for skills and commands with every agent, anywhere in the message; `$` keeps opening the same list for good, `@` stays files and `+` Ghostex agents. Each agent receives its own spelling (`skill_invocation.rs`).
+fn is_slash_skill_token(token: &str) -> bool {
+    token
+        .strip_prefix('/')
+        .is_some_and(|rest| !rest.contains(['/', '\\']))
 }
 
 /// The most a `+` query reaches back over words, in code points.
@@ -116,6 +131,7 @@ fn session_words_trigger(indexed: &Utf16Text, cursor: usize) -> Option<ComposerT
         }
         return Some(ComposerTrigger {
             kind: TriggerKind::Session,
+            slash: false,
             query: token.chars().skip(1).collect(),
             start: indexed.offset(index),
             end: indexed.offset(cursor),
@@ -170,14 +186,18 @@ pub fn skill_detail(skill: &Skill) -> String {
     }
 }
 
-/// Markdown-linked skill mention: the label carries the invocation the agent reads (`$name`, or
-/// `/name` for Claude Code), and the destination is the skill's `SKILL.md`, which is what a reader
-/// clicking the mention wants open.
-pub fn linked_skill_mention(skill: &Skill, agent: Option<&str>) -> String {
-    file_reference(
-        &skill.skill_file_path,
-        &crate::composer::skill_invocation::skill_invocation(&skill.name, agent),
-    )
+/// Markdown-linked skill mention: the label is the Ghostex spelling `/name` for every agent, and
+/// the destination is the skill's `SKILL.md` (or command file), which is what a reader clicking the
+/// mention wants open. The agent receives its own spelling (`skill_invocation::agent_skill_text`).
+pub fn linked_skill_mention(skill: &Skill) -> String {
+    file_reference(&skill.skill_file_path, &format!("/{}", skill.name))
+}
+
+/// A catalog entry that is a command file (`commands/<name>.md`) rather than a `SKILL.md`: the `/`
+/// list shows those in their own section.
+pub fn is_command_entry(skill: &Skill) -> bool {
+    let path = skill.skill_file_path.to_ascii_lowercase();
+    !(path == "skill.md" || path.ends_with("/skill.md") || path.ends_with("\\skill.md"))
 }
 
 /// The `@` picker completes to a named file link using the draft's next reference number.

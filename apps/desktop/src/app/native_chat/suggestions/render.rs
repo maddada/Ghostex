@@ -79,6 +79,31 @@ impl Render for SuggestionPanel {
         let card_radius = spec.card_radius(s, glass);
         let row_radius = spec.row_radius(card_radius, s);
         let heading = data["heading"].as_str().unwrap_or_default().to_uppercase();
+        // The list's heading, and a section's inside the `/` list (skills, custom commands, the
+        // agent's built-in commands): small capitals in the muted colour.
+        let heading_row = |id: gpui::ElementId, text: String| {
+            // GPUI text has no letter spacing, so React's `tracking-[0.14em]` is laid out one
+            // glyph at a time, each followed by the same advance CSS adds after every letter.
+            div()
+                .id(id)
+                .role(gpui::Role::Heading)
+                .aria_label(text.clone())
+                .flex()
+                .overflow_hidden()
+                .px(inline)
+                .pt(px(spec.heading_padding_top_px * s))
+                .pb(px(spec.heading_padding_bottom_px * s))
+                .text_size(px(spec.heading_font_size_px * s))
+                .line_height(px(spec.heading_line_height_px * s))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(p.muted)
+                .children(text.chars().map(|glyph| {
+                    div()
+                        .flex_shrink_0()
+                        .mr(px(spec.heading_letter_spacing_px * s))
+                        .child(glyph.to_string())
+                }))
+        };
         let mut body = div()
             .id("suggestion-list")
             .role(gpui::Role::ListBox)
@@ -92,29 +117,7 @@ impl Render for SuggestionPanel {
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
             .p(px(spec.list_padding_px * s))
-            .child(
-                // GPUI text has no letter spacing, so React's `tracking-[0.14em]` is laid out one
-                // glyph at a time, each followed by the same advance CSS adds after every letter.
-                div()
-                    .id("suggestion-heading")
-                    .role(gpui::Role::Heading)
-                    .aria_label(heading.clone())
-                    .flex()
-                    .overflow_hidden()
-                    .px(inline)
-                    .pt(px(spec.heading_padding_top_px * s))
-                    .pb(px(spec.heading_padding_bottom_px * s))
-                    .text_size(px(spec.heading_font_size_px * s))
-                    .line_height(px(spec.heading_line_height_px * s))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(p.muted)
-                    .children(heading.chars().map(|glyph| {
-                        div()
-                            .flex_shrink_0()
-                            .mr(px(spec.heading_letter_spacing_px * s))
-                            .child(glyph.to_string())
-                    })),
-            );
+            .child(heading_row("suggestion-heading".into(), heading.clone()));
         if let Some(status) = data["status"].as_str() {
             let retry = data["retry"] == true;
             body = body.child(
@@ -177,103 +180,114 @@ impl Render for SuggestionPanel {
                 )
             });
             let working = row["working"] == true;
-            body = body.child(
-                div()
-                    .id(("suggestion", index))
-                    .role(gpui::Role::ListBoxOption)
-                    .aria_selected(index == selected)
-                    .aria_label(format!("{label} {detail}"))
-                    .flex()
-                    .items_center()
-                    .gap(gap)
-                    .w_full()
-                    .min_w_0()
-                    .h(spec.row_height(s))
-                    .px(inline)
-                    .when(round_top, |row| row.rounded_t(row_radius))
-                    .when(round_bottom, |row| row.rounded_b(row_radius))
-                    .border(px(spec.row_border_px))
-                    .border_color(outline)
-                    .chat_cursor_pointer()
-                    .when(index == selected, |row| row.bg(highlight))
-                    .when(files, |row| {
-                        row.child(
-                            gpui::svg()
-                                .path("titlebar/file.svg")
-                                .size(px(spec.icon_px * s))
-                                .flex_shrink_0()
-                                .text_color(p.muted),
-                        )
-                    })
-                    .when_some(logo, |row, (logo, color)| {
-                        row.child(
-                            gpui::svg()
-                                .path(logo)
-                                .size(px(spec.icon_px * s))
-                                .flex_shrink_0()
-                                .text_color(color),
-                        )
-                    })
-                    .child(
-                        div()
-                            .min_w_0()
-                            .truncate()
-                            .map(|text| {
-                                if sessions {
-                                    text.flex_1()
-                                } else {
-                                    text.flex_shrink_0()
-                                }
-                            })
-                            // A long name (`/plugin:skill`) widens its own row up to the phone's 60%.
-                            .when(!files && !sessions, |text| {
-                                text.min_w(px(spec.label_column_px * s))
-                                    .max_w(gpui::relative(0.6))
-                            })
-                            .child(label),
+            let section = row["section"].as_str().map(str::to_uppercase);
+            let option = div()
+                .id(("suggestion", index))
+                .role(gpui::Role::ListBoxOption)
+                .aria_selected(index == selected)
+                .aria_label(format!("{label} {detail}"))
+                .flex()
+                .items_center()
+                .gap(gap)
+                .w_full()
+                .min_w_0()
+                .h(spec.row_height(s))
+                .px(inline)
+                .when(round_top, |row| row.rounded_t(row_radius))
+                .when(round_bottom, |row| row.rounded_b(row_radius))
+                .border(px(spec.row_border_px))
+                .border_color(outline)
+                .chat_cursor_pointer()
+                .when(index == selected, |row| row.bg(highlight))
+                .when(files, |row| {
+                    row.child(
+                        gpui::svg()
+                            .path("titlebar/file.svg")
+                            .size(px(spec.icon_px * s))
+                            .flex_shrink_0()
+                            .text_color(p.muted),
                     )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .when(sessions, |text| text.flex_none().max_w(px(160.0 * s)))
-                            .text_color(if working {
-                                rgb(super::super::chat_pills::ATTENTION_COLOR).into()
+                })
+                .when_some(logo, |row, (logo, color)| {
+                    row.child(
+                        gpui::svg()
+                            .path(logo)
+                            .size(px(spec.icon_px * s))
+                            .flex_shrink_0()
+                            .text_color(color),
+                    )
+                })
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .map(|text| {
+                            if sessions {
+                                text.flex_1()
                             } else {
-                                p.muted
-                            })
-                            .child(detail),
-                    )
-                    .on_mouse_move(cx.listener(move |this, _, _, cx| {
-                        let core = this.selected;
-                        let moved = this.chat.update(cx, |chat, cx| {
-                            let list = &mut chat.suggestions;
-                            if list.hover == Some(index)
-                                || list.hover.is_none() && core == Some(index)
-                            {
-                                return false;
+                                text.flex_shrink_0()
                             }
-                            list.hover = Some(index);
-                            if !list.hovered.contains(&index) {
-                                list.hovered.push(index);
-                            }
-                            chat.invoke(json!({"type":"suggestionHighlight","index":index}), cx);
-                            true
-                        });
-                        if moved {
-                            cx.notify();
+                        })
+                        // A long name (`/plugin:skill`) widens its own row up to the phone's 60%.
+                        .when(!files && !sessions, |text| {
+                            text.min_w(px(spec.label_column_px * s))
+                                .max_w(gpui::relative(0.6))
+                        })
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .when(sessions, |text| text.flex_none().max_w(px(160.0 * s)))
+                        .text_color(if working {
+                            rgb(super::super::chat_pills::ATTENTION_COLOR).into()
+                        } else {
+                            p.muted
+                        })
+                        .child(detail),
+                )
+                .on_mouse_move(cx.listener(move |this, _, _, cx| {
+                    let core = this.selected;
+                    let moved = this.chat.update(cx, |chat, cx| {
+                        let list = &mut chat.suggestions;
+                        if list.hover == Some(index) || list.hover.is_none() && core == Some(index)
+                        {
+                            return false;
                         }
-                    }))
-                    .on_mouse_down(
-                        gpui::MouseButton::Left,
-                        cx.listener(move |this, _, window, cx| {
-                            window.prevent_default();
-                            cx.stop_propagation();
-                            this.choose(json!({"type":"suggestionPick","index":index}), cx);
-                        }),
-                    ),
-            );
+                        list.hover = Some(index);
+                        if !list.hovered.contains(&index) {
+                            list.hovered.push(index);
+                        }
+                        chat.invoke(json!({"type":"suggestionHighlight","index":index}), cx);
+                        true
+                    });
+                    if moved {
+                        cx.notify();
+                    }
+                }))
+                .on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(move |this, _, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        this.choose(json!({"type":"suggestionPick","index":index}), cx);
+                    }),
+                );
+            // A section's heading rides in its first row's slot, so the list keeps one child per
+            // row and `scroll_to_item` still finds the selected one.
+            body = match section {
+                Some(section) => body.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .w_full()
+                        .child(heading_row(("suggestion-section", index).into(), section))
+                        .child(option),
+                ),
+                None => body.child(option),
+            };
         }
         let card = div()
             .rounded(card_radius)

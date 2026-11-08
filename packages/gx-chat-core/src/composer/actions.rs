@@ -461,8 +461,21 @@ fn suggestion_command(state: &mut ChatState, action: &UserAction) -> Vec<Effect>
         None => popup.selected,
     };
     if popup.kind == SuggestionKind::Slash {
-        let Some(command) = matches.slash_matches.get(index) else {
-            return Vec::new();
+        let rows = crate::composer::suggestions::slash_rows(&matches);
+        let command = match rows.get(index) {
+            Some(crate::composer::suggestions::SlashRow::Command(command)) => *command,
+            Some(crate::composer::suggestions::SlashRow::Skill(skill)) => {
+                // A skill picked from the `/` list at the start of the draft: its pill replaces
+                // the `/query` the whole draft holds.
+                let content = format!("{} ", crate::composer::trigger::linked_skill_mention(skill));
+                let caret = content.encode_utf16().count();
+                return vec![Effect::SetComposerText {
+                    content,
+                    caret: Some(caret),
+                    from_history: false,
+                }];
+            }
+            None => return Vec::new(),
         };
         if command.insert_text.is_none()
             && key == Some("enter")
@@ -490,7 +503,6 @@ fn suggestion_command(state: &mut ChatState, action: &UserAction) -> Vec<Effect>
         popup.kind,
         index,
         &state.composer.suggestions.text,
-        sources.agent.as_deref(),
     ) else {
         return Vec::new();
     };

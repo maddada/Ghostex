@@ -24,15 +24,16 @@ pub const INTERRUPTED_TOAST_MS: u64 = 2_000;
 pub const INTERRUPTED_TOAST_TEXT: &str = "Agent was interrupted";
 
 /// What the desktop composer says when nothing is blocking it; `+` mentions another agent session
-/// (`transcript/session_mentions.rs`).
+/// (`transcript/session_mentions.rs`). `$` still opens the skills (CDXC:AgentSkills 2026-11-08 on
+/// `trigger::is_slash_skill_token`), but the hint names `/`, the one key for every agent.
 pub const DESKTOP_COMPOSER_PLACEHOLDER: &str =
-    "Press Enter to send a message and Tab to Queue.\nUse @ to mention a file, $ for skills and + for agents.";
+    "Press Enter to send a message and Tab to Queue.\nUse / for skills and commands, @ to mention a file and + for agents.";
 
 /// What a touch composer (the phone, `StartConfig::touch_composer`) says when nothing is blocking
 /// it, the text of the React chat's `MOBILE_SESSION_CHAT_PLACEHOLDER`
 /// (`session-chat-composer.tsx`).
 pub const TOUCH_COMPOSER_PLACEHOLDER: &str =
-    "Tap \u{2191} to send or hold it to queue; use @ for files, $ for skills and + for agents.";
+    "Tap \u{2191} to send or hold it to queue; use / for skills, @ for files and + for agents.";
 
 /// The title of the toast a blocked Send raises.
 pub const SEND_BLOCKED_TITLE: &str = "Message not sent";

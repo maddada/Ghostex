@@ -104,13 +104,17 @@ pub(in crate::app::native_chat) fn suggestion_panel_height(
 ) -> Pixels {
     let spec = &*SPEC;
     let rows = projection["rows"].as_array().map_or(0, Vec::len) as f32;
+    // The `/` list's later sections each add a heading above their first row.
+    let sections = projection["rows"].as_array().map_or(0, |rows| {
+        rows.iter().filter(|row| row["section"].is_string()).count()
+    }) as f32;
     let status = if projection["status"].is_string() {
         spec.status_height(projection["retry"] == true, scale)
     } else {
         px(0.0)
     };
     let list = px(spec.list_padding_px * 2.0 * scale)
-        + spec.heading_height(scale)
+        + spec.heading_height(scale) * (1.0 + sections)
         + spec.row_height(scale) * rows
         + status;
     list.min(px(spec.list_max_height_px * scale)) + px(spec.border_px * 2.0)

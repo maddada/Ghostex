@@ -106,6 +106,24 @@ pub fn begin(
         }),
         (_, version) => version,
     };
+    // A skill typed by hand goes as the pill a pick writes (CDXC:AgentSkills 2026-11-08 on
+    // `pill_typed_skills`), as the draft's next revision for the same reason as the envelope above.
+    let pilled = match (mode, &envelope) {
+        (SubmissionMode::Compact, _) | (_, Some(_)) => None,
+        _ => crate::composer::skill_invocation::pill_typed_skills(
+            text,
+            state.composer.sources.skills.as_deref().unwrap_or_default(),
+            state.session.agent.as_deref(),
+        ),
+    };
+    let text = pilled.as_deref().unwrap_or(text);
+    let version = match (&pilled, version) {
+        (Some(_), Some(version)) => Some(crate::composer::queue::DraftVersion {
+            revision: version.revision + 1,
+            ..version
+        }),
+        (_, version) => version,
+    };
     // A side chat starts now whatever the main agent is doing: it is never queued behind it.
     let side_chat = crate::composer::side_chat::starts_side_chat(state, text);
     let mode = if side_chat && mode == SubmissionMode::Queue {

@@ -8,7 +8,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::composer::references::next_file_reference_index;
-use crate::composer::skill_invocation::skill_invocation;
 use crate::composer::slash_commands::{
     filter_slash_commands, slash_commands_for_agent, slash_heading_for_agent, slash_query,
     SlashCommand,
@@ -16,7 +15,8 @@ use crate::composer::slash_commands::{
 use crate::composer::text::Utf16Text;
 use crate::composer::trigger::{
     detect_composer_trigger, file_basename, file_directory, file_mention, filter_files,
-    filter_skills, linked_skill_mention, skill_detail, ComposerTrigger, Skill, TriggerKind,
+    filter_skills, is_command_entry, linked_skill_mention, skill_detail, ComposerTrigger, Skill,
+    TriggerKind,
 };
 use crate::transcript::session_mentions::{
     choice_detail, choice_mention, filter_session_choices, SessionChoice,
@@ -27,6 +27,9 @@ pub const FILE_SUGGESTION_HEADING: &str = "Project files";
 
 /// The heading above the composer's `+` session list.
 pub const SESSION_SUGGESTION_HEADING: &str = "Agents in this project";
+
+/// The heading above the custom and plugin commands (`commands/<name>.md`) in the `/` and `$` lists.
+pub const CUSTOM_COMMANDS_HEADING: &str = "Custom commands";
 
 /// Which of the three lists is open.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,6 +59,11 @@ pub struct SuggestionRow {
     /// A `+` row's session is working: its state reads in the working colour.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub working: bool,
+    /// A section heading drawn above this row, on the first row of every section after the first
+    /// (whose heading is the popup's own `heading`): the `/` list's skills, custom commands and
+    /// built-in commands.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
 }
 
 /// The popup as the renderer draws it, or absent when no list is open.
@@ -162,7 +170,12 @@ pub struct SuggestionDismissals {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SuggestionMatches {
     pub slash_query: Option<String>,
+    /// The skills and custom commands the `/` list offers above the built-in commands, skills
+    /// first.
+    pub slash_skills: Vec<Skill>,
     pub slash_matches: Vec<&'static SlashCommand>,
+    /// The built-in commands come first: the query names one exactly and no skill.
+    pub slash_commands_first: bool,
     pub slash_open: bool,
     pub trigger: Option<ComposerTrigger>,
     pub skill_query: Option<String>,
@@ -196,9 +209,12 @@ pub fn picker_edges(
         }
         _ => false,
     };
-    let kind = detect_composer_trigger(draft, Some(caret)).map(|trigger| trigger.kind);
+    let trigger = detect_composer_trigger(draft, Some(caret));
+    let kind = trigger.as_ref().map(|trigger| trigger.kind);
+    // A `/` token asks for the skills too: the `/` list shows them above the commands.
+    let slash_skill = trigger.as_ref().is_some_and(|trigger| trigger.slash);
     (
-        kind == Some(TriggerKind::Skill) && !dismissed.skill && !slash_open,
+        kind == Some(TriggerKind::Skill) && !dismissed.skill && (slash_skill || !slash_open),
         kind == Some(TriggerKind::Path) && !dismissed.file && !slash_open,
     )
 }
@@ -213,32 +229,46 @@ pub fn composer_suggestions(
 ) -> SuggestionMatches {
     let commands = slash_commands_for_agent(sources.agent.as_deref());
     let slash_query = slash_query(draft).map(str::to_string);
-    let slash_matches = match &slash_query {
-        Some(query) if !dismissed.slash => filter_slash_commands(commands, query),
-        _ => Vec::new(),
+    let skills = sources.skills.clone().unwrap_or_default();
+    let (slash_matches, slash_skills) = match &slash_query {
+        Some(query) if !dismissed.slash => (
+            filter_slash_commands(commands, query),
+            ranked_skill_matches(&skills, query),
+        ),
+        _ => (Vec::new(), Vec::new()),
     };
-    let slash_open = !slash_matches.is_empty();
+    let slash_commands_first = slash_query.as_deref().is_some_and(|query| {
+        slash_matches.iter().any(|command| command.name == query)
+            && !slash_skills.iter().any(|skill| skill.name == query)
+    });
+    let slash_open = !slash_matches.is_empty() || !slash_skills.is_empty();
     let trigger = detect_composer_trigger(draft, Some(caret));
     let skill_query = trigger
         .as_ref()
         .filter(|trigger| trigger.kind == TriggerKind::Skill)
         .map(|trigger| trigger.query.clone());
-    let skills = sources.skills.clone().unwrap_or_default();
+    let slash_skill = trigger.as_ref().is_some_and(|trigger| trigger.slash);
     let skill_matches = match &skill_query {
-        Some(query) if !dismissed.skill => {
-            filter_skills(&skills, query).into_iter().cloned().collect()
-        }
+        Some(query) if !dismissed.skill => ranked_skill_matches(&skills, query),
         _ => Vec::new(),
     };
-    let skill_picker_active = skill_query.is_some() && !dismissed.skill && !slash_open;
+    // A `/` that starts the draft belongs to the `/` list, which Escape closes for good.
+    let skill_picker_active = skill_query.is_some()
+        && !dismissed.skill
+        && !slash_open
+        && !(slash_skill && slash_query.is_some());
+    // A `/` later in the message opens the skills only while one matches, so a word such as
+    // `/tmp` in prose stays text; `$` also shows the loading, empty and error lines.
     let skill_open = skill_picker_active
         && (!skill_matches.is_empty()
-            || sources.skills_loading
-            || sources
-                .skills_error
-                .as_deref()
-                .is_some_and(|error| !error.is_empty())
-            || (sources.skills.as_ref().is_some_and(Vec::is_empty) && can_request_skills));
+            || (!slash_skill
+                && (sources.skills_loading
+                    || sources
+                        .skills_error
+                        .as_deref()
+                        .is_some_and(|error| !error.is_empty())
+                    || (sources.skills.as_ref().is_some_and(Vec::is_empty)
+                        && can_request_skills))));
     let file_query = trigger
         .as_ref()
         .filter(|trigger| trigger.kind == TriggerKind::Path)
@@ -267,7 +297,9 @@ pub fn composer_suggestions(
     let session_open = !session_matches.is_empty();
     SuggestionMatches {
         slash_query,
+        slash_skills,
         slash_matches,
+        slash_commands_first,
         slash_open,
         trigger,
         skill_query,
@@ -281,6 +313,77 @@ pub fn composer_suggestions(
         session_matches,
         session_open,
     }
+}
+
+/// The skills and custom commands whose name contains the query: skills before command files,
+/// then names that start with the query before the rest, each in catalog order.
+fn ranked_skill_matches(skills: &[Skill], query: &str) -> Vec<Skill> {
+    let lower = query.trim().to_lowercase();
+    let mut matches: Vec<Skill> = filter_skills(skills, query).into_iter().cloned().collect();
+    matches.sort_by_key(|skill| {
+        (
+            is_command_entry(skill),
+            !skill.name.to_lowercase().starts_with(&lower),
+        )
+    });
+    matches
+}
+
+/// One row of the `/` list.
+#[derive(Clone, Copy, Debug)]
+pub enum SlashRow<'a> {
+    Skill(&'a Skill),
+    Command(&'static SlashCommand),
+}
+
+/// The `/` list's rows in order: skills, custom and plugin commands, then the agent's built-in
+/// commands, or the built-ins first when the query names one exactly.
+pub fn slash_rows(matches: &SuggestionMatches) -> Vec<SlashRow<'_>> {
+    let skills = matches.slash_skills.iter().map(SlashRow::Skill);
+    let commands = matches
+        .slash_matches
+        .iter()
+        .map(|command| SlashRow::Command(command));
+    if matches.slash_commands_first {
+        commands.chain(skills).collect()
+    } else {
+        skills.chain(commands).collect()
+    }
+}
+
+/// The section a skill or command row belongs to, as its heading.
+fn row_section(row: &SlashRow, sources: &SuggestionSources) -> String {
+    match row {
+        SlashRow::Skill(skill) if is_command_entry(skill) => CUSTOM_COMMANDS_HEADING.to_string(),
+        SlashRow::Skill(_) => skills_heading(sources),
+        SlashRow::Command(_) => slash_heading_for_agent(sources.agent.as_deref()).to_string(),
+    }
+}
+
+/// Each row's section heading when it starts a new section after the first, and the first
+/// section's heading, which is the popup's own.
+fn sections(
+    rows: &[SlashRow],
+    sources: &SuggestionSources,
+) -> (Option<String>, Vec<Option<String>>) {
+    let mut first = None;
+    let mut previous: Option<String> = None;
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let section = row_section(row, sources);
+        if previous.as_deref() == Some(section.as_str()) {
+            out.push(None);
+            continue;
+        }
+        if first.is_none() {
+            first = Some(section.clone());
+            out.push(None);
+        } else {
+            out.push(Some(section.clone()));
+        }
+        previous = Some(section);
+    }
+    (first, out)
 }
 
 /// Replaces the mention under the caret with `replacement`, answering the new text and caret.
@@ -441,27 +544,23 @@ pub fn suggestion_popup(
     } else {
         return None;
     };
+    let slash = slash_rows(matches);
+    let skill_rows: Vec<SlashRow> = matches.skill_matches.iter().map(SlashRow::Skill).collect();
+    let (section_heading, row_sections) = match kind {
+        SuggestionKind::Slash => sections(&slash, sources),
+        SuggestionKind::Skill => sections(&skill_rows, sources),
+        _ => (None, Vec::new()),
+    };
+    let row_label = |row: &SlashRow| match row {
+        SlashRow::Skill(skill) => (format!("/{}", skill.name), skill_detail(skill)),
+        SlashRow::Command(command) => (
+            format!("/{}", command.name),
+            command.description.to_string(),
+        ),
+    };
     let rows: Vec<(String, String)> = match kind {
-        SuggestionKind::Slash => matches
-            .slash_matches
-            .iter()
-            .map(|command| {
-                (
-                    format!("/{}", command.name),
-                    command.description.to_string(),
-                )
-            })
-            .collect(),
-        SuggestionKind::Skill => matches
-            .skill_matches
-            .iter()
-            .map(|skill| {
-                (
-                    skill_invocation(&skill.name, sources.agent.as_deref()),
-                    skill_detail(skill),
-                )
-            })
-            .collect(),
+        SuggestionKind::Slash => slash.iter().map(row_label).collect(),
+        SuggestionKind::Skill => skill_rows.iter().map(row_label).collect(),
         SuggestionKind::File => matches
             .file_matches
             .iter()
@@ -487,10 +586,10 @@ pub fn suggestion_popup(
     let count = rows.len();
     let selected = index.min(count.saturating_sub(1));
     let send_on_enter = kind == SuggestionKind::Slash
-        && matches
-            .slash_matches
-            .get(selected)
-            .is_none_or(|command| command.insert_text.is_none())
+        && matches!(
+            slash.get(selected),
+            Some(SlashRow::Command(command)) if command.insert_text.is_none()
+        )
         && rows
             .get(selected)
             .is_some_and(|(label, _)| text == label.as_str());
@@ -509,14 +608,16 @@ pub fn suggestion_popup(
                     agent_icon: choice(row_index).and_then(|choice| choice.agent_icon.clone()),
                     coordinator: choice(row_index).is_some_and(|choice| choice.coordinator),
                     working: choice(row_index).is_some_and(|choice| choice.working),
+                    section: row_sections.get(row_index).cloned().flatten(),
                 }
             })
             .collect(),
         selected,
         send_on_enter,
         heading: match kind {
-            SuggestionKind::Slash => slash_heading_for_agent(sources.agent.as_deref()).to_string(),
-            SuggestionKind::Skill => skills_heading(sources),
+            SuggestionKind::Slash | SuggestionKind::Skill => {
+                section_heading.unwrap_or_else(|| skills_heading(sources))
+            }
             SuggestionKind::File => FILE_SUGGESTION_HEADING.to_string(),
             SuggestionKind::Session => SESSION_SUGGESTION_HEADING.to_string(),
         },
@@ -560,14 +661,10 @@ pub fn suggestion_replacement(
     kind: SuggestionKind,
     index: usize,
     text: &str,
-    agent: Option<&str>,
 ) -> Option<String> {
     match kind {
         SuggestionKind::Slash => None,
-        SuggestionKind::Skill => matches
-            .skill_matches
-            .get(index)
-            .map(|skill| linked_skill_mention(skill, agent)),
+        SuggestionKind::Skill => matches.skill_matches.get(index).map(linked_skill_mention),
         SuggestionKind::File => matches
             .file_matches
             .get(index)
@@ -670,7 +767,7 @@ mod session_picker_tests {
             true,
         );
         let replacement =
-            suggestion_replacement(&matches, SuggestionKind::Session, 0, draft, None).unwrap();
+            suggestion_replacement(&matches, SuggestionKind::Session, 0, draft).unwrap();
         let (text, caret) =
             complete_composer_mention(draft, caret, &format!("{replacement} ")).unwrap();
         assert_eq!(text, "ask [Fix login](S90:P3lv0:G1) ");
