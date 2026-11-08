@@ -1,0 +1,241 @@
+name: GPUI release - Collab component
+
+# CDXC:Collab 2026-11-08 DECISION:
+# User (#495, Q1730): Collab's working code is not in the app download. It ships as an on-demand
+# component like GBots, the Code editor and CEF: `ghostex-collab` (server/collab), built here for
+# every platform gxserver runs on, signed (Developer ID and notarised on macOS), attested, and
+# published to the components repository with the same token. gxserver downloads it only when the
+# owner installs Collab in Settings > Extensions, with their signed approval
+# (server/src/collab_shim/install.rs).
+#
+# The component is content-addressed (tooling/collab/component-identity.mjs: the crate version plus
+# a hash of its source, lockfile, toolchain, the wire contract and the build script), so a release
+# whose inputs did not change finds its archives already published and builds nothing. The macOS,
+# Linux and Windows release jobs record the published archive for their platform right before they
+# seal on-demand-resources.json (tooling/collab/seal-component.sh).
+#
+# A manual dispatch with `publish: false` builds every platform without publishing anything and
+# keeps the archives and their components.json record as run artifacts.
+
+on:
+  workflow_call:
+    inputs:
+      publish:
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      component_version:
+        value: ${{ jobs.identity.outputs.component_version }}
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the archives to the components repository (off builds only)
+        required: true
+        default: false
+        type: boolean
+
+# Ghostex's component signing key (tooling/release-gpui/component-signing.mjs): publish-component.mjs
+# signs every component archive it records; GHOSTEX_REQUIRE_COMPONENT_SIGNATURES makes it, and the seal, refuse unsigned ones (#495).
+env:
+  GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+  GHOSTEX_REQUIRE_COMPONENT_SIGNATURES: '1'
+  # Every platform a Ghostex app ships for: gxserver runs Collab wherever it runs.
+  COLLAB_PLATFORMS: darwin-arm64 linux-x64 linux-arm64 windows-x64 windows-arm64
+
+permissions:
+  attestations: write
+  contents: write
+  id-token: write
+
+jobs:
+  identity:
+    runs-on: ubuntu-24.04
+    outputs:
+      component_version: ${{ steps.identity.outputs.component_version }}
+      download_tag: ${{ steps.identity.outputs.download_tag }}
+      published: ${{ steps.probe.outputs.published }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Resolve the Collab component identity
+        id: identity
+        run: node tooling/collab/component-identity.mjs --github-output >> "$GITHUB_OUTPUT"
+      - name: Probe the published component
+        id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG='${{ steps.identity.outputs.download_tag }}'
+          VERSION='${{ steps.identity.outputs.component_version }}'
+          REPO="$(node tooling/release-gpui/components-repo.mjs)"
+          NAMES="$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          PUBLISHED=true
+          for PLATFORM in $COLLAB_PLATFORMS; do
+            if ! printf '%s\n' "$NAMES" | grep -Fxq "collab-$VERSION-$PLATFORM.tar.gz.sha256"; then
+              PUBLISHED=false
+            fi
+          done
+          echo "published=$PUBLISHED" >> "$GITHUB_OUTPUT"
+          echo "::notice::Collab $TAG published in $REPO: $PUBLISHED"
+
+  component:
+    needs: identity
+    # A release reuses a component that is already published; a manual build-only run always builds.
+    if: ${{ needs.identity.outputs.published != 'true' || !inputs.publish }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin-arm64
+            runner: macos-15
+          - platform: linux-x64
+            runner: ubuntu-24.04
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+          - platform: windows-x64
+            runner: windows-2025
+          - platform: windows-arm64
+            runner: windows-11-vs2026-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      OUTPUT_DIR: build/collab/out
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install musl (static Linux build)
+        if: ${{ startsWith(matrix.platform, 'linux-') }}
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq musl-tools
+      - name: Import Developer ID certificate
+        if: ${{ startsWith(matrix.platform, 'darwin-') }}
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          if [[ -z "$CERTIFICATE_BASE64" ]]; then
+            echo "::warning::No Developer ID certificate; the macOS binary stays unsigned (build-only)."
+            exit 0
+          fi
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/ghostex-signing.keychain-db"
+          printf '%s' "$CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          echo "COLLAB_SIGN_IDENTITY=Developer ID Application: Mohamad Youssef (KTKP595G3B)" >> "$GITHUB_ENV"
+      - name: Configure notarization
+        if: ${{ startsWith(matrix.platform, 'darwin-') && inputs.publish }}
+        env:
+          NOTARY_KEY_BASE64: ${{ secrets.APPLE_NOTARY_KEY_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
+        run: |
+          if [[ -n "$NOTARY_KEY_BASE64" && -n "$NOTARY_KEY_ID" && -n "$NOTARY_ISSUER_ID" ]]; then
+            NOTARY_KEY_PATH="$RUNNER_TEMP/AuthKey_${NOTARY_KEY_ID}.p8"
+            printf '%s' "$NOTARY_KEY_BASE64" | base64 --decode > "$NOTARY_KEY_PATH"
+            xcrun notarytool store-credentials notarytool-profile \
+              --key "$NOTARY_KEY_PATH" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID"
+          elif [[ -n "$NOTARY_APPLE_ID" && -n "$NOTARY_TEAM_ID" && -n "$NOTARY_APP_PASSWORD" ]]; then
+            xcrun notarytool store-credentials notarytool-profile \
+              --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD"
+          else
+            echo "Configure either App Store Connect API-key or Apple ID notarization secrets" >&2
+            exit 1
+          fi
+          echo "COLLAB_NOTARY_PROFILE=notarytool-profile" >> "$GITHUB_ENV"
+      - name: Build the component
+        run: |
+          ARGS=(--platform '${{ matrix.platform }}' --out "$OUTPUT_DIR")
+          if [[ -n "${COLLAB_SIGN_IDENTITY:-}" ]]; then ARGS+=(--sign-identity "$COLLAB_SIGN_IDENTITY"); fi
+          if [[ -n "${COLLAB_NOTARY_PROFILE:-}" ]]; then ARGS+=(--notary-profile "$COLLAB_NOTARY_PROFILE"); fi
+          tooling/collab/build-component.sh "${ARGS[@]}"
+      - name: Attest build provenance
+        if: ${{ inputs.publish }}
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ env.OUTPUT_DIR }}/collab-${{ needs.identity.outputs.component_version }}-${{ matrix.platform }}.tar.gz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: collab-component-${{ matrix.platform }}
+          path: ${{ env.OUTPUT_DIR }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: [identity, component]
+    if: ${{ always() && needs.identity.result == 'success' && (needs.component.result == 'success' || needs.component.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - uses: actions/download-artifact@v7
+        if: ${{ needs.component.result == 'success' }}
+        with:
+          pattern: collab-component-*
+          path: build/collab/assets
+          merge-multiple: true
+      - name: Publish the archives, or record them for a build-only run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
+        run: |
+          VERSION='${{ needs.identity.outputs.component_version }}'
+          if [[ '${{ needs.component.result }}' == 'skipped' ]]; then
+            echo "::notice::Collab $VERSION is already published; nothing to build."
+            for PLATFORM in $COLLAB_PLATFORMS; do
+              tooling/release-gpui/retry.sh 4 2 -- node tooling/release-gpui/publish-component.mjs \
+                --reuse-published --metadata-only --require-sha256-sidecars \
+                --component collab --version "$VERSION" --platform "$PLATFORM" \
+                --asset-dir "build/collab/reuse-$PLATFORM" \
+                --output "build/collab/components-$PLATFORM.json"
+            done
+            exit 0
+          fi
+          MODE=()
+          if [[ '${{ inputs.publish }}' != 'true' ]]; then
+            MODE=(--metadata-only)
+          elif [[ -z "$COMPONENTS_GITHUB_TOKEN" ]]; then
+            echo "::error::COMPONENTS_GITHUB_TOKEN is not configured (tooling/release-gpui/components-repo-setup.md)."
+            exit 1
+          fi
+          tooling/release-gpui/retry.sh 4 2 -- node tooling/release-gpui/publish-component.mjs \
+            "${MODE[@]}" \
+            --require-sha256-sidecars \
+            --require-platforms "${COLLAB_PLATFORMS// /,}" \
+            --component collab \
+            --version "$VERSION" \
+            --asset-dir build/collab/assets \
+            --output build/collab/components.json
+          cat build/collab/components.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: collab-components-json
+          path: build/collab/components*.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "### Collab component ${{ needs.identity.outputs.component_version }}"
+            echo ""
+            echo "- Published before this run: ${{ needs.identity.outputs.published }}"
+            echo "- Publish: ${{ inputs.publish }}"
+          } >> "$GITHUB_STEP_SUMMARY"

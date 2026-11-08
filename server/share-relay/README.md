@@ -1,22 +1,23 @@
 # ghostex-share-relay
 
-Ghostex Collab's share relay, `share.ghostex.dev`. An owner's gxserver keeps one outgoing
-WebSocket here (`/h`) while Ghostex Collab is on and a chat is shared; a guest's browser opens the
+Ghostex Collab's share relay, `share.ghostex.dev`. An owner's Collab component (`server/collab`, the
+sidecar gxserver runs once Collab is installed) keeps one outgoing WebSocket here (`/h`) while a
+chat is shared; a guest's browser opens the
 link `/s/<page id>/#<key>`, gets the guest page (the GPUI web build) from this relay, and connects to
 `/g/<route>`. The relay pairs them and copies frames it cannot read: the key stays in the link's
-`#fragment`, and the page and gxserver lock every frame end to end with keys derived from it
-(`server/src/collab/tunnel.rs`, `apps/gpui-web/www/src/collab/tunnel.js`). It keeps nothing on disk.
+`#fragment`, and the page and the component lock every frame end to end with keys derived from it
+(`server/collab/src/tunnel.rs`, `apps/gpui-web/www/src/collab/tunnel.js`). It keeps nothing on disk.
 
 ## The pinned guest page
 
-Each Ghostex release trusts one guest page (GitHub #495): `server/src/collab/guest_page.manifest`
+Each Collab component release trusts one guest page (GitHub #495): `server/collab/src/guest_page.manifest`
 lists every file of the page with its SHA-256, and the page hash is the SHA-256 of that manifest.
 The relay keeps each page in `--pages <folder>/<page hash>/`, checks at start that the folder's
 files hash to its name (a folder that doesn't is not served), and serves it at
 `/s/<first 16 hex of the hash>/`. Several releases' pages live side by side; add a page, never
 replace one.
 
-Before a gxserver shares a chat through this relay it downloads that page, file by file, and
+Before the component shares a chat through this relay it downloads that page, file by file, and
 compares it with its manifest; any difference and it registers no shared chat, so no guest is let
 in through a changed page. It checks again every hour while sharing. In the browser, `index.html`
 carries the script's integrity hash and the script carries the WebAssembly's SHA-256, so a page
@@ -30,7 +31,7 @@ mkdir page && cd page   # then download index.html and every file it names from 
 find . -type f | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do shasum -a 256 "$f"; done | shasum -a 256
 ```
 
-The result must equal the page hash in the release's `guest_page.manifest` (`shasum -a 256 server/src/collab/guest_page.manifest`).
+The result must equal the page hash in the release's `guest_page.manifest` (`shasum -a 256 server/collab/src/guest_page.manifest`).
 
 ## Run it locally
 
@@ -40,8 +41,10 @@ cargo xtask web-build   # from the repository root: the guest page in apps/gpui-
 server/share-relay/target/debug/ghostex-share-relay --listen 127.0.0.1:58800 --dev-page "$PWD/apps/gpui-web/www/dist"
 ```
 
-Start a debug gxserver (`cargo xtask test-server`) with `GHOSTEX_COLLAB_RELAY_URL=http://127.0.0.1:58800`
-and `GHOSTEX_COLLAB_UNPINNED_GUEST_PAGE=1` (debug builds only): links then read
+Start a debug gxserver (`cargo xtask test-server`, which passes `GHOSTEX_COLLAB_*` through) with
+`GHOSTEX_COLLAB_RELAY_URL=http://127.0.0.1:58800`, `GHOSTEX_COLLAB_UNPINNED_GUEST_PAGE=1` (debug
+builds only) and `GHOSTEX_COLLAB_DEV_BINARY=<target>/debug/ghostex-collab` (`cargo build` in
+`server/collab`; Settings > Extensions > Collab then installs that binary): links then read
 `http://127.0.0.1:58800/s/dev/#<key>` and skip the page check. To test the pinned path instead,
 run `build-linux.sh web`, unpack the page tarball into a folder and pass it as `--pages`.
 
@@ -51,7 +54,7 @@ run `build-linux.sh web`, unpack the page tarball into a folder and pass it as `
 Linux and writes `dist/ghostex-share-relay-<version>-linux-<arch>.tar.gz` (binary, systemd unit,
 Caddyfile, this README) with a `.sha256` beside each. When `apps/gpui-web/www/dist` has been built
 it also writes `dist/ghostex-share-relay-web-<version>.tar.gz` (one folder named by the page hash),
-its `.sha256` and its `.manifest`, and copies the manifest to `server/src/collab/guest_page.manifest`:
+its `.sha256` and its `.manifest`, and copies the manifest to `server/collab/src/guest_page.manifest`:
 commit that file in the release that should use the page, and deploy the page before that release
 ships.
 

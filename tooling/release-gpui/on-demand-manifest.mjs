@@ -2,6 +2,11 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APP_RELEASE_GITHUB_REPO, componentsGithubRepo } from './components-repo.mjs';
+import {
+  componentSigningStatement,
+  expectedSigningPublicKeyHex,
+  verifyComponentSignature,
+} from './component-signing.mjs';
 
 const sha256Pattern = /^[0-9a-f]{64}$/;
 const identifierPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -53,7 +58,10 @@ export function authenticateComponentChecksumSidecar(contents, expectedAssetName
   return match[1];
 }
 
-export function validateOnDemandManifestV2(input) {
+export function validateOnDemandManifestV2(
+  input,
+  { requireSignatures = false, signingPublicKeyHex = expectedSigningPublicKeyHex() } = {}
+) {
   const manifest = requireObject(input, 'root');
   if (manifest.schemaVersion !== 2) fail('schemaVersion must equal 2');
   if (typeof manifest.version !== 'string' || !manifest.version.trim()) fail('version must be a non-empty string');
@@ -117,6 +125,26 @@ export function validateOnDemandManifestV2(input) {
       }
       requireSha256(platformAsset.sha256, `components.${key}.platforms.${platformKey}.sha256`);
       requireSize(platformAsset.sizeBytes, `components.${key}.platforms.${platformKey}.sizeBytes`);
+      if (platformAsset.signature !== undefined) {
+        const statement = componentSigningStatement({
+          name,
+          componentVersion,
+          platform: platformKey,
+          assetName,
+          sha256: platformAsset.sha256,
+          sizeBytes: platformAsset.sizeBytes,
+        });
+        if (
+          typeof platformAsset.signature !== 'string' ||
+          !verifyComponentSignature(statement, platformAsset.signature, signingPublicKeyHex)
+        ) {
+          fail(`components.${key}.platforms.${platformKey}.signature is not Ghostex's signature over this archive`);
+        }
+      } else if (requireSignatures) {
+        fail(
+          `components.${key}.platforms.${platformKey} is not signed (release manifests must carry every archive's signature)`
+        );
+      }
     }
   }
   return manifest;
@@ -197,6 +225,11 @@ export async function sealOnDemandManifest({ buildManifestPath, componentManifes
     assets: legacyAssetsFromBuildManifest(buildManifest),
     components,
   });
+  // A release seals only signed archives (GHOSTEX_REQUIRE_COMPONENT_SIGNATURES=1 in the release
+  // workflows): every client refuses an unsigned one.
+  if (process.env.GHOSTEX_REQUIRE_COMPONENT_SIGNATURES === '1') {
+    validateOnDemandManifestV2(manifest, { requireSignatures: true });
+  }
   await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
 }

@@ -65,7 +65,7 @@ pub enum ChatRpcMethod {
     CoordinatorBoard,
     /// Autopilot's choices (`/api/autopilot`, server/src/server/autopilot_http.rs): the pill.
     Autopilot,
-    /// Ghostex Collab's owner calls (`/api/collab`, server/src/server/collab_http.rs): the answer
+    /// Ghostex Collab's owner calls (`/api/collab`, forwarded by server/src/collab_shim/http.rs to the Collab component): the answer
     /// to a guest's message.
     Collab,
     /// A shared chat's chat box is being typed into (`/api/collabTyping`).

@@ -122,7 +122,7 @@ impl Principal {
             // session here, so they may ask for those like an agent here does.
             Self::Peer { .. } => capability == RequestSensitiveAction,
             // Guests and extensions keep their own endpoint allow-lists
-            // (`collab::shares::GUEST_ENDPOINTS`, the extension registry) and never ask.
+            // (`collab_shim::registry::GUEST_READ_ENDPOINTS`, the extension registry) and never ask.
             Self::Guest { .. } | Self::Extension { .. } | Self::Anonymous => false,
         }
     }
@@ -168,6 +168,8 @@ pub fn route_access(path: &str) -> RouteAccess {
         "/api/health" | "/api/pairDevice" | "/api/pairingStatus" | "/api/renewDeviceToken" => {
             RouteAccess::Public
         }
+        // The Collab component's calls: its handler takes only the host token gxserver gave it.
+        "/api/collabHost" => RouteAccess::Public,
         super::APPROVALS_LIST_ENDPOINT
         | super::APPROVALS_APPROVE_ENDPOINT
         | super::APPROVALS_DENY_ENDPOINT

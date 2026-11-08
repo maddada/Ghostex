@@ -1,25 +1,29 @@
-//! Settings > Collab (Ghostex Collab): the switch, what a new share starts with, and the chats
-//! shared right now with Stop sharing. Everything here is gxserver's (`/api/collab`,
-//! server/src/server/collab_http.rs), read when the page opens, every 5 seconds while it is the
-//! open page, and after each change.
+//! Settings > Collab (Ghostex Collab): Your name, what a new share starts with, and the chats
+//! shared right now with Stop sharing. Everything here is the Collab component's (`/api/collab`,
+//! server/collab/src/owner.rs, through gxserver), read when the page opens, every 5 seconds while
+//! it is the open page, and after each change. The page shows only while Collab is installed
+//! (Settings > Extensions installs it, with the owner's approval); Uninstall is here too.
 //!
 //! CDXC:Collab 2026-11-07 DECISION:
 //! User (Q1610): "we need a page in settings called "Collab" and we need to call this feature Ghostex Collab": the global switch (off by default), the defaults a new share starts with (24-hour expiry, a code the guest types, approve each message) and the list of active shares.
 //!
 //! CDXC:Collab 2026-11-08 DECISION:
-//! User (#495): turning Ghostex Collab on needs the owner's signed approval (Touch ID, Windows Hello or the system password), a link lasts an hour by default and a day at most, a code is always asked, and Send is never a default (it is turned on per chat, with approval). The switch waits here for the approval ("Approve on this computer or your phone"), following the request through `/api/collab`'s read (its `approvals`), so the page uses only the Settings host's gxserver call and the Settings preview binary builds it unchanged.
-//! SEE-ALSO: server/src/collab/config.rs (the choices and their defaults), packages/settings-catalog/src/pages/collab.rs (its search rows), apps/desktop/src/app/window/collab_share.rs (a chat's Share popover).
+//! User (#495): a link lasts an hour by default and a day at most, a code is always asked, and Send is never a default (it is turned on per chat, with approval).
+//!
+//! CDXC:Collab 2026-11-08 DECISION:
+//! User (#495, Q1730): Collab is an extension component. Its on/off switch is gone: it is on while installed, installing asks for the owner's approval (Settings > Extensions), and uninstalling (here or there) never asks.
+//! SEE-ALSO: server/collab/src/config.rs (the choices and their defaults), packages/settings-catalog/src/pages/collab.rs (its search rows), apps/desktop/src/app/window/collab_share.rs (a chat's Share popover).
 use super::super::catalog::SettingOption;
 use super::super::fields::{
     ButtonVariant, CONTROL_LANE_WIDTH, FieldStates, ListItemStatus, RowSpec, SettingsPage,
     segmented_field, setting_row, settings_button, settings_list_item, settings_section,
-    settings_text_input, static_note, toggle_field_with,
+    settings_text_input, static_note,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
 use super::super::palette::SettingsPalette;
 use super::super::rail::{rail_pages, render_no_matches};
-use super::super::store::{SettingsStore, store_gxserver_rpc};
+use super::super::store::{SettingsStore, refresh_collab_component, store_gxserver_rpc};
 use gpui::{
     AnyView, App, AppContext as _, Context, Div, Entity, IntoElement, ParentElement as _, Render,
     Styled as _, Task, Window, div, px,
@@ -45,11 +49,8 @@ pub(crate) struct CollabTab {
     log: Vec<Value>,
     /// The Your name field's typing, saved once it pauses.
     name_edit: u64,
-    /// Turning Collab on, waiting for the owner's approval: gxserver's words for it.
-    waiting: Option<String>,
-    /// Turning Collab on was asked: gxserver's refusal text (shown if it was no approval request)
-    /// and when, while the page follows the request.
-    following: Option<(String, std::time::Instant)>,
+    /// Uninstalling now.
+    removing: bool,
     was_active: bool,
     _refresh: Option<Task<()>>,
 }
@@ -123,8 +124,7 @@ impl CollabTab {
             saving: 0,
             log: Vec::new(),
             name_edit: 0,
-            waiting: None,
-            following: None,
+            removing: false,
             was_active: true,
             _refresh: Some(refresh),
         }
@@ -194,9 +194,12 @@ impl CollabTab {
                     match result {
                         Ok(_) if read && page.saving > 0 => {}
                         Ok(answer) => {
+                            if answer["installed"] == false {
+                                // Uninstalled meanwhile: the rail drops this page.
+                                refresh_collab_component(&page.store, cx);
+                            }
                             page.view = Some(answer);
                             page.error = None;
-                            page.follow_approval();
                         }
                         Err(error) => {
                             page.error = Some(error);
@@ -212,39 +215,25 @@ impl CollabTab {
         );
     }
 
-    /// Turns Collab on. gxserver answers with an approval request and turns it on itself once the
-    /// owner approves; the page follows that request through its reads (`approvals` in the read,
-    /// this caller's own requests), so it needs nothing beyond the Settings host's gxserver call.
-    fn turn_on(&mut self, cx: &mut Context<Self>) {
-        if self.following.is_some() {
+    /// Uninstalls Collab: every share ends and the component is removed. Never asks.
+    fn uninstall(&mut self, cx: &mut Context<Self>) {
+        if self.removing {
             return;
         }
-        if !self.store.read(cx).request().gxserver_rpc_available {
-            self.error = Some("Ghostex's background service is not reachable.".to_string());
-            cx.notify();
-            return;
-        }
+        self.removing = true;
         let this = cx.weak_entity();
         store_gxserver_rpc(
             &self.store.clone(),
-            "/api/collab",
-            json!({ "op": "set", "patch": { "enabled": true } }),
-            CALL_TIMEOUT,
+            "/api/extensionComponents",
+            json!({ "op": "uninstall", "name": "collab" }),
+            Duration::from_secs(60),
             move |result, cx| {
                 let _ = this.update(cx, |page, cx| {
-                    match result {
-                        Ok(answer) => {
-                            page.view = Some(answer);
-                            page.error = None;
-                        }
-                        Err(error) => {
-                            // Usually the approval request; the next read says which.
-                            page.following = Some((error, std::time::Instant::now()));
-                            page.waiting = Some("Turn on Ghostex Collab".to_string());
-                            page.error = None;
-                            page.follow_approval_soon(cx);
-                        }
+                    page.removing = false;
+                    if let Err(error) = result {
+                        page.error = Some(error);
                     }
+                    refresh_collab_component(&page.store, cx);
                     page.reload(cx);
                     cx.notify();
                 });
@@ -253,74 +242,8 @@ impl CollabTab {
         );
     }
 
-    /// Reads again every two seconds while turning on waits for the owner's approval.
-    fn follow_approval_soon(&mut self, cx: &mut Context<Self>) {
-        cx.spawn(async move |page, cx| {
-            loop {
-                cx.background_executor().timer(Duration::from_secs(2)).await;
-                let going = page
-                    .update(cx, |page, cx| {
-                        if page.following.is_some() {
-                            page.reload(cx);
-                        }
-                        page.following.is_some()
-                    })
-                    .unwrap_or(false);
-                if !going {
-                    break;
-                }
-            }
-        })
-        .detach();
-    }
-
-    /// Where the turn-on request stands, from a read's `approvals`.
-    fn follow_approval(&mut self) {
-        let Some((refusal, since)) = self.following.clone() else {
-            return;
-        };
-        let view = self.view.clone().unwrap_or(Value::Null);
-        let request = view["approvals"].as_array().and_then(|requests| {
-            requests
-                .iter()
-                .rev()
-                .find(|request| request["action"] == "collabEnable")
-                .cloned()
-        });
-        let finished = |page: &mut Self, error: Option<String>| {
-            page.following = None;
-            page.waiting = None;
-            page.error = error;
-        };
-        if view["config"]["enabled"] == true {
-            return finished(self, None);
-        }
-        match request
-            .as_ref()
-            .and_then(|request| request["status"].as_str())
-        {
-            Some("pending" | "approved") if since.elapsed() < Duration::from_secs(11 * 60) => {
-                self.waiting = request
-                    .as_ref()
-                    .and_then(|request| request["summary"].as_str())
-                    .map(str::to_string);
-            }
-            Some("denied") => finished(self, Some("You didn't approve it.".to_string())),
-            Some("pending" | "approved" | "expired") => finished(
-                self,
-                Some("The approval request ran out. Try again.".to_string()),
-            ),
-            // Not an approval: gxserver refused outright.
-            _ => finished(self, Some(refusal)),
-        }
-    }
-
     /// Changes some choices: on screen at once, then saved.
     fn set(&mut self, patch: Value, cx: &mut Context<Self>) {
-        if patch["enabled"] == true {
-            self.turn_on(cx);
-            return;
-        }
         if let (Some(config), Some(fields)) = (
             self.view
                 .as_mut()
@@ -350,25 +273,37 @@ impl CollabTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<Div> {
-        let on = self.config()["enabled"] == true;
-        let waiting = self
-            .waiting
-            .as_ref()
-            .map(|summary| format!("Approve on this computer or your phone: {summary}."));
-        let description = if let Some(waiting) = waiting.as_deref() {
-            waiting
-        } else if on {
-            "On. Share is in each chat's header: it makes a link that opens the chat in any browser. Each share needs your approval. Turning this off ends every share at once."
+        let view = self.view.clone().unwrap_or(Value::Null);
+        let version = view["version"].as_str().unwrap_or_default().to_string();
+        let description = if self.removing {
+            "Uninstalling Collab\u{2026}".to_string()
         } else {
-            "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write messages you approve. Turning it on asks for Touch ID (or your system's equivalent)."
+            format!(
+                "Installed{}. Share is in each chat's header: it makes a link that opens the chat in any browser. Each share needs your approval. Uninstalling ends every share at once and removes Collab from this computer.",
+                if version.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({version})")
+                }
+            )
         };
-        let mut rows = vec![toggle_field_with(
+        let uninstall = settings_button(
+            p,
+            "collab-uninstall",
+            "Uninstall",
+            None,
+            ButtonVariant::Outline,
+            self.removing,
+            None,
+            |page: &mut Self, _window, cx| page.uninstall(cx),
+            cx,
+        );
+        let mut rows = vec![setting_row(
             p,
             "collabEnabled",
             RowSpec::new("Ghostex Collab").description(description),
-            on,
             None,
-            |page: &mut Self, checked, _, cx| page.set(json!({ "enabled": checked }), cx),
+            uninstall,
             cx,
         )];
         // CDXC:Collab 2026-11-07 DECISION: the coordinator, for the user: a "Your name" field in Settings > Collab; empty, guests see this computer's user name.
@@ -428,13 +363,15 @@ impl CollabTab {
                 p,
                 "collabExpiry",
                 RowSpec::new("Link ends after").description(
-                    "A day at most. Stop sharing, or deleting the chat, ends a link at once. Guests always type the eight-digit code that comes with the link.",
+                    "Until I stop it keeps a link live until you stop sharing. Stop sharing, or deleting the chat, ends a link at once. Guests always type the eight-digit code that comes with the link, and every link asks for Touch ID.",
                 ),
                 None,
                 &[
                     option("1 hour", "hour"),
                     option("4 hours", "fourHours"),
                     option("24 hours", "day"),
+                    // CDXC:Collab 2026-11-08 DECISION: User (Q1785) "add \"until i stop it\" as an option please here and in settings".
+                    option("Until I stop it", "untilStopped"),
                 ],
                 Some(expiry.as_str()),
                 None,
@@ -459,7 +396,7 @@ impl CollabTab {
             .cloned()
             .unwrap_or_default();
         let mut rows = Vec::new();
-        // The relay's guest page failed this release's check (server/src/collab/page_pin.rs):
+        // The relay's guest page failed this release's check (server/collab/src/page_pin.rs):
         // sharing waits until it passes.
         if let Some(message) = self
             .view
@@ -673,6 +610,18 @@ impl Render for CollabTab {
             let mut block = PageBlock::section("switch", section);
             block.margin_top += 20.0;
             blocks.push(block);
+        }
+        if self
+            .view
+            .as_ref()
+            .is_some_and(|view| view["installed"] == false)
+        {
+            blocks.push(PageBlock::plain(static_note(
+                &p,
+                "Collab isn't installed. Install it in Settings > Extensions.",
+                false,
+            )));
+            return settings_page(&self.store, SettingsTabId::Collab, &p, blocks, cx);
         }
         let on = self.config()["enabled"] == true;
         if shown("newShares")

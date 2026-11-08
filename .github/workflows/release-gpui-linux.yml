@@ -76,6 +76,13 @@ permissions:
   contents: write
   id-token: write
 
+# Ghostex's component signing key (tooling/release-gpui/component-signing.mjs): publish-component.mjs
+# signs every component archive it records; GHOSTEX_REQUIRE_COMPONENT_SIGNATURES makes it, and the seal, refuse unsigned ones (#495).
+env:
+  GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+  # The app's sealed on-demand-resources.json must carry every archive's signature.
+  GHOSTEX_REQUIRE_COMPONENT_SIGNATURES: '1'
+
 jobs:
   build:
     # CDXC:Release 2026-10-31 WHY:
@@ -103,6 +110,9 @@ jobs:
       # a build-only run ships without it when it is not published.
       GHOSTEX_GBOTS_SEAL: '1'
       GHOSTEX_GBOTS_OPTIONAL: ${{ inputs.build_only && '1' || '0' }}
+      # And the Collab component (release-gpui-collab.yml, tooling/collab/seal-component.sh).
+      GHOSTEX_COLLAB_SEAL: '1'
+      GHOSTEX_COLLAB_OPTIONAL: ${{ inputs.build_only && '1' || '0' }}
       LINUX_ARCH: ${{ inputs.arch }}
       LINUX_DEB_ARCH: ${{ inputs.arch == 'arm64' && 'arm64' || 'amd64' }}
       LINUX_RPM_ARCH: ${{ inputs.arch == 'arm64' && 'aarch64' || 'x86_64' }}

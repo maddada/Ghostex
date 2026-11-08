@@ -1,6 +1,6 @@
 //! Ghostex pages and HTML files for a Ghostex Collab guest, whose browser cannot reach this
 //! computer's `/visual/<id>` routes: the page's HTML goes through the share's tunnel instead
-//! (`/api/collabGuestPage`, server/src/server/collab_http.rs), and the guest's page sends its
+//! (`/api/collabGuestPage`, server/src/collab_shim/http.rs), and the guest's page sends its
 //! answers back the same way (`/api/collabGuestPageAnswers`), as a guest message.
 //!
 //! CDXC:Collab 2026-11-07 DECISION:

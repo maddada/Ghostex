@@ -332,6 +332,10 @@ impl ExtensionsTab {
                 card_grid(cells, None, columns),
             ));
         }
+        let first = groups.is_empty();
+        if let Some(group) = self.render_collab_group(p, &filter, columns, first, cx) {
+            groups.push(group);
+        }
         let loading = self.plugin_status_loading;
         let refresh = settings_sized_button(
             p,

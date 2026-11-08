@@ -3,7 +3,10 @@
 //! (window/collab_share.rs).
 //!
 //! CDXC:Collab 2026-11-07 DECISION:
-//! User (Q1615): "Where Share lives: a button in the chat header." It shows on every chat of this computer, Ghostex Collab on or off (the popover offers to turn it on), and is the one place that says a chat is shared, so the header gets no second "Shared" pill.
+//! User (Q1615): "Where Share lives: a button in the chat header." It is the one place that says a chat is shared, so the header gets no second "Shared" pill.
+//!
+//! CDXC:Collab 2026-11-08 DECISION:
+//! User (#495, Q1732): Collab is an extension; the Share button shows only once it is installed and running on this computer (the chat's `collab` part is there).
 
 use std::cell::{Cell, RefCell};
 
@@ -52,6 +55,10 @@ impl GhostexGpuiApp {
     ) -> Option<AnyElement> {
         let (_, chat) = self.share_button_chat()?;
         let collab = chat.read(cx).snapshot["collab"].clone();
+        // No Collab part: Collab isn't installed (or is stopped) on this computer, so no Share.
+        if collab.is_null() {
+            return None;
+        }
         let shared = collab["shared"] == true;
         let watching = collab["viewerCount"].as_u64().unwrap_or(0);
         let label = match (shared, watching) {
@@ -106,6 +113,22 @@ impl GhostexGpuiApp {
                 .on_prepaint(|bounds, _, _| ANCHOR.with(|anchor| anchor.set(Some(bounds))))
                 .into_any_element(),
         )
+    }
+
+    /// The Share popover's Review: the keyboard goes to the chat box of the shared chat, right under
+    /// the waiting message's card (Decline, Edit, Send).
+    pub(crate) fn focus_collab_review(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some((key, chat)) = self.share_button_chat() else {
+            return;
+        };
+        if share_target().as_ref() != Some(&key) {
+            return;
+        }
+        chat.update(cx, |chat, cx| chat.focus_composer_from_hotkey(window, cx));
     }
 
     /// Opens (or closes) the Share popover under the header button.

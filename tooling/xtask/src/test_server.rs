@@ -538,6 +538,11 @@ fn free_server_id(taken: &std::collections::HashSet<String>) -> Res<String> {
 const INHERITED_PREFIXES: [&str; 5] = ["GHOSTEX_", "ZMX_", "CLAUDE_", "CLAUDECODE", "CODEX_"];
 
 fn is_inherited_variable(key: &str) -> bool {
+    // Collab's development switches (the component to install, a local relay, the unpinned guest
+    // page) are meant for the test server (server/share-relay/README.md).
+    if key.starts_with("GHOSTEX_COLLAB_") {
+        return false;
+    }
     INHERITED_PREFIXES.iter().any(|prefix| {
         if prefix.ends_with('_') {
             key.starts_with(prefix)

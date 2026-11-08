@@ -31,96 +31,23 @@ pub(crate) struct InstalledRuntime {
     pub(crate) version: String,
 }
 
-/// The sealed GBots component for this platform.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct SealedComponent {
-    pub(crate) component_version: String,
-    pub(crate) url: String,
-    pub(crate) asset_name: String,
-    pub(crate) sha256: String,
-    pub(crate) size_bytes: u64,
-}
+/// The sealed GBots component for this platform (crate::components).
+pub(crate) use crate::components::SealedComponent;
 
-/// The component store's GBots folder: `GHOSTEX_COMPONENT_STORE_DIR` when set (as the desktop's
-/// component store reads it), else the data folder's `components/gbots`.
+/// The component store's GBots folder.
 pub(crate) fn component_root() -> PathBuf {
-    let root = std::env::var_os("GHOSTEX_COMPONENT_STORE_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            ghostex_paths::GhostexPaths::resolve()
-                .data_dir
-                .join("components")
-        });
-    root.join(GBOTS_COMPONENT)
+    crate::components::component_root(GBOTS_COMPONENT)
 }
 
 /// `<os>-<arch>`, the platform folder and asset suffix the component store names.
 pub(crate) fn platform_dir() -> String {
-    let os = match std::env::consts::OS {
-        "macos" => "darwin",
-        other => other,
-    };
-    let arch = match std::env::consts::ARCH {
-        "aarch64" => "arm64",
-        "x86_64" => "x64",
-        other => other,
-    };
-    format!("{os}-{arch}")
-}
-
-/// The app's sealed `on-demand-resources.json`: `GHOSTEX_ON_DEMAND_MANIFEST`, else the first one
-/// beside or above gxserver's own executable (macOS keeps it in `Contents/Resources/Web/`, above
-/// `Web/gxserver/GhostexServer.app`; Linux and Windows beside the app under `resources/`).
-pub(crate) fn manifest_path() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("GHOSTEX_ON_DEMAND_MANIFEST") {
-        let path = PathBuf::from(path);
-        return path.is_file().then_some(path);
-    }
-    let executable = std::env::current_exe().ok()?;
-    let executable = std::fs::canonicalize(&executable).unwrap_or(executable);
-    executable.ancestors().skip(1).take(7).find_map(|dir| {
-        [
-            "on-demand-resources.json",
-            "Web/on-demand-resources.json",
-            "resources/on-demand-resources.json",
-            "resources/Web/on-demand-resources.json",
-        ]
-        .iter()
-        .map(|candidate| dir.join(candidate))
-        .find(|candidate| candidate.is_file())
-    })
+    crate::components::platform_dir()
 }
 
 /// The sealed GBots component for this platform, or `None` when the app has none (a
 /// development build, or an app released before GBots).
 pub(crate) fn sealed_component() -> Option<SealedComponent> {
-    let manifest: Value =
-        serde_json::from_str(&std::fs::read_to_string(manifest_path()?).ok()?).ok()?;
-    let component = manifest.pointer(&format!("/components/{GBOTS_COMPONENT}"))?;
-    let component_version = component.get("componentVersion")?.as_str()?.to_string();
-    let tag = component.get("downloadTag")?.as_str()?.to_string();
-    let repo = component
-        .get("githubRepo")
-        .or_else(|| manifest.get("githubRepo"))?
-        .as_str()?
-        .to_string();
-    let platform = component.pointer(&format!("/platforms/{}", platform_dir()))?;
-    let asset_name = platform.get("assetName")?.as_str()?.to_string();
-    let sha256 = platform.get("sha256")?.as_str()?.to_ascii_lowercase();
-    let size_bytes = platform.get("sizeBytes")?.as_u64()?;
-    let safe = |text: &str| !text.is_empty() && !text.contains(['/', '\\']) && !text.contains("..");
-    if !safe(&component_version) || !safe(&asset_name) || sha256.len() != 64 {
-        return None;
-    }
-    let base = std::env::var("GHOSTEX_ON_DEMAND_BASE_URL")
-        .unwrap_or_else(|_| format!("https://github.com/{repo}/releases/download"));
-    Some(SealedComponent {
-        url: format!("{}/{tag}/{asset_name}", base.trim_end_matches('/')),
-        component_version,
-        asset_name,
-        sha256,
-        size_bytes,
-    })
+    crate::components::sealed(GBOTS_COMPONENT)
 }
 
 /// Where this gxserver's runtime goes: the sealed component's version, else `dev`.

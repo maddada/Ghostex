@@ -88,6 +88,11 @@ open_string_enum! {
         // Approvers
         /// Add another approver key (a second desktop or a phone) after the first one.
         AddApproverKey => "addApproverKey",
+        // Extensions
+        /// Download and install an extension component that opens a way into this computer
+        /// (the target is the component's name, such as `collab`). Updating an installed one,
+        /// turning it off and uninstalling it never ask.
+        InstallExtensionComponent => "installExtensionComponent",
     }
 }
 

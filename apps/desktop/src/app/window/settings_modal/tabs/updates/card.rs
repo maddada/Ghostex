@@ -45,6 +45,8 @@ pub(super) fn item_icon(p: &SettingsPalette, item: &Value, size: f32) -> AnyElem
         "spaceo" => "modals/settings/device-laptop.svg",
         "code" => "titlebar/brand-vscode.svg",
         "cef" => "modals/settings/browser.svg",
+        "collab" => "modals/settings/users.svg",
+        "gbots" => "modals/settings/robot.svg",
         "extension" => "modals/settings/puzzle.svg",
         "node" => "modals/settings/brand-nodejs.svg",
         "uv" => "modals/settings/brand-python.svg",

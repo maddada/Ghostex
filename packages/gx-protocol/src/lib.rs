@@ -24,6 +24,8 @@ pub mod client_message;
 /// Cloud Boxes; used module-qualified (`cloud_box::CloudBox`), not glob re-exported, because its
 /// param names (`ListParams`, `BoxParams`) are generic.
 pub mod cloud_box;
+pub mod collab_component;
+pub mod component_signing;
 pub mod coordinator;
 pub mod de;
 pub mod delta;

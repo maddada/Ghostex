@@ -890,6 +890,8 @@ stage_on_demand_remote_gxserver_manifest() {
 	fi
 	# GBots, an on-demand component the GBots computer's gxserver downloads (server/src/gbots/download.rs); release builds only.
 	"$REPO_ROOT/tooling/gbots/seal-component.sh" "darwin-$GHOSTEX_MACOS_ARCH" "$component_manifest"
+	# Collab, the sharing extension gxserver downloads when the owner installs it (server/src/collab_shim/install.rs); release builds only.
+	"$REPO_ROOT/tooling/collab/seal-component.sh" "darwin-$GHOSTEX_MACOS_ARCH" "$component_manifest"
 	manifest_args=(
 		seal
 		--build-manifest "$build_manifest"

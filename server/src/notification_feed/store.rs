@@ -111,7 +111,7 @@ pub(crate) fn insert_notification_feed_row(
 
 /// Insert a row beside the session's unread rows instead of superseding them: only an earlier
 /// unread row with the same title goes. For news about a chat that is not about its agent (a
-/// Ghostex Collab guest joining, `collab_http::notify_guest_joined`), which must not hide an
+/// Ghostex Collab guest joining, `collab_shim::http`, `notify_guest_joined`), which must not hide an
 /// approval or a finished turn waiting in that chat.
 pub(crate) fn insert_notification_feed_row_beside(
     db: &Connection,

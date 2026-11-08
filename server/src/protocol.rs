@@ -380,12 +380,24 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // The phone and a desktop connected to this computer turn Autopilot on and off and read its log too.
         "/api/autopilot" => remote_allowed(path),
         // Ghostex Collab: the owner's shares (the phone stops and approves them too), and the
-        // typing signal both the owner and a guest send (server/src/server/collab_http.rs).
+        // typing signal both the owner and a guest send (server/src/collab_shim/http.rs; the component answers a guest's).
         // A guest's page reads the chat's pages and sends their answers through the same tunnel.
         "/api/collab"
         | "/api/collabTyping"
         | "/api/collabGuestPage"
-        | "/api/collabGuestPageAnswers" => remote_allowed(path),
+        | "/api/collabGuestPageAnswers"
+        // Installing Collab (with the owner's signed approval), updating and uninstalling it,
+        // from the desktop, a desktop connected to this computer, or the phone.
+        | "/api/extensionComponents" => remote_allowed(path),
+        // The Collab component's calls (server/src/collab_shim/http.rs): no gxserver token, only
+        // the host token gxserver handed the component on its stdin, checked by the handler.
+        "/api/collabHost" => descriptor(
+            path,
+            ApiPermission::RemoteBlocked,
+            false,
+            false,
+            Transport::Http,
+        ),
         "/api/events" => descriptor(
             path,
             ApiPermission::RemoteAllowed,

@@ -297,21 +297,23 @@ pub(in crate::server) async fn route_http(
             .map(|entry| (hash_device_api_token(token), entry.device_id))
     });
     let caller_token_hash = caller_device.as_ref().map(|(hash, _)| hash.clone());
-    // A Ghostex Collab share token (server/src/collab/shares.rs): only its own chat, only
-    // `GUEST_ENDPOINTS`, checked again against the request's ids once the body is read.
+    // A Ghostex Collab share token (the component's, server/src/collab_shim/registry.rs): only
+    // its own chat, only `GUEST_READ_ENDPOINTS`, checked again against the request's ids once the
+    // body is read.
     let share = (endpoint.requires_auth
         && token_extension_id.is_none()
         && peer.is_none()
         && !is_authorized_headers(&parts.headers, &state.auth_token)
         && caller_token_hash.is_none())
-    .then(|| bearer_token(&parts.headers).and_then(crate::collab::shares::authorize_token))
+    .then(|| bearer_token(&parts.headers).and_then(crate::collab_shim::registry::authorize_token))
     .flatten();
     // A session's own `gxs_` token or the desktop's `gxo_` owner session (crate::security).
     let token_principal =
         bearer_token(&parts.headers).and_then(|token| state.security.session_tokens.resolve(token));
-    if share.is_some() && !crate::collab::shares::GUEST_ENDPOINTS.contains(&endpoint.path.as_str())
+    if share.is_some()
+        && !crate::collab_shim::registry::GUEST_READ_ENDPOINTS.contains(&endpoint.path.as_str())
     {
-        return super::super::collab_http::guest_refusal(endpoint.path, request_id);
+        return crate::collab_shim::http::guest_refusal(endpoint.path, request_id);
     }
     if endpoint.requires_auth
         && !is_authorized_headers(&parts.headers, &state.auth_token)
@@ -408,8 +410,20 @@ pub(in crate::server) async fn route_http(
         );
     }
 
+    // The Collab component's own calls carry the host token gxserver gave it at start, which only
+    // this handler checks (server/src/collab_shim/http.rs).
+    if endpoint.path == ghostex_gx_protocol::collab_component::COLLAB_HOST_ENDPOINT {
+        return crate::collab_shim::http::handle_host_http(
+            &state,
+            &parts.headers,
+            request_id,
+            &body_json,
+        )
+        .await;
+    }
+
     if let Some(share) = share {
-        if let Some(response) = super::super::collab_http::route_guest(
+        if let Some(response) = crate::collab_shim::http::route_guest(
             &state,
             share,
             &parts.headers,
@@ -600,7 +614,7 @@ fn resolve_caller(
     extension_id: Option<&str>,
     device: Option<(&str, Option<&str>)>,
     peer: Option<&PeerAuthorization>,
-    share: Option<&crate::collab::shares::StoredShare>,
+    share: Option<&ghostex_gx_protocol::collab_component::ShareScope>,
 ) -> Principal {
     if main_token {
         return Principal::LocalAgent;
@@ -630,7 +644,7 @@ fn resolve_caller(
     }
     if let Some(share) = share {
         return Principal::Guest {
-            share_id: share.id.clone(),
+            share_id: share.share_id.clone(),
         };
     }
     Principal::Anonymous

@@ -93,7 +93,8 @@ Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in 
 
 | Group | Actions | Wired by | Asks when |
 | --- | --- | --- | --- |
-| Collab | `collabEnable`, `collabShareChat`, `collabChangeShare`, `collabEnableSendMode`, `collabApproveGuestMessage`, `collabChangeRelay` | Collab thread | |
+| Collab | `collabShareChat`, `collabChangeShare`, `collabEnableSendMode`, `collabApproveGuestMessage` | The Collab component asks (server/collab/src/owner.rs), gxserver gates (`collab_shim/http.rs`) | `/api/collab` `op: share` (also to see a link again), `setMode` to Send or from View only, `resolve` with `send`. `collabEnable` and `collabChangeRelay` are no longer asked: Collab is on while installed, and the relay is never settable. |
+| Extensions | `installExtensionComponent` (target: the component, `collab` today) | `collab_shim/http.rs` | `/api/extensionComponents` `op: install`: a component that opens a way into this computer. Updating it, turning it off and uninstalling never ask. |
 | Pairing | `pairingShowCode`, `pairingApproveDevice` | Pairing thread | |
 | Easy Connect | `easyConnectEnable`, `easyConnectAllowList`, `easyConnectPorts`, `easyConnectRelay` | `security_gates.rs` | `/api/updateTailcatState`: turning it on, a new port, new devices on (or emptying) the allow-list (empty lets any device in), a relay change. Turning it off never asks. |
 | Connected computers | `computerRegister`, `computerGrant`, `computerChangeAccess` | `security_gates.rs` | `/api/registerConnectedComputer`, `/api/issueComputerGrant` for a computer not approved in the last 30 days (renewals of an approved one pass; Agent access off never asks). |

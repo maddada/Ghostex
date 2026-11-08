@@ -371,7 +371,7 @@ pub async fn run_gxserver_foreground(
     explicit reason and waits for the user. Never silently re-sent.
     */
     let _ = crate::session_chat_queue::recover_session_chat_queue_after_restart(&paths);
-    crate::collab::migrate_at_start(&paths);
+    crate::collab_shim::migrate_at_start(&paths);
     crate::accounts::recovery::start(state.clone());
     crate::accounts::reset_watch::start(state.clone());
     crate::accounts::claude_swap_switch::start(state.clone());
@@ -388,7 +388,8 @@ pub async fn run_gxserver_foreground(
     session_stall_runtime::start_session_stall_runtime(state.clone());
     network_status_runtime::start_network_status_runtime(state.clone());
     autopilot_runtime::start_autopilot_runtime(state.clone());
-    collab_connector::start_collab_connector(state.clone());
+    crate::collab_shim::http::approvals::start(state.clone());
+    crate::collab_shim::sidecar::start_supervisor(state.clone());
     coordinator_remote_runtime::start_coordinator_remote_runtime(state.clone());
     tokio::spawn(peer_http::start_peer_listener(state.clone()));
     agent_message_delivery_runtime::start_agent_message_delivery_runtime(state.clone());

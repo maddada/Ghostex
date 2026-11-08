@@ -2,14 +2,14 @@
 //! from <guest>" cards with Decline / Edit / Send, and on a guest's page their own messages
 //! waiting for the owner and what their chat box may do.
 //!
-//! gxserver puts `collab` on every chat frame (server/src/collab/shares.rs): `{ shared: false }`,
+//! gxserver puts `collab` on every chat frame (server/src/collab_shim/mod.rs, from the Collab component): `{ shared: false }`,
 //! or `{ shared, shareId, mode, owner, ownerTyping, viewers: [{ id, name, typing }], held: [{ id,
 //! viewerId, name, text, atMs }] }`. A guest's page says it is one once, with `setCollabGuest`
 //! (`{ viewerId, name }`, apps/gpui-web/src/app/collab_guest.rs); every other client is the owner.
 //!
 //! CDXC:Collab 2026-11-07 DECISION:
 //! User (Q1614): a new share starts in "approve each message (the owner gets a "Message from <guest>" card with Decline / Edit / Send)"; the other modes (straight to the agent, view only) are per chat. A guest "can never answer permission prompts" (Q1617), so a guest's chat shows "Waiting for <owner>" where the owner would answer.
-//! SEE-ALSO: apps/desktop/src/app/native_chat/collab.rs (desktop and web drawing), server/src/server/collab_http.rs (the calls).
+//! SEE-ALSO: apps/desktop/src/app/native_chat/collab.rs (desktop and web drawing), server/collab/src/owner.rs (the calls).
 
 use serde_json::{json, Value};
 
@@ -209,8 +209,19 @@ fn names_line(names: &[String], one: &str, many: &str) -> Option<String> {
 /// projectId, sessionId, shareId, role, owner, mode, viewers: [name], watching, typing, cards,
 /// waiting, guestNote, viewOnly }`.
 pub fn project(state: &ChatState) -> Value {
-    if state.session.collab.is_none() {
+    if !available(state) {
         return Value::Null;
+    }
+    if !running(state) {
+        // Share shows its Install (the popover and the phone's sheet read `installed`).
+        let collab = state.session.collab.as_ref();
+        return json!({
+            "shared": false,
+            "available": false,
+            "installed": collab.and_then(|collab| collab.get("installed")).cloned().unwrap_or(Value::Bool(false)),
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+        });
     }
     let Some(collab) = shared(state) else {
         // The phone's Share sheet makes the share from these.
@@ -328,6 +339,28 @@ pub fn project(state: &ChatState) -> Value {
 /// The pill's id in `chatPills`.
 pub const COLLAB_PILL: &str = "collab";
 
+/// Whether Share shows for this chat: gxserver said something about Collab, and either Collab
+/// runs here or it doesn't but the owner didn't pick "Don't show Share" (`available: false` with
+/// `hideShare`, server/src/collab_shim/mod.rs). Without Collab, Share opens the popover's Install.
+///
+/// CDXC:Collab 2026-11-08 DECISION:
+/// User (Q1782): "Show it until you dismiss it": Share shows before Collab is installed, its popover offers Install and "Don't show Share".
+fn available(state: &ChatState) -> bool {
+    state.session.collab.as_ref().is_some_and(|collab| {
+        collab.get("available") != Some(&Value::Bool(false))
+            || collab.get("hideShare") != Some(&Value::Bool(true))
+    })
+}
+
+/// Collab runs on this computer (not just Share showing its Install).
+fn running(state: &ChatState) -> bool {
+    state
+        .session
+        .collab
+        .as_ref()
+        .is_some_and(|collab| collab.get("available") != Some(&Value::Bool(false)))
+}
+
 /// The phone's Share pill: "Share", or "Shared" with how many are watching; it opens the phone's
 /// Share sheet. Only on a touch composer (`StartConfig::touch_composer`): the desktop and the web
 /// build have the header's Share button instead, so a chat never shows both. `None` before
@@ -340,7 +373,7 @@ pub fn pill(state: &ChatState) -> Option<crate::document::ChatPill> {
         .boot_config
         .as_ref()
         .is_some_and(|config| config.touch_composer);
-    if !touch || is_guest(state) {
+    if !touch || is_guest(state) || !available(state) {
         return None;
     }
     let collab = state.session.collab.as_ref()?;
@@ -567,5 +600,27 @@ mod held_answers_tests {
         state.session.collab_guest = None;
         let cards = project(&state)["cards"].clone();
         assert_eq!(cards[0]["answers"]["by"], "Sam");
+    }
+
+    #[test]
+    fn share_shows_its_install_until_dont_show_share() {
+        let mut state = ChatState::default();
+        state.session.boot_config = Some(crate::event::StartConfig {
+            touch_composer: true,
+            ..Default::default()
+        });
+        state.session.collab = Some(json!({"shared": false, "available": true}));
+        assert!(pill(&state).is_some());
+        assert_eq!(project(&state)["shared"], false);
+        // Collab isn't installed: Share still shows, for its Install...
+        state.session.collab =
+            Some(json!({"shared": false, "available": false, "installed": false}));
+        assert!(pill(&state).is_some());
+        assert_eq!(project(&state)["available"], false);
+        // ...until the owner picks "Don't show Share".
+        state.session.collab =
+            Some(json!({"shared": false, "available": false, "hideShare": true}));
+        assert!(pill(&state).is_none());
+        assert!(project(&state).is_null());
     }
 }

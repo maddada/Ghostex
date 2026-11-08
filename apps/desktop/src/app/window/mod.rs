@@ -48,6 +48,7 @@ pub(crate) mod session_handoff_modal;
 pub(crate) mod session_links_card;
 pub(crate) mod session_note_modal;
 pub(crate) mod settings_modal;
+pub(crate) mod share_popover_view;
 pub(crate) mod space_editor_modal;
 pub(crate) mod terminal_paste_confirm_modal;
 mod titlebar_notifications_panel;

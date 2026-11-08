@@ -166,6 +166,7 @@ pub(crate) fn rail_pages(store: &SettingsStore) -> Vec<RailPage> {
                 && match tab {
                     SettingsTabId::OsIntegration => store.os_integration_visible(),
                     SettingsTabId::Connectors => store.connectors_visible(),
+                    SettingsTabId::Collab => store.collab_installed(),
                     _ => true,
                 }
         })

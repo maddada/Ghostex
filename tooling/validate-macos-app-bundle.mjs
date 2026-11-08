@@ -47,6 +47,7 @@ export async function validateMacosAppBundle({
     );
   }
   await assertMachOContainsArch(path.join(appPath, 'Contents', 'MacOS', appName), arch);
+  await validateCollabComponentAbsence({ appPath, arch });
   if (releaseManifest) {
     await validateUnbundledCefComponent({ appPath, arch, appName, onDemandManifest: releaseManifest });
     await validateUnbundledCodeServerComponent({ arch, onDemandManifest: releaseManifest, resourcesRoot });
@@ -360,6 +361,27 @@ async function validateOnDemandResourceShape({ arch, onDemandManifest, resources
   }
 
   await validateVersionedOnDemandPayloadAbsence({ arch, resourcesRoot });
+}
+
+/**
+ * CDXC:Collab 2026-11-08 DECISION:
+ * User (#495, Q1730): Collab's working code is not in the app download; gxserver downloads the
+ * `ghostex-collab` component only when the owner installs Collab. A bundle that carries it anyway is
+ * not valid release output.
+ */
+async function validateCollabComponentAbsence({ appPath, arch }) {
+  const folders = [appPath];
+  while (folders.length > 0) {
+    const folder = folders.pop();
+    for (const entry of await readdir(folder, { withFileTypes: true })) {
+      if (entry.name === 'ghostex-collab' || entry.name === 'ghostex-collab.exe') {
+        throw new MacosAppBundleValidationError(
+          `${arch} app bundles the Collab component at ${path.join(folder, entry.name)}; it must only be downloaded on install.`
+        );
+      }
+      if (entry.isDirectory() && !entry.isSymbolicLink()) folders.push(path.join(folder, entry.name));
+    }
+  }
 }
 
 async function validateVersionedOnDemandPayloadAbsence({ arch, resourcesRoot }) {
