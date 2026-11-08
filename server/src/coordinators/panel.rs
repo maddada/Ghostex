@@ -160,6 +160,49 @@ struct CachedRow {
     recent_until: Option<chrono::DateTime<chrono::Utc>>,
     /// The supervisor's view of the thread it was built with (live.rs).
     live: Option<ThreadLive>,
+    /// When a resolved thread's row next reads its session row again (`RESOLVED_RECHECK`).
+    recheck_at: std::time::Instant,
+}
+
+/// CDXC:Coordinators 2026-11-08 WHY:
+/// The supervisor still read and hashed every thread's session row every two seconds to learn a
+/// cached row was unchanged: on the profiled Mac about 900 of the 1,000 threads were resolved, and
+/// that read was a third of the panels' cost (gxserver idled at 20% of a core). A resolved
+/// thread's row is in the board's done list and the "N more" read, and its session changes only
+/// when someone renames, retags or reopens it, so it reads its session row again every 30 to 40
+/// seconds (spread over the threads) instead of every tick. A change to its thread record (a
+/// reopen), its live state or its `recent` mark still rebuilds it on the next tick.
+const RESOLVED_RECHECK: std::time::Duration = std::time::Duration::from_secs(30);
+
+fn resolved_recheck_at(key: &SessionKey) -> std::time::Instant {
+    let mut hasher = DefaultHasher::new();
+    key.hash(&mut hasher);
+    std::time::Instant::now()
+        + RESOLVED_RECHECK
+        + std::time::Duration::from_millis(hasher.finish() % 10_000)
+}
+
+/// What one coordinator's panel was last built from.
+struct PanelInputs {
+    rows: Vec<Value>,
+    items: Vec<super::board::BoardItem>,
+    custom_tags: Value,
+    intro_hidden: bool,
+    built_at: std::time::Instant,
+}
+
+/// CDXC:Coordinators 2026-11-08 WHY:
+/// Every tick sorted, summarised and rebuilt the board of every coordinator's panel, though
+/// between two ticks nearly every panel is built from exactly the same rows. A panel whose rows,
+/// board items, tag catalog and intro choice equal what it was last built from is kept as it is.
+/// The board's groups move with the day and the relayed approval cards end after two hours
+/// (board.rs, relay.rs), so a kept panel is still rebuilt at least every minute; threads on other
+/// computers carry a clock-dependent `recent` mark, so a panel with any is rebuilt every tick.
+const PANEL_REBUILD_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
+
+fn panel_inputs() -> &'static Mutex<HashMap<SessionKey, PanelInputs>> {
+    static INPUTS: OnceLock<Mutex<HashMap<SessionKey, PanelInputs>>> = OnceLock::new();
+    INPUTS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn rows() -> &'static Mutex<HashMap<SessionKey, CachedRow>> {
@@ -636,7 +679,7 @@ pub fn refresh_coordinator_panels(
         .map(|mut rows| std::mem::take(&mut *rows))
         .unwrap_or_default();
     let mut next_rows: HashMap<SessionKey, CachedRow> = HashMap::new();
-    let mut built: Vec<(SessionKey, Vec<Value>)> = Vec::new();
+    let mut built: Vec<(SessionKey, Vec<Value>, bool)> = Vec::new();
     for coordinator in coordinators {
         let key = coordinator.key();
         if !session_exists(db, &key) {
@@ -654,6 +697,16 @@ pub fn refresh_coordinator_panels(
                     && cached.live == live
                     && cached.recent_until.is_none_or(|until| now < until)
             });
+            let cached = match cached {
+                Some(cached)
+                    if thread.is_resolved() && std::time::Instant::now() < cached.recheck_at =>
+                {
+                    panel_rows.push(cached.row.clone());
+                    next_rows.insert(thread_key, cached);
+                    continue;
+                }
+                other => other,
+            };
             // A read error leaves the row uncached and builds it from `None`, as before.
             let stored = session_rows.as_mut().and_then(|statement| {
                 read_session_row(statement, &thread_key, |hash| {
@@ -669,7 +722,14 @@ pub fn refresh_coordinator_panels(
             if let (Some(fingerprint), Some(cached)) = (fingerprint, cached) {
                 if cached.session == fingerprint {
                     panel_rows.push(cached.row.clone());
-                    next_rows.insert(thread_key, cached);
+                    let recheck_at = resolved_recheck_at(&thread_key);
+                    next_rows.insert(
+                        thread_key,
+                        CachedRow {
+                            recheck_at,
+                            ..cached
+                        },
+                    );
                     continue;
                 }
             }
@@ -688,26 +748,29 @@ pub fn refresh_coordinator_panels(
             if let Some(fingerprint) = fingerprint {
                 if row_is_stable(thread, session.as_ref()) {
                     next_rows.insert(
-                        thread_key,
+                        thread_key.clone(),
                         CachedRow {
                             thread: thread.clone(),
                             session: fingerprint,
                             recent_until: recent_until(&row),
                             live: live.clone(),
                             row: row.clone(),
+                            recheck_at: resolved_recheck_at(&thread_key),
                         },
                     );
                 }
             }
             panel_rows.push(row);
         }
+        let local_rows = panel_rows.len();
         panel_rows.extend(
             remote_threads
                 .iter()
                 .filter(|thread| thread.coordinator_key() == key)
                 .map(|thread| build_remote_row(thread, now)),
         );
-        built.push((key, panel_rows));
+        let has_remote = panel_rows.len() > local_rows;
+        built.push((key, panel_rows, has_remote));
     }
     if let Ok(mut rows) = rows().lock() {
         *rows = next_rows;
@@ -718,22 +781,47 @@ pub fn refresh_coordinator_panels(
     // The sidebar's tag catalog, for the board's tag chips and its Tags menu.
     let custom_tags =
         crate::custom_session_tags::read_custom_session_tags(db).unwrap_or(Value::Null);
-    let next: HashMap<SessionKey, CachedPanel> = built
-        .into_iter()
-        .map(|(key, mut panel_rows)| {
-            let approvals = super::relay::track_approvals(&mut panel_rows);
-            let items = board_items.remove(&key).unwrap_or_default();
-            let mut board = super::board::board_value(
-                &panel_rows,
-                &items,
-                Some(super::board::SUMMARY_ROWS),
-                now,
-            );
-            super::board::add_tag_looks(&mut board, &custom_tags);
-            let panel = cached_panel(panel_rows, board, approvals, intro_hidden, panels.get(&key));
-            (key, panel)
-        })
-        .collect();
+    let mut inputs = panel_inputs()
+        .lock()
+        .map(|mut inputs| std::mem::take(&mut *inputs))
+        .unwrap_or_default();
+    let mut next_inputs: HashMap<SessionKey, PanelInputs> = HashMap::new();
+    let mut next: HashMap<SessionKey, CachedPanel> = HashMap::new();
+    // Panels built from the same inputs as last time: kept, and unchanged by definition.
+    let mut kept: Vec<SessionKey> = Vec::new();
+    for (key, mut panel_rows, has_remote) in built {
+        let items = board_items.remove(&key).unwrap_or_default();
+        if let Some(last) = inputs.remove(&key).filter(|last| {
+            !has_remote
+                && panels.contains_key(&key)
+                && last.built_at.elapsed() < PANEL_REBUILD_EVERY
+                && last.intro_hidden == intro_hidden
+                && last.custom_tags == custom_tags
+                && last.items == items
+                && last.rows == panel_rows
+        }) {
+            next_inputs.insert(key.clone(), last);
+            kept.push(key);
+            continue;
+        }
+        let rows_built_from = panel_rows.clone();
+        let approvals = super::relay::track_approvals(&mut panel_rows);
+        let mut board =
+            super::board::board_value(&panel_rows, &items, Some(super::board::SUMMARY_ROWS), now);
+        super::board::add_tag_looks(&mut board, &custom_tags);
+        let panel = cached_panel(panel_rows, board, approvals, intro_hidden, panels.get(&key));
+        next.insert(key.clone(), panel);
+        next_inputs.insert(
+            key,
+            PanelInputs {
+                rows: rows_built_from,
+                items,
+                custom_tags: custom_tags.clone(),
+                intro_hidden,
+                built_at: std::time::Instant::now(),
+            },
+        );
+    }
     let mut changed = next
         .iter()
         .filter(|(key, panel)| {
@@ -743,7 +831,15 @@ pub fn refresh_coordinator_panels(
         .collect::<Vec<_>>();
     // A coordinator that went away keeps its last panel on any open chat; nothing to republish.
     changed.sort();
+    for key in kept {
+        if let Some(panel) = panels.remove(&key) {
+            next.insert(key, panel);
+        }
+    }
     *panels = next;
+    if let Ok(mut inputs) = panel_inputs().lock() {
+        *inputs = next_inputs;
+    }
     changed
 }
 
