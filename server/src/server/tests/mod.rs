@@ -19,6 +19,7 @@ mod push;
 mod push_delivery;
 mod remote_thread_stall;
 mod renderer_and_titles;
+mod security_routes;
 mod settings_sync_appearance;
 mod voice_remote_sessions;
 #[cfg(unix)]

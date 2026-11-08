@@ -1502,6 +1502,7 @@ dependencies = [
  "portable-pty",
  "rand 0.10.3",
  "resvg",
+ "ring",
  "roxmltree 0.21.2",
  "rusqlite",
  "ruzstd",

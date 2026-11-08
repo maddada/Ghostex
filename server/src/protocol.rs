@@ -1147,6 +1147,17 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             true,
             Transport::Http,
         ),
+        /*
+        CDXC:Security 2026-11-08 WHY:
+        The approval API (crate::security, server/src/server/security_http.rs). The phone and a desktop connected to this computer list, approve and deny requests too; approving needs a signature from a registered approver key, and only the owner's devices pass the capability check, so the listener is not what protects it.
+        */
+        "/api/listApprovalRequests"
+        | "/api/readApprovalRequest"
+        | "/api/approveApprovalRequest"
+        | "/api/denyApprovalRequest"
+        | "/api/listApproverKeys"
+        | "/api/enrollApproverKey"
+        | "/api/removeApproverKey" => remote_allowed(path),
         "/api/updateAuth"
         | "/api/updateListenerConfig"
         | "/api/installTool"

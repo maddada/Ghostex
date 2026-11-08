@@ -23,6 +23,7 @@ pub(super) async fn route_work_mode_http(
         request_id,
         body_json,
         token_extension_id,
+        caller,
     } = request;
     Ok(match endpoint.path.as_str() {
         // CDXC:WorkMode 2026-10-24 WHY: Issues Workflow has no per-project switch any more (project.rs). Older clients (the phone's Work Mode row, `ghostex work-mode on|off` in old scripts) still call this, so it answers with what the project has now and stores nothing.
@@ -154,6 +155,7 @@ pub(super) async fn route_work_mode_http(
                 request_id,
                 body_json,
                 token_extension_id,
+                caller,
             })
         }
     })

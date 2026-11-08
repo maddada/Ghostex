@@ -89,6 +89,7 @@ fn test_app_state_on_with_push(
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
         device_api_tokens: crate::auth::DeviceApiTokens::default(),
+        security: crate::security::SecurityState::new("S1"),
         cef_devtools: Default::default(),
         automation_runtime,
         delayed_send_runtime,

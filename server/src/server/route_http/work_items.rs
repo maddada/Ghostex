@@ -39,6 +39,7 @@ pub(super) async fn route_work_items_http(
         request_id,
         body_json,
         token_extension_id,
+        caller,
     } = request;
     if !matches!(
         endpoint.path.as_str(),
@@ -50,6 +51,7 @@ pub(super) async fn route_work_items_http(
             request_id,
             body_json,
             token_extension_id,
+            caller,
         });
     }
     let params = match read_domain_rpc_params(&body_json) {

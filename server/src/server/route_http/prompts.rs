@@ -13,6 +13,7 @@ pub(super) async fn route_prompts_http(
         request_id,
         body_json,
         token_extension_id,
+        caller,
     } = request;
     Ok(match endpoint.path.as_str() {
         "/api/scheduleDelayedSend" | "/api/cancelDelayedSend" | "/api/postponeDelayedSend" => {
@@ -171,6 +172,7 @@ pub(super) async fn route_prompts_http(
                 request_id,
                 body_json,
                 token_extension_id,
+                caller,
             })
         }
     })

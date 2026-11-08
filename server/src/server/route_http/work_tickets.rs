@@ -25,6 +25,7 @@ pub(super) async fn route_work_tickets_http(
         request_id,
         body_json,
         token_extension_id,
+        caller,
     } = request;
     Ok(match endpoint.path.as_str() {
         "/api/startWorkOnTicket" => {
@@ -94,6 +95,7 @@ pub(super) async fn route_work_tickets_http(
                 request_id,
                 body_json,
                 token_extension_id,
+                caller,
             })
         }
     })

@@ -74,6 +74,7 @@ fn state_in(temp: &tempfile::TempDir, live: bool) -> Arc<AppState> {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()
         },
         device_api_tokens: crate::auth::DeviceApiTokens::default(),
+        security: crate::security::SecurityState::new("S1"),
         cef_devtools: Default::default(),
         automation_runtime: crate::automations::AutomationRuntime::new(
             paths.clone(),

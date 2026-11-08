@@ -17,6 +17,8 @@ mod open_enum;
 
 pub mod agent_message_delivery;
 pub mod agentbox;
+/// Signed approvals for sensitive actions (GitHub #495); used module-qualified.
+pub mod approval;
 pub mod chat;
 pub mod client_message;
 /// Cloud Boxes; used module-qualified (`cloud_box::CloudBox`), not glob re-exported, because its

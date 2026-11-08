@@ -187,6 +187,7 @@ pub async fn run_gxserver_foreground(
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: auth.token,
         device_api_tokens: load_device_api_tokens(&paths),
+        security: crate::security::SecurityState::new(metadata.server_id.as_str()),
         cef_devtools: Default::default(),
         automation_runtime,
         delayed_send_runtime,

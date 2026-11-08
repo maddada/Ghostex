@@ -39,6 +39,7 @@ pub(super) async fn route_sidebar_http(
         request_id,
         body_json,
         token_extension_id,
+        caller,
     } = request;
     Ok(match endpoint.path.as_str() {
         "/api/readSidebarHud" => handle_domain_http(
@@ -497,6 +498,7 @@ pub(super) async fn route_sidebar_http(
                 request_id,
                 body_json,
                 token_extension_id,
+                caller,
             })
         }
     })

@@ -60,6 +60,8 @@ md-5 = "0.11"
 percent-encoding = "2"
 portable-pty = "0.9"
 rand = "0.10"
+# Verifies approvers' signatures (P-256 from the Secure Enclave / Android Keystore, RSA from Windows Hello); already in the tree through rustls.
+ring = "0.17"
 tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
 ureq = { version = "3.5", features = ["json"] }
 # `fallible_uint`: rusqlite 0.38 moved the u64 column reads and writes (session counts, the scan cache) behind it.

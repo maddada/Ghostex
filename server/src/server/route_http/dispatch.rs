@@ -16,6 +16,7 @@ use crate::{
         endpoint_for, is_remote_endpoint_allowed, protocol_mismatch_error, rpc_error,
         EndpointDescriptor, ListenerKind, MinimalHealthResponse, Transport,
     },
+    security::Principal,
 };
 
 use super::*;
@@ -28,6 +29,9 @@ pub(super) struct RouteHttpRequest {
     pub(super) request_id: String,
     pub(super) body_json: Value,
     pub(super) token_extension_id: Option<String>,
+    /// Who is calling, settled at the auth gate (`crate::security::Principal`). Handlers pass
+    /// it to `require_owner_presence` and to capability checks.
+    pub(super) caller: Principal,
 }
 
 pub(in crate::server) async fn route_http(
@@ -280,6 +284,9 @@ pub(in crate::server) async fn route_http(
         && caller_token_hash.is_none())
     .then(|| bearer_token(&parts.headers).and_then(crate::collab::shares::authorize_token))
     .flatten();
+    // A session's own `gxs_` token or the desktop's `gxo_` owner session (crate::security).
+    let token_principal =
+        bearer_token(&parts.headers).and_then(|token| state.security.session_tokens.resolve(token));
     if share.is_some() && !crate::collab::shares::GUEST_ENDPOINTS.contains(&endpoint.path.as_str())
     {
         return super::super::collab_http::guest_refusal(endpoint.path, request_id);
@@ -290,6 +297,7 @@ pub(in crate::server) async fn route_http(
         && token_extension_id.is_none()
         && peer.is_none()
         && share.is_none()
+        && token_principal.is_none()
     {
         return routed_json(
             Some(endpoint.path),
@@ -301,6 +309,15 @@ pub(in crate::server) async fn route_http(
             ),
         );
     }
+
+    let caller = resolve_caller(
+        is_authorized_headers(&parts.headers, &state.auth_token),
+        token_principal,
+        token_extension_id.as_deref(),
+        caller_token_hash.as_deref(),
+        peer.as_ref(),
+        share.as_ref(),
+    );
 
     let body_json = if method == Method::POST {
         let body_limit_bytes = json_body_limit_bytes(&endpoint.path);
@@ -413,12 +430,22 @@ pub(in crate::server) async fn route_http(
         )
         .await;
     }
+    if let Some(response) = super::super::security_http::route_security_http(
+        &state,
+        &caller,
+        &endpoint.path,
+        &request_id,
+        &body_json,
+    ) {
+        return response;
+    }
     let request = RouteHttpRequest {
         state,
         endpoint,
         request_id,
         body_json,
         token_extension_id,
+        caller,
     };
     // Every area matches distinct literal endpoint paths, so the order the areas are tried in
     // never changes which arm answers.
@@ -531,4 +558,46 @@ pub(in crate::server) async fn route_http(
             Some(request_id),
         ),
     )
+}
+
+/*
+CDXC:Security 2026-11-08 WHY:
+One principal per request, settled from the same checks the gate just made, in the order the gate trusts them: the main token, then a session's or the owner's own token, an extension's, a paired phone's, a connected computer's, a Collab guest's. Until Phase 2 of #495 mints session tokens and the desktop's owner session, the main token resolves to `LocalAgent` (the agent level the token file is being downgraded to), and a phone's device id is its token hash's first 12 characters until pairing v2 gives devices real ids.
+*/
+fn resolve_caller(
+    main_token: bool,
+    token_principal: Option<Principal>,
+    extension_id: Option<&str>,
+    device_token_hash: Option<&str>,
+    peer: Option<&PeerAuthorization>,
+    share: Option<&crate::collab::shares::StoredShare>,
+) -> Principal {
+    if main_token {
+        return Principal::LocalAgent;
+    }
+    if let Some(principal) = token_principal {
+        return principal;
+    }
+    if let Some(extension_id) = extension_id {
+        return Principal::Extension {
+            extension_id: extension_id.to_string(),
+        };
+    }
+    if let Some(hash) = device_token_hash {
+        return Principal::Device {
+            device_id: format!("token:{}", &hash[..hash.len().min(12)]),
+        };
+    }
+    if let Some(PeerAuthorization::Allowed { server_id, name }) = peer {
+        return Principal::Peer {
+            server_id: server_id.clone(),
+            name: name.clone(),
+        };
+    }
+    if let Some(share) = share {
+        return Principal::Guest {
+            share_id: share.id.clone(),
+        };
+    }
+    Principal::Anonymous
 }
