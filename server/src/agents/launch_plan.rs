@@ -895,6 +895,19 @@ fn project_with_global_agent_list(db: &Connection, project: &Value) -> Option<Va
     None
 }
 
+/// The approvals mode the owner's own launcher setting gives `agent_id` in `project` (its agent
+/// list, else the global one), whatever a create call sends (security_cross_project.rs).
+pub(crate) fn owner_agent_accept_all_mode(
+    db: &Connection,
+    project: &Value,
+    agent_id: &str,
+) -> Option<String> {
+    let global = project_with_global_agent_list(db, project);
+    let project = global.as_ref().unwrap_or(project);
+    let config = resolve_project_agent_config(project, agent_id, None);
+    read_text_from_map(&config, "acceptAllMode")
+}
+
 pub(crate) fn create_agent_session_default_title(
     agent_name: Option<&str>,
     agent_id: Option<&str>,

@@ -153,6 +153,7 @@ mod previous_session_restore_http;
 mod project_docs_http;
 pub mod project_paths;
 mod route_http;
+mod security_cross_project;
 mod security_gates;
 mod security_http;
 mod security_owner_only;

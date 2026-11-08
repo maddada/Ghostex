@@ -93,6 +93,14 @@ open_string_enum! {
         /// (the target is the component's name, such as `collab`). Updating an installed one,
         /// turning it off and uninstalling it never ask.
         InstallExtensionComponent => "installExtensionComponent",
+        // Other projects (#495 follow-up)
+        /// An agent's first message to, or new session in, a project other than its own (the
+        /// target is the project's id); approved once, it is remembered for that agent session
+        /// and that project.
+        ReachOtherProject => "reachOtherProject",
+        /// A create call that starts an agent with approvals off (`acceptAllMode: "enabled"`)
+        /// when the owner's own setting for it doesn't. Asks every time.
+        ForceFullAccess => "forceFullAccess",
         // Teams
         /// Connect a workspace to a team backend with a token made elsewhere
         /// (`ghostex team deploy`'s last step), by anyone but the owner's devices; the target is

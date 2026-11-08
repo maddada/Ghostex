@@ -1,0 +1,306 @@
+//! Other projects' sessions (GitHub #495 follow-up, Q1863 "ask once per project"): an agent's
+//! first message to, or new session in, a project other than its own asks the owner, and the
+//! approval is remembered for that agent session and that project
+//! (`SecurityState::project_reach_approved`). A create call that starts an agent with approvals
+//! off when the owner's own setting doesn't asks every time, in any project.
+//!
+//! | Route | Asks when |
+//! | --- | --- |
+//! | `/api/sendSessionChatMessage`, `/api/queueSessionChatPrompt`, `/api/sendSessionChatQueuedPrompt`, `/api/updateSessionChatQueuedPrompt`, `/api/scheduleDelayedSend` | the session is in another project and isn't one of the caller's threads |
+//! | `/api/createSession`, `/api/createAgentSession`, `/api/createWorktreeSession`, `/api/createWorkspaceTerminal`, `/api/forkSession` | the project (or a folder that is no project yet) is another one, and the caller isn't a coordinator (which starts its threads this way); `launchSettings.acceptAllMode: "enabled"` against the owner's setting asks always |
+//!
+//! A project's worktrees count as the project (a worktree registered as its own project names
+//! its parent in `worktree.parentProjectId`). The owner's devices never ask; Chief skips the
+//! reach question (`Principal::skips_approval`), not the full-access one. The token file (the web
+//! build, the CLI in the user's own terminal) has no project of its own and only gets the
+//! full-access question.
+
+use serde_json::{json, Map, Value};
+
+use crate::domain::DomainRepository;
+use crate::security::{ActionRequest, Principal, SensitiveAction, SessionRole};
+
+use super::AppState;
+
+const MESSAGE_ROUTES: &[&str] = &[
+    "/api/sendSessionChatMessage",
+    "/api/queueSessionChatPrompt",
+    "/api/sendSessionChatQueuedPrompt",
+    "/api/updateSessionChatQueuedPrompt",
+    "/api/scheduleDelayedSend",
+];
+
+const CREATE_ROUTES: &[&str] = &[
+    "/api/createSession",
+    "/api/createAgentSession",
+    "/api/createWorktreeSession",
+    "/api/createWorkspaceTerminal",
+    "/api/forkSession",
+];
+
+/// Whether `endpoint_path` is one this file may ask for.
+pub(crate) fn is_cross_project_route(endpoint_path: &str) -> bool {
+    MESSAGE_ROUTES.contains(&endpoint_path) || CREATE_ROUTES.contains(&endpoint_path)
+}
+
+/// The key a caller's remembered approvals are kept under; `None` for callers this never asks
+/// (the owner's devices, and callers with no project of their own to compare against that keep
+/// their own allow-lists: connected computers, guests, extensions).
+pub(crate) fn caller_key(caller: &Principal) -> Option<String> {
+    match caller {
+        Principal::Session {
+            project_id,
+            session_id,
+            ..
+        } => Some(format!("{project_id}:{session_id}")),
+        Principal::LocalAgent => Some("localAgent".to_string()),
+        _ => None,
+    }
+}
+
+/// Where a call reaches: a known project, or a folder that would become a new one.
+enum Reach {
+    Project { id: String, name: String },
+    Folder(String),
+}
+
+/// The approval this call needs, if any.
+pub(crate) fn cross_project_action(
+    state: &AppState,
+    caller: &Principal,
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+) -> Option<ActionRequest> {
+    let key = caller_key(caller)?;
+    let db = crate::storage::open_gxserver_database(&state.paths).ok()?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let create = CREATE_ROUTES.contains(&endpoint_path);
+    let reach = if create {
+        create_reach(&repository, params)?
+    } else {
+        let project_id = text(params, "projectId")?;
+        let project = repository.get_project(project_id).ok().flatten()?;
+        Reach::Project {
+            id: project_id.to_string(),
+            name: project_name(&project, project_id),
+        }
+    };
+    if create && forces_full_access(&db, &repository, &reach, params) {
+        let (target, place) = describe(&reach);
+        return Some(
+            ActionRequest::new(
+                SensitiveAction::ForceFullAccess,
+                format!("Start an agent with approvals off in {place}"),
+            )
+            .target(target)
+            .params(Value::Object(params.clone()))
+            .detail("It runs every command without asking you first."),
+        );
+    }
+    // CDXC:Security 2026-11-08 WHY: the token file has no project of its own, and its callers are
+    // the GPUI web build and the ghostex CLI in the user's own terminal, which would otherwise ask
+    // once for every project the user touches. Agents carry their session's own token, which is
+    // what this question is about; the token file still asks before forcing full access.
+    if matches!(caller, Principal::LocalAgent) || is_own_reach(&repository, caller, &reach) {
+        return None;
+    }
+    if !create && is_callers_thread(state, caller, params) {
+        return None;
+    }
+    // A coordinator starts its threads in other projects with a create, then links them; its
+    // threads never ask (user decision).
+    if create
+        && matches!(
+            caller,
+            Principal::Session {
+                role: SessionRole::Coordinator | SessionRole::Head,
+                ..
+            }
+        )
+    {
+        return None;
+    }
+    let (target, place) = describe(&reach);
+    if state.security.project_reach_approved(&key, &target) {
+        return None;
+    }
+    let summary = if create {
+        format!("Start a session in {place}")
+    } else {
+        format!("Message a session in {place}")
+    };
+    Some(
+        ActionRequest::new(SensitiveAction::ReachOtherProject, summary)
+            .target(target)
+            .params(Value::Object(params.clone()))
+            .detail(format!(
+                "Approved once, this agent can message and start sessions in {place} until it ends."
+            )),
+    )
+}
+
+/// After the owner approved `request` for `caller`, remember the project it reached.
+pub(crate) fn remember_approved(
+    state: &AppState,
+    caller: &Principal,
+    approval: &ghostex_gx_protocol::approval::ApprovalRequest,
+) {
+    if !matches!(
+        approval.action,
+        SensitiveAction::ReachOtherProject | SensitiveAction::ForceFullAccess
+    ) {
+        return;
+    }
+    let (Some(key), Some(target)) = (caller_key(caller), approval.target.as_deref()) else {
+        return;
+    };
+    state.security.approve_project_reach(&key, target);
+}
+
+/// The target a reach is remembered under and how the card names it.
+fn describe(reach: &Reach) -> (String, String) {
+    match reach {
+        Reach::Project { id, name } => (id.clone(), name.clone()),
+        Reach::Folder(path) => (format!("folder:{path}"), format!("the folder {path}")),
+    }
+}
+
+/// The project a create names: `projectId`, else `projectPath` or `cwd` (an existing project's
+/// folder, or a folder the create would add as a project).
+fn create_reach(repository: &DomainRepository, params: &Map<String, Value>) -> Option<Reach> {
+    if let Some(project_id) = text(params, "projectId") {
+        if let Some(project) = repository.get_project(project_id).ok().flatten() {
+            return Some(Reach::Project {
+                id: project_id.to_string(),
+                name: project_name(&project, project_id),
+            });
+        }
+    }
+    let (field, value) = ["projectPath", "cwd"].iter().find_map(|field| {
+        params
+            .get(*field)
+            .filter(|value| !value.is_null())
+            .map(|value| (*field, value))
+    })?;
+    let path = crate::domain::normalize_existing_directory_path(Some(value), field).ok()?;
+    Some(
+        match repository.find_project_by_path(&path).ok().flatten() {
+            Some(project) => {
+                let id = text_value(&project, "projectId")?.to_string();
+                let name = project_name(&project, &id);
+                Reach::Project { id, name }
+            }
+            None => Reach::Folder(path),
+        },
+    )
+}
+
+/// Whether the reach is the caller's own project, or a worktree of it, or the project it is a
+/// worktree of.
+fn is_own_reach(repository: &DomainRepository, caller: &Principal, reach: &Reach) -> bool {
+    let Principal::Session { project_id, .. } = caller else {
+        return false;
+    };
+    let Reach::Project { id, .. } = reach else {
+        return false;
+    };
+    id == project_id || project_root(repository, id) == project_root(repository, project_id)
+}
+
+/// A project's root: the project a worktree registered as its own project belongs to, else itself.
+fn project_root(repository: &DomainRepository, project_id: &str) -> String {
+    repository
+        .get_project(project_id)
+        .ok()
+        .flatten()
+        .and_then(|project| {
+            project
+                .pointer("/worktree/parentProjectId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|parent| !parent.is_empty())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| project_id.to_string())
+}
+
+/// Whether the message goes to one of the calling coordinator's threads.
+fn is_callers_thread(state: &AppState, caller: &Principal, params: &Map<String, Value>) -> bool {
+    let Principal::Session {
+        project_id: own_project,
+        session_id: own_session,
+        role: SessionRole::Coordinator | SessionRole::Head,
+    } = caller
+    else {
+        return false;
+    };
+    let (Some(project_id), Some(session_id)) =
+        (text(params, "projectId"), text(params, "sessionId"))
+    else {
+        return false;
+    };
+    super::security_gates::is_own_thread(state, own_project, own_session, project_id, session_id)
+}
+
+/*
+CDXC:Security 2026-11-08 DECISION:
+User (#495 follow-up, Q1863): "forcing full access always asks". A create call forces it when it sends `launchSettings.acceptAllMode: "enabled"` and the owner's own setting would not start that agent with approvals off: neither "Agent approvals: accept all" nor the agent's own launcher setting is on. A call that only repeats the owner's setting changes nothing, so it doesn't ask (the page's option A: "unless it matches your own setting").
+*/
+fn forces_full_access(
+    db: &rusqlite::Connection,
+    repository: &DomainRepository,
+    reach: &Reach,
+    params: &Map<String, Value>,
+) -> bool {
+    let requested = params
+        .get("launchSettings")
+        .and_then(|settings| settings.get("acceptAllMode"))
+        .and_then(Value::as_str)
+        .map(|mode| mode.trim().eq_ignore_ascii_case("enabled"))
+        .unwrap_or(false);
+    if !requested {
+        return false;
+    }
+    let global = crate::agents::settings::read_agent_settings(db)
+        .ok()
+        .and_then(|settings| {
+            settings
+                .get("agentAcceptAllEnabled")
+                .and_then(Value::as_bool)
+        })
+        .unwrap_or(false);
+    if global {
+        return false;
+    }
+    let project = match reach {
+        Reach::Project { id, .. } => repository.get_project(id).ok().flatten(),
+        Reach::Folder(_) => None,
+    }
+    .unwrap_or_else(|| json!({}));
+    let agent_id =
+        text(params, "agentId").unwrap_or(crate::agents::settings::DEFAULT_PROMPT_AGENT_ID);
+    let own = crate::agents::owner_agent_accept_all_mode(db, &project, agent_id);
+    !own.is_some_and(|mode| mode.trim().eq_ignore_ascii_case("enabled"))
+}
+
+fn project_name(project: &Value, fallback: &str) -> String {
+    text_value(project, "name")
+        .map(str::to_string)
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+fn text_value<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+}
+
+fn text<'a>(params: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
+    params
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}

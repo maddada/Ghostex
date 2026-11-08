@@ -188,6 +188,9 @@ impl Principal {
         match action {
             AnswerOtherSessionPrompt => self.has(Capability::AnswerAnyPrompt),
             TypeIntoOtherSession | InterruptOtherSession => self.has(Capability::SteerAnySession),
+            // Chief messages and starts sessions in any project (its head role); forcing full
+            // access still asks it like any agent.
+            ReachOtherProject => self.has(Capability::SteerAnySession),
             _ => false,
         }
     }

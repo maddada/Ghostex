@@ -96,6 +96,9 @@ pub struct SecurityState {
     /// Connected computers the owner approved (server id → when, ms); see
     /// [`SecurityState::computer_approved`].
     approved_computers: Arc<std::sync::Mutex<std::collections::BTreeMap<String, u64>>>,
+    /// Projects the owner let a caller reach (caller key, project id), in memory only: see
+    /// [`SecurityState::project_reach_approved`].
+    approved_project_reach: Arc<std::sync::Mutex<std::collections::BTreeSet<(String, String)>>>,
     /// `gxserver/auth/security.json`; `None` in tests that need no disk.
     persist_path: Option<Arc<PathBuf>>,
     save_lock: Arc<std::sync::Mutex<()>>,
@@ -113,6 +116,7 @@ impl SecurityState {
             owner_challenges: OwnerChallenges::default(),
             session_tokens: SessionTokens::default(),
             approved_computers: Arc::default(),
+            approved_project_reach: Arc::default(),
             persist_path: None,
             save_lock: Arc::default(),
             events: broadcast::channel(256).0,
@@ -251,6 +255,27 @@ impl SecurityState {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .insert(server_id.to_string(), now_ms);
         let _ = self.save();
+    }
+
+    /*
+    CDXC:Security 2026-11-08 DECISION:
+    User (#495 follow-up, Q1863 "ask once per project"): an agent's first message to, or new session in, a project other than its own asks the owner; the approval is remembered for that agent session and that project, until gxserver restarts. It is kept in memory only: a session that ends never comes back with the same id's approvals in a later gxserver, and a restart asks again at most once per project.
+    */
+    /// Whether the owner already let `caller_key` (a session's `<project>:<session>`, or
+    /// `localAgent`) reach project `project_id`.
+    pub fn project_reach_approved(&self, caller_key: &str, project_id: &str) -> bool {
+        self.approved_project_reach
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .contains(&(caller_key.to_string(), project_id.to_string()))
+    }
+
+    /// Remembers that the owner let `caller_key` reach project `project_id`.
+    pub fn approve_project_reach(&self, caller_key: &str, project_id: &str) {
+        self.approved_project_reach
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert((caller_key.to_string(), project_id.to_string()));
     }
 
     /// Adds an approver key: the first one directly (it is the owner's call, checked by the

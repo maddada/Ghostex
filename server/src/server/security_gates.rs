@@ -11,6 +11,7 @@
 //! | `/api/answerSessionChatPrompt` | anyone but the owner's devices and Chief answers another session's prompt |
 //! | `/api/interruptSessionChat` | anyone but the owner's devices and Chief stops a session that is neither their own nor one of their threads |
 //! | `/api/sendSessionText`, `/api/sendSessionEnter`, `/api/sendSessionMessage` | anyone but the owner's devices and Chief types into a session that isn't their own, its threads included (a coordinator's Escape or Ctrl-C to its own thread doesn't ask) |
+//! | chat messages and creates into another project, a create forcing full access | see security_cross_project.rs |
 //!
 //! What only the owner's devices may do at all, with no approval to ask for, is refused before
 //! these (`security_owner_only.rs`).
@@ -115,6 +116,7 @@ pub(crate) fn gate(
     };
     match decided {
         Ok(grant) => {
+            super::security_cross_project::remember_approved(state, caller, &grant.approval);
             if let Some((server_id, _)) = computer {
                 state
                     .security
@@ -128,6 +130,8 @@ pub(crate) fn gate(
                     | SensitiveAction::InterruptOtherSession
                     | SensitiveAction::SettingsWeakenSecurity
                     | SensitiveAction::GbotsEnable
+                    | SensitiveAction::ReachOtherProject
+                    | SensitiveAction::ForceFullAccess
                     | SensitiveAction::TeamSyncConnect
             ) {
                 crate::audit::record(
@@ -372,6 +376,9 @@ fn sensitive_action(
         }
         "/api/interruptSessionChat" => interrupt_action(state, caller, params),
         "/api/connectTeamSync" => team_connect_action(caller, params),
+        path if super::security_cross_project::is_cross_project_route(path) => {
+            super::security_cross_project::cross_project_action(state, caller, path, params)
+        }
         _ => match security::route_access(endpoint_path) {
             RouteAccess::Presence(action) => Some(
                 ActionRequest::new(
@@ -713,7 +720,7 @@ fn interrupt_action(
 }
 
 /// Whether session `session_id` of `project_id` is a thread of coordinator `coordinator`.
-fn is_own_thread(
+pub(super) fn is_own_thread(
     state: &AppState,
     coordinator_project: &str,
     coordinator_session: &str,
