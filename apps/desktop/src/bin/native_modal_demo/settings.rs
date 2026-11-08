@@ -293,6 +293,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             json!({ "initialSearchQuery": if query.is_empty() { "font".to_string() } else { query } })
         }
         "search-other" => json!({ "initialSearchQuery": "tailscale" }),
+        // `orchestrator-playbook…-row`: searched for, so the Playbook overrides row shows.
+        state if state.starts_with("orchestrator-playbook") && state.ends_with("-row") => {
+            json!({ "initialSearchQuery": "playbook" })
+        }
         state if state.starts_with("orchestrator-playbook") => {
             json!({ "initialSection": "chat" })
         }
@@ -382,12 +386,18 @@ thread_local! {
 /// The scripted gxserver's `/api/readCoordinatorPlaybook` and `/api/setCoordinatorPlaybook`
 /// (states `orchestrator-playbook`, `orchestrator-playbook-edit`,
 /// `orchestrator-playbook-overrides-edit`, `orchestrator-playbook-old-edit`,
-/// `orchestrator-playbook-old-armed`).
+/// `orchestrator-playbook-old-armed`, `orchestrator-playbook-view`,
+/// `orchestrator-playbook-overrides-view`), and `/api/readCoordinatorGuide`.
 fn orchestrator_playbook_rpc(
     state: &str,
     path: &str,
     params: &Value,
 ) -> Option<Result<Value, String>> {
+    if path == "/api/readCoordinatorGuide" {
+        return Some(Ok(
+            json!({ "guide": super::new_coordinator_demo::demo_guide() }),
+        ));
+    }
     if !matches!(
         path,
         "/api/readCoordinatorPlaybook" | "/api/setCoordinatorPlaybook"

@@ -84,6 +84,12 @@ impl GeneralTab {
                 super::orchestrator_playbook::preview_arm_switch(&mut page);
             }
         }
+        // `orchestrator-playbook…-view` opens the read-only playbook.
+        if preview_state.as_deref().is_some_and(|state| {
+            chat && state.starts_with("orchestrator-playbook") && state.ends_with("-view")
+        }) {
+            super::orchestrator_playbook::open_playbook_view(&mut page, window, cx);
+        }
         page
     }
 }
@@ -458,10 +464,13 @@ impl Render for GeneralTab {
         let preview = self.marked_sections_preview(&g, window, cx);
         let instructions =
             super::orchestrator_playbook::render_playbook_sheet(self, &g.p, window, cx);
+        let playbook_view =
+            super::orchestrator_playbook::render_playbook_view_sheet(self, &g.p, window, cx);
         div()
             .size_full()
             .child(settings_page(&self.store, tab, &g.p, blocks, cx))
             .children(preview)
             .children(instructions)
+            .children(playbook_view)
     }
 }

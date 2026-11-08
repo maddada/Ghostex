@@ -3,6 +3,7 @@
 //! `antigravity` (no XHigh: Medium and High), `none` (no agent an orchestrator can run on),
 //! `overrides` (the user wrote playbook overrides), `overrides-edit` (their editor open),
 //! `old-playbook` (an edited full playbook saved before overrides is still in use, editor open),
+//! `view` (the read-only playbook page, no overrides), `overrides-view` (the page with overrides),
 //! `effort-menu` (the Effort menu open), `all-efforts` (Show all effort levels on, the Effort menu
 //! open on every level of the model).
 use super::new_coordinator_modal::*;
@@ -141,6 +142,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     };
     let open_effort_menu = matches!(demo.state.as_str(), "effort-menu" | "all-efforts");
     let open_editor = matches!(demo.state.as_str(), "overrides-edit" | "old-playbook");
+    let open_view = demo.state.ends_with("view");
     let _ = super::open_modal_window(
         NEW_COORDINATOR_MODAL_WIDTH,
         NEW_COORDINATOR_MODAL_INITIAL_HEIGHT,
@@ -152,6 +154,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 }
                 if open_editor {
                     modal.open_playbook_editor(window, cx);
+                }
+                modal.set_playbook_guide(Ok(demo_guide()), cx);
+                if open_view {
+                    modal.open_playbook_view(window, cx);
                 }
                 modal
             })
@@ -177,4 +183,18 @@ fn demo_playbook_view(state: &str) -> serde_json::Value {
             serde_json::json!([])
         },
     })
+}
+
+/// The scripted `/api/readCoordinatorGuide` answer: the playbook Ghostex ships (the skill's body)
+/// and the marked reply format.
+pub(super) fn demo_guide() -> String {
+    let skill = include_str!("../../../../../skills/ghostex-orchestrator/SKILL.md");
+    let body = skill
+        .strip_prefix("---\n")
+        .and_then(|rest| rest.split_once("\n---\n"))
+        .map_or(skill, |(_, body)| body)
+        .trim();
+    format!(
+        "{body}\n\nReply format: the user chose marked handovers. Start each status and action section with its marker.\n"
+    )
 }

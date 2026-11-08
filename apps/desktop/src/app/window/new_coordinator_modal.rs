@@ -120,6 +120,10 @@ pub(crate) struct GpuiNewCoordinatorModalWindow {
     playbook: Option<OrchestratorPlaybookInfo>,
     playbook_input: Entity<TextareaState>,
     editor: Option<PlaybookEditor>,
+    /// Ghostex's part of the playbook in effect (`/api/readCoordinatorGuide`), once read.
+    playbook_guide: Option<Result<String, String>>,
+    /// The read-only playbook page is open.
+    viewing: bool,
     fit: ModalFit,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
@@ -198,6 +202,8 @@ impl GpuiNewCoordinatorModalWindow {
             playbook: config.playbook,
             playbook_input,
             editor: None,
+            playbook_guide: None,
+            viewing: false,
             fit: ModalFit::fixed(),
             focus_handle: cx.focus_handle(),
             _subscriptions: subscriptions,
@@ -410,6 +416,10 @@ impl GpuiNewCoordinatorModalWindow {
     }
 
     fn on_enter_action(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
+        if self.viewing {
+            cx.stop_propagation();
+            return;
+        }
         if self.editor.is_some() {
             // Enter is a newline in the overrides; Cmd/Ctrl+Enter saves.
             let in_text = self
@@ -439,6 +449,10 @@ impl GpuiNewCoordinatorModalWindow {
 
     fn on_escape_action(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
+        if self.viewing {
+            self.close_playbook_view(window, cx);
+            return;
+        }
         if self.editor.is_some() {
             self.close_playbook_editor(window, cx);
             return;
@@ -454,6 +468,13 @@ impl GpuiNewCoordinatorModalWindow {
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
+        if self.viewing {
+            if key == "escape" {
+                self.close_playbook_view(window, cx);
+                cx.stop_propagation();
+            }
+            return;
+        }
         if self.editor.is_some() {
             if key == "escape" {
                 self.close_playbook_editor(window, cx);
@@ -784,6 +805,9 @@ impl GpuiNewCoordinatorModalWindow {
 
     fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
+        if self.viewing {
+            return self.render_playbook_view_footer(cx);
+        }
         if self.editor.is_some() {
             return self.render_playbook_footer(cx);
         }
@@ -822,7 +846,9 @@ impl Render for GpuiNewCoordinatorModalWindow {
             "One agent you talk to about {}. It plans the work, hands each task to a thread (its own agent session, optionally in its own worktree), and reports back when threads finish or need you.",
             self.project_name
         );
-        let content = if self.editor.is_some() {
+        let content = if self.viewing {
+            self.render_playbook_view()
+        } else if self.editor.is_some() {
             self.render_playbook_page(window, cx)
         } else {
             vec![
@@ -834,7 +860,7 @@ impl Render for GpuiNewCoordinatorModalWindow {
         // Rendered on the playbook page too, so a list left open when Edit was pressed hides.
         let menu = self
             .render_open_menu(window, cx)
-            .filter(|_| self.editor.is_none());
+            .filter(|_| self.editor.is_none() && !self.viewing);
         modal_shell(
             &p,
             "ghostex-gpui-new-coordinator-modal",

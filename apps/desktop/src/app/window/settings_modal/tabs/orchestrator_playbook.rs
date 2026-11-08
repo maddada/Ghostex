@@ -4,6 +4,9 @@
 //! never edited. Both read and save through gxserver (`/api/readCoordinatorPlaybook`,
 //! `/api/setCoordinatorPlaybook`). While an edited full playbook saved before overrides is still
 //! stored, the sheet says so and offers Use Ghostex's Playbook, which saves it as a Markdown file.
+//! View playbook beside Edit opens the read-only playbook as coordinators read it
+//! (`/api/readCoordinatorGuide`; CDXC:Coordinators 2026-11-08 in
+//! window/new_coordinator_playbook.rs).
 //!
 //! CDXC:Coordinators 2026-10-19 WHY: the editor is a dialog nested in the Settings window, not an app modal of its own: opening another app modal replaces the open one (`open_native_app_modal`), which would close Settings under the reader. The user's decision (2026-11-07, overrides instead of editing) is on server/src/coordinators/playbook.rs.
 use super::super::super::native_modal_kit::*;
@@ -24,8 +27,9 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 use super::super::super::new_coordinator_modal::{
-    OVERRIDES_DESCRIPTION, OVERRIDES_HINT, OVERRIDES_PLACEHOLDER, old_copies_note, old_copy_places,
-    overrides_summary,
+    EDIT_OVERRIDES, OVERRIDES_DESCRIPTION, OVERRIDES_HINT, OVERRIDES_PLACEHOLDER,
+    PLAYBOOK_VIEW_DESCRIPTION, PLAYBOOK_VIEW_TITLE, PlaybookViewColors, VIEW_PLAYBOOK,
+    guide_ghostex_part, old_copies_note, old_copy_places, overrides_summary, playbook_view_body,
 };
 
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
@@ -72,12 +76,20 @@ pub(crate) struct PlaybookSheet {
     switch_generation: u64,
 }
 
-/// Per page: the overrides read so far and the open editor.
+/// The open read-only playbook.
+pub(crate) struct PlaybookViewSheet {
+    focus: FocusHandle,
+    /// Ghostex's part of the guide once read, or why it could not be.
+    guide: Option<Result<String, String>>,
+}
+
+/// Per page: the overrides read so far, the open editor and the open playbook view.
 #[derive(Default)]
 pub(crate) struct OrchestratorPlaybookState {
     known: Option<PlaybookOverrides>,
     requested: bool,
     sheet: Option<PlaybookSheet>,
+    view: Option<PlaybookViewSheet>,
     draft: String,
 }
 
@@ -178,6 +190,146 @@ pub(crate) fn open_playbook_sheet<V: HasOrchestratorPlaybook>(
         cx,
     );
     cx.notify();
+}
+
+/// Opens the read-only playbook, reading the guide and the overrides fresh.
+pub(crate) fn open_playbook_view<V: HasOrchestratorPlaybook>(
+    page: &mut V,
+    window: &mut Window,
+    cx: &mut Context<V>,
+) {
+    let focus = cx.focus_handle();
+    focus.focus(window, cx);
+    page.orchestrator_playbook().view = Some(PlaybookViewSheet { focus, guide: None });
+    let store = page.settings_store().clone();
+    let this = cx.weak_entity();
+    store_gxserver_rpc(
+        &store,
+        "/api/readCoordinatorGuide",
+        json!({}),
+        RPC_TIMEOUT,
+        move |result, cx| {
+            let _ = this.update(cx, |page, cx| {
+                if let Some(view) = page.orchestrator_playbook().view.as_mut() {
+                    view.guide = Some(result.and_then(|answer| {
+                        answer["guide"]
+                            .as_str()
+                            .map(guide_ghostex_part)
+                            .ok_or_else(|| "Ghostex could not show its playbook.".to_string())
+                    }));
+                }
+                cx.notify();
+            });
+        },
+        cx,
+    );
+    read_overrides(page, cx);
+    cx.notify();
+}
+
+fn close_view<V: HasOrchestratorPlaybook>(page: &mut V, cx: &mut Context<V>) {
+    page.orchestrator_playbook().view = None;
+    cx.notify();
+}
+
+/// The read-only playbook, while it is open.
+pub(crate) fn render_playbook_view_sheet<V: HasOrchestratorPlaybook>(
+    page: &mut V,
+    p: &SettingsPalette,
+    window: &mut Window,
+    cx: &mut Context<V>,
+) -> Option<AnyElement> {
+    let p = &p.nested_dialog();
+    let state = page.orchestrator_playbook();
+    let view = state.view.as_ref()?;
+    let focus = view.focus.clone();
+    let guide = view.guide.clone();
+    let overrides = state
+        .known
+        .as_ref()
+        .map(|known| known.text.clone())
+        .unwrap_or_default();
+    let colors = PlaybookViewColors {
+        light: p.light,
+        foreground: p.foreground,
+        muted: p.muted,
+        panel: p.raised,
+        hairline: p.hairline,
+        destructive: p.destructive,
+    };
+    let body = vec![playbook_view_body(
+        colors,
+        "orchestrator-playbook-view",
+        guide.as_ref(),
+        &overrides,
+    )];
+    let close = settings_button(
+        p,
+        "orchestrator-playbook-view-close",
+        "Close",
+        None,
+        ButtonVariant::Outline,
+        false,
+        None,
+        |page: &mut V, _window, cx| close_view(page, cx),
+        cx,
+    );
+    let edit = settings_button(
+        p,
+        "orchestrator-playbook-view-edit",
+        EDIT_OVERRIDES,
+        None,
+        ButtonVariant::Primary,
+        !page
+            .settings_store()
+            .read(cx)
+            .request()
+            .gxserver_rpc_available,
+        None,
+        |page: &mut V, window, cx| {
+            page.orchestrator_playbook().view = None;
+            open_playbook_sheet(page, window, cx);
+        },
+        cx,
+    );
+    let footer = h_flex()
+        .w_full()
+        .gap(px(8.0))
+        .child(div().flex_1())
+        .child(close)
+        .child(edit)
+        .into_any_element();
+    let max_height = f32::from(window.viewport_size().height) * 0.92;
+    let description = Some(div().child(PLAYBOOK_VIEW_DESCRIPTION).into_any_element());
+    let on_close = |page: &mut V, _window: &mut Window, cx: &mut Context<V>| close_view(page, cx);
+    // A tall sheet whose body scrolls under a fixed header and footer.
+    let body = vec![
+        div()
+            .id("orchestrator-playbook-view-scroll")
+            .w_full()
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .children(body)
+            .into_any_element(),
+    ];
+    Some(settings_dialog_sheet(
+        p,
+        "orchestrator-playbook-view",
+        &focus,
+        PLAYBOOK_VIEW_TITLE,
+        description,
+        720.0,
+        Some(max_height),
+        24.0,
+        12.0,
+        false,
+        body,
+        Some(footer),
+        on_close,
+        window,
+        cx,
+    ))
 }
 
 fn close_sheet<V: HasOrchestratorPlaybook>(page: &mut V, cx: &mut Context<V>) {
@@ -529,6 +681,17 @@ pub(crate) fn playbook_control<V: HasOrchestratorPlaybook>(
         move |page: &mut V, window, cx| open_playbook_sheet(page, window, cx),
         cx,
     );
+    let view = settings_button(
+        p,
+        format!("{id}-view"),
+        format!("{VIEW_PLAYBOOK}…"),
+        None,
+        ButtonVariant::Outline,
+        !rpc_available,
+        None,
+        move |page: &mut V, window, cx| open_playbook_view(page, window, cx),
+        cx,
+    );
     h_flex()
         .gap(px(10.0))
         .child(
@@ -541,6 +704,7 @@ pub(crate) fn playbook_control<V: HasOrchestratorPlaybook>(
                 .text_color(hsla(p.muted))
                 .child(state),
         )
+        .child(view)
         .child(edit)
         .into_any_element()
 }

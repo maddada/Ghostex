@@ -117,7 +117,7 @@ impl GhostexGpuiApp {
         if let (Some(remote), Some(project_id)) = (instructions_target, project_id) {
             cx.spawn(async move |_this, cx| {
                 let read = crate::app::gx_store::gx_rpc(
-                    remote,
+                    remote.clone(),
                     "/api/readCoordinatorPlaybook",
                     serde_json::json!({ "projectId": project_id }),
                 )
@@ -135,6 +135,26 @@ impl GhostexGpuiApp {
                     return;
                 };
                 cx.update(|cx| dialog.update(cx, |dialog, cx| dialog.set_playbook(Some(info), cx)));
+                // The playbook as `ghostex coordinator guide` prints it for this project, for View
+                // playbook. Without a session the read is not recorded as any coordinator's.
+                let guide = crate::app::gx_store::gx_rpc(
+                    remote,
+                    "/api/readCoordinatorGuide",
+                    serde_json::json!({ "projectId": project_id }),
+                )
+                .await
+                .map_err(|error| error.message)
+                .and_then(|view| {
+                    view.get("guide")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string)
+                        .ok_or_else(|| {
+                            "This computer's Ghostex could not show its playbook.".to_string()
+                        })
+                });
+                cx.update(|cx| {
+                    dialog.update(cx, |dialog, cx| dialog.set_playbook_guide(guide, cx))
+                });
             })
             .detach();
         }

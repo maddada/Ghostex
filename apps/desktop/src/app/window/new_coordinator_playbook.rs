@@ -1,9 +1,14 @@
 //! The New Coordinator dialog's Playbook overrides: the row that shows the user's overrides (the
-//! instructions every coordinator reads after Ghostex's playbook, ranked above it) and the small
-//! editor page its Edit button opens. Ghostex's playbook itself is never edited.
+//! instructions every coordinator reads after Ghostex's playbook, ranked above it), the small
+//! editor page its Edit button opens, and the read-only playbook page its View playbook button
+//! opens. Ghostex's playbook itself is never edited.
 //! See CDXC:Coordinators 2026-11-07 in server/src/coordinators/playbook.rs.
+//!
+//! CDXC:Coordinators 2026-11-08 DECISION:
+//! User, of the New Coordinator dialog's "Playbook overrides: None. Coordinators follow Ghostex's playbook as it ships. [Edit]" row: "this ux here sucks, there's no way to see the actual current" playbook. View playbook (here and beside Edit in Settings > Chat > Playbook overrides) opens a scrollable, read-only page of what `ghostex coordinator guide` prints for the project (`/api/readCoordinatorGuide`, which records no read without a session): Ghostex's playbook and the reply format the user chose, then the user's overrides in their own box marked as theirs, with Edit overrides to change them.
 use super::*;
 use gpui::StatefulInteractiveElement as _;
+use gpui::{SharedString, Styled as _};
 use std::time::Duration;
 
 const FIELD_OVERRIDES: &str = "Playbook overrides";
@@ -14,6 +19,20 @@ pub(crate) const OVERRIDES_DESCRIPTION: &str = "Your own instructions for every 
 pub(crate) const OVERRIDES_HINT: &str =
     "Every coordinator, existing ones too, follows them from its next message.";
 const EDIT: &str = "Edit";
+pub(crate) const VIEW_PLAYBOOK: &str = "View playbook";
+pub(crate) const PLAYBOOK_VIEW_TITLE: &str = "Coordinator playbook";
+pub(crate) const PLAYBOOK_VIEW_DESCRIPTION: &str = "What every coordinator reads, top to bottom: Ghostex's playbook with the reply format you chose, then your overrides, which take precedence. Ghostex's part comes with Ghostex and updates with it.";
+pub(crate) const EDIT_OVERRIDES: &str = "Edit overrides";
+const GHOSTEX_PART_TITLE: &str = "Ghostex's playbook";
+const GHOSTEX_PART_LABEL: &str = "Read-only";
+const OVERRIDES_PART_TITLE: &str = "Your overrides";
+const OVERRIDES_PART_LABEL: &str = "Yours";
+const NO_OVERRIDES: &str =
+    "None yet. Edit overrides adds instructions every coordinator follows over Ghostex's playbook.";
+const GUIDE_LOADING: &str = "Loading the playbook…";
+/// The heading the guide puts the user's overrides under (server/src/coordinators/role.rs
+/// `PLAYBOOK_OVERRIDES_HEADING`); the page shows them in their own box instead.
+const GUIDE_OVERRIDES_HEADING: &str = "## The user's overrides";
 const BACK: &str = "Back";
 const SAVE: &str = "Save";
 const SAVING: &str = "Saving…";
@@ -119,6 +138,146 @@ pub(crate) fn overrides_summary(overrides: &str) -> String {
         .unwrap_or_else(|| "None. Coordinators follow Ghostex's playbook as it ships.".to_string())
 }
 
+/// Ghostex's part of a guide (`/api/readCoordinatorGuide`): the playbook and the reply format,
+/// without the user's overrides that end it.
+pub(crate) fn guide_ghostex_part(guide: &str) -> String {
+    let marker = format!("\n{GUIDE_OVERRIDES_HEADING}\n");
+    guide
+        .find(&marker)
+        .map_or(guide, |at| &guide[..at])
+        .trim()
+        .to_string()
+}
+
+/// The colours the read-only playbook page draws with, from either dialog's palette.
+#[derive(Clone, Copy)]
+pub(crate) struct PlaybookViewColors {
+    pub(crate) light: bool,
+    pub(crate) foreground: gpui::Rgba,
+    pub(crate) muted: gpui::Rgba,
+    pub(crate) panel: gpui::Rgba,
+    pub(crate) hairline: gpui::Rgba,
+    pub(crate) destructive: gpui::Rgba,
+}
+
+/// The read-only playbook page's body: Ghostex's part (`guide`: loading, read, or why it could not
+/// be read) as Markdown, then the user's overrides in their own box marked as theirs. The caller
+/// puts it in a scroll area.
+pub(crate) fn playbook_view_body(
+    c: PlaybookViewColors,
+    id: &str,
+    guide: Option<&Result<String, String>>,
+    overrides: &str,
+) -> AnyElement {
+    let title_row = |title: &'static str, label: &'static str| {
+        h_flex()
+            .w_full()
+            .justify_between()
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .line_height(px(17.0))
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(hsla(c.muted))
+                    .child(title),
+            )
+            .child(
+                div()
+                    .px(px(7.0))
+                    .py(px(1.0))
+                    .rounded(px(999.0))
+                    .border_1()
+                    .border_color(hsla(c.hairline))
+                    .text_size(px(11.0))
+                    .line_height(px(16.0))
+                    .text_color(hsla(c.muted))
+                    .child(label),
+            )
+    };
+    let boxed = |child: AnyElement| {
+        div()
+            .w_full()
+            .px(px(16.0))
+            .py(px(12.0))
+            .rounded(px(8.0))
+            .border_1()
+            .border_color(hsla(c.hairline))
+            .bg(hsla(c.panel))
+            .child(child)
+    };
+    let note = |text: String, color: gpui::Rgba| {
+        div()
+            .text_size(px(13.0))
+            .line_height(px(19.0))
+            .text_color(hsla(color))
+            .child(text)
+            .into_any_element()
+    };
+    let ghostex = match guide {
+        None => note(GUIDE_LOADING.to_string(), c.muted),
+        Some(Err(message)) => note(message.clone(), c.destructive),
+        Some(Ok(text)) => {
+            // Headings a step above the 13px text, and inline code as an ink wash chip, so the
+            // page reads like the dialog around it in light and dark.
+            let ink = if c.light { 0x000000 } else { 0xffffff };
+            let mut style = gpui_component::text::TextViewStyle::default()
+                .default_cursor(true)
+                .paragraph_gap(gpui::rems(0.6))
+                .heading_font_size(|level, _| match level {
+                    1 => px(18.0),
+                    2 => px(16.0),
+                    3 => px(14.0),
+                    _ => px(13.0),
+                })
+                .inline_code(gpui::HighlightStyle {
+                    color: Some(hsla(c.foreground)),
+                    background_color: Some(hsla(modal_rgba(ink, 0.08))),
+                    ..Default::default()
+                });
+            style.is_dark = !c.light;
+            gpui_component::text::TextView::markdown(
+                SharedString::from(format!("{id}-ghostex-part")),
+                text.clone(),
+            )
+            .parse_synchronously(true)
+            .selectable(true)
+            .w_full()
+            .min_w_0()
+            .style(style)
+            .text_size(px(13.0))
+            .line_height(px(20.0))
+            .text_color(hsla(c.foreground))
+            .into_any_element()
+        }
+    };
+    let overrides = overrides.trim();
+    let yours = if overrides.is_empty() {
+        note(NO_OVERRIDES.to_string(), c.muted)
+    } else {
+        div()
+            .w_full()
+            .text_size(px(13.0))
+            .line_height(px(20.0))
+            .text_color(hsla(c.foreground))
+            .whitespace_normal()
+            .children(
+                overrides
+                    .lines()
+                    .map(|line| div().min_h(px(20.0)).child(line.to_string())),
+            )
+            .into_any_element()
+    };
+    v_flex()
+        .w_full()
+        .gap(px(8.0))
+        .child(title_row(GHOSTEX_PART_TITLE, GHOSTEX_PART_LABEL))
+        .child(boxed(ghostex))
+        .child(div().h(px(8.0)))
+        .child(title_row(OVERRIDES_PART_TITLE, OVERRIDES_PART_LABEL))
+        .child(boxed(yours))
+        .into_any_element()
+}
+
 /// What a save changes.
 pub(crate) enum PlaybookChange {
     Overrides(String),
@@ -168,6 +327,103 @@ impl GpuiNewCoordinatorModalWindow {
     ) {
         self.playbook = info;
         cx.notify();
+    }
+
+    /// Ghostex's part of the guide, once the host has read it (or why it could not).
+    pub(crate) fn set_playbook_guide(
+        &mut self,
+        guide: Result<String, String>,
+        cx: &mut Context<Self>,
+    ) {
+        self.playbook_guide = Some(guide.map(|guide| guide_ghostex_part(&guide)));
+        cx.notify();
+    }
+
+    /// Turns the dialog into the read-only playbook page.
+    pub(crate) fn open_playbook_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.playbook.is_none() {
+            return;
+        }
+        self.close_menus();
+        self.viewing = true;
+        self.focus_handle.focus(window, cx);
+        cx.notify();
+    }
+
+    pub(super) fn close_playbook_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.viewing = false;
+        self.name_input
+            .update(cx, |input, cx| input.focus(window, cx));
+        cx.notify();
+    }
+
+    /// The playbook page: its header and the scrolling read-only playbook.
+    pub(super) fn render_playbook_view(&self) -> Vec<AnyElement> {
+        let p = self.palette;
+        let overrides = self
+            .playbook
+            .as_ref()
+            .map(|info| info.overrides.clone())
+            .unwrap_or_default();
+        let colors = PlaybookViewColors {
+            light: p.light,
+            foreground: p.foreground,
+            muted: p.muted,
+            panel: p.panel,
+            hairline: p.hairline,
+            destructive: p.destructive,
+        };
+        vec![
+            modal_header(&p, PLAYBOOK_VIEW_TITLE, Some(PLAYBOOK_VIEW_DESCRIPTION)),
+            div()
+                .id("new-coordinator-playbook-view-scroll")
+                .w_full()
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .child(playbook_view_body(
+                    colors,
+                    "new-coordinator-playbook-view",
+                    self.playbook_guide.as_ref(),
+                    &overrides,
+                ))
+                .into_any_element(),
+        ]
+    }
+
+    /// Back on the left; Edit overrides on the right.
+    pub(super) fn render_playbook_view_footer(&self, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        let back = modal_action_button(
+            &p,
+            "new-coordinator-playbook-view-back",
+            BACK,
+            None,
+            ModalButtonTone::Neutral,
+            false,
+            |this, window, cx| this.close_playbook_view(window, cx),
+            cx,
+        );
+        let edit = modal_action_button(
+            &p,
+            "new-coordinator-playbook-view-edit",
+            EDIT_OVERRIDES,
+            None,
+            ModalButtonTone::Primary,
+            false,
+            |this, window, cx| {
+                this.viewing = false;
+                this.open_playbook_editor(window, cx)
+            },
+            cx,
+        );
+        h_flex()
+            .w_full()
+            .gap(px(8.0))
+            .child(div().flex_1())
+            .child(h_flex().w(px(96.0)).child(back))
+            .child(h_flex().w(px(140.0)).child(edit))
+            .into_any_element()
     }
 
     pub(crate) fn open_playbook_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -336,6 +592,16 @@ impl GpuiNewCoordinatorModalWindow {
             |this, window, cx| this.open_playbook_editor(window, cx),
             cx,
         );
+        let view = modal_action_button(
+            &p,
+            "new-coordinator-playbook-view",
+            VIEW_PLAYBOOK,
+            None,
+            ModalButtonTone::Neutral,
+            false,
+            |this, window, cx| this.open_playbook_view(window, cx),
+            cx,
+        );
         let summary_color = if info.overrides.is_empty() {
             p.muted
         } else {
@@ -382,7 +648,8 @@ impl GpuiNewCoordinatorModalWindow {
                                 .text_color(summary_color)
                                 .child(overrides_summary(&info.overrides)),
                         )
-                        .child(div().flex_shrink_0().w(px(72.0)).child(edit)),
+                        .child(div().flex_shrink_0().w(px(124.0)).child(view))
+                        .child(div().flex_shrink_0().w(px(64.0)).child(edit)),
                 )
                 .into_any_element(),
         )
