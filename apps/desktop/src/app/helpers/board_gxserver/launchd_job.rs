@@ -40,12 +40,20 @@ pub(crate) fn gpui_current_uid() -> u32 {
     unsafe { libc::getuid() }
 }
 
+/// The gxserver job in use: the app's bundled SMAppService agent once the app moved to it (the
+/// legacy plist is gone and the agent is loaded), else the legacy `…gxserver` LaunchAgent.
 pub(crate) fn gpui_gxserver_launchd_job_target() -> String {
-    format!(
-        "gui/{}/{}",
-        gpui_current_uid(),
-        gpui_gxserver_launch_agent_label()
-    )
+    use ghostex_paths::macos_launch_agent as agents;
+    let legacy = gpui_gxserver_launch_agent_label();
+    let label = if legacy == agents::LEGACY_GXSERVER
+        && !agents::legacy_plist_path(&legacy).exists()
+        && agents::gui_job_loaded(agents::BUNDLED_GXSERVER)
+    {
+        agents::BUNDLED_GXSERVER.to_string()
+    } else {
+        legacy
+    };
+    format!("gui/{}/{label}", gpui_current_uid())
 }
 
 pub(crate) fn gpui_run_launchctl(arguments: &[&str]) -> GpuiCapturedCommandOutput {

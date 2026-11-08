@@ -1098,6 +1098,18 @@ fn main() {
         .file(gpui_color_panel)
         .compile("ghostex_gpui_color_panel");
 
+    // Ghostex's background helpers as SMAppService agents
+    // (app/helpers/board_gxserver/background_agents.rs).
+    let gpui_background_agents = manifest_dir.join("native/macos/GpuiBackgroundAgents.m");
+    println!(
+        "cargo:rerun-if-changed={}",
+        gpui_background_agents.display()
+    );
+    gpui_macos_objc_build()
+        .file(gpui_background_agents)
+        .compile("ghostex_gpui_background_agents");
+    println!("cargo:rustc-link-lib=framework=ServiceManagement");
+
     // The Files view's Open With menu (native_docs/open_externally.rs).
     let gpui_open_with = manifest_dir.join("native/macos/GpuiOpenWith.m");
     println!("cargo:rerun-if-changed={}", gpui_open_with.display());

@@ -276,7 +276,8 @@ impl Render for AboutTab {
                                     .line_height(px(20.0))
                                     .text_color(hsla(p.muted))
                                     .child(format!("Version {APP_VERSION}")),
-                            ),
+                            )
+                            .children(background_helpers_line(&p)),
                     ),
             )
             .child(
@@ -346,4 +347,46 @@ impl Render for AboutTab {
         ));
         settings_page(&self.store, SettingsTabId::About, &p, blocks, cx)
     }
+}
+
+/// How Ghostex's background helpers run (CDXC:BackgroundItems 2026-11-08 in
+/// app/helpers/board_gxserver/background_agents.rs), with a way to Login Items when macOS waits
+/// for the user's OK.
+#[cfg(target_os = "macos")]
+fn background_helpers_line(p: &SettingsPalette) -> Option<AnyElement> {
+    let (text, needs_approval) = crate::app::helpers::gpui_background_helpers_status_line()?;
+    let line = div()
+        .mt(px(2.0))
+        .text_size(px(12.0))
+        .line_height(px(18.0))
+        .text_color(hsla(p.muted))
+        .child(text);
+    if !needs_approval {
+        return Some(line.into_any_element());
+    }
+    Some(
+        h_flex()
+            .gap(px(8.0))
+            .child(line)
+            .child(
+                div()
+                    .id("settings-about-open-login-items")
+                    .mt(px(2.0))
+                    .text_size(px(12.0))
+                    .line_height(px(18.0))
+                    .text_color(hsla(p.foreground))
+                    .underline()
+                    .cursor_pointer()
+                    .child("Open Login Items")
+                    .on_click(|_: &ClickEvent, _, _| {
+                        crate::app::helpers::gpui_open_login_items_settings()
+                    }),
+            )
+            .into_any_element(),
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn background_helpers_line(_p: &SettingsPalette) -> Option<AnyElement> {
+    None
 }

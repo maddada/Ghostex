@@ -242,7 +242,11 @@ fn main() {
     // Login Items names Ghostex, not the signing developer, for a gxserver job installed before
     // 11.1.2 (GitHub #510); never restarts gxserver.
     #[cfg(target_os = "macos")]
-    thread::spawn(app::helpers::board_gxserver::gpui_name_ghostex_in_gxserver_launch_agent);
+    // The bundled helpers follow the start-at-login switch (CDXC:BackgroundItems 2026-11-08).
+    thread::spawn(|| {
+        app::helpers::board_gxserver::gpui_name_ghostex_in_gxserver_launch_agent();
+        app::helpers::board_gxserver::gpui_reconcile_bundled_helpers(None);
+    });
     // Only finds the CEF runtime on disk; nothing starts or downloads it here
     // (CDXC:CefRuntime 2026-09-28 in app/helpers/web_runtime.rs).
     // A runtime the user uninstalled (or, on Windows, reinstalled) while it ran is removed first,

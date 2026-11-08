@@ -839,6 +839,15 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<Vec<Stri
     let mut steps = Vec::new();
     let log_offset =
         std::fs::metadata(gpui_gxserver_launch_log_path()).map_or(0, |metadata| metadata.len());
+    // The app's bundled agent first (CDXC:BackgroundItems 2026-11-08 in background_agents.rs);
+    // whatever stops it, the legacy LaunchAgent below starts gxserver in the same call.
+    match gpui_start_gxserver_through_bundled_agent(binary, &mut steps) {
+        Ok(()) => {
+            gpui_note_gxserver_launch(log_offset);
+            return Ok(steps);
+        }
+        Err(reason) => steps.push(format!("using the legacy LaunchAgent: {reason}")),
+    }
     gpui_spawn_local_gxserver_launchd_job(binary, &mut steps)
         .map_err(|error| format!("{error}\n{}", steps.join("\n")))?;
     gpui_note_gxserver_launch(log_offset);
@@ -949,7 +958,9 @@ fn gpui_spawn_local_gxserver_launchd_job(
     ghostex_paths::macos_launch_agent::write_plist_if_changed(&plist_path, &plist)
         .map_err(|_| LAUNCH_FAILURE.to_string())?;
 
-    let job_target = gpui_gxserver_launchd_job_target();
+    // This job's own label, not `gpui_gxserver_launchd_job_target` (which names the bundled job
+    // once the app has moved to it).
+    let job_target = format!("gui/{}/{label}", gpui_current_uid());
     let domain_target = format!("gui/{}", gpui_current_uid());
     let plist_argument = plist_path.to_string_lossy().to_string();
     let started = std::time::Instant::now();

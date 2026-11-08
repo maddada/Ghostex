@@ -30,6 +30,27 @@ pub(super) fn install(port: u16) -> Result<()> {
         return uninstall(port);
     }
     let (agents_dir, label, plist_path) = agent_location(port)?;
+    // CDXC:BackgroundItems 2026-11-08: once the app has registered its bundled recovery agent
+    // (SMAppService), that one is kickstarted and the legacy copy goes; until then, or when the
+    // app could not register it, the legacy plist below is the agent.
+    {
+        use ghostex_paths::macos_launch_agent::{
+            gui_job_loaded, remove_legacy_agent, BUNDLED_LOGIN_RECOVERY,
+        };
+        if gui_job_loaded(BUNDLED_LOGIN_RECOVERY) {
+            remove_legacy_agent(&label)
+                .with_context(|| format!("remove {}", plist_path.display()))?;
+            let target = format!("gui/{}/{BUNDLED_LOGIN_RECOVERY}", unsafe { libc::getuid() });
+            let started = launchctl(&["kickstart", &target])?;
+            if !started.status.success() {
+                return Err(anyhow!(
+                    "launchctl kickstart {target} failed: {}",
+                    launchctl_error(&started)
+                ));
+            }
+            return Ok(());
+        }
+    }
     fs::create_dir_all(&agents_dir).context("create LaunchAgents directory")?;
     let binary = env::current_exe().context("find gxserver executable")?;
     let mut variables = vec![("GHOSTEX_GXSERVER_DEV_PORT".to_string(), port.to_string())];

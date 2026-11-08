@@ -18,6 +18,17 @@ pub(super) fn install(
     paths: &GxserverPaths,
 ) -> Result<()> {
     let (folder, label) = location(place)?;
+    // CDXC:BackgroundItems 2026-11-08: the app registers its bundled at-login agent
+    // (SMAppService) when the switch turns on; while that one is loaded the legacy entry goes,
+    // and the legacy plist below is written only when the app could not register it.
+    if matches!(place, LoginEntryPlace::System) {
+        use ghostex_paths::macos_launch_agent::{
+            gui_job_loaded, remove_legacy_agent, BUNDLED_AT_LOGIN,
+        };
+        if gui_job_loaded(BUNDLED_AT_LOGIN) {
+            return remove_legacy_agent(&label).with_context(|| format!("remove {label}"));
+        }
+    }
     let port = crate::config::read_selected_local_api_port()?;
     let mut variables = vec![("GHOSTEX_GXSERVER_DEV_PORT".to_string(), port.to_string())];
     for key in [

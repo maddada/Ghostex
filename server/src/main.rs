@@ -10,7 +10,11 @@ fn main() {
         }
         return;
     }
-    // Before the runtime starts any thread: PATH is process-wide state.
+    // Before the runtime starts any thread: PATH is process-wide state. A run started by one of the
+    // app's bundled launchd agents first gets the user's PATH and its launch log
+    // (CDXC:BackgroundItems 2026-11-08 in packages/paths/src/macos_launch_agent.rs).
+    #[cfg(target_os = "macos")]
+    ghostex_paths::macos_launch_agent::prepare_bundled_agent_process();
     gxserver::prepare_process_environment();
     raise_open_file_limit();
     let runtime = tokio::runtime::Builder::new_multi_thread()

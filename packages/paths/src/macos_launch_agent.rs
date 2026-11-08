@@ -77,3 +77,165 @@ pub fn write_plist_if_changed(path: &Path, contents: &str) -> std::io::Result<bo
     file.write_all(contents.as_bytes())?;
     Ok(true)
 }
+
+/*
+CDXC:BackgroundItems 2026-11-08 DECISION: GitHub #510, User: "do it now for 11.2.0". Ghostex's
+helpers ship inside the app (Contents/Library/LaunchAgents) and the app registers them with
+SMAppService, so Login Items lists them under Ghostex and macOS announces them once per install:
+an update that replaces gxserver posts nothing (tested 2026-11-08 on macOS 27 with a Developer ID
+build: register posted one "“<app>” can run in the background" notification, a re-signed update
+and an unregister/register posted none). The plists in ~/Library/LaunchAgents stay as the fallback
+whenever registration fails, needs approval, or this is an isolated profile.
+
+The labels sit outside `launchd_label_prefix` (`com.madda.ghostex.`), so `stop-all`'s bootout of
+every Ghostex job never unloads a registered helper, which only SMAppService may do.
+*/
+/// The bundled gxserver job (run on demand by the app, like the legacy `…gxserver` job).
+pub const BUNDLED_GXSERVER: &str = "com.madda.ghostex-app.gxserver";
+/// The bundled login-recovery agent (runs at each desktop login and on kickstart).
+pub const BUNDLED_LOGIN_RECOVERY: &str = "com.madda.ghostex-app.gxserver-login-recovery";
+/// The bundled start-at-login agent (registered only while the switch is on).
+pub const BUNDLED_AT_LOGIN: &str = "com.madda.ghostex-app.gxserver-at-login";
+/// The legacy labels the bundled agents replace, for the default profile.
+pub const LEGACY_GXSERVER: &str = "com.madda.ghostex.gxserver";
+pub const LEGACY_LOGIN_RECOVERY: &str = "com.madda.ghostex.gxserver-login-recovery";
+pub const LEGACY_AT_LOGIN: &str = "com.madda.ghostex.gxserver-at-login";
+/// Set to 1 in every bundled plist: gxserver then sets up what a legacy plist used to pass.
+pub const BUNDLED_AGENT_ENV: &str = "GHOSTEX_GXSERVER_BUNDLED_AGENT";
+/// Where the bundled plists live inside the app, and the program they run (`BundleProgram`).
+pub const BUNDLED_AGENTS_DIR: &str = "Contents/Library/LaunchAgents";
+pub const BUNDLED_GXSERVER_PROGRAM: &str =
+    "Contents/Resources/Web/gxserver/GhostexServer.app/Contents/MacOS/gxserver";
+
+fn uid() -> u32 {
+    unsafe { libc::getuid() }
+}
+
+/// `launchctl print gui/<uid>/<label>` succeeds: launchd has the job (for a bundled agent, it is
+/// registered and allowed).
+pub fn gui_job_loaded(label: &str) -> bool {
+    Command::new("/bin/launchctl")
+        .args(["print", &format!("gui/{}/{label}", uid())])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+/// `~/Library/LaunchAgents/<label>.plist`.
+pub fn legacy_plist_path(label: &str) -> std::path::PathBuf {
+    crate::user_home_dir()
+        .join("Library/LaunchAgents")
+        .join(format!("{label}.plist"))
+}
+
+/// Boots out and deletes a legacy agent. Call only once its bundled replacement is loaded.
+pub fn remove_legacy_agent(label: &str) -> std::io::Result<()> {
+    let _ = Command::new("/bin/launchctl")
+        .args(["bootout", &format!("gui/{}/{label}", uid())])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    match fs::remove_file(legacy_plist_path(label)) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
+}
+
+/// The outermost `.app` that contains `path`.
+pub fn outermost_app_bundle(path: &Path) -> Option<std::path::PathBuf> {
+    path.ancestors()
+        .filter(|ancestor| {
+            ancestor
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("app"))
+        })
+        .last()
+        .map(Path::to_path_buf)
+}
+
+/// The app's record of its bundled agents: which gxserver the bundled job runs (launchd reports a
+/// bundled job's program only relative to its app) and the digest of each plist it registered,
+/// so a changed plist is registered again (launchd keeps the copy it was given).
+fn bundled_agents_state_file() -> std::path::PathBuf {
+    crate::GhostexPaths::resolve()
+        .gxserver_state_dir()
+        .join("bundled-launch-agents.json")
+}
+
+pub fn read_bundled_agents_state() -> serde_json::Map<String, serde_json::Value> {
+    fs::read(bundled_agents_state_file())
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default()
+}
+
+pub fn write_bundled_agents_state(
+    state: &serde_json::Map<String, serde_json::Value>,
+) -> std::io::Result<()> {
+    let path = bundled_agents_state_file();
+    if let Some(folder) = path.parent() {
+        fs::create_dir_all(folder)?;
+    }
+    let text = serde_json::to_string_pretty(state).unwrap_or_default();
+    write_plist_if_changed(&path, &text).map(|_| ())
+}
+
+/// The program of the bundled gxserver job, when it is loaded and the app recorded it.
+pub fn bundled_gxserver_program() -> Option<std::path::PathBuf> {
+    if !gui_job_loaded(BUNDLED_GXSERVER) {
+        return None;
+    }
+    read_bundled_agents_state()
+        .get("program")
+        .and_then(serde_json::Value::as_str)
+        .map(std::path::PathBuf::from)
+}
+
+/*
+CDXC:BackgroundItems 2026-11-08 WHY: a bundled plist is the same for every user, so it cannot
+carry what the app used to write into ~/Library/LaunchAgents: launchd gives the job only
+/usr/bin:/bin:/usr/sbin:/sbin (seen in the 2026-11-08 test), and StandardOutPath cannot name a
+per-user log. The port and folders need nothing: bundled agents are used only for the default
+profile, whose port and folders are the defaults. So a process started by a bundled agent asks
+the login shell for the user's PATH (as the app does at start, at most `STARTUP_PROBE_WAIT`) and
+sends its output to gxserver's launch log. The marker is removed at once, so nothing gxserver
+starts (terminals, `gxserver start` typed in one) inherits it.
+*/
+/// Call first thing in gxserver's `main`, before any thread starts.
+pub fn prepare_bundled_agent_process() {
+    if std::env::var_os(BUNDLED_AGENT_ENV).is_none() {
+        return;
+    }
+    let home = crate::user_home_dir();
+    let current = std::env::var("PATH").ok();
+    let login_shell = crate::tool_path::login_shell_path_entries_within(
+        &home,
+        crate::tool_path::STARTUP_PROBE_WAIT,
+    )
+    .unwrap_or_default();
+    let path =
+        crate::tool_path::normalized_user_tool_path_with(login_shell, current.as_deref(), &home);
+    // SAFETY: called from `main` before the runtime or any other thread starts.
+    unsafe {
+        std::env::remove_var(BUNDLED_AGENT_ENV);
+        std::env::set_var("PATH", path);
+    }
+    let log = crate::GhostexPaths::resolve()
+        .logs_dir
+        .join("gxserver")
+        .join("launch.log");
+    if let Some(folder) = log.parent() {
+        let _ = fs::create_dir_all(folder);
+    }
+    if let Ok(file) = fs::OpenOptions::new().create(true).append(true).open(&log) {
+        use std::os::fd::AsRawFd;
+        unsafe {
+            libc::dup2(file.as_raw_fd(), 1);
+            libc::dup2(file.as_raw_fd(), 2);
+        }
+    }
+}

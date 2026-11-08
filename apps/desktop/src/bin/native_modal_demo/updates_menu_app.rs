@@ -57,6 +57,13 @@ pub(crate) mod consts {
 }
 
 pub(crate) mod helpers {
+    /// The app's About line for its background helpers (board_gxserver/background_agents.rs).
+    #[allow(dead_code)]
+    pub(crate) fn gpui_background_helpers_status_line() -> Option<(String, bool)> {
+        None
+    }
+    #[allow(dead_code)]
+    pub(crate) fn gpui_open_login_items_settings() {}
     use gpui::{FontWeight, Hsla, IntoElement, ParentElement as _, Styled as _, div, px, rgb, svg};
     use gpui_component::h_flex;
 

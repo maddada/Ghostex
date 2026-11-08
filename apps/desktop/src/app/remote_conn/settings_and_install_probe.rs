@@ -57,6 +57,21 @@ impl GhostexGpuiApp {
             .unwrap_or_default()
             .to_string();
         let mut settings_object = settings_object.clone();
+        // The bundled start-at-login agent follows the switch at once, before gxserver's settings
+        // poll would write a legacy one (CDXC:BackgroundItems 2026-11-08 in background_agents.rs).
+        #[cfg(target_os = "macos")]
+        {
+            let start_at_login = |object: &serde_json::Map<String, serde_json::Value>| {
+                object
+                    .get("startServerAtLogin")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+            };
+            let wanted = start_at_login(&settings_object);
+            if wanted != start_at_login(&previous_settings_object) {
+                std::thread::spawn(move || gpui_reconcile_bundled_helpers(Some(wanted)));
+            }
+        }
         // CDXC:Onboarding 2026-09-15 WHY:
         // The native Tips popup saves read IDs directly, while React's normalized settings omit this key or carry an older copy.
         // Preserve the latest native value so a later sidebar or Settings save cannot make read tips unread again.

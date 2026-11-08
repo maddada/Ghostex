@@ -980,6 +980,9 @@ pub(crate) mod macos_app_launchd_job {
         pub(crate) program: PathBuf,
         /// The job's process, when launchd runs one.
         pub(crate) pid: Option<u32>,
+        /// Registered by the app with SMAppService: only SMAppService may load it, so `start`
+        /// never bootstraps it from a plist.
+        pub(crate) bundled: bool,
     }
 
     impl AppJob {
@@ -994,12 +997,21 @@ pub(crate) mod macos_app_launchd_job {
         let plist = PathBuf::from(std::env::var_os("HOME")?)
             .join("Library/LaunchAgents")
             .join(format!("{label}.plist"));
-        let program = job_program(&plist)?;
-        if !is_executable(&program) {
-            return None;
-        }
         let domain = format!("gui/{}", unsafe { libc::getuid() });
         if !launchctl(&["print", &domain]).0 {
+            return None;
+        }
+        // CDXC:BackgroundItems 2026-11-08: the app's job is its bundled SMAppService agent once
+        // the app has moved to it (the legacy plist is deleted only after that agent ran
+        // gxserver), and the legacy plist while it exists, which is also the fallback the app
+        // writes again whenever the bundled agent cannot be used.
+        if !plist.exists() && port == crate::constants::GXSERVER_LOCAL_API_PORT {
+            if let Some(job) = find_bundled(&domain) {
+                return Some(job);
+            }
+        }
+        let program = job_program(&plist)?;
+        if !is_executable(&program) {
             return None;
         }
         let target = format!("{domain}/{label}");
@@ -1011,6 +1023,30 @@ pub(crate) mod macos_app_launchd_job {
             domain,
             plist,
             program,
+            bundled: false,
+        })
+    }
+
+    /// The app's bundled gxserver agent, when SMAppService has it loaded.
+    fn find_bundled(domain: &str) -> Option<AppJob> {
+        use ghostex_paths::macos_launch_agent::{bundled_gxserver_program, BUNDLED_GXSERVER};
+        let program = bundled_gxserver_program()?;
+        if !is_executable(&program) {
+            return None;
+        }
+        let target = format!("{domain}/{BUNDLED_GXSERVER}");
+        let (loaded, output) = launchctl(&["print", &target]);
+        if !loaded {
+            return None;
+        }
+        Some(AppJob {
+            pid: launchctl_print_pid(&output),
+            label: BUNDLED_GXSERVER.to_string(),
+            target,
+            domain: domain.to_string(),
+            plist: PathBuf::new(),
+            program,
+            bundled: true,
         })
     }
 
@@ -1018,6 +1054,9 @@ pub(crate) mod macos_app_launchd_job {
     /// which ends a running instance first; without it a running job is left alone).
     pub(crate) fn start(job: &AppJob, restart: bool) -> std::result::Result<(), String> {
         if !launchctl(&["print", &job.target]).0 {
+            if job.bundled {
+                return Err(format!("{} is no longer loaded", job.label));
+            }
             let (loaded, output) =
                 launchctl(&["bootstrap", &job.domain, &job.plist.to_string_lossy()]);
             if !loaded && !launchctl(&["print", &job.target]).0 {

@@ -7,6 +7,8 @@
 // for one of them here and qualify its call sites instead. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
 pub(crate) mod automation;
+#[cfg(target_os = "macos")]
+pub(crate) mod background_agents;
 pub(crate) mod command_terminal_sessions;
 pub(crate) mod daemon_status_and_install;
 pub(crate) mod focus_state;
@@ -27,6 +29,8 @@ pub(crate) mod sidebar_state;
 pub(crate) mod typed_operations;
 
 pub(crate) use automation::*;
+#[cfg(target_os = "macos")]
+pub(crate) use background_agents::*;
 pub(crate) use command_terminal_sessions::*;
 pub(crate) use daemon_status_and_install::*;
 pub(crate) use focus_state::*;

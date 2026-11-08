@@ -1125,6 +1125,62 @@ stage_code_server_payload_if_changed() {
 
 # CDXC:Build 2026-09-23 WHY:
 # Signing rewrites the staged copies of these binaries, so they never match their sources again: rsync or cp copied an unsigned original back on every start and every nested signature was redone.
+# CDXC:BackgroundItems 2026-11-08 DECISION: GitHub #510. Ghostex's background helpers ship in the
+# app and the app registers them with SMAppService (app/helpers/board_gxserver/background_agents.rs),
+# so Login Items lists them under Ghostex and macOS announces them once per install. The labels and
+# BundleProgram must match packages/paths/src/macos_launch_agent.rs. Each plist is the same for every
+# user: gxserver works out the user's PATH and its launch log itself when GHOSTEX_GXSERVER_BUNDLED_AGENT
+# is set. Only rewritten when its text changes, so an unchanged app keeps its signature.
+GPUI_BUNDLED_GXSERVER_PROGRAM="Contents/Resources/Web/gxserver/GhostexServer.app/Contents/MacOS/gxserver"
+write_gpui_bundled_launch_agent() {
+	local label="$1" argument="$2" extra="$3" target
+	target="$APP_PATH/Contents/Library/LaunchAgents/$label.plist"
+	mkdir -p "$(dirname "$target")"
+	local text
+	text="$(cat <<EOF_AGENT
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>$label</string>
+	<key>BundleProgram</key>
+	<string>$GPUI_BUNDLED_GXSERVER_PROGRAM</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>gxserver</string>
+		<string>$argument</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>CLICOLOR</key>
+		<string>1</string>
+		<key>GHOSTEX_GXSERVER_BUNDLED_AGENT</key>
+		<string>1</string>
+	</dict>
+	<key>KeepAlive</key>
+	<false/>
+$extra
+</dict>
+</plist>
+EOF_AGENT
+)"
+	if [[ -f "$target" && "$(<"$target")" == "$text" ]]; then
+		return 0
+	fi
+	printf '%s\n' "$text" >"$target"
+	plutil -lint "$target" >/dev/null
+}
+
+stage_gpui_bundled_launch_agents() {
+	# The gxserver job: started on demand by the app, like the legacy job (RunAtLoad off).
+	write_gpui_bundled_launch_agent com.madda.ghostex-app.gxserver --foreground "$(printf '\t<key>RunAtLoad</key>\n\t<false/>\n\t<key>ProcessType</key>\n\t<string>Interactive</string>\n')"
+	# Login recovery: runs at each desktop login (server/src/server/macos_login_recovery.rs).
+	write_gpui_bundled_launch_agent com.madda.ghostex-app.gxserver-login-recovery --recover-after-login "$(printf '\t<key>RunAtLoad</key>\n\t<true/>\n\t<key>LimitLoadToSessionType</key>\n\t<string>Aqua</string>\n')"
+	# Start at login, registered only while the switch is on (server/src/computer_startup/).
+	write_gpui_bundled_launch_agent com.madda.ghostex-app.gxserver-at-login --at-login "$(printf '\t<key>RunAtLoad</key>\n\t<true/>\n\t<key>LimitLoadToSessionType</key>\n\t<string>Aqua</string>\n\t<key>AbandonProcessGroup</key>\n\t<true/>\n\t<key>ProcessType</key>\n\t<string>Interactive</string>\n')"
+}
+
 # Record which source identity each staged copy came from and copy only when that changes, so codesign-gpui-app.sh can reuse the existing signature.
 staged_copy_stamp_key() {
 	printf 'staged-copy-%s\n' "$(md5 -q -s "$1")"
@@ -1647,6 +1703,7 @@ EOF_HELPER
 done
 
 stage_gpui_lid_sleep_helper
+stage_gpui_bundled_launch_agents
 stage_gpui_ghostex_editor_app
 stage_gpui_sparkle_framework_if_available
 
