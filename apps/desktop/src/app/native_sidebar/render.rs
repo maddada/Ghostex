@@ -65,11 +65,11 @@ impl GhostexGpuiApp {
                     header.child(div().h(px(4.0 * appearance.scale)).flex_shrink_0())
                 })
                 .children(self.render_native_sidebar_space_row(&snapshot, &appearance, false, cx))
-                // CDXC:Chief 2026-11-08 DECISION: User (Q1922): Chief of Staff shows in the Unified sidebar too, under its header, drawn as in the Project sidebar (native_sidebar/chief.rs); its block lines up with the Unified group headers' box.
+                // CDXC:Chief 2026-11-08 DECISION: User (Q1922): Main Hub shows in the Unified sidebar too, under its header, drawn as in the Project sidebar (native_sidebar/chief.rs); its block lines up with the Unified group headers' box.
                 .when(!snapshot.spaces_enabled, |header| {
                     header.child(div().h(px(6.0 * appearance.scale)).flex_shrink_0())
                 })
-                .children(self.render_native_sidebar_chief(&snapshot, &appearance, cx))
+                .children(self.render_native_sidebar_chief(&snapshot, &appearance, true, cx))
                 .into_any_element()
         });
         let unified_list = unified.as_ref().map(|unified| {
@@ -328,6 +328,12 @@ impl GhostexGpuiApp {
                                                             .pl(px(18.0 * appearance.scale))
                                                             .mr(px(5.0 * appearance.scale))
                                                             .mb(px(10.0 * appearance.scale))
+                                                            // With computers combined, the home section's title above the first computer's header (chief_row_view.rs).
+                                                            .when(
+                                                                content.home_headers.len() > 1
+                                                                    && content.home_headers.first().is_some_and(|home| home.group_id == group.group_id),
+                                                                |block| block.child(super::chief_row_view::home_section_title(appearance.scale, appearance.muted)),
+                                                            )
                                                             .child(
                                                                 self.render_native_sidebar_group(
                                                                     group,

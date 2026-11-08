@@ -55,7 +55,7 @@ impl GhostexGpuiApp {
             .children(self.render_native_machine_tabs(snapshot, appearance, window, cx))
             .child(div().h(px(13.0 * scale)).flex_shrink_0())
             .children(self.render_native_sidebar_space_row(snapshot, appearance, true, cx))
-            .children(self.render_native_sidebar_chief(snapshot, appearance, cx))
+            .children(self.render_native_sidebar_chief(snapshot, appearance, false, cx))
             .into_any_element()
     }
 

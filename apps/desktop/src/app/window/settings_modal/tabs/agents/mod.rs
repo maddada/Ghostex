@@ -532,6 +532,11 @@ impl Render for AgentsTab {
         {
             blocks.push(PageBlock::section("config", section));
         }
+        if should_show_section(&search.section("homeFolder"), None)
+            && let Some(section) = self.render_home_folder(&p, &search, window, cx)
+        {
+            blocks.push(PageBlock::section("homeFolder", section));
+        }
         if should_show_section(&search.section(HOOKS_ANCHOR), None)
             && let Some(section) = self.render_hooks_card(&p, &search, window, cx)
         {

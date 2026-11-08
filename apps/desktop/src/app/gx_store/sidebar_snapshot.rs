@@ -434,6 +434,12 @@ pub(super) fn snapshot_from_view(
             .iter()
             .map(crate::app::native_sidebar::chief::native_chief)
             .collect(),
+        home_headers: view
+            .home_headers
+            .iter()
+            .map(crate::app::native_sidebar::chief::native_home)
+            .collect(),
+        machines_with_home: view.machines_with_home.clone(),
         // The two hotkey labels are the hotkey settings formatted for the current platform, which
         // the list re-reads whenever the settings file's content hash moves.
         search_shortcut: input.search_shortcut.clone(),

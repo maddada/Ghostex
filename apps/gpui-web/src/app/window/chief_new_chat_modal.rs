@@ -1,0 +1,1 @@
+../../../../desktop/src/app/window/chief_new_chat_modal.rs

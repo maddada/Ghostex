@@ -5,7 +5,12 @@
 //! Chief), `working`, `asking`, `open` (its chat is open), `setup` (first open, no agent yet),
 //! `folded` (two more computers have one, folded), `unfolded` (the same, unfolded), `bots` (the
 //! sidebar in Bots mode, where the row is not drawn: `chief_row_shown`), `unified` (the Unified
-//! sidebar: a stand-in for its header, the row under it, then a Unified group header and cards).
+//! sidebar: a stand-in for its header, the row under it, then a Unified group header and cards),
+//! and the home (CDXC:Chief 2026-11-08 in server/src/chief/home.rs): `home` (one computer: Chief's
+//! row heads the home project and its loose sessions, then the next project), `home-combined`
+//! (computers combined: the home section's title, then each computer's header with its own home
+//! sessions), `home-earlier` (the home unfolded with Chief's earlier chats asleep in it),
+//! `home-tooltip` (the Main Hub tooltip under the header, drawn in the tooltip bubble's look).
 use super::chief_row_view::*;
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -79,6 +84,7 @@ impl Render for ChiefRowPreview {
         };
         let open = state == "open";
         let main = chief_header_row(
+            CHIEF_LABEL,
             1.0,
             colors,
             fold,
@@ -104,40 +110,42 @@ impl Render for ChiefRowPreview {
                 .child(glyph.to_string())
         };
         // The project header as project_header.rs lays it out, in its block (render.rs).
-        let project_header = div().pl(px(24.0)).pr(px(7.0)).child(
-            h_flex()
-                .relative()
-                .h(px(30.0))
-                .ml(px(-15.0))
-                .mr(px(3.0))
-                .pl(px(23.0))
-                .pr(px(6.0))
-                .gap(px(10.0))
-                .child(
-                    div().absolute().left_0().top(px(7.0)).child(
-                        svg()
-                            .path("titlebar/chevron-right.svg")
+        let project_header = || {
+            div().pl(px(24.0)).pr(px(7.0)).child(
+                h_flex()
+                    .relative()
+                    .h(px(30.0))
+                    .ml(px(-15.0))
+                    .mr(px(3.0))
+                    .pl(px(23.0))
+                    .pr(px(6.0))
+                    .gap(px(10.0))
+                    .child(
+                        div().absolute().left_0().top(px(7.0)).child(
+                            svg()
+                                .path("titlebar/chevron-right.svg")
+                                .size(px(16.0))
+                                .text_color(colors.muted)
+                                .with_transformation(gpui::Transformation::rotate(
+                                    gpui::percentage(0.25),
+                                )),
+                        ),
+                    )
+                    .child(
+                        div()
                             .size(px(16.0))
-                            .text_color(colors.muted)
-                            .with_transformation(gpui::Transformation::rotate(gpui::percentage(
-                                0.25,
-                            ))),
-                    ),
-                )
-                .child(
-                    div()
-                        .size(px(16.0))
-                        .rounded(px(3.0))
-                        .bg(rgb(0x3b82f6))
-                        .text_size(px(10.0))
-                        .text_color(rgb(0xffffff))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child("G"),
-                )
-                .child(div().font_weight(gpui::FontWeight::LIGHT).child("Ghostex")),
-        );
+                            .rounded(px(3.0))
+                            .bg(rgb(0x3b82f6))
+                            .text_size(px(10.0))
+                            .text_color(rgb(0xffffff))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child("G"),
+                    )
+                    .child(div().font_weight(gpui::FontWeight::LIGHT).child("Ghostex")),
+            )
+        };
         let session = |title: &str| {
             div().pl(px(24.0)).child(
                 div()
@@ -181,9 +189,95 @@ impl Render for ChiefRowPreview {
                     .child(title.to_string()),
             )
         };
+        let home = state.starts_with("home");
+        // A loose session under the home header: its title, dimmed while asleep, and its dot.
+        let home_session = |title: &str, asleep: bool, status: Option<AnyElement>| {
+            div().pl(px(24.0)).pr(px(7.0)).child(
+                h_flex()
+                    .h(px(30.0))
+                    .pl(px(8.0))
+                    .pr(px(6.0))
+                    .gap(px(8.0))
+                    .font_weight(gpui::FontWeight::LIGHT)
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .when(asleep, |title| title.text_color(colors.muted))
+                            .child(title.to_string()),
+                    )
+                    .children(status),
+            )
+        };
+        let home_header = |label: &str, fold: ChiefFold, status: Option<AnyElement>| {
+            chief_block(1.0).pb(px(0.0)).child(chief_header_row(
+                label, 1.0, colors, fold, false, false, None, status,
+            ))
+        };
+        let home_rows: Vec<AnyElement> = match state {
+            "home" | "home-tooltip" => vec![
+                home_header(CHIEF_LABEL, ChiefFold::Unfolded, Some(dot(WORKING)))
+                    .into_any_element(),
+                home_session("Preventing Mac screen lock", false, Some(dot(WORKING)))
+                    .into_any_element(),
+                home_session("Disk cleanup and move to /Volumes", false, None).into_any_element(),
+                home_session("CPU usage investigation", true, None).into_any_element(),
+                home_session("Install opencode via mise", true, None).into_any_element(),
+            ],
+            "home-earlier" => vec![
+                home_header(CHIEF_LABEL, ChiefFold::Unfolded, None).into_any_element(),
+                home_session("Preventing Mac screen lock", false, Some(dot(WORKING)))
+                    .into_any_element(),
+                home_session("Main Hub \u{b7} 8 Nov, 13:30", true, None).into_any_element(),
+                home_session("Main Hub \u{b7} 7 Nov, 09:12", true, None).into_any_element(),
+                home_session("CPU usage investigation", true, None).into_any_element(),
+            ],
+            "home-combined" => vec![
+                chief_block(1.0)
+                    .pb(px(2.0))
+                    .child(home_section_title(1.0, colors.muted))
+                    .into_any_element(),
+                home_header("MacBook Pro", ChiefFold::Unfolded, Some(dot(WORKING)))
+                    .into_any_element(),
+                home_session("Preventing Mac screen lock", false, Some(dot(WORKING)))
+                    .into_any_element(),
+                home_session("CPU usage investigation", true, None).into_any_element(),
+                home_header("Hetzner", ChiefFold::Unfolded, Some(dot(QUESTION))).into_any_element(),
+                home_session("Restart the relay", false, Some(dot(QUESTION))).into_any_element(),
+                home_header("WN desktop", ChiefFold::Folded, None).into_any_element(),
+            ],
+            _ => Vec::new(),
+        };
+        // The tooltip bubble's look (tooltips.rs `in_window_bubble`): the menu fill, its outline.
+        let tooltip_card = (state == "home-tooltip").then(|| {
+            let fill = if self.light {
+                hsla(0xffffff, 1.0)
+            } else {
+                hsla(0x2b3038, 1.0)
+            };
+            div()
+                .absolute()
+                .top(px(14.0 + 40.0 + 30.0 + 4.0))
+                .left(px(9.0))
+                .py(px(10.0))
+                .px(px(12.0))
+                .rounded(px(8.0))
+                .bg(fill)
+                .border_1()
+                .border_color(hsla(ink, 0.14))
+                .shadow_lg()
+                .child(main_hub_tooltip_content(
+                    None,
+                    1.0,
+                    hsla(ink, 1.0),
+                    hsla(ink, 0.6),
+                ))
+        });
         v_flex()
+            .relative()
             .w(px(300.0))
-            .h(px(330.0))
+            .h(px(if home { 380.0 } else { 330.0 }))
             .bg(background)
             .text_color(hsla(ink, 1.0))
             .text_size(px(TEXT_SIZE))
@@ -219,7 +313,14 @@ impl Render for ChiefRowPreview {
                         .child("New bot"),
                 )
             })
-            .when(shown, |column| {
+            .when(home, |column| {
+                column
+                    .children(home_rows)
+                    .child(div().h(px(10.0)))
+                    .child(project_header())
+                    .child(session("Main Coordinator"))
+            })
+            .when(shown && !home, |column| {
                 column.child(chief_block(1.0).child(main).when(
                     fold == ChiefFold::Unfolded,
                     |block| {
@@ -251,12 +352,14 @@ impl Render for ChiefRowPreview {
                     .child(session("Main Coordinator"))
                     .child(session("Outdated dependencies audit"))
             })
-            .when(!bots && !unified, |column| {
+            .when(!bots && !unified && !home, |column| {
                 column
-                    .child(project_header)
+                    .child(project_header())
                     .child(session("Main Coordinator"))
                     .child(session("Outdated dependencies audit"))
             })
+            // Last, so it paints over the rows like a tooltip.
+            .children(tooltip_card)
     }
 }
 
@@ -267,9 +370,14 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         demo.state.clone()
     };
     let light = demo.palette.light;
+    let height = if state.starts_with("home") {
+        380.0
+    } else {
+        330.0
+    };
     let _ = super::open_modal_window(
         300.0,
-        330.0,
+        height,
         move |_, cx| cx.new(|_| ChiefRowPreview { state, light }),
         cx,
     );

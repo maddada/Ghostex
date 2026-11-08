@@ -69,6 +69,9 @@ pub(crate) enum GpuiAppModalKind {
     /// "Paste potentially unsafe text?" for terminal paste protection (terminal_input/paste_and_shortcuts.rs).
     TerminalPasteConfirm,
     CloseSessionsConfirm,
+    /// "Start a new chat with Main Hub?" before New Chat or Change Agent
+    /// (native_sidebar/chief.rs).
+    ChiefNewChat,
     /// The one-time 11.0.1 security notice: pair phones and computers again
     /// (security_upgrade_modal_lifecycle.rs). Opened directly when gxserver says it is due.
     SecurityUpgrade,
@@ -123,6 +126,7 @@ impl GpuiAppModalKind {
             "addSessionLink" => Some(Self::AddSessionLink),
             "terminalPasteConfirm" => Some(Self::TerminalPasteConfirm),
             "closeSessionsConfirm" => Some(Self::CloseSessionsConfirm),
+            "chiefNewChat" => Some(Self::ChiefNewChat),
             _ => None,
         }
     }
@@ -173,6 +177,7 @@ impl GpuiAppModalKind {
             Self::AddSessionLink => "addSessionLink",
             Self::TerminalPasteConfirm => "terminalPasteConfirm",
             Self::CloseSessionsConfirm => "closeSessionsConfirm",
+            Self::ChiefNewChat => "chiefNewChat",
         }
     }
 
@@ -220,6 +225,7 @@ impl GpuiAppModalKind {
             Self::AddSessionLink => "Ghostex Add a Link",
             Self::TerminalPasteConfirm => "Ghostex Paste",
             Self::CloseSessionsConfirm => "Ghostex Close",
+            Self::ChiefNewChat => "Ghostex New Chat",
         }
     }
 
@@ -416,6 +422,10 @@ impl GpuiAppModalKind {
                 px(crate::app::window::CLOSE_SESSIONS_CONFIRM_MODAL_WIDTH),
                 px(crate::app::window::CLOSE_SESSIONS_CONFIRM_MODAL_INITIAL_HEIGHT),
             ),
+            Self::ChiefNewChat => size(
+                px(crate::app::window::CHIEF_NEW_CHAT_MODAL_WIDTH),
+                px(crate::app::window::CHIEF_NEW_CHAT_MODAL_INITIAL_HEIGHT),
+            ),
             Self::RemoteGxserverInstall => size(
                 px(APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_HEIGHT),
@@ -530,6 +540,7 @@ impl GpuiAppModalKind {
             | Self::NewGbot
             | Self::TerminalPasteConfirm
             | Self::CloseSessionsConfirm
+            | Self::ChiefNewChat
             | Self::Onboarding => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",

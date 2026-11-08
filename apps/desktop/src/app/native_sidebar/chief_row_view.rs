@@ -17,8 +17,8 @@ use gpui::{
 };
 use gpui_component::{h_flex, v_flex};
 
-/// Chief's name on its row and in its menu ("Chief of Staff", Q1896; server/src/chief/mod.rs `CHIEF_TITLE`).
-pub(crate) const CHIEF_LABEL: &str = "Chief of Staff";
+/// Chief's name on its row and in its menu ("Main Hub", Q1931; server/src/chief/mod.rs `CHIEF_TITLE`).
+pub(crate) const CHIEF_LABEL: &str = "Main Hub";
 /// The Ghostex flower in one colour (Q1735).
 pub(crate) const FLOWER_ICON: &str = "titlebar/ghostex-flower.svg";
 /// How much of the muted colour the chevron keeps while nothing can unfold under it.
@@ -83,6 +83,7 @@ pub(crate) fn chief_block(scale: f32) -> Div {
 /// before its first open, its status dot. `outline` is drawn over
 /// it while its chat is open (the sidebar's selected outline).
 pub(crate) fn chief_header_row(
+    label: &str,
     scale: f32,
     colors: ChiefRowColors,
     fold: ChiefFold,
@@ -107,9 +108,13 @@ pub(crate) fn chief_header_row(
             },
         )));
     h_flex()
-        .id("native-sidebar-chief")
+        .id(if label == CHIEF_LABEL {
+            gpui::SharedString::from("native-sidebar-chief")
+        } else {
+            gpui::SharedString::from(format!("native-sidebar-chief-{label}"))
+        })
         .role(gpui::Role::TreeItem)
-        .aria_label(CHIEF_LABEL)
+        .aria_label(label.to_string())
         .when(fold != ChiefFold::Single, |row| {
             row.aria_expanded(fold == ChiefFold::Unfolded)
         })
@@ -142,7 +147,7 @@ pub(crate) fn chief_header_row(
                 .flex()
                 .items_center()
                 .font_weight(gpui::FontWeight::LIGHT)
-                .child(div().min_w_0().truncate().child(CHIEF_LABEL)),
+                .child(div().min_w_0().truncate().child(label.to_string())),
         )
         .when(needs_agent, |row| {
             row.child(
@@ -154,6 +159,100 @@ pub(crate) fn chief_header_row(
             )
         })
         .children(status)
+}
+
+/// The width of the Main Hub tooltip's text column.
+pub(crate) const MAIN_HUB_TOOLTIP_WIDTH: f32 = 264.0;
+
+/// What the Main Hub tooltip says: its title (with the computer's name when several are combined)
+/// and its plain lines.
+pub(crate) fn main_hub_tooltip_lines(machine_label: Option<&str>) -> (String, [&'static str; 2]) {
+    let title = match machine_label {
+        Some(machine) => format!("{CHIEF_LABEL} \u{b7} {machine}"),
+        None => CHIEF_LABEL.to_string(),
+    };
+    (
+        title,
+        [
+            "The home for chats that don't belong to a project: quick questions, terminals and agents started in your home folder.",
+            "Its agent sees and steers every Ghostex agent on this computer, and talks to the Main Hubs on your other computers.",
+        ],
+    )
+}
+
+/// The Main Hub tooltip's content, without its bubble: the flower and the title, two plain lines,
+/// and what a click and a right-click do. The sidebar wraps it in its frosted tooltip bubble
+/// (tooltips.rs `main_hub_tooltip`); the `native-modal-demo` preview draws it for screenshots.
+///
+/// CDXC:Chief 2026-11-08 DECISION:
+/// User (Q1931): "when we hover on it we need to show a tool tip that's beautiful and explains what is this please". A card, not a one-liner: a short title, then plain lines saying it is the home for chats that belong to no project and the agent that sees and steers every Ghostex agent on this computer (and the other computers' Main Hubs). On the phone the same words open its long-press menu.
+pub(crate) fn main_hub_tooltip_content(
+    machine_label: Option<&str>,
+    scale: f32,
+    foreground: Hsla,
+    secondary: Hsla,
+) -> Div {
+    let (title, lines) = main_hub_tooltip_lines(machine_label);
+    let hint = |key: &'static str, does: &'static str| {
+        h_flex()
+            .gap(px(4.0 * scale))
+            .child(
+                div()
+                    .px(px(4.0 * scale))
+                    .rounded(px(3.0 * scale))
+                    .border_1()
+                    .border_color(secondary.opacity(0.45))
+                    .text_size(px(10.0 * scale))
+                    .line_height(px(14.0 * scale))
+                    .child(key),
+            )
+            .child(does)
+    };
+    v_flex()
+        .w(px(MAIN_HUB_TOOLTIP_WIDTH * scale))
+        .gap(px(5.0 * scale))
+        .child(
+            h_flex()
+                .gap(px(7.0 * scale))
+                .pb(px(1.0 * scale))
+                .child(flower(15.0 * scale, foreground))
+                .child(
+                    div()
+                        .text_size(px(13.0 * scale))
+                        .line_height(px(18.0 * scale))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(foreground)
+                        .child(title),
+                ),
+        )
+        .children(lines.into_iter().map(|line| {
+            div()
+                .text_size(px(11.5 * scale))
+                .line_height(px(16.0 * scale))
+                .text_color(foreground.opacity(0.82))
+                .child(line)
+        }))
+        .child(
+            h_flex()
+                .pt(px(3.0 * scale))
+                .gap(px(10.0 * scale))
+                .text_size(px(10.5 * scale))
+                .text_color(secondary)
+                .child(hint("Click", "open the chat"))
+                .child(hint("Right-click", "more")),
+        )
+}
+
+/// The home section's title with the computers combined: "Main Hub" over the computers' own
+/// home headers, in the muted small type of a section label.
+pub(crate) fn home_section_title(scale: f32, muted: Hsla) -> impl IntoElement {
+    h_flex()
+        .h(px(22.0 * scale))
+        .gap(px(6.0 * scale))
+        .text_size(px(11.5 * scale))
+        .text_color(muted)
+        .child(flower(12.0 * scale, muted))
+        .child(CHIEF_LABEL)
 }
 
 /// Another computer's Chief, unfolded under this computer's like a session under its project: the

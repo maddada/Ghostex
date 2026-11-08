@@ -863,6 +863,14 @@ impl SidebarViewModel {
             &state.focus,
             &row_context,
         );
+        state.view.home_headers = super::chief::home_headers(
+            store,
+            effective,
+            &state.view.groups,
+            &state.focus,
+            &row_context,
+        );
+        state.view.machines_with_home = super::chief::machines_with_home(store, &state.view.chiefs);
         // The waiting copy of an empty sidebar moves with the clock alone.
         state.next_deadline_ms = min_deadline(
             state.next_deadline_ms,
@@ -1202,6 +1210,7 @@ pub(super) fn project_context(
             && !project.work_github_off
             && project.work_tracker.as_deref() == Some("github"),
         work_tracker_github: project.work_tracker.as_deref() == Some("github"),
+        is_home: project.is_home,
     })
 }
 

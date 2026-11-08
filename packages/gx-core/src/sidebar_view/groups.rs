@@ -58,6 +58,8 @@ pub(crate) struct ProjectContextInput {
     pub(crate) work_pull_requests: bool,
     pub(crate) work_github: bool,
     pub(crate) work_tracker_github: bool,
+    /// The home project (`PresentationProject::is_home`), drawn under Main Hub's row.
+    pub(crate) is_home: bool,
 }
 
 /// Who is focused right now, in the vocabulary the rows compare against.
@@ -285,6 +287,7 @@ fn project_context_view(project: &ProjectContextInput) -> ProjectContextView {
         work_pull_requests: project.work_pull_requests,
         work_github: project.work_github,
         work_tracker_github: project.work_tracker_github,
+        is_home: project.is_home,
     }
 }
 

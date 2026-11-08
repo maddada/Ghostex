@@ -44,6 +44,13 @@ pub(crate) struct NativeSidebarSnapshot {
     /// first (gx-core `SidebarView::chiefs`).
     #[serde(default)]
     pub(crate) chiefs: Vec<NativeSidebarChief>,
+    /// The home groups' headers (gx-core `SidebarView::home_headers`): each home group is drawn
+    /// with Main Hub's row as its header (native_sidebar/chief.rs).
+    #[serde(skip)]
+    pub(crate) home_headers: Vec<NativeSidebarHome>,
+    /// The machines whose Chief is a home header; the others keep the row under the Spaces bar.
+    #[serde(skip)]
+    pub(crate) machines_with_home: Vec<String>,
     pub(crate) search_shortcut: Option<String>,
     pub(crate) commands_shortcut: Option<String>,
 }
@@ -256,6 +263,18 @@ fn deserialize_sessions<'de, D: serde::Deserializer<'de>>(
 ) -> Result<Vec<Arc<NativeSidebarSession>>, D::Error> {
     Vec::<NativeSidebarSession>::deserialize(deserializer)
         .map(|sessions| sessions.into_iter().map(Arc::new).collect())
+}
+
+/// One computer's home group header (gx-core `HomeHeaderView`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct NativeSidebarHome {
+    /// The home project's group.
+    pub(crate) group_id: String,
+    /// `local`, or the remote machine's id.
+    pub(crate) machine_id: String,
+    pub(crate) machine_label: String,
+    /// That computer's Chief; `None` before its first open.
+    pub(crate) chief: Option<NativeSidebarChief>,
 }
 
 /// One computer's Chief row (gx-core `ChiefRowView`).

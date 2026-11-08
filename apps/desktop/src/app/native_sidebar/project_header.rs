@@ -33,8 +33,46 @@ impl GhostexGpuiApp {
         let id = group.group_id.clone();
         let hover_id = id.clone();
         let drag_id = id.clone();
-        let menu = group.menu.clone();
         let scale = appearance.scale;
+        // The home project's header is Main Hub's row (chief.rs): its name, flower, status
+        // and click are Chief's; its chevron, drag, drop and hover buttons stay the project's.
+        let (home, several_homes) = self
+            .native_sidebar
+            .snapshot
+            .as_ref()
+            .map(|snapshot| {
+                (
+                    snapshot
+                        .home_headers
+                        .iter()
+                        .find(|home| home.group_id == group.group_id)
+                        .cloned(),
+                    snapshot.home_headers.len() > 1,
+                )
+            })
+            .unwrap_or_default();
+        let menu = match &home {
+            Some(home) => {
+                let mut items = self
+                    .native_sidebar_chief_menu(Some(&home.machine_id))
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                items.push(json!({ "separator": true }));
+                items.extend(group.menu.as_array().cloned().unwrap_or_default());
+                std::sync::Arc::new(Value::Array(items))
+            }
+            None => group.menu.clone(),
+        };
+        let home_title = home.as_ref().map(|home| {
+            if several_homes {
+                home.machine_label.clone()
+            } else {
+                super::chief_row_view::CHIEF_LABEL.to_string()
+            }
+        });
+        let home_chief = home.as_ref().and_then(|home| home.chief.clone());
+        let home_focused = home_chief.as_ref().is_some_and(|chief| chief.is_focused);
         let hovered = self.native_sidebar.hovered_group.as_ref() == Some(&id);
         let tooltip_span = self
             .native_sidebar
@@ -102,7 +140,7 @@ impl GhostexGpuiApp {
             .native_sidebar
             .name_editor
             .as_ref()
-            .filter(|editor| editor.kind == "group" && editor.id == id)
+            .filter(|editor| home.is_none() && editor.kind == "group" && editor.id == id)
         {
             div()
                 .flex_1()
@@ -125,14 +163,44 @@ impl GhostexGpuiApp {
                 .items_center()
                 .font_weight(gpui::FontWeight::LIGHT)
                 .gap(px(5.0 * scale))
-                .child(div().min_w_0().truncate().child(group.title.clone()))
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .child(home_title.clone().unwrap_or_else(|| group.title.clone())),
+                )
                 .children(
                     group
                         .machine_names
                         .iter()
+                        .filter(|_| home.is_none())
                         .map(|(_, short)| machine_name_chip(short, appearance)),
                 )
-                .when_some(tooltip, |title, tooltip| {
+                // The home header explains Main Hub (chief_row_view.rs `main_hub_tooltip_content`).
+                .when(
+                    home.is_some()
+                        && self.native_sidebar.pointer_inside
+                        && self.native_sidebar.menu.is_none()
+                        && !cx.has_active_drag(),
+                    |title| {
+                        let machine = several_homes
+                            .then(|| home.as_ref().map(|home| home.machine_label.clone()))
+                            .flatten();
+                        title.managed_discrete_tooltip_with_placement(
+                            tooltip_span.placement(),
+                            appearance.tooltip_delay,
+                            move |window, cx| {
+                                super::tooltips::main_hub_tooltip(
+                                    machine.clone(),
+                                    scale,
+                                    window,
+                                    cx,
+                                )
+                            },
+                        )
+                    },
+                )
+                .when_some(tooltip.filter(|_| home.is_none()), |title, tooltip| {
                     title.when(
                         self.native_sidebar.pointer_inside
                             && self.native_sidebar.menu.is_none()
@@ -165,7 +233,7 @@ impl GhostexGpuiApp {
         h_flex()
             .id(format!("native-sidebar-project-{id}"))
             .role(gpui::Role::TreeItem)
-            .aria_label(group.title.clone())
+            .aria_label(home_title.clone().unwrap_or_else(|| group.title.clone()))
             .aria_expanded(!group.collapsed)
             .relative()
             .h(px(30.0 * scale))
@@ -183,6 +251,16 @@ impl GhostexGpuiApp {
                 move |bounds, _, _| header_bounds.set(Some(bounds))
             })
             .child(self.native_sidebar.header_hover.probe(hover_id))
+            // Where the pick-an-agent menu of this computer's Chief hangs (chief.rs).
+            .when(
+                home.as_ref()
+                    .is_some_and(|home| home.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID),
+                |row| {
+                    row.on_prepaint(super::menus::record_menu_owner(
+                        &self.native_sidebar.chief_row_bounds,
+                    ))
+                },
+            )
             // CDXC:Projects 2026-10-06 DECISION:
             // User: "Make the chevron to the left of the project part of the button, not outside it". The chevron sits inside the header's hover/selected box at its left edge and is not a hit area of its own: a click on it is the row's click, which expands/collapses the project, and a drag from it moves the project. This supersedes the 2026-09-19 separate chevron button hanging outside the row.
             .child(
@@ -200,6 +278,12 @@ impl GhostexGpuiApp {
                 hud["settings"]["showProjectIcons"].as_bool() != Some(false),
                 |row| {
                     row.child(match icon_image {
+                        _ if home.is_some() => gpui::svg()
+                            .path(super::chief_row_view::FLOWER_ICON)
+                            .size(px(16.0 * scale))
+                            .flex_shrink_0()
+                            .text_color(appearance.muted)
+                            .into_any_element(),
                         _ if folder_icon => gpui::svg()
                             .path("titlebar/folder.svg")
                             .size(px(16.0 * scale))
@@ -226,7 +310,7 @@ impl GhostexGpuiApp {
                     })
                 },
             )
-            .when(collapsed_active, |row| {
+            .when(collapsed_active || home_focused, |row| {
                 row.bg(appearance.selected)
                     .child(super::decorations::selected_outline(appearance))
             })
@@ -237,10 +321,21 @@ impl GhostexGpuiApp {
             .when_some(bot_status, |row, status| {
                 row.child(super::bots::bot_status_dot(status, appearance))
             })
-            .when(!hovered && bot_status.is_none(), |row| {
+            .when(!hovered && bot_status.is_none() && home.is_none(), |row| {
                 row.children(super::project_status::project_status(
                     group, hud, appearance,
                 ))
+            })
+            // A home header shows its Chief's dot, or "Pick an agent" before the first open.
+            .when(!hovered && home.is_some(), |row| match &home_chief {
+                Some(chief) => row.children(super::chief::chief_status(chief, scale)),
+                None => row.child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(12.0 * scale))
+                        .text_color(appearance.muted)
+                        .child("Pick an agent"),
+                ),
             })
             .when(hovered, |row| {
                 row.child(
@@ -370,10 +465,52 @@ impl GhostexGpuiApp {
             })
             .sidebar_drag_source(dragged, cx)
             .sidebar_drop_target("group", drag_id, None, cx)
-            .on_click(cx.listener(move |app, _, _, cx| {
-                cx.stop_propagation();
-                app.dispatch_native_sidebar_ui(json!({"type": "toggleGroup", "groupId": id}), cx);
-            }))
+            .map(|row| match &home {
+                // The chevron folds the home's sessions; anywhere else opens Chief's chat.
+                Some(home) => {
+                    let machine_id = home.machine_id.clone();
+                    let fold_id = id.clone();
+                    row.child(
+                        div()
+                            .id(format!("native-sidebar-home-fold-{id}"))
+                            .role(gpui::Role::Button)
+                            .aria_label(if group.collapsed {
+                                "Show the home folder's sessions"
+                            } else {
+                                "Fold the home folder's sessions"
+                            })
+                            .absolute()
+                            .left_0()
+                            .top_0()
+                            .h_full()
+                            .w(px(PROJECT_HEADER_CHEVRON_GUTTER * scale))
+                            .on_click(cx.listener(move |app, _, _, cx| {
+                                cx.stop_propagation();
+                                app.dispatch_native_sidebar_ui(
+                                    json!({"type": "toggleGroup", "groupId": fold_id}),
+                                    cx,
+                                );
+                            })),
+                    )
+                    .on_click(cx.listener(move |app, _, window, cx| {
+                        cx.stop_propagation();
+                        app.handle_native_sidebar_action(
+                            &super::actions::NativeSidebarAction {
+                                command: json!({ "type": "chief", "op": "open", "machineId": machine_id }),
+                            },
+                            window,
+                            cx,
+                        );
+                    }))
+                }
+                None => row.on_click(cx.listener(move |app, _, _, cx| {
+                    cx.stop_propagation();
+                    app.dispatch_native_sidebar_ui(
+                        json!({"type": "toggleGroup", "groupId": id}),
+                        cx,
+                    );
+                })),
+            })
             .into_any_element()
     }
 }

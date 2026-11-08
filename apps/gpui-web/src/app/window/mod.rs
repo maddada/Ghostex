@@ -2,6 +2,7 @@
 #![allow(dead_code, unused_imports)]
 pub(crate) mod add_session_link_modal;
 pub(crate) mod agent_hooks_required_modal;
+pub(crate) mod chief_new_chat_modal;
 pub(crate) mod close_sessions_confirm_modal;
 pub(crate) mod coordinator_details_modal;
 pub(crate) mod create_linear_ticket_modal;
@@ -31,6 +32,7 @@ pub(crate) mod work_link_picker_modal;
 
 pub(crate) use add_session_link_modal::*;
 pub(crate) use agent_hooks_required_modal::*;
+pub(crate) use chief_new_chat_modal::*;
 pub(crate) use close_sessions_confirm_modal::*;
 pub(crate) use coordinator_details_modal::*;
 pub(crate) use create_linear_ticket_modal::*;

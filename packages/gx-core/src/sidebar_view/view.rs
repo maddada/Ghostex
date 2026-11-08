@@ -60,6 +60,12 @@ pub struct SidebarView {
     /// computer's first and then each other computer's. Drawn under the Spaces bar whether or
     /// not the Chief extension is on; the host leaves them out while it is off.
     pub chiefs: Vec<super::chief::ChiefRowView>,
+    /// The home groups' headers (`chief.rs`), in list order: each is drawn as Main Hub's row
+    /// for that computer instead of a project header.
+    pub home_headers: Vec<super::chief::HomeHeaderView>,
+    /// The machines of `chiefs` that have a home project (drawn in this Space or not): their Chief
+    /// is a home header, never the row under the Spaces bar.
+    pub machines_with_home: Vec<String>,
 }
 
 /// What the list of a remote machine that is not connected says about its connection.
@@ -309,6 +315,8 @@ pub struct ProjectContextView {
     pub work_github: bool,
     /// The workspace's primary tracker is GitHub, so the Linear parts stay hidden even with a key.
     pub work_tracker_github: bool,
+    /// The home project: its header is Main Hub's row (`SidebarView::home_headers`).
+    pub is_home: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

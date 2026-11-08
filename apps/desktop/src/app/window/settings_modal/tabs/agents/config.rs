@@ -5,8 +5,8 @@
 use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::{
     ButtonVariant, PageAction, RowSpec, SELECT_WIDTH, SettingsDialogSpec, dialog_footer,
-    select_field, setting_row, settings_button, settings_dialog, settings_section,
-    settings_segmented, settings_select, static_note, text_field, toggle_field,
+    home_secret_folders_field, select_field, setting_row, settings_button, settings_dialog,
+    settings_section, settings_segmented, settings_select, static_note, text_field, toggle_field,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::search::{TabSearch, should_show_setting};
@@ -25,6 +25,9 @@ const TITLE_AGENT: &str = "sessionTitleGenerationAgent";
 const CUSTOM_TITLE_COMMAND: &str = "customSessionTitleGenerationCommand";
 const ACCEPT_ALL: &str = "agentAcceptAllEnabled";
 const TRUST_PROJECT_FOLDERS: &str = "trustProjectFoldersAutomatically";
+const SHOW_ON_ALL_SPACES: &str = "chiefShowOnAllSpaces";
+const CONFIRM_NEW_CHAT: &str = "chiefConfirmNewChat";
+const HOME_SECRET_FOLDERS: &str = "homeSecretFolders";
 /// How the agent a project's new-session button starts is remembered (gx-core `agent_choice.rs`).
 const NEW_SESSION_AGENT_SCOPE: &str = "newSessionAgentScope";
 /// A shadcn `Select` with this many items becomes the searchable dropdown.
@@ -301,6 +304,69 @@ impl AgentsTab {
             ));
         }
         settings_section(p, "Defaults", None, None, rows)
+    }
+
+    /// The Home folder card: where Main Hub's home shows, whether New Chat asks, and the
+    /// folders agents started in the home folder can't read (server/src/agents/home_secret_folders.rs).
+    pub(super) fn render_home_folder(
+        &mut self,
+        p: &SettingsPalette,
+        search: &TabSearch,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Div> {
+        let section = search.section("homeFolder");
+        let values = self.store.read(cx).values();
+        let mut rows: Vec<AnyElement> = Vec::new();
+        if should_show_setting(&section, SHOW_ON_ALL_SPACES, None) {
+            rows.push(toggle_field(
+                self,
+                p,
+                SHOW_ON_ALL_SPACES,
+                RowSpec::new("Show Main Hub on all Spaces").description(
+                    "Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to.",
+                ),
+                values.bool(SHOW_ON_ALL_SPACES),
+                cx,
+            ));
+        }
+        if should_show_setting(&section, CONFIRM_NEW_CHAT, None) {
+            rows.push(toggle_field(
+                self,
+                p,
+                CONFIRM_NEW_CHAT,
+                RowSpec::new("Ask before New Chat").description(
+                    "Ask before New Chat or Change Agent starts a new chat with Main Hub. Your earlier chats stay under its row either way.",
+                ),
+                values.bool(CONFIRM_NEW_CHAT),
+                cx,
+            ));
+        }
+        if should_show_setting(&section, HOME_SECRET_FOLDERS, None) {
+            let value = values.value(HOME_SECRET_FOLDERS);
+            let default = settings_catalog()
+                .default_value(HOME_SECRET_FOLDERS)
+                .cloned()
+                .unwrap_or(Value::Null);
+            let modified = !value.is_null() && value != default;
+            rows.push(home_secret_folders_field(
+                self,
+                p,
+                RowSpec::new("Folders agents can't read in your home folder")
+                    .description(
+                        "Agents Ghostex starts in your home folder are kept out of these folders and files. Claude Code's file tools and every Codex command are held to the list; Claude's shell commands and other agents are not.",
+                    )
+                    .modified(modified),
+                modified.then(|| reset_to(HOME_SECRET_FOLDERS)),
+                &value,
+                window,
+                cx,
+            ));
+        }
+        if rows.is_empty() {
+            return None;
+        }
+        settings_section(p, "Home folder", None, None, rows)
     }
 
     /// The Skip permissions? confirmation (`w-[25rem] gap-4 p-5`, nested).

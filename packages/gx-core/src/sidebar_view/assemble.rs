@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::collections::{project_sidebar_collections, CollectionItem, CollectionsState};
 use super::daemon_wait::{DaemonWait, TRY_NOW_LABEL};
-use super::groups::{group_summary, GroupBuild, GroupPlan};
+use super::groups::{group_summary, GroupBuild, GroupKind, GroupPlan};
 use super::inputs::{
     effective_sidebar_mode, SidebarHostInputs, SidebarMode, SidebarSettings, SidebarUiState,
     UnavailableState, LOCAL_MACHINE_ID,
@@ -64,8 +64,14 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     // The bot groups of the other bot kind than the Bots space shows (`BotsSource`).
     let mut other_bot_groups: BTreeSet<&str> = BTreeSet::new();
     let mut bot_runs_today = 0;
+    // The home project's groups (one per computer with the computers combined), whose header is
+    // Main Hub's row (`chief.rs`).
+    let mut home_groups: BTreeSet<&str> = BTreeSet::new();
     for plan in input.plans {
         if let Some(project) = &plan.project {
+            if project.is_home && plan.kind == GroupKind::Project {
+                home_groups.insert(plan.group_id.as_str());
+            }
             projects_by_group.insert(
                 plan.group_id.as_str(),
                 (
@@ -147,6 +153,11 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     let shows_group = |selection: &SpaceSelection, group_id: &str| -> bool {
         if is_bot_group(group_id) {
             return false;
+        }
+        // CDXC:Chief 2026-11-08 DECISION:
+        // User: the home row "should remain top of the space that it's a part of you know? so i should be able to move it to a space if i want and it'll remain in that space, not show on top of all spaces like we have now (make this a setting, default off, 'Show on all spaces')". The home project is a Space member like any project (Move to Space moves it, and the adopted project keeps the Space it was in); `chiefShowOnAllSpaces` shows it in every Space. Either way it is drawn first (below).
+        if input.settings.chief_show_on_all_spaces && home_groups.contains(group_id) {
+            return true;
         }
         let project = space_project_of_group(group_id);
         selection_shows_project(
@@ -299,8 +310,10 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         if !input.ui.show_hidden && input.ui.hidden_items.group_ids.contains(&plan.group_id) {
             continue;
         }
+        // The home group is Main Hub's row: it stays with no loose sessions.
         if hiding_on
             && plan.project.is_some()
+            && !home_groups.contains(plan.group_id.as_str())
             && !build.core.is_active
             && !projects_with_sessions.contains(&plan.group_id)
         {
@@ -335,6 +348,36 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     let mut collections: Vec<CollectionView> = Vec::new();
     let mut order: Vec<OrderItem> = Vec::new();
     // Collections group projects; the bots are one flat list.
+    // The home groups (with their session groups) lead the list and belong to no collection.
+    let in_home = |group_id: &str| {
+        home_groups.contains(group_id)
+            || owner_project_group_id(group_id)
+                .is_some_and(|owner| home_groups.contains(owner.as_str()))
+    };
+    let home_ids: Vec<String> = rendered_ids
+        .iter()
+        .filter(|group_id| home_groups.contains(group_id.as_str()))
+        .flat_map(|home| {
+            std::iter::once(home.clone()).chain(
+                rendered_ids
+                    .iter()
+                    .filter(|group_id| {
+                        owner_project_group_id(group_id).as_deref() == Some(home.as_str())
+                    })
+                    .cloned(),
+            )
+        })
+        .collect();
+    for group_id in &home_ids {
+        order.push(OrderItem {
+            kind: OrderKind::Project,
+            id: group_id.clone(),
+        });
+    }
+    let rendered_ids: Vec<String> = rendered_ids
+        .into_iter()
+        .filter(|group_id| !in_home(group_id))
+        .collect();
     let collection_items = if bots_mode {
         rendered_ids
             .iter()
@@ -532,6 +575,8 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         hidden_collection_group_ids,
         // Filled by the caller from the store (`chief.rs`).
         chiefs: Vec::new(),
+        home_headers: Vec::new(),
+        machines_with_home: Vec::new(),
         show_all_projects_row: (empty_projects > 0).then_some(ShowAllProjectsRow {
             empty_projects,
             showing: input.ui.show_all_projects,

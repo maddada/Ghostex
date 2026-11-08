@@ -239,7 +239,6 @@ pub use crate::sidebar_ui::{
     HIDDEN_ITEMS_STORAGE_KEY, MACHINE_TAB_STORAGE_KEY, PROJECT_COLLECTIONS_STORAGE_KEY,
     SIDEBAR_WINDOW_SCOPE_ID,
 };
-pub use crate::sidebar_view::ChiefRowView;
 pub use crate::sidebar_view::{
     armed_actions_by_session, close_project_group_is_active, close_project_successor_candidates,
     close_project_successor_group_order, first_awake_successor_session_id, is_awake_successor_row,
@@ -279,6 +278,7 @@ pub use crate::sidebar_view::{
     DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
 };
 pub use crate::sidebar_view::{tag_choice, tag_choices, TagChoice};
+pub use crate::sidebar_view::{ChiefRowView, HomeHeaderView};
 pub use crate::workspace_groups::{
     owns_group_command, plan_group_command, CustomTagsPush, CustomTagsPushEffect, GroupCommandPlan,
 };

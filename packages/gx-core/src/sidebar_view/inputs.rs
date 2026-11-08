@@ -383,6 +383,9 @@ pub struct SidebarSettings {
     pub unified_project_order: Vec<String>,
     /// The Project sidebar leaves out projects with no sessions (`sidebarHideProjectsWithoutSessions`).
     pub hide_projects_without_sessions: bool,
+    /// The home project (Main Hub's group) shows at the top of every Space
+    /// (`chiefShowOnAllSpaces`); off, only at the top of its own Space.
+    pub chief_show_on_all_spaces: bool,
     /// Settings › Sidebar's Separate by machine (`sidebarSeparateByMachine`): machine tabs and one
     /// machine's list at a time, as before. Off by default: one list for every machine
     /// (`sidebar_view/merged.rs`).
@@ -425,6 +428,7 @@ impl Default for SidebarSettings {
             unified_group_by_project: false,
             unified_project_order: Vec::new(),
             hide_projects_without_sessions: false,
+            chief_show_on_all_spaces: false,
             separate_by_machine: false,
             worktree_sessions_in_project: true,
             pinned_session_order: PinnedSessionOrder::Manual,
@@ -518,6 +522,10 @@ impl SidebarSettings {
             hide_projects_without_sessions: boolean(
                 "sidebarHideProjectsWithoutSessions",
                 defaults.hide_projects_without_sessions,
+            ),
+            chief_show_on_all_spaces: boolean(
+                "chiefShowOnAllSpaces",
+                defaults.chief_show_on_all_spaces,
             ),
             separate_by_machine: boolean("sidebarSeparateByMachine", defaults.separate_by_machine),
             worktree_sessions_in_project: boolean(
