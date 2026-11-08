@@ -19,7 +19,9 @@ The version in this folder is **11.0.0** (GitHub release v11.0.0).
 
 ## Screenshots
 
-There is no Android emulator in the environment that produced these, and the app shows nothing until it is paired with a computer running Ghostex. The phone screenshots are an Android-styled composition of the real UI already captured for the iOS listing (`tooling/release-mobile/app-store/screenshots/iphone-6.9/`). The iOS status bar and home-indicator band are cropped off. A status bar and a gesture pill are drawn on top. The app UI inside the frame is the shared React Native UI from those captures, not a new Android photograph. The terminal and Find screenshots still show the iOS keyboard from the source capture.
+The phone screenshots are composites of the shared React Native app UI captured for the iOS listing (`tooling/release-mobile/app-store/screenshots/iphone-6.9/`) and real Android OS pixels. The composition crops the iOS status bar, Dynamic Island, and home-indicator area. Its status bar and gesture navigation strip come from a headless Pixel API 35 emulator at 1080×1920. The terminal and Find keyboard regions use dark Gboard captures from that emulator, with Enter and Search action keys respectively. Find and Docs use Android-style back arrows in place of the iOS back controls. The app content inside the frame remains the iOS-origin capture; these composites are not direct Android app screenshots.
+
+The cropped system captures are in `graphics/source/pixel-*.png`. `compose.py` scales them to the phone frame without recreating OS glyphs. The keyboard assets retain their native key geometry: the join removes only an empty band between the keys and navigation controls.
 
 Tablet screenshots are not included. The only tablet captures on hand are iPad screenshots, and those would show the wrong device.
 

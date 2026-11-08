@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """Regenerate the Google Play listing graphics.
 
-Phone screenshots are an Android-styled composition of the real app UI already
-captured for the iOS App Store listing. This environment has no Android
-emulator paired to a Ghostex computer, so the pixels inside the phone are
-those captures with the iOS status bar and home-indicator band cropped off,
-then framed with a drawn Android status bar and gesture bar. They are not
-photographs of the Android app.
+Phone screenshots combine the shared React Native app UI captured for the iOS
+App Store listing with real Pixel emulator system chrome and Gboard pixels.
+The app content is not a new Android capture. OS-only regions are replaced.
 
 Outputs (24-bit PNG, no alpha, except the 512 icon which is 32-bit):
 
@@ -36,6 +33,12 @@ ROOT = PLAY.parents[2]
 IOS_PHONE = ROOT / "tooling/release-mobile/app-store/screenshots/iphone-6.9"
 CAPTIONS = ROOT / "tooling/release-mobile/app-store/screenshots/captions.json"
 ICON_SOURCE = HERE / "source/icon.png"
+STATUS_SOURCE = HERE / "source/pixel-status.png"
+NAV_SOURCE = HERE / "source/pixel-gesture-nav.png"
+KEYBOARD_SOURCES = {
+    "04-terminal.png": HERE / "source/pixel-gboard-enter.png",
+    "07-find.png": HERE / "source/pixel-gboard-search.png",
+}
 
 PHONE_SIZE = (1080, 1920)
 # The rounded phone bitmap inside each 1320x2868 iOS store image, from compose.py.
@@ -68,9 +71,17 @@ def font_path(weight: str) -> Path:
         "SemiBold": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "Bold": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     }
+    mac_fallback = {
+        "Regular": "/Library/Fonts/SF-Compact-Display-Regular.otf",
+        "Medium": "/Library/Fonts/SF-Compact-Display-Medium.otf",
+        "SemiBold": "/Library/Fonts/SF-Compact-Display-Semibold.otf",
+        "Bold": "/Library/Fonts/SF-Compact-Display-Bold.otf",
+    }
     for path in candidates:
         if path.is_file():
             return path
+    if Path(mac_fallback[weight]).is_file():
+        return Path(mac_fallback[weight])
     return Path(fallback[weight])
 
 
@@ -167,7 +178,24 @@ def app_pixels(path: Path) -> Image.Image:
         raise SystemExit(f"{path.name} is {image.size}, expected 1320x2868")
     framed = image.crop(IOS_FRAME)
     height = framed.height - CROP_TOP - CROP_BOTTOM
-    return framed.crop((0, CROP_TOP, framed.width, CROP_TOP + height))
+    content = framed.crop((0, CROP_TOP, framed.width, CROP_TOP + height))
+    # The iPhone Dynamic Island can extend just below the cropped status band.
+    # This region is blank app background on every source screen.
+    draw = ImageDraw.Draw(content)
+    draw.rectangle((0, 0, content.width, 35), fill=content.getpixel((20, 40)))
+    if path.name == "07-find.png":
+        # The source Find header has an iOS back-button capsule. Android uses
+        # a plain back arrow beside the same screen title.
+        draw.rectangle((0, 0, content.width, 174), fill="#000000")
+        draw.line(((104, 75), (76, 102), (104, 129)), fill="#f1f1f1", width=6, joint="curve")
+        draw.line(((78, 102), (130, 102)), fill="#f1f1f1", width=6)
+        draw.text((192, 69), "Find Prompts", font=font("SemiBold", 43), fill="#f1f1f1")
+    elif path.name == "06-docs.png":
+        # The iOS stack header uses a circular chevron control here.
+        draw.rectangle((38, 38, 170, 168), fill=content.getpixel((190, 100)))
+        draw.line(((108, 76), (80, 104), (108, 132)), fill="#f1f1f1", width=6, joint="curve")
+        draw.line(((82, 104), (136, 104)), fill="#f1f1f1", width=6)
+    return content
 
 
 def chrome_color(content: Image.Image, top: bool) -> tuple[int, int, int]:
@@ -177,44 +205,24 @@ def chrome_color(content: Image.Image, top: bool) -> tuple[int, int, int]:
     return pixels[len(pixels) // 2]
 
 
-def draw_status(canvas: Image.Image, color: tuple[int, int, int]) -> None:
-    draw = ImageDraw.Draw(canvas)
-    draw.rectangle((0, 0, canvas.width, STATUS_H), fill=color)
-    face = font("Medium", 22)
-    draw.text((28, 14), "9:41", font=face, fill="#f2f2f2")
-    right = canvas.width - 28
-    # Battery.
-    battery = (right - 34, 18, right, 36)
-    draw.rounded_rectangle(battery, radius=3, outline="#f2f2f2", width=2)
-    draw.rectangle((right, 23, right + 3, 31), fill="#f2f2f2")
-    draw.rectangle((battery[0] + 3, 21, battery[0] + 22, 33), fill="#f2f2f2")
-    # Wi-Fi: three arcs.
-    cx = right - 62
-    for radius, width in ((14, 3), (9, 3), (4, 3)):
-        draw.arc((cx - radius, 34 - radius, cx + radius, 34 + radius), 225, 315, fill="#f2f2f2", width=width)
-    # Signal bars.
-    base = 38
-    x = right - 108
-    for index, level in enumerate((8, 13, 18, 22)):
-        draw.rounded_rectangle((x + index * 8, base - level, x + index * 8 + 5, base), radius=1, fill="#f2f2f2")
-
-
-def draw_nav(canvas: Image.Image, y: int, color: tuple[int, int, int]) -> None:
-    draw = ImageDraw.Draw(canvas)
-    draw.rectangle((0, y, canvas.width, canvas.height), fill=color)
-    pill_w = 118
-    left = (canvas.width - pill_w) // 2
-    draw.rounded_rectangle((left, y + 16, left + pill_w, y + 22), radius=3, fill="#9a9a9a")
-
-
-def frame_phone(content: Image.Image, width: int) -> Image.Image:
+def frame_phone(content: Image.Image, width: int, file_name: str) -> Image.Image:
     scale = width / content.width
     height = round(content.height * scale)
     scaled = content.resize((width, height), Image.Resampling.LANCZOS)
     phone = Image.new("RGB", (width, STATUS_H + height + NAV_H), chrome_color(scaled, True))
     phone.paste(scaled, (0, STATUS_H))
-    draw_status(phone, chrome_color(scaled, True))
-    draw_nav(phone, STATUS_H + height, chrome_color(scaled, False))
+    with Image.open(STATUS_SOURCE) as opened:
+        status = opened.convert("RGB").resize((width, STATUS_H), Image.Resampling.LANCZOS)
+    phone.paste(status, (0, 0))
+    with Image.open(NAV_SOURCE) as opened:
+        nav = opened.convert("RGB").resize((width, NAV_H), Image.Resampling.LANCZOS)
+    phone.paste(nav, (0, STATUS_H + height))
+    if keyboard_source := KEYBOARD_SOURCES.get(file_name):
+        with Image.open(keyboard_source) as opened:
+            keyboard = opened.convert("RGB")
+        keyboard_height = round(keyboard.height * width / keyboard.width)
+        keyboard = keyboard.resize((width, keyboard_height), Image.Resampling.LANCZOS)
+        phone.paste(keyboard, (0, phone.height - keyboard_height))
     return phone
 
 
@@ -247,7 +255,7 @@ def render_phone(row: dict[str, str]) -> Path:
     # Width follows the height budget so the tall UI stays inside 9:16.
     width_budget = PHONE_SIZE[0] - 120
     phone_width = min(width_budget, round(content.width * (max_height - STATUS_H - NAV_H) / content.height))
-    phone = frame_phone(content, phone_width)
+    phone = frame_phone(content, phone_width, row["file"])
     if phone.height > max_height:
         raise SystemExit(f"{row['file']} phone is {phone.size}, taller than {max_height}")
     x = (PHONE_SIZE[0] - phone.width) // 2
