@@ -93,6 +93,7 @@ impl NativeChatView {
     /// The reader moved the list on purpose: the held row is free to move again, and a list that is
     /// not following waits for the reader to reach the bottom, as after any scroll up.
     pub(super) fn release_answer_hold(&self) {
+        self.release_reply_hold();
         if !std::mem::take(&mut *self.answer_hold.borrow_mut()).active {
             return;
         }

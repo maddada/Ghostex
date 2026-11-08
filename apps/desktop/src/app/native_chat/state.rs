@@ -276,6 +276,8 @@ pub(crate) struct NativeChatView {
     pub(crate) list: gpui::ListState,
     /// Set while a transcript field has focus: whether tail following resumes when it leaves (scroll_bottom.rs).
     pub(super) transcript_focus_follow: std::cell::Cell<Option<bool>>,
+    /// The agent's reply arriving: its fade and the hold at its top (reply_arrival.rs).
+    pub(super) reply_arrival: std::rc::Rc<std::cell::RefCell<super::reply_arrival::ReplyArrival>>,
     /// A one-click answer holding the row the reader clicked still (answer_anchor.rs).
     pub(super) answer_hold: std::rc::Rc<std::cell::RefCell<super::answer_anchor::AnswerHold>>,
     /// Where the focused transcript field was painted, which streaming rows must not move (scroll_bottom.rs).
@@ -442,6 +444,7 @@ impl NativeChatView {
             hide_file_changes: false,
             disclosure_motion: Default::default(),
             transcript_focus_follow: Default::default(),
+            reply_arrival: Default::default(),
             answer_hold: Default::default(),
             transcript_focus_field_top: Default::default(),
             in_subagent: false,
