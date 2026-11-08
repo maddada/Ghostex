@@ -428,6 +428,12 @@ pub(super) fn snapshot_from_view(
             })
             .collect(),
         more_menu,
+        chief_enabled: crate::app::native_sidebar::chief::chief_on(),
+        chiefs: view
+            .chiefs
+            .iter()
+            .map(crate::app::native_sidebar::chief::native_chief)
+            .collect(),
         // The two hotkey labels are the hotkey settings formatted for the current platform, which
         // the list re-reads whenever the settings file's content hash moves.
         search_shortcut: input.search_shortcut.clone(),

@@ -153,6 +153,9 @@ impl GhostexGpuiApp {
             // Raised only by the app's settings sync notes (gx_store/settings_sync.rs), which a page
             // does not get.
             GpuiAppToastAction::UndoSyncedChange { .. } => {}
+            // Raised only by Chief's Disable Extension, which a page does not offer
+            // (native_sidebar/chief.rs).
+            GpuiAppToastAction::UndoChiefDisable => {}
             // Raised only by the app's approval cards (app/owner_security/ui.rs); approving needs
             // the computer's own key store and presence prompt, which a page has not.
             GpuiAppToastAction::SecurityApproval { .. } => {}

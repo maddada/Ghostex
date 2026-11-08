@@ -266,6 +266,9 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::UndoSyncedChange { id } => {
                 self.gx_store_undo_settings_sync_change(id, cx);
             }
+            GpuiAppToastAction::UndoChiefDisable => {
+                self.set_native_sidebar_chief_enabled(true, cx);
+            }
             GpuiAppToastAction::SecurityApproval {
                 request,
                 deny,
@@ -274,6 +277,29 @@ impl GhostexGpuiApp {
                 self.owner_security_decide(request, *deny, machine_id.as_deref(), cx);
             }
         }
+    }
+
+    /// Chief's Disable Extension: says where it comes back, with Undo.
+    pub(crate) fn show_chief_disabled_toast(&mut self, cx: &mut gpui::Context<Self>) {
+        self.app_toast_id_counter = self.app_toast_id_counter.wrapping_add(1);
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: format!("gpui-app-toast-{}", self.app_toast_id_counter),
+                level: GpuiAppToastLevel::Info,
+                title: "Chief turned off".to_string(),
+                description: Some(
+                    "Its chat and memory are kept. Turn it back on in Settings > Extensions."
+                        .to_string(),
+                ),
+                copy_text: None,
+                action: Some(GpuiAppToastAction::UndoChiefDisable),
+                loading: false,
+                persistent: false,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS * 2,
+                epoch: 0,
+            },
+            cx,
+        );
     }
 
     pub(crate) fn show_gpui_gxserver_bootstrap_toast(

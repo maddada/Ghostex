@@ -4,6 +4,8 @@ mod agentbox;
 pub(crate) mod appearance;
 pub(crate) mod automations_row;
 mod bots;
+pub(crate) mod chief;
+pub(crate) mod chief_row_view;
 mod claude_cloud;
 mod cloud_box;
 mod collections;

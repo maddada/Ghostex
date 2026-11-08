@@ -671,6 +671,8 @@ impl GhostexGpuiApp {
             collections: Vec::new(),
             order: Vec::new(),
             more_menu: Value::Null,
+            chief_enabled: false,
+            chiefs: Vec::new(),
             search_shortcut: None,
             commands_shortcut: None,
         };
