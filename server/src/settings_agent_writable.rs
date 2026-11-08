@@ -41,12 +41,19 @@ pub(crate) fn refused_keys(patch: &Map<String, Value>) -> Vec<String> {
         .collect()
 }
 
+/// Settings the catalog lists only as app state (its About page), with the page whose own
+/// controls change them: what the refusal names instead.
+const EDITED_ON_PAGE: &[(&str, &str, &str)] = &[("remoteMachines", "Remote machines", "Remote")];
+
 /// The refusal's words: what can't be changed and where the user changes it.
 pub(crate) fn refusal_message(keys: &[String]) -> String {
     let catalog = ghostex_settings_catalog::help::catalog();
     let named = keys
         .iter()
         .map(|key| {
+            if let Some((_, title, page)) = EDITED_ON_PAGE.iter().find(|(id, ..)| id == key) {
+                return format!("\"{title}\" (Settings > {page})");
+            }
             catalog
                 .settings
                 .iter()

@@ -12,6 +12,17 @@ use serde_json::Value;
 /// Connectors. Collab's are gated by Collab's own approvals.
 const SECURITY_RELAXING_TABS: &[&str] = &["remote", "accounts", "secrets", "sync", "connectors"];
 
+/*
+CDXC:Security 2026-11-08 DECISION:
+User (Q1936, 11.1.2): the computers this one connects to are not a way in, so changing them never
+asks. The saved machines (`remoteMachines`, with their SSH passwords) are app state the catalog
+files outside the Remote page, so they never matched; this computer's 2-character name on the
+sidebar pills is on the Remote page but only renames a pill. Everything that lets someone in
+(Easy Connect, its relay, ports and allow-list, pairing, SSH access, Tailscale) still asks.
+*/
+/// Remote-page settings that let no one in: changing them never asks.
+const LETS_NO_ONE_IN: &[&str] = &["localMachineShortName"];
+
 fn security_relaxing_keys() -> &'static HashSet<String> {
     static KEYS: OnceLock<HashSet<String>> = OnceLock::new();
     KEYS.get_or_init(|| {
@@ -19,6 +30,7 @@ fn security_relaxing_keys() -> &'static HashSet<String> {
             .settings
             .into_iter()
             .filter(|entry| SECURITY_RELAXING_TABS.contains(&entry.tab.as_str()))
+            .filter(|entry| !LETS_NO_ONE_IN.contains(&entry.key.as_str()))
             .map(|entry| entry.key)
             .collect()
     })
