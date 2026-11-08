@@ -568,9 +568,8 @@ impl GpuiAppToastWindow {
                     });
                 }),
             )
-            .child(titlebar_svg_icon(
-                COMMAND_ICON_XMARK,
-                8.0,
+            .child(super::round_close_button::round_close_x_icon(
+                super::round_close_button::RoundCloseXSize::Toast { scale: 1.0 },
                 gpui_app_toast_close_button_icon_color(light),
             ))
             .when_some(region, |button, region| {
@@ -636,41 +635,10 @@ impl GpuiAppToastWindow {
 /// The frames a toast window's frosted region is built from, collected while it draws.
 type ToastFrames = std::rc::Rc<std::cell::RefCell<Vec<(Bounds<Pixels>, Pixels)>>>;
 
-/// The toast's round × is a see-through light gray in both appearances, with a dark gray ×.
-///
-/// CDXC:Theming 2026-11-04 DECISION:
-/// User, of the toast's close button: solid black stood out against the frosted toasts; it should be light gray so it fits the see-through UI. The fill keeps some of what is behind it in dark and light alike, its hover is a step stronger, and the × is dark gray so it still reads on the light fill.
-pub(crate) fn gpui_app_toast_close_button_color(light: bool) -> Hsla {
-    if light {
-        rgb(0xe2e2e2).opacity(0.80).into()
-    } else {
-        rgb(0xc9c9c9).opacity(0.72).into()
-    }
-}
-
-pub(crate) fn gpui_app_toast_close_button_hover_color(light: bool) -> Hsla {
-    if light {
-        rgb(0xd2d2d2).opacity(0.92).into()
-    } else {
-        rgb(0xdedede).opacity(0.88).into()
-    }
-}
-
-pub(crate) fn gpui_app_toast_close_button_border_color(light: bool) -> Hsla {
-    if light {
-        rgb(0x000000).opacity(0.10).into()
-    } else {
-        rgb(0xffffff).opacity(0.28).into()
-    }
-}
-
-pub(crate) fn gpui_app_toast_close_button_icon_color(light: bool) -> Hsla {
-    if light {
-        rgb(0x4a4a4a).into()
-    } else {
-        rgb(0x2b2b2b).into()
-    }
-}
+pub(crate) use super::round_close_button::{
+    gpui_app_toast_close_button_border_color, gpui_app_toast_close_button_color,
+    gpui_app_toast_close_button_hover_color, gpui_app_toast_close_button_icon_color,
+};
 
 /// Whether toasts sit on their own blurred window.
 ///

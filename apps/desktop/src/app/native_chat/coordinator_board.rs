@@ -619,16 +619,18 @@ impl NativeChatView {
                             })
                         })
                         .child(
-                            svg()
-                                .path("titlebar/x.svg")
-                                .size(px(11.0 * s))
-                                .text_color(if armed {
+                            crate::app::window::round_close_button::round_close_x_icon(
+                                crate::app::window::round_close_button::RoundCloseXSize::BoardCard {
+                                    scale: s,
+                                },
+                                if armed {
                                     red
                                 } else {
                                     crate::app::window::toast::gpui_app_toast_close_button_icon_color(
                                         p.light,
                                     )
-                                }),
+                                },
+                            ),
                         ),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
