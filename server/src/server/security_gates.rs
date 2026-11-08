@@ -11,6 +11,7 @@
 //! | `/api/answerSessionChatPrompt` | anyone but the owner's devices and Chief answers another session's prompt |
 //! | `/api/interruptSessionChat` | anyone but the owner's devices and Chief stops a session that is neither their own nor one of their threads |
 //! | `/api/sendSessionText`, `/api/sendSessionEnter`, `/api/sendSessionMessage` | anyone but the owner's devices and Chief types into a session that isn't their own, its threads included (a coordinator's Escape or Ctrl-C to its own thread doesn't ask) |
+//! | `/api/cloudBoxes` `create`, `setAgentLogin` (allowed), `projectSettings` (write) | anyone but the owner's devices: logins and project secrets go onto a box |
 //! | chat messages and creates into another project, a create forcing full access | see security_cross_project.rs |
 //!
 //! What only the owner's devices may do at all, with no approval to ask for, is refused before
@@ -132,6 +133,7 @@ pub(crate) fn gate(
                     | SensitiveAction::GbotsEnable
                     | SensitiveAction::ReachOtherProject
                     | SensitiveAction::ForceFullAccess
+                    | SensitiveAction::CloudBoxShareLogins
                     | SensitiveAction::TeamSyncConnect
             ) {
                 crate::audit::record(
@@ -375,6 +377,7 @@ fn sensitive_action(
             input_action(state, caller, endpoint_path, params)
         }
         "/api/interruptSessionChat" => interrupt_action(state, caller, params),
+        "/api/cloudBoxes" => cloud_box_action(state, caller, params),
         "/api/connectTeamSync" => team_connect_action(caller, params),
         path if super::security_cross_project::is_cross_project_route(path) => {
             super::security_cross_project::cross_project_action(state, caller, path, params)
@@ -508,6 +511,73 @@ fn autopilot_action(params: &Map<String, Value>) -> Option<ActionRequest> {
         )
         .params(Value::Object(params.clone()))
     })
+}
+
+/*
+CDXC:CloudBoxes 2026-11-08 DECISION:
+#495 follow-up (the audit's leftovers, "under the same rule"): `/api/cloudBoxes` `create`, `setAgentLogin` with `allowed: true`, and `projectSettings` with `settings` put the owner's agent logins and a project's secret files onto a box, so an agent's call asks the owner with Touch ID. The owner's own devices don't ask (the Cloud Boxes page and the phone are the owner choosing). Turning a login off and reading settings never ask; `connectInfo` is left as it is (the user is asked about it separately).
+*/
+fn cloud_box_action(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Option<ActionRequest> {
+    if caller.is_owner_device() {
+        return None;
+    }
+    let project_name = |project_id: &str| {
+        crate::storage::open_gxserver_database(&state.paths)
+            .ok()
+            .and_then(|db| {
+                crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str())
+                    .get_project(project_id)
+                    .ok()
+                    .flatten()
+            })
+            .and_then(|project| {
+                project
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| project_id.to_string())
+    };
+    let (summary, target, detail) = match text(params, "action")? {
+        "create" => {
+            let project_id = text(params, "projectId").unwrap_or_default();
+            (
+                format!("Start a Cloud Box for {}", project_name(project_id)),
+                project_id.to_string(),
+                "The box gets the agent logins and project files you set up for Cloud Boxes.",
+            )
+        }
+        "setAgentLogin" if params.get("allowed").and_then(Value::as_bool) == Some(true) => {
+            let account = text(params, "accountId").unwrap_or_default();
+            (
+                format!("Let Cloud Boxes use the agent login {account}"),
+                account.to_string(),
+                "Boxes you start get a copy of this login.",
+            )
+        }
+        "projectSettings" if params.get("settings").is_some_and(|value| !value.is_null()) => {
+            let project_id = text(params, "projectId").unwrap_or_default();
+            (
+                format!(
+                    "Change what Cloud Boxes get from {}",
+                    project_name(project_id)
+                ),
+                project_id.to_string(),
+                "Boxes for this project may get its secret files and setup.",
+            )
+        }
+        _ => return None,
+    };
+    Some(
+        ActionRequest::new(SensitiveAction::CloudBoxShareLogins, summary)
+            .target(target)
+            .params(Value::Object(params.clone()))
+            .detail(detail),
+    )
 }
 
 /*

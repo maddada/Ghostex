@@ -101,6 +101,11 @@ open_string_enum! {
         /// A create call that starts an agent with approvals off (`acceptAllMode: "enabled"`)
         /// when the owner's own setting for it doesn't. Asks every time.
         ForceFullAccess => "forceFullAccess",
+        // Cloud Boxes
+        /// Start a box, or change what boxes get, when that puts the owner's agent logins or a
+        /// project's secret files onto a box (`/api/cloudBoxes` `create`, `setAgentLogin` with
+        /// `allowed: true`, `projectSettings` with `settings`).
+        CloudBoxShareLogins => "cloudBoxShareLogins",
         // Teams
         /// Connect a workspace to a team backend with a token made elsewhere
         /// (`ghostex team deploy`'s last step), by anyone but the owner's devices; the target is
