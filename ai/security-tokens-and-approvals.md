@@ -37,15 +37,16 @@ every route as `RouteHttpRequest::caller`.
 | `Device { device_id }` | `gxd_…` today | A paired phone. Pairing v2 replaces the token; until then `device_id` is `token:<first 12 hex of the hash>`. |
 | `Session { project_id, session_id, role }` | `gxs_…`, in the session's `GHOSTEX_SESSION_TOKEN` | Issued when an agent or terminal starts (zmx and wmx), the same token again when that session starts again, revoked when the session is deleted (and by a 5-minute sweep for sessions deleted another way). `role` from the coordinator markers: `agent`, `coordinator`, `thread`. The `ghostex` CLI inside a session sends it. |
 | `LocalAgent` | the token file `gxserver/auth/token` | Agent level plus thread management (user decision 3A). Hooks, plugins, older sessions and the CLI in the user's own terminal use it. |
-| `Peer { server_id, name }` | a connected computer's grant | Keeps `PEER_ALLOWED_ENDPOINTS`. |
+| `Peer { server_id, name }` | a connected computer's grant | Keeps `PEER_ALLOWED_ENDPOINTS`. May ask (answering a prompt or typing into a session here go through the same gate as an agent here). |
 | `Guest { share_id }` | `gxshare_…` | Keeps `GUEST_ENDPOINTS`. |
 | `Extension { extension_id }` | an extension's API token | Keeps the extension registry's scope. |
 | `Anonymous` | none | Public routes only. |
 
 ## What they may do: `Capability`
 
-`Principal::has(capability)`. Owner and Device have every capability. Peers, guests, extensions
-and anonymous callers have none of these (they keep their own endpoint allow-lists).
+`Principal::has(capability)`. Owner and Device have every capability. Peers have only
+`RequestSensitiveAction`; guests, extensions and anonymous callers have none of these (all of them
+keep their own endpoint allow-lists).
 
 | Capability | Session agent/thread | Coordinator | LocalAgent |
 | --- | --- | --- | --- |
@@ -86,8 +87,9 @@ Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in 
 | Connected computers | `computerRegister`, `computerGrant`, `computerChangeAccess` | `security_gates.rs` | `/api/registerConnectedComputer`, `/api/issueComputerGrant` for a computer not approved in the last 30 days (renewals of an approved one pass; Agent access off never asks). |
 | Autopilot | `autopilotAnswerApprovals`, `autopilotLiftLimits` | `security_gates.rs` | `/api/autopilot` `op: "set"` with `answerApprovals: true`, or `limits`. |
 | GBots | `gbotsEnable`, `gbotsAddBot`, `gbotsChangeSenders` | `security_gates.rs` | `updateSettingsPatch` turning `gbotsEnabled` on or changing `gbotsComputer`; `/api/gbots` `action: "create"`. Who may message a bot is set inside the GBots sidecar, not through gxserver. |
-| Settings | `settingsWeakenSecurity` (target: the keys) | `security_gates.rs` | `updateSettingsPatch` (`/api/dispatchRendererCommand`) of a key on the Remote, Accounts, Secrets, Sync or Connectors page, or holding a token, password, secret, API key or credential. Collab's keys are left to the Collab routes. The desktop's own Settings window writes the file itself and isn't gated here. |
+| Settings | `settingsWeakenSecurity` (target: the keys) | `security_gates.rs`, desktop `owner_security/settings.rs` | One rule, `ghostex_settings_catalog::security_relaxing::needs_owner_presence`: a key on the Remote, Accounts, Secrets, Sync or Connectors page, or holding a token, password, secret, API key or credential. Through the API (`updateSettingsPatch`), a key the API may not write at all is refused by `settings_agent_writable.rs` before any approval; the rest (Sync's, GBots') ask. The desktop's own Settings window shows the system prompt (Touch ID / Windows Hello / polkit) before it saves such a change, and shows the saved values again when the prompt is declined. Collab's keys are left to the Collab routes. |
 | Prompts | `answerOtherSessionPrompt` | `security_gates.rs` | `/api/answerSessionChatPrompt` by anyone but the owner's devices for a session that isn't the caller's own, a coordinator answering its own threads included (user decision 2; Autopilot keeps its own actions). |
+| Terminal input | `typeIntoOtherSession` | `security_gates.rs` | `/api/sendSessionText` (send-text, send-key), `/api/sendSessionEnter`, `/api/sendSessionMessage` by anyone but the owner's devices into a session that isn't the caller's own, a coordinator's threads included (user decision). A coordinator's Escape or Ctrl-C to its own thread passes; `/api/interruptSessionChat` and chat messages through the chat queue (`ghostex agents send`) never ask. |
 | Approvers | `addApproverKey` | `security_http.rs` | A second owner key, or any approver key after the first. |
 
 Add a new action here, in the enum, and in the phone's TypeScript port together.
@@ -202,7 +204,17 @@ is as readable to a same-user program as the token file), `ownerSessions` (hashe
 `approvedComputers` (server id → when). An unreadable file is moved aside and gxserver starts with
 none; the desktop then enrolls again on first use.
 
-## Security events (for the audit log)
+## The security log (`crate::audit`)
+
+The gate writes to the hash-chained security log: a new request as `pending` (which also sends
+the phone a push), a refusal at the gate, a denial at `/api/denyApprovalRequest`, owner and
+approver keys added or removed. When the gate spends an approval on a request, it is noted for
+that request (`audit::note_approval`): an entry the route's handler records with `Outcome::Done`
+carries the approval and reads as `approved`. Routes whose handlers keep no entry of their own
+(prompt answers, terminal input, settings, GBots on) get one `approved` entry from the gate. The
+log names `gxs_` callers as the session and `gxo_` callers as the owner.
+
+## Security events (in-process stream)
 
 `state.security.subscribe()` returns a `tokio::sync::broadcast::Receiver<SecurityEvent>`; a slow
 subscriber loses the oldest events (`Lagged`) and never blocks gxserver. Events (`type` tag,
@@ -215,10 +227,7 @@ per event.
 
 ## Not covered yet
 
-- Agents can still type into another session's terminal (`sendSessionText`, `sendSessionEnter`),
-  which can answer a terminal permission prompt without `answerSessionChatPrompt`.
-- The desktop's own Settings window writes security-relaxing settings without a prompt (only the
-  API path asks).
-- There is no Settings > Security page listing keys and pending requests; requests show as cards
-  on the desktop and in the phone's Approvals screen.
-- The phone gets no push notification for a new request.
+- The macOS approver key is a Keychain key behind Touch ID, not a Secure Enclave key (user
+  decision 1A of the follow-up: revisit with a `keychain-access-groups` entitlement later).
+- Settings > Security lists the security log, not the approver keys or pending requests; pending
+  requests show as cards on the desktop and in the phone's Approvals screen.
