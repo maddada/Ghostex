@@ -3764,42 +3764,42 @@ note list in one call, as the editors save), and `ghostex coordinator guide` (th
 coordinator's own playbook, ending with your playbook overrides). `ghostex coordinator --help` lists every flag. `ghostex orchestrator …`
 is an alias that runs the same commands.
 
-## Chief (the Ghostex-wide coordinator)
+## Chief of Staff (the Ghostex-wide coordinator)
 
-Chief is one agent per computer that you can ask about anything: any session,
+Chief of Staff is one agent per computer that you can ask about anything: any session,
 agent, project or computer, and Ghostex itself ("what's stuck?", "what did the
 sidebar thread decide?", "how do I pair my phone?"). Its row, with the Ghostex
 flower, sits under the Spaces bar, so it stays put while you switch Spaces; the
 phone shows the same row.
 
-- **First open**: click the row and pick the agent Chief runs on (any agent a
+- **First open**: click the row and pick the agent Chief of Staff runs on (any agent a
   coordinator can run on). After that it is one ongoing chat.
 - **What it does**: it reads every session's chat and screen, messages,
   interrupts and types into any session, and answers other agents' questions
   and permission prompts, all without asking you each time. It is a coordinator
   too: work in a project goes to that project's coordinator (or a thread it
   starts there when the project has none), and work on another computer goes to
-  that computer's Chief. Questions about Ghostex are answered from this guide.
-  "Ask anything about Ghostex" in the Help menu opens Chief's chat.
+  that computer's Chief of Staff. Questions about Ghostex are answered from this guide.
+  "Ask anything about Ghostex" in the Help menu opens Chief of Staff's chat.
 - **What it can't do**: Collab, sharing, pairing a phone, Easy Connect,
   connecting computers, Autopilot's approvals and limits, GBots, security
-  settings and installing things stay yours. Chief explains them and points to
+  settings and installing things stay yours. Chief of Staff explains them and points to
   the Settings page instead.
 - **Right-click the row**: New Chat starts it fresh while it keeps its goal,
   memory notes and threads; Change Agent moves it to another agent the same way;
-  Goal & Instructions and Memory open its editors; Disable Extension turns Chief
+  Goal & Instructions and Memory open its editors; Disable Extension turns Chief of Staff
   off. On the phone, a long press on the row offers New Chat and Change Agent.
-- **Several computers**: each computer has its own Chief for its own projects.
-  With computers combined in the sidebar, a chevron appears to the left of this
-  computer's Chief, like a project's: click it to unfold the other computers'
-  Chiefs under it (on the phone, tap it). With Separate by machine on, each
-  computer's tab shows its own.
-- **Turning it off**: Settings > Extensions > Chief (on by default; only you can
+- **Several computers**: each computer has its own Chief of Staff for its own projects.
+  With computers combined in the sidebar, the chevron to the left of this
+  computer's Chief of Staff (dimmed while only this computer has one) unfolds
+  the other computers' under it, like a project's sessions; on the phone, tap
+  it. With Separate by machine on, each computer's tab shows its own.
+- **Turning it off**: Settings > Extensions > Chief of Staff (on by default; only you can
   switch it, not an agent). Off hides the row on the computer and the phone,
-  puts Chief's agent to sleep and takes away its control over your other agents;
+  puts Chief of Staff's agent to sleep and takes away its control over your other agents;
   its chat and memory are kept for when you turn it back on.
 
-`ghostex chief status`, `ghostex chief guide` (the playbook Chief follows),
+`ghostex chief status`, `ghostex chief guide` (the playbook Chief of Staff follows),
 `ghostex chief new-chat`, `ghostex chief set-agent <agent-id>`, `ghostex chief
 send [--computer <name>] "<text>"`. Setting: `chiefHidden`.
 
@@ -4042,6 +4042,17 @@ Running on <computer>. GBots runs on macOS and Linux.
   or any connected one (for example "start a Codex thread in my app project
   and tell me what it finds"). The sessions it starts show in your sidebar
   with a card saying which bot sent the task.
+- **Apps and tools**: bots get what Claude and Codex sessions get from
+  Connectors: every app connected in Settings > Connectors for the bot's
+  workspace (Composio's apps such as Gmail, Google Calendar, Slack, Notion,
+  GitHub and Linear, and Executor's when it is on) and the workspace's `gh`
+  and `gws` sign-ins. Reads run at once; anything that would send, post,
+  create, edit or delete follows the workspace's Ask/Allow/Never rules, and
+  Ask shows the approval card in the bot's conversation. Connect an app the
+  same way as for sessions (Settings > About > Experimental > Enable
+  Experimental Features, then Settings > Connectors, or `ghostex connectors
+  sign-in` and `ghostex connectors connect <app>`); the bot's next turn has
+  it. GBots' own apps screen is not part of Ghostex.
 - **One GBots computer**: all bots, their conversations and the accounts they
   use live on one computer. Pick it with **Runs on** on the GBots card (this
   computer by default; it lists your connected remote machines). Choosing
@@ -4916,7 +4927,7 @@ After updating to 11.1, Ghostex shows a one-time notice: Ghostex went through a 
 
 ## Approvals (sensitive changes need your Touch ID, Windows Hello or phone)
 
-Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a bot, change a setting that loosens security (the Sync page's, for example), answer another session's permission prompt, or type into another session's terminal (a coordinator answering or typing into its own threads too), the change waits and an "Approval needed" card shows on your computer with Approve and Deny. A coordinator can still stop its own threads (Escape, Ctrl-C) and message them as before. Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows, or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. An approval is good for that one change only and lapses after 10 minutes unanswered (a connected computer's request waits a day, as one card whoever asks); a connected computer, once approved, stays connected for 30 days. The first time an agent messages a session in another project, or starts a session there (or in a folder that isn't a project yet), it asks too; once you approve, that agent can reach that project without asking again until it ends. An agent's own project and its worktrees, and a coordinator's own threads, never ask. Starting an agent with approvals off ("accept all") when your own setting for that agent doesn't asks every time. Starting a Cloud Box, letting Cloud Boxes use one of your agent logins, and changing what a project's boxes get ask when an agent does them, and so does connecting this computer to a team backend (the last step of `ghostex team deploy`).
+Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a bot, change a setting that loosens security (the Sync page's, for example), answer another session's permission prompt, or type into another session's terminal (a coordinator answering or typing into its own threads too), the change waits and an "Approval needed" card shows on your computer with Approve and Deny. A coordinator can still stop its own threads (Escape, Ctrl-C) and message them as before. Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows, or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. An approval is good for that one change only and lapses after 10 minutes unanswered (a connected computer's request waits a day, as one card whoever asks); a connected computer, once approved, stays connected for 30 days. The first time an agent messages a session in another project, or starts a session there (or in a folder that isn't a project yet), it asks too, with one card however many messages it sends meanwhile; once you approve, that agent can reach that project without asking again until it ends, and Approve or Deny closes that card on the computer and the phone at once. An agent's own project and its worktrees, and a coordinator's own threads, never ask. Starting an agent with approvals off ("accept all") when your own setting for that agent doesn't asks every time. Starting a Cloud Box, letting Cloud Boxes use one of your agent logins, and changing what a project's boxes get ask when an agent does them, and so does connecting this computer to a team backend (the last step of `ghostex team deploy`).
 
 Some things only you can do, in Settings, and agents can't even ask for them: installing an extension or turning one on and giving it permissions (Settings > Extensions), adding, changing or removing a secret provider (Settings > Secrets), joining a team, making invites, the team's Linear keys and its Slack flow (Settings > Workspaces), and the settings that loosen security: Agent approvals accept all, Workspaces, Cloud Boxes' Start boxes from your phone, Trust project folders automatically, Connectors, the custom commands Ghostex runs (Custom Title Command, Global worktree command, Custom editor command), Paste protection and Bot automations. An agent asked to do one of these explains it and points you to the page. This includes the `ghostex` CLI in your own terminal, which Ghostex can't tell apart from an agent. Turning things off never asks. Every request, approval and denial is in Settings > Security's log. Each session now gets its own key to Ghostex that ends with the session, and the shared key file only gives agent-level access. The keys that approve are kept in macOS Keychain, Windows Credential Manager or the Linux Secret Service; on Windows and Linux other programs running as you can read those, so the protection there is weaker than on macOS. The CLI waits for your answer (`--no-wait` returns at once).
 

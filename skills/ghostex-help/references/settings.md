@@ -544,7 +544,7 @@ How to use this file:
 - **Turn off OS Integration** `osIntegrationHidden` (boolean, default false): Leave the OS Integration page out of Settings. On by default, and shown only while Enable Experimental Features is on.
 - **Turn off Debugging** `debuggingHidden` (boolean, default false): Leave the Debugging page out of Settings. On by default.
 - **Turn off the voice agent** `voiceAgentHidden` (boolean, default false): Turn off the voice agent everywhere: the headset at the top of the window and its arrow menu, voice calls about one session, the call rows on Settings > Voice and the voice agent hotkeys, on this computer and in the phone app connected to it. A call that is running ends. Dictate keeps working, and the xAI and OpenAI keys stay on Settings > Voice. On by default; your voice settings are kept.
-- **Turn off Chief** `chiefHidden` (boolean, default false) [not agent-writable]: Turn off Chief everywhere: its row under the Spaces bar, here and in the phone app. Its agent stops and loses its control over your other agents; its chat and memory are kept for when you turn it back on. On by default. Only you can change this, not an agent.
+- **Turn off Chief of Staff** `chiefHidden` (boolean, default false) [not agent-writable]: Turn off Chief of Staff everywhere: its row under the Spaces bar, here and in the phone app. Its agent stops and loses its control over your other agents; its chat and memory are kept for when you turn it back on. On by default. Only you can change this, not an agent.
 ### Get more
 
 - **Get more extensions** `store` (Settings UI row without a settings key; use `ghostex settings open`): Browse audited extensions, install them, and manage what is already installed.
