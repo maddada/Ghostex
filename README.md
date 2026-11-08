@@ -20,7 +20,7 @@
 
 <br />
 
-<h3 align="center">Lots of useful extensions & views</h3>
+<h3 align="center">Customizable extensions & sidepanels</h3>
 
 <p align="center">
   <a href="media/readme/gx-hero-1.webp">
@@ -30,8 +30,7 @@
   </a>
 </p>
 
-<h3 align="center">Super Customizable & Powerful</h3>
-<p align="center">As minimal or feature-rich as you want it to be</p>
+<h3 align="center">As minimal or feature-rich as you want it to be</h3>
 <p align="center">
   <a href="media/readme/gx-hero-2.jpeg">
     <picture>
@@ -40,8 +39,7 @@
   </a>
 </p>
 
-<h3 align="center">First-class Coordinators with Visual Questions</h3>
-<p align="center">Coordinators fully manage your projects for you and spin up threads automatically.</br>Work best with the /ghostex-visuals skill</p>
+<h3 align="center">First-class Coordinators with Visual Inline Pages</h3>
 <p align="center">
   <a href="media/readme/gx-hero-9.webp">
     <picture>
@@ -50,6 +48,7 @@
   </a>
 </p>
 
+<h3 align="center">Visually pick from different designs/options then send choices to agent</h3>
 <p align="center">
   <a href="media/readme/gx-hero-10.webp">
     <picture>
