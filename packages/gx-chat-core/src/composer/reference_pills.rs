@@ -179,6 +179,13 @@ pub fn media_kind(path: &str) -> Option<MediaKind> {
     }
 }
 
+/// Whether `path` names a web page the Browser can show: `.html` or `.htm`, a `:line` suffix ignored.
+/// CDXC:SessionChat 2026-11-09 WHY: GitHub #515: a page an agent linked in chat had no way into Ghostex's own Browser, so its menu gains an Open in Browser row for these files (`reference_menu.rs`).
+pub fn is_html_file(path: &str) -> bool {
+    let lowered = crate::transcript::jsstr::ascii_lower(without_position(path));
+    lowered.ends_with(".html") || lowered.ends_with(".htm")
+}
+
 /// The noun a reference to `path` is named with: `Video` in "[Video #1](clip.mp4)", "Open Video
 /// Location".
 pub fn path_noun(path: &str) -> &'static str {

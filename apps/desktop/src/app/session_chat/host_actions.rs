@@ -577,6 +577,13 @@ impl GhostexGpuiApp {
             self.locate_session_chat_file(session_id, path, cx);
             return;
         }
+        if action == "openInBrowser" {
+            let Some(path) = message.get("path").and_then(serde_json::Value::as_str) else {
+                return;
+            };
+            self.open_session_chat_file_in_browser(session_id, path, window, cx);
+            return;
+        }
         if action == "annotateReply" {
             let Some(markdown) = message
                 .get("markdown")

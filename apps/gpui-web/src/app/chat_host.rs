@@ -359,6 +359,11 @@ impl GhostexGpuiApp {
                 }),
                 cx,
             ),
+            Some("openInBrowser") => self.web_chat_needs_app_toast(
+                "Pages open in the Ghostex app",
+                "The file is on the computer running Ghostex, and its Browser opens it there.",
+                cx,
+            ),
             Some("openFile" | "locateFile" | "annotateReply") => self.web_chat_needs_app_toast(
                 "Files open in the Ghostex app",
                 "The browser has no Code or Docs view.",

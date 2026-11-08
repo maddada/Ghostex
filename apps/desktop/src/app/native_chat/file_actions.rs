@@ -41,6 +41,10 @@ impl NativeChatView {
         if !self.file_locate_available() {
             rows.retain(|row| row["command"]["action"] != "locateFile");
         }
+        // CDXC:SessionChat 2026-11-09 WHY: Open in Browser loads the file's `file://` address in this app's Browser, which only finds a file of a chat on this computer; a remote session's file is on the other computer (GitHub #515).
+        if self.config.machine_id != "local" {
+            rows.retain(|row| row["command"]["action"] != "openInBrowser");
+        }
     }
 
     /// A right press on something that shows a file: the file's menu, led by the transcript menu's

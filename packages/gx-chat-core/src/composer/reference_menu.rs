@@ -10,7 +10,9 @@ use crate::composer::json::OrderedMap;
 use crate::composer::links::{
     classify_link_href, file_position_from_href, FilePosition, LinkTarget,
 };
-use crate::composer::reference_pills::{media_kind, path_noun, reference_kind, ReferenceKind};
+use crate::composer::reference_pills::{
+    is_html_file, media_kind, path_noun, reference_kind, ReferenceKind,
+};
 use crate::ordered;
 
 /// One row of the menu: the command the host runs, an icon, and a label.
@@ -94,6 +96,16 @@ pub fn reference_menu_rows(href: &str) -> Vec<ReferenceMenuRow> {
             command: file_command(&path, "docs", position),
             icon_path: "titlebar/file-text.svg".to_string(),
             label: "Open in Files".to_string(),
+            disabled: None,
+        });
+    }
+    // CDXC:SessionChat 2026-11-09 DECISION:
+    // GitHub #515: an HTML file an agent linked can be opened in Ghostex's own Browser (a new tab of the session's project, from its `file://` address), not only in VS Code, Files or the system app. The desktop leaves the row out for a remote session (`keep_available_file_rows` in apps/desktop/src/app/native_chat/file_actions.rs): that file is on the other computer. Ghostex web shows it and answers with the "opens in the Ghostex app" toast, as it does for Open in Files. The phone does not serve the action, so its menu leaves the row out.
+    if is_html_file(&path) {
+        rows.push(ReferenceMenuRow {
+            command: ordered! { "action": "openInBrowser", "path": path.clone(), "type": "host" },
+            icon_path: "titlebar/world.svg".to_string(),
+            label: "Open in Browser".to_string(),
             disabled: None,
         });
     }

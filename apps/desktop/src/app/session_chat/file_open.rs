@@ -165,6 +165,87 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    /// Open in Browser on an HTML file link: the file's `file://` address in a new Browser tab of
+    /// the session's project.
+    ///
+    /// CDXC:SessionChat 2026-11-09 DECISION:
+    /// GitHub #515: the menu of an HTML file an agent linked offers Ghostex's own Browser next to VS Code, Files and the folder row. The tab goes through the one embedded-browser door (`open_browser_url_from_renderer_command`) with the session's project as its target, so it lands in that project's Browser even when another project is on screen, and with no reuse so each choice is its own tab. A remote session's file is on the other computer and the chat menu leaves the row out there; a request that still arrives says so instead of opening this computer's file of the same path.
+    pub(crate) fn open_session_chat_file_in_browser(
+        &mut self,
+        session_id: TerminalSessionId,
+        path: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let trimmed = path.trim();
+        if trimmed.is_empty() || trimmed.chars().count() > GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS {
+            return;
+        }
+        if self
+            .agents_chat_remote_key_for_session(session_id)
+            .is_some()
+        {
+            self.report_session_chat_file_open_failure(
+                "That file is on the session's computer, so this computer's Browser cannot open it.",
+                cx,
+            );
+            return;
+        }
+        let context = match self.session_chat_file_resolution_context(session_id) {
+            Ok(context) => context,
+            Err(_) => {
+                self.report_session_chat_file_open_failure(
+                    "That session's project folder is unavailable.",
+                    cx,
+                );
+                return;
+            }
+        };
+        let trimmed = trimmed.to_string();
+        let path = trimmed.clone();
+        let background = cx.background_executor().clone();
+        cx.spawn_in(window, async move |this, cx| {
+            let resolved = background
+                .spawn(async move { resolve_session_chat_file(context, &path) })
+                .await;
+            let _ = this.update_in(cx, |this, window, cx| match resolved {
+                Ok(resolved) if !resolved.is_directory => {
+                    let Ok(url) = file_url(&resolved.file_path) else {
+                        this.report_session_chat_file_open_failure(
+                            "That file path cannot be opened in the Browser.",
+                            cx,
+                        );
+                        return;
+                    };
+                    this.open_browser_url_from_renderer_command(
+                        GpuiSidebarOpenBrowserUrlMessage {
+                            url,
+                            reuse: GpuiBrowserRendererOpenReuse::None,
+                            from_quick_header: false,
+                            project_id: Some(resolved.project_id),
+                        },
+                        window,
+                        cx,
+                    );
+                }
+                Ok(_) => this.report_session_chat_file_open_failure("That path is not a file.", cx),
+                Err(GpuiSessionChatFileResolutionError::InvalidPath) => {}
+                Err(GpuiSessionChatFileResolutionError::ProjectUnavailable) => this
+                    .report_session_chat_file_open_failure(
+                        "That session's project folder is unavailable.",
+                        cx,
+                    ),
+                Err(GpuiSessionChatFileResolutionError::NotFile) => {
+                    this.report_session_chat_file_open_failure("That path is not a file.", cx)
+                }
+                Err(GpuiSessionChatFileResolutionError::NotFound) => {
+                    this.copy_unresolved_session_chat_file_path(&trimmed, cx)
+                }
+            });
+        })
+        .detach();
+    }
+
     fn finish_session_chat_file_open(
         &mut self,
         resolution: Result<GpuiResolvedSessionChatFile, GpuiSessionChatFileResolutionError>,
