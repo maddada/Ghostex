@@ -77,7 +77,7 @@ function explicitReferenceKind(label: string): SessionChatReferenceKind | null {
   if (/^Image #\d+$/.test(label)) return 'image';
   if (/^(?:Audio|File|PDF|Video) #\d+$/.test(label)) return 'file';
   if (/^Folder #\d+$/.test(label)) return 'folder';
-  // `/name` is a Claude Code skill pill (`gx-chat-core` `composer/skill_invocation.rs`); one segment, so a path label stays a file.
+  // `/name` is the skill pill every agent's composer writes (`gx-chat-core` `composer/skill_invocation.rs`); one segment, so a path label stays a file.
   if (label.startsWith('$') || /^\/[^\s/\\]+$/.test(label)) return 'skill';
   return null;
 }
@@ -99,10 +99,33 @@ export function sessionChatReferencePillText(label: string, kind: SessionChatRef
   return `${REFERENCE_PILL_ICON_SPACE}${sessionChatReferenceDisplayLabel(label, kind).replaceAll(' ', '\u00a0')}${REFERENCE_PILL_TRAILING_SPACE}`;
 }
 
+/**
+ * A skill or command link: a `SKILL.md`, an `.md` file in a `commands` folder, or any `.md` file
+ * whose `$`/`/` pill names a plugin command (`plugin:name`, `plugin:folder:name`).
+ * SEE-ALSO: `is_skill_file` in `packages/gx-chat-core/src/composer/reference_pills.rs` and
+ * `server/src/session_chat_skill_invocation.rs` accept exactly the same links (CDXC:AgentSkills 2026-11-08).
+ */
+function isSkillFile(label: string, path: string): boolean {
+  if (/(?:^|[\\/])SKILL\.md$/i.test(path)) return true;
+  if (!/\.md$/i.test(path)) return false;
+  if (/[\\/]commands[\\/][^\\/]+\.md$/i.test(path)) return true;
+  return isPluginCommandName(label.replace(/^[$/]/, ''));
+}
+
+/** `plugin:name` or `plugin:folder:name`: segments of `[A-Za-z0-9_-]`, the last not all digits. */
+function isPluginCommandName(name: string): boolean {
+  const segments = name.split(':');
+  return (
+    segments.length >= 2 &&
+    segments.every((segment) => /^[A-Za-z0-9_-]+$/.test(segment)) &&
+    !/^\d+$/.test(segments[segments.length - 1] ?? '')
+  );
+}
+
 /** Classifies any rendered machine-path link for the shared pill styling. */
 export function sessionChatReferenceKind(label: string, path: string): SessionChatReferenceKind {
   const explicit = explicitReferenceKind(label.trim());
-  if (explicit && (explicit !== 'skill' || /(?:^|[\\/])SKILL\.md$/i.test(path))) {
+  if (explicit && (explicit !== 'skill' || isSkillFile(label.trim(), path))) {
     return explicit;
   }
   if (/^https?:\/\//i.test(path)) return 'url';
@@ -202,7 +225,7 @@ export function sessionChatComposerReferences(text: string, includeRevealed = fa
       continue;
     }
     const kind = sessionChatReferenceKind(label, destination.path);
-    if (label.startsWith('$') && !/(?:^|[\\/])SKILL\.md$/i.test(destination.path)) {
+    if (label.startsWith('$') && !isSkillFile(label, destination.path)) {
       continue;
     }
     references.push({
