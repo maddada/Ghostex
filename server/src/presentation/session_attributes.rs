@@ -283,12 +283,18 @@ pub(crate) fn is_active(session: &Value) -> bool {
 }
 
 pub(crate) fn effective_lifecycle_state(session: &Value) -> String {
-    if provider_exists(session)
-        && string_field(session, "lifecycleState").as_deref() != Some("stopped")
-    {
+    let lifecycle =
+        string_field(session, "lifecycleState").unwrap_or_else(|| "unknown".to_string());
+    if lifecycle == "stopped" {
+        return "stopped".to_string();
+    }
+    if provider_exists(session) {
         return "running".to_string();
     }
-    string_field(session, "lifecycleState").unwrap_or_else(|| "unknown".to_string())
+    if provider_session_state(session) == "missing" && lifecycle == "running" {
+        return "sleeping".to_string();
+    }
+    lifecycle
 }
 
 pub(crate) fn provider_exists(session: &Value) -> bool {
