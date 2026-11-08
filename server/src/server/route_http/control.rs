@@ -60,9 +60,11 @@ pub(super) async fn route_control_http(
         | "/api/pairedDevices"
         | "/api/removePairedDevice"
         | "/api/pairDevice"
+        | "/api/pairingStatus"
+        | "/api/renewDeviceToken"
         | "/api/pairedDeviceSeen"
         | "/api/easyConnectAddresses" => {
-            handle_remote_access_http(&state, endpoint.path, request_id, &body_json).await
+            handle_remote_access_http(&state, &caller, endpoint.path, request_id, &body_json).await
         }
         path if super::COLLAB_ENDPOINTS.contains(&path) => {
             super::handle_collab_http(&state, &caller, endpoint.path, request_id, &body_json).await

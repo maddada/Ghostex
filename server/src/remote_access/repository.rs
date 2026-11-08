@@ -18,7 +18,7 @@ pub struct RemotePairingSecretRecord {
     pub created_at: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RemotePairedDeviceRecord {
     pub id: String,
     pub name: String,
@@ -29,6 +29,50 @@ pub struct RemotePairedDeviceRecord {
     pub api_token_hash: Option<String>,
     pub paired_at: String,
     pub last_seen_at: Option<String>,
+    /// `paired` (pairing v2, with a device key) or `legacy` (paired before 11.0.1: no access
+    /// left, listed so the user knows to pair it again).
+    pub status: PairedDeviceStatus,
+    /// The device key its token is bound to (pairing v2); `None` on a legacy row.
+    pub device_key: Option<StoredDeviceKey>,
+    /// When the device token lapses unless the device key renews it (RFC 3339).
+    pub api_token_expires_at: Option<String>,
+    /// The phone's approver key, enrolled when its pairing was approved.
+    pub approver_key_id: Option<String>,
+    /// A legacy row whose unrestricted SSH key line is already gone.
+    pub legacy_key_line_removed: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PairedDeviceStatus {
+    #[default]
+    Paired,
+    Legacy,
+}
+
+impl PairedDeviceStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Paired => "paired",
+            Self::Legacy => "legacy",
+        }
+    }
+
+    fn from_db(value: &str) -> Self {
+        if value == "paired" {
+            Self::Paired
+        } else {
+            Self::Legacy
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredDeviceKey {
+    pub algorithm: String,
+    /// base64 standard, as the phone sent it.
+    pub public_key: String,
+    /// `crate::security::approver_key_id` of the key bytes.
+    pub key_id: String,
 }
 
 pub struct RemotePairingRepository<'a> {
@@ -133,9 +177,10 @@ impl<'a> RemotePairingRepository<'a> {
                 r#"
                 INSERT INTO remote_paired_devices (
                   id, name, platform, sshKeyFingerprint, tailcatClientKey, apiTokenHash, pairedAt,
-                  lastSeenAt
+                  lastSeenAt, status, deviceKeyAlgorithm, deviceKeyPublic, deviceKeyId,
+                  apiTokenExpiresAt, approverKeyId, legacyKeyLineRemoved
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
                 "#,
                 params![
                     device.id,
@@ -146,6 +191,16 @@ impl<'a> RemotePairingRepository<'a> {
                     device.api_token_hash,
                     device.paired_at,
                     device.last_seen_at,
+                    device.status.as_str(),
+                    device.device_key.as_ref().map(|key| key.algorithm.as_str()),
+                    device
+                        .device_key
+                        .as_ref()
+                        .map(|key| key.public_key.as_str()),
+                    device.device_key.as_ref().map(|key| key.key_id.as_str()),
+                    device.api_token_expires_at,
+                    device.approver_key_id,
+                    device.legacy_key_line_removed,
                 ],
             )
             .with_context(|| "insert remote paired device")?;
@@ -158,7 +213,8 @@ impl<'a> RemotePairingRepository<'a> {
             .prepare(
                 r#"
                 SELECT id, name, platform, sshKeyFingerprint, tailcatClientKey, pairedAt, lastSeenAt,
-                  apiTokenHash
+                  apiTokenHash, status, deviceKeyAlgorithm, deviceKeyPublic, deviceKeyId,
+                  apiTokenExpiresAt, approverKeyId, legacyKeyLineRemoved
                 FROM remote_paired_devices
                 ORDER BY pairedAt DESC, id ASC
                 "#,
@@ -176,7 +232,8 @@ impl<'a> RemotePairingRepository<'a> {
             .query_row(
                 r#"
                 SELECT id, name, platform, sshKeyFingerprint, tailcatClientKey, pairedAt, lastSeenAt,
-                  apiTokenHash
+                  apiTokenHash, status, deviceKeyAlgorithm, deviceKeyPublic, deviceKeyId,
+                  apiTokenExpiresAt, approverKeyId, legacyKeyLineRemoved
                 FROM remote_paired_devices
                 WHERE id = ?1
                 "#,
@@ -202,19 +259,45 @@ impl<'a> RemotePairingRepository<'a> {
         Ok(Some(device))
     }
 
-    /// The stored hashes of every paired phone's API token.
-    pub fn list_api_token_hashes(&self) -> Result<Vec<String>> {
+    /// Every paired (v2) phone's API token: its hash, its device id and when it lapses. Legacy
+    /// rows never carry a working token.
+    pub fn list_api_tokens(&self) -> Result<Vec<(String, String, Option<String>)>> {
         let mut statement = self
             .db
             .prepare(
-                "SELECT apiTokenHash FROM remote_paired_devices WHERE apiTokenHash IS NOT NULL",
+                "SELECT apiTokenHash, id, apiTokenExpiresAt FROM remote_paired_devices
+                 WHERE apiTokenHash IS NOT NULL AND status = 'paired'",
             )
             .with_context(|| "prepare paired device token list")?;
         let rows = statement
-            .query_map([], |row| row.get::<_, String>(0))
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
             .with_context(|| "list paired device tokens")?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .with_context(|| "read paired device tokens")
+    }
+
+    /// Replaces a paired phone's token (after its device key signed a renewal).
+    pub fn replace_api_token(&self, id: &str, token_hash: &str, expires_at: &str) -> Result<bool> {
+        let updated = self
+            .db
+            .execute(
+                "UPDATE remote_paired_devices SET apiTokenHash = ?2, apiTokenExpiresAt = ?3
+                 WHERE id = ?1 AND status = 'paired'",
+                params![id, token_hash, expires_at],
+            )
+            .with_context(|| "replace paired device token")?;
+        Ok(updated > 0)
+    }
+
+    /// Marks a legacy row's SSH key line as gone.
+    pub fn mark_legacy_key_line_removed(&self, id: &str) -> Result<()> {
+        self.db
+            .execute(
+                "UPDATE remote_paired_devices SET legacyKeyLineRemoved = 1 WHERE id = ?1",
+                params![id],
+            )
+            .with_context(|| "mark legacy key line removed")?;
+        Ok(())
     }
 
     pub fn touch_device_seen(&self, id: &str) -> Result<Option<RemotePairedDeviceRecord>> {
@@ -238,6 +321,22 @@ fn read_device_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RemotePairedDevi
         paired_at: row.get(5)?,
         last_seen_at: row.get(6)?,
         api_token_hash: row.get(7)?,
+        status: PairedDeviceStatus::from_db(&row.get::<_, String>(8)?),
+        device_key: match (
+            row.get::<_, Option<String>>(9)?,
+            row.get::<_, Option<String>>(10)?,
+            row.get::<_, Option<String>>(11)?,
+        ) {
+            (Some(algorithm), Some(public_key), Some(key_id)) => Some(StoredDeviceKey {
+                algorithm,
+                public_key,
+                key_id,
+            }),
+            _ => None,
+        },
+        api_token_expires_at: row.get(12)?,
+        approver_key_id: row.get(13)?,
+        legacy_key_line_removed: row.get(14)?,
     })
 }
 

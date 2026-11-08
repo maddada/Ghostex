@@ -1296,4 +1296,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0061_tailcat_relay",
         sql: include_str!("migrations/0061_tailcat_relay.sql"),
     },
+    Migration {
+        id: "0062_pairing_v2_device_keys",
+        sql: include_str!("migrations/0062_pairing_v2_device_keys.sql"),
+    },
 ];

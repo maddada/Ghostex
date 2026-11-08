@@ -673,10 +673,12 @@ pub(super) fn classify_existing_gxserver(
 }
 
 /// The paired phones' token hashes at startup; an unreadable database starts with none, so only the
-/// main token works until the next pair or remove reloads them.
+/// main token works until the next pair or remove reloads them. Phones paired before 11.0.1 lose
+/// their unrestricted SSH key lines here (CDXC:RemotePairing 2026-11-08 in paired_devices.rs).
 fn load_device_api_tokens(paths: &GxserverPaths) -> crate::auth::DeviceApiTokens {
     let tokens = crate::auth::DeviceApiTokens::default();
     if let Ok(db) = crate::storage::open_gxserver_database(paths) {
+        let _ = crate::remote_access::retire_legacy_pairings(&db);
         let _ = crate::remote_access::reload_device_api_tokens(&db, &tokens);
     }
     tokens

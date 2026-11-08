@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::HashMap,
     fs, io,
     path::Path,
     sync::{Arc, RwLock},
@@ -105,8 +105,23 @@ SEE-ALSO: server/src/remote_access/pair_device.rs (minting), server/src/remote_a
 */
 #[derive(Clone, Default)]
 pub struct DeviceApiTokens {
-    hashes: Arc<RwLock<HashSet<String>>>,
+    entries: Arc<RwLock<HashMap<String, DeviceTokenEntry>>>,
 }
+
+/*
+CDXC:RemotePairing 2026-11-08 DECISION:
+User (GitHub #495, Q1721): pairing v2 binds each phone's token to the device key it paired with. The token is issued only after the owner approved that key, names its device (so the caller is `Principal::Device` with the real device id), and lapses after `DEVICE_API_TOKEN_TTL` unless the device key signs a renewal (`/api/renewDeviceToken`), so a copied token stops working on its own. Tokens of phones paired before 11.0.1 are not loaded at all.
+*/
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeviceTokenEntry {
+    /// The paired device the token belongs to; `None` only in tests that load bare hashes.
+    pub device_id: Option<String>,
+    /// Milliseconds since the epoch after which the token no longer opens anything.
+    pub expires_at_ms: Option<u64>,
+}
+
+/// How long a device token works before the device key must renew it.
+pub const DEVICE_API_TOKEN_TTL: chrono::Duration = chrono::Duration::days(30);
 
 impl DeviceApiTokens {
     pub fn new(hashes: impl IntoIterator<Item = String>) -> Self {
@@ -115,23 +130,40 @@ impl DeviceApiTokens {
         tokens
     }
 
+    /// Loads bare hashes that never lapse and name no device (tests and old fixtures).
     pub fn replace(&self, hashes: impl IntoIterator<Item = String>) {
-        let mut set = self
-            .hashes
+        self.replace_entries(
+            hashes
+                .into_iter()
+                .map(|hash| (hash, DeviceTokenEntry::default())),
+        );
+    }
+
+    pub fn replace_entries(&self, entries: impl IntoIterator<Item = (String, DeviceTokenEntry)>) {
+        let mut map = self
+            .entries
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        *set = hashes.into_iter().collect();
+        *map = entries.into_iter().collect();
     }
 
     pub fn accepts(&self, provided_token: &str) -> bool {
+        self.entry_for(provided_token).is_some()
+    }
+
+    /// The live entry for `provided_token`, if it is a known device token that has not lapsed.
+    pub fn entry_for(&self, provided_token: &str) -> Option<DeviceTokenEntry> {
         if !provided_token.starts_with(DEVICE_API_TOKEN_PREFIX) {
-            return false;
+            return None;
         }
         let hash = hash_device_api_token(provided_token);
-        self.hashes
+        let now_ms = chrono::Utc::now().timestamp_millis().max(0) as u64;
+        self.entries
             .read()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .contains(&hash)
+            .get(&hash)
+            .filter(|entry| entry.expires_at_ms.is_none_or(|expires| now_ms < expires))
+            .cloned()
     }
 }
 
@@ -215,6 +247,36 @@ fn write_new_file_with_mode(path: &Path, bytes: &[u8], mode: u32) -> Result<()> 
 mod tests {
     use super::*;
     use crate::paths::get_gxserver_paths;
+
+    #[test]
+    fn a_device_token_names_its_device_and_stops_working_when_it_lapses() {
+        let tokens = DeviceApiTokens::default();
+        let live = mint_device_api_token();
+        let lapsed = mint_device_api_token();
+        let now_ms = chrono::Utc::now().timestamp_millis() as u64;
+        tokens.replace_entries([
+            (
+                hash_device_api_token(&live),
+                DeviceTokenEntry {
+                    device_id: Some("d1".into()),
+                    expires_at_ms: Some(now_ms + 60_000),
+                },
+            ),
+            (
+                hash_device_api_token(&lapsed),
+                DeviceTokenEntry {
+                    device_id: Some("d2".into()),
+                    expires_at_ms: Some(now_ms - 1),
+                },
+            ),
+        ]);
+        assert_eq!(
+            tokens.entry_for(&live).and_then(|entry| entry.device_id),
+            Some("d1".to_string())
+        );
+        assert!(!tokens.accepts(&lapsed));
+        assert!(!tokens.accepts("not-a-device-token"));
+    }
 
     #[test]
     fn authorization_bearer_parsing_matches_typescript_split() {

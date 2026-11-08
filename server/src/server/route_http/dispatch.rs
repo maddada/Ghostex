@@ -272,9 +272,13 @@ pub(in crate::server) async fn route_http(
     // before the body is read: a phone removed while its body arrives must not pass the gate as
     // itself and then reach the push registration as the main token (CDXC:Notifications
     // 2026-11-07 DECISION in push/registration.rs).
-    let caller_token_hash = bearer_token(&parts.headers)
-        .filter(|token| state.device_api_tokens.accepts(token))
-        .map(hash_device_api_token);
+    let caller_device = bearer_token(&parts.headers).and_then(|token| {
+        state
+            .device_api_tokens
+            .entry_for(token)
+            .map(|entry| (hash_device_api_token(token), entry.device_id))
+    });
+    let caller_token_hash = caller_device.as_ref().map(|(hash, _)| hash.clone());
     // A Ghostex Collab share token (server/src/collab/shares.rs): only its own chat, only
     // `GUEST_ENDPOINTS`, checked again against the request's ids once the body is read.
     let share = (endpoint.requires_auth
@@ -314,7 +318,9 @@ pub(in crate::server) async fn route_http(
         is_authorized_headers(&parts.headers, &state.auth_token),
         token_principal,
         token_extension_id.as_deref(),
-        caller_token_hash.as_deref(),
+        caller_device
+            .as_ref()
+            .map(|(hash, device_id)| (hash.as_str(), device_id.as_deref())),
         peer.as_ref(),
         share.as_ref(),
     );
@@ -568,13 +574,13 @@ pub(in crate::server) async fn route_http(
 
 /*
 CDXC:Security 2026-11-08 WHY:
-One principal per request, settled from the same checks the gate just made, in the order the gate trusts them: the main token, then a session's or the owner's own token, an extension's, a paired phone's, a connected computer's, a Collab guest's. Until Phase 2 of #495 mints session tokens and the desktop's owner session, the main token resolves to `LocalAgent` (the agent level the token file is being downgraded to), and a phone's device id is its token hash's first 12 characters until pairing v2 gives devices real ids.
+One principal per request, settled from the same checks the gate just made, in the order the gate trusts them: the main token, then a session's or the owner's own token, an extension's, a paired phone's, a connected computer's, a Collab guest's. Until Phase 2 of #495 mints session tokens and the desktop's owner session, the main token resolves to `LocalAgent` (the agent level the token file is being downgraded to), and a phone is its paired device (pairing v2 tokens name it; a token loaded without a device, in tests, keeps its hash's first 12 characters).
 */
 fn resolve_caller(
     main_token: bool,
     token_principal: Option<Principal>,
     extension_id: Option<&str>,
-    device_token_hash: Option<&str>,
+    device: Option<(&str, Option<&str>)>,
     peer: Option<&PeerAuthorization>,
     share: Option<&crate::collab::shares::StoredShare>,
 ) -> Principal {
@@ -589,9 +595,13 @@ fn resolve_caller(
             extension_id: extension_id.to_string(),
         };
     }
-    if let Some(hash) = device_token_hash {
+    // Pairing v2 tokens name their device; a bare hash (tests) keeps the hash-derived id.
+    if let Some((hash, device_id)) = device {
         return Principal::Device {
-            device_id: format!("token:{}", &hash[..hash.len().min(12)]),
+            device_id: device_id.map_or_else(
+                || format!("token:{}", &hash[..hash.len().min(12)]),
+                str::to_string,
+            ),
         };
     }
     if let Some(PeerAuthorization::Allowed { server_id, name }) = peer {

@@ -1140,7 +1140,15 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         stays FullLocal: only the loopback API listener (and the tunnel that
         forwards to it) serves it, never the remote listener.
         */
-        "/api/pairDevice" => descriptor(
+        /*
+        CDXC:RemotePairing 2026-11-08 DECISION:
+        Pairing v2 (GitHub #495): a pending phone asks where its pairing stands, and a paired phone
+        renews its device token, before it holds a working token, so like `/api/pairDevice` these
+        take no bearer token; each ask is signed by the phone's device key instead (checked
+        against the key it paired with, timestamps fresh and only ever newer) and the answer
+        carries a token only for that key. FullLocal like `/api/pairDevice`.
+        */
+        "/api/pairDevice" | "/api/pairingStatus" | "/api/renewDeviceToken" => descriptor(
             path,
             ApiPermission::FullLocal,
             false,
