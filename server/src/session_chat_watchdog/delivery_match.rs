@@ -210,9 +210,15 @@ fn message_plain_text(message: &SessionChatMessage) -> String {
 }
 
 /// Agent TUIs re-wrap and re-indent what the user typed, so both sides of the
-/// comparison are reduced to single-spaced words.
+/// comparison are reduced to their words with no whitespace at all.
+///
+/// CDXC:SessionChat 2026-11-08 WHY: Codex on Windows recorded a queued message with its line
+/// breaks gone ("(lines 9–10)Comment on:" for "(lines 9–10)\nComment on:", #509), so the text
+/// folded to single spaces no longer contained the send and the check could call a delivered
+/// message missing. Where the spaces and line breaks fall says nothing about which message arrived.
+/// SEE-ALSO: packages/gx-chat-core/src/session/pending.rs `content_key`, the chat's same rule.
 pub(super) fn normalize_watchdog_text(text: &str) -> String {
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
+    text.split_whitespace().collect()
 }
 
 // ---------------------------------------------------------------------------
