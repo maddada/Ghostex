@@ -248,6 +248,14 @@ Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairi
 - `/api/pairedDevices` lists `pending` (with words) beside `devices` (`status`: `paired` or
   `legacy`). `/api/removePairedDevice` revokes a device (key line, token, push, allow-list entry,
   approver key) or denies a pending one; it never needs approval.
+- Phones that sign in over SSH (Tailscale, the local network) pair through that login:
+  `/api/pairOverSsh` (token file only, `LocalAgent`; a session token, peer or paired phone is
+  refused) takes `/api/pairDevice`'s body without the code, SSH key and tailcat key, and answers
+  `{ status: "pending", pendingId, nonce, words }` (words from that fresh nonce and the device key).
+  The same `pairingApproveDevice` request (its params carry `overSsh: true`) and `/api/pairingStatus`
+  finish it without the SSH line and allow-list entry: the device row, the `gxd_` token and the
+  approver key. Such rows answer `overSsh: true` in `/api/pairedDevices`, as do their Pending
+  entries. `ghostex server endpoint` lists the `pairOverSsh` capability.
 - Computers pair the same way (`kind: "computer"` on `/api/pairDevice`, sent by the connecting
   computer's gxserver from `/api/pairComputer`, `remote_access/computer_pairing.rs`): Pending, three
   words, the signed approval; what it grants is only the computer's tailcat client key on the
