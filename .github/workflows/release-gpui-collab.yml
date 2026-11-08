@@ -160,6 +160,9 @@ jobs:
           fi
           echo "COLLAB_NOTARY_PROFILE=notarytool-profile" >> "$GITHUB_ENV"
       - name: Build the component
+        # CDXC:Collab 2026-11-08 WHY: server/.cargo/config.toml routes rustc through kache, and the Collab crate (server/collab) inherits it, but these runners don't install kache, so every platform failed with "could not execute process `kache`". An empty RUSTC_WRAPPER overrides the config and builds without a wrapper.
+        env:
+          RUSTC_WRAPPER: ''
         run: |
           ARGS=(--platform '${{ matrix.platform }}' --out "$OUTPUT_DIR")
           if [[ -n "${COLLAB_SIGN_IDENTITY:-}" ]]; then ARGS+=(--sign-identity "$COLLAB_SIGN_IDENTITY"); fi
