@@ -9130,7 +9130,7 @@
     {
       "key": "globalActions",
       "title": "Global Actions",
-      "subtitle": "Global actions apply to every project, are stored by the Ghostex daemon, and appear in the tab strip above your tabs.",
+      "subtitle": "Global actions apply to every project, are stored by the Ghostex daemon, and appear under Global in every project's Start menu.",
       "tab": "actions",
       "tabTitle": "Actions",
       "section": "actions",

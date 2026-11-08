@@ -324,7 +324,7 @@ How to use this file:
 - **Terminal Action** `terminalAction` (Settings UI row without a settings key; use `ghostex settings open`): Add terminal actions to run saved commands in quick command terminals with one click or a hotkey.
 - **Browser Action** `browserAction` (Settings UI row without a settings key; use `ghostex settings open`): Add browser actions to open saved URLs in browser panes.
 - **Custom actions** `actionShortcuts` (Settings UI row without a settings key; use `ghostex settings open`): Actions are custom shortcuts for repeat work, shared between a main project and its worktrees.
-- **Global Actions** `globalActions` (Settings UI row without a settings key; use `ghostex settings open`): Global actions apply to every project, are stored by the Ghostex daemon, and appear in the tab strip above your tabs.
+- **Global Actions** `globalActions` (Settings UI row without a settings key; use `ghostex settings open`): Global actions apply to every project, are stored by the Ghostex daemon, and appear under Global in every project's Start menu.
 ## Accounts (tab `accounts`)
 
 ### Accounts
