@@ -40,7 +40,7 @@ use controls::{
 };
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Context, Entity, IntoElement, ParentElement as _,
-    Render, RenderImage, SharedString, Styled as _, Window, WindowAppearance, div, px,
+    Render, RenderImage, SharedString, Styled as _, Window, WindowAppearance, canvas, div, px,
 };
 use gpui_component::h_flex;
 use serde_json::{Map, Value, json};
@@ -110,6 +110,17 @@ pub(crate) fn theme_tab_view(
     cx.new(|cx| ThemeTab::new(store.clone(), window, cx)).into()
 }
 
+/// CDXC:Settings 2026-11-08 WHY:
+/// At a narrow Settings window (640 base) the Colours rows broke: a row keeps its control on the
+/// right at up to 60% of the width without shrinking it, and the sixteen squares (436pt) or the
+/// Colourfulness slider (about 400pt) did not fit beside the label and its readout, so "Light mode
+/// colour" wrapped one letter per line and the squares overlapped it. Below these card widths the
+/// row puts its control under the label (the Appearance row's layout); the squares also wrap if
+/// even that is too narrow. The widths are the label, readout, icon tile, padding and control at
+/// their longest ("Midnight · follows dark mode").
+const COLOUR_ROW_SIDE_BY_SIDE: f32 = 880.0;
+const COLOURFULNESS_ROW_SIDE_BY_SIDE: f32 = 640.0;
+
 pub(crate) struct ThemeTab {
     pub(super) store: Entity<SettingsStore>,
     fields: FieldStates,
@@ -136,6 +147,9 @@ pub(crate) struct ThemeTab {
     pending_monospace_font: Option<String>,
     /// The Presets row's sideways scroll (presets.rs).
     presets_row: presets::PresetsRow,
+    /// The Colours card's width at the last paint, so rows too narrow for their label and control
+    /// side by side put the control under the label (`stacks`).
+    row_width: Rc<Cell<f32>>,
 }
 
 fn palette_dark_dropdown(page: &mut ThemeTab) -> &mut DropdownState {
@@ -201,6 +215,7 @@ impl ThemeTab {
             monospace_font_dropdown: DropdownState::default(),
             pending_monospace_font: None,
             presets_row: presets::PresetsRow::default(),
+            row_width: Rc::new(Cell::new(f32::INFINITY)),
         };
         page.apply_preview_state(window, cx);
         page
@@ -469,7 +484,8 @@ impl ThemeTab {
                     "Colourfulness",
                     "How much of the colour shows in the sidebar and work area. Subtle is deeper and nearly neutral, Vivid lighter and more colourful, and Full is the colour you picked itself.",
                 )
-                .icon(ICON_COLOURFULNESS),
+                .icon(ICON_COLOURFULNESS)
+                .stacked(self.stacks(COLOURFULNESS_ROW_SIDE_BY_SIDE)),
                 Some(reset_key::<Self>("themeSidebarContrast")),
                 control,
                 cx,
@@ -682,11 +698,13 @@ impl ThemeTab {
             name
         };
         let control = h_flex()
+            .flex_wrap()
             .gap(px(SWATCH_GAP))
             .items_center()
             .children(squares)
             .into_any_element();
-        setting_row(
+        let stacked = self.stacks(COLOUR_ROW_SIDE_BY_SIDE);
+        let row = setting_row(
             &p,
             if dark {
                 "themeColourDark"
@@ -707,11 +725,42 @@ impl ThemeTab {
                 },
             )
             .readout(readout)
-            .icon(if dark { ICON_DARK } else { ICON_LIGHT }),
+            .icon(if dark { ICON_DARK } else { ICON_LIGHT })
+            .stacked(stacked),
             Some(reset_key::<Self>(key)),
             control,
             cx,
-        )
+        );
+        if dark { self.measure_row(row, cx) } else { row }
+    }
+
+    /// Whether a row needing `side_by_side` points for its label and control together stacks them.
+    fn stacks(&self, side_by_side: f32) -> bool {
+        self.row_width.get() < side_by_side
+    }
+
+    /// `row` with its width recorded in `row_width`, redrawing the page when it changes.
+    fn measure_row(&self, row: AnyElement, cx: &mut Context<Self>) -> AnyElement {
+        let width = self.row_width.clone();
+        let page = cx.entity_id();
+        div()
+            .relative()
+            .w_full()
+            .child(row)
+            .child(
+                canvas(
+                    move |bounds, _, cx| {
+                        let next = f32::from(bounds.size.width);
+                        if (width.replace(next) - next).abs() > 0.5 {
+                            cx.notify(page);
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .inset_0(),
+            )
+            .into_any_element()
     }
 
     /// The rows under More colour options.

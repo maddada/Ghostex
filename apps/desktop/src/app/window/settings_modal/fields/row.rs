@@ -99,6 +99,12 @@ impl RowSpec {
         self
     }
 
+    /// `wide` when `stacked`: a row that puts its control under the label only when the page is
+    /// too narrow for both side by side.
+    pub(crate) fn stacked(self, stacked: bool) -> Self {
+        if stacked { self.wide() } else { self }
+    }
+
     pub(crate) fn icon(mut self, icon: &'static str) -> Self {
         self.icon = Some(icon);
         self.marker_after_label = true;

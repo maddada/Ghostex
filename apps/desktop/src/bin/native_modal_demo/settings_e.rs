@@ -15,7 +15,8 @@
 //! `theme-glass-picture`, `theme-glass-live`, `theme-glass-live-dark-only`,
 //! `theme-glass-live-video`, `theme-glass-opaque` and `theme-glass-blocked`. `theme-presets` opens
 //! Interface at its Presets row, and `theme-presets-<preset id>` (`theme-presets-kg-wave`) with that
-//! preset picked, which the row scrolls into view.
+//! preset picked, which the row scrolls into view. `theme-colours` opens it at Colours, `theme-at-<section>` at that section
+//! (`transparency`, `chatTerminal`).
 use serde_json::{Map, Value, json};
 
 /// `GHOSTEX_NATIVE_MODAL_DEMO_STATE`.
@@ -155,6 +156,12 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
         state if state.starts_with("theme") => "theme",
         _ => return None,
     };
+    if state == "theme-colours" {
+        return Some(json!({ "initialTab": "theme", "initialSection": "theming" }));
+    }
+    if let Some(section) = state.strip_prefix("theme-at-") {
+        return Some(json!({ "initialTab": "theme", "initialSection": section }));
+    }
     if state.starts_with("theme-presets") {
         return Some(json!({ "initialTab": "theme", "initialSection": "presets" }));
     }
