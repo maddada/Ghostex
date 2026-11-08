@@ -92,8 +92,9 @@ they ask for one.
    `ghostex guide features`; `ghostex coordinator --help` has every verb and
    flag. When the user asks what a coordinator knows or will do, read the
    playbook it actually follows, `ghostex coordinator guide` (add
-   `--project-id <id>` for another project), since the user can edit it in
-   Settings > Chat > Coordinator playbook. If something the guide promises is
+   `--project-id <id>` for another project), which ends with the user's own
+   playbook overrides (Settings > Chat > Playbook overrides). If something the
+   guide promises is
    missing from the playbook, say so: a coordinator only learns it from there.
    Threads on another computer need that computer connected in Settings >
    Remote > Remote machines with Agent access on (`ghostex computers` lists

@@ -60,13 +60,16 @@ hotkeys Every shortcut and its default binding
   back at the next launch.
 - **Quick Access** (Cmd+Shift+P): search every command, pane action, settings
   shortcut, and recent session. Cmd+P opens it on Recent Sessions.
-- **Settings** (Cmd+,): **Updates** first (with how many updates count), then an App tier of pages (Chat, Sidebar & Sessions, Terminal, Theme,
-  Notifications, Files & Links, Power & Sleep, Hotkeys), a Setup tier (Agents, Accounts,
-  Integrations, Remote, Projects, About), then **Extensions** at the bottom (the built-in feature
+- **Settings** (Cmd+,): **Updates** first (with how many updates count), then six labelled groups:
+  **Working** (Chat, Sidebar & Sessions, Terminal, Files & Links), **Appearance** (Interface,
+  Notifications, Hotkeys), **Voice** (Dictation, Voice Agent), **Agents & Accounts** (Agents,
+  Accounts, Autopilot, Secrets), **Connections** (Remote, Sync, Projects, Collab, Integrations) and
+  **Privacy & System** (Security, Power & Sleep, About); a group shows only while one of its pages
+  does. Then **Extensions** at the bottom (the built-in feature
   switches and the extensions you can install), with a chevron under it that folds the
-  add-on pages (Voice agent, Workspaces, Cloud Boxes, Connectors, Actions, Open In, OS
+  add-on pages (Workspaces, Cloud Boxes, Connectors, Actions, Open In, OS
   Integration and Debugging while each is shown), and one search box that finds rows on
-  every page.
+  every page. Every page starts with its title and a one-line intro saying what the page is for.
 - **Dialogs** such as Quick Access, Settings, Search by Prompt and Add Project open
   over the middle of the window and stay open when you click somewhere else. Close
   one with Escape or the round × in its top-right corner, which appears while the

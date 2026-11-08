@@ -2654,6 +2654,18 @@
       "agentWritable": true
     },
     {
+      "key": "changesHideTestFiles",
+      "title": "Hide test files in Changes",
+      "subtitle": "Leave test files (such as foo_test.go, button.test.ts, FooTests.swift and anything in a tests folder) out of the Changes view, so you can review an agent's change without its tests. A line at the top says how many are hidden, with a click to show them. The flask button in the Changes toolbar switches this too.",
+      "tab": "tools",
+      "tabTitle": "Files & Links",
+      "section": "fileOpening",
+      "sectionTitle": "File opening",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "audioFileOpenTarget",
       "title": "Audio",
       "subtitle": "Choose whether audio files linked in agent chat or the terminal, or opened with `ghostex open`, play in Files or open in the system app. Formats Files cannot play, such as .m4a, always open in the system app.",
@@ -12414,7 +12426,7 @@
     {
       "key": "securityLog",
       "title": "Security log",
-      "subtitle": "Every sensitive action on this computer, newest first: pairing a phone, Easy Connect changes, sharing a chat in Collab, letting a connected computer's agents in, Autopilot answering an approval, and attempts to change settings only you can change. Each says who asked, when and how it ended. Each one also shows in the notification bell and on your paired phones. `ghostex security log` reads the same list.",
+      "subtitle": "Every sensitive action on this computer, newest first: pairing a phone, Easy Connect changes, sharing a chat in Collab, letting a connected computer's agents in, Autopilot answering an approval, and attempts to change settings only you can change. Each says who asked, when and how it ended. The important ones also show in the notification bell and on your paired phones: anything that opens this computer to other people or devices (turning on Collab, sharing a chat, pairing a phone, turning on or widening Easy Connect, letting a computer in), a new owner or approver key, a protection turned off, anything an agent, a phone, another computer or a Collab guest did, the same request refused three times, and an edited log. `ghostex security log` reads the same list.",
       "tab": "security",
       "tabTitle": "Security",
       "section": "log",
@@ -12767,6 +12779,39 @@
       "key": "dictateEngine",
       "title": "Engine",
       "subtitle": "Which service turns your recording into text: Hex, a free dictation app that runs on this computer with no key and works offline (macOS on Apple silicon, Windows, Linux), or OpenAI or xAI with your API key. Hex is recommended; Set up Hex installs it and walks you through it. A new install picks your saved key (xAI, then OpenAI) and Hex when there is no key; after that it stays on what you pick. Each computer has its own engine, and the phone changes it per computer.",
+      "tab": "dictation",
+      "tabTitle": "Dictation",
+      "section": "dictate",
+      "sectionTitle": "Speech to text",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "dictateOpenaiKey",
+      "title": "OpenAI API key",
+      "subtitle": "Shown under the engine when it is OpenAI: paste your key from platform.openai.com. It is the same key the Voice Agent uses on GPT Realtime, kept encrypted on this computer.",
+      "tab": "dictation",
+      "tabTitle": "Dictation",
+      "section": "dictate",
+      "sectionTitle": "Speech to text",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "dictateXaiKey",
+      "title": "xAI API key",
+      "subtitle": "Shown under the engine when it is xAI: paste your key from console.x.ai. It is the same key the Voice Agent uses on Grok Voice, kept encrypted on this computer.",
+      "tab": "dictation",
+      "tabTitle": "Dictation",
+      "section": "dictate",
+      "sectionTitle": "Speech to text",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "dictateOldModels",
+      "title": "Old speech models",
+      "subtitle": "The models Ghostex's own speech engine downloaded before Hex replaced it. Ghostex no longer uses them; Delete frees the space.",
       "tab": "dictation",
       "tabTitle": "Dictation",
       "section": "dictate",
