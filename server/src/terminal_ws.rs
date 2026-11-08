@@ -33,6 +33,8 @@ const DEFAULT_ROWS: u16 = 30;
 pub(crate) struct TerminalWsState {
     pub auth_token: String,
     pub device_api_tokens: DeviceApiTokens,
+    /// The desktop's owner sessions, which open a terminal like the token file does.
+    pub owner_sessions: crate::security::SessionTokens,
     pub base_url: String,
     pub paths: GxserverPaths,
     pub server_id: String,
@@ -58,11 +60,14 @@ pub(crate) async fn handle_terminal_socket(
     state: TerminalWsState,
 ) {
     let query = terminal_query(&uri);
-    if query
-        .get("authToken")
-        .map(String::as_str)
-        .map(|token| is_authorized_client_token(token, &state.auth_token, &state.device_api_tokens))
-        != Some(true)
+    if query.get("authToken").map(String::as_str).map(|token| {
+        is_authorized_client_token(
+            token,
+            &state.auth_token,
+            &state.device_api_tokens,
+            &state.owner_sessions,
+        )
+    }) != Some(true)
     {
         send_error_and_close(
             &mut socket,

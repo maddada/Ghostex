@@ -47,11 +47,19 @@ pub(crate) async fn handle_voice(
         );
     };
     let query_token = query_value(&uri, "authToken");
-    let authorized =
-        is_authorized_client_headers(&headers, &state.auth_token, &state.device_api_tokens)
-            || query_token.as_deref().is_some_and(|token| {
-                is_authorized_client_token(token, &state.auth_token, &state.device_api_tokens)
-            });
+    let authorized = is_authorized_client_headers(
+        &headers,
+        &state.auth_token,
+        &state.device_api_tokens,
+        &state.security.session_tokens,
+    ) || query_token.as_deref().is_some_and(|token| {
+        is_authorized_client_token(
+            token,
+            &state.auth_token,
+            &state.device_api_tokens,
+            &state.security.session_tokens,
+        )
+    });
     if !authorized {
         return json_response(
             StatusCode::UNAUTHORIZED,

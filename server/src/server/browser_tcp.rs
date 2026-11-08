@@ -18,7 +18,12 @@ pub(crate) async fn handle_browser_tcp(
     let failure = |status, code, message| {
         json_response(status, rpc_error(code, message, Some(request_id(&headers))))
     };
-    if !is_authorized_client_headers(&headers, &state.auth_token, &state.device_api_tokens) {
+    if !is_authorized_client_headers(
+        &headers,
+        &state.auth_token,
+        &state.device_api_tokens,
+        &state.security.session_tokens,
+    ) {
         return failure(
             StatusCode::UNAUTHORIZED,
             "unauthorized",

@@ -200,14 +200,17 @@ fn devtools_failure(
     json_response(status, rpc_error(code, message, Some(request_id(headers))))
 }
 
-/// The desktop joins as the DevTools host. Only the main token: a paired phone's token cannot
-/// pose as the app.
+/// The desktop joins as the DevTools host. Only the main token or the desktop's owner session
+/// (which the app sends once it is open, #495): a paired phone's token cannot pose as the app.
 pub(crate) async fn handle_cef_devtools_host(
     State(state): State<Arc<AppState>>,
     ws: std::result::Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
     headers: HeaderMap,
 ) -> Response<Body> {
-    if !crate::auth::is_authorized_headers(&headers, &state.auth_token) {
+    let app = crate::auth::is_authorized_headers(&headers, &state.auth_token)
+        || crate::auth::bearer_token(&headers)
+            .is_some_and(|token| state.security.session_tokens.is_owner_session(token));
+    if !app {
         return devtools_failure(
             &headers,
             StatusCode::UNAUTHORIZED,
@@ -261,7 +264,12 @@ pub(crate) async fn handle_cef_devtools_pages(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Response<Body> {
-    if !is_authorized_client_headers(&headers, &state.auth_token, &state.device_api_tokens) {
+    if !is_authorized_client_headers(
+        &headers,
+        &state.auth_token,
+        &state.device_api_tokens,
+        &state.security.session_tokens,
+    ) {
         return devtools_failure(
             &headers,
             StatusCode::UNAUTHORIZED,
@@ -301,7 +309,12 @@ pub(crate) async fn handle_cef_devtools_page(
     ws: std::result::Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
     headers: HeaderMap,
 ) -> Response<Body> {
-    if !is_authorized_client_headers(&headers, &state.auth_token, &state.device_api_tokens) {
+    if !is_authorized_client_headers(
+        &headers,
+        &state.auth_token,
+        &state.device_api_tokens,
+        &state.security.session_tokens,
+    ) {
         return devtools_failure(
             &headers,
             StatusCode::UNAUTHORIZED,

@@ -146,6 +146,12 @@ impl SessionTokens {
             .cloned()
     }
 
+    /// Whether `token` is an open owner session (`gxo_`) of the desktop.
+    pub fn is_owner_session(&self, token: &str) -> bool {
+        token.starts_with(OWNER_TOKEN_PREFIX)
+            && matches!(self.resolve(token), Some(Principal::Owner { .. }))
+    }
+
     /// Revokes the session's token; returns the principal it removed.
     pub fn revoke_session(&self, project_id: &str, session_id: &str) -> Vec<Principal> {
         let mut tokens = self.write();

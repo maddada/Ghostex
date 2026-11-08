@@ -42,6 +42,13 @@ every route as `RouteHttpRequest::caller`.
 | `Extension { extension_id }` | an extension's API token | Keeps the extension registry's scope. |
 | `Anonymous` | none | Public routes only. |
 
+The sockets (`/api/events`, `/api/terminal`, `/api/voice`, `/api/browserTcp`, the CEF DevTools
+host and pages) don't go through that gate: they take the token file, a phone's `gxd_` and the
+desktop's `gxo_` owner session (`auth::is_authorized_client_token`). The desktop sends `gxo_` on
+every call once it is open, its sidebar store's `/api/events` socket included, so a socket that
+refused it would empty the sidebar of this computer's projects and sessions. A `gxs_` session
+token still opens none of them.
+
 ## What they may do: `Capability`
 
 `Principal::has(capability)`. Owner and Device have every capability. Peers have only

@@ -75,24 +75,33 @@ pub fn is_authorized_headers(headers: &HeaderMap, expected_token: &str) -> bool 
     is_expected_gxserver_auth_token(provided, expected_token)
 }
 
-/// The main token in the `Authorization` header, or a paired phone's own token.
+/// The main token in the `Authorization` header, a paired phone's own token, or the desktop's
+/// owner session.
 pub fn is_authorized_client_headers(
     headers: &HeaderMap,
     expected_token: &str,
     device_tokens: &DeviceApiTokens,
+    owner_sessions: &crate::security::SessionTokens,
 ) -> bool {
-    bearer_token(headers)
-        .is_some_and(|provided| is_authorized_client_token(provided, expected_token, device_tokens))
+    bearer_token(headers).is_some_and(|provided| {
+        is_authorized_client_token(provided, expected_token, device_tokens, owner_sessions)
+    })
 }
 
-/// The main token, or a paired phone's own token.
+/*
+CDXC:Security 2026-11-08 WHY:
+After #495 phase 2 the desktop sends its `gxo_` owner session instead of the token file on every call to this computer's gxserver, its sidebar store's `/api/events` socket included. The sockets accepted only the token file and phone tokens, so the store's socket was refused (401) as soon as the owner session opened and the sidebar lost every local project and session while remote ones stayed. The owner session holds more than the token file, so every socket the token file opens opens for it too. A session's own `gxs_` token is still refused here, as before.
+*/
+/// The main token, a paired phone's own token, or the desktop's owner session (`gxo_`).
 pub fn is_authorized_client_token(
     provided_token: &str,
     expected_token: &str,
     device_tokens: &DeviceApiTokens,
+    owner_sessions: &crate::security::SessionTokens,
 ) -> bool {
     is_expected_gxserver_auth_token(provided_token, expected_token)
         || device_tokens.accepts(provided_token)
+        || owner_sessions.is_owner_session(provided_token)
 }
 
 /// Prefix of the API tokens `/api/pairDevice` gives each paired phone.
