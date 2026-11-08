@@ -11,7 +11,7 @@ pub(crate) fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
 }
 
 /// A test daemon with its own server id, for tests that run two computers in one process.
-pub(super) fn test_app_state_for(paths: GxserverPaths, server_id: &str) -> Arc<AppState> {
+pub(crate) fn test_app_state_for(paths: GxserverPaths, server_id: &str) -> Arc<AppState> {
     let state = test_app_state_on(paths, server_id, None);
     approve_test_computers(&state);
     state

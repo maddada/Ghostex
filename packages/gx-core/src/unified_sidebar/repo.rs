@@ -33,6 +33,46 @@ pub fn repo_identity(
     }
 }
 
+/// Where a project's folder is inside its repository (`product-x`, `company/sub-co`), lowercase,
+/// when it is a subfolder rather than the repository itself. `None` for the repository's root and
+/// when the root is unknown or does not contain the folder.
+pub fn folder_in_repository(path: &str, repository_root_path: Option<&str>) -> Option<String> {
+    let normalize = |path: &str| {
+        path.trim()
+            .replace('\\', "/")
+            .trim_end_matches('/')
+            .to_string()
+    };
+    let root = normalize(repository_root_path?);
+    let path = normalize(path);
+    let folder = path
+        .strip_prefix(&root)?
+        .strip_prefix('/')?
+        .trim_matches('/');
+    (!folder.is_empty()).then(|| folder.to_lowercase())
+}
+
+/// The key one project matches its copies by: its repository's key, plus `#` and its folder
+/// inside the repository when it is a subfolder (`github.com/o/monorepo#trading`).
+///
+/// CDXC:RemoteMachines 2026-11-07 DECISION:
+/// Issue #461: each folder of a repository is its own project, so `monorepo/trading` on one computer matches `monorepo/trading` on another and never `monorepo/` or `monorepo/product-x`. A folder with no origin (`dir:`) is keyed by its own folder name already and gets no suffix. The one list (`sidebar_view::merged`) and settings sync (gxserver `settings_sync::spaces_bridge`, #488) both key projects this way.
+pub fn project_repo_key(repository_key: &str, folder: Option<&str>) -> String {
+    match folder.filter(|_| !repository_key.starts_with("dir:")) {
+        Some(folder) => format!("{repository_key}#{folder}"),
+        None => repository_key.to_string(),
+    }
+}
+
+/// A [`project_repo_key`] without its folder: the repository's own key.
+pub fn repository_of_project_key(key: &str) -> &str {
+    if key.starts_with("dir:") {
+        return key;
+    }
+    key.split_once('#')
+        .map_or(key, |(repository, _)| repository)
+}
+
 /// `host/owner/repo` (lowercase) and the repository's name, for every form git prints an origin
 /// in: `https://host/owner/repo(.git)`, `ssh://user@host:port/owner/repo`, `git@host:owner/repo`
 /// and a local path. `None` for an empty value.

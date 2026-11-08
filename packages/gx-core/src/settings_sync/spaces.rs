@@ -543,11 +543,20 @@ fn noun(field: &str) -> &str {
 }
 
 fn repo_label(repo: &str) -> String {
-    repo.trim_start_matches("dir:")
+    let repository = crate::unified_sidebar::repository_of_project_key(repo);
+    let name = repository
+        .trim_start_matches("dir:")
         .rsplit('/')
         .next()
-        .unwrap_or(repo)
-        .to_string()
+        .unwrap_or(repository);
+    // A folder of a repository (`github.com/o/monorepo#trading`) reads `monorepo/trading`.
+    match repo
+        .strip_prefix(repository)
+        .and_then(|rest| rest.strip_prefix('#'))
+    {
+        Some(folder) => format!("{name}/{folder}"),
+        None => name.to_string(),
+    }
 }
 
 /// The edit that deletes a group on every computer (the user's Ungroup).
@@ -556,7 +565,7 @@ pub fn group_deleted_edit(group_id: &str) -> (String, Option<Value>) {
 }
 
 /// A document's items in its `order`, then any it holds outside the order.
-fn ordered<'a>(document: &'a Value, list: &str) -> Vec<(String, &'a Value)> {
+pub(super) fn ordered<'a>(document: &'a Value, list: &str) -> Vec<(String, &'a Value)> {
     let Some(items) = document.get(list).and_then(Value::as_object) else {
         return Vec::new();
     };
@@ -600,7 +609,7 @@ fn members_by_container(local: LocalSpaces<'_>) -> BTreeMap<String, Vec<String>>
     out
 }
 
-fn strings(value: Option<&Value>) -> Vec<String> {
+pub(super) fn strings(value: Option<&Value>) -> Vec<String> {
     value
         .and_then(Value::as_array)
         .into_iter()
