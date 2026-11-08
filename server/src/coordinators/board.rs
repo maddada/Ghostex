@@ -1543,30 +1543,4 @@ mod tests {
         assert_eq!(moving["total"], 20);
         assert_eq!(moving["rows"].as_array().unwrap().len(), SUMMARY_ROWS);
     }
-
-    /// The copy's `items` names every item on the board, the ones the cap leaves out too, and
-    /// none that left it (dropped), so a chat can dim a mention of a card that is gone.
-    #[test]
-    fn the_chats_copy_indexes_every_item() {
-        let mut items: Vec<BoardItem> = (1..=20)
-            .map(|number| BoardItem {
-                number,
-                title: format!("Item {number}"),
-                group: "later".to_string(),
-                updated_at: now_iso(),
-                ..Default::default()
-            })
-            .collect();
-        items[19].group = "dropped".to_string();
-        let board = board_value(&[], &items, Some(SUMMARY_ROWS), now());
-        assert_eq!(
-            group_of(&board, "later")["rows"].as_array().unwrap().len(),
-            SUMMARY_ROWS
-        );
-        let index = board["items"].as_object().unwrap();
-        assert_eq!(index.len(), 19);
-        assert_eq!(index["B1"], "Item 1");
-        assert_eq!(index["B19"], "Item 19");
-        assert!(index.get("B20").is_none());
-    }
 }

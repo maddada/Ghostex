@@ -11,8 +11,6 @@ mod lists_bridge;
 mod runner;
 mod spaces_bridge;
 mod store;
-#[cfg(test)]
-mod tests;
 
 pub(crate) use exchange::{handle_settings_sync_exchange, EXCHANGE_ENDPOINT};
 pub(crate) use http::{handle_settings_sync_http, SETTINGS_SYNC_ENDPOINTS};

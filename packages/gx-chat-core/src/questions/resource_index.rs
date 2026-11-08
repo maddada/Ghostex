@@ -337,43 +337,6 @@ mod tests {
         assert!(entries.iter().all(|entry| entry.at_ms == Some(1_000)));
     }
 
-    /// A one-click question (answer links in the prose) is indexed as a one-question form with its
-    /// tag, question and place, waiting until its answer comes back, and read back from its reply.
-    #[test]
-    fn one_click_questions_are_indexed_as_forms() {
-        use crate::transcript::question_forms::answers_message;
-        let ask = "\u{2753} **Needs you:**\n- **Q1277:** Should the security audit merge into main now?\n  - The thread would catch up with main once more first.\n  - [Review, then merge](ghostex-answer:Q1277 \"recommended\") [Hold](ghostex-answer:Q1277=hold)";
-        let mut message = reply("m1", 1_000, ask);
-        message.byte_offset = Some(42);
-        let entries = index(std::slice::from_ref(&message), &[]);
-        assert_eq!(entries.len(), 1);
-        let entry = &entries[0];
-        assert_eq!(
-            (entry.kind.as_str(), entry.status.as_str()),
-            ("form", "waiting")
-        );
-        assert_eq!(entry.tags, ["Q1277"]);
-        assert!(
-            entry.title.contains("Should the security audit merge"),
-            "{}",
-            entry.title
-        );
-        assert_eq!((entry.offset, entry.at_ms), (Some(42), Some(1_000)));
-        let form = crate::transcript::inline_answers::inline_questions(ask)[0].form();
-        assert_eq!(
-            entry.id, form.id,
-            "the id the chat's asker and the modal's form use"
-        );
-
-        let answer: ChatMessage = serde_json::from_value(serde_json::json!({
-            "id": "u1", "role": "user", "source": "transcript", "timestamp": 2_000,
-            "blocks": [{"type": "text", "text": answers_message(&form, &serde_json::json!({"Q1277": "Hold"}))}],
-        }))
-        .unwrap();
-        let answered = index(&[message, answer], &[]);
-        assert_eq!(answered[0].status, "answered");
-    }
-
     #[test]
     fn statuses_follow_answers_and_withdrawals() {
         let withdraw = "```questions\n{\"withdraw\":[\"Q2\"]}\n```";

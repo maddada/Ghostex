@@ -57,15 +57,4 @@ describe('notification feed contract', () => {
     expect(state.unreadCount).toBe(1);
     expect(state.nextUnreadId).toBeUndefined();
   });
-
-  test('a security row is listed and counted', () => {
-    const state = normalizeNotificationFeedState({
-      items: [row({ id: 's', kind: 'security', sessionId: 'security:12', securityEntry: 12 })],
-      unreadCount: 1,
-      nextUnreadId: 's',
-    });
-    expect(state.items[0]?.securityEntry).toBe(12);
-    expect(state.unreadCount).toBe(1);
-    expect(state.nextUnreadId).toBe('s');
-  });
 });

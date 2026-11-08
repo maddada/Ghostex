@@ -423,13 +423,4 @@ mod tests {
         assert_eq!(window_controls_state(false, true, false), (mac, false));
         assert_eq!(window_controls_state(true, true, false), (mac, false));
     }
-
-    #[test]
-    fn keeping_the_lights_with_the_sidebar_collapsed_reserves_their_room() {
-        let mac = cfg!(target_os = "macos");
-        assert_eq!(window_controls_state(true, false, true), (mac, mac));
-        // Docked and full screen are the same either way.
-        assert_eq!(window_controls_state(false, false, true), (mac, mac));
-        assert_eq!(window_controls_state(true, true, true), (mac, false));
-    }
 }

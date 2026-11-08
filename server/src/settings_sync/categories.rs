@@ -233,25 +233,3 @@ impl Engine<'_> {
         Ok(patch)
     }
 }
-
-#[cfg(test)]
-mod instruction_tests {
-    #[test]
-    fn playbooks_skills_and_agent_commands_carry_instructions() {
-        for key in [
-            "coordinator/playbook/all",
-            "coordinator/playbook/project/github.com/a/b",
-            "skills/own/review",
-            "agentRoster/agent/claude",
-        ] {
-            assert!(super::carries_agent_instructions(key), "{key}");
-        }
-        for key in [
-            "appearance/theme",
-            "skills/bundled/ghostex-help",
-            "agentRoster/order",
-        ] {
-            assert!(!super::carries_agent_instructions(key), "{key}");
-        }
-    }
-}

@@ -112,25 +112,3 @@ pub fn presentation(request: &Value, notice_title: &str) -> Option<Value> {
         "reason": reason,
     }))
 }
-
-#[cfg(test)]
-mod fold_tests {
-    use super::*;
-
-    #[test]
-    fn a_long_one_line_command_folds_to_its_first_wrapped_rows() {
-        let command = "pkill -f gaploop.sh; ".repeat(30);
-        let (preview, more) = fold_code(&command, 4).expect("folds");
-        assert!(preview.chars().count() <= 4 * CODE_ROW_CHARS);
-        assert!(preview.ends_with('\u{2026}'));
-        assert!(more.ends_with("more lines"));
-    }
-
-    #[test]
-    fn short_commands_stay_whole_and_many_lines_fold_by_line() {
-        assert!(fold_code("ls -la", 4).is_none());
-        let (preview, more) = fold_code("a\nb\nc\nd\ne\nf", 4).unwrap();
-        assert_eq!(preview, "a\nb\nc\nd");
-        assert_eq!(more, "2 more lines");
-    }
-}

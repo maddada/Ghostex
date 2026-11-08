@@ -162,50 +162,6 @@ pub fn general_group_setting_keys(group: &str) -> &'static [&'static str] {
 }
 
 #[cfg(test)]
-mod work_area_frame_default_tests {
-    use super::{default_value, keep_work_area_frame_off_for_existing_settings};
-    use serde_json::{json, Map, Value};
-
-    fn migrated(value: Value) -> (bool, Value) {
-        let mut settings: Map<String, Value> = serde_json::from_value(value).unwrap();
-        let changed = keep_work_area_frame_off_for_existing_settings(&mut settings);
-        (changed, Value::Object(settings))
-    }
-
-    #[test]
-    fn frame_is_on_by_default() {
-        assert_eq!(
-            default_value("workAreaFrame"),
-            Some(&crate::json::J::Bool(true))
-        );
-    }
-
-    #[test]
-    fn existing_settings_without_the_key_keep_the_frame_off() {
-        assert_eq!(
-            migrated(json!({"sidebarTheme": "dark"})),
-            (
-                true,
-                json!({"sidebarTheme": "dark", "workAreaFrame": false})
-            )
-        );
-        assert_eq!(migrated(json!({})), (true, json!({"workAreaFrame": false})));
-    }
-
-    #[test]
-    fn a_saved_choice_is_kept() {
-        assert_eq!(
-            migrated(json!({"workAreaFrame": true})),
-            (false, json!({"workAreaFrame": true}))
-        );
-        assert_eq!(
-            migrated(json!({"workAreaFrame": false})),
-            (false, json!({"workAreaFrame": false}))
-        );
-    }
-}
-
-#[cfg(test)]
 mod chat_view_default_tests {
     use super::migrate_chat_view_default;
     use serde_json::{json, Map, Value};

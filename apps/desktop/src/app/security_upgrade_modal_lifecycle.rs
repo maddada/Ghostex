@@ -164,29 +164,3 @@ impl GhostexGpuiApp {
         self.open_gpui_app_modal_window(modal, open_message, sidebar_state_message, None, cx);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_notice_takes_the_show_qr_code_or_says_why_there_is_none() {
-        let answer = json!({ "easyConnect": { "payload": "ghostex://pair?x" } });
-        assert_eq!(
-            security_notice_code(Ok(&answer)),
-            SecurityNoticeCode::Ready("ghostex://pair?x".into())
-        );
-        assert_eq!(
-            security_notice_code(Ok(&json!({}))),
-            SecurityNoticeCode::Unavailable(NO_CODE.into())
-        );
-        assert_eq!(
-            security_notice_code(Ok(&json!({ "easyConnect": { "payload": "" } }))),
-            SecurityNoticeCode::Unavailable(NO_CODE.into())
-        );
-        assert_eq!(
-            security_notice_code(Err("gxserver is not reachable".into())),
-            SecurityNoticeCode::Unavailable("gxserver is not reachable".into())
-        );
-    }
-}

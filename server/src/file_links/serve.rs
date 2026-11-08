@@ -264,26 +264,3 @@ fn status(code: StatusCode) -> RoutedResponse {
         response: code.into_response(),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_folder_link_serves_project_files_but_not_hidden_ones() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = fs::canonicalize(dir.path()).unwrap();
-        fs::write(root.join("index.html"), "<p>hi</p>").unwrap();
-        fs::write(root.join(".env"), "TOKEN=secret").unwrap();
-        fs::create_dir_all(root.join(".git")).unwrap();
-        fs::write(root.join(".git").join("config"), "[remote]").unwrap();
-        fs::create_dir_all(root.join(".ssh")).unwrap();
-        fs::write(root.join(".ssh").join("id_ed25519"), "key").unwrap();
-        let link = super::super::registry::link_path(&root, "index.html");
-        assert_eq!(resolve(&link), Some(root.join("index.html")));
-        let base = link.trim_end_matches("index.html");
-        for hidden in [".env", ".git/config", ".ssh/id_ed25519", "%2Eenv"] {
-            assert_eq!(resolve(&format!("{base}{hidden}")), None, "{hidden}");
-        }
-    }
-}

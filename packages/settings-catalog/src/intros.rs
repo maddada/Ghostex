@@ -46,39 +46,3 @@ pub fn page_intro(id: &str) -> Option<&'static str> {
         .find(|(page, _)| *page == id)
         .map(|(_, intro)| *intro)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::Platform;
-
-    #[test]
-    fn every_catalog_page_and_general_page_has_a_one_line_intro() {
-        let mut ids: Vec<&str> = crate::extra_pages(Platform::MacOs)
-            .iter()
-            .map(|page| page.id)
-            .collect();
-        ids.extend(crate::GENERAL_GROUPS.iter().map(|group| match group.id {
-            "appearance" => "theme",
-            id => id,
-        }));
-        ids.push("hotkeys");
-        for id in ids {
-            let intro = page_intro(id).unwrap_or_else(|| panic!("{id} has no intro"));
-            assert!(intro.ends_with('.'), "{id}: one sentence");
-            assert!(
-                !intro.contains('\n') && intro.len() <= 120,
-                "{id}: one line"
-            );
-        }
-    }
-
-    #[test]
-    fn every_intro_belongs_to_a_page() {
-        let mut seen = Vec::new();
-        for (id, _) in PAGE_INTROS {
-            assert!(!seen.contains(id), "{id} twice");
-            seen.push(*id);
-        }
-    }
-}

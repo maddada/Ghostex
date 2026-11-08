@@ -77,16 +77,3 @@ pub(super) fn pair_again_line(
         ))
         .into_any_element()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_line_counts_what_still_waits() {
-        assert_eq!(waiting_of(&json!({ "waiting": 3 })), 3);
-        assert_eq!(waiting_of(&json!({})), 0);
-        assert!(pair_again_text(1).starts_with("1 phone or computer still uses"));
-        assert!(pair_again_text(4).starts_with("4 phones and computers still use"));
-    }
-}

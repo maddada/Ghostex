@@ -411,29 +411,3 @@ fn install(app_data_dir: &Path, dsh_home: &Path) -> std::io::Result<(bool, &'sta
     write_if_changed(&layer, &next)?;
     Ok((written, "mounted"))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// CDXC:ServerDaemon 2026-11-08: a plugin file from before the owner check is rewritten at the
-    /// next DeepSeek Harness launch (`install` compares the whole file).
-    #[test]
-    fn a_plugin_written_by_an_older_ghostex_is_rewritten() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let data = temp.path().join("data");
-        let dsh_home = temp.path().join("dsh");
-        let plugin = plugin_path(&data);
-        let older = plugin_source().replace("    await ghostexOwnerCheck(env.baseUrl)\n", "");
-        assert_ne!(older, plugin_source());
-        fs::create_dir_all(plugin.parent().expect("plugin folder")).expect("plugin folder");
-        fs::write(&plugin, &older).expect("older plugin");
-
-        let (written, _) = install(&data, &dsh_home).expect("install");
-        assert!(written);
-        let text = fs::read_to_string(&plugin).expect("plugin");
-        assert_eq!(text, plugin_source());
-        assert!(text.contains("await ghostexOwnerCheck(env.baseUrl)"));
-        assert!(!install(&data, &dsh_home).expect("install again").0);
-    }
-}

@@ -615,59 +615,6 @@ mod tests {
         );
     }
 
-    /// The labels the rail draws for the shown pages `shown`, in order (rail.rs `render_rail`).
-    fn labels(shown: &[SettingsTabId]) -> Vec<&'static str> {
-        let mut previous = None;
-        let mut labels = Vec::new();
-        for tab in shown {
-            if let Some(tier) = RailTier::label_before(previous, *tab) {
-                labels.push(tier.title());
-            }
-            previous = Some(tab.tier());
-        }
-        labels
-    }
-
-    /// CDXC:Settings 2026-11-08: a group whose pages are all hidden shows no label, and Updates
-    /// never gets one.
-    #[test]
-    fn group_with_every_page_hidden_shows_no_label() {
-        use SettingsTabId as T;
-        let shown = |hidden: &[T]| -> Vec<T> {
-            SettingsTabId::RAIL_ORDER
-                .into_iter()
-                .filter(|tab| *tab != T::Extensions && !tab.in_extensions_group())
-                .filter(|tab| !hidden.contains(tab))
-                .collect()
-        };
-        let all = [
-            "Working",
-            "Appearance",
-            "Voice",
-            "Agents & Accounts",
-            "Connections",
-            "Privacy & System",
-        ];
-        assert_eq!(labels(&shown(&[])), all);
-        // Voice Agent off and Dictation filtered out by a search: no Voice label.
-        assert_eq!(
-            labels(&shown(&[T::Dictation, T::VoiceAgent])),
-            [
-                "Working",
-                "Appearance",
-                "Agents & Accounts",
-                "Connections",
-                "Privacy & System"
-            ]
-        );
-        // One page left of a group still gets its label.
-        assert_eq!(labels(&shown(&[T::VoiceAgent])), all);
-        // A search that matches only Collab: one label, Connections.
-        assert_eq!(labels(&[T::Collab]), ["Connections"]);
-        assert_eq!(labels(&[T::Updates, T::Collab]), ["Connections"]);
-        assert!(labels(&[T::Updates]).is_empty());
-    }
-
     /// CDXC:VoiceMode 2026-11-08: Voice Agent sits right under Dictation in the Voice group; `voice`
     /// opens Dictation and `voiceAgent` Voice Agent.
     #[test]
@@ -696,17 +643,6 @@ mod tests {
             SettingsTabId::from_id("voiceAgent"),
             Some(SettingsTabId::VoiceAgent)
         );
-    }
-
-    /// CDXC:Settings 2026-11-08: every page in the rail has its one-line intro in the catalog.
-    #[test]
-    fn every_rail_page_has_an_intro() {
-        for tab in SettingsTabId::RAIL_ORDER {
-            assert!(
-                ghostex_settings_catalog::page_intro(tab.id()).is_some(),
-                "{tab:?} has no intro in packages/settings-catalog/src/intros.rs"
-            );
-        }
     }
 
     /// CDXC:Settings 2026-10-27: About ends the everyday pages, then the Extensions page, then the

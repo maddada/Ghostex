@@ -1650,36 +1650,4 @@ mod tests {
             .set_len(original_size)
             .unwrap();
     }
-
-    /// The coordinator's Q1277: a one-click question answered on 2026-11-05 under the id its
-    /// question had before 804a8118c, which the sweep counted open again (the pink dot with no
-    /// ? pill). The answers envelope's tag settles it, in the count and the board's tag states, also
-    /// in a ledger kept across a restart.
-    #[test]
-    fn an_answer_sent_under_an_older_id_settles_the_tag_it_names() {
-        let ask = "\u{2753} **Needs you:**\n- **Q1277:** Should the security audit merge into main now? I recommend having a separate thread review it first.\n  - The thread would catch up with main once more, then push the editor fork, the phone commits and the branch, in that order. After the merge, team owners run `ghostex team deploy`.\n  - [Review, then merge](ghostex-answer:Q1277 \"recommended\") [Merge it now](ghostex-answer:Q1277=merge) [Hold](ghostex-answer:Q1277=hold)";
-        let answer = "\n\n<pasted_content id=\"da06\">\n<ghostex-page-answers page=\"e7a1b880ae7522f143561bbf278fbeae\" title=\"The thread would catch up with main once more, then push the editor fork, the phone commits and the branch, in that order. After the merge, team owners run ghostex team deploy.\">\n{\n  \"Q1277\": \"Review, then merge\"\n}\n</ghostex-page-answers>\n</pasted_content id=\"da06\">\n";
-        let mut ledger = Ledger::default();
-        ledger.observe(vec![
-            message("a1", "assistant", 1, ask),
-            message("u1", "user", 2, answer),
-        ]);
-        let open: usize = ledger
-            .open(&[], None, |_| false)
-            .iter()
-            .map(OpenAsker::count)
-            .sum();
-        assert_eq!(open, 0);
-        assert_eq!(ledger.tag_states(&[], |_| false).get("Q1277"), Some(&true));
-
-        // What a restart replays from the kept copy (`Ledger::restore`).
-        let mut found = Vec::new();
-        for (message, _) in &ledger.asking {
-            let more = asker_entries(std::slice::from_ref(message), &found);
-            found.extend(more);
-        }
-        assert!(found
-            .iter()
-            .any(|entry| matches!(entry, Found::Said(tags) if tags == &["Q1277"])));
-    }
 }

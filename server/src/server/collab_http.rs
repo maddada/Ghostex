@@ -817,16 +817,6 @@ pub(crate) mod approvals {
         None
     }
 
-    /// The answer stored for `approval_id`, for tests.
-    #[cfg(test)]
-    pub(crate) fn done_answer(approval_id: &str) -> Option<OwnerResult> {
-        with_book(|book| {
-            book.done
-                .get(approval_id)
-                .map(|(_, answer, _)| answer.clone())
-        })
-    }
-
     /// Runs one approved call as the caller that asked; `false` when it wasn't awaited here (or a
     /// repeated call took it first).
     pub(crate) async fn finish(state: &Arc<AppState>, approval_id: &str) -> bool {

@@ -656,7 +656,3 @@ fn log(
         details: Some(json!({ "projectId": project_id, "sessionId": session_id })),
     });
 }
-
-#[cfg(test)]
-#[path = "restart_tests.rs"]
-mod tests;

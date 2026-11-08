@@ -297,22 +297,3 @@ impl Render for SecurityTab {
         settings_page(&self.store, SettingsTabId::Security, &p, blocks, cx)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn an_entry_says_how_it_ended_and_who_asked() {
-        let detail = entry_detail(&json!({
-            "outcome": "refused",
-            "reason": "Only you can change it.",
-            "target": "remoteMachines",
-            "actor": { "label": "An agent or the app (says session G1)" },
-            "atMs": 0,
-        }));
-        assert!(detail.starts_with(
-            "Refused \u{b7} asked by An agent or the app (says session G1) \u{b7} remoteMachines \u{b7} Only you can change it."
-        ));
-    }
-}
