@@ -794,10 +794,17 @@ in the same Space on all of them, and a change made on any of them, on the
 phone too, reaches the others; Ungroup removes a group from every computer. The
 first time, Spaces with the same name on two computers become one and a message
 says so, so name a Space the same on each computer to keep them together.
+A computer that joins later takes the Spaces the others already share: its own
+arrangement only fills in projects no other computer has filed. Taking a project
+out of every Space applies on that computer only; the others keep it where they
+have it.
 Ghostex saves a copy of every computer's Spaces and groups first, in the
 `backups` folder of its state folder. If Ghostex 11.0.0's sync moved every
 folder of one repository into a single Space, the update puts them back once,
-from that copy, unless you have rearranged them since. Turn Separate by machine on for a tab per
+from that copy, unless you have rearranged them since. When one sync moves
+three or more projects between Spaces at once (or puts them back like this),
+Settings > Sync lists it under Projects moved by sync, saying which projects
+went where and when. Turn Separate by machine on for a tab per
 computer, each with its own list; the Spaces stay shared, each tab showing its
 computer's projects of them.
 Cards show the project's own icon when it has one, and right-clicking
@@ -1208,7 +1215,10 @@ where they are while you open, change and close views.
   nudge; its board card shows a red "Not moving" chip too. While this computer
   is offline (or the agent's API does not answer) the 8 minutes stop: nothing is
   nudged, reported or marked not moving, and the clock starts again once the
-  network is back.
+  network is back. A "not moving" or "idle" report that waited in the
+  coordinator's queue (for example while its input box could not be read) is
+  dropped instead of delivered late when the thread has since moved on,
+  finished, or been closed or marked done.
 - A new session goes straight into Drafts, below Pinned and above Sessions,
   and stays there until its first message is sent or its agent starts
   working, whether it is empty or holds unsent text. Drafts starts collapsed,
@@ -2205,7 +2215,11 @@ queue stay in the list above the input. This also applies when reopening the cha
 or continuing on another device. A message that has waited about a minute says why under it, for
 example that the agent is still working, is waiting for your answer, or that its input box can't
 be read yet; in that last case Ghostex keeps trying on its own and, if it still can't deliver after
-a few minutes, marks the message Not sent with Retry.
+a few minutes, marks the message Not sent with Retry. When the agent is idle and its input box still
+hasn't come back after about four minutes, Ghostex reloads the agent on its own conversation, as
+Full Reload does, and the message goes in once the new input box is ready. It does not reload an
+agent that is in the middle of a turn, is waiting for an answer, shows background tasks, or was
+already restarted automatically in the last ten minutes.
 When a chat message cannot be sent, it stays in the thread with a card saying why.
 Retry sends it again, Fix it restarts the agent on its conversation and then
 sends it, and Terminal view shows what the agent is showing. The session gets a
@@ -3651,7 +3665,9 @@ version of the Projects features in Cursor and Claude Code.
   running them in parallel matters, the coordinator gives a thread its own git
   worktree and branch, so parallel threads never edit the same checkout. A coordinator's
   threads trust the project's own folder and the worktrees Ghostex makes for
-  them, so they start without stopping at the agent's folder-trust question.
+  them, so they start without stopping at the agent's folder-trust question. A
+  thread started on a connected computer with its own worktree is trusted there
+  the same way.
 - **Goal, standing instructions and memory**: every thread's brief carries the
   coordinator's goal and its standing instructions (rules such as which branch
   to target or how to verify work). Memory notes are the coordinator's own:
@@ -3774,9 +3790,10 @@ phone shows the same row.
   Goal & Instructions and Memory open its editors; Disable Extension turns Chief
   off. On the phone, a long press on the row offers New Chat and Change Agent.
 - **Several computers**: each computer has its own Chief for its own projects.
-  With computers combined in the sidebar, the row shows this computer's Chief with
-  a "+N" that unfolds the others; with Separate by machine on, each computer's tab
-  shows its own.
+  With computers combined in the sidebar, a chevron appears to the left of this
+  computer's Chief, like a project's: click it to unfold the other computers'
+  Chiefs under it (on the phone, tap it). With Separate by machine on, each
+  computer's tab shows its own.
 - **Turning it off**: Settings > Extensions > Chief (on by default; only you can
   switch it, not an agent). Off hides the row on the computer and the phone,
   puts Chief's agent to sleep and takes away its control over your other agents;
@@ -4235,9 +4252,10 @@ sessions, so any client can control agents on any machine.
   one admin prompt, and gives a pairing QR code: under Connect a phone, click
   the hidden QR to open it in a popup (Settings never shows the code until you ask)
   and scan it with the Ghostex mobile app. If the phone can't scan it, click
-  Copy as text under the QR and paste the code in the phone's Scan code screen
-  (Paste a pairing code). A Tailscale path is offered for tailnets; its code sits
-  behind the same click-to-show QR and Copy as text.
+  Copy Easy Connect code under the QR and paste it in the phone's Scan code
+  screen (Paste an Easy Connect code). The Easy Connect code works once, for
+  five minutes. A Tailscale path is offered for tailnets; its code sits behind
+  the same click-to-show QR and Copy as text.
   The phone's own camera can scan the code too: the QR is a ghostex.dev link,
   so with an up-to-date Ghostex app installed the camera opens the app straight
   into pairing, on Android and iPhone.
@@ -4298,8 +4316,12 @@ sessions, so any client can control agents on any machine.
   from that phone wait for approval on the computer; chat messages and reading
   work as before. If you deny it, Ask again on the phone asks once more.
   Removing it under Paired devices puts it back to asking. Computers you reach
-  over SSH don't pair again; the first connection may ask once with Touch ID
-  to let the two computers' agents reach each other.
+  over SSH don't pair again; the first connection shows one Approval needed
+  card to let the two computers' agents reach each other, however often the
+  computers reconnect or restart while it waits (it waits a day). Approve asks
+  for Touch ID (Windows Hello, polkit) once, and the computer then stays
+  approved for 30 days; Ghostex never opens that prompt on its own. With the
+  computer's Agent access off it never asks.
   Paired devices are listed and can be removed with one tap, on the computer or
   on any paired phone (the phone's Edit machine lists the computer's devices).
   Each phone pairs with its own device key, kept in its Secure Enclave or
@@ -4312,8 +4334,8 @@ sessions, so any client can control agents on any machine.
   the Show QR popup is open or it waits for approval (paired phones reconnect
   once when the popup opens and about a minute after it closes).
   Another computer connects the same way: on this computer click Show QR, then
-  Copy as text, and paste that code into Add a machine (Settings > Remote >
-  Remote machines) on the other one. When you click Add machine, both
+  Copy Easy Connect code, and paste it as the Easy Connect code in Add a machine
+  (Settings > Remote > Remote machines) on the other one. When you click Add machine, both
   computers show three words; check they match and approve the request here.
   Then the other computer can reach this one through Easy Connect, and still
   signs in with this computer's SSH username and password. To re-pair a
@@ -4326,7 +4348,7 @@ sessions, so any client can control agents on any machine.
   paired earlier keep working whichever you pick, and an up-to-date phone app
   learns the new address on its next connection. When the chosen relay is
   down, the pairing QR and phones use the public relays. Computers that
-  connect with Copy as text keep using the public relays.
+  connect with an Easy Connect code keep using the public relays.
   On the phone, open Web Preview
   from the machine menu and enter a website address or a port such as `3000`
   immediately, or choose a listening port from the list. The address bar stays
@@ -4890,11 +4912,13 @@ Settings > Security lists the entries, newest first. Every entry is chained to t
 
 Agents and the `ghostex` CLI can't change settings that only you may change (Remote, Accounts, keys and tokens), even through `ghostex actions`; the attempt is refused and logged. Easy Connect serves only SSH and Ghostex itself, never other ports. Private file links never open keys (such as `~/.ssh`), Ghostex's own data, or a project's hidden files like `.env`.
 
-After updating to 11.1.0, Ghostex shows a one-time notice if you have phones or computers that connect through Easy Connect: they must pair again (Settings > Remote, Show QR), because pairing became more secure. Phones and computers that connect over Tailscale, your network or SSH keep working; a phone that signs in that way pairs once, when its three words match (see Remote).
+After updating to 11.1, Ghostex shows a one-time notice: Ghostex went through a big security audit and every phone and computer now gets its own key, so each one pairs once. The notice lists your devices, one row each, with a status (Needs pairing, Waiting for you, Paired, Nothing to do); click one to pair it. A phone on Easy Connect: its page shows the Easy Connect code (scan it, or Copy Easy Connect code and paste it on the phone), then the phone's three words to approve. A phone that signs in over Tailscale, your network or SSH: open Ghostex on it, then approve its words. A computer on Easy Connect: on that computer open Settings > Remote > Easy Connect > Show QR > Copy Easy Connect code, paste it on the computer's page here, and approve it there when its words match. Computers you reach over SSH need nothing. Remind me later brings the notice back tomorrow (twice at most); Settings > Remote keeps a Pair again line until every device is done.
 
 ## Approvals (sensitive changes need your Touch ID, Windows Hello or phone)
 
-Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a bot, change a setting that loosens security (the Sync page's, for example), answer another session's permission prompt, or type into another session's terminal (a coordinator answering or typing into its own threads too), the change waits and an "Approval needed" card shows on your computer with Approve and Deny. A coordinator can still stop its own threads (Escape, Ctrl-C) and message them as before. Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows, or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. An approval is good for that one change only and lapses after 10 minutes unanswered; a connected computer, once approved, stays connected for 30 days. Turning things off never asks. Every request, approval and denial is in Settings > Security's log. Each session now gets its own key to Ghostex that ends with the session, and the shared key file only gives agent-level access. The keys that approve are kept in macOS Keychain, Windows Credential Manager or the Linux Secret Service; on Windows and Linux other programs running as you can read those, so the protection there is weaker than on macOS. The CLI waits for your answer (`--no-wait` returns at once).
+Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a bot, change a setting that loosens security (the Sync page's, for example), answer another session's permission prompt, or type into another session's terminal (a coordinator answering or typing into its own threads too), the change waits and an "Approval needed" card shows on your computer with Approve and Deny. A coordinator can still stop its own threads (Escape, Ctrl-C) and message them as before. Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows, or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. An approval is good for that one change only and lapses after 10 minutes unanswered (a connected computer's request waits a day, as one card whoever asks); a connected computer, once approved, stays connected for 30 days. The first time an agent messages a session in another project, or starts a session there (or in a folder that isn't a project yet), it asks too; once you approve, that agent can reach that project without asking again until it ends. An agent's own project and its worktrees, and a coordinator's own threads, never ask. Starting an agent with approvals off ("accept all") when your own setting for that agent doesn't asks every time. Starting a Cloud Box, letting Cloud Boxes use one of your agent logins, and changing what a project's boxes get ask when an agent does them, and so does connecting this computer to a team backend (the last step of `ghostex team deploy`).
+
+Some things only you can do, in Settings, and agents can't even ask for them: installing an extension or turning one on and giving it permissions (Settings > Extensions), adding, changing or removing a secret provider (Settings > Secrets), joining a team, making invites, the team's Linear keys and its Slack flow (Settings > Workspaces), and the settings that loosen security: Agent approvals accept all, Workspaces, Cloud Boxes' Start boxes from your phone, Trust project folders automatically, Connectors, the custom commands Ghostex runs (Custom Title Command, Global worktree command, Custom editor command), Paste protection and Bot automations. An agent asked to do one of these explains it and points you to the page. This includes the `ghostex` CLI in your own terminal, which Ghostex can't tell apart from an agent. Turning things off never asks. Every request, approval and denial is in Settings > Security's log. Each session now gets its own key to Ghostex that ends with the session, and the shared key file only gives agent-level access. The keys that approve are kept in macOS Keychain, Windows Credential Manager or the Linux Secret Service; on Windows and Linux other programs running as you can read those, so the protection there is weaker than on macOS. The CLI waits for your answer (`--no-wait` returns at once).
 
 ## Secrets (passwords, API keys and 1Password)
 
@@ -4916,7 +4940,7 @@ one (a name and the 1Password account, such as my.1password.com) and removes
 one. It needs the 1Password CLI (`op`, from 1Password or `brew install
 1password-cli`) with "Integrate with 1Password CLI" turned on in 1Password's
 Developer settings; each account shows whether `op` is signed in to it.
-Ghostex keeps only the account name, never a key. With an account added you
+Ghostex keeps only the account name, never a key. Only you add, change or remove an account, here; agents and the CLI are refused. With an account added you
 can paste a 1Password reference (`op://vault/item/field`, from an item field's
 Copy Secret Reference) instead of a key: in a secret request card, and in the
 voice agent's xAI and OpenAI key fields, where the key is then read from
@@ -4924,12 +4948,19 @@ voice agent's xAI and OpenAI key fields, where the key is then read from
 read. "Check a reference" on the same page tries a reference and says only
 whether it worked.
 
+Only you answer a secret request, and only you can have Ghostex read a
+1Password reference: from Ghostex on your computer or your paired phone. An
+agent, a script using the token file, the browser version (`ghostex web`) and
+another computer's agents are refused, for the card, for "Check a reference"
+and for a reference pasted into a voice key.
+
 Settings page: Secrets (`ghostex settings open --tab secrets`). CLI:
 `ghostex secret request --label text --reason text`,
 `ghostex secret providers list`,
 `ghostex secret providers add --name Personal --account my.1password.com`,
-`ghostex secret providers remove <id>`,
-`ghostex secret providers check --provider <id> --reference op://vault/item/field`.
+`ghostex secret providers remove <id>` and
+`ghostex secret providers check --provider <id> --reference op://vault/item/field`
+(all three refused from the CLI: do them in Settings > Secrets).
 
 ## Notifications and status
 
@@ -5527,8 +5558,11 @@ Convex CLI login (`npx convex login`) to create the project, deploy Ghostex's
 functions and make them the team's owner; it prints the Slack and Linear webhook
 URLs, and the Slack signing secret and Linear webhook secret go into the Convex
 project's environment variables (`SLACK_SIGNING_SECRET`, `LINEAR_WEBHOOK_SECRET`).
-`ghostex team invite` makes a one-time invite link (valid for a week), and each
-teammate runs `ghostex team join <link>`. So that a Slack request reaches you, link
+Its last step connects this workspace to the new project and asks for your
+approval (Touch ID or your phone) first. Settings > Workspaces makes a one-time
+invite link (valid for a week), and each teammate joins with it there; joining,
+invites, the team's Linear keys and its Slack flow are done only in Settings, not
+by agents or the CLI. So that a Slack request reaches you, link
 your Slack user once: send @Ghostex any message in Slack, and its private reply
 gives the exact command, `ghostex team identity --slack-user U012ABC --slack-code
 gxl_…`, with a one-time code that works for 30 minutes (Ghostex needs it to know
@@ -5570,27 +5604,25 @@ for the result). Setup: create the Slack app from `ghostex team slack-manifest`
 (an app made from an older manifest needs the `channels:read` and `groups:read`
 scopes added and the app reinstalled before the Issues view can show channel names),
 store its token and signing secret with `ghostex team slack-connect` (read from
-stdin, on the computer that deployed the team), then set the flow with `ghostex team flow set
---working-channel <channel ID> --watch-only <IDs> --default-run cloud|local
---linear-team <KEY> --qc-owner <Slack member ID> --instructions-file <path>` and
-map each channel to its repo with `ghostex team flow map <channel ID> --repo
-owner/name` (add `--linear-project <name>` to put the tickets Ghostex creates from
-that channel into a Linear project). The team instructions file is added to every session started from
-Slack. Settings > Workspaces has all of this too: the **Slack** row's **Copy app
-manifest**, whether the bot token and signing secret are stored (with the
-`slack-connect` command to copy), and the workspace's **Team flow** section for the
-working channel, watch-only channels, repos for new work, where new work runs, the
-default Linear team and the team instructions. **Never work without a ticket** is
+stdin, on the computer that deployed the team), then set the flow in Settings >
+Workspaces: the **Slack** row's **Copy app manifest**, whether the bot token and
+signing secret are stored (with the `slack-connect` command to copy), and the
+workspace's **Team flow** section for the working channel, watch-only channels,
+repos for new work (and a Linear project for the tickets each channel's work
+creates), where new work runs, the default Linear team and the team instructions.
+Only you change the flow there; `ghostex team flow show` reads it, and agents and
+the CLI can't change it. The team instructions are added to every session started
+from Slack. **Never work without a ticket** is
 always on. Only the team's owners can change the team flow; members see it
 read-only.
 
 Slack commands find and create Linear tickets with the team's Linear key. Only the
 team's owners set it: paste it in **Linear for the team** under the Work workspace
-in Settings > Workspaces (members see whether it is set and who set it), or run
-`ghostex team linear-connect` and paste it (`--remove` removes it). Tickets created
+in Settings > Workspaces (members see whether it is set and who set it); agents and
+the CLI can't set it. Tickets created
 with it show the key's owner as their creator in Linear. To be the creator of the
 tickets you request from Slack yourself, turn on **Create my Slack tickets with my
-own Linear key** (or `ghostex team own-linear-key on`): Ghostex stores the
+own Linear key** there: Ghostex stores the
 workspace's own Linear key (its **Linear API key** row) in the team's Convex project
 for you, keeps it up to date when you change that key, and removes it when you turn
 the switch off or leave the team; everything else still uses the team's key. The
@@ -5606,8 +5638,8 @@ docs directory), Settings > Projects > Linear API key, `hideProjectHeaderDiffSta
 status|linear-key|source|tracker|create-ticket|start|cleanup` (old name `ghostex
 work-mode`; `create-ticket` and `start` take `--source <ticket command ID>`),
 `ghostex link-session`. Team
-backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
-`ghostex team flow|slack-manifest|slack-connect|linear-connect|own-linear-key`,
+backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
+`ghostex team flow show|slack-manifest|slack-connect`,
 `ghostex slack post`.
 
 ## Extensions, Open In, and integrations
@@ -5734,8 +5766,13 @@ backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
   `lazygit`): when it is missing, opening the extension says so, and on a Mac with
   Homebrew its **Install with Homebrew** button runs `brew install <command>` in a
   new terminal; open the extension again once it finishes. Terminal-pane extensions
-  run only for local projects. CLI: `ghostex extensions list`, `ghostex extensions
-  install <id>`, `ghostex extensions state <id> --set pinned=true`.
+  run only for local projects. Only you install extensions, in Settings >
+  Extensions, which shows what each one may do first; agents and the CLI can't
+  install one, turn one on or give it a permission. To install one you made or downloaded
+  yourself, use **Install from folder…** at the top of Get more: pick its folder,
+  then tick each permission you give it (nothing is ticked at first; it gets nothing
+  you leave unticked) and Install. CLI: `ghostex extensions list`,
+  `ghostex extensions state <id> --set pinned=true`.
 - **Claude** is a built-in extension, off by default: turn it on with its switch
   in Settings > Extensions (Features) to use claude.ai inside Ghostex.
   It adds a Claude button (grey, like its neighbours) to the sidebar's top row, next to the Issues button.
@@ -6150,7 +6187,15 @@ size Scale gave it, Scale no longer applies, and the keys change only the area y
 are in (in a terminal, only that terminal until it restarts). If you had changed one
 of those sizes before Interface scale existed, the switch starts on, so nothing
 changes size. The Terminal page's Font size row links here.
-Settings: `interfaceScalePercent`, `interfaceScaleAreasSeparately`, `agentManagerZoomPercent`, `sessionChatZoomPercent`, `filesZoomPercent`, `terminalFontSize`.
+On Linux, the whole app first takes its size from your desktop's display scale
+(GNOME, KDE, Hyprland and COSMIC included), so the header, menus, dialogs and web
+pages match your other apps, and Interface scale applies on top. Display scale,
+under Scale areas separately (Linux only), shows the scale Ghostex found and lets
+you pick a fixed one from 100% to 300% if it gets it wrong; it takes effect when
+Ghostex restarts. The first time Ghostex finds a display scale above 100% on
+COSMIC while Interface scale is raised, it offers once to set Interface scale back
+to 100%.
+Settings: `interfaceScalePercent`, `interfaceScaleAreasSeparately`, `linuxDisplayScale`, `agentManagerZoomPercent`, `sessionChatZoomPercent`, `filesZoomPercent`, `terminalFontSize`.
 Presets, right above Colours, are twenty theme cards grouped by family: Catppuccin
 (Mocha, Macchiato, Frappé, Latte), Dracula and Alucard, Solarized Dark and Light,
 Tokyo Night (Night, Storm, Moon, Day), Nord, Kanagawa (Wave, Dragon, Lotus),

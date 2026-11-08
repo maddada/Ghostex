@@ -1902,7 +1902,7 @@
       "type": "boolean",
       "default": true,
       "advanced": true,
-      "agentWritable": true
+      "agentWritable": false
     },
     {
       "key": "terminalPastePreviewableImages",
@@ -2169,7 +2169,7 @@
     {
       "key": "attentionAlertsFor",
       "title": "Alert me for",
-      "subtitle": "Needs you only plays the finished sound and shows the system notification only when an agent asks you something, waits for approval, or ends with Blocked or Needs you, and a coordinator's threads stay quiet. The bell keeps every row either way.",
+      "subtitle": "A coordinator's threads finishing, and a coordinator that only finished, stay quiet under both choices, and a red dot (an approval, a stuck or blocked session) always alerts. All plays the finished sound and shows the system notification whenever any other agent finishes; Needs you only does that only when it asks you something, waits for approval, or ends with Blocked or Needs you. The bell keeps every row either way.",
       "tab": "notifications",
       "tabTitle": "Notifications",
       "section": "sounds",
@@ -8482,6 +8482,54 @@
       "availability": "Only on macOS."
     },
     {
+      "key": "linuxDisplayScale",
+      "title": "Display scale",
+      "subtitle": "Linux only. How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. Interface scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "enum",
+      "default": "auto",
+      "options": [
+        {
+          "label": "Automatic",
+          "value": "auto"
+        },
+        {
+          "label": "100%",
+          "value": "100"
+        },
+        {
+          "label": "125%",
+          "value": "125"
+        },
+        {
+          "label": "150%",
+          "value": "150"
+        },
+        {
+          "label": "175%",
+          "value": "175"
+        },
+        {
+          "label": "200%",
+          "value": "200"
+        },
+        {
+          "label": "250%",
+          "value": "250"
+        },
+        {
+          "label": "300%",
+          "value": "300"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
       "key": "workspacePaneGap",
       "title": "Pane gap",
       "subtitle": "Gap in pixels between split panes in the Agents view.",
@@ -9666,7 +9714,7 @@
       "sectionTitle": "Defaults",
       "type": "boolean",
       "default": true,
-      "agentWritable": true
+      "agentWritable": false
     },
     {
       "key": "agentAcceptAllEnabled",
@@ -9678,7 +9726,7 @@
       "sectionTitle": "Config",
       "type": "boolean",
       "default": false,
-      "agentWritable": true
+      "agentWritable": false
     },
     {
       "key": "defaultPromptAgentId",
@@ -9748,7 +9796,7 @@
       "sectionTitle": "Config",
       "type": "string",
       "default": "",
-      "agentWritable": true
+      "agentWritable": false
     },
     {
       "key": "agentResumeHooks",
@@ -10205,7 +10253,7 @@
       "sectionTitle": "Stopping and deleting",
       "type": "boolean",
       "default": false,
-      "agentWritable": true
+      "agentWritable": false
     },
     {
       "key": "cloudBoxesBoxes",
@@ -11205,7 +11253,7 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
-      "agentWritable": true
+      "agentWritable": false
     },
     {
       "key": "actionsHidden",
@@ -11265,7 +11313,7 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
-      "agentWritable": true
+      "agentWritable": false
     },
     {
       "key": "readAloudHidden",
@@ -11325,7 +11373,7 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": false,
-      "agentWritable": true
+      "agentWritable": false
     },
     {
       "key": "osIntegrationHidden",
@@ -11700,7 +11748,7 @@
       "sectionTitle": "Default editor",
       "type": "string",
       "default": "",
-      "agentWritable": true
+      "agentWritable": false
     },
     {
       "key": "setDefaultEditor",
@@ -11813,7 +11861,7 @@
       "sectionTitle": "Global Defaults",
       "type": "string",
       "default": "",
-      "agentWritable": true
+      "agentWritable": false
     },
     {
       "key": "globalTicketKey",
