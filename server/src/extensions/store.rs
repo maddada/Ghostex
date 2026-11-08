@@ -135,7 +135,7 @@ pub(crate) fn store_entry_for_install(
     entry
 }
 
-/// Refuses an install that asks for more than the user approved: with an approval, a different version or capabilities it did not list; without one, an update that adds a background process or a new remote website (those need the consent dialog).
+/// Refuses an install that asks for more than the user approved: with an approval, a different version, a background process or a remote website it did not show (permissions it did not tick are granted none); without one, an update that adds a background process or a new remote website (those need the consent dialog).
 pub(crate) fn check_install_approval(
     manifest: &ExtensionManifest,
     previous: Option<&ExtensionManifest>,
@@ -156,11 +156,11 @@ pub(crate) fn check_install_approval(
     match approval {
         Some(approval) => {
             let new_url = remote_url(manifest);
+            // A permission the approval leaves out is not refused, only not granted
+            // (`store_entry_for_install`): the owner may tick fewer than an extension asks for
+            // (Settings > Extensions > Install from folder…, 2026-11-08). A background process
+            // and a remote website can't be left out, so they must have been shown.
             if approval.version != manifest.version
-                || manifest
-                    .permissions
-                    .iter()
-                    .any(|permission| !approval.permissions.contains(permission))
                 || (runs_command(manifest) && !approval.background_process)
                 || (new_url.is_some() && new_url != approval.remote_url)
             {

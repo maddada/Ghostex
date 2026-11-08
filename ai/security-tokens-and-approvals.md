@@ -111,6 +111,12 @@ The settings keys that loosen security are off the agent-writable list
 `customDefaultEditorCommand`, `terminalClipboardPasteProtection`, `botAutomationsHidden`.
 GBots and Sync keys stay writable and ask (`settingsWeakenSecurity`, `gbotsEnable`).
 
+The owner installs an extension from a folder with Settings > Extensions > **Install from
+folder…** (`tabs/extensions/folder_install.rs`): a folder picker, the extension's name and the
+permissions it asks for, each a tick box starting unticked. An approval grants only the
+permissions it lists (a left-out one is not granted, not refused); a background process, a
+remote website or another version it didn't show is still refused (`check_install_approval`).
+
 Extensions besides the routes: an install without the consent dialog's approval gets no
 permissions (`store_entry_for_install`), and a payload that wasn't installed through Ghostex (no
 store entry) is never started, served or given state; it lists as off and can only be

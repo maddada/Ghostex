@@ -9,7 +9,8 @@
 //! (scrolled to Your views), `extensions-filter` (a filtered page), `extensions-empty` (a filter
 //! nothing matches), `extensions-loading`, `extensions-error`, `extensions-detail` (an installed
 //! extension's page), `extensions-store-detail` (a Store page with its README), `extensions-consent`
-//! (the install consent over the Store page), `extensions-view-editor` (the Configure view deep
+//! (the install consent over the Store page), `extensions-folder-install` (Install from folder…'s
+//! consent, nothing ticked), `extensions-view-editor` (the Configure view deep
 //! link), `extensions-templates` (Add view), `extensions-scope` (the Choose where it's shown deep
 //! link), `extensions-scope-menu` (its picker open), `extensions-arrange` (Arrange views), `extensions-delete-view` (Delete
 //! confirmation over the Configure view deep link),

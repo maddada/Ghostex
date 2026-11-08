@@ -50,6 +50,8 @@ pub(crate) struct BrowserState {
     pub(crate) selected_store: Option<String>,
     /// The catalog entry waiting for install consent.
     pub(crate) consent: Option<String>,
+    /// A folder's extension waiting for install consent (Install from folder…).
+    pub(crate) folder_install: Option<super::folder_install::FolderInstall>,
     pub(crate) pending: HashSet<String>,
     pub(crate) loading: bool,
     pub(crate) error: Option<String>,

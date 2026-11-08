@@ -18,6 +18,7 @@ pub(crate) mod data;
 mod delete_view;
 mod detail;
 mod filter_bar;
+mod folder_install;
 mod gbots_card;
 mod remembered_form;
 mod scope_editor;
@@ -423,6 +424,20 @@ impl ExtensionsTab {
                     }
                 }
             }
+            "extensions-folder-install" => {
+                self.preview_applied = true;
+                self.show_folder_install(
+                    "/Users/you/Extensions/port-watch-dev".into(),
+                    json!({
+                        "name": "port-watch-dev",
+                        "title": "Port Watch (dev)",
+                        "version": "0.3.0",
+                        "permissions": ["exec", "network", "clipboard"],
+                        "server": { "command": "./port-watch serve --port {port}" },
+                    }),
+                    cx,
+                );
+            }
             "extensions-delete-view" => {
                 let values = self.store.read(cx).values();
                 let editing = self
@@ -515,6 +530,9 @@ impl Render for ExtensionsTab {
             if let Some(consent) = self.render_consent(&p, window, cx) {
                 blocks.push(PageBlock::plain(consent));
             }
+            if let Some(consent) = self.render_folder_install(&p, window, cx) {
+                blocks.push(PageBlock::plain(consent));
+            }
             return settings_page(&self.store, SettingsTabId::Extensions, &p, blocks, cx);
         }
         let counts = self.extension_counts(cx);
@@ -562,6 +580,9 @@ impl Render for ExtensionsTab {
             blocks.push(PageBlock::plain(dialog));
         }
         if let Some(consent) = self.render_consent(&p, window, cx) {
+            blocks.push(PageBlock::plain(consent));
+        }
+        if let Some(consent) = self.render_folder_install(&p, window, cx) {
             blocks.push(PageBlock::plain(consent));
         }
         if let Some(confirm) = self.render_delete_view(&p, window, cx) {

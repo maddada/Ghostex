@@ -438,7 +438,8 @@ impl ExtensionsTab {
             .child("\u{a0}repo. Reviewed and tested by @maddada.")
             .into_any_element();
         let body = self.render_store_list(p, window, cx);
-        plain_section(p, "Get more", description, None, body)
+        let from_folder = self.install_from_folder_button(p, cx);
+        plain_section(p, "Get more", description, Some(from_folder), body)
     }
 
     fn render_store_list(
