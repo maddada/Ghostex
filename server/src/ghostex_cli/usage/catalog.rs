@@ -632,6 +632,10 @@ pub fn usage() -> String {
             "Stop a stuck session's agent and start it again on the same conversation (its current turn is lost)",
         ),
         format_help_command(
+            "chief --help",
+            "Chief, the Ghostex-wide coordinator under the Spaces bar: its status, its playbook, a new chat, its agent, and messaging another computer's Chief",
+        ),
+        format_help_command(
             "coordinator --help",
             "Run a coordinator: one agent you talk to that starts, supervises, and reports on thread sessions",
         ),

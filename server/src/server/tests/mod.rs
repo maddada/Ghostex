@@ -3,6 +3,7 @@
 mod account_login_thread;
 mod attention_stint;
 mod chat_linked_files;
+mod chief_head_routes;
 mod collab_routes;
 mod connected_computers_routes;
 mod draft_worktree_routes;

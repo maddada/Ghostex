@@ -308,6 +308,18 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsPages", J::Arr(&[J::Str("voiceAgent")])),
         ("hotkeys", J::Arr(&[J::Str("toggleVoiceAgent"), J::Str("voiceCallAboutSession"), J::Str("holdToTalk")])),
     ]),
+    // CDXC:Chief 2026-11-08 DECISION:
+    // User (Q1734-Q1750): a Ghostex-wide coordinator named Chief, "enabled by default but it's an extension". A whole-feature entry like the voice agent, on by default with a new key (`chiefHidden`, default false) that only the user may change (`user_only`, so no agent can switch it through the API). Off hides its sidebar row on the desktop and the phone, puts its agent to sleep and takes its head role away at once (server/src/chief/), and keeps its chat and memory, so turning it back on picks up where it left off.
+    // SEE-ALSO: server/src/chief/ (the session, the head role), packages/settings-catalog/src/help/supplemental.rs (`chiefHidden`).
+    J::Obj(&[
+        ("description", J::Str("An agent pinned under the Spaces bar that you can ask about any session, agent, project or computer, or about Ghostex itself. It can message, steer and answer your other agents, and hands project work to that project's coordinator.")),
+        ("category", J::Str("features")),
+        ("id", J::Str("chief")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("chiefHidden")),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Chief")),
+    ]),
     // CDXC:VoiceMode 2026-10-21 DECISION:
     // User: Read aloud ships as a Ghostex extension, disabled by default (2026-10-20), and (Q23) as a built-in extension, not a Store extension: a Store extension cannot reach the chat composer, a message's actions or the phone. A whole-feature entry like Workspaces, with a new key (`readAloudHidden`, default on = hidden) because the settings file stores every default; off hides the reply action, the ⋯ menu rows, the Voice and Speed rows and the two hotkeys, and keeps their saved values. No `platforms` list: the switch also governs the phone and Ghostex in a browser that talk to this computer, so it exists on Linux too, where the desktop draws no controls (Q25; `readAloudUnavailable` says why).
     // SEE-ALSO: packages/gx-chat-core/src/read_aloud/ (the rules), server/src/ghostex_cli/sessions/mobile_summary.rs (`builtInFeatures`, how the phone learns the switch), docs/2026-10-20/voice-mode/read-aloud-client-contract.md.

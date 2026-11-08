@@ -20,6 +20,7 @@ pub(crate) mod autopilot;
 pub mod board_start_work;
 pub(crate) mod bot_feed;
 pub(crate) mod bot_projects;
+pub(crate) mod chief;
 pub(crate) mod claude_cloud;
 pub mod cli;
 pub mod close_after_done;

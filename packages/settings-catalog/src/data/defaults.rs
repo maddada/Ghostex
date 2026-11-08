@@ -150,6 +150,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("debuggingHidden", J::Bool(false)),
     // CDXC:VoiceMode 2026-10-25 DECISION: the voice agent is a built-in extension, on by default (official_extensions.rs).
     ("voiceAgentHidden", J::Bool(false)),
+    // CDXC:Chief 2026-11-08 DECISION: Chief is a built-in extension, on by default (official_extensions.rs).
+    ("chiefHidden", J::Bool(false)),
     ("openInTitlebarButtonHidden", J::Bool(false)),
     // CDXC:CodeEditor 2026-05-06-15:00
     // Embedded code-server editor panes can reuse the user's local VS Code

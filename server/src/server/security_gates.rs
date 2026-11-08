@@ -8,9 +8,13 @@
 //! | `/api/autopilot` `op: "set"` | `answerApprovals` goes on, `limits` change |
 //! | `/api/gbots` `action: "create"` | always (a new bot) |
 //! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a security-relaxing setting changes, or GBots goes on |
-//! | `/api/answerSessionChatPrompt` | anyone but the owner's devices answers another session's prompt |
-//! | `/api/interruptSessionChat` | anyone but the owner's devices stops a session that is neither their own nor one of their threads |
-//! | `/api/sendSessionText`, `/api/sendSessionEnter`, `/api/sendSessionMessage` | anyone but the owner's devices types into a session that isn't their own, its threads included (a coordinator's Escape or Ctrl-C to its own thread doesn't ask) |
+//! | `/api/answerSessionChatPrompt` | anyone but the owner's devices and Chief answers another session's prompt |
+//! | `/api/interruptSessionChat` | anyone but the owner's devices and Chief stops a session that is neither their own nor one of their threads |
+//! | `/api/sendSessionText`, `/api/sendSessionEnter`, `/api/sendSessionMessage` | anyone but the owner's devices and Chief types into a session that isn't their own, its threads included (a coordinator's Escape or Ctrl-C to its own thread doesn't ask) |
+//!
+//! Which callers skip those three is `Principal::skips_approval` (security/capability.rs); Chief
+//! (the head role, settled per request by `crate::chief::settle_principal`) skips them and nothing
+//! else.
 //!
 //! Pairing and Collab routes are gated by their own threads with the same
 //! `require_owner_presence`.
@@ -23,7 +27,7 @@ use serde_json::{json, Map, Value};
 use crate::{
     domain::read_domain_rpc_params,
     protocol::rpc_error,
-    security::{self, ActionRequest, Capability, Principal, RouteAccess, SensitiveAction},
+    security::{self, ActionRequest, Principal, RouteAccess, SensitiveAction},
 };
 
 use super::{require_owner_presence, routed_json, AppState, RoutedResponse};
@@ -394,10 +398,10 @@ fn settings_action(params: &Map<String, Value>) -> Option<ActionRequest> {
     )
 }
 
-/// The owner's devices answer any prompt; a session answers its own; everyone else asks
-/// (user decision 2 of #495, CDXC:Security in security/capability.rs).
+/// The owner's devices and Chief answer any prompt; a session answers its own; everyone else
+/// asks (user decision 2 of #495, CDXC:Security in security/capability.rs).
 fn prompt_action(caller: &Principal, params: &Map<String, Value>) -> Option<ActionRequest> {
-    if caller.has(Capability::AnswerAnyPrompt) {
+    if caller.skips_approval(&SensitiveAction::AnswerOtherSessionPrompt) {
         return None;
     }
     let project_id = text(params, "projectId")?;
@@ -437,7 +441,7 @@ fn input_action(
     endpoint_path: &str,
     params: &Map<String, Value>,
 ) -> Option<ActionRequest> {
-    if caller.has(Capability::AnswerAnyPrompt) {
+    if caller.skips_approval(&SensitiveAction::TypeIntoOtherSession) {
         return None;
     }
     let session_id = text(params, "sessionId")?;
@@ -498,7 +502,7 @@ fn interrupt_action(
     caller: &Principal,
     params: &Map<String, Value>,
 ) -> Option<ActionRequest> {
-    if caller.has(Capability::AnswerAnyPrompt) {
+    if caller.skips_approval(&SensitiveAction::InterruptOtherSession) {
         return None;
     }
     let session_id = text(params, "sessionId")?;

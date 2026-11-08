@@ -13,6 +13,22 @@ pub enum SessionRole {
     Coordinator,
     /// A thread started by a coordinator; same powers as an agent.
     Thread,
+    /// Chief, the Ghostex-wide coordinator, while its extension is on. Never stored with a
+    /// token: only `crate::chief::settle_principal` gives it, per request (see
+    /// [`SessionRole::stored`]).
+    Head,
+}
+
+impl SessionRole {
+    /// The role a token may be stored with: `Head` is never stored, so a token minted or
+    /// restored with it holds a coordinator's role, and only the auth gate's per-request check
+    /// (`crate::chief::settle_principal`) can make a caller the head.
+    pub fn stored(self) -> Self {
+        match self {
+            Self::Head => Self::Coordinator,
+            role => role,
+        }
+    }
 }
 
 /// The caller behind a request's token, settled once at the auth gate.
@@ -61,14 +77,33 @@ pub enum Capability {
     AgentWritableSettings,
     /// Change the other settings that don't weaken security.
     OwnerSettings,
-    /// Answer another session's permission prompt without asking. Only the owner's devices:
-    /// any agent, a coordinator answering its own threads included, asks
-    /// (`SensitiveAction::AnswerOtherSessionPrompt`).
+    /// Answer another session's permission prompt without asking. The owner's devices and
+    /// Chief (the head role); any other agent, a coordinator answering its own threads
+    /// included, asks (`SensitiveAction::AnswerOtherSessionPrompt`).
     AnswerAnyPrompt,
+    /// Type into and interrupt any session without asking. The owner's devices and Chief;
+    /// any other agent asks (`TypeIntoOtherSession`, `InterruptOtherSession`).
+    SteerAnySession,
     /// Ask for a sensitive action (the call becomes an approval request).
     RequestSensitiveAction,
     /// See the pending approval requests, deny them, and post signed approvals.
     DecideApprovals,
+}
+
+impl Capability {
+    /// Every capability (tables and tests walk it).
+    pub const KNOWN: &'static [Self] = &[
+        Self::OwnSession,
+        Self::ProjectSessions,
+        Self::ManageOwnThreads,
+        Self::ManageAnyThreads,
+        Self::AgentWritableSettings,
+        Self::OwnerSettings,
+        Self::AnswerAnyPrompt,
+        Self::SteerAnySession,
+        Self::RequestSensitiveAction,
+        Self::DecideApprovals,
+    ];
 }
 
 impl Principal {
@@ -93,7 +128,7 @@ impl Principal {
 
     /*
     CDXC:Security 2026-11-08 DECISION:
-    User (#495 follow-up): an approval is needed for any agent answering another session's permission prompt, including a coordinator answering its own threads ("the playbook already says only the user answers those"); Autopilot stays under its own gated actions. So no session or token-file caller holds `AnswerAnyPrompt`. The token file (the CLI in the user's own terminal) keeps thread management (decision 3A), everything else of it is an agent's.
+    User (#495 follow-up): an approval is needed for any agent answering another session's permission prompt, including a coordinator answering its own threads ("the playbook already says only the user answers those"); Autopilot stays under its own gated actions. So no session or token-file caller holds `AnswerAnyPrompt`, Chief's head role aside (CDXC:Chief 2026-11-08 at `skips_approval`). The token file (the CLI in the user's own terminal) keeps thread management (decision 3A), everything else of it is an agent's.
     */
     pub fn has(&self, capability: Capability) -> bool {
         use Capability::*;
@@ -103,8 +138,9 @@ impl Principal {
                 OwnSession | ProjectSessions | AgentWritableSettings | RequestSensitiveAction => {
                     true
                 }
-                ManageOwnThreads => *role == SessionRole::Coordinator,
-                ManageAnyThreads | OwnerSettings | AnswerAnyPrompt | DecideApprovals => false,
+                ManageOwnThreads => matches!(role, SessionRole::Coordinator | SessionRole::Head),
+                AnswerAnyPrompt | SteerAnySession => *role == SessionRole::Head,
+                ManageAnyThreads | OwnerSettings | DecideApprovals => false,
             },
             // The design's "CLI in your own terminal" column: thread management stays, the rest
             // is an agent's.
@@ -127,6 +163,34 @@ impl Principal {
         }
     }
 
+    /*
+    CDXC:Chief 2026-11-08 DECISION:
+    User (Q1749, Q1750): Chief gets "a head role granted once" with no Touch ID: it reads every session and types into, interrupts and messages any session freely, and answers other agents' approval prompts without asking ("prompts free"). "We already don't allow agents to manage stuff related to collab/access/pairing/security, agents should just point to the settings for these", so every other sensitive action still asks, for Chief exactly as for any agent. This is the one place that says which approvals a caller skips.
+    */
+    /// Whether this caller may do `action` without the owner's approval. Only the three
+    /// "steer another session" actions can be skipped, and only by a caller holding the matching
+    /// capability (the owner's devices and the head); every other sensitive action asks whoever
+    /// calls.
+    pub fn skips_approval(&self, action: &ghostex_gx_protocol::approval::SensitiveAction) -> bool {
+        use ghostex_gx_protocol::approval::SensitiveAction::*;
+        match action {
+            AnswerOtherSessionPrompt => self.has(Capability::AnswerAnyPrompt),
+            TypeIntoOtherSession | InterruptOtherSession => self.has(Capability::SteerAnySession),
+            _ => false,
+        }
+    }
+
+    /// Whether this caller is Chief with its head role (settled for this request).
+    pub fn is_head(&self) -> bool {
+        matches!(
+            self,
+            Self::Session {
+                role: SessionRole::Head,
+                ..
+            }
+        )
+    }
+
     /// Whether this caller may manage the thread whose coordinator is `coordinator_session_id`.
     pub fn may_manage_thread_of(&self, coordinator_session_id: &str) -> bool {
         if self.has(Capability::ManageAnyThreads) {
@@ -135,7 +199,10 @@ impl Principal {
         match self {
             Self::Session {
                 session_id, role, ..
-            } => *role == SessionRole::Coordinator && session_id == coordinator_session_id,
+            } => {
+                matches!(role, SessionRole::Coordinator | SessionRole::Head)
+                    && session_id == coordinator_session_id
+            }
             _ => false,
         }
     }
@@ -224,6 +291,109 @@ mod tests {
         assert!(!coordinator.may_manage_thread_of("s2"));
         assert!(!session(SessionRole::Agent).may_manage_thread_of("s1"));
         assert!(Principal::LocalAgent.may_manage_thread_of("s2"));
+    }
+
+    /// What each role holds, for every capability. The match is exhaustive, so a new
+    /// capability does not compile until it says whether Chief's head role holds it.
+    fn expected(capability: Capability) -> (bool, bool, bool, bool) {
+        use Capability::*;
+        // (head, coordinator, agent, thread)
+        match capability {
+            OwnSession | ProjectSessions | AgentWritableSettings | RequestSensitiveAction => {
+                (true, true, true, true)
+            }
+            ManageOwnThreads => (true, true, false, false),
+            AnswerAnyPrompt | SteerAnySession => (true, false, false, false),
+            ManageAnyThreads | OwnerSettings | DecideApprovals => (false, false, false, false),
+        }
+    }
+
+    #[test]
+    fn every_capability_for_a_head_token_against_ordinary_session_tokens() {
+        for capability in Capability::KNOWN {
+            let (head, coordinator, agent, thread) = expected(*capability);
+            assert_eq!(
+                session(SessionRole::Head).has(*capability),
+                head,
+                "head {capability:?}"
+            );
+            assert_eq!(
+                session(SessionRole::Coordinator).has(*capability),
+                coordinator,
+                "coordinator {capability:?}"
+            );
+            assert_eq!(
+                session(SessionRole::Agent).has(*capability),
+                agent,
+                "agent {capability:?}"
+            );
+            assert_eq!(
+                session(SessionRole::Thread).has(*capability),
+                thread,
+                "thread {capability:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_sensitive_action_for_a_head_token_against_every_other_caller() {
+        use ghostex_gx_protocol::approval::SensitiveAction::{self, *};
+        let steering = |action: &SensitiveAction| {
+            matches!(
+                action,
+                AnswerOtherSessionPrompt | TypeIntoOtherSession | InterruptOtherSession
+            )
+        };
+        assert!(SensitiveAction::KNOWN.len() >= 25);
+        let others = [
+            session(SessionRole::Agent),
+            session(SessionRole::Coordinator),
+            session(SessionRole::Thread),
+            Principal::LocalAgent,
+            Principal::Peer {
+                server_id: "S2".into(),
+                name: "Laptop".into(),
+            },
+            Principal::Guest {
+                share_id: "x".into(),
+            },
+            Principal::Extension {
+                extension_id: "e".into(),
+            },
+            Principal::Anonymous,
+        ];
+        for action in SensitiveAction::KNOWN {
+            // Chief skips only the three steering approvals; Collab, pairing, Easy Connect,
+            // computers, Autopilot, GBots, security settings and approver keys still ask.
+            assert_eq!(
+                session(SessionRole::Head).skips_approval(action),
+                steering(action),
+                "head {action:?}"
+            );
+            for caller in &others {
+                assert!(!caller.skips_approval(action), "{caller:?} {action:?}");
+            }
+            // The owner's devices skip the same three and nothing else either.
+            assert_eq!(
+                Principal::Owner {
+                    device_id: "mac".into()
+                }
+                .skips_approval(action),
+                steering(action),
+                "owner {action:?}"
+            );
+        }
+        assert!(!session(SessionRole::Head).skips_approval(&SensitiveAction::Other("new".into())));
+    }
+
+    #[test]
+    fn the_head_manages_its_own_threads_only() {
+        let head = session(SessionRole::Head);
+        assert!(head.is_head());
+        assert!(head.may_manage_thread_of("s1"));
+        assert!(!head.may_manage_thread_of("s2"));
+        assert_eq!(SessionRole::Head.stored(), SessionRole::Coordinator);
+        assert_eq!(SessionRole::Agent.stored(), SessionRole::Agent);
     }
 
     #[test]

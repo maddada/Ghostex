@@ -285,8 +285,10 @@ pub(in crate::server) async fn route_http(
     .then(|| bearer_token(&parts.headers).and_then(crate::collab::shares::authorize_token))
     .flatten();
     // A session's own `gxs_` token or the desktop's `gxo_` owner session (crate::security).
-    let token_principal =
-        bearer_token(&parts.headers).and_then(|token| state.security.session_tokens.resolve(token));
+    // Chief's own token is the head for this request while its extension is on (chief/head.rs).
+    let token_principal = bearer_token(&parts.headers)
+        .and_then(|token| state.security.session_tokens.resolve(token))
+        .map(|principal| crate::chief::settle_principal(principal, &state.paths));
     if share.is_some() && !crate::collab::shares::GUEST_ENDPOINTS.contains(&endpoint.path.as_str())
     {
         return super::super::collab_http::guest_refusal(endpoint.path, request_id);
