@@ -110,41 +110,63 @@ pub(crate) fn notifies(entry: &StoredEntry, earlier: &[StoredEntry]) -> bool {
     }
 }
 
-/// The log's entries newest first and, for each, whether it notifies.
-fn decisions(entries: &[StoredEntry]) -> impl Iterator<Item = (&StoredEntry, bool)> {
-    entries
-        .iter()
-        .enumerate()
-        .map(|(index, entry)| (entry, notifies(entry, &entries[index + 1..])))
-}
-
 /// Takes out of the feed the security rows `notifies` would not have made, written before it
 /// existed, so the bell is clean without the user clicking anything. Returns how many went.
+///
+/// It starts from the feed's security rows (a handful, the feed is pruned), not the log, which only
+/// grows: `read_log(oldest)` returns the log's entries newest first, back to `oldest` and the
+/// `REPEAT_WINDOW_MS` before it that the repeat rule reads. The deletes run in one transaction.
 pub(crate) fn remove_unimportant_security_rows(
     db: &rusqlite::Connection,
-    entries: &[StoredEntry],
+    read_log: impl FnOnce(u64) -> Vec<StoredEntry>,
 ) -> rusqlite::Result<usize> {
+    let rows: Vec<(String, u64)> = db
+        .prepare("SELECT DISTINCT sessionId FROM notification_feed WHERE kind = ?1")?
+        .query_map([NOTIFICATION_FEED_KIND_SECURITY], |row| {
+            row.get::<_, String>(0)
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .into_iter()
+        .filter_map(|session_id| {
+            let seq = session_id
+                .strip_prefix(
+                    crate::notification_feed::store::SECURITY_NOTIFICATION_SESSION_PREFIX,
+                )?
+                .parse::<u64>()
+                .ok()?;
+            Some((session_id, seq))
+        })
+        .collect();
+    let Some(oldest) = rows.iter().map(|(_, seq)| *seq).min() else {
+        return Ok(0);
+    };
+    let entries = read_log(oldest);
+    let transaction = db.unchecked_transaction()?;
     let mut removed = 0;
-    for (entry, notifies) in decisions(entries) {
-        if !notifies {
-            removed += db.execute(
+    for (session_id, seq) in &rows {
+        // A row whose entry the log no longer has is left alone.
+        let Some(index) = entries.iter().position(|entry| entry.seq == *seq) else {
+            continue;
+        };
+        if !notifies(&entries[index], &entries[index + 1..]) {
+            removed += transaction.execute(
                 "DELETE FROM notification_feed WHERE kind = ?1 AND sessionId = ?2",
-                rusqlite::params![
-                    NOTIFICATION_FEED_KIND_SECURITY,
-                    security_notification_session_id(entry.seq)
-                ],
+                rusqlite::params![NOTIFICATION_FEED_KIND_SECURITY, session_id],
             )?;
         }
     }
+    transaction.commit()?;
     Ok(removed)
 }
 
 fn remove_unimportant_rows(state: &AppState) {
-    let entries = super::live_log().read_recent(usize::MAX);
     let removed = crate::storage::open_gxserver_database(&state.paths)
         .map_err(|error| error.to_string())
         .and_then(|db| {
-            remove_unimportant_security_rows(&db, &entries).map_err(|error| error.to_string())
+            remove_unimportant_security_rows(&db, |oldest| {
+                super::live_log().read_back_to(oldest, REPEAT_WINDOW_MS)
+            })
+            .map_err(|error| error.to_string())
         });
     match removed {
         Ok(0) => {}
@@ -605,7 +627,11 @@ mod tests {
             )
             .unwrap();
         }
-        assert_eq!(remove_unimportant_security_rows(&db, &entries).unwrap(), 3);
+        let read_log = |oldest: u64| {
+            assert_eq!(oldest, 1);
+            entries.clone()
+        };
+        assert_eq!(remove_unimportant_security_rows(&db, read_log).unwrap(), 3);
         let left: Vec<(String, bool)> = db
             .prepare("SELECT sessionId, readAt IS NULL FROM notification_feed")
             .unwrap()
@@ -615,6 +641,15 @@ mod tests {
             .unwrap();
         assert_eq!(left, [("security:3".to_string(), true)]);
         // Running again on the next start changes nothing.
-        assert_eq!(remove_unimportant_security_rows(&db, &entries).unwrap(), 0);
+        assert_eq!(
+            remove_unimportant_security_rows(&db, |_| entries.clone()).unwrap(),
+            0
+        );
+        // An empty feed does not read the log at all.
+        db.execute("DELETE FROM notification_feed", []).unwrap();
+        assert_eq!(
+            remove_unimportant_security_rows(&db, |_| panic!("read the log")).unwrap(),
+            0
+        );
     }
 }

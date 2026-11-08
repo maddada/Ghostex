@@ -191,6 +191,33 @@ impl AuditLog {
             .collect()
     }
 
+    /// The entries newest first, back to `oldest_seq` and the `window_ms` before it (by time),
+    /// so a reader that needs only the end of the log parses no more than that.
+    pub fn read_back_to(&self, oldest_seq: u64, window_ms: i64) -> Vec<StoredEntry> {
+        let Ok(text) = std::fs::read_to_string(&self.path) else {
+            return Vec::new();
+        };
+        let mut entries = Vec::new();
+        let mut oldest_at_ms = None;
+        for entry in text
+            .lines()
+            .rev()
+            .filter(|line| !line.trim().is_empty())
+            .filter_map(|line| serde_json::from_str::<StoredEntry>(line).ok())
+        {
+            if entry.seq <= oldest_seq && oldest_at_ms.is_none() {
+                oldest_at_ms = Some(entry.at_ms);
+            }
+            if entry.seq < oldest_seq
+                && oldest_at_ms.is_some_and(|at_ms| at_ms - entry.at_ms > window_ms)
+            {
+                break;
+            }
+            entries.push(entry);
+        }
+        entries
+    }
+
     /// Walks the whole chain and, when this process wrote to the log, compares its end with the
     /// newest hash it wrote.
     pub fn check(&self) -> ChainCheck {
@@ -379,6 +406,26 @@ mod tests {
 
     fn write_lines(log: &AuditLog, lines: &[String]) {
         std::fs::write(log.path(), format!("{}\n", lines.join("\n"))).unwrap();
+    }
+
+    #[test]
+    fn reading_back_stops_past_the_window_before_the_oldest() {
+        let (_dir, log) = log();
+        for at_ms in [0, 100, 900, 1_000, 2_000] {
+            log.append_at(
+                at_ms,
+                &Action::new("t.test", "test"),
+                &Actor::Ghostex,
+                &Outcome::Done,
+                None,
+            )
+            .unwrap();
+        }
+        let seqs = |entries: Vec<StoredEntry>| entries.iter().map(|e| e.seq).collect::<Vec<_>>();
+        // Entry 4 is at 1000: entries at 900 are within 200 ms of it, 100 and 0 are not.
+        assert_eq!(seqs(log.read_back_to(4, 200)), [5, 4, 3]);
+        assert_eq!(seqs(log.read_back_to(5, 0)), [5]);
+        assert_eq!(seqs(log.read_back_to(1, 10_000)), [5, 4, 3, 2, 1]);
     }
 
     #[test]
