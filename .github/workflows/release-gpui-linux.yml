@@ -467,11 +467,14 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: build/release-gpui/${{ inputs.version }}/linux-tar-${{ env.LINUX_ARCH }}/ghostex-${{ inputs.version }}-linux-${{ env.LINUX_ARCH }}.tar.zst
+      # CDXC:Release 2026-11-08 WHY: the AppImage product is the image and its .zsync file (product-inputs.mjs), and a reuse redispatch verifies an attestation for every file of the product, so attesting only the image made 11.1.0's reuse refuse "ghostex-11.1.0-linux-x64.AppImage.zsync has no verifiable build attestation".
       - name: Attest the AppImage
         if: ${{ contains(inputs.packages, 'appimage') && !inputs.build_only }}
         uses: actions/attest-build-provenance@v4
         with:
-          subject-path: build/release-gpui/${{ inputs.version }}/linux-appimage-${{ env.LINUX_ARCH }}/ghostex-${{ inputs.version }}-linux-${{ env.LINUX_ARCH }}.AppImage
+          subject-path: |
+            build/release-gpui/${{ inputs.version }}/linux-appimage-${{ env.LINUX_ARCH }}/ghostex-${{ inputs.version }}-linux-${{ env.LINUX_ARCH }}.AppImage
+            build/release-gpui/${{ inputs.version }}/linux-appimage-${{ env.LINUX_ARCH }}/ghostex-${{ inputs.version }}-linux-${{ env.LINUX_ARCH }}.AppImage.zsync
       - name: Attest the DEB package
         if: ${{ contains(inputs.packages, 'deb') && !inputs.build_only }}
         uses: actions/attest-build-provenance@v4
