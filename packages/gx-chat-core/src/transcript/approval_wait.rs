@@ -56,8 +56,23 @@ pub fn approval_wait(state: &ChatState) -> Option<ApprovalWait> {
 /// place in that row: its index in `tools`, and the `files` rows its writes became.
 struct Target {
     item: usize,
-    work: Option<usize>,
+    work: Spot,
     place: Place,
+}
+
+/// Where a row sits inside its list item.
+#[derive(Clone, Copy)]
+enum Spot {
+    /// The item is the row.
+    Row,
+    /// A summary turn's work, at this index.
+    SummaryWork(usize),
+    /// A finished turn's reply.
+    Final,
+    /// A finished turn's row drawn outside its fold, at this index.
+    Artifact(usize),
+    /// A finished turn's folded work, at this index.
+    FoldedWork(usize),
 }
 
 /// The waiting call's rows inside one message. A write is drawn as file rows (one per file it
@@ -152,18 +167,35 @@ fn newest_open_call(source: &ghostex_gx_protocol::ChatMessage) -> Search {
 }
 
 /// The rows the list draws, newest first, each with where it sits.
-fn rows_newest_first(items: &[TranscriptItem]) -> Vec<(usize, Option<usize>, &Value)> {
+///
+/// CDXC:SessionChat 2026-11-08 FIX: Claude in manual mode reads as idle while it waits on a permission, so the turn holding the waiting call is drawn as a finished turn ("Worked for 24s") and its call stayed shut: with Tool call cards on its card stayed one line, and without them its tool row stayed closed, so the reader could not see what the approval asked. A finished turn's rows are searched too, its reply first (the newest row, which holds the call the agent stopped on), then its folded work and the rows drawn outside the fold; a waiting call in the folded work is lifted out of the fold ([`mark_waiting_call`]).
+fn rows_newest_first(items: &[TranscriptItem]) -> Vec<(usize, Spot, &Value)> {
     let mut rows = Vec::new();
     for (item_index, item) in items.iter().enumerate().rev() {
         match item {
-            TranscriptItem::Message { message } => rows.push((item_index, None, &**message)),
+            TranscriptItem::Message { message } => rows.push((item_index, Spot::Row, &**message)),
             TranscriptItem::Summary { work, .. } => {
                 for (work_index, message) in work.iter().enumerate().rev() {
-                    rows.push((item_index, Some(work_index), &**message));
+                    rows.push((item_index, Spot::SummaryWork(work_index), &**message));
                 }
             }
-            // A finished turn's work holds no call an approval still waits on.
-            TranscriptItem::CompletedWork { .. } | TranscriptItem::Unknown(_) => {}
+            TranscriptItem::CompletedWork {
+                work,
+                artifacts,
+                final_message,
+                ..
+            } => {
+                if let Some(message) = final_message {
+                    rows.push((item_index, Spot::Final, &**message));
+                }
+                for (index, message) in work.iter().enumerate().rev() {
+                    rows.push((item_index, Spot::FoldedWork(index), &**message));
+                }
+                for (index, message) in artifacts.iter().enumerate().rev() {
+                    rows.push((item_index, Spot::Artifact(index), &**message));
+                }
+            }
+            TranscriptItem::Unknown(_) => {}
         }
     }
     rows
@@ -172,7 +204,7 @@ fn rows_newest_first(items: &[TranscriptItem]) -> Vec<(usize, Option<usize>, &Va
 /// The rows newest first, until one of them answers `find`: `Some(target or none)` once the search
 /// ends, `None` when no row did. A target comes with the place in `rows` of the row it is in.
 fn search(
-    rows: &[(usize, Option<usize>, &Value)],
+    rows: &[(usize, Spot, &Value)],
     cache: &ProjectionCache,
     find: &dyn Fn(&ghostex_gx_protocol::ChatMessage) -> Search,
 ) -> Option<Option<(usize, Target)>> {
@@ -203,7 +235,7 @@ fn search(
 }
 
 fn locate(
-    rows: &[(usize, Option<usize>, &Value)],
+    rows: &[(usize, Spot, &Value)],
     cache: &ProjectionCache,
     wait: &ApprovalWait,
 ) -> Option<(usize, Target)> {
@@ -265,16 +297,42 @@ pub fn open_waiting_call_in(
 
 /// Opens the waiting call where [`locate`] found it, in the row's own copy of its model.
 fn mark_waiting_call(items: &mut [TranscriptItem], target: Target) {
+    // A row with nothing to open stays where it is drawn.
+    if target.place.files.is_empty() && target.place.tool.is_none() {
+        return;
+    }
     let message = match (&mut items[target.item], target.work) {
-        (TranscriptItem::Message { message }, None) => message,
+        (TranscriptItem::Message { message }, Spot::Row) => message,
         (
             TranscriptItem::Summary {
                 work, work_open, ..
             },
-            Some(index),
+            Spot::SummaryWork(index),
         ) => {
             *work_open = true;
             &mut work[index]
+        }
+        (
+            TranscriptItem::CompletedWork {
+                final_message: Some(message),
+                ..
+            },
+            Spot::Final,
+        ) => message,
+        (TranscriptItem::CompletedWork { artifacts, .. }, Spot::Artifact(index)) => {
+            &mut artifacts[index]
+        }
+        // The fold stays shut; the waiting row is drawn under it with the rows outside it.
+        (
+            TranscriptItem::CompletedWork {
+                work, artifacts, ..
+            },
+            Spot::FoldedWork(index),
+        ) => {
+            artifacts.push(work.remove(index));
+            artifacts
+                .last_mut()
+                .expect("the row just lifted out of the fold")
         }
         _ => return,
     };
