@@ -363,13 +363,15 @@ impl CollabTab {
                 p,
                 "collabExpiry",
                 RowSpec::new("Link ends after").description(
-                    "A day at most. Stop sharing, or deleting the chat, ends a link at once. Guests always type the eight-digit code that comes with the link.",
+                    "Until I stop it keeps a link live until you stop sharing. Stop sharing, or deleting the chat, ends a link at once. Guests always type the eight-digit code that comes with the link, and every link asks for Touch ID.",
                 ),
                 None,
                 &[
                     option("1 hour", "hour"),
                     option("4 hours", "fourHours"),
                     option("24 hours", "day"),
+                    // CDXC:Collab 2026-11-08 DECISION: User (Q1785) "add \"until i stop it\" as an option please here and in settings".
+                    option("Until I stop it", "untilStopped"),
                 ],
                 Some(expiry.as_str()),
                 None,

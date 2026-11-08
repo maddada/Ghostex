@@ -27,7 +27,7 @@ fn new_shares() -> Section {
         "New shares start with",
         vec![
             row("collabMode", "Guest messages", "What a guest's message does: Ask me (you approve each one with Send, Edit or Decline), Send (straight to the agent, labelled with their name) or View only. Ask me by default; change it for one chat in its Share popover."),
-            row("collabExpiry", "Link ends after", "1 hour, 24 hours (the default), 7 days, or never. Stop sharing ends a link at once."),
+            row("collabExpiry", "Link ends after", "1 hour (the default), 4 hours, 24 hours, or Until I stop it (the link stays live until you stop sharing). Stop sharing, or deleting the chat, ends a link at once. The Share popover's chip changes it too."),
             row("collabRequireCode", "Ask for a code", "Guests also type the six-digit code shown in the Share popover, so a link alone is not enough. On by default."),
         ],
     )

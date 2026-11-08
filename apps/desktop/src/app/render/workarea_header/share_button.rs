@@ -115,6 +115,22 @@ impl GhostexGpuiApp {
         )
     }
 
+    /// The Share popover's Review: the keyboard goes to the chat box of the shared chat, right under
+    /// the waiting message's card (Decline, Edit, Send).
+    pub(crate) fn focus_collab_review(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some((key, chat)) = self.share_button_chat() else {
+            return;
+        };
+        if share_target().as_ref() != Some(&key) {
+            return;
+        }
+        chat.update(cx, |chat, cx| chat.focus_composer_from_hotkey(window, cx));
+    }
+
     /// Opens (or closes) the Share popover under the header button.
     pub(crate) fn toggle_collab_share_popover(
         &mut self,

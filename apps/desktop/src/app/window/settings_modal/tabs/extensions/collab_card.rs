@@ -120,12 +120,29 @@ impl ExtensionsTab {
                 },
                 _ if component.is_null() => "Checking Collab\u{2026}".to_string(),
                 _ if !can_install => "This build of Ghostex has no Collab component.".to_string(),
-                _ => "Not installed. Installing asks for Touch ID (or your system's equivalent)."
+                _ if component["shareHidden"] == true => "Not installed. Share is hidden in chats; installing asks for Touch ID (or your system's equivalent).".to_string(),
+                _ => "Not installed. Chats show Share, which installs it; installing asks for Touch ID (or your system's equivalent)."
                     .to_string(),
             }
         };
 
         let mut actions: Vec<AnyElement> = Vec::new();
+        // "Don't show Share" was picked in a chat's Share popover: bring Share back.
+        if !installed && component["shareHidden"] == true {
+            actions.push(settings_sized_button(
+                p,
+                "collab-show-share",
+                "Show Share in chats",
+                None,
+                None,
+                SizedButtonVariant::Outline,
+                SizedButtonSize::Sm,
+                self.collab_card.busy,
+                None,
+                |tab: &mut Self, _window, cx| tab.show_share_again(cx),
+                cx,
+            ));
+        }
         let busy = self.collab_card.busy || working;
         let control = if installed {
             if update.is_some() {
@@ -242,6 +259,25 @@ impl ExtensionsTab {
             let _ = tab.update(cx, |_, cx| cx.notify());
         })
         .detach();
+    }
+
+    /// Shows the chat header's Share button again (it offers Install while Collab isn't installed).
+    fn show_share_again(&mut self, cx: &mut Context<Self>) {
+        let tab = cx.entity().downgrade();
+        store_gxserver_rpc(
+            &self.store,
+            "/api/collab",
+            json!({ "op": "hideShare", "hidden": false }),
+            CALL_TIMEOUT,
+            move |_, cx| {
+                let _ = tab.update(cx, |tab, cx| {
+                    tab.collab_card.asked_at = None;
+                    refresh_collab_component(&tab.store, cx);
+                    cx.notify();
+                });
+            },
+            cx,
+        );
     }
 
     /// Install, Update or Uninstall. Install answers with the owner's approval request, and

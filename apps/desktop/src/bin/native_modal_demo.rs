@@ -113,6 +113,11 @@ mod session_note_modal;
 mod settings_demo;
 #[path = "../app/window/settings_modal/mod.rs"]
 mod settings_modal;
+// The chat header's Share popover (Ghostex Collab), drawn from the app's own view.
+#[path = "native_modal_demo/share_popover.rs"]
+mod share_popover_demo;
+#[path = "../app/window/share_popover_view.rs"]
+mod share_popover_view;
 #[path = "native_modal_demo/space_editor.rs"]
 mod space_editor_demo;
 #[path = "../app/window/space_editor_modal.rs"]
@@ -570,6 +575,7 @@ fn main() {
                 "new-thread-picker" => new_thread_picker_demo::open(&demo, cx),
                 "update-available" => update_available_demo::open(&demo, cx),
                 "updates-menu" => updates_menu_demo::open(&demo, cx),
+                "share-popover" => share_popover_demo::open(&demo, cx),
                 "remote-setup" => remote_setup_demo::open(&demo, cx),
                 "delayed-send" => delayed_send_demo::open(&demo, cx),
                 "space-editor" => space_editor_demo::open(&demo, cx),
