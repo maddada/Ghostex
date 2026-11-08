@@ -134,6 +134,47 @@ open_string_enum! {
     }
 }
 
+/// A GBot's look and place on its project row (`gbotsBot`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationGbotsBot {
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub id: String,
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub name: String,
+    /// Its role ("Researcher"); may be empty.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub title: String,
+    /// A Ghostex icon name (apps/desktop/assets/titlebar/<icon>.svg).
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub icon: String,
+    /// One of the eight GBot colours by id, and its `#rrggbb`.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub color: String,
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub color_hex: String,
+    /// The launcher its chats run on.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub agent_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub department_id: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_lead: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub paused: bool,
+}
+
+/// Who opened a GBot chat (`gbotsChat` on its session row).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationGbotsChat {
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub bot_id: String,
+    /// `user`, `chief`, or later `bot:<id>`, `routine:<id>`, `room:<id>`, `api:<id>`.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub opened_by: String,
+}
+
 /// Sanitized git preferences published on the presentation project.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -198,6 +239,11 @@ pub struct PresentationProject {
     /// project and from an older daemon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bot_runs_today: Option<u64>,
+    /// The GBot whose folder this project is (server/src/gbots/presentation.rs); absent for every
+    /// other project, while GBots are off, and from an older daemon. Clients place such a project
+    /// under Chief of Staff in Main Hub, never in the projects list or the Bots space.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gbots_bot: Option<PresentationGbotsBot>,
     /// Issues Workflow (formerly Work mode) is on for this project: a Linear key applies to it, `gh`
     /// is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs).
     /// Present only when true.
@@ -1062,6 +1108,10 @@ pub struct PresentationSession {
     /// (gx-core `SessionRow::is_chief`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub is_chief: bool,
+    /// A chat of a GBot (server/src/gbots/presentation.rs): its bot and who opened it; absent
+    /// for every other session and while GBots are off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gbots_chat: Option<PresentationGbotsChat>,
     /// `coordinator` for a coordinator session, `thread` for a session a coordinator started;
     /// absent otherwise. A coordinator that is also another coordinator's thread says
     /// `coordinator` and still carries the thread fields below.

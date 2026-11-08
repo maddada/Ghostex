@@ -39,10 +39,14 @@ pub const READ_ALOUD: &str = "readAloud";
 /// calls while it is off, and the phone learns it from `builtInFeaturesOff`. Dictate is not part
 /// of it.
 pub const VOICE_AGENT: &str = "voiceAgent";
-/// Chief, the Ghostex-wide coordinator (its sidebar row under the Spaces bar on the desktop and
-/// the phone, its agent session and its head role); on by default. gxserver takes the head role
-/// away and puts its agent to sleep while it is off (server/src/chief/).
+/// Main Hub with Chief of Staff, the Ghostex-wide coordinator (its pinned row in Main Hub on the
+/// desktop and the phone, its agent session and its head role); a beta, off by default. gxserver
+/// takes the head role away and puts its agent to sleep while it is off (server/src/chief/).
 pub const CHIEF: &str = "chief";
+/// GBots, Ghostex's own bots under Chief of Staff in Main Hub; off by default, and off while Main
+/// Hub ([`CHIEF`]) is off. gxserver refuses `/api/gbots` and `ghostex gbots` while it is off
+/// (server/src/gbots/feature.rs).
+pub const GBOTS: &str = "gbots";
 /// Claude (claude.ai in a view opened from the sidebar's top bar, with an account bar to switch
 /// between the saved Claude accounts' sign-ins). Off by default.
 pub const CLAUDE_WEB: &str = "claudeWeb";

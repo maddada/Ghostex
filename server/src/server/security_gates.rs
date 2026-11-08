@@ -6,7 +6,7 @@
 //! | `/api/updateTailcatState` | Easy Connect goes on, opens a new port, lets new devices in (or empties its allow-list), changes its relay |
 //! | `/api/registerConnectedComputer`, `/api/issueComputerGrant` | a computer not approved in the last 30 days, with Agent access on: one request per computer, whoever asks (registering a computer with Agent access off never asks) |
 //! | `/api/autopilot` `op: "set"` | `answerApprovals` goes on, `limits` change |
-//! | `/api/gbots` `op: "create"` | always (a new bot) |
+//! | `/api/gbots` `op: "create"` | from your own computer, phone or terminal (Chief of Staff's adds don't ask; other agents are refused) |
 //! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a security-relaxing setting changes, or GBots goes on |
 //! | `/api/cloudBoxes` `create`, `setAgentLogin` (allowed), `projectSettings` (write) | anyone but the owner's devices: logins and project secrets go onto a box |
 //! | a create forcing full access | see security_full_access.rs |
@@ -349,6 +349,31 @@ fn computer_gate(
     Some((server_id, request))
 }
 
+/*
+CDXC:GBots 2026-11-08 DECISION:
+User (Q2103 A): Chief of Staff adds a GBot on its own and tells you in one card, so its adds ask nobody. Your own computer, phone and terminal still ask before a bot is added (the previous GBots' rule, kept by M0). Other agents may not add bots at all (Q-D A): `/api/gbots` refuses them with one sentence, so they are not asked for here; neither is anyone while GBots are off or for a name `/api/gbots` refuses, which it answers instead.
+*/
+fn gbots_add_action(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Option<ActionRequest> {
+    let user = matches!(
+        caller,
+        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent
+    );
+    let name = text(params, "name").unwrap_or_default();
+    // A name `/api/gbots` refuses anyway is never worth the user's approval.
+    if !user || !crate::gbots::gbots_on(&state.paths) || crate::gbots::name_problem(name).is_some()
+    {
+        return None;
+    }
+    Some(
+        ActionRequest::new(SensitiveAction::GbotsAddBot, format!("Add the GBot {name}"))
+            .params(Value::Object(params.clone())),
+    )
+}
+
 fn sensitive_action(
     state: &AppState,
     caller: &Principal,
@@ -359,11 +384,7 @@ fn sensitive_action(
         "/api/updateTailcatState" => easy_connect_action(state, params),
         "/api/autopilot" => autopilot_action(params),
         "/api/gbots" if text(params, "op") == Some("create") => {
-            let name = text(params, "name").unwrap_or("a new bot");
-            Some(
-                ActionRequest::new(SensitiveAction::GbotsAddBot, format!("Add the bot {name}"))
-                    .params(Value::Object(params.clone())),
-            )
+            gbots_add_action(state, caller, params)
         }
         "/api/dispatchRendererCommand" if text(params, "action") == Some("updateSettingsPatch") => {
             settings_action(params)

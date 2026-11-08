@@ -36,7 +36,8 @@ const CHIEF_GOAL: &str =
 pub(super) const CHIEF_FIRST_REQUEST: &str = "You are Chief of Staff, the Ghostex-wide coordinator on this computer: the user asks you about any session, agent, project or computer, or about Ghostex itself. Before your first reply, and again after any context compaction, run `ghostex chief guide` and follow it; where it differs from the coordinator guide, it wins. Then say in one short line that you're ready and wait for the user.";
 
 /// The launchers Chief can run on: set up to start, and an agent family a coordinator runs on.
-pub(super) fn chief_agent_rows(projects: &[Value]) -> Vec<Value> {
+/// GBots run on the same list (server/src/gbots/session.rs).
+pub(crate) fn chief_agent_rows(projects: &[Value]) -> Vec<Value> {
     sidebar_agent_buttons_from_projects(projects)
         .as_array()
         .cloned()
@@ -285,7 +286,9 @@ fn create_chief_session(
     Ok((record, started))
 }
 
-fn start_provider(
+/// Starts the agent of a session gxserver just created; answers whether it started. GBot chats
+/// start the same way (server/src/gbots/session.rs).
+pub(crate) fn start_provider(
     state: &AppState,
     db: &Connection,
     repository: &DomainRepository<'_>,

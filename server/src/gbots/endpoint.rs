@@ -1,24 +1,596 @@
-//! `/api/gbots {op, …}`: what clients and the `ghostex gbots` CLI ask of GBots. Until native
-//! GBots land, `list` answers with no bots and every other op is refused.
+//! `/api/gbots {op, …}`: what clients and the `ghostex gbots` CLI ask of GBots.
+//!
+//! | op | params | who |
+//! | --- | --- | --- |
+//! | `list` | | anyone here |
+//! | `show` | `bot` | anyone here |
+//! | `chats` | `bot` | anyone here |
+//! | `brief` | `bot?` (a bot's own chat needs none) | the bot's own chats, you, Chief of Staff |
+//! | `create` | `name`, `title?`, `description?`, `soul?`, `icon?`, `color?`, `agentId?`, `model?`, `effort?`, `approval?` | you, Chief of Staff |
+//! | `edit` | `bot` and the fields to change | you, Chief of Staff |
+//! | `remove` | `bot` | you, Chief of Staff |
+//! | `newChat` | `bot`, `task?` | you, Chief of Staff |
+//! | `closeChat` | `chat` (a session ref) | you; Chief of Staff for the chats it opened |
+//!
+//! Every op is refused while GBots are off (feature.rs). An approval level above `ask` is set from
+//! your own computer or phone only.
+//!
+//! CDXC:GBots 2026-11-08 DECISION:
+//! User (Q-D A): "the user and Chief of Staff" may create and edit bots; a department lead edits only its own members' instructions (departments come later). Other agents are refused with one sentence; "you" is the owner's devices and the `ghostex` CLI in your own terminal (the token file), which also asks for your approval before adding a bot (server/src/server/security_gates.rs). Chief of Staff adds bots without asking (Q2103 A). Letting a bot do more than ask first (approval `edits`, `auto`, `full`) is yours alone, like the other things only you can set.
 
 use std::sync::Arc;
 
+use axum::http::StatusCode;
+use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
-use crate::domain::DomainStateError;
-use crate::server::AppState;
+use super::record::{
+    bot_summary, delete_bot, insert_bot, list_bots, new_id, read_bot, record_change, require_bot,
+    update_bot, Bot, BotFields, DEFAULT_ICON, MAX_BOTS,
+};
+use crate::coordinators::now_iso;
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::protocol::{rpc_error, rpc_success};
+use crate::security::Principal;
+use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::storage::open_gxserver_database;
 
-pub(crate) async fn gbots_action(
-    _state: Arc<AppState>,
-    params: Map<String, Value>,
-) -> Result<Value, DomainStateError> {
-    let op = params
-        .get("op")
+pub(crate) const GBOTS_ENDPOINT: &str = "/api/gbots";
+
+/// Who is asking, as GBots' rules see it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Asker {
+    /// The owner's computer or phone.
+    OwnerDevice,
+    /// The `ghostex` CLI in the user's own terminal (the token file).
+    Terminal,
+    /// Chief of Staff, with its head role.
+    Chief,
+    /// Any other agent session.
+    Agent,
+    /// Anyone else (a connected computer, an extension).
+    Other,
+}
+
+impl Asker {
+    fn of(caller: &Principal) -> Self {
+        match caller {
+            Principal::Owner { .. } | Principal::Device { .. } => Self::OwnerDevice,
+            Principal::LocalAgent => Self::Terminal,
+            caller if caller.is_head() => Self::Chief,
+            Principal::Session { .. } => Self::Agent,
+            _ => Self::Other,
+        }
+    }
+
+    fn is_user(self) -> bool {
+        matches!(self, Self::OwnerDevice | Self::Terminal)
+    }
+
+    fn may_manage(self) -> bool {
+        self.is_user() || self == Self::Chief
+    }
+
+    /// `createdBy` and `openedBy`.
+    fn label(self) -> &'static str {
+        if self == Self::Chief {
+            "chief"
+        } else {
+            "user"
+        }
+    }
+}
+
+fn forbidden(message: &str) -> DomainStateError {
+    DomainStateError {
+        code: "forbidden",
+        message: message.to_string(),
+    }
+}
+
+pub(crate) async fn handle_gbots_http(
+    state: Arc<AppState>,
+    caller: Principal,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    if !super::gbots_on(&state.paths) {
+        return error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "turnedOff",
+                message: super::gbots_off_message(&state.paths),
+            },
+        );
+    }
+    let outcome = tokio::task::spawn_blocking(move || run(&state, &caller, &params)).await;
+    match outcome {
+        Ok(Ok(result)) => routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, result),
+        ),
+        Ok(Err(error)) => error_response(endpoint_path, request_id, error),
+        Err(error) => domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "internalError",
+                message: format!("GBots could not answer: {error}"),
+            },
+        ),
+    }
+}
+
+/// GBots' own refusals carry their HTTP status (409 while GBots are off); everything else is a
+/// domain error as usual.
+fn error_response(
+    endpoint_path: String,
+    request_id: String,
+    error: DomainStateError,
+) -> RoutedResponse {
+    if error.code != "turnedOff" {
+        return domain_error_response(endpoint_path, request_id, error);
+    }
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::CONFLICT,
+        rpc_error(error.code, error.message, Some(request_id)),
+    )
+}
+
+fn text<'a>(params: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
+    params
+        .get(key)
         .and_then(Value::as_str)
         .map(str::trim)
-        .unwrap_or_default();
+        .filter(|value| !value.is_empty())
+}
+
+fn required<'a>(params: &'a Map<String, Value>, key: &str) -> Result<&'a str, DomainStateError> {
+    text(params, key).ok_or_else(|| DomainStateError::bad_request(format!("Pass {key}.")))
+}
+
+fn run(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, &state.metadata.server_id);
+    let asker = Asker::of(caller);
+    let op = text(params, "op").unwrap_or("list");
     match op {
-        "list" => Ok(json!({ "bots": [] })),
-        _ => Err(DomainStateError::bad_request("op must be list.")),
+        "list" => list(state, &db, &repository),
+        "show" => show(state, &db, &repository, required(params, "bot")?),
+        "chats" => {
+            let bot = require_bot(&db, required(params, "bot")?)?;
+            chats(state, &repository, &bot)
+        }
+        "brief" => brief(state, &db, caller, asker, text(params, "bot")),
+        "create" => {
+            if !asker.may_manage() {
+                return Err(forbidden(
+                    "Only you and Chief of Staff can add GBots. Ask Chief of Staff for one.",
+                ));
+            }
+            create(state, &db, &repository, asker, params)
+        }
+        "edit" => {
+            if !asker.may_manage() {
+                return Err(forbidden(
+                    "Only you and Chief of Staff can change a GBot. Ask Chief of Staff to.",
+                ));
+            }
+            edit(state, &db, &repository, asker, params)
+        }
+        "remove" => {
+            if !asker.may_manage() {
+                return Err(forbidden(
+                    "Only you and Chief of Staff can remove a GBot.",
+                ));
+            }
+            remove(state, &db, &repository, asker, required(params, "bot")?)
+        }
+        "newChat" => {
+            if !asker.may_manage() {
+                return Err(forbidden(
+                    "Only you and Chief of Staff can open a chat with a GBot.",
+                ));
+            }
+            let bot = require_bot(&db, required(params, "bot")?)?;
+            let (session, started) = super::session::create_bot_chat(
+                state,
+                &db,
+                &repository,
+                &bot,
+                asker.label(),
+                text(params, "task"),
+            )?;
+            Ok(json!({
+                "bot": bot_summary(&bot),
+                "chat": super::session::chat_summary(&state.metadata.server_id, &session),
+                "providerStarted": started,
+            }))
+        }
+        "closeChat" => close_chat(state, &db, &repository, asker, required(params, "chat")?),
+        other => Err(DomainStateError::bad_request(format!(
+            "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat or closeChat."
+        ))),
     }
+}
+
+fn list(
+    state: &AppState,
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+) -> Result<Value, DomainStateError> {
+    let bots = list_bots(db)?
+        .iter()
+        .map(|bot| {
+            let mut summary = bot_summary(bot);
+            summary["folder"] = json!(super::folder::bot_folder(&state.paths, &bot.bot_id));
+            summary["openChats"] = json!(super::session::bot_chats(repository, bot)
+                .map(|chats| chats.len())
+                .unwrap_or(0));
+            summary
+        })
+        .collect::<Vec<_>>();
+    Ok(json!({ "bots": bots }))
+}
+
+fn show(
+    state: &AppState,
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    reference: &str,
+) -> Result<Value, DomainStateError> {
+    let bot = require_bot(db, reference)?;
+    let mut summary = bot_summary(&bot);
+    summary["soul"] = json!(bot.soul);
+    summary["folder"] = json!(super::folder::bot_folder(&state.paths, &bot.bot_id));
+    let drift = super::folder::soul_drift(&state.paths, &bot);
+    summary["soulDrift"] = json!(drift);
+    if let Some(drift) = drift {
+        summary["soulDriftMessage"] = json!(format!(
+            "SOUL.md was {drift} outside Ghostex, so {} still follows the instructions saved in Ghostex. Save new instructions with `ghostex gbots edit {} --soul-file <file>`.",
+            bot.name, bot.name
+        ));
+    }
+    summary["chats"] = chats(state, repository, &bot)?["chats"].take();
+    Ok(json!({ "bot": summary }))
+}
+
+fn chats(
+    state: &AppState,
+    repository: &DomainRepository<'_>,
+    bot: &Bot,
+) -> Result<Value, DomainStateError> {
+    let chats: Vec<Value> = super::session::bot_chats(repository, bot)?
+        .iter()
+        .map(|session| super::session::chat_summary(&state.metadata.server_id, session))
+        .collect();
+    Ok(json!({ "bot": bot_summary(bot), "chats": chats }))
+}
+
+/// The bot a caller's own session is a chat of.
+fn own_bot(db: &Connection, caller: &Principal) -> Result<Option<Bot>, DomainStateError> {
+    let Principal::Session { project_id, .. } = caller else {
+        return Ok(None);
+    };
+    super::record::bot_for_project(db, project_id)
+}
+
+fn brief(
+    state: &AppState,
+    db: &Connection,
+    caller: &Principal,
+    asker: Asker,
+    reference: Option<&str>,
+) -> Result<Value, DomainStateError> {
+    let own = own_bot(db, caller)?;
+    let bot = match (reference, own) {
+        (None, Some(own)) => own,
+        (Some(reference), Some(own)) => {
+            let named = require_bot(db, reference)?;
+            if named.bot_id != own.bot_id && !asker.may_manage() {
+                return Err(forbidden("A GBot reads only its own brief."));
+            }
+            named
+        }
+        (Some(reference), None) => {
+            if !asker.may_manage() {
+                return Err(forbidden(
+                    "Only a GBot's own chats, you and Chief of Staff read its brief.",
+                ));
+            }
+            require_bot(db, reference)?
+        }
+        (None, None) => {
+            return Err(DomainStateError::bad_request(
+                "This isn't a GBot's chat: name the GBot with --bot.",
+            ))
+        }
+    };
+    let team = list_bots(db)?;
+    Ok(json!({
+        "bot": bot_summary(&bot),
+        "brief": super::brief::brief_text(&state.paths, &bot, &team),
+    }))
+}
+
+/// Refuses an approval level above `ask` unless the owner's own device sets it.
+fn check_approval(asker: Asker, fields: &BotFields) -> Result<(), DomainStateError> {
+    if fields.raises_approval() && asker != Asker::OwnerDevice {
+        return Err(forbidden(
+            "Only you can let a GBot do more than ask first: set its approval level from Ghostex on your computer or phone.",
+        ));
+    }
+    Ok(())
+}
+
+fn create(
+    state: &AppState,
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    asker: Asker,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let fields = BotFields::from_params(params);
+    if fields
+        .name
+        .as_deref()
+        .is_none_or(|name| name.trim().is_empty())
+    {
+        return Err(DomainStateError::bad_request("Give the GBot a name."));
+    }
+    check_approval(asker, &fields)?;
+    let others = list_bots(db)?;
+    if others.len() >= MAX_BOTS {
+        return Err(DomainStateError {
+            code: "conflict",
+            message: format!(
+                "This computer has {MAX_BOTS} GBots, the most it can have. Remove one first."
+            ),
+        });
+    }
+    let rows = super::session::bot_agent_rows(repository)?;
+    let agent_id = match fields.agent_id.as_deref().map(str::trim) {
+        Some(agent_id) if !agent_id.is_empty() => agent_id.to_string(),
+        _ => crate::coordinators::default_coordinator_launcher(&rows).ok_or_else(|| {
+            DomainStateError::bad_request(format!(
+                "No agent a GBot can run on is set up here. Set up {} first.",
+                crate::coordinators::coordinator_agent_families_text()
+            ))
+        })?,
+    };
+    super::session::check_agent(&rows, &agent_id)?;
+    let now = now_iso();
+    let mut bot = Bot {
+        bot_id: new_id("b_"),
+        name: String::new(),
+        title: String::new(),
+        description: String::new(),
+        soul: String::new(),
+        icon: DEFAULT_ICON.to_string(),
+        color: super::record::COLORS[0].0.to_string(),
+        agent_id,
+        model: None,
+        effort: None,
+        approval: "ask".to_string(),
+        department_id: None,
+        is_lead: false,
+        computer: "this".to_string(),
+        project_id: String::new(),
+        work_folder: None,
+        memory_enabled: true,
+        paused_at: None,
+        created_by: asker.label().to_string(),
+        created_at: now.clone(),
+        updated_at: now,
+    };
+    fields.apply(&mut bot, &others)?;
+    let folder =
+        super::folder::create_folder(&state.paths, &bot).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("Could not create the GBot's folder: {error}"),
+        })?;
+    insert_bot(db, &bot)?;
+    super::presentation::refresh_presented_bots(db);
+    let project = match super::project::add_bot_project(state, db, repository, &bot, &folder) {
+        Ok(project) => project,
+        Err(error) => {
+            // Nothing of the user's is in a folder made a moment ago.
+            let _ = delete_bot(db, &bot.bot_id);
+            let _ = std::fs::remove_dir_all(&folder);
+            super::presentation::refresh_presented_bots(db);
+            return Err(error);
+        }
+    };
+    bot.project_id = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    update_bot(db, &bot)?;
+    let change_id = record_change(db, "botAdded", &bot.bot_id, None, Some(&bot), asker.label())?;
+    super::brief::refresh_all_instruction_files(&state.paths, db);
+    let mut summary = bot_summary(&bot);
+    summary["folder"] = json!(folder);
+    Ok(json!({ "bot": summary, "changeId": change_id }))
+}
+
+fn edit(
+    state: &AppState,
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    asker: Asker,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let before = require_bot(db, required(params, "bot")?)?;
+    let fields = BotFields::from_params(params);
+    check_approval(asker, &fields)?;
+    if let Some(agent_id) = fields.agent_id.as_deref() {
+        super::session::check_agent(
+            &super::session::bot_agent_rows(repository)?,
+            agent_id.trim(),
+        )?;
+    }
+    let others = list_bots(db)?;
+    let mut bot = before.clone();
+    fields.apply(&mut bot, &others)?;
+    if bot == before {
+        return Ok(json!({ "bot": bot_summary(&bot), "changed": false }));
+    }
+    bot.updated_at = now_iso();
+    update_bot(db, &bot)?;
+    if bot.soul != before.soul {
+        super::folder::write_soul(&state.paths, &bot).map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("Saved, but SOUL.md could not be written: {error}"),
+        })?;
+    }
+    if bot.name != before.name && !bot.project_id.is_empty() {
+        super::project::rename_bot_project(state, db, repository, &bot)?;
+    }
+    let change_id = record_change(
+        db,
+        "botEdited",
+        &bot.bot_id,
+        Some(&before),
+        Some(&bot),
+        asker.label(),
+    )?;
+    super::presentation::refresh_presented_bots(db);
+    super::brief::refresh_all_instruction_files(&state.paths, db);
+    if !bot.project_id.is_empty() {
+        let _ = crate::server::schedule_presentation_project_delta(
+            state,
+            db,
+            repository,
+            &bot.project_id,
+            "projectUpdated",
+        );
+    }
+    Ok(json!({ "bot": bot_summary(&bot), "changed": true, "changeId": change_id }))
+}
+
+fn remove(
+    state: &AppState,
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    asker: Asker,
+    reference: &str,
+) -> Result<Value, DomainStateError> {
+    let bot = require_bot(db, reference)?;
+    let chats = super::session::bot_chats(repository, &bot)?;
+    for chat in &chats {
+        let text = |key: &str| {
+            chat.get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        super::session::close_chat(state, &text("projectId"), &text("sessionId"))?;
+    }
+    if let Some(project) = super::project::bot_project(repository, &bot)? {
+        if let Some(project_id) = project.get("projectId").and_then(Value::as_str) {
+            super::project::remove_bot_project(state, db, repository, project_id)?;
+        }
+    }
+    delete_bot(db, &bot.bot_id)?;
+    let change_id = record_change(
+        db,
+        "botRemoved",
+        &bot.bot_id,
+        Some(&bot),
+        None,
+        asker.label(),
+    )?;
+    super::presentation::refresh_presented_bots(db);
+    super::brief::refresh_all_instruction_files(&state.paths, db);
+    let folder = super::folder::bot_folder(&state.paths, &bot.bot_id);
+    let trashed = if folder.exists() {
+        super::trash::move_to_trash(
+            &state.paths.home_dir,
+            &folder,
+            &format!("GBot {}", bot.name),
+        )
+    } else {
+        Ok(())
+    };
+    Ok(json!({
+        "removed": bot_summary(&bot),
+        "closedChats": chats.len(),
+        "changeId": change_id,
+        "folderInTrash": trashed.is_ok() && !folder.exists(),
+        "folderError": trashed.err(),
+    }))
+}
+
+/// `(projectId, sessionId)` of a chat ref: `S…:P…:G…`, `P…:G…`, or a bare session id looked up
+/// among the bots' projects.
+fn chat_key(
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    reference: &str,
+) -> Result<(String, String), DomainStateError> {
+    let parts: Vec<&str> = reference.trim().split(':').collect();
+    if parts.len() >= 2 {
+        let session = parts[parts.len() - 1].to_string();
+        let project = parts[parts.len() - 2].to_string();
+        return Ok((project, session));
+    }
+    for bot in list_bots(db)? {
+        if repository
+            .get_session(&bot.project_id, reference)?
+            .is_some()
+        {
+            return Ok((bot.project_id, reference.to_string()));
+        }
+    }
+    Err(DomainStateError::not_found(format!(
+        "There is no GBot chat {reference}. Run `ghostex gbots chats <bot>` to see them."
+    )))
+}
+
+fn close_chat(
+    state: &AppState,
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    asker: Asker,
+    reference: &str,
+) -> Result<Value, DomainStateError> {
+    let (project_id, session_id) = chat_key(db, repository, reference)?;
+    let session = repository
+        .get_session(&project_id, &session_id)?
+        .ok_or_else(|| DomainStateError::not_found(format!("There is no chat {reference}.")))?;
+    let Some((bot_id, opened_by)) = super::session::chat_of(&session) else {
+        return Err(DomainStateError::bad_request(
+            "That chat isn't a GBot's. Close it from the sidebar or with `ghostex agents close`.",
+        ));
+    };
+    let allowed = asker.is_user() || (asker == Asker::Chief && opened_by == "chief");
+    if !allowed {
+        return Err(forbidden(if asker == Asker::Chief {
+            "Chief of Staff closes only the GBot chats it opened, never yours."
+        } else {
+            "Only you, and Chief of Staff for the chats it opened, can close a GBot's chat."
+        }));
+    }
+    let bot = read_bot(db, bot_id)?;
+    super::session::close_chat(state, &project_id, &session_id)?;
+    Ok(json!({
+        "closed": super::session::chat_summary(&state.metadata.server_id, &session),
+        "bot": bot.as_ref().map(bot_summary),
+    }))
 }

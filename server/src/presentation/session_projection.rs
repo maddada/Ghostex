@@ -107,6 +107,8 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
             Value::from(crate::bot_feed::published_bot_runs_today(profile)),
         );
     }
+    // A GBot's project: its look and place under Chief of Staff (server/src/gbots/presentation.rs).
+    crate::gbots::insert_gbots_project_presentation(project, &mut output);
     if let Some(project_id) = project.get("projectId").and_then(Value::as_str) {
         insert_issues_workflow_fields(
             &mut output,
@@ -216,6 +218,8 @@ pub(crate) fn project_presentation_session(
         presentation_actions(session, &activity),
     );
     output.insert("activity".to_string(), Value::String(activity.clone()));
+    // A GBot's chat: its bot and who opened it (server/src/gbots/presentation.rs).
+    crate::gbots::insert_gbots_session_presentation(session, &mut output);
     // The open ```questions forms and question pages count too, while the agent works as well
     // (CDXC:SessionStatus 2026-10-20 in server/src/session_chat_open_questions.rs). Only a running
     // session publishes them; `attention.kind` reads them in every lifecycle state.

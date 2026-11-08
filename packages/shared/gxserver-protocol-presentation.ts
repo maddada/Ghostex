@@ -151,6 +151,19 @@ export interface GxserverPresentationProject {
   botGatewayRunning?: boolean;
   /** How many runs that bot's cron jobs delivered since local midnight; absent for every other project. */
   botRunsToday?: number;
+  /** The GBot whose folder this project is (server/src/gbots/presentation.rs); absent otherwise and while GBots are off. */
+  gbotsBot?: {
+    id: string;
+    name: string;
+    title: string;
+    icon: string;
+    color: string;
+    colorHex: string;
+    agentId: string;
+    departmentId?: string;
+    isLead?: true;
+    paused?: true;
+  };
   /** Issues Workflow (formerly Work mode) is on for this project: a Linear key applies, `gh` is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs); present only when true. */
   workMode?: true;
   /** Issues Workflow is on and a Linear key applies to this project; present only when true. */
@@ -499,6 +512,8 @@ export interface GxserverPresentationSession {
   forkBranchCount?: number;
   forkFamilySessionIds?: GxserverSessionId[];
   /** `coordinator` or `thread`; absent for every other session (gxserver `coordinators/presentation.rs`). */
+  /** A chat of a GBot: its bot and who opened it (`user`, `chief`, …); absent otherwise and while GBots are off. */
+  gbotsChat?: { botId: string; openedBy: string };
   coordinatorRole?: 'coordinator' | 'thread';
   coordinatorProjectId?: GxserverProjectId;
   coordinatorSessionId?: GxserverSessionId;

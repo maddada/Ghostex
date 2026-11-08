@@ -35,6 +35,7 @@ pub(crate) use presentation::{
     chief_home_session_trusted, insert_chief_presentation_payload, insert_chief_session_projection,
 };
 pub(crate) use record::{chief_key, read_record};
+pub(crate) use session::{chief_agent_rows, start_provider};
 pub(crate) use sweep::start_chief_sweep;
 
 /// The playbook Chief follows, printed by `ghostex chief guide` (and `/api/chief` `guide`).

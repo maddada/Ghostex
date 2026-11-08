@@ -30,10 +30,10 @@ fn initializes_sqlite_with_current_migrations_and_schema_layout() {
     let journal_mode: String = db
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .expect("journal_mode");
-    assert_eq!(user_version, 64);
+    assert_eq!(user_version, 65);
     assert_eq!(foreign_keys, 1);
     assert_eq!(journal_mode, "wal");
-    assert_eq!(schema_migration_count(&db), 64);
+    assert_eq!(schema_migration_count(&db), 65);
     assert_eq!(
         explicit_index_names(&db),
         vec![
@@ -46,6 +46,10 @@ fn initializes_sqlite_with_current_migrations_and_schema_layout() {
             "idx_coordinator_remote_threads_coordinator".to_string(),
             "idx_coordinator_threads_coordinator".to_string(),
             "idx_delayed_sends_due".to_string(),
+            "idx_gbots_assignments_bot".to_string(),
+            "idx_gbots_assignments_root".to_string(),
+            "idx_gbots_bots_name".to_string(),
+            "idx_gbots_changes_at".to_string(),
             "idx_global_sidebar_commands_order".to_string(),
             "idx_id_allocations_kind_parent".to_string(),
             "idx_notification_feed_read".to_string(),
