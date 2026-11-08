@@ -887,6 +887,10 @@ pub(super) fn qr_preview_dialog(
     };
     let grid = tab.qr_for(tailscale, &payload);
     let copy = copy_text_button(tab, t, "remote-qr-copy-text", card, cx);
+    // Pairing v2 (GitHub #495): a phone that scanned this code waits here with its three words.
+    let waiting = (!tailscale)
+        .then(|| tab.pending_devices.first().cloned())
+        .flatten();
     let qr_size = QR_PREVIEW_SIZE
         .min(window.viewport_size().height.as_f32() - QR_PREVIEW_CHROME_HEIGHT)
         .max(QR_PLACEHOLDER_SIZE)
@@ -992,6 +996,37 @@ pub(super) fn qr_preview_dialog(
                 )
                 .children(copy.map(|button| div().pt(px(8.0)).child(button))),
         )
+        .children(waiting.map(|device| {
+            v_flex()
+                .w_full()
+                .items_center()
+                .gap(px(4.0))
+                .p(px(12.0))
+                .rounded(px(MODAL_RADIUS_CONTROL))
+                .border_1()
+                .border_color(hsla(colors.border))
+                .text_center()
+                .child(
+                    div()
+                        .text_color(hsla(colors.muted))
+                        .child(format!("{} is waiting. Check it shows:", device.name)),
+                )
+                .child(
+                    div()
+                        .text_size(px(18.0))
+                        .line_height(px(26.0))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(hsla(colors.foreground))
+                        .child(device.words.join(" · ")),
+                )
+                .child(
+                    div()
+                        .text_size(px(13.0))
+                        .line_height(px(18.57))
+                        .text_color(hsla(colors.muted))
+                        .child("Then approve the request on this computer or a paired phone. If the words differ, deny it under Paired devices."),
+                )
+        }))
         .into_any_element();
     Some(dialog_overlay(
         "remote-qr-preview-overlay",

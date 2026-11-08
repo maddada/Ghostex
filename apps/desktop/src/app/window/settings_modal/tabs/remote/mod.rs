@@ -182,6 +182,8 @@ pub(crate) struct RemoteTab {
     pub(super) access: Option<AccessStatus>,
     pub(super) pairing: Option<PairingCodes>,
     pub(super) paired_devices: Option<Vec<PairedDevice>>,
+    /// Phones waiting for approval, with their words (pairing v2).
+    pub(super) pending_devices: Vec<PendingDevice>,
     pub(super) request_error: Option<String>,
     pub(super) enabling_ssh: bool,
     pub(super) install_pending: bool,
@@ -354,6 +356,7 @@ impl RemoteTab {
             access: None,
             pairing: None,
             paired_devices: None,
+            pending_devices: Vec::new(),
             request_error: None,
             enabling_ssh: false,
             install_pending: false,
@@ -580,12 +583,36 @@ impl RemoteTab {
                                     this.easy_connect = Some(status);
                                     this.pairing = Some(code);
                                     this.request_error = None;
+                                    // A phone that just scanned shows its words on the sheet
+                                    // without waiting for the slow refresh.
+                                    if this.qr_preview == Some(PathCard::EasyConnect) {
+                                        this.refresh_pending_devices(cx);
+                                    }
                                 }
                                 Err(error) => this.request_error = Some(error),
                             }
                             cx.notify();
                         },
                     ),
+                }
+            },
+        );
+    }
+
+    /// The phones waiting for approval, while the Show QR sheet is open.
+    fn refresh_pending_devices(&mut self, cx: &mut Context<Self>) {
+        self.rpc(
+            "/api/pairedDevices",
+            json!({}),
+            RPC_TIMEOUT,
+            cx,
+            |this, devices, cx| {
+                if let Ok(value) = devices {
+                    this.pending_devices = read_pending_devices(&value);
+                    if let Ok(devices) = read_paired_devices_result(&value) {
+                        this.paired_devices = Some(devices);
+                    }
+                    cx.notify();
                 }
             },
         );
@@ -632,6 +659,7 @@ impl RemoteTab {
                     cx,
                     move |this, devices, cx| {
                         this.slow_in_flight = false;
+                        let pending = devices.as_ref().ok().map(read_pending_devices);
                         match devices.and_then(|value| read_paired_devices_result(&value)) {
                             Ok(devices) => {
                                 if access.ssh.enabled {
@@ -639,6 +667,7 @@ impl RemoteTab {
                                 }
                                 this.access = Some(access);
                                 this.paired_devices = Some(devices);
+                                this.pending_devices = pending.unwrap_or_default();
                             }
                             Err(error) => this.request_error = Some(error),
                         }
@@ -768,9 +797,11 @@ impl RemoteTab {
             cx,
             |this, result, cx| {
                 this.removing_device = None;
+                let pending = result.as_ref().ok().map(read_pending_devices);
                 match result.and_then(|value| read_paired_devices_result(&value)) {
                     Ok(devices) => {
                         this.paired_devices = Some(devices);
+                        this.pending_devices = pending.unwrap_or_default();
                         this.request_error = None;
                     }
                     Err(error) => this.request_error = Some(error),

@@ -6,7 +6,7 @@ use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{switch_control, toggle_from_row};
 use super::RemoteTab;
 use super::model::{
-    format_paired_device_detail, is_paired_device_connected_now, is_phone_platform,
+    PendingDevice, format_paired_device_detail, is_paired_device_connected_now, is_phone_platform,
 };
 use super::style::*;
 use gpui::prelude::FluentBuilder as _;
@@ -204,6 +204,20 @@ pub(super) fn paired_devices_list(
             })
             .collect(),
     };
+    let mut rows = rows;
+    let pending: Vec<AnyElement> = tab
+        .pending_devices
+        .clone()
+        .into_iter()
+        .map(|device| pending_device_row(tab, t, rpc, device, cx))
+        .collect();
+    if !pending.is_empty() {
+        // An empty-list placeholder makes no sense beside a phone that is pairing.
+        if tab.paired_devices.as_ref().is_some_and(Vec::is_empty) {
+            rows.clear();
+        }
+        rows.splice(0..0, pending);
+    }
     let paired_only = paired_only_row(tab, t, rpc, cx);
     v_flex()
         .w_full()
@@ -213,6 +227,83 @@ pub(super) fn paired_devices_list(
         .child(rows_frame(t, rows))
         .child(rows_frame(t, vec![paired_only]))
         .into_any_element()
+}
+
+/*
+CDXC:RemotePairing 2026-11-08 DECISION:
+User (GitHub #495, Q1721): a phone that scanned the QR is Pending until the owner compares three words shown on both screens and approves with Touch ID, Windows Hello or the system password. The row shows the words; approving happens on the approval request (the desktop's approval card, GitHub #495 Phase 2), because a plain button here could be clicked by an agent driving the GUI. Deny needs no approval: it only closes a door.
+*/
+fn pending_device_row(
+    tab: &RemoteTab,
+    t: &RemoteTokens,
+    rpc: bool,
+    device: PendingDevice,
+    cx: &mut Context<RemoteTab>,
+) -> AnyElement {
+    let glyph = if is_phone_platform(&device.platform) {
+        ICON_DEVICE_MOBILE
+    } else {
+        ICON_DEVICE_LAPTOP
+    };
+    let removing = tab.removing_device.as_deref() == Some(device.id.as_str());
+    let main = v_flex()
+        .min_w_0()
+        .gap(px(3.0))
+        .child(
+            h_flex()
+                .items_center()
+                .gap(px(6.0))
+                .text_size(px(14.0))
+                .line_height(px(20.0))
+                .text_color(hsla(t.foreground))
+                .child(super::super::super::fields::settings_icon(
+                    glyph,
+                    15.0,
+                    t.foreground,
+                ))
+                .child(device.name.clone())
+                .child(detail(t, "· waiting for your approval", false)),
+        )
+        .child(
+            div()
+                .text_size(px(15.0))
+                .line_height(px(22.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(hsla(t.foreground))
+                .child(device.words.join(" · ")),
+        )
+        .child(detail(
+            t,
+            "Approve the request only if the phone shows the same three words. Deny it if you didn't just scan the code.",
+            true,
+        ))
+        .into_any_element();
+    let id: SharedString = device.id.clone().into();
+    let deny_id = device.id.clone();
+    let value = compact_button(
+        &t.p,
+        SharedString::from(format!("remote-pending-{id}-deny")),
+        "Deny",
+        removing.then(|| {
+            spinner(
+                SharedString::from(format!("remote-pending-{id}-spinner")),
+                14.0,
+                t.muted,
+                900,
+            )
+        }),
+        Look::Filled,
+        24.0,
+        14.0,
+        Some(t.muted),
+        !rpc || removing,
+        None,
+        move |tab: &mut RemoteTab, _window, cx| {
+            tab.remove_paired_device(deny_id.clone(), cx);
+        },
+        cx,
+    );
+    remote_row(main, Some(value))
 }
 
 /*
