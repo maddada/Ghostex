@@ -5,7 +5,7 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::RowControl;
 use super::super::super::fields::{
-    SizedButtonSize, SizedButtonVariant, icon, settings_icon, settings_sized_button,
+    SizedButtonSize, SizedButtonVariant, icon, settings_icon, settings_sized_button, tooltip_text,
 };
 use super::super::super::palette::SettingsPalette;
 use gpui::prelude::FluentBuilder as _;
@@ -18,8 +18,8 @@ use std::sync::Arc;
 
 /// `.extension-card-grid { gap: 0.625rem }`.
 const GRID_GAP: f32 = 10.0;
-/// `min-height: 9.5rem`.
-pub(crate) const CARD_MIN_HEIGHT: f32 = 152.0;
+/// The card's height with its title, no description (CDXC:Extensions 2026-11-08 in `grid_card`).
+pub(crate) const CARD_MIN_HEIGHT: f32 = 116.0;
 /// `EXTENSION_ICON_COLOR` (`#b9b9b9`; the light theme's `--extension-icon-color` is `#525252`).
 pub(crate) fn extension_icon_color(p: &SettingsPalette) -> gpui::Rgba {
     if p.light {
@@ -227,8 +227,15 @@ pub(crate) struct GridCardSpec {
 /// User: every extension on the Settings Extensions page (built-in, installed, Store and the user's own views) is a card in a grid, three to a row, instead of a list row. One card shape serves all four so they read as one family: icon and the on/off switch (or Install) on top, title, description, an optional scope label, and a footer with the type or author on the left and the row actions, which appear on hover or focus. The switch is the state, so there is no status dot; a card that is off dims its icon.
 /// CDXC:Extensions 2026-11-07 WHY:
 /// A card's description wraps in full instead of stopping at three lines with an ellipsis: the GBots card cut off mid-word ("on any of your co…") and only a hover tooltip showed the rest. The grid keeps cards in a row the same height, so a longer description just makes its row taller, and there is no tooltip repeating the text.
-/// `ExtensionGridCard`: icon and control on top, title, the whole description, an optional
-/// scope label, and a footer with the meta text and the actions that appear on hover.
+/// CDXC:Extensions 2026-11-08 DECISION:
+/// User (Q2023 on the remote tile audit page, overriding a two-line clamp): "For extensions let's
+/// just show a tooltip for all of them: just show the title, and when I hover an (i) icon appears
+/// next to the title; hovering it shows the details of each one in the tooltip. It'll make
+/// extension cards simpler". Supersedes the 2026-11-07 full description: in a three-column grid
+/// it filled the cards with paragraphs cut off at the page's edge.
+/// `ExtensionGridCard`: icon and control on top, the title (its description behind the (i) that
+/// shows on hover), an optional scope label, and a footer with the meta text and the actions that
+/// appear on hover.
 pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
     let group: SharedString = format!("extension-card-{}", spec.id).into();
     let hover_surface = p.raised_hover;
@@ -312,6 +319,26 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                         .text_color(hsla(p.foreground))
                         .child(spec.title),
                 )
+                .when(!spec.description.is_empty(), |this| {
+                    this.child(
+                        div()
+                            .id(SharedString::from(format!(
+                                "extension-card-description-{}",
+                                spec.id
+                            )))
+                            .flex_shrink_0()
+                            .flex()
+                            .items_center()
+                            .opacity(0.0)
+                            .group_hover(group.clone(), |this| this.opacity(1.0))
+                            .tooltip(tooltip_text(spec.description.to_string()))
+                            .child(settings_icon(
+                                "modals/settings/info-circle.svg",
+                                14.0,
+                                p.muted,
+                            )),
+                    )
+                })
                 .children(spec.badge.map(|badge| {
                     div()
                         .flex_shrink_0()
@@ -325,20 +352,6 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                         .text_color(hsla(p.muted))
                         .child(badge)
                 })),
-        )
-        .child(
-            div()
-                .id(SharedString::from(format!(
-                    "extension-card-description-{}",
-                    spec.id
-                )))
-                .mt(px(2.0))
-                .w_full()
-                .min_w_0()
-                .text_size(px(13.0))
-                .line_height(px(18.85))
-                .text_color(hsla(p.foreground_alpha(0.75)))
-                .child(spec.description),
         )
         .children(spec.extra)
         .children(spec.scope_summary.map(|summary| {
