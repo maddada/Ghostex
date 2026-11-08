@@ -62,6 +62,9 @@ pub struct SessionState {
     /// The session runs on its own login (its command sets the profile or runs a wrapper), so it
     /// offers no account. Reads alone, and only a read that says so changes it.
     pub uses_own_login: bool,
+    /// The icons of the agents turned on in Settings › Agents, carried by reads alone; `None`
+    /// until a read says (an older daemon), which shows every provider's model menu tab.
+    pub enabled_agent_icons: Option<Vec<String>>,
     /// Model and effort read off the agent's screen. Absent means unchanged; merged by evidence.
     pub selected_options: Option<Value>,
     /// How many times `setSelectedOptions` was handed a NEW object, which is the identity family
@@ -168,6 +171,7 @@ impl Default for SessionState {
             available_agents: None,
             switchable_agents: None,
             uses_own_login: false,
+            enabled_agent_icons: None,
             selected_options: None,
             selected_options_generation: 0,
             terminal_notice: None,
