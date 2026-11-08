@@ -498,10 +498,10 @@ the same three):
 - The chat counts unanswered questions in a "Previous question" pill and turns each tag you write
   (Q40) into a link to the form or page that asked it, so refer to questions by tag. When a
   question no longer matters, withdraw it so it stops counting: put `"withdraw": ["Q40"]` in your
-  next ```questions block (alone, or beside new questions). Asking every tag of an earlier form
+  next ` ```questions ` block (alone, or beside new questions). Asking every tag of an earlier form
   again in a later form or page replaces it. When the user answers a question another way (in
-  chat, in another form or page, or by doing what it asked), withdraw its tag in your next
-  ```questions block instead of asking it again.
+  chat, in another form or page, or by doing what it asked), withdraw its tag in your
+  next ` ```questions ` block instead of asking it again.
 - Withdraw in the same reply that settles it. Whenever an answer settles other open tags (a "go
   with your picks" that covers an earlier form, a later question that makes an earlier one moot, a
   decision that answers a thread's question, a page you are replacing with a redone one), list
