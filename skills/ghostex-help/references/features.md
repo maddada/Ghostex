@@ -4152,6 +4152,14 @@ sessions, so any client can control agents on any machine.
   built yourself is signed differently) and install the latest release's APK;
   if it still fails, `adb install ghostex-android.apk` from a computer shows
   the real reason.
+  To look around with no computer and no account, open the phone app and tap
+  **Try a demo computer**. On the Connect your computer screen, open the card
+  of that name and tap **Open demo**. The Sessions list opens for **Demo
+  computer**, with sample projects (Atlas API, Side project, Wander). A chat
+  answers with a reply saved in the app, the terminal is a script (`ls`,
+  `pwd`, `git status`, `help`), and Web Preview shows a page saved in the app.
+  Nothing is sent over the network, and voice is off. Remove it in Settings >
+  Demo computer > Remove demo computer. Pairing a real computer is separate.
   The phone app keeps itself up to date: most releases download in the
   background and apply the next time the app starts, or right away with
   Restart to update in the phone's Settings > Updates, which also shows the

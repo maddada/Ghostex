@@ -1,24 +1,32 @@
-Ghostex is the companion app for Ghostex, a free, open source desktop app (ghostex.dev) that runs command-line coding agents on the user's own computer. The phone app has no account and no content of its own: it connects to the user's computer and shows the agent sessions running there.
+Ghostex is a free, open-source companion app. It connects to the user's own computer running Ghostex (https://ghostex.dev) so they can view and steer the AI coding agent sessions on that computer. There is no account and no in-app purchase.
 
-For review we run a demo computer with Ghostex and a few sample projects and agent sessions. It stays online for the whole review.
+Review uses the demo built into the app. It runs fully offline. Projects, sessions, chat, the terminal and Web Preview come from data kept in memory on the device. Nothing is paired, stored as a login, or sent over the network. No sign-in is required.
 
-HOW TO CONNECT
-1. Open the app and tap "Connect your computer".
-2. Choose "Use Tailscale", then tap "Or type the details". This form connects over plain SSH to any address; the Tailscale check at the top can be ignored.
-3. Fill in:
-   Address: {{DEMO_ADDRESS}}
-   Username: {{DEMO_USERNAME}}
-   Password: the password in Sign-In Information
-   SSH port (open Advanced): {{DEMO_SSH_PORT}}
-4. Tap Save. The Sessions list shows the demo computer's projects and agent sessions.
+HOW TO REVIEW
+1. Launch the app. On the first screen, tap "Try a demo computer".
+2. If you already tapped "Connect your computer", open the card titled "Try a demo computer" and tap "Open demo".
+3. The Sessions list for "Demo computer" opens.
+4. Open the Atlas API rate-limit chat (the session titled "Rate limit the public API") or "A weekend in Lisbon". Send a message. A canned reply streams back. Nothing is sent to a model or a server.
+5. Tap "Terminal view" in the header. The terminal is a script, not a live shell. Type ls, pwd, git status, or help.
+6. Tap "New session" and pick Atlas API, Side project, or Wander. The new chat answers the same way.
+7. On the Atlas API project, open Actions and choose "Open preview". Web Preview shows a page bundled with the app. It does not load the internet.
+8. Settings > Voice explains that voice is off for the demo computer. Dictate and the voice agent need a real computer.
+9. Settings > Live Activity shows sample data from the demo sessions, on this phone only.
+10. Remove the demo from Settings > Demo computer > Remove demo computer. Pairing a real computer is separate.
 
-WHAT TO TRY
-- Tap a session to open its chat. Scroll the conversation, then send a message such as "Summarize what you changed" and watch the agent answer.
-- Open the same session's terminal from the session's menu and try the extra keys.
-- Open Web Preview from the computer's menu and pick the site running on port 3000.
-- Long-press a project and choose Docs to read its Markdown files.
+OVER-THE-AIR UPDATES
+The app uses expo-updates. Updates are code-signed and served from https://ota.ghostex.dev. An update contains only JavaScript, assets, and the bundled WebAssembly core that runs inside the app's WebView and JavaScript runtime. Updates do not change the app's primary purpose, do not add native code, and do not bypass review. This is consistent with App Store Review Guideline 2.5.2 and section 3.3.1(B) of the Apple Developer Program License Agreement on interpreted code.
 
-Real users usually pair with Easy Connect ("Scan a code"): Ghostex on their computer shows a QR code that the app scans. Those codes expire after 15 minutes, which is why review uses the address form above.
+BACKGROUND MODES
+The audio and voip background modes are used for the hands-free voice agent. The voice agent uses CallKit so a voice conversation with the user's agent continues when the screen locks. Voice is not available in demo mode.
 
-DATA
-The app only talks to the computers the user connects. The agents run on those computers under the user's own accounts; the app sends no conversation or code to us or to any AI service. "Send Bug / Feedback" posts the report the user writes to our feedback service, only when the user sends it.
+AGE RATING
+The age rating is 16+ because Web Preview can show arbitrary web content from the user's own dev server (unrestricted web access). In the demo, Web Preview shows only the bundled page.
+
+CAMERA, MICROPHONE, AND LOCAL NETWORK
+Camera: scanning the pairing QR code shown on the user's computer, and attaching photos to a session.
+Microphone and speech recognition: the voice agent and dictation.
+Local network: connecting to the user's own computer.
+
+ENCRYPTION
+The app uses standard encryption only (TLS, SSH, and WireGuard via OpenSSL). ITSAppUsesNonExemptEncryption is false.

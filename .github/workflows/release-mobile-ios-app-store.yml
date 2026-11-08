@@ -83,6 +83,9 @@ jobs:
           GHOSTEX_REVIEW_CONTACT_LAST_NAME: ${{ secrets.APPLE_REVIEW_CONTACT_LAST_NAME }}
           GHOSTEX_REVIEW_CONTACT_PHONE: ${{ secrets.APPLE_REVIEW_CONTACT_PHONE }}
           GHOSTEX_REVIEW_CONTACT_EMAIL: ${{ secrets.APPLE_REVIEW_CONTACT_EMAIL }}
+          # Optional. The in-app demo needs no sign-in. Empty username or password
+          # sets demoAccountRequired to false and sends no credentials. Address and
+          # SSH port are ignored; the notes have no placeholders.
           GHOSTEX_REVIEW_DEMO_ADDRESS: ${{ secrets.APPLE_REVIEW_DEMO_ADDRESS }}
           GHOSTEX_REVIEW_DEMO_USERNAME: ${{ secrets.APPLE_REVIEW_DEMO_USERNAME }}
           GHOSTEX_REVIEW_DEMO_PASSWORD: ${{ secrets.APPLE_REVIEW_DEMO_PASSWORD }}
