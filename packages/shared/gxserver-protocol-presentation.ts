@@ -79,6 +79,8 @@ export interface GxserverPresentationAttentionState {
   notificationId?: string;
   /** A finished turn whose handover has a 🛑 Blocked or ❓ Needs you section. Present only when true; absent on an older daemon. */
   handoverNeedsYou?: boolean;
+  /** gxserver's verdict on whether this attention alerts (packages/gx-core/src/alert_rule.rs); absent on an older daemon. */
+  alerts?: boolean;
 }
 
 export interface GxserverPresentationSessionActions {
@@ -470,6 +472,14 @@ export interface GxserverPresentationSession {
   pendingQuestionCount?: number;
   /** Stuck on a permission prompt or approval card only the user can grant (the red dot); absent when not. */
   awaitingApproval?: boolean;
+  /** Since when a session has shown no progress (the not-moving red dot); absent when not stuck. */
+  stuckSince?: string;
+  /** `autopilot` while Autopilot heals the stuck session, so its red dot does not alert yet. */
+  stuckHandledBy?: string;
+  /** Since when the session is blocked (out of usage on every account, an error recovery could not get past): the red dot. */
+  blockedSince?: string;
+  /** Why it is blocked, in a few plain words; present with `blockedSince`. */
+  blockedReason?: string;
   /** A running session holds a question card only the user can answer, also while the agent works; absent when not. Independent of pendingQuestionCount. */
   awaitingAnswer?: boolean;
   agentIcon?: string;

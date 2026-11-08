@@ -74,6 +74,9 @@ impl AgentActivityReport {
 /// (`handoverNeedsYou`). A coordinator's thread hands its report to its coordinator, so only its
 /// own `needsInput` alerts. An attention an older daemon publishes without a kind alerts as before;
 /// a session that already left attention when its alert would play does not, since nothing waits.
+/// CDXC:Notifications 2026-11-08 SEE-ALSO: the rule itself is now `alert_rule::should_alert`
+/// (alert_rule.rs), which makes a thread's and a coordinator's plain finished turn quiet under All
+/// too; this setting only narrows what that rule lets through.
 /// SEE-ALSO: apps/mobile/app/src/notifications/attentionAlerts.ts (the phone's copy of this rule).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum AttentionAlerts {
@@ -91,28 +94,10 @@ impl AttentionAlerts {
         }
     }
 
-    /// Whether `session`'s attention alerts under this choice.
+    /// Whether `session`'s attention alerts under this choice (`alert_rule::attention_alerts`).
     pub fn alerts(self, session: &PresentationSession) -> bool {
-        match self {
-            Self::All => true,
-            Self::NeedsYou => attention_needs_you(session),
-        }
+        crate::alert_rule::attention_alerts(session, self)
     }
-}
-
-fn attention_needs_you(session: &PresentationSession) -> bool {
-    use ghostex_gx_protocol::AttentionKind;
-    let Some(attention) = session.attention.as_ref() else {
-        return false;
-    };
-    if attention.kind != Some(AttentionKind::Finished) {
-        return true;
-    }
-    let thread = session
-        .coordinator_session_id
-        .as_deref()
-        .is_some_and(|id| !id.trim().is_empty());
-    attention.handover_needs_you && !thread
 }
 
 /// Per-session attention bookkeeping. Lives in the [`crate::Core`].
@@ -128,9 +113,12 @@ pub(crate) struct AttentionTracker {
     sound_event_keys: HashSet<String>,
     sound_event_order: VecDeque<String>,
     sound_suppressed_until: HashMap<SessionKey, u64>,
-    /// Sessions last seen stuck (`stuckSince`), so the not-moving alert plays once per stuck
-    /// stretch.
+    /// Sessions last seen stuck with nobody healing them (`alert_rule::stuck_alerts`), so the
+    /// not-moving alert plays once per stuck stretch, when Autopilot leaves it for the user if it
+    /// was healing it.
     stuck: HashSet<SessionKey>,
+    /// Sessions last seen blocked (`blockedSince`), so the blocked alert plays once per stretch.
+    blocked: HashSet<SessionKey>,
 }
 
 /// `getGpuiPresentationAttentionEventId`: the event id, else the entered-at time for an older
@@ -242,7 +230,10 @@ impl AttentionTracker {
         // CDXC:Coordinators 2026-11-05 DECISION: a session that becomes stuck plays the
         // not-moving sound and shows a banner, on the same live deltas the completion sound
         // plays on (server/src/coordinators/stall.rs).
-        let stuck = session.stuck_since.is_some();
+        // CDXC:Notifications 2026-11-08: only while nobody heals it (`stuckHandledBy`), so a
+        // session Autopilot is interrupting or reloading alerts when Autopilot leaves it for the
+        // user, not before (alert_rule.rs).
+        let stuck = crate::alert_rule::stuck_alerts(session);
         if stuck && self.stuck.insert(key.clone()) {
             if let Some(effects) = sound.as_mut() {
                 effects.push(Effect::SessionStuckRaised {
@@ -251,6 +242,23 @@ impl AttentionTracker {
             }
         } else if !stuck {
             self.stuck.remove(key);
+        }
+        // CDXC:Notifications 2026-11-08: blocked (out of usage, an error recovery could not get
+        // past) is a red dot that always alerts, on the same live deltas.
+        let blocked = crate::alert_rule::blocked_alerts(session);
+        if blocked && self.blocked.insert(key.clone()) {
+            if let Some(effects) = sound.as_mut() {
+                effects.push(Effect::SessionBlockedRaised {
+                    session: key.clone(),
+                    reason: session
+                        .blocked_reason
+                        .clone()
+                        .filter(|reason| !reason.trim().is_empty())
+                        .unwrap_or_else(|| "Blocked: it needs you to carry on.".to_string()),
+                });
+            }
+        } else if !blocked {
+            self.blocked.remove(key);
         }
         let previous = self.activity.insert(key.clone(), session.activity.clone());
         if session.activity != SessionActivity::Attention {
@@ -304,6 +312,7 @@ impl AttentionTracker {
     fn forget(&mut self, key: &SessionKey) {
         self.activity.remove(key);
         self.stuck.remove(key);
+        self.blocked.remove(key);
         self.clear_tracking(key);
     }
 
@@ -611,6 +620,10 @@ mod tests {
             parent,
         );
         row["attention"] = attention;
+        // A plain session, not the coordinator the shared fixture makes of a row without a parent.
+        if parent.is_none() {
+            row.as_object_mut().unwrap().remove("coordinatorRole");
+        }
         serde_json::from_value(row).expect("the row parses")
     }
 
@@ -642,8 +655,12 @@ mod tests {
             assert_eq!(AttentionAlerts::from_setting(value), AttentionAlerts::All);
         }
         let finished = json!({ "acknowledged": false, "eventId": "e1", "kind": "finished" });
+        let asks = json!({ "acknowledged": false, "eventId": "e1", "kind": "needsInput" });
         assert!(AttentionAlerts::All.alerts(&attention_row(None, finished.clone())));
-        assert!(AttentionAlerts::All.alerts(&attention_row(Some("lead"), finished)));
+        // CDXC:Notifications 2026-11-08: a thread's finished turn is quiet under All too, while
+        // its question still alerts.
+        assert!(!AttentionAlerts::All.alerts(&attention_row(Some("lead"), finished)));
+        assert!(AttentionAlerts::All.alerts(&attention_row(Some("lead"), asks)));
     }
 
     /// One local project: the orchestrator `lead`, its thread `done` and that thread's own thread

@@ -26,6 +26,11 @@ pub(crate) enum AlertKind {
     Failed,
     /// A sensitive action recorded in the security log (server/src/audit/notify.rs).
     Security,
+    /// A session not moving that nobody heals (the red dot): the phone's Error switch, as `failed`.
+    Stuck,
+    /// A session blocked on every account being out of usage (the red dot): the phone's Error
+    /// switch, as `failed`. An error recovery could not get past is a `Failed` row already.
+    Blocked,
 }
 
 impl AlertKind {
@@ -33,7 +38,9 @@ impl AlertKind {
         match self {
             Self::Finished => "finished",
             Self::NeedsInput => "needsInput",
-            Self::Failed => "failed",
+            // CDXC:Notifications 2026-11-08: the red dots ride the phone's existing `failed`
+            // kind (its Error switch and Failed section); only the words differ.
+            Self::Failed | Self::Stuck | Self::Blocked => "failed",
             Self::Security => "security",
         }
     }
@@ -45,6 +52,8 @@ impl AlertKind {
             Self::NeedsInput => "Waiting for you",
             Self::Failed => "Ended with an error",
             Self::Security => "Security: check this was you",
+            Self::Stuck => "Not moving: it may be stuck",
+            Self::Blocked => "Blocked: out of usage on every account",
         }
     }
 
@@ -53,7 +62,7 @@ impl AlertKind {
         match self {
             Self::Finished => kinds.finished,
             Self::NeedsInput => kinds.waiting,
-            Self::Failed => kinds.error,
+            Self::Failed | Self::Stuck | Self::Blocked => kinds.error,
             // CDXC:Security 2026-11-08 WHY: the point of the notice is that the owner sees every sensitive action at once, so no per-kind switch turns it off.
             Self::Security => true,
         }

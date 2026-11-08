@@ -233,6 +233,10 @@ pub enum Effect {
     /// A live delta showed a session of this computer newly stuck (gxserver's `stuckSince`): play
     /// the not-moving sound and show a banner unless the user turned those off.
     SessionStuckRaised { session: SessionKey },
+    /// A live delta showed a session of this computer newly blocked (gxserver's `blockedSince`:
+    /// out of usage on every account, or an error recovery could not get past): play the
+    /// not-moving sound and show a banner with `reason` unless the user turned those off.
+    SessionBlockedRaised { session: SessionKey, reason: String },
     /// Persist the user's last selected session of a project (it must survive restarts, and the
     /// project being closed and reopened).
     ///

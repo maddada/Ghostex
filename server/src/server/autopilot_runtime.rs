@@ -865,6 +865,17 @@ async fn execute(state: Arc<AppState>, memory: Arc<Mutex<Memory>>, plan: Plan) {
         }
         Act::Park => {
             log(&state, &plan, "Left it for you.", Outcome::Parked);
+            // CDXC:Notifications 2026-11-08: its red dot is the user's now, so it alerts
+            // (server/src/server/session_stall_runtime.rs).
+            let (alerting, (project_id, session_id)) = (state.clone(), key.clone());
+            let _ = tokio::task::spawn_blocking(move || {
+                super::session_stall_runtime::announce_left_for_user(
+                    &alerting,
+                    &project_id,
+                    &session_id,
+                );
+            })
+            .await;
             // What no rule could move gets a look from the supervisor: it may know what to tell it.
             super::autopilot_judge::queue_judgment(super::autopilot_judge::JudgmentItem {
                 key: key.clone(),

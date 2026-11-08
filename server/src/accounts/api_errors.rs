@@ -620,6 +620,13 @@ pub(crate) fn store_recovery(
             session["sessionId"].as_str().unwrap_or_default(),
         );
     }
+    // CDXC:Notifications 2026-11-08: a usage limit recovery gives up on (no account it can move
+    // the session to) is blocked, which always alerts (super::limit_wait::announce_limit_gave_up).
+    if let Some(next) = runtime.get("accountRecovery") {
+        if super::limit_wait::limit_gave_up(next) && !super::limit_wait::limit_gave_up(previous) {
+            super::limit_wait::announce_limit_gave_up(state, repo, session);
+        }
+    }
     let due = runtime.get_mut("accountRecovery").is_some_and(|recovery| {
         reconcile_failure_notice(previous, recovery);
         notice_due(previous, recovery)

@@ -1081,6 +1081,7 @@ mod tests {
             mobile["attention"],
             json!({
                 "acknowledged": false,
+                "alerts": true,
                 "enteredAt": at(T0 + 30_000),
                 "eventId": event_id,
                 "kind": "finished",

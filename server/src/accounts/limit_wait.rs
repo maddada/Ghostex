@@ -129,6 +129,13 @@ pub(super) fn enter(
         .pointer("/accountWait/notificationId")
         .and_then(Value::as_str)
         .map(str::to_string);
+    // When the wait began, kept across passes: the blocked red dot's `blockedSince`.
+    let since = recovery
+        .pointer("/accountWait/since")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
+    let first = posted.is_none();
     let notification = posted.or_else(|| {
         let subtitle = repo
             .get_project(pid)
@@ -158,7 +165,13 @@ pub(super) fn enter(
         broadcast_notification_feed_changed(state);
         item["id"].as_str().map(str::to_string)
     });
+    if first {
+        if let Some(id) = notification.as_deref() {
+            crate::push::announce_blocked(state, repo, session, id, crate::push::BlockedWhy::Usage);
+        }
+    }
     wait["notificationId"] = json!(notification);
+    wait["since"] = json!(since);
     recovery["accountWait"] = wait.clone();
     waits()
         .lock()
@@ -213,6 +226,74 @@ pub(super) fn restore(session: &Value) {
             .unwrap_or_else(|e| e.into_inner())
             .insert(key(pid, sid), wait.clone());
     }
+}
+
+/// Whether a recovery state is a usage limit recovery gave up on: no account it could move the
+/// session to (`needsAttention` with the `usageLimit` trigger). Nothing retries it, and no failed
+/// row covers it, since a usage limit is no error.
+pub(crate) fn limit_gave_up(recovery: &Value) -> bool {
+    recovery["status"] == "needsAttention" && recovery["trigger"] == "usageLimit"
+}
+
+/// The bell row and the phone push for a usage limit recovery just gave up on: blocked, which
+/// always alerts (CDXC:Notifications 2026-11-08 in packages/gx-core/src/alert_rule.rs).
+pub(super) fn announce_limit_gave_up(
+    state: &AppState,
+    repo: &DomainRepository<'_>,
+    session: &Value,
+) {
+    let (Some(pid), Some(sid)) = (session["projectId"].as_str(), session["sessionId"].as_str())
+    else {
+        return;
+    };
+    let subtitle = repo
+        .get_project(pid)
+        .ok()
+        .flatten()
+        .and_then(|p| p["name"].as_str().map(str::to_string))
+        .unwrap_or_default();
+    let Ok(item) = insert_notification_feed_row(
+        repo.db,
+        NewNotificationFeedRow {
+            project_id: pid.to_string(),
+            session_id: sid.to_string(),
+            kind: NOTIFICATION_FEED_KIND_CUSTOM,
+            title: session["title"]
+                .as_str()
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+                .unwrap_or("Session")
+                .to_string(),
+            subtitle,
+            body: LIMIT_GAVE_UP_REASON.to_string(),
+            agent_name: notification_agent_icon(session),
+            attention_event_id: None,
+        },
+    ) else {
+        return;
+    };
+    broadcast_notification_feed_changed(state);
+    if let Some(id) = item["id"].as_str() {
+        crate::push::announce_blocked(state, repo, session, id, crate::push::BlockedWhy::Usage);
+    }
+}
+
+/// What a session blocked at a usage limit recovery gave up on says, on its red dot and its row.
+pub(crate) const LIMIT_GAVE_UP_REASON: &str =
+    "Blocked: it hit its usage limit and Ghostex couldn't move it to an account with room.";
+
+/// Since when the session waits with every account out of usage: the blocked red dot
+/// (CDXC:Notifications 2026-11-08 in packages/gx-core/src/alert_rule.rs).
+pub(crate) fn blocked_since(session: &Value) -> Option<String> {
+    let wait = waiting(session)?;
+    wait["since"]
+        .as_str()
+        .or_else(|| {
+            session
+                .pointer("/runtimeSettings/accountRecovery/updatedAt")
+                .and_then(Value::as_str)
+        })
+        .map(str::to_string)
 }
 
 /// The saved wait, while the session's recovery is still waiting for an account with room.
