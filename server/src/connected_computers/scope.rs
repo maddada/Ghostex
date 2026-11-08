@@ -2,7 +2,7 @@
 //! forwards: the endpoints the advertised verbs (`ghostex sessions`, `agents types/list/create/send/
 //! close/reload`, `read-session-chat`, `read-text`, `send-message`/`send-text`/`send-key`,
 //! `interrupt-session-chat`, `answer-session-chat-prompt`, `coordinator start-thread --computer`,
-//! `coordinator promote --computer`,
+//! `coordinator promote --computer`, `link add|remove --session <thread on that computer>`,
 //! the session sleep/wake/close actions) and the report checker for threads on another computer
 //! call, and nothing else.
 
@@ -53,6 +53,12 @@ pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     "/api/readAgentHookStatus",
     "/api/installAgentHooks",
     "/api/uninstallAgentHooks",
+    // CDXC:SessionLinks 2026-11-08 FIX: `ghostex link add|remove --session <thread on that
+    // computer>` (issue #497: a coordinator links every thread to its PR). Only the relay on the
+    // coordinator's own computer knows whose thread a session is, so it limits these two to the
+    // coordinator's own threads (thread_scope.rs); the other link verbs stay off.
+    "/api/addSessionLink",
+    "/api/removeSessionLink",
     // Settings sync: one exchange trades both computers' synced settings (server/src/settings_sync/).
     "/api/settingsSyncExchange",
 ];

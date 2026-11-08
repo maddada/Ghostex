@@ -113,7 +113,17 @@ pub(in crate::server) async fn route_http(
     }
 
     if path.starts_with(crate::connected_computers::RELAY_ROUTE_PREFIX) {
-        if !is_authorized_headers(&parts.headers, &state.auth_token) {
+        /*
+        CDXC:SessionLinks 2026-11-08 FIX:
+        GitHub #497. Inside a session the CLI sends that session's own `gxs_` token, not the token file, so the relay's front gate turned every agent away once sessions had tokens ("Only this computer's own agents can reach its connected computers"), and a coordinator could not relay anything. The token file (agent level), a session's token and the owner's own session now pass, as the caller they are: the relay judges the calls that depend on it (connected_computers/thread_scope.rs).
+        */
+        let relay_caller = if is_authorized_headers(&parts.headers, &state.auth_token) {
+            Some(Principal::LocalAgent)
+        } else {
+            bearer_token(&parts.headers)
+                .and_then(|token| state.security.session_tokens.resolve(token))
+        };
+        let Some(relay_caller) = relay_caller else {
             return routed_json(
                 Some(crate::connected_computers::RELAY_ROUTE_PREFIX.to_string()),
                 StatusCode::UNAUTHORIZED,
@@ -123,9 +133,17 @@ pub(in crate::server) async fn route_http(
                     Some(request_id),
                 ),
             );
-        }
-        return crate::connected_computers::relay(method, &path, parts.headers, body, request_id)
-            .await;
+        };
+        return crate::connected_computers::relay(
+            method,
+            &path,
+            parts.headers,
+            body,
+            request_id,
+            &relay_caller,
+            &state.paths,
+        )
+        .await;
     }
 
     let endpoint = endpoint_for(&path);
