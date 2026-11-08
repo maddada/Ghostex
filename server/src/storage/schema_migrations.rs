@@ -1304,4 +1304,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0063_projects_revision",
         sql: include_str!("migrations/0063_projects_revision.sql"),
     },
+    Migration {
+        id: "0064_side_chat_index",
+        sql: include_str!("migrations/0064_side_chat_index.sql"),
+    },
 ];

@@ -63,6 +63,8 @@ fn side_chats_by_parent(
     let mut by_parent: HashMap<SessionKey, Vec<Value>> = HashMap::new();
     let mut parents: HashMap<SessionKey, Value> = HashMap::new();
     let mut parent_titles: HashMap<SessionKey, String> = HashMap::new();
+    // The partial `idx_sessions_side_chats` (migration 0064) serves this only while its `WHERE`
+    // matches this one word for word; without it every tick reads every session's JSON.
     let Ok(mut statement) = db.prepare_cached(&format!(
         "SELECT * FROM sessions WHERE instr(runtimeSettingsJson, '\"{PARENT_KEY}\"') > 0 ORDER BY createdAt"
     )) else {
