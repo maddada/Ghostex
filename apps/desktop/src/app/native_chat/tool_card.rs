@@ -168,9 +168,9 @@ impl NativeChatView {
         let key = format!("tool-card:{id}");
         let live = message["toolCardLive"] == true;
         let running = card["running"] == true;
-        // Open while its calls run and until the agent writes again, folded after (the core's
-        // `live_card_id`); a call waiting on an approval keeps it open (`toolsOpen`).
-        let open = self.is_expanded(&key, running || live || message["toolsOpen"] == true);
+        // One line until the reader opens it; a call waiting on an approval opens it (`waiting`).
+        // While calls run the header carries the newest one's words (the core's `liveLabel`).
+        let open = self.is_expanded(&key, card["waiting"] == true);
         let motion = self.disclosure_frame(&key, open, cx);
         let animate = (running || live) && !cx.reduce_motion();
         let (surface, border, hairline, _, _, _) = card_colors(p);
@@ -223,7 +223,13 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let title = text(card, "title");
+        let live_label = text(card, "liveLabel");
+        let live_more = text(card, "liveMore");
+        let title = if live_label.is_empty() {
+            text(card, "title")
+        } else {
+            live_label.clone()
+        };
         let failed = text(card, "failedLabel");
         let time = text(card, "time");
         let more = card["moreIcons"].as_u64().unwrap_or(0);
@@ -285,31 +291,77 @@ impl NativeChatView {
                 tile.into_any_element()
             });
         }
-        let title_element = div()
-            .min_w_0()
-            .truncate()
-            .text_size(px(13.5 * s))
-            .text_color(p.muted)
-            .child(title.clone());
-        // The header's words settle into their next value ("Using 3 tools" into "Using 4 tools",
-        // "Used 6 tools") while the card is live: the old text gives way to the new one fading up.
-        let title_element = if animate {
-            title_element
-                .with_animation(
-                    SharedString::from(format!("{key}:title:{title}")),
-                    Animation::new(ENTER).with_easing(gpui::ease_out_quint()),
-                    |title, delta| title.opacity(0.2 + 0.8 * delta),
+        // The running call's words sweep with the row's shimmer; otherwise the header's words
+        // settle into their next value ("Using 3 tools" into "Used 3 tools") while the card is
+        // live, the old text giving way to the new one fading up.
+        let title_element = if !live_label.is_empty() && animate {
+            let (dim, bright) = (p.muted.opacity(0.8), p.foreground);
+            let (shimmer_label, font) = (live_label.clone(), p.font.clone());
+            div()
+                .min_w_0()
+                .truncate()
+                .text_size(px(13.5 * s))
+                .with_throttled_animation(
+                    SharedString::from(format!("{key}:live")),
+                    SHIMMER,
+                    move |title, phase| {
+                        title.child(shimmer_text(&shimmer_label, &font, phase, dim, bright))
+                    },
                 )
                 .into_any_element()
         } else {
-            title_element.into_any_element()
+            let plain = div()
+                .min_w_0()
+                .truncate()
+                .text_size(px(13.5 * s))
+                .text_color(p.muted)
+                .child(title.clone());
+            if animate {
+                plain
+                    .with_animation(
+                        SharedString::from(format!("{key}:title:{title}")),
+                        Animation::new(ENTER).with_easing(gpui::ease_out_quint()),
+                        |title, delta| title.opacity(0.2 + 0.8 * delta),
+                    )
+                    .into_any_element()
+            } else {
+                plain.into_any_element()
+            }
         };
+        // A spinner beside the live line while a call runs, as its row has.
+        let spinner: Option<AnyElement> = (!live_label.is_empty()).then(|| {
+            let glyph = gpui::svg()
+                .path("titlebar/loader2.svg")
+                .size(px(13.0 * s))
+                .flex_shrink_0()
+                .text_color(p.muted);
+            if animate {
+                glyph
+                    .with_throttled_animation(
+                        SharedString::from(format!("{key}:spin")),
+                        SPIN,
+                        |glyph, progress| {
+                            glyph.with_transformation(gpui::Transformation::rotate(
+                                gpui::percentage(progress),
+                            ))
+                        },
+                    )
+                    .into_any_element()
+            } else {
+                glyph.into_any_element()
+            }
+        });
         let toggle_key = key.to_string();
-        let aria = [title.as_str(), failed.as_str(), time.as_str()]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let aria = [
+            title.as_str(),
+            live_more.as_str(),
+            failed.as_str(),
+            time.as_str(),
+        ]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ");
         div()
             .id(SharedString::from(format!("{key}:header")))
             .role(gpui::Role::Button)
@@ -358,6 +410,17 @@ impl NativeChatView {
                         .child(time),
                 )
             })
+            // The card's other calls beside the live line ("+2 more").
+            .when(!live_more.is_empty(), |this| {
+                this.child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(12.0 * s))
+                        .text_color(p.muted)
+                        .child(live_more.clone()),
+                )
+            })
+            .children(spinner)
             .child(
                 gpui::svg()
                     .path(if open {

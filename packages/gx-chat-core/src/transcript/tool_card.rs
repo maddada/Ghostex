@@ -4,6 +4,8 @@
 //! on the right, and a header that counts ("Using 3 tools", "Used 6 tools · 1 failed · 1m 4s").
 //!
 //! CDXC:SessionChat 2026-10-28 DECISION: User, after a video of tool calls they liked: "Let's please do this under feature flag if possible (toggle in settings) so i can test it. Keep current look as it is." With Settings > Chat > Tool call cards (`chatToolCallCards`, off by default) on, a message's tool calls and file edits are one card (Q708, all seven parts): the tools' icons stacked in its header with "Using N tools" / "Used N tools", "N failed" and the burst's time; each row in the call's tense with its result ("92 lines", "6 matches", "+18 −4", "214 passed", "exit 1") and time ("30ms", "1.2s"); a shimmer on the running row; short motion; a failed row says what failed with the reason on a second line, and no Retry; MCP calls of known apps read as a verb on the app ("Reading SPX-412 in Linear") with its logo (`tool_apps.rs`). Approvals keep their approval card; the waiting call's row says it waits (Q709). A card folds to one line as soon as its tools are done and the agent writes again, and the turn still folds into "Worked for" (Q710). With the switch off nothing here runs and every row draws as before. The renderers only draw this: desktop `native_chat/tool_card.rs`, phone `ToolCard.tsx`.
+//!
+//! CDXC:SessionChat 2026-11-08 DECISION: User, with Tool call cards on: "when this is enabled i see tools card area jump open then close", then picked "Folded, with the live line in the header" (Q1925) and the newest running call in it (Q1926), with "i dont get what 2 of 3 means tho, we need different text there pls". A card is one line while its calls run and after: the header says the newest running call in its own words with the shimmer and a spinner (`liveLabel`), and "+N more" for the card's other calls (`liveMore`); once they are done it says "Used N tools" as before. It never opens or folds by itself: it opens when the reader clicks it, or when a call in it waits on an approval (`waiting`, set by `mark_card_waiting`). Supersedes the part of the 2026-10-28 decision (Q710) that drew a card open while its calls ran and until the agent wrote again; every card opened, then folded a second later, because Claude writes a sentence before almost every call, and a line streamed from the terminal folded it and opened it again on top of that.
 
 use std::collections::HashMap;
 
@@ -185,6 +187,19 @@ pub fn tool_card(
     } else {
         String::new()
     };
+    // The folded card's live line: the newest running call in its own words, and how many other
+    // calls the card holds.
+    let live_label = entries
+        .iter()
+        .rev()
+        .find(|entry| entry["status"] == "running")
+        .map(|entry| text(entry, "label"))
+        .unwrap_or_default();
+    let live_more = if live_label.is_empty() || count < 2 {
+        String::new()
+    } else {
+        format!("+{} more", count - 1)
+    };
     let used = tools_label(if running { "Using" } else { "Used" }, count);
     let folded = [used.as_str(), failed_label.as_str(), time.as_str()]
         .into_iter()
@@ -199,6 +214,8 @@ pub fn tool_card(
         "running": running,
         "stopped": stopped,
         "title": used,
+        "liveLabel": live_label,
+        "liveMore": live_more,
         "failed": failed,
         "failedLabel": failed_label,
         "time": time,
@@ -849,9 +866,11 @@ pub fn has_unanswered_call(blocks: &[ChatBlock]) -> bool {
     })
 }
 
-/// The message whose card stays open while the agent works: the newest agent row, with the
-/// tool-only rows after it that the fold merges into it (`fold_tool_messages`). Every other card
-/// folds to one line once its calls are done, because the agent wrote again after it.
+/// The message whose card is live while the agent works: the newest agent row, with the
+/// tool-only rows after it that the fold merges into it (`fold_tool_messages`). A live card's
+/// header and rows move as they change; it no longer decides whether the card is open (the
+/// 2026-11-08 decision above), so a row streamed from the terminal taking its place changes no
+/// card's height.
 pub fn live_card_id(messages: &[ChatMessage], working: bool) -> Option<String> {
     if !working {
         return None;
@@ -893,7 +912,9 @@ pub fn mark_card_waiting(
                 Some("file") => files.contains(&index),
                 _ => false,
             };
-            if !hit || entry["status"] != "running" {
+            // The session reads as idle while it waits on an approval, so the waiting call can
+            // be drawn stopped; it waits all the same.
+            if !hit || !(entry["status"] == "running" || entry["status"] == "stopped") {
                 continue;
             }
             if let Some(waiting) = entry.get("waitingLabel").cloned() {
@@ -906,6 +927,10 @@ pub fn mark_card_waiting(
     }
     if marked {
         card.insert("title".to_string(), "Waiting for approval".into());
+        // The header says it waits, and the card opens to the call that waits (`waiting`).
+        card.insert("liveLabel".to_string(), "".into());
+        card.insert("liveMore".to_string(), "".into());
+        card.insert("waiting".to_string(), Value::Bool(true));
         fields.insert("toolCardLive".to_string(), Value::Bool(true));
     }
 }
