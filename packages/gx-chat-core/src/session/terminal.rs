@@ -286,13 +286,70 @@ fn painted_matches(painted: &str, saved: &str) -> bool {
         return true;
     }
     if !ends_with_ellipsis(&preview) {
-        return false;
+        return painted_matches_any_tense(&preview, &full);
     }
     let head = preview
         .trim_end_matches('\u{2026}')
         .trim_end_matches("...")
         .trim_end_matches(crate::session::text::is_js_space);
-    full.starts_with(head)
+    full.starts_with(head) || same_words_any_tense(head, &full, true)
+}
+
+/// CDXC:SessionChat 2026-11-08 DECISION:
+/// User (Q1920 "clear", on a finished Bash card whose working row still said "Listing what landed on
+/// main since 11.1.1 and checking the release state"): the working row drops a tool's label once its
+/// card is in the transcript. Claude paints a description's verbs in the -ing form on screen
+/// ("Listing … and checking …") while the transcript saves what the model wrote ("List … and check
+/// …"), so the painted row is compared word by word, a painted "-ing" word matching its base form.
+/// `partial_tail` lets the last painted word be cut short, for a row Claude ended with "…".
+fn painted_matches_any_tense(painted: &str, saved: &str) -> bool {
+    same_words_any_tense(painted, saved, false)
+}
+
+fn same_words_any_tense(painted: &str, saved: &str, partial_tail: bool) -> bool {
+    let painted: Vec<String> = painted.split_whitespace().map(str::to_lowercase).collect();
+    let saved: Vec<String> = saved.split_whitespace().map(str::to_lowercase).collect();
+    if painted.is_empty()
+        || painted.len() > saved.len()
+        || (!partial_tail && painted.len() != saved.len())
+    {
+        return false;
+    }
+    let last = painted.len() - 1;
+    painted
+        .iter()
+        .zip(&saved)
+        .enumerate()
+        .all(|(index, (shown, kept))| {
+            same_word_any_tense(shown, kept)
+                || (partial_tail && index == last && cut_word_matches(shown, kept))
+        })
+}
+
+/// A painted word Claude cut short: "chec" or "checki" for "check", "writi" for "write".
+fn cut_word_matches(shown: &str, kept: &str) -> bool {
+    let base = kept.strip_suffix('e').unwrap_or(kept);
+    kept.starts_with(shown) || (!base.is_empty() && shown.starts_with(base))
+}
+
+/// "listing" for "list", "writing" for "write", "running" for "run", "lying" for "lie".
+fn same_word_any_tense(shown: &str, kept: &str) -> bool {
+    if shown == kept {
+        return true;
+    }
+    let Some(stem) = shown.strip_suffix("ing").filter(|stem| !stem.is_empty()) else {
+        return false;
+    };
+    if stem == kept || format!("{stem}e") == kept {
+        return true;
+    }
+    if let Some(base) = stem.strip_suffix('y') {
+        if format!("{base}ie") == kept {
+            return true;
+        }
+    }
+    let mut chars = stem.chars().rev();
+    matches!((chars.next(), chars.next()), (Some(a), Some(b)) if a == b && stem[..stem.len() - a.len_utf8()] == *kept)
 }
 
 /// `sessionChatTerminalToolRetired`: a terminal preview is redundant once its call is recorded or
