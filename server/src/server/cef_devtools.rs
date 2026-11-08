@@ -264,7 +264,7 @@ pub(crate) async fn handle_cef_devtools_pages(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Response<Body> {
-    if !is_authorized_client_headers(
+    if !crate::auth::is_authorized_session_client_headers(
         &headers,
         &state.auth_token,
         &state.device_api_tokens,
@@ -309,7 +309,7 @@ pub(crate) async fn handle_cef_devtools_page(
     ws: std::result::Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
     headers: HeaderMap,
 ) -> Response<Body> {
-    if !is_authorized_client_headers(
+    if !crate::auth::is_authorized_session_client_headers(
         &headers,
         &state.auth_token,
         &state.device_api_tokens,

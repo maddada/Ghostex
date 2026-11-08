@@ -46,8 +46,13 @@ The sockets (`/api/events`, `/api/terminal`, `/api/voice`, `/api/browserTcp`, th
 host and pages) don't go through that gate: they take the token file, a phone's `gxd_` and the
 desktop's `gxo_` owner session (`auth::is_authorized_client_token`). The desktop sends `gxo_` on
 every call once it is open, its sidebar store's `/api/events` socket included, so a socket that
-refused it would empty the sidebar of this computer's projects and sessions. A `gxs_` session
-token still opens none of them.
+refused it would empty the sidebar of this computer's projects and sessions. A live `gxs_`
+session token opens only `/api/voice` and the DevTools pages (`/api/cefDevtools/json`,
+`/api/cefDevtools/page/<id>`, `auth::is_authorized_session_client_token`): the `ghostex` CLI in a
+session sends it for `ghostex voice` and `ghostex browser mcp`. No client in a session uses the
+others, so they keep refusing it. A cloud box attach (`ghostex_cli/cloud_attach.rs`) sends the
+box's own token file, peers and extensions open no socket. Test:
+`server/src/server/tests/socket_tokens.rs`.
 
 ## What they may do: `Capability`
 

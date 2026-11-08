@@ -152,6 +152,12 @@ impl SessionTokens {
             && matches!(self.resolve(token), Some(Principal::Owner { .. }))
     }
 
+    /// Whether `token` is a live session's own token (`gxs_`).
+    pub fn is_session_token(&self, token: &str) -> bool {
+        token.starts_with(SESSION_TOKEN_PREFIX)
+            && matches!(self.resolve(token), Some(Principal::Session { .. }))
+    }
+
     /// Revokes the session's token; returns the principal it removed.
     pub fn revoke_session(&self, project_id: &str, session_id: &str) -> Vec<Principal> {
         let mut tokens = self.write();

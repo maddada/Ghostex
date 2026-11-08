@@ -20,7 +20,7 @@ use super::conversation::{ClientFrame, Conversation, Input};
 use super::focus::FocusScope;
 use super::provider::{self, ConnectError, Provider};
 use super::{announcements, dictation, keys, prompt, registry, tools};
-use crate::auth::{is_authorized_client_headers, is_authorized_client_token};
+use crate::auth::{is_authorized_session_client_headers, is_authorized_session_client_token};
 use crate::protocol::{protocol_mismatch_error, rpc_error};
 use crate::server::{
     is_expected_protocol_version, json_response, query_value, read_protocol_version, request_id,
@@ -47,13 +47,13 @@ pub(crate) async fn handle_voice(
         );
     };
     let query_token = query_value(&uri, "authToken");
-    let authorized = is_authorized_client_headers(
+    let authorized = is_authorized_session_client_headers(
         &headers,
         &state.auth_token,
         &state.device_api_tokens,
         &state.security.session_tokens,
     ) || query_token.as_deref().is_some_and(|token| {
-        is_authorized_client_token(
+        is_authorized_session_client_token(
             token,
             &state.auth_token,
             &state.device_api_tokens,

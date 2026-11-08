@@ -104,6 +104,37 @@ pub fn is_authorized_client_token(
         || owner_sessions.is_owner_session(provided_token)
 }
 
+/*
+CDXC:Security 2026-11-08 WHY:
+The `ghostex` CLI inside a Ghostex session (an agent's or the user's own terminal) sends that session's `gxs_` token, not the token file (`ghostex_cli/rpc.rs`), so `ghostex voice` and `ghostex browser mcp` were refused on `/api/voice` and the `/api/cefDevtools` pages. Those two take a session token as well: it is agent level, as the token file that opened them before is. The other sockets (events, terminal, browserTcp, the DevTools host) have no client inside a session and keep refusing it.
+*/
+/// [`is_authorized_client_headers`], or an open session's own `gxs_` token.
+pub fn is_authorized_session_client_headers(
+    headers: &HeaderMap,
+    expected_token: &str,
+    device_tokens: &DeviceApiTokens,
+    session_tokens: &crate::security::SessionTokens,
+) -> bool {
+    bearer_token(headers).is_some_and(|provided| {
+        is_authorized_session_client_token(provided, expected_token, device_tokens, session_tokens)
+    })
+}
+
+/// [`is_authorized_client_token`], or an open session's own `gxs_` token.
+pub fn is_authorized_session_client_token(
+    provided_token: &str,
+    expected_token: &str,
+    device_tokens: &DeviceApiTokens,
+    session_tokens: &crate::security::SessionTokens,
+) -> bool {
+    is_authorized_client_token(
+        provided_token,
+        expected_token,
+        device_tokens,
+        session_tokens,
+    ) || session_tokens.is_session_token(provided_token)
+}
+
 /// Prefix of the API tokens `/api/pairDevice` gives each paired phone.
 pub const DEVICE_API_TOKEN_PREFIX: &str = "gxd_";
 
