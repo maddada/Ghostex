@@ -181,8 +181,10 @@ pub struct SettledPrefix {
     /// The composition the prefix was last checked against, the revision of that list's head
     /// (`TranscriptPart`), and that list's sorted order: an unchanged composition (a backfill
     /// batch, a tick) needs no second check, and one that kept its head needs only its tail checked.
+    /// The head is the revision and the length it had: a head that has only grown since
+    /// (`composition::compose_after`) keeps its revision, and its rows before that length.
     checked_generation: u64,
-    checked_part: Option<u64>,
+    checked_part: Option<(u64, usize)>,
     order: Vec<usize>,
     /// The prefix's ids, with each row's time (`mark_inherited`).
     times: HashMap<String, Option<i64>>,
@@ -1041,7 +1043,7 @@ impl SettledPrefix {
                 .messages
                 .transcript_part
                 .as_ref()
-                .map(|part| part.revision),
+                .map(|part| (part.revision, part.len)),
             order: Vec::new(),
             times: HashMap::new(),
             ids: HashSet::new(),

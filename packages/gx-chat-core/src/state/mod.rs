@@ -27,7 +27,8 @@ pub use crate::state::extras::{
 };
 pub use crate::state::menus::{DraftAgentSwitch, MenusState};
 pub use crate::state::messages::{
-    FramePosition, LoadEarlierRequest, MessagesState, OutstandingRead, ReadKind, ResyncState,
+    FramePosition, LoadEarlierRequest, MessagesState, OutstandingRead, PushedSince, ReadKind,
+    ResyncState,
 };
 pub use crate::state::pending::{CommandMarker, PendingSend, PendingState, TerminalStream};
 pub use crate::state::pickers::{

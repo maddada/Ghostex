@@ -14,14 +14,16 @@ use std::collections::BTreeMap;
 use ghostex_gx_protocol::ChatMessage;
 
 use crate::session::assembler::{id_collides, shadowed_id, source_priority};
-use crate::state::MessagesState;
+use crate::state::{MessagesState, PushedSince};
 
-/// Applies `incoming` to `list`, keeping `index_by_id` aligned.
+/// Applies `incoming` to `list`, keeping `index_by_id` aligned. True when no row already in the
+/// list was replaced: every row was pushed at the end or left out.
 fn apply_incoming(
     list: &mut Vec<ChatMessage>,
     index_by_id: &mut BTreeMap<String, usize>,
     incoming: &[ChatMessage],
-) {
+) -> bool {
+    let mut pushed_only = true;
     for raw in incoming {
         let mut message = raw.clone();
         if let Some(at) = index_by_id.get(&message.id).copied() {
@@ -44,10 +46,12 @@ fn apply_incoming(
                 });
                 if replace {
                     list[at] = message;
+                    pushed_only = false;
                 }
             }
         }
     }
+    pushed_only
 }
 
 /// [`merge_messages`] into `list` itself. The index `apply_incoming` reads is a position per id,
@@ -107,16 +111,26 @@ impl MessagesState {
         self.list = next;
         self.index_by_id = index;
         self.list_revision = self.list_revision.wrapping_add(1);
+        self.pushed_since = None;
     }
 
     /// Folds an append into the list in place.
     pub fn apply_append(&mut self, incoming: &[ChatMessage]) {
         let mut list = std::mem::take(&mut self.list);
         let mut index = std::mem::take(&mut self.index_by_id);
-        apply_incoming(&mut list, &mut index, incoming);
+        let before = PushedSince {
+            revision: self.list_revision,
+            len: list.len(),
+        };
+        let pushed_only = apply_incoming(&mut list, &mut index, incoming);
         self.list = list;
         self.index_by_id = index;
         self.list_revision = self.list_revision.wrapping_add(1);
+        self.pushed_since = if pushed_only {
+            self.pushed_since.or(Some(before))
+        } else {
+            None
+        };
         // The merger put the incoming OBJECT in the list wherever it replaced or appended, so a
         // row that landed carries a new `deferredWork`.
         for message in incoming {

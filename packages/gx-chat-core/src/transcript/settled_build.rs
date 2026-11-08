@@ -42,21 +42,26 @@ pub(super) fn build_on(
         // wholly in that head, and every row of the new tail sorts after the prefix: the prefix
         // still leads the list unchanged, and only the rows after it need sorting.
         let part = state.messages.transcript_part.as_ref();
-        let kept = part.filter(|part| {
-            settled.checked_part == Some(part.revision)
+        // The rows before `head` are the ones the check saw there: the head was kept, or only grew
+        // after them (`composition::compose_after`), so every row from `head` on is new or moved.
+        let kept = part.and_then(|part| {
+            let (revision, head) = settled.checked_part?;
+            (revision == part.revision
+                && head <= part.len
                 && part.len <= composed.len()
-                && settled.order[..held].iter().all(|at| *at < part.len)
-                && composed[part.len..]
+                && settled.order[..held].iter().all(|at| *at < head)
+                && composed[head..]
                     .iter()
-                    .all(|message| order_key(message) > settled.order_max)
+                    .all(|message| order_key(message) > settled.order_max))
+            .then_some(head)
         });
         let order = match kept {
-            Some(part) => {
+            Some(head) => {
                 let mut later: Vec<usize> = settled.order[held..]
                     .iter()
                     .copied()
-                    .filter(|at| *at < part.len)
-                    .chain(part.len..composed.len())
+                    .filter(|at| *at < head)
+                    .chain(head..composed.len())
                     .collect();
                 later.sort_by(|left, right| order_cmp(&composed[*left], &composed[*right]));
                 let mut order = settled.order[..held].to_vec();
@@ -82,7 +87,7 @@ pub(super) fn build_on(
         }
         settled.order = order;
         settled.checked_generation = generation;
-        settled.checked_part = part.map(|part| part.revision);
+        settled.checked_part = part.map(|part| (part.revision, part.len));
     }
     let order = std::mem::take(&mut settled.order);
     let built = build_after(state, settled, &order, context, cache, view);

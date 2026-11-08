@@ -14,6 +14,13 @@ use ghostex_gx_protocol::ChatMessage;
 use crate::session::fold::FoldedSnapshot;
 use crate::wire::StreamPosition;
 
+/// A revision of `MessagesState::list` and the list's length then.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PushedSince {
+    pub revision: u64,
+    pub len: usize,
+}
+
 /// The transcript and its bookkeeping.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct MessagesState {
@@ -117,6 +124,16 @@ pub struct MessagesState {
     /// Bumped whenever `list` changes (`replace_list`, `apply_append`, `remove_ids`), which is
     /// what `boundaried` is rebuilt on.
     pub list_revision: u64,
+    /// Since which revision `list` has only had rows pushed at its end, and how long it was then:
+    /// every row before that length is the row it was. `None` once a row was replaced or the list
+    /// rebuilt. What lets `boundaried` and the composed head grow instead of being rebuilt.
+    pub pushed_since: Option<PushedSince>,
+    /// What the last whole assembly learned about the list, for extending it with pushed rows
+    /// (`session::assembler::AssembledTail`).
+    pub assembled_tail: Option<crate::session::assembler::AssembledTail>,
+    /// Set when the last `boundaried` refresh extended the previous list rather than rebuilding
+    /// it: the key it extended and that list's length. The composition reads it to extend its head.
+    pub boundaried_extended: Option<(crate::session::composition::BoundariedKey, usize)>,
     /// The dependencies the last composed list was built from (the `messages` memo's deps).
     pub compose_key: Option<crate::session::composition::ComposeKey>,
     /// The composed list's head (the reconciled transcript) as the last composition built it.

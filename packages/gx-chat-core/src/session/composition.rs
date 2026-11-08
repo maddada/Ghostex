@@ -193,12 +193,50 @@ pub struct ComposeKey {
 
 /// Rebuilds `state.messages.boundaried` when the transcript or the markers changed, and keeps it
 /// otherwise: the `assembled` / `surfaced` / `boundaried` memos of `controller.ts`.
+///
+/// Rows only pushed at the list's end since the last refresh, under the same markers and agent,
+/// extend it (`AssembledTail::extend`); `boundaried_extended` then says what it extended, for the
+/// composition's head.
 pub fn refresh_boundaried(state: &mut ChatState) {
     let key = BoundariedKey::of(state);
     if state.messages.boundaried_key.as_ref() == Some(&key) {
         return;
     }
-    state.messages.boundaried = boundaried_transcript(state);
+    let messages = &mut state.messages;
+    let previous = messages
+        .boundaried_key
+        .take()
+        .filter(|previous| previous.markers == key.markers && previous.agent == key.agent);
+    let added = match (
+        previous.as_ref(),
+        messages.pushed_since,
+        &mut messages.assembled_tail,
+    ) {
+        (Some(_), Some(pushed), Some(tail)) => {
+            tail.extend(&messages.list, key.list_revision, pushed)
+        }
+        _ => None,
+    };
+    match (previous, added) {
+        (Some(previous), Some(added)) => {
+            let from = messages.boundaried.len();
+            messages.boundaried.extend(apply_marker_boundaries_in(
+                surface_skill_invocation_user_turns_in(added),
+                &state.pending.markers,
+            ));
+            messages.boundaried_extended = Some((previous, from));
+        }
+        _ => {
+            let (assembled, tail) =
+                crate::session::assembler::assembled_with_tail(&messages.list, key.list_revision);
+            messages.assembled_tail = tail;
+            messages.boundaried = apply_marker_boundaries_in(
+                surface_skill_invocation_user_turns_in(assembled),
+                &state.pending.markers,
+            );
+            messages.boundaried_extended = None;
+        }
+    }
     state.messages.boundaried_key = Some(key);
 }
 
@@ -282,13 +320,14 @@ fn compose_after(
     previous: Vec<ChatMessage>,
 ) -> (Vec<ChatMessage>, TranscriptPart) {
     let rebuilt;
-    let boundaried: &[ChatMessage] =
-        if state.messages.boundaried_key.as_ref() == Some(&BoundariedKey::of(state)) {
-            &state.messages.boundaried
-        } else {
-            rebuilt = boundaried_transcript(state);
-            &rebuilt
-        };
+    let boundaried_current =
+        state.messages.boundaried_key.as_ref() == Some(&BoundariedKey::of(state));
+    let boundaried: &[ChatMessage] = if boundaried_current {
+        &state.messages.boundaried
+    } else {
+        rebuilt = boundaried_transcript(state);
+        &rebuilt
+    };
     let queue = state.session.queue_prompts.clone().unwrap_or_default();
     let mut startup_pending =
         pending_with_startup_sends(&state.pending.sends, &queue, state.session.agent.as_deref());
@@ -317,8 +356,28 @@ fn compose_after(
         .transcript_part
         .as_ref()
         .filter(|part| part.key == key && previous.len() >= part.len);
-    let (mut composed, part) = match kept {
-        Some(part) => {
+    // The head the last composition built, when `boundaried` has since only grown at its end
+    // (`refresh_boundaried`) and nothing else the head is built from moved: the head is the same
+    // rows with the new ones, reconciled, filtered and retired the same way, after them. A new row
+    // that is an archived local command (or its output) can move what the reconciliation inserts
+    // before it, so it builds the head again.
+    let extended = kept.is_none().then_some(()).and_then(|()| {
+        let part = state.messages.transcript_part.as_ref()?;
+        let (extended, from) = state.messages.boundaried_extended.as_ref()?;
+        let fits = boundaried_current
+            && previous.len() >= part.len
+            && part.key.boundaried == *extended
+            && part.key.app_commands == key.app_commands
+            && part.key.pending == key.pending
+            && part.key.async_questions_since == key.async_questions_since
+            && *from <= boundaried.len()
+            && !boundaried[*from..]
+                .iter()
+                .any(|message| message.id.starts_with("local-command:"));
+        fits.then_some((part, *from))
+    });
+    let (mut composed, part) = match (kept, extended) {
+        (Some(part), _) => {
             let mut composed = previous;
             composed.truncate(part.len);
             (
@@ -330,7 +389,28 @@ fn compose_after(
                 },
             )
         }
-        None => {
+        (None, Some((part, from))) => {
+            let mut composed = previous;
+            composed.truncate(part.len);
+            let mut added = crate::transcript::local_command::without_shell_echo_queue_rows(
+                boundaried[from..].to_vec(),
+                &pending_messages,
+            );
+            retire_async_questions(state, &mut added);
+            composed.extend(added);
+            let len = composed.len();
+            // The rows before `part.len` are the ones the head held, so the revision stays: the
+            // projection's settled prefix keeps its place in them (`settled_build::build_on`).
+            (
+                composed,
+                TranscriptPart {
+                    key,
+                    len,
+                    revision: part.revision,
+                },
+            )
+        }
+        (None, None) => {
             let mut transcript = crate::transcript::local_command::without_shell_echo_queue_rows(
                 reconcile_local_command_output(boundaried, &state.session.app_commands),
                 &pending_messages,

@@ -324,6 +324,125 @@ impl Assembler {
     }
 }
 
+/// What a whole assembly of a one-source list knows about it, so rows pushed after it can be
+/// added to its answer instead of assembling the whole list again (`extend`).
+///
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// User: "ghostex app gets slower with time until it becomes super slow ... even pasting an image takes long". Every new row re-assembled, re-sorted and copied the whole transcript, then the composition copied it twice more and the projection sorted and compared it again: on a 19,000-row chat (the coordinator's, scrolled far up) that was most of each new row's ~50 ms. A list of one source with unique ids assembles to its own rows in sort order, so rows pushed at its end that sort after every row it holds, with no tie the order cannot settle, are exactly the rows a whole assembly would add at its end. Anything else assembles the whole list as before.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AssembledTail {
+    /// The list revision and length it covers.
+    revision: u64,
+    len: usize,
+    /// The one source every row has.
+    source: ChatSource,
+    /// Every row's id.
+    ids: std::collections::HashSet<String>,
+    /// The greatest `(tier, timestamp)` among the rows, the two keys the order compares first.
+    newest: (u8, i64),
+}
+
+/// The two keys [`compare_stored`] compares first: rows that differ in them are ordered the same
+/// way whatever else they hold.
+fn order_group(message: &ChatMessage) -> (u8, i64) {
+    (id_rank(&message.id), message.timestamp.unwrap_or(i64::MIN))
+}
+
+/// Whether [`compare_stored`] orders these rows the same way whatever order they arrive in.
+///
+/// Within one `(tier, timestamp)` it compares byte offsets when both rows have one and arrival
+/// otherwise, which can go round in a circle once three rows mix the two; any other set is a
+/// strict total order (ids are unique), whose sort has one answer.
+fn order_is_total<'a>(rows: impl Iterator<Item = &'a ChatMessage>) -> bool {
+    let mut groups: std::collections::HashMap<(u8, i64), (usize, bool, bool)> =
+        std::collections::HashMap::new();
+    for message in rows {
+        let group = groups.entry(order_group(message)).or_default();
+        group.0 += 1;
+        if message.byte_offset.is_some() {
+            group.1 = true;
+        } else {
+            group.2 = true;
+        }
+    }
+    groups
+        .values()
+        .all(|(count, offset, none)| *count < 3 || !(*offset && *none))
+}
+
+/// [`assembled_messages`], with what [`AssembledTail::extend`] needs to add rows pushed after it,
+/// when the list allows that: one source, unique ids, a total order.
+pub fn assembled_with_tail(
+    list: &[ChatMessage],
+    revision: u64,
+) -> (Vec<ChatMessage>, Option<AssembledTail>) {
+    let assembled = assembled_messages(list);
+    let tail = (|| {
+        let source = list.first()?.source.clone();
+        if list.iter().any(|message| message.source != source) {
+            return None;
+        }
+        let mut ids = std::collections::HashSet::with_capacity(list.len());
+        if !list.iter().all(|message| ids.insert(message.id.clone())) {
+            return None;
+        }
+        if !order_is_total(list.iter()) {
+            return None;
+        }
+        let newest = list.iter().map(order_group).max()?;
+        Some(AssembledTail {
+            revision,
+            len: list.len(),
+            source,
+            ids,
+            newest,
+        })
+    })();
+    (assembled, tail)
+}
+
+impl AssembledTail {
+    /// The rows `list` (at `revision`) holds after the ones this assembly covered, in the order a
+    /// whole assembly of `list` puts them at its end; `None` when that cannot be known without one.
+    /// `pushed` says since when the list only had rows pushed at its end.
+    pub fn extend(
+        &mut self,
+        list: &[ChatMessage],
+        revision: u64,
+        pushed: crate::state::PushedSince,
+    ) -> Option<Vec<ChatMessage>> {
+        if pushed.revision > self.revision || pushed.len > self.len || self.len > list.len() {
+            return None;
+        }
+        let added = &list[self.len..];
+        let mut ids = std::collections::HashSet::with_capacity(added.len());
+        let fits = added.iter().all(|message| {
+            message.source == self.source
+                && !self.ids.contains(&message.id)
+                && ids.insert(message.id.as_str())
+                && order_group(message) > self.newest
+        });
+        if !fits || !order_is_total(added.iter()) {
+            return None;
+        }
+        let mut order: Vec<usize> = (self.len..list.len()).collect();
+        order.sort_by(|left, right| {
+            compare_stored(
+                (&list[*left], &list[*left].id, *left),
+                (&list[*right], &list[*right].id, *right),
+            )
+        });
+        if let Some(newest) = added.iter().map(order_group).max() {
+            self.newest = newest;
+        }
+        self.ids
+            .extend(added.iter().map(|message| message.id.clone()));
+        self.len = list.len();
+        self.revision = revision;
+        Some(order.into_iter().map(|at| list[at].clone()).collect())
+    }
+}
+
 /// [`Assembler::reset`] over [`Row::stamped`]`(list)`, then the sorted rows' messages: what the
 /// composition reads, with the same merges in the same order and the same sort, byte for byte.
 ///
