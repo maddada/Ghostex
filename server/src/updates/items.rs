@@ -945,7 +945,9 @@ async fn app_item(state: &AppState) -> Value {
     let note = if available && !supported {
         text("unsupportedReason")
     } else if available {
-        Some("Updates last; Ghostex restarts once and your agents keep running.".to_string())
+        // Short enough for two lines of Settings > Updates' card (the remote tile audit, finding 9:
+        // the longer note ended "your agents keep runni…").
+        Some("Restarts Ghostex once; agents keep running.".to_string())
     } else {
         None
     };

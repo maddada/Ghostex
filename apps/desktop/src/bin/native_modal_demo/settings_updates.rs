@@ -176,7 +176,7 @@ fn items(state: &str) -> Vec<Value> {
     items.extend([
         item("agent:gemini", "agent", "agents", "Gemini CLI", "gemini", "Agent · npm", Some("0.41.2"), Some("0.67.0"), "failed", json!({"error": "npm: EACCES, permission denied /usr/local/lib/node_modules", "major": false})),
         item("extension:lazygit", "extension", "extensions", "Lazygit", "extension", "Extension", Some("1.2.0"), Some("1.3.0"), "needsYou", json!({"error": "This version of lazygit adds a background process or a remote website. Update it from Settings > Extensions so you can approve that first."})),
-        item("app", "app", "ghostex", "Ghostex", "ghostex", "This computer", Some("10.47.0"), Some("10.48.0"), "available", json!({"note": "Updates last; Ghostex restarts once and your agents keep running."})),
+        item("app", "app", "ghostex", "Ghostex", "ghostex", "This computer", Some("10.47.0"), Some("10.48.0"), "available", json!({"note": "Restarts Ghostex once; agents keep running."})),
         item("machine:studio", "machine", "ghostex", "Studio Mac", "machine", "Remote machine", Some("10.46.2"), Some("10.47.0"), "available", json!({"note": "Restarts Ghostex there; its agents keep running.", "auto": true, "topBar": false})),
         item("agent:claude", "agent", "agents", "Claude Code", "claude", "Agent · mise", Some("2.1.312"), Some("2.1.318"), "available", json!({"note": "4 sessions restart on it when idle", "auto": true})),
         item("agent:codex", "agent", "agents", "Codex", "codex", "Agent · mise", Some("0.165.0"), Some("0.166.0"), "updating", json!({"progress": "Updating…"})),
@@ -254,7 +254,7 @@ fn computers_items() -> Vec<Value> {
             Some("10.47.0"),
             Some("10.48.0"),
             "available",
-            json!({"note": "Updates last; Ghostex restarts once and your agents keep running."}),
+            json!({"note": "Restarts Ghostex once; agents keep running."}),
         ),
         item(
             "agent:claude",

@@ -372,7 +372,8 @@ impl AccountsTab {
         } else if connected && !account.needs_sign_in() {
             status_tag(p, "Connected", TagTone::Success)
         } else if account.needs_sign_in() {
-            status_tag(p, "Needs sign-in", TagTone::Warning)
+            // Neutral: the amber box under the header already asks for the sign-in (finding 12).
+            status_tag(p, "Signed out", TagTone::Off)
         } else if draft.eligible {
             status_tag(p, "Auto-switch on", TagTone::On)
         } else {

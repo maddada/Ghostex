@@ -203,39 +203,17 @@ impl AccountsTab {
                     .child("Waiting for sign-in…")
                     .into_any_element()
             } else {
-                let reconnect_id = id.clone();
-                let account = account.clone();
-                h_flex()
-                    .gap(px(6.0))
-                    .items_center()
-                    .child(settings_sized_button(
-                        p,
-                        SharedString::from(format!("account-{id}-list-reconnect")),
-                        if account.synced_from().is_some() {
-                            "Sign in on this computer"
-                        } else {
-                            "Reconnect"
-                        },
-                        None,
-                        None,
-                        SizedButtonVariant::Primary,
-                        SizedButtonSize::Xs,
-                        false,
-                        None,
-                        move |page: &mut Self, _window, cx| {
-                            page.select_pane(Pane::Account(reconnect_id.clone()), cx);
-                            if account.usage_only() {
-                                page.start_usage_sign_in(
-                                    &account.provider(),
-                                    Some(account.id()),
-                                    cx,
-                                );
-                            } else {
-                                page.start_reconnect(&account, cx);
-                            }
-                        },
-                        cx,
-                    ))
+                // CDXC:Accounts 2026-11-08 WHY: a bright Reconnect button in each narrow list row
+                // (and the yellow pill and amber box in the panel beside it) said the same thing
+                // three times (the remote tile audit, finding 12). The row says it quietly; the
+                // panel it opens has the one Reconnect button.
+                div()
+                    .text_color(hsla(p.muted))
+                    .child(if account.synced_from().is_some() {
+                        "Sign in on this computer"
+                    } else {
+                        "Sign in needed"
+                    })
                     .into_any_element()
             }
         } else {
