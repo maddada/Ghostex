@@ -9,13 +9,15 @@ use serde_json::{Value, json};
 
 impl GhostexGpuiApp {
     /// Opens the editor for an orchestrator read from `/api/readCoordinator` (`coordinator`); the
-    /// Overrides mode also takes the `/api/readCoordinatorPlaybook` answer (`playbook`).
+    /// Overrides mode also takes the `/api/readCoordinatorPlaybook` answer (`playbook`) and the
+    /// guide that coordinator reads (`guide`, from `/api/readCoordinatorGuide`) for View playbook.
     pub(crate) fn open_gpui_coordinator_details_modal(
         &mut self,
         mode: CoordinatorDetailsMode,
         remote: Option<GpuiRemoteGxserverRequestTarget>,
         coordinator: &Value,
         playbook: Option<&Value>,
+        guide: Option<Result<String, String>>,
         cx: &mut gpui::Context<Self>,
     ) {
         let text = |key: &str| {
@@ -55,6 +57,7 @@ impl GhostexGpuiApp {
                 .to_string(),
             old_copies_note: playbook
                 .and_then(|view| old_copies_note_elsewhere(&old_copy_places(view))),
+            guide,
             palette: self.gpui_native_dialog_palette(),
         };
         // The editor stays open while the save runs and closes only when gxserver accepted it

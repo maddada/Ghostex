@@ -90,6 +90,7 @@ impl GhostexGpuiApp {
                             remote,
                             &read["coordinator"],
                             None,
+                            None,
                             cx,
                         ),
                         Err(error) => this.dispatch_gpui_app_modal_toast(
@@ -113,6 +114,20 @@ impl GhostexGpuiApp {
                         json!({ "projectId": ids["projectId"] }),
                     )
                     .await;
+                    // What that coordinator reads, for View playbook; without a session the read
+                    // is not recorded as its.
+                    let guide = gx_rpc(
+                        remote.clone(),
+                        "/api/readCoordinatorGuide",
+                        json!({ "projectId": ids["projectId"] }),
+                    )
+                    .await
+                    .map_err(|error| error.message)
+                    .and_then(|view| {
+                        view["guide"].as_str().map(str::to_string).ok_or_else(|| {
+                            "That computer's Ghostex could not show its playbook.".to_string()
+                        })
+                    });
                     let _ = this.update(cx, |this, cx| match (coordinator, playbook) {
                         // A gxserver older than overrides answers none: nothing to edit there.
                         (Ok(_), Ok(view)) if view.get("overrides").is_none() => this
@@ -127,6 +142,7 @@ impl GhostexGpuiApp {
                             remote,
                             &read["coordinator"],
                             Some(&view),
+                            Some(guide),
                             cx,
                         ),
                         (Err(error), _) | (_, Err(error)) => this.dispatch_gpui_app_modal_toast(
