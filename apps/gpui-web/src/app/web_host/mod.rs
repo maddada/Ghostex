@@ -8,6 +8,7 @@ mod extension_buttons;
 mod find_prompts;
 mod git_menu;
 mod host_messages;
+mod main_hub_card;
 mod modals;
 mod new_thread_picker;
 mod project_path_actions;

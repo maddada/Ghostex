@@ -328,12 +328,6 @@ impl GhostexGpuiApp {
                                                             .pl(px(18.0 * appearance.scale))
                                                             .mr(px(5.0 * appearance.scale))
                                                             .mb(px(10.0 * appearance.scale))
-                                                            // With computers combined, the home section's title above the first computer's header (chief_row_view.rs).
-                                                            .when(
-                                                                content.home_headers.len() > 1
-                                                                    && content.home_headers.first().is_some_and(|home| home.group_id == group.group_id),
-                                                                |block| block.child(super::chief_row_view::home_section_title(appearance.scale, appearance.muted)),
-                                                            )
                                                             .child(
                                                                 self.render_native_sidebar_group(
                                                                     group,
@@ -472,6 +466,8 @@ impl GhostexGpuiApp {
             .children(self.render_native_sidebar_menu(window, cx))
             // The floating links card, where a build draws it in the page (the desktop's is a window).
             .children(self.render_session_links_page_card(cx))
+            // The Main Hub card, where a build draws it in the page (the desktop's is a window).
+            .children(self.render_main_hub_page_card(cx))
             .into_any_element()
     }
 }

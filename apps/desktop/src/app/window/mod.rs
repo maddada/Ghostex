@@ -24,6 +24,7 @@ pub(crate) mod extension_titlebar_panel;
 pub(crate) mod feedback_modal;
 pub(crate) mod find_prompts;
 pub(crate) mod frosted_host;
+pub(crate) mod main_hub_card;
 pub(crate) mod markdown_table_modal;
 pub(crate) mod mermaid_diagram_modal;
 pub(crate) mod missing_project_folder_modal;

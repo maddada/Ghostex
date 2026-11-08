@@ -6,7 +6,7 @@
 //! CDXC:Chief 2026-11-08 DECISION:
 //! User (Q1734, Q1735, Q1740, Q1743, Q1747): "own row but under spaces bar please (stays static while switching space)", with the Ghostex flower; "ask which agent on first open"; the menu's Close is "Disable Extension", which turns the extension off (hides the row, stops the agent, keeps its chat and memory); with computers combined "this computer's row plus a count", whose "+N" unfolds the other computers' Chief rows the way a coordinator's threads fold.
 //! CDXC:Chief 2026-11-08 DECISION:
-//! User (Q1911, Q1913, Q1910): the row is now the header of the home project (gx-core `home_headers`, drawn by project_header.rs in the project header's place): its click opens Chief's chat, its chevron folds the home's sessions, its menu is Chief's items over the project's own (Move to Space included). With computers combined each computer's home has its own header named after the computer, replacing the fold of other computers' Chiefs. The row under the Spaces bar stays only for a computer with no home project (an older gxserver) and in the Unified sidebar. New Chat and Change Agent ask first (`chiefConfirmNewChat`, window/chief_new_chat_modal.rs).
+//! User (Q1911, Q1910, Q1991, Q1993): the row is now the header of the home project (gx-core `home_headers`, drawn by project_header.rs in the project header's place): its click opens Chief's chat, its chevron folds the home's sessions, its menu is Chief's items over the project's own (Move to Space included). With computers combined the homes are one list under this one header, each other computer's chat with its chip (Q1993, gx-core merged.rs). Resting on the row opens its card beside the sidebar (Q1991, window/main_hub_card.rs). The row under the Spaces bar stays only for a computer with no home project (an older gxserver) and in the Unified sidebar. New Chat and Change Agent ask first (`chiefConfirmNewChat`, window/chief_new_chat_modal.rs).
 //! SEE-ALSO: packages/gx-core/src/sidebar_view/chief.rs (which rows), server/src/chief/ (the session and `/api/chief`).
 
 use gpui::AppContext as _;
@@ -16,7 +16,6 @@ use gpui::{
     StatefulInteractiveElement, Styled, div, px,
 };
 use gpui_component::ElementExt as _;
-use gpui_component::tooltip::ManagedTooltipExt as _;
 use serde_json::{Value, json};
 
 use super::actions::NativeSidebarAction;
@@ -82,6 +81,9 @@ fn confirm_new_chat_on() -> bool {
 }
 
 const CONFIRM_NEW_CHAT_SETTING: &str = "chiefConfirmNewChat";
+
+/// The Main Hub card's key for the row under the Spaces bar (a home header's is its group id).
+const STATIC_ROW_KEY: &str = "chief-row";
 
 /// The status dot a Chief row draws, the same dots and order as a session card's.
 pub(crate) fn chief_status(chief: &NativeSidebarChief, scale: f32) -> Option<AnyElement> {
@@ -169,18 +171,15 @@ impl GhostexGpuiApp {
             local.and_then(|chief| chief_status(chief, scale)),
         )
         .on_prepaint(super::menus::record_menu_owner(&owner))
-        .when(
-            self.native_sidebar.pointer_inside
-                && self.native_sidebar.menu.is_none()
-                && !cx.has_active_drag(),
-            |row| {
-                row.managed_discrete_tooltip_with_placement(
-                    gpui_component::tooltip::ManagedTooltipPlacement::BelowLeft,
-                    appearance.tooltip_delay,
-                    move |window, cx| super::tooltips::main_hub_tooltip(None, scale, window, cx),
-                )
-            },
-        )
+        // Resting on the row opens Main Hub's card beside the sidebar.
+        .on_hover({
+            let owner = owner.clone();
+            cx.listener(move |app, hovered: &bool, _, cx| {
+                let top = owner.get().map(|bounds| bounds.top().as_f32());
+                app.hover_main_hub_row(STATIC_ROW_KEY.to_string(), top, *hovered, cx);
+            })
+        })
+        .on_any_mouse_down(cx.listener(|app, _, _, cx| app.dismiss_main_hub_card(cx)))
         // The fold chevron is its own hit area: a click anywhere else on the row opens the chat.
         .when(fold != ChiefFold::Single, |row| {
             row.child(
@@ -266,6 +265,64 @@ impl GhostexGpuiApp {
                 .children(other_rows)
                 .into_any_element(),
         )
+    }
+
+    /// The pointer entered (`hovered`) or left a Main Hub row whose top in the window is `top`:
+    /// after the tooltip delay its card opens beside the sidebar (window/main_hub_card.rs on the
+    /// desktop, web_host/main_hub_card.rs on the web), and it closes when the pointer leaves.
+    pub(crate) fn hover_main_hub_row(
+        &mut self,
+        key: String,
+        top: Option<f32>,
+        hovered: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !hovered {
+            if self.native_sidebar.main_hub_card_pending.as_deref() == Some(key.as_str()) {
+                self.native_sidebar.main_hub_card_pending = None;
+            }
+            if self
+                .native_sidebar
+                .main_hub_card_open
+                .as_ref()
+                .is_some_and(|(open, _)| *open == key)
+            {
+                self.close_main_hub_card(cx);
+            }
+            return;
+        }
+        let Some(top) = top else {
+            return;
+        };
+        if self.native_sidebar.main_hub_card_pending.as_deref() == Some(key.as_str()) {
+            return;
+        }
+        self.native_sidebar.main_hub_card_pending = Some(key.clone());
+        let delay = self.configured_tooltip_delay();
+        cx.spawn(async move |app, cx| {
+            cx.background_executor().timer(delay).await;
+            let _ = app.update(cx, |app, cx| {
+                let still_here =
+                    app.native_sidebar.main_hub_card_pending.as_deref() == Some(key.as_str());
+                if still_here
+                    && app.native_sidebar.menu.is_none()
+                    && !cx.has_active_drag()
+                    && !app.floating_sidebar_shown()
+                {
+                    app.open_main_hub_card(key, top, cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// A press on the row: the chat or the menu takes over, so the card goes and stays gone until
+    /// the pointer comes back.
+    pub(crate) fn dismiss_main_hub_card(&mut self, cx: &mut gpui::Context<Self>) {
+        self.native_sidebar.main_hub_card_pending = None;
+        if self.native_sidebar.main_hub_card_open.is_some() {
+            self.close_main_hub_card(cx);
+        }
     }
 
     /// The row's right-click menu, for `machine_id`'s Chief (the selected computer's when `None`).

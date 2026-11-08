@@ -64,7 +64,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
     // The bot groups of the other bot kind than the Bots space shows (`BotsSource`).
     let mut other_bot_groups: BTreeSet<&str> = BTreeSet::new();
     let mut bot_runs_today = 0;
-    // The home project's groups (one per computer with the computers combined), whose header is
+    // The home project's group (the computers' homes merged into one with the computers combined, merged.rs), whose header is
     // Main Hub's row (`chief.rs`).
     let mut home_groups: BTreeSet<&str> = BTreeSet::new();
     for plan in input.plans {

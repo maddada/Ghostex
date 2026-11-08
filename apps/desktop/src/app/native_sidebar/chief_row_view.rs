@@ -164,35 +164,25 @@ pub(crate) fn chief_header_row(
 /// The width of the Main Hub tooltip's text column.
 pub(crate) const MAIN_HUB_TOOLTIP_WIDTH: f32 = 264.0;
 
-/// What the Main Hub tooltip says: its title (with the computer's name when several are combined)
-/// and its plain lines.
-pub(crate) fn main_hub_tooltip_lines(machine_label: Option<&str>) -> (String, [&'static str; 2]) {
-    let title = match machine_label {
-        Some(machine) => format!("{CHIEF_LABEL} \u{b7} {machine}"),
-        None => CHIEF_LABEL.to_string(),
-    };
-    (
-        title,
-        [
-            "The home for chats that don't belong to a project: quick questions, terminals and agents started in your home folder.",
-            "Its agent sees and steers every Ghostex agent on this computer, and talks to the Main Hubs on your other computers.",
-        ],
-    )
+/// What the Main Hub card says under its title.
+pub(crate) fn main_hub_tooltip_lines() -> [&'static str; 2] {
+    [
+        "The home for chats that don't belong to a project: quick questions, terminals and agents started in your home folder.",
+        "Its agent sees and steers every Ghostex agent on this computer, and talks to the Main Hubs on your other computers.",
+    ]
 }
 
-/// The Main Hub tooltip's content, without its bubble: the flower and the title, two plain lines,
-/// and what a click and a right-click do. The sidebar wraps it in its frosted tooltip bubble
-/// (tooltips.rs `main_hub_tooltip`); the `native-modal-demo` preview draws it for screenshots.
+/// The Main Hub card's content, without its frame: the flower and the title, two plain lines,
+/// and what a click and a right-click do. tooltips.rs `main_hub_card` frames it; the desktop shows
+/// it in its own window beside the sidebar (window/main_hub_card.rs), the web build in its page
+/// (web_host/main_hub_card.rs), and the `native-modal-demo` preview draws it for screenshots.
 ///
 /// CDXC:Chief 2026-11-08 DECISION:
 /// User (Q1931): "when we hover on it we need to show a tool tip that's beautiful and explains what is this please". A card, not a one-liner: a short title, then plain lines saying it is the home for chats that belong to no project and the agent that sees and steers every Ghostex agent on this computer (and the other computers' Main Hubs). On the phone the same words open its long-press menu.
-pub(crate) fn main_hub_tooltip_content(
-    machine_label: Option<&str>,
-    scale: f32,
-    foreground: Hsla,
-    secondary: Hsla,
-) -> Div {
-    let (title, lines) = main_hub_tooltip_lines(machine_label);
+/// CDXC:Chief 2026-11-08 DECISION:
+/// User (Q1991): "move the hover card OUTSIDE the sidebar, like the hover menu that shows a session's links (it floats beside the sidebar instead of over the rows); keep its content". It opens beside the sidebar, level with the row, after the tooltip delay, and closes when the pointer leaves the row. Supersedes the tooltip drawn over the rows.
+pub(crate) fn main_hub_tooltip_content(scale: f32, foreground: Hsla, secondary: Hsla) -> Div {
+    let lines = main_hub_tooltip_lines();
     let hint = |key: &'static str, does: &'static str| {
         h_flex()
             .gap(px(4.0 * scale))
@@ -222,7 +212,7 @@ pub(crate) fn main_hub_tooltip_content(
                         .line_height(px(18.0 * scale))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(foreground)
-                        .child(title),
+                        .child(CHIEF_LABEL),
                 ),
         )
         .children(lines.into_iter().map(|line| {
@@ -241,18 +231,6 @@ pub(crate) fn main_hub_tooltip_content(
                 .child(hint("Click", "open the chat"))
                 .child(hint("Right-click", "more")),
         )
-}
-
-/// The home section's title with the computers combined: "Main Hub" over the computers' own
-/// home headers, in the muted small type of a section label.
-pub(crate) fn home_section_title(scale: f32, muted: Hsla) -> impl IntoElement {
-    h_flex()
-        .h(px(22.0 * scale))
-        .gap(px(6.0 * scale))
-        .text_size(px(11.5 * scale))
-        .text_color(muted)
-        .child(flower(12.0 * scale, muted))
-        .child(CHIEF_LABEL)
 }
 
 /// Another computer's Chief, unfolded under this computer's like a session under its project: the

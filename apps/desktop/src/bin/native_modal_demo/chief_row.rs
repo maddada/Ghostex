@@ -190,25 +190,50 @@ impl Render for ChiefRowPreview {
             )
         };
         let home = state.starts_with("home");
-        // A loose session under the home header: its title, dimmed while asleep, and its dot.
+        // A computer's pill after a chat's title (project_header.rs `machine_name_chip`'s look).
+        let chip = |name: &str| {
+            div()
+                .flex_shrink_0()
+                .px(px(5.0))
+                .rounded(px(99.0))
+                .border_1()
+                .border_color(colors.muted.opacity(0.35))
+                .text_size(px(10.0))
+                .text_color(colors.muted)
+                .font_weight(gpui::FontWeight::NORMAL)
+                .child(name.to_string())
+                .into_any_element()
+        };
+        // A loose session under the home header: its title, dimmed while asleep, the computer's
+        // pill for a chat on another computer, and its dot.
+        let home_chat =
+            |title: &str, asleep: bool, machine: Option<&str>, status: Option<AnyElement>| {
+                div().pl(px(24.0)).pr(px(7.0)).child(
+                    h_flex()
+                        .h(px(30.0))
+                        .pl(px(8.0))
+                        .pr(px(6.0))
+                        .gap(px(8.0))
+                        .font_weight(gpui::FontWeight::LIGHT)
+                        .child(
+                            h_flex()
+                                .flex_1()
+                                .min_w_0()
+                                .gap(px(5.0))
+                                .child(
+                                    div()
+                                        .min_w_0()
+                                        .truncate()
+                                        .when(asleep, |title| title.text_color(colors.muted))
+                                        .child(title.to_string()),
+                                )
+                                .children(machine.map(chip)),
+                        )
+                        .children(status),
+                )
+            };
         let home_session = |title: &str, asleep: bool, status: Option<AnyElement>| {
-            div().pl(px(24.0)).pr(px(7.0)).child(
-                h_flex()
-                    .h(px(30.0))
-                    .pl(px(8.0))
-                    .pr(px(6.0))
-                    .gap(px(8.0))
-                    .font_weight(gpui::FontWeight::LIGHT)
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .when(asleep, |title| title.text_color(colors.muted))
-                            .child(title.to_string()),
-                    )
-                    .children(status),
-            )
+            home_chat(title, asleep, None, status)
         };
         let home_header = |label: &str, fold: ChiefFold, status: Option<AnyElement>| {
             chief_block(1.0).pb(px(0.0)).child(chief_header_row(
@@ -234,23 +259,27 @@ impl Render for ChiefRowPreview {
                 home_session("CPU usage investigation", true, None).into_any_element(),
             ],
             "home-combined" => vec![
-                chief_block(1.0)
-                    .pb(px(2.0))
-                    .child(home_section_title(1.0, colors.muted))
+                home_header(CHIEF_LABEL, ChiefFold::Unfolded, Some(dot(WORKING)))
                     .into_any_element(),
-                home_header("MacBook Pro", ChiefFold::Unfolded, Some(dot(WORKING)))
+                home_chat(
+                    "Preventing Mac screen lock",
+                    false,
+                    None,
+                    Some(dot(WORKING)),
+                )
+                .into_any_element(),
+                home_chat("Main Hub", false, Some("Hetzner"), Some(dot(QUESTION)))
                     .into_any_element(),
-                home_session("Preventing Mac screen lock", false, Some(dot(WORKING)))
-                    .into_any_element(),
-                home_session("CPU usage investigation", true, None).into_any_element(),
-                home_header("Hetzner", ChiefFold::Unfolded, Some(dot(QUESTION))).into_any_element(),
-                home_session("Restart the relay", false, Some(dot(QUESTION))).into_any_element(),
-                home_header("WN desktop", ChiefFold::Folded, None).into_any_element(),
+                home_chat("Restart the relay", false, Some("Hetzner"), None).into_any_element(),
+                home_chat("Game launcher setup", true, Some("WN"), None).into_any_element(),
+                home_chat("CPU usage investigation", true, None, None).into_any_element(),
             ],
             _ => Vec::new(),
         };
-        // The tooltip bubble's look (tooltips.rs `in_window_bubble`): the menu fill, its outline.
-        let tooltip_card = (state == "home-tooltip").then(|| {
+        // The card beside the sidebar, over the work area (window/main_hub_card.rs), in the
+        // tooltip bubble's look (tooltips.rs `in_window_bubble`): the menu fill, its outline.
+        let card_beside = state == "home-tooltip";
+        let tooltip_card = card_beside.then(|| {
             let fill = if self.light {
                 hsla(0xffffff, 1.0)
             } else {
@@ -258,8 +287,8 @@ impl Render for ChiefRowPreview {
             };
             div()
                 .absolute()
-                .top(px(14.0 + 40.0 + 30.0 + 4.0))
-                .left(px(9.0))
+                .top(px(14.0 + 40.0))
+                .left(px(300.0 + 6.0))
                 .py(px(10.0))
                 .px(px(12.0))
                 .rounded(px(8.0))
@@ -268,14 +297,19 @@ impl Render for ChiefRowPreview {
                 .border_color(hsla(ink, 0.14))
                 .shadow_lg()
                 .child(main_hub_tooltip_content(
-                    None,
                     1.0,
                     hsla(ink, 1.0),
                     hsla(ink, 0.6),
                 ))
         });
-        v_flex()
+        let work_area = if self.light {
+            hsla(0xf8f9fb, 1.0)
+        } else {
+            hsla(0x16191d, 1.0)
+        };
+        let column = v_flex()
             .relative()
+            .flex_shrink_0()
             .w(px(300.0))
             .h(px(if home { 380.0 } else { 330.0 }))
             .bg(background)
@@ -357,8 +391,13 @@ impl Render for ChiefRowPreview {
                     .child(project_header())
                     .child(session("Main Coordinator"))
                     .child(session("Outdated dependencies audit"))
-            })
-            // Last, so it paints over the rows like a tooltip.
+            });
+        // The sidebar, and with the card the work area beside it, the card painted last.
+        h_flex()
+            .relative()
+            .bg(work_area)
+            .child(column)
+            .when(card_beside, |row| row.child(div().w(px(330.0)).h_full()))
             .children(tooltip_card)
     }
 }
@@ -375,8 +414,14 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     } else {
         330.0
     };
+    // The card state shows the work area beside the sidebar too.
+    let width = if state == "home-tooltip" {
+        630.0
+    } else {
+        300.0
+    };
     let _ = super::open_modal_window(
-        300.0,
+        width,
         height,
         move |_, cx| cx.new(|_| ChiefRowPreview { state, light }),
         cx,

@@ -161,8 +161,12 @@ pub(super) fn merge_machines(
             }
         }
     }
+    identities.retain(|identity| identity.key != HOME_KEY);
     let canonical = merge_repo_identities(identities.iter());
     let key_of = |project: &ProjectContextInput| -> String {
+        if project.is_home {
+            return HOME_KEY.to_string();
+        }
         let identity = identity_of(project);
         let from_origin = !identity.key.starts_with("dir:");
         let key = canonical
@@ -346,6 +350,26 @@ pub(super) fn merge_machines(
                 );
                 for session_id in session_ids {
                     if let Some(row) = row_of(session_id, &mut drawn_keys) {
+                        plans[entry].rows.push(row);
+                    }
+                }
+                // That computer's Main Hub chat is a row of the one home list (Q1993).
+                if let Some(key) = project
+                    .is_home
+                    .then(|| chief_row_key(store, &guest.machine))
+                    .flatten()
+                    .filter(|key| drawn_keys.insert(key.clone()))
+                {
+                    if let Some(row) = guest_row(
+                        &mut cache.rows,
+                        store,
+                        key,
+                        &guest.chip,
+                        input.inputs,
+                        &context,
+                        next_row_id,
+                        work,
+                    ) {
                         plans[entry].rows.push(row);
                     }
                 }
@@ -598,7 +622,18 @@ fn mergeable(
     })
 }
 
+/// The key every computer's home project shares, so the homes are one entry (`identity_of`).
+const HOME_KEY: &str = "home:";
+
+/// CDXC:Chief 2026-11-08 DECISION:
+/// User (Q1993): with computers combined, Main Hub is "one list with a small computer chip on each chat instead of one header per computer (keep the Main Hub row as the header)". Every computer's home project (`is_home`) has the same key, so the homes are one entry headed by Main Hub's row, each other computer's chat carrying that computer's chip like any merged project's; the other computers' own Main Hub chats join it as rows too (`chief_row_key`). Supersedes one header per computer (Q1913).
 fn identity_of(project: &ProjectContextInput) -> RepoIdentity {
+    if project.is_home {
+        return RepoIdentity {
+            key: HOME_KEY.to_string(),
+            label: project.title.clone(),
+        };
+    }
     repo_identity(
         project.git_remote_origin_url.as_deref(),
         &project.path,
@@ -634,6 +669,18 @@ fn last_used_copy(plan: &GroupPlan, copies: &[Copy]) -> Option<PlanActionTarget>
         group_id: copy.group_id.clone(),
         project: copy.project.clone(),
         remote_machine: copy.remote_machine.clone(),
+    })
+}
+
+/// `machine`'s Main Hub session, which its own list draws as its home's header and the combined
+/// list as a row of the one home entry.
+fn chief_row_key(store: &PresentationStore, machine: &MachineId) -> Option<SessionKey> {
+    let loaded = store.machine(machine)?.loaded()?;
+    let session = loaded.server_sessions().find(|session| session.is_chief)?;
+    Some(SessionKey {
+        machine: machine.clone(),
+        project_id: session.project_id.clone(),
+        session_id: session.session_id.clone(),
     })
 }
 

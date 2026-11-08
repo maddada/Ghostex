@@ -310,42 +310,28 @@ fn sidebar_tooltip_bubble(
     .build(window, cx)
 }
 
-/// The Main Hub row's tooltip (chief_row_view.rs `main_hub_tooltip_content`) in the session
-/// tooltip's bubble: frosted under glass, the bubble's fill and outline otherwise.
-pub(crate) fn main_hub_tooltip(
-    machine_label: Option<String>,
-    scale: f32,
-    window: &mut Window,
-    cx: &mut App,
-) -> AnyView {
+/// The Main Hub card (chief_row_view.rs `main_hub_tooltip_content`) beside the sidebar: the
+/// frosted menus' fill where its window is frosted (`frosted`), else the tooltip bubble's.
+pub(crate) fn main_hub_card(scale: f32, frosted: bool, glass: bool) -> gpui::Div {
     let menu = titlebar_popup_menu_background();
-    let frosted = crate::app::window::frosted_host::frosted_hosting_active()
-        && window.tooltip_presenter_active();
-    let in_window = in_window_bubble(window_glass_active_in(window));
+    let in_window = in_window_bubble(glass);
     let background = if frosted {
         crate::app::helpers::frosted_tooltip_fill(menu)
     } else {
         in_window.fill
     };
-    let foreground = titlebar_popup_menu_foreground();
-    let secondary = in_window.secondary;
-    Tooltip::element(move |_, _| {
-        super::chief_row_view::main_hub_tooltip_content(
-            machine_label.as_deref(),
+    div()
+        .py(px(10.0 * scale))
+        .px(px(12.0 * scale))
+        .rounded(px(8.0 * scale))
+        .border_1()
+        .border_color(in_window.border)
+        .bg(background)
+        .child(super::chief_row_view::main_hub_tooltip_content(
             scale,
-            foreground,
-            secondary,
-        )
-    })
-    .mx_0()
-    .mt(px(4.0 * scale))
-    .mb_0()
-    .py(px(10.0 * scale))
-    .px(px(12.0 * scale))
-    .rounded(px(gpui_component::tooltip::TOOLTIP_RADIUS))
-    .bg(background)
-    .border_color(in_window.border)
-    .build(window, cx)
+            titlebar_popup_menu_foreground(),
+            in_window.secondary,
+        ))
 }
 
 /// The bubble's colours where it is drawn inside the window it floats over.

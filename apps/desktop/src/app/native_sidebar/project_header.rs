@@ -36,21 +36,13 @@ impl GhostexGpuiApp {
         let scale = appearance.scale;
         // The home project's header is Main Hub's row (chief.rs): its name, flower, status
         // and click are Chief's; its chevron, drag, drop and hover buttons stay the project's.
-        let (home, several_homes) = self
-            .native_sidebar
-            .snapshot
-            .as_ref()
-            .map(|snapshot| {
-                (
-                    snapshot
-                        .home_headers
-                        .iter()
-                        .find(|home| home.group_id == group.group_id)
-                        .cloned(),
-                    snapshot.home_headers.len() > 1,
-                )
-            })
-            .unwrap_or_default();
+        let home = self.native_sidebar.snapshot.as_ref().and_then(|snapshot| {
+            snapshot
+                .home_headers
+                .iter()
+                .find(|home| home.group_id == group.group_id)
+                .cloned()
+        });
         let menu = match &home {
             Some(home) => {
                 let mut items = self
@@ -64,13 +56,9 @@ impl GhostexGpuiApp {
             }
             None => group.menu.clone(),
         };
-        let home_title = home.as_ref().map(|home| {
-            if several_homes {
-                home.machine_label.clone()
-            } else {
-                super::chief_row_view::CHIEF_LABEL.to_string()
-            }
-        });
+        let home_title = home
+            .as_ref()
+            .map(|_| super::chief_row_view::CHIEF_LABEL.to_string());
         let home_chief = home.as_ref().and_then(|home| home.chief.clone());
         let home_focused = home_chief.as_ref().is_some_and(|chief| chief.is_focused);
         let hovered = self.native_sidebar.hovered_group.as_ref() == Some(&id);
@@ -176,30 +164,6 @@ impl GhostexGpuiApp {
                         .filter(|_| home.is_none())
                         .map(|(_, short)| machine_name_chip(short, appearance)),
                 )
-                // The home header explains Main Hub (chief_row_view.rs `main_hub_tooltip_content`).
-                .when(
-                    home.is_some()
-                        && self.native_sidebar.pointer_inside
-                        && self.native_sidebar.menu.is_none()
-                        && !cx.has_active_drag(),
-                    |title| {
-                        let machine = several_homes
-                            .then(|| home.as_ref().map(|home| home.machine_label.clone()))
-                            .flatten();
-                        title.managed_discrete_tooltip_with_placement(
-                            tooltip_span.placement(),
-                            appearance.tooltip_delay,
-                            move |window, cx| {
-                                super::tooltips::main_hub_tooltip(
-                                    machine.clone(),
-                                    scale,
-                                    window,
-                                    cx,
-                                )
-                            },
-                        )
-                    },
-                )
                 .when_some(tooltip.filter(|_| home.is_none()), |title, tooltip| {
                     title.when(
                         self.native_sidebar.pointer_inside
@@ -249,6 +213,16 @@ impl GhostexGpuiApp {
             .on_prepaint({
                 let header_bounds = header_bounds.clone();
                 move |bounds, _, _| header_bounds.set(Some(bounds))
+            })
+            // Resting on Main Hub's header opens its card beside the sidebar (chief.rs).
+            .when(home.is_some(), |row| {
+                let header_bounds = header_bounds.clone();
+                let card_key = id.clone();
+                row.on_hover(cx.listener(move |app, hovered: &bool, _, cx| {
+                    let top = header_bounds.get().map(|bounds| bounds.top().as_f32());
+                    app.hover_main_hub_row(card_key.clone(), top, *hovered, cx);
+                }))
+                .on_any_mouse_down(cx.listener(|app, _, _, cx| app.dismiss_main_hub_card(cx)))
             })
             .child(self.native_sidebar.header_hover.probe(hover_id))
             // Where the pick-an-agent menu of this computer's Chief hangs (chief.rs).
