@@ -4,7 +4,7 @@ use std::path::Path;
 use ghostex_gx_chat_core::protocol::{ChatMessage, ChatRole};
 use ghostex_gx_chat_core::transcript::noise::{is_hidden_message, may_suppress_turn};
 use ghostex_gx_chat_core::transcript::tool_fold::{
-    is_tool_only_blocks, takes_tool_burst, tool_burst_step_for, ToolBurstStep,
+    is_tool_only_blocks, takes_tool_burst, takes_tool_burst_row, tool_burst_step_for, ToolBurstStep,
 };
 use ghostex_gx_chat_core::transcript::transcript::passes_over_tool_burst;
 use ghostex_gx_chat_core::transcript::turns::{is_settled_reply, passed_over_before_wake};
@@ -471,7 +471,16 @@ impl Turn {
                 self.run.push(message);
             }
             ToolBurstStep::Ends if final_reply => self.keep_final(message),
-            ToolBurstStep::Ends => self.end_run(message, keep, agent),
+            ToolBurstStep::Ends => {
+                // A background task's end is drawn as tool calls and takes the run after it like a
+                // reply (`takes_tool_burst_row`); only a user or system row can be one.
+                let takes = takes_tool_burst(&chat_role(message.role))
+                    || (matches!(
+                        message.role,
+                        SessionChatRole::User | SessionChatRole::System
+                    ) && read_once(&mut row, &message).is_some_and(takes_tool_burst_row));
+                self.end_run(message, keep, agent, takes)
+            }
         }
         self.guard_next = false;
         if wake {
@@ -515,10 +524,10 @@ impl Turn {
         self.keep_row(message, true);
     }
 
-    /// `message` ends the open run in the chat's tool fold: a reply or reasoning row takes the run
-    /// into itself (`takes_tool_burst`), and after any other row the run is a message of its own.
-    fn end_run(&mut self, message: SessionChatMessage, keep: bool, agent: bool) {
-        let takes = takes_tool_burst(&chat_role(message.role));
+    /// `message` ends the open run in the chat's tool fold: a reply, reasoning, tool or background
+    /// task's end row takes the run into itself (`takes`, the chat core's `takes_tool_burst_row`),
+    /// and after any other row the run is a message of its own.
+    fn end_run(&mut self, message: SessionChatMessage, keep: bool, agent: bool, takes: bool) {
         if takes && (self.run_kept || (keep && message.blocks.iter().any(is_tool_block))) {
             self.keep_run();
             self.run_kept = false;
