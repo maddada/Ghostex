@@ -136,6 +136,14 @@ impl SecurityState {
             .approved_computers
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = saved.approved_computers;
+        *state
+            .approved_project_reach
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = saved
+            .approved_project_reach
+            .into_iter()
+            .map(|reach| (reach.caller, reach.target))
+            .collect();
         state.persist_path = Some(Arc::new(path));
         Ok(state)
     }
@@ -162,6 +170,16 @@ impl SecurityState {
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .clone(),
+                approved_project_reach: self
+                    .approved_project_reach
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .iter()
+                    .map(|(caller, target)| persist::PersistedProjectReach {
+                        caller: caller.clone(),
+                        target: target.clone(),
+                    })
+                    .collect(),
             },
         )
     }
@@ -226,7 +244,12 @@ impl SecurityState {
     /// Revokes a session's token when the session ends.
     pub fn revoke_session_token(&self, project_id: &str, session_id: &str) {
         let removed = self.session_tokens.revoke_session(project_id, session_id);
+        let forgot =
+            self.forget_project_reach(|caller| caller == format!("{project_id}:{session_id}"));
         if removed.is_empty() {
+            if forgot {
+                let _ = self.save();
+            }
             return;
         }
         let _ = self.save();
@@ -259,7 +282,9 @@ impl SecurityState {
 
     /*
     CDXC:Security 2026-11-08 DECISION:
-    User (#495 follow-up, Q1863 "ask once per project"): an agent's first message to, or new session in, a project other than its own asks the owner; the approval is remembered for that agent session and that project, until gxserver restarts. It is kept in memory only: a session that ends never comes back with the same id's approvals in a later gxserver, and a restart asks again at most once per project.
+    User (#495 follow-up, Q1863 "ask once per project"): an agent's first message to, or new session in, a project other than its own asks the owner; the approval is remembered for that agent session and that project.
+    CDXC:Security 2026-11-08 DECISION:
+    User, on the in-memory first version: "make these approvals not save in memory pls so u dont ask me to approve again later". They are saved in security.json with the other security state and loaded at start, so a gxserver restart asks nothing again. An entry goes when its session is deleted (`revoke_session_token`) or closed (stopped; the security sweep, `forget_reach_of_closed_sessions`), so the list can't grow forever; a sleeping session keeps its approvals.
     */
     /// Whether the owner already let `caller_key` (a session's `<project>:<session>`, or
     /// `localAgent`) reach project `project_id`.
@@ -276,6 +301,18 @@ impl SecurityState {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .insert((caller_key.to_string(), project_id.to_string()));
+        let _ = self.save();
+    }
+
+    /// Drops the remembered reach approvals whose caller `gone` names; whether any went.
+    fn forget_project_reach(&self, gone: impl Fn(&str) -> bool) -> bool {
+        let mut approved = self
+            .approved_project_reach
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let before = approved.len();
+        approved.retain(|(caller, _)| !gone(caller));
+        approved.len() != before
     }
 
     /// Adds an approver key: the first one directly (it is the owner's call, checked by the
@@ -339,6 +376,23 @@ pub fn revoke_tokens_of_deleted_sessions(
         if !live.contains(&(project_id.clone(), session_id.clone())) {
             state.revoke_session_token(&project_id, &session_id);
         }
+    }
+}
+
+/// Drops the remembered reach approvals of sessions that are no longer open (`open` holds every
+/// session's `(project id, session id)` that exists and isn't stopped): a closed session's
+/// approvals go with it, so the saved list can't grow forever.
+pub fn forget_reach_of_closed_sessions(
+    state: &SecurityState,
+    open: &std::collections::HashSet<(String, String)>,
+) {
+    let forgot = state.forget_project_reach(|caller| {
+        caller.split_once(':').is_none_or(|(project, session)| {
+            !open.contains(&(project.to_string(), session.to_string()))
+        })
+    });
+    if forgot {
+        let _ = state.save();
     }
 }
 

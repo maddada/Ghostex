@@ -134,7 +134,7 @@ pub(crate) fn cross_project_action(
             .target(target)
             .params(Value::Object(params.clone()))
             .detail(format!(
-                "Approved once, this agent can message and start sessions in {place} until it ends."
+                "Approved once, this agent can message and start sessions in {place} until it is closed."
             )),
     )
 }
@@ -149,6 +149,11 @@ pub(crate) fn remember_approved(
         approval.action,
         SensitiveAction::ReachOtherProject | SensitiveAction::ForceFullAccess
     ) {
+        return;
+    }
+    // Only an agent session is ever asked about reach; the token file's full-access approvals
+    // aren't kept.
+    if !matches!(caller, Principal::Session { .. }) {
         return;
     }
     let (Some(key), Some(target)) = (caller_key(caller), approval.target.as_deref()) else {

@@ -2,7 +2,8 @@
 //! must survive a gxserver restart (zmx sessions outlive it and keep their token).
 //!
 //! Written whole, through a temporary file and a rename, mode 0600 in the 0700 auth folder.
-//! Approval requests and owner sessions are never written: they live minutes, or only in the
+//! The projects the owner let an agent session reach are written too, until that session is
+//! closed or deleted. Approval requests and owner sessions are never written: they live minutes, or only in the
 //! desktop app's memory.
 
 use std::{
@@ -34,6 +35,19 @@ pub struct PersistedSecurity {
     /// Connected computers the owner approved, by server id, with when (ms).
     #[serde(default)]
     pub approved_computers: std::collections::BTreeMap<String, u64>,
+    /// Projects the owner let an agent session reach (`reachOtherProject`), kept until that
+    /// session is closed or deleted.
+    #[serde(default)]
+    pub approved_project_reach: Vec<PersistedProjectReach>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedProjectReach {
+    /// The agent session, as `<project id>:<session id>`.
+    pub caller: String,
+    /// The project it may reach (a project id, or `folder:<path>`).
+    pub target: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

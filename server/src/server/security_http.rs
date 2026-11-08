@@ -511,6 +511,9 @@ pub(crate) fn start_security_events(state: std::sync::Arc<AppState>) {
                             if let Some(live) = live_sessions(&paths) {
                                 security::revoke_tokens_of_deleted_sessions(&security, &live);
                             }
+                            if let Some(open) = open_sessions(&paths) {
+                                security::forget_reach_of_closed_sessions(&security, &open);
+                            }
                         })
                         .await;
                     }
@@ -545,6 +548,22 @@ pub(crate) fn start_security_events(state: std::sync::Arc<AppState>) {
 
 /// Every session's `(project id, session id)`, or `None` when the database can't be read (then
 /// no token is revoked).
+/// Every session that exists and isn't closed (stopped); a sleeping one counts as open.
+fn open_sessions(
+    paths: &crate::paths::GxserverPaths,
+) -> Option<std::collections::HashSet<(String, String)>> {
+    let db = crate::storage::open_gxserver_database(paths).ok()?;
+    let mut statement = db
+        .prepare("SELECT projectId, sessionId FROM sessions WHERE lifecycleState != 'stopped'")
+        .ok()?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .ok()?;
+    rows.collect::<Result<_, _>>().ok()
+}
+
 fn live_sessions(
     paths: &crate::paths::GxserverPaths,
 ) -> Option<std::collections::HashSet<(String, String)>> {
