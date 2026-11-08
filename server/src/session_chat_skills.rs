@@ -681,76 +681,199 @@ fn enabled_claude_plugins(
         .collect()
 }
 
-/// A plugin's skills (`skills/<name>/SKILL.md`) and commands (`commands/<name>.md`) as Claude
-/// Code's `/` menu lists them: `plugin:name`, a skill over a command of the same name, and nothing
-/// marked `user-invocable: false`. Only the default folders are read, not extra ones a
-/// plugin.json `skills` or `commands` key names.
+/// A plugin's skills and commands (`commands/<name>.md`) as Claude Code's `/` menu lists them:
+/// `plugin:name`, a skill over a command of the same name, and nothing marked
+/// `user-invocable: false`. Skills come from `skills/<name>/SKILL.md` and from every folder the
+/// plugin.json `skills` key names (see [`claude_plugin_skill_folders`]). Only the default
+/// `commands/` folder is read, not the paths a plugin.json `commands` key names.
 fn discover_claude_plugin_skills(plugin: &str, install: &Path, skills: &mut Vec<SessionChatSkill>) {
     let mut names = HashSet::new();
-    for (root, commands) in [
-        (install.join("skills"), false),
-        (install.join("commands"), true),
-    ] {
-        let Ok(entries) = fs::read_dir(&root) else {
-            continue;
-        };
-        let mut entries = entries
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .collect::<Vec<_>>();
-        entries.sort();
-        for path in entries {
-            let (skill_file_path, name) = if commands {
-                let is_markdown = path.extension().is_some_and(|extension| extension == "md");
-                (path.clone(), path.file_stem().filter(|_| is_markdown))
-            } else {
-                (path.join("SKILL.md"), path.file_name())
-            };
-            let Some(name) = name.and_then(|name| name.to_str()) else {
-                continue;
-            };
-            let name = format!("{plugin}:{name}");
-            // A hidden skill leaves the name free, so a command of that name still lists.
-            if !skill_file_path.is_file()
-                || !user_invocable(&skill_file_path)
-                || !names.insert(name.clone())
-            {
-                continue;
+    let mut add = |root: &Path, directory_path: PathBuf, skill_file_path: PathBuf, name: &str| {
+        let name = format!("{plugin}:{name}");
+        // A hidden skill leaves the name free, so a command of that name still lists.
+        if !skill_file_path.is_file()
+            || !user_invocable(&skill_file_path)
+            || !names.insert(name.clone())
+        {
+            return;
+        }
+        skills.push(SessionChatSkill {
+            directory_path,
+            skill_file_path,
+            name,
+            source_kind: "pluginCache",
+            root_path: root.to_path_buf(),
+            variant_label: None,
+        });
+    };
+    for (root, folder) in claude_plugin_skill_folders(install) {
+        match folder {
+            PluginSkillFolder::Skill => {
+                let skill_file = root.join("SKILL.md");
+                // A folder named in plugin.json is one skill, named by its front matter.
+                let name = front_matter_value(&skill_file, "name")
+                    .map(|name| {
+                        name.strip_prefix(&format!("{plugin}:"))
+                            .unwrap_or(&name)
+                            .to_string()
+                    })
+                    .filter(|name| !name.is_empty())
+                    .or_else(|| {
+                        root.file_name()
+                            .and_then(|name| name.to_str())
+                            .map(str::to_string)
+                    });
+                if let Some(name) = name {
+                    add(&root, root.clone(), skill_file, &claude_skill_name(&name));
+                }
             }
-            skills.push(SessionChatSkill {
-                directory_path: path,
-                skill_file_path,
-                name,
-                source_kind: "pluginCache",
-                root_path: root.clone(),
-                variant_label: None,
-            });
+            PluginSkillFolder::SkillsOf => {
+                for path in sorted_entries(&root) {
+                    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                        continue;
+                    };
+                    let name = claude_skill_name(name);
+                    add(&root, path.clone(), path.join("SKILL.md"), &name);
+                }
+            }
         }
     }
+    let commands = install.join("commands");
+    for path in sorted_entries(&commands) {
+        let is_markdown = path.extension().is_some_and(|extension| extension == "md");
+        let Some(name) = path
+            .file_stem()
+            .filter(|_| is_markdown)
+            .and_then(|name| name.to_str())
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        add(&commands, path.clone(), path, &name);
+    }
+}
+
+enum PluginSkillFolder {
+    /// The folder is a skill: it holds `SKILL.md`.
+    Skill,
+    /// Each folder inside it that holds a `SKILL.md` is a skill.
+    SkillsOf,
+}
+
+/// The folders Claude Code loads a plugin's skills from, in its order: `skills/`, then each path
+/// the plugin.json `skills` key names (a string or an array, relative to the install folder),
+/// where a path holding `SKILL.md` is one skill and any other path a folder of skill folders. A
+/// plugin with neither, whose own folder holds `SKILL.md`, is that one skill.
+///
+/// CDXC:AgentSkills 2026-11-08 WHY:
+/// GitHub #513: plugins such as mattpocock-skills 1.3.1 (`"skills": ["./skills/engineering/to-spec", ...]`) and ui-ux-pro-max (`"skills": "./.claude/skills/"`) listed nothing after the 31 Oct change read only `skills/<name>/SKILL.md`. Checked against Claude Code 2.1.319's plugin loader: the manifest paths add to `skills/` rather than replace it, a path that escapes the plugin folder is refused, and a skill's name has every character outside `[A-Za-z0-9_-]` turned into `-`.
+fn claude_plugin_skill_folders(install: &Path) -> Vec<(PathBuf, PluginSkillFolder)> {
+    let default = install.join("skills");
+    let mut folders = Vec::new();
+    if default.is_dir() {
+        folders.push((default.clone(), PluginSkillFolder::SkillsOf));
+    }
+    let manifest = fs::read(install.join(".claude-plugin").join("plugin.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
+    let declared = match manifest.as_ref().map(|manifest| &manifest["skills"]) {
+        Some(Value::String(path)) => vec![path.as_str()],
+        Some(Value::Array(paths)) => paths.iter().filter_map(Value::as_str).collect(),
+        _ => {
+            if folders.is_empty() && install.join("SKILL.md").is_file() {
+                folders.push((install.to_path_buf(), PluginSkillFolder::Skill));
+            }
+            return folders;
+        }
+    };
+    let Ok(real_install) = fs::canonicalize(install) else {
+        return folders;
+    };
+    let real_default = fs::canonicalize(&default).ok();
+    for path in declared {
+        // `./skills/x` names `<install>/skills/x`; dropping the `.` keeps the listed path clean.
+        let folder = install.join(
+            Path::new(path)
+                .components()
+                .filter(|part| !matches!(part, std::path::Component::CurDir))
+                .collect::<PathBuf>(),
+        );
+        let Ok(real_folder) = fs::canonicalize(&folder) else {
+            continue;
+        };
+        if !real_folder.starts_with(&real_install)
+            || !real_folder.is_dir()
+            || real_default.as_ref() == Some(&real_folder)
+            || folders
+                .iter()
+                .any(|(seen, _)| fs::canonicalize(seen).ok().as_ref() == Some(&real_folder))
+        {
+            continue;
+        }
+        let kind = if folder.join("SKILL.md").is_file() {
+            PluginSkillFolder::Skill
+        } else {
+            PluginSkillFolder::SkillsOf
+        };
+        folders.push((folder, kind));
+    }
+    folders
+}
+
+/// Claude Code's spelling of a plugin skill name: every character outside `[A-Za-z0-9_-]` as `-`.
+fn claude_skill_name(name: &str) -> String {
+    name.chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '_' | '-') {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+fn sorted_entries(folder: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return Vec::new();
+    };
+    let mut entries = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .collect::<Vec<_>>();
+    entries.sort();
+    entries
+}
+
+/// The value of `key` in a skill file's front matter, unquoted, when it has one.
+fn front_matter_value(skill_file: &Path, key: &str) -> Option<String> {
+    let text = fs::read_to_string(skill_file).ok()?;
+    let mut lines = text.lines();
+    if lines.next().map(str::trim) != Some("---") {
+        return None;
+    }
+    lines
+        .take_while(|line| line.trim() != "---")
+        .find_map(|line| {
+            let (line_key, value) = line.split_once(':')?;
+            (line_key.trim_end() == key).then_some(value)
+        })
+        .map(|value| {
+            let value = value.split(" #").next().unwrap_or_default().trim();
+            value.trim_matches(['"', '\'']).to_string()
+        })
 }
 
 /// Whether Claude Code's `/` menu lists the file: yes without a `user-invocable` key in its front
 /// matter, and with one only for a value Claude reads as true, so `no`, `False` and an empty value
 /// hide it as `false` does.
 fn user_invocable(skill_file: &Path) -> bool {
-    let Ok(text) = fs::read_to_string(skill_file) else {
-        return false;
-    };
-    let mut lines = text.lines();
-    if lines.next().map(str::trim) != Some("---") {
-        return true;
-    }
-    lines
-        .take_while(|line| line.trim() != "---")
-        .find_map(|line| {
-            let (key, value) = line.split_once(':')?;
-            (key.trim_end() == "user-invocable").then_some(value)
-        })
-        .is_none_or(|value| {
-            let value = value.split(" #").next().unwrap_or_default().trim();
-            let value = value.trim_matches(['"', '\'']).to_ascii_lowercase();
-            matches!(value.as_str(), "true" | "yes" | "on" | "1")
-        })
+    front_matter_value(skill_file, "user-invocable").is_none_or(|value| {
+        matches!(
+            value.to_ascii_lowercase().as_str(),
+            "true" | "yes" | "on" | "1"
+        )
+    })
 }
 
 fn skill_to_value(skill: SessionChatSkill, agent_id: &str) -> Value {
