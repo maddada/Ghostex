@@ -460,11 +460,20 @@ fn gxserver_root_from_executable_path(executable_path: &Path) -> Option<PathBuf>
     CDXC:Build 2026-06-21-13:59:
     The macOS app launches gxserver from Web/gxserver/bin/gxserver while the process current directory is not the package root. Resolve bundled zmx from the running executable's package root first so Rust starts with the same app resources the TypeScript daemon used.
     */
-    let parent = executable_path.parent()?;
-    if parent.file_name().and_then(|name| name.to_str()) != Some("bin") {
+    /*
+    CDXC:Zmx 2026-11-08 WHY:
+    On macOS gxserver runs from `<package>/GhostexServer.app/Contents/MacOS/gxserver` and
+    `bin/gxserver` only links there. A gxserver started by that real path (macOS opens the bundle
+    as an app with `/` as its folder) took `/gxserver` as its package, reported zmx missing, and a
+    PC connecting to that Mac showed "Remote setup failed: ... its zmx program is missing or broken"
+    while the Mac's own zmx was fine (gxserver.jsonl serverStarted 2026-11-08 16:55 UTC). The
+    bundle's package is the folder holding `bin`, whichever of the two paths started it.
+    */
+    let bin_dir = crate::ghostex_cli::launchers::package_bin_dir(executable_path)?;
+    if bin_dir.file_name().and_then(|name| name.to_str()) != Some("bin") {
         return None;
     }
-    parent.parent().map(Path::to_path_buf)
+    bin_dir.parent().map(Path::to_path_buf)
 }
 
 fn dedupe_candidates(candidates: Vec<ToolCandidate>) -> Vec<ToolCandidate> {

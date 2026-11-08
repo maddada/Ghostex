@@ -48,10 +48,13 @@ pub fn read_build_identity_for_executable(executable_path: &Path, version: &str)
     read_build_identity_from_package_root(&package_root, version)
 }
 
+/// The package holding `bin/gxserver`, also when gxserver was started by its real path inside
+/// `<package>/GhostexServer.app` (CDXC:Zmx 2026-11-08 in toolchain.rs): that start read
+/// `GhostexServer.app/Contents/build-identity.json`, found none and reported a source build, so
+/// the app took its own gxserver for another build.
 fn package_root_for_executable(executable_path: &Path) -> Option<PathBuf> {
-    executable_path
+    crate::ghostex_cli::launchers::package_bin_dir(executable_path)?
         .parent()
-        .and_then(|bin_dir| bin_dir.parent())
         .map(Path::to_path_buf)
 }
 
