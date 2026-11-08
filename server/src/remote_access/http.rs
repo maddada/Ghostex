@@ -95,7 +95,7 @@ pub(crate) async fn handle_remote_access_http(
                 Ok(json!({
                     "outcome": result.outcome,
                     "message": result.message,
-                    "ssh": read_ssh_access_status(port),
+                    "ssh": read_ssh_access_status_now(port),
                 }))
             })
             .await

@@ -28,7 +28,51 @@ pub struct SshAccessStatus {
     pub detail: Option<String>,
 }
 
+/*
+CDXC:RemotePairing 2026-11-08 WHY:
+Windows repro of GitHub #508: Settings > Remote asks `/api/remoteAccessStatus` every 10 s while it
+is open, and each answer opened a TCP connection to this computer's sshd and dropped it, which the
+OpenSSH log records as a connection aborted at the banner exchange, every 10 s. Whether SSH access
+is on changes only when the user turns it on or off, so the answer is kept for a minute; turning it
+on here (`/api/enableSshAccess`) probes again at once.
+*/
+/// How long a probe's answer is reused for the status reads Settings > Remote repeats.
+const SSH_STATUS_TTL: Duration = Duration::from_secs(60);
+
+fn cached_status() -> &'static std::sync::Mutex<Option<(std::time::Instant, SshAccessStatus)>> {
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<Option<(std::time::Instant, SshAccessStatus)>>,
+    > = std::sync::OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+/// The SSH access status for the status reads: the last probe's answer when it is under a minute
+/// old and for the same port, else a new probe.
 pub fn read_ssh_access_status(port: u16) -> SshAccessStatus {
+    let mut cache = cached_status()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some((at, status)) = cache.as_ref() {
+        if status.port == port && at.elapsed() < SSH_STATUS_TTL {
+            return status.clone();
+        }
+    }
+    let status = probe_ssh_access_status(port);
+    *cache = Some((std::time::Instant::now(), status.clone()));
+    status
+}
+
+/// A new probe, remembered for the status reads: after SSH access was turned on or off here.
+pub fn read_ssh_access_status_now(port: u16) -> SshAccessStatus {
+    let status = probe_ssh_access_status(port);
+    *cached_status()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+        Some((std::time::Instant::now(), status.clone()));
+    status
+}
+
+fn probe_ssh_access_status(port: u16) -> SshAccessStatus {
     let enabled = ssh_port_accepts_connections(port);
     SshAccessStatus {
         enabled,
