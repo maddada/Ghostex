@@ -96,7 +96,20 @@ pub(crate) fn handle_connected_computers_http(
                 .and_then(Value::as_u64)
                 .map(std::time::Duration::from_millis)
                 .unwrap_or(registry::DEFAULT_REGISTRATION_TTL);
+            let had_grant = registry::has_grant(server_id);
             let grant = registry::issue_grant(server_id, name, agent_access, rotate, ttl, owner);
+            if matches!(grant, Ok(Some(_))) && (!had_grant || rotate) {
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "computers.grant",
+                        format!("Let agents on {name} use this computer"),
+                    )
+                    .target(name),
+                    crate::audit::Actor::current(),
+                    crate::audit::Outcome::Done,
+                    None,
+                );
+            }
             json!({
                 "serverId": state.metadata.server_id,
                 "name": this_computer_name(),
@@ -118,7 +131,20 @@ pub(crate) fn handle_connected_computers_http(
                 .and_then(Value::as_u64)
                 .map(std::time::Duration::from_millis)
                 .unwrap_or(registry::DEFAULT_REGISTRATION_TTL);
-            json!({ "revoked": registry::revoke_grant(server_id, deny, ttl) })
+            let revoked = registry::revoke_grant(server_id, deny, ttl);
+            if revoked {
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "computers.revoke",
+                        "Stopped agents on a connected computer from using this computer",
+                    )
+                    .target(server_id),
+                    crate::audit::Actor::current(),
+                    crate::audit::Outcome::Done,
+                    None,
+                );
+            }
+            json!({ "revoked": revoked })
         }
         _ => json!({
             "serverId": state.metadata.server_id,

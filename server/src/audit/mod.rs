@@ -49,6 +49,12 @@ use std::sync::{Arc, OnceLock};
 pub fn live_log() -> &'static Arc<AuditLog> {
     static LOG: OnceLock<Arc<AuditLog>> = OnceLock::new();
     LOG.get_or_init(|| {
+        // Unit tests drive handlers that log; they must never write the user's real log.
+        if cfg!(test) {
+            let dir =
+                std::env::temp_dir().join(format!("gxserver-audit-test-{}", std::process::id()));
+            return Arc::new(AuditLog::open(AuditLog::default_path(&dir)));
+        }
         let paths = crate::paths::get_gxserver_paths(None);
         Arc::new(AuditLog::open(AuditLog::default_path(&paths.root_dir)))
     })

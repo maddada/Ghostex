@@ -268,6 +268,7 @@ pub mod session_self_heal;
 pub mod session_status;
 pub mod session_transcript_export;
 pub mod session_transcript_size;
+pub(crate) mod settings_agent_writable;
 pub(crate) mod settings_sync;
 pub mod setup;
 pub(crate) mod shared_settings_file;

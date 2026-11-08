@@ -1097,13 +1097,29 @@ async fn answer(
         &json!({ "params": params }),
     )
     .await;
-    if routed.response.status().is_success() {
-        return Ok(());
+    let result = if routed.response.status().is_success() {
+        Ok(())
+    } else {
+        let bytes = to_bytes(routed.response.into_body(), 64 * 1024)
+            .await
+            .unwrap_or_default();
+        Err(error_text(&String::from_utf8_lossy(&bytes)))
+    };
+    // A question's answer is the agent's own choice; anything else (an approval, a permission or
+    // trust prompt in the terminal) is Autopilot letting the agent do something.
+    if params.get("kind").and_then(Value::as_str) != Some("question") {
+        crate::audit::record(
+            crate::audit::Action::new(
+                "autopilot.answer",
+                "Autopilot answered an approval for an agent",
+            )
+            .target(format!("{}:{}", key.0, key.1)),
+            crate::audit::Actor::Autopilot,
+            crate::audit::Outcome::of(&result),
+            None,
+        );
     }
-    let bytes = to_bytes(routed.response.into_body(), 64 * 1024)
-        .await
-        .unwrap_or_default();
-    Err(error_text(&String::from_utf8_lossy(&bytes)))
+    result
 }
 
 fn finish(

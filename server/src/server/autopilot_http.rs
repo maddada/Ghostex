@@ -141,6 +141,14 @@ fn handle(state: &AppState, params: &Map<String, Value>) -> Result<Value, Domain
     };
     if let Some(after) = &after {
         if *after != before {
+            if let Some(summary) = autopilot_widening(&before, after) {
+                crate::audit::record(
+                    crate::audit::Action::new("autopilot.widen", summary),
+                    crate::audit::Actor::current(),
+                    crate::audit::Outcome::Done,
+                    None,
+                );
+            }
             publish_change(state, &db, &repository, &before, after);
         }
     }
@@ -151,6 +159,49 @@ fn handle(state: &AppState, params: &Map<String, Value>) -> Result<Value, Domain
         .unwrap_or(200)
         .min(2_000) as usize;
     Ok(read_view(state, &repository, &config, limit))
+}
+
+/// The security log's sentence for a change that lets Autopilot do more (turned on, answers
+/// approvals, a wider tier, a hard limit it may now cross, more projects or sessions); `None` when
+/// the change only narrows it.
+fn autopilot_widening(before: &AutopilotConfig, after: &AutopilotConfig) -> Option<String> {
+    let mut changes = Vec::new();
+    if after.enabled && !before.enabled {
+        changes.push("turned on Autopilot".to_string());
+    }
+    if after.answer_approvals && !before.answer_approvals {
+        changes.push("Autopilot may answer approvals".to_string());
+    }
+    if after.tier != before.tier {
+        changes.push(format!("Autopilot's level set to {:?}", after.tier));
+    }
+    let limits = |config: &AutopilotConfig| {
+        serde_json::to_value(&config.limits)
+            .ok()
+            .and_then(|value| value.as_object().cloned())
+            .unwrap_or_default()
+    };
+    let old_limits = limits(before);
+    for (limit, allowed) in limits(after) {
+        if allowed == Value::Bool(true) && old_limits.get(&limit) != Some(&Value::Bool(true)) {
+            changes.push(format!("Autopilot may now {limit}"));
+        }
+    }
+    let added = after
+        .projects
+        .keys()
+        .chain(after.sessions.keys())
+        .filter(|key| !before.projects.contains_key(*key) && !before.sessions.contains_key(*key))
+        .count();
+    if added > 0 {
+        changes.push(format!(
+            "Autopilot covers {added} more project(s) or session(s)"
+        ));
+    }
+    let mut summary = changes.join(", ");
+    let first = summary.chars().next()?.to_uppercase().to_string();
+    summary.replace_range(..1, &first);
+    Some(summary)
 }
 
 /// What Settings > Autopilot and `ghostex autopilot status` show.

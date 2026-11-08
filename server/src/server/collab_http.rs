@@ -365,9 +365,17 @@ fn gate(
 
 /// After an approved change ran: the security event the audit log and the notifications read.
 fn performed(state: &AppState, caller: &Principal, grant: &PresenceGrant, ok: bool) {
-    // TODO(#495 audit log): call `audit::record(action, caller, outcome, approval)` here once the
-    // audit-log thread's module lands. Until then its log reads this same change from the
-    // `SensitiveActionPerformed` event below (`state.security.subscribe()`).
+    // The security log's entry and its notification (server/src/audit/).
+    crate::audit::record(
+        crate::audit::Action::from_approval(&grant.approval),
+        crate::audit::Actor::from(caller),
+        if ok {
+            crate::audit::Outcome::Approved
+        } else {
+            crate::audit::Outcome::Failed("The change did not go through.".to_string())
+        },
+        Some(crate::audit::ApprovalRef::from(&grant.approval)),
+    );
     state.security.record_performed(
         grant.approval.action.clone(),
         grant.approval.target.clone(),

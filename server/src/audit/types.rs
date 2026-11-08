@@ -46,6 +46,8 @@ pub enum Actor {
     Extension { id: String },
     /// A Ghostex Collab guest.
     CollabGuest { name: String },
+    /// Autopilot, deciding for an agent on its own.
+    Autopilot,
     /// gxserver acting on its own (a sweep, an expiry, startup).
     Ghostex,
 }
@@ -88,7 +90,8 @@ impl Actor {
                 Some(server_id.clone()),
             ),
             Self::Extension { id } => ("extension", format!("Extension {id}"), Some(id.clone())),
-            Self::CollabGuest { name } => ("collabGuest", format!("Collab guest {name}"), None),
+            Self::CollabGuest { name } => ("collabGuest", format!("A Collab guest ({name})"), None),
+            Self::Autopilot => ("autopilot", "Autopilot".to_string(), None),
             Self::Ghostex => ("ghostex", "Ghostex".to_string(), None),
         };
         ActorRecord {
@@ -153,4 +156,72 @@ pub struct ActorRecord {
     pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+}
+
+impl Action {
+    /// The action an approval covered, in the words gxserver wrote for its card.
+    pub fn from_approval(approval: &ghostex_gx_protocol::approval::ApprovalRequest) -> Self {
+        let action = Self::new(approval.action.as_str(), approval.summary.clone());
+        match &approval.target {
+            Some(target) => action.target(target.clone()),
+            None => action,
+        }
+    }
+}
+
+impl From<&ghostex_gx_protocol::approval::ApprovalRequest> for ApprovalRef {
+    fn from(approval: &ghostex_gx_protocol::approval::ApprovalRequest) -> Self {
+        Self {
+            id: approval.id.clone(),
+            signer: approval.decided_by.clone(),
+        }
+    }
+}
+
+/// The caller the auth gate settled (`security::Principal`), as the log names it.
+impl From<&crate::security::Principal> for Actor {
+    fn from(principal: &crate::security::Principal) -> Self {
+        use crate::security::Principal;
+        match principal {
+            Principal::Owner { device_id } => Self::Owner {
+                device: Some(device_id.clone()),
+            },
+            Principal::Device { device_id } => Self::PairedDevice {
+                id: Some(device_id.clone()),
+                name: device_id.clone(),
+            },
+            Principal::Session {
+                project_id,
+                session_id,
+                ..
+            } => Self::Session {
+                session_id: format!("{project_id}:{session_id}"),
+            },
+            Principal::LocalAgent => Self::current_or_shared_token(),
+            Principal::Peer { server_id, name } => Self::ConnectedComputer {
+                server_id: server_id.clone(),
+                name: name.clone(),
+            },
+            Principal::Guest { share_id } => Self::CollabGuest {
+                name: share_id.clone(),
+            },
+            Principal::Extension { extension_id } => Self::Extension {
+                id: extension_id.clone(),
+            },
+            Principal::Anonymous => Self::Ghostex,
+        }
+    }
+}
+
+impl Actor {
+    /// The shared token's caller, with the session the CLI said it runs in when this request
+    /// carried one.
+    fn current_or_shared_token() -> Self {
+        match Self::current() {
+            actor @ Self::SharedToken { .. } => actor,
+            _ => Self::SharedToken {
+                claimed_session: None,
+            },
+        }
+    }
 }

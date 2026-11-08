@@ -51,6 +51,9 @@ pub(crate) async fn handle_remote_access_http(
     let pairing_runtime = state.remote_pairing_runtime.clone();
     let device_tokens = state.device_api_tokens.clone();
     let logger = state.logger.clone();
+    // Read here: the security log is written from the blocking pool, where the request's caller
+    // is not visible.
+    let actor = crate::audit::Actor::current();
 
     let outcome = match endpoint_path.as_str() {
         "/api/remoteAccessStatus" => {
@@ -74,6 +77,15 @@ pub(crate) async fn handle_remote_access_http(
                     read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime).ports;
                 let port = ssh_port_for_pairing(&served_ports);
                 let result = enable_ssh_access(port);
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "pairing.enableSsh",
+                        "Asked to turn on SSH access (Remote Login) for phones",
+                    ),
+                    actor,
+                    crate::audit::Outcome::Done,
+                    None,
+                );
                 Ok(json!({
                     "outcome": result.outcome,
                     "message": result.message,
@@ -101,6 +113,7 @@ pub(crate) async fn handle_remote_access_http(
                 {
                     let db = open_gxserver_database(&paths)?;
                     let secret = pairing_runtime.ensure_secret(&db)?;
+                    log_new_pairing_code(&secret.secret_hash, actor);
                     let code = EasyConnectCode {
                         v: 1,
                         address: text_address,
@@ -157,11 +170,23 @@ pub(crate) async fn handle_remote_access_http(
             };
             tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
-                if remove_paired_device(&paths, &db, &tailcat_runtime, &device_tokens, &device_id)?
-                    .is_none()
-                {
+                let Some(removed) = remove_paired_device(
+                    &paths,
+                    &db,
+                    &tailcat_runtime,
+                    &device_tokens,
+                    &device_id,
+                )?
+                else {
                     return Err(RemoteAccessHttpError::unknown_device(&device_id));
-                }
+                };
+                crate::audit::record(
+                    crate::audit::Action::new("pairing.remove", "Removed a paired phone")
+                        .target(removed.name),
+                    actor,
+                    crate::audit::Outcome::Done,
+                    None,
+                );
                 Ok(json!({ "devices": list_paired_devices_json(&db)? }))
             })
             .await
@@ -199,6 +224,7 @@ pub(crate) async fn handle_remote_access_http(
             };
             tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
+                let device_name = params.device_name.clone();
                 let outcome = pair_device(
                     &paths,
                     &db,
@@ -207,7 +233,41 @@ pub(crate) async fn handle_remote_access_http(
                     &device_tokens,
                     &logger,
                     params,
-                )?;
+                );
+                // The phone pairing calls with the code alone; the log names it.
+                let actor = match actor {
+                    crate::audit::Actor::Ghostex => crate::audit::Actor::PairedDevice {
+                        id: outcome
+                            .as_ref()
+                            .ok()
+                            .map(|outcome| outcome.device_id.clone()),
+                        name: device_name.clone(),
+                    },
+                    actor => actor,
+                };
+                crate::audit::record(
+                    crate::audit::Action::new("pairing.pair", "A phone paired with this computer")
+                        .target(device_name),
+                    actor,
+                    match &outcome {
+                        Ok(_) => crate::audit::Outcome::Done,
+                        Err(PairDeviceError::RateLimited) => {
+                            crate::audit::Outcome::Refused("Too many pairing attempts.".to_string())
+                        }
+                        Err(PairDeviceError::CodeExpired) => crate::audit::Outcome::Refused(
+                            "The pairing code was wrong, used or expired.".to_string(),
+                        ),
+                        Err(PairDeviceError::BadRequest(message)) => {
+                            crate::audit::Outcome::Refused(message.clone())
+                        }
+                        Err(PairDeviceError::ApprovalDeclined) => crate::audit::Outcome::Denied,
+                        Err(PairDeviceError::Internal(error)) => {
+                            crate::audit::Outcome::Failed(format!("{error:#}"))
+                        }
+                    },
+                    None,
+                );
+                let outcome = outcome?;
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                 Ok(json!({
                     "deviceId": outcome.device_id,
@@ -237,6 +297,25 @@ pub(crate) async fn handle_remote_access_http(
         ),
         Err(error) => error.into_response(endpoint_path, request_id),
     }
+}
+
+/// Logs a pairing code once per code: the Show QR sheet polls `/api/remotePairingCode` while it
+/// is open, and the same code comes back until it is used or expires.
+fn log_new_pairing_code(secret_hash: &str, actor: crate::audit::Actor) {
+    static LAST: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+    let mut last = LAST
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if last.as_deref() == Some(secret_hash) {
+        return;
+    }
+    *last = Some(secret_hash.to_string());
+    crate::audit::record(
+        crate::audit::Action::new("pairing.code", "A pairing code for Easy Connect was shown"),
+        actor,
+        crate::audit::Outcome::Done,
+        None,
+    );
 }
 
 fn read_device_id(body: &Value) -> Result<String, RemoteAccessHttpError> {

@@ -301,6 +301,13 @@ pub(crate) fn issue_grant(
     Ok(Some(token))
 }
 
+/// Whether `server_id` holds a live grant now (a renewal keeps it; the security log notes only new ones).
+pub(crate) fn has_grant(server_id: &str) -> bool {
+    let mut registry = registry();
+    prune(&mut registry, Instant::now());
+    registry.grants.contains_key(server_id)
+}
+
 /// Drops the token `server_id` was given, so its agents are refused from now on. `deny` (this
 /// computer's own app turning the switch off) also keeps it from being minted again for `ttl`.
 pub(crate) fn revoke_grant(server_id: &str, deny: bool, ttl: Duration) -> bool {

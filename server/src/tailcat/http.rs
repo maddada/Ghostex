@@ -111,6 +111,15 @@ pub(crate) async fn handle_tailcat_http(
         )),
     };
 
+    crate::audit::record(
+        easy_connect_audit_action(&update),
+        crate::audit::Actor::current(),
+        match &outcome {
+            Ok(_) => crate::audit::Outcome::Done,
+            Err((_, message)) => crate::audit::Outcome::Failed(message.clone()),
+        },
+        None,
+    );
     match outcome {
         Ok((record, status)) => {
             log_tailcat_state_update_success(
@@ -134,6 +143,51 @@ pub(crate) async fn handle_tailcat_http(
             );
             tailcat_error_response(endpoint_path, request_id, "internalError", message)
         }
+    }
+}
+
+/// The security log's line for an Easy Connect change.
+fn easy_connect_audit_action(update: &TailcatStateUpdate) -> crate::audit::Action {
+    use crate::audit::Action;
+    match update {
+        TailcatStateUpdate::SetEnabled { enabled: true } => {
+            Action::new("easyConnect.enable", "Turned on Easy Connect")
+        }
+        TailcatStateUpdate::SetEnabled { enabled: false } => {
+            Action::new("easyConnect.disable", "Turned off Easy Connect")
+        }
+        TailcatStateUpdate::SetPorts { ports } => Action::new(
+            "easyConnect.ports",
+            format!(
+                "Changed the ports Easy Connect opens to {}",
+                ports
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        ),
+        TailcatStateUpdate::SetAllowedClientKeys {
+            allowed_client_keys,
+        } => Action::new(
+            "easyConnect.allowList",
+            format!(
+                "Changed who may connect through Easy Connect ({} allowed)",
+                allowed_client_keys.len()
+            ),
+        ),
+        TailcatStateUpdate::SetRelay { mode, custom_host } => Action::new(
+            "easyConnect.relay",
+            match mode {
+                TailcatRelayMode::Custom => {
+                    format!("Easy Connect now uses the relay {}", custom_host.trim())
+                }
+                TailcatRelayMode::Ghostex => "Easy Connect now uses Ghostex's relay".to_string(),
+                TailcatRelayMode::Public => {
+                    "Easy Connect now uses only Tailscale's public relays".to_string()
+                }
+            },
+        ),
     }
 }
 

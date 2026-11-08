@@ -587,6 +587,32 @@ pub(crate) async fn handle_renderer_command_http(
             ),
         );
     }
+    // Only settings an agent may write pass the API (settings_agent_writable.rs).
+    if action == "updateSettingsPatch" {
+        let refused = payload
+            .get("patch")
+            .and_then(Value::as_object)
+            .map(crate::settings_agent_writable::refused_keys)
+            .unwrap_or_default();
+        if !refused.is_empty() {
+            let message = crate::settings_agent_writable::refusal_message(&refused);
+            crate::audit::record(
+                crate::audit::Action::new(
+                    "settings.ownerOnly",
+                    "Tried to change settings only you can change",
+                )
+                .target(refused.join(", ")),
+                crate::audit::Actor::current(),
+                crate::audit::Outcome::Refused(message.clone()),
+                None,
+            );
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::FORBIDDEN,
+                rpc_error("forbidden", message, Some(request_id)),
+            );
+        }
+    }
     let timeout_ms = match normalize_renderer_command_timeout_ms(params.get("timeoutMs")) {
         Ok(timeout_ms) => timeout_ms,
         Err(message) => {
