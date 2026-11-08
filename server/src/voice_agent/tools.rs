@@ -339,6 +339,9 @@ pub(super) struct ToolMemory {
     scope: std::sync::Mutex<Option<FocusScope>>,
     /// The call's client is not on this computer (`clientRemote=1`): sessions are shown there.
     client_remote: bool,
+    /// The token the attached client opened the call with; the tools' requests send it
+    /// (`loopback::ToolCaller`). The last client to attach is the one the call acts for.
+    caller_token: std::sync::Mutex<Option<String>>,
 }
 
 impl ToolMemory {
@@ -361,6 +364,22 @@ impl ToolMemory {
 
     pub(super) fn client_remote(&self) -> bool {
         self.client_remote
+    }
+
+    pub(super) fn set_caller_token(&self, token: String) {
+        if let Ok(mut current) = self.caller_token.lock() {
+            *current = Some(token);
+        }
+    }
+
+    /// A new tool call's requests, as the attached client.
+    pub(super) fn tool_caller(&self) -> super::loopback::ToolCaller {
+        super::loopback::ToolCaller::new(
+            self.caller_token
+                .lock()
+                .ok()
+                .and_then(|token| token.clone()),
+        )
     }
 
     fn key(name: &str) -> String {
@@ -404,6 +423,27 @@ impl ToolMemory {
 }
 
 pub(super) async fn run(
+    state: &Arc<AppState>,
+    memory: &ToolMemory,
+    name: &str,
+    args: &Value,
+) -> ToolOutcome {
+    run_as(state, memory, &memory.tool_caller(), name, args).await
+}
+
+/// [`run`] with the requests of `caller`, which keeps the approvals and the calls already made
+/// when the tool runs again after an approval (`approvals.rs`).
+pub(super) async fn run_as(
+    state: &Arc<AppState>,
+    memory: &ToolMemory,
+    caller: &super::loopback::ToolCaller,
+    name: &str,
+    args: &Value,
+) -> ToolOutcome {
+    super::loopback::with_caller(caller.clone(), run_followed(state, memory, name, args)).await
+}
+
+async fn run_followed(
     state: &Arc<AppState>,
     memory: &ToolMemory,
     name: &str,

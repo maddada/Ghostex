@@ -238,6 +238,21 @@ was spent; the action is about to run), `sensitiveActionPerformed { action, targ
 `approverKeyRemoved { by }`. The audit-log thread owns the hash-chained log and the notification
 per event.
 
+## The voice agent's tools
+
+The voice agent's tools call gxserver's own routes on the loopback listener
+(`voice_agent/loopback.rs`) with the token the attached client opened `/api/voice` with
+(`Input::Caller`, the last client to attach wins), not the token file: the desktop's `gxo_`, a
+phone's `gxd_`, a session's `gxs_`, or the token file (the web build, `ghostex voice` outside a
+session). So a call can do exactly what its client may. The owner's devices answer prompts, type
+into sessions and stop turns without asking, as their own clicks do. For any other client a gated
+call answers `approvalRequired`: the tool tells the model at once that it waits for the user's
+approval on their computer or phone (the request is an agent's, so it shows as a card on both),
+`voice_agent/approvals.rs` reads the request every two seconds as that client, and once approved
+runs the tool again with the approval (calls that already went through are not repeated) and
+announces the result; a denial or a lapse is announced too. Test:
+`server/src/server/tests/voice_caller_token.rs`.
+
 ## Not covered yet
 
 - The macOS approver key is a Keychain key behind Touch ID, not a Secure Enclave key (user

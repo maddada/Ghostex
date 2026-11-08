@@ -75,6 +75,8 @@ pub(super) struct Announcement {
 }
 
 pub(super) enum Input {
+    /// The token the client about to attach opened its socket with (`loopback::ToolCaller`).
+    Caller(String),
     Attach {
         attach_id: u64,
         out: mpsc::UnboundedSender<ClientFrame>,
@@ -448,6 +450,7 @@ impl Conversation {
 
     async fn on_input(&mut self, input: Input) -> Result<(), Ended> {
         match input {
+            Input::Caller(token) => self.memory.set_caller_token(token),
             Input::Attach {
                 attach_id,
                 out,
@@ -1508,7 +1511,8 @@ impl Conversation {
         let tx = self.tx.clone();
         let memory = self.memory.clone();
         tokio::spawn(async move {
-            let outcome = tools::run(&state, &memory, &name, &args).await;
+            let outcome =
+                super::approvals::run_in_call(state, memory, name.clone(), args, tx.clone()).await;
             let _ = tx.send(Input::ToolDone {
                 call_id,
                 name,

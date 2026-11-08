@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use serde_json::json;
 
-use super::super::{control, tools};
+use super::super::control;
 use super::{Conversation, Ended, Input};
 
 impl Conversation {
@@ -41,11 +41,12 @@ impl Conversation {
         self.to_client(json!({"type": "tool", "phase": "started", "callId": call_id, "name": "stop_session", "label": label}));
         let (state, tx, memory) = (self.state.clone(), self.tx.clone(), self.memory.clone());
         tokio::spawn(async move {
-            let outcome = tools::run(
-                &state,
-                &memory,
-                "stop_session",
-                &json!({"session": reference}),
+            let outcome = super::super::approvals::run_in_call(
+                state,
+                memory,
+                "stop_session".to_string(),
+                json!({"session": reference}),
+                tx.clone(),
             )
             .await;
             let _ = tx.send(Input::CardStopDone {

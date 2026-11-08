@@ -5,6 +5,7 @@
 //! sent to xAI or OpenAI with the keys kept on this computer. Client contract: docs/2026-10-20/voice-mode/voice-agent-client-contract.md.
 
 mod announcements;
+mod approvals;
 mod computers;
 #[cfg(test)]
 mod computers_tests;
@@ -70,6 +71,108 @@ pub(crate) async fn run_tool_for_tests(
     tools::run(state, &tools::ToolMemory::new(false), name, &args)
         .await
         .output
+}
+
+/// Runs one voice tool as a conversation does, for a client that opened the call with `token`
+/// (`None`: the token file): the tool's output, and the text of every announcement the
+/// conversation would get afterwards.
+#[cfg(test)]
+pub(crate) async fn run_tool_in_call_for_tests(
+    state: &std::sync::Arc<crate::server::AppState>,
+    token: Option<&str>,
+    name: &str,
+    args: serde_json::Value,
+) -> (
+    serde_json::Value,
+    tokio::sync::mpsc::UnboundedReceiver<(String, Option<String>)>,
+) {
+    computers::reset_for_tests();
+    let memory = std::sync::Arc::new(tools::ToolMemory::new(false));
+    if let Some(token) = token {
+        memory.set_caller_token(token.to_string());
+    }
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let (texts, announced) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        while let Some(input) = rx.recv().await {
+            if let conversation::Input::Announce(announcements) = input {
+                for announcement in announcements {
+                    let _ = texts.send((announcement.text, announcement.model_text));
+                }
+            }
+        }
+    });
+    let outcome = approvals::run_in_call(state.clone(), memory, name.to_string(), args, tx).await;
+    (outcome.output, announced)
+}
+
+/// One voice tool call's requests as the client holding `token` (`None`: the token file), for
+/// the end-to-end checks in `server/tests/voice_caller_token.rs`.
+#[cfg(test)]
+pub(crate) struct VoiceCallerForTests {
+    caller: loopback::ToolCaller,
+    pending: std::sync::Mutex<Option<loopback::PendingApproval>>,
+}
+
+#[cfg(test)]
+impl VoiceCallerForTests {
+    pub(crate) fn new(token: Option<&str>) -> Self {
+        Self {
+            caller: loopback::ToolCaller::new(token.map(str::to_string)),
+            pending: Default::default(),
+        }
+    }
+
+    /// One request inside the tool call; an approval it ran into is kept for [`Self::decide`].
+    pub(crate) async fn call(
+        &self,
+        state: &std::sync::Arc<crate::server::AppState>,
+        path: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let result = loopback::with_caller(
+            self.caller.clone(),
+            loopback::call(state, path, params, std::time::Duration::from_secs(10)),
+        )
+        .await;
+        if let Some(pending) = self.caller.take_pending() {
+            *self.pending.lock().unwrap() = Some(pending);
+        }
+        result
+    }
+
+    /// The id of the approval the last call ran into.
+    pub(crate) fn pending_id(&self) -> Option<String> {
+        self.pending
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|pending| pending.id.clone())
+    }
+
+    /// Waits as a conversation does until the user decided, and on an approval lets the next
+    /// call send it: `approved`, `denied`, `lapsed`.
+    pub(crate) async fn decide(
+        &self,
+        state: &std::sync::Arc<crate::server::AppState>,
+    ) -> &'static str {
+        let pending = self
+            .pending
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("a pending approval");
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        match approvals::wait_for_decision(state, &self.caller, &pending, &tx).await {
+            approvals::Decision::Approved => {
+                self.caller.approve(&pending);
+                "approved"
+            }
+            approvals::Decision::Denied => "denied",
+            approvals::Decision::Lapsed => "lapsed",
+            approvals::Decision::Gone => "gone",
+        }
+    }
 }
 
 /// A warning whose `error` (kept by the log, unlike a `message` detail) holds a provider's own

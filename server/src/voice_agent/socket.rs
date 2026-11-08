@@ -70,6 +70,11 @@ pub(crate) async fn handle_voice(
             ),
         );
     }
+    // The voice agent's tools act with this token, not the token file (`loopback::ToolCaller`).
+    let caller_token = crate::auth::bearer_token(&headers)
+        .map(str::to_string)
+        .or_else(|| query_token.clone())
+        .unwrap_or_default();
     let version = read_protocol_version(&headers, &uri, None);
     if !is_expected_protocol_version(version.as_ref()) {
         return json_response(
@@ -119,7 +124,7 @@ pub(crate) async fn handle_voice(
                     focus,
                     client_remote,
                 };
-                run_conversation_socket(state, socket, conversation_id, start).await
+                run_conversation_socket(state, socket, conversation_id, start, caller_token).await
             }
             _ => {
                 fail(
@@ -167,6 +172,7 @@ async fn run_conversation_socket(
     mut socket: WebSocket,
     conversation_id: Option<String>,
     start: Start,
+    caller_token: String,
 ) {
     let (tx, resumed) = match conversation_id {
         Some(id) => match registry::sender(&id) {
@@ -186,6 +192,7 @@ async fn run_conversation_socket(
             None => return,
         },
     };
+    let _ = tx.send(Input::Caller(caller_token));
     let attach_id = NEXT_ATTACH.fetch_add(1, Ordering::Relaxed);
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<ClientFrame>();
     if tx
