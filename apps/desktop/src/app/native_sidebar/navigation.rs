@@ -267,9 +267,12 @@ impl GhostexGpuiApp {
         // On macOS the hidden sidebar's top row is the floating panel's, which runs from the
         // window's top with or without the lights (full screen has none): it centres its buttons on
         // the lights' line with as much room under them as above, and keeps the lights' inset on
-        // its right (`floating_row_trailing_padding`).
-        let floating_row =
-            !footer && !owns_window_corner && cfg!(target_os = "macos") && self.sidebar_collapsed;
+        // its right (`floating_row_trailing_padding`). A panel under the header, while the window
+        // keeps its own lights (`floating_sidebar_full_height`), keeps the plain row.
+        let floating_row = !footer
+            && !owns_window_corner
+            && self.sidebar_collapsed
+            && self.floating_sidebar_full_height();
         let (row_height, top_padding, bottom_padding) =
             if owns_window_corner || lights_row.is_some() || floating_row {
                 let top_padding = match lights_row {

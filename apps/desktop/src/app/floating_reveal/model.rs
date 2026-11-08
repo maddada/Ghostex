@@ -333,13 +333,24 @@ impl GhostexGpuiApp {
     }
 
     /// macOS: the panel carrying `content` floats the hidden sidebar, so it runs the window's full
-    /// height from the top, in full screen too (where it carries no lights). A sessions column
-    /// alone keeps its place under the header, as on Windows and Linux.
+    /// height from the top, in full screen too (where it carries no lights), unless the window keeps
+    /// its own lights in its top-left with the sidebar collapsed (`floating_sidebar_full_height`). A
+    /// sessions column alone keeps its place under the header, as on Windows and Linux.
     ///
     /// CDXC:Sidebar 2026-11-07 WHY:
-    /// A contributor change from the GitHub #432 follow-up PR, not a maintainer decision (promote it to a DECISION if you agree with it). In full screen the floating sidebar runs the full height too, from the top of the screen as it does windowed, instead of sitting under the header; full screen shows no lights, so there are no holes and its top row starts at the top. With "Frame the work area" on it sits inside the frame like a card, as in Dia: inset from the window's top, left and bottom edges by the frame's gutter, its corners concentric with the window's, the lights inside it where the window shows them with the frame (`floating_reveal_card_inset`, `floating_panel_corner_radii` in host_macos.rs). The floating sidebar thus keeps one shape in every mode and never runs outside the frame.
+    /// A contributor change from the GitHub #432 follow-up PR, not a maintainer decision (promote it to a DECISION if you agree with it). In full screen the floating sidebar runs the full height too, from the top of the screen as it does windowed, instead of sitting under the header; full screen shows no lights, so there are no holes and its top row starts at the top. With "Frame the work area" on it sits inside the frame like a card, as in Dia: inset from the window's top, left and bottom edges by the frame's gutter, its corners concentric with the window's, the lights inside it where the window shows them with the frame (`floating_reveal_card_inset`, `floating_panel_corner_radii` in host_macos.rs). The floating sidebar thus keeps one shape in every mode where it runs the full height (see `floating_sidebar_full_height` for when it does not) and never runs outside the frame.
     pub(crate) fn floating_reveal_full_height(&self, content: FloatingRevealContent) -> bool {
-        cfg!(target_os = "macos") && content.sidebar
+        content.sidebar && self.floating_sidebar_full_height()
+    }
+
+    /// macOS: the floating sidebar runs the window's full height, except while the window keeps its
+    /// own traffic lights and their room in its top-left with the sidebar collapsed
+    /// (`window_controls_reserved`): then it keeps its place under the header, as before #494.
+    ///
+    /// CDXC:Sidebar 2026-11-08 WHY:
+    /// The full-height panel above came in the same week as `showWindowButtonsWhenSidebarCollapsed` (CDXC:Titlebar 2026-11-08 DECISION in helpers/work_area_frame.rs), and the user asked that the two not conflict ("keep in mind i added the setting to show/hide traffic lights when sidebar collapsed i think might conflict?"). With that setting on (its default) the window shows its own lights with the sidebar collapsed and the floating sidebar carries none, so a panel from the window's top would cover them and the header's toggles beside them for as long as it is open. One rule decides both: the panel runs full height (and is a card inside the frame) exactly when the window keeps no room for its lights, which is with the setting off (the panel carries the lights) and in full screen (no lights in the window).
+    pub(crate) fn floating_sidebar_full_height(&self) -> bool {
+        cfg!(target_os = "macos") && !self.window_controls_reserved()
     }
 
     /// The gutter the full-height panel keeps from the window's top, left and bottom edges: the work
