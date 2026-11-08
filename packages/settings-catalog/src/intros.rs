@@ -28,7 +28,7 @@ pub const PAGE_INTROS: &[(&str, &str)] = &[
     ("remote", "Reach this computer from your phone or another computer, and add remote machines."),
     ("sync", "Carry Spaces, settings, skills and agents between your computers."),
     ("projects", "Per-project worktree command, ticket key, docs folders and cloud box choices."),
-    ("about", "Your version, links, privacy and experimental features."),
+    ("about", "Your version, links and privacy."),
     ("extensions", "Turn built-in features and extensions on or off."),
     ("workspaces", "Separate setups for work and personal projects, each with its colour, Claude account and keys."),
     ("cloudBoxes", "Run agents in cloud sandboxes: where they run, the monthly cap and your boxes."),

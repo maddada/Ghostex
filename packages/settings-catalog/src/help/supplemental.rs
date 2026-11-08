@@ -556,6 +556,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "fasterRendering",
+        tab: EXTENSIONS,
+        group: None,
+        section: "official",
+        section_title: "Experimental",
+        title: "Faster rendering",
+        subtitle: "Redraw only the parts of a window that changed, so Ghostex uses less CPU while agents stream and you scroll; it applies at once. Turn it off if part of a window stops updating. Experimental, off by default.",
+        options: &[],
+        user_only: false,
+    },
+    Supplemental {
         key: "terminalShadersEnabled",
         tab: EXTENSIONS,
         group: None,

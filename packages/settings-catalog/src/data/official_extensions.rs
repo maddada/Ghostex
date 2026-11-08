@@ -458,6 +458,20 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("title", J::Str("Terminal shaders")),
         ("platforms", J::Arr(&[J::Str("macos")])),
     ]),
+    // CDXC:Extensions 2026-11-09 DECISION: User (Q2000 C on the Faster rendering page): "keep the
+    // toggle but move this to the extensions -> experimental (since we're taking away the
+    // experimental toggle in about page)". Its key, value and default (off) are unchanged; the
+    // About page's Advanced section, which held only it, is gone.
+    J::Obj(&[
+        ("description", J::Str("Redraw only the parts of a window that changed, so Ghostex uses less CPU while agents stream and you scroll. Turn it off if part of a window stops updating.")),
+        ("category", J::Str("experimental")),
+        ("id", J::Str("fasterRendering")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("fasterRendering")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Faster rendering")),
+    ]),
 ]);
 
 pub const GHOSTEX_OFFICIAL_EXTENSION_CATEGORIES: J = J::Arr(&[

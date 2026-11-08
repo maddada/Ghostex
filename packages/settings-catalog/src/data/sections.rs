@@ -121,7 +121,6 @@ pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "attentionNotificationActions",
     "dimSleepingSessions",
     "wakeSleepingSessionsOnSelect",
-    "fasterRendering",
     "markedHandoversStyle",
     "markedHandoversEmoji",
     "markedHandoversHeadingStrength",
@@ -600,11 +599,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
     ),
     (
         "advanced",
-        &[
-            "dimSleepingSessions",
-            "wakeSleepingSessionsOnSelect",
-            "fasterRendering",
-        ],
+        &["dimSleepingSessions", "wakeSleepingSessionsOnSelect"],
     ),
     (
         "theming",

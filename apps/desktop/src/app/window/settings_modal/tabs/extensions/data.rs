@@ -201,6 +201,7 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "keepAwake" => "titlebar/coffee.svg",
         "allAutomations" => "modals/settings/bolt.svg",
         "terminalShaders" => "modals/settings/sparkles.svg",
+        "fasterRendering" => "titlebar/rocket.svg",
         _ => "modals/settings/world.svg",
     }
 }
