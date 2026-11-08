@@ -44,6 +44,7 @@
 //!   a refused request and an unrouted call with code constants.
 
 mod boot;
+pub(crate) mod computers;
 mod diagnostics;
 mod dismissals;
 mod draft_ops;

@@ -389,6 +389,18 @@ fn run_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
         undo_optimistic(state);
         return fail(state, "The session chat send was cancelled.", None);
     }
+    if holds_head(state, phase) && crate::session::computer::holds_sends(state) {
+        return hold_head(state, context);
+    }
+    if matches!(
+        phase,
+        SendPhase::PushDraft | SendPhase::SendText | SendPhase::QueueText
+    ) {
+        crate::session::computer::arm_check(state, context);
+    }
+    let Some(submission) = state.composer.submitting.as_ref() else {
+        return Vec::new();
+    };
     let text = submission.text.clone();
     let version = submission.version.clone();
     let handoff = submission.handoff;
@@ -538,6 +550,82 @@ fn run_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
             }]
         }
     }
+}
+
+/// Whether the head phase is one a held message can stand for: a plain send or queue of text the
+/// user typed, not a compact, a handoff to the terminal or a Side chat.
+fn holds_head(state: &ChatState, phase: SendPhase) -> bool {
+    let Some(submission) = state.composer.submitting.as_ref() else {
+        return false;
+    };
+    matches!(
+        phase,
+        SendPhase::PushDraft | SendPhase::SendText | SendPhase::QueueText
+    ) && matches!(
+        submission.mode,
+        SubmissionMode::Send | SubmissionMode::Queue
+    ) && !submission.handoff
+        && !submission.text.trim().is_empty()
+        && crate::composer::side_chat::side_chat_question(&submission.text).is_none()
+}
+
+/// The head submission becomes a held message: its echo gives way to the held row, the chat box
+/// stays clear, and the sends waiting behind it go on (and are held too while the computer is
+/// offline).
+fn hold_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
+    let Some(submission) = state.composer.submitting.as_ref() else {
+        return Vec::new();
+    };
+    let text = submission.text.clone();
+    let images = submission.image_paths.clone();
+    let send_request_id = submission.send_request_id.clone();
+    undo_optimistic(state);
+    if let Some(submission) = state.composer.submitting.as_mut() {
+        submission.request = None;
+        submission.storage = None;
+    }
+    state.core.clear_error();
+    let mut effects =
+        crate::session::computer::hold(state, context, &text, &images, send_request_id.as_deref());
+    effects.extend(finish(state));
+    effects.extend(start_next(state, context));
+    state.core.publish_after(&effects);
+    effects
+}
+
+/// The computer turned out to be offline while a message to it was still waiting for an answer
+/// (Q1838 "check fast"): it is held now. Its late answer, if any, finds no submission to settle.
+pub fn hold_in_flight(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
+    let in_flight = state
+        .composer
+        .submitting
+        .as_ref()
+        .is_some_and(|submission| {
+            submission.request.is_some()
+                && submission
+                    .phases
+                    .first()
+                    .is_some_and(|phase| holds_head(state, *phase))
+        });
+    if !in_flight {
+        return Vec::new();
+    }
+    hold_head(state, context)
+}
+
+/// A message to the agent is waiting for its call to answer.
+pub fn delivering(state: &ChatState) -> bool {
+    state
+        .composer
+        .submitting
+        .as_ref()
+        .is_some_and(|submission| {
+            submission.request.is_some()
+                && matches!(
+                    submission.phases.first(),
+                    Some(SendPhase::PushDraft | SendPhase::SendText | SendPhase::QueueText)
+                )
+        })
 }
 
 /// Whether the stored draft is text typed after this submission, under another identity.
@@ -790,9 +878,13 @@ pub fn settle_request(
             // A Ghostex Collab guest's message reaches the agent labelled with their name, or
             // waits for the owner as its own row, so the echo drawn at Enter never matches it.
             if crate::extras::collab::is_guest(state)
-                && state.composer.submitting.as_ref().is_some_and(|submission| {
-                    submission.phases.first() == Some(&SendPhase::SendText)
-                })
+                && state
+                    .composer
+                    .submitting
+                    .as_ref()
+                    .is_some_and(|submission| {
+                        submission.phases.first() == Some(&SendPhase::SendText)
+                    })
             {
                 if let Some(pending_id) = state
                     .composer
@@ -844,6 +936,19 @@ pub fn settle_request(
                 submission.phases.remove(0);
             }
             effects.extend(run_head(state, context));
+        }
+        // A session on another computer that did not answer: the message is held on this
+        // computer until it is back (`session/computer.rs`).
+        crate::wire::RpcOutcome::Err { code, .. }
+            if crate::session::computer::holds_refusal(state, code.as_deref())
+                && state
+                    .composer
+                    .submitting
+                    .as_ref()
+                    .and_then(|submission| submission.phases.first().copied())
+                    .is_some_and(|phase| holds_head(state, phase)) =>
+        {
+            effects.extend(hold_head(state, context));
         }
         crate::wire::RpcOutcome::Err { message, code, .. } => {
             remember_failed_send(state, code.as_deref());

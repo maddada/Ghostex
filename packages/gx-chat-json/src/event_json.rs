@@ -101,6 +101,12 @@ enum EventJson {
     Visibility {
         shown: bool,
     },
+    /// `{"type": "computerChanged", "computer": {"name": "Windows PC", "remote": true,
+    /// "offline": true, "lastSeenMs": …}}`: the computer the session runs on.
+    ComputerChanged {
+        #[serde(default)]
+        computer: Option<ghostex_gx_chat_core::session::computer::SessionComputer>,
+    },
 }
 
 #[derive(Deserialize)]
@@ -192,6 +198,7 @@ pub(crate) fn parse(json: &str) -> Result<Event, String> {
         }
         EventJson::ReadAloud { event } => Event::ReadAloud(event),
         EventJson::Visibility { shown } => Event::Visibility { shown },
+        EventJson::ComputerChanged { computer } => Event::ComputerChanged(computer),
     })
 }
 

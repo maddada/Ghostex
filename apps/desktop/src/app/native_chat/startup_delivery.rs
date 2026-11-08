@@ -57,6 +57,37 @@ impl NativeChatView {
             return None;
         }
         let prompt_id = delivery["promptId"].clone();
+        // A message held on this computer while the session's computer is offline
+        // (packages/gx-chat-core/src/session/computer.rs): "Will send when Windows PC is back" and
+        // Cancel, which puts it back in the chat box.
+        if delivery["state"] == "held" {
+            let sending = reason.starts_with("Sending");
+            return Some(
+                self.delivery_note(
+                    DeliveryNote {
+                        id: "startup-delivery".into(),
+                        role: gpui::Role::Status,
+                        lead: None,
+                        status: reason.into(),
+                        color: p.muted,
+                        actions: if sending {
+                            Vec::new()
+                        } else {
+                            vec![NoteAction {
+                                id: "held-send-cancel".into(),
+                                label: "Cancel",
+                                command: json!({"type":"removeQueue","promptId":prompt_id}),
+                            }]
+                        },
+                        end: true,
+                    },
+                    p,
+                    cx,
+                )
+                .max_w(gpui::relative(0.8))
+                .into_any_element(),
+            );
+        }
         // A held row that says why can go from here too, and a send that left the queue
         // unconfirmed has only this line (CDXC:SessionChat 2026-10-31 in
         // packages/gx-chat-core/src/session/startup_sends.rs).
@@ -226,7 +257,11 @@ impl NativeChatView {
         if !waiting && !queued {
             return None;
         }
-        let label = if waiting {
+        // A held message waits for its computer, not for the agent: a clock, not a spinner.
+        let held = delivery["state"] == "held";
+        let label = if held {
+            "Waiting for the computer"
+        } else if waiting {
             "Waiting for agent"
         } else {
             "Queued, click to interrupt and send"
@@ -244,6 +279,19 @@ impl NativeChatView {
             .tooltip(move |window, cx| {
                 gpui_component::tooltip::Tooltip::new(label).build(window, cx)
             });
+        if held {
+            return Some((
+                slot.role(gpui::Role::Status)
+                    .child(
+                        svg()
+                            .path("titlebar/clock.svg")
+                            .size(px(12.0 * s))
+                            .text_color(p.muted),
+                    )
+                    .into_any_element(),
+                1,
+            ));
+        }
         if waiting {
             let glyph = svg()
                 .path("titlebar/loader2.svg")

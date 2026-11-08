@@ -772,6 +772,10 @@ fn insert_attachments(action: &UserAction) -> Vec<Effect> {
 
 fn remove_queue(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let prompt_id = string_param(action, "promptId");
+    // Cancel on a message held for an offline computer.
+    if prompt_id.starts_with(crate::session::computer::HELD_PREFIX) {
+        return crate::session::computer::cancel(state, prompt_id);
+    }
     // The row already left (`settle_rows_gone_from_queue`): the card is all there is to remove.
     let row_left = !state
         .session

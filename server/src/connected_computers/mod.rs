@@ -1,6 +1,7 @@
 //! Connected computers: the computers this one's agents can start, message and read sessions on
 //! (and that can do the same here), reached over the desktop app's connection to them.
 
+mod held_sends;
 mod http;
 mod peer_listener;
 mod registry;
@@ -8,6 +9,9 @@ mod relay;
 mod scope;
 mod thread_scope;
 
+pub(crate) use held_sends::{
+    handle_held_sends_http, start_held_send_delivery, HELD_SEND_ENDPOINTS,
+};
 pub(crate) use http::{
     handle_connected_computers_http, this_computer_name, CONNECTED_COMPUTER_ENDPOINTS,
 };

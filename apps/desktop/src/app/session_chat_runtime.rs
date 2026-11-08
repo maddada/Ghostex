@@ -39,6 +39,9 @@ impl GhostexGpuiApp {
     ) {
         // CDXC:RemoteMachines 2026-09-23 WHY:
         // Reconnecting can replace the SSH forward port while native chat views remain alive. Refresh their mutation/upload target alongside the chat socket's endpoint, including parked views, without recreating controllers or drafts.
+        // Every connect transition passes here, so this is where the chats learn whether their
+        // computer is offline (remote_conn/chat_computers.rs).
+        self.publish_session_chat_computers();
         let native_views = self
             .native_chat_views
             .values()

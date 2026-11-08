@@ -11,6 +11,7 @@ pub(crate) mod app_modal_bridge;
 pub(crate) mod app_update;
 pub(crate) mod attach_request;
 pub(crate) mod attach_terminal;
+pub(crate) mod chat_computers;
 pub(crate) mod clone_job_and_preview;
 pub(crate) mod connected_computers;
 pub(crate) mod dispatch_results;

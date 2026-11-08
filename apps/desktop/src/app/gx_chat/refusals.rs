@@ -136,6 +136,9 @@ fn rpc_method_name(wire: &str) -> &'static str {
         ChatRpcMethod::ReadSessionFilesLinks => "readSessionFilesLinks",
         ChatRpcMethod::ReadSessionDetails => "readSessionDetails",
         ChatRpcMethod::StopSessionBackgroundTask => "stopSessionBackgroundTask",
+        ChatRpcMethod::HoldSessionChatSend => "holdSessionChatSend",
+        ChatRpcMethod::ListHeldSessionChatSends => "listHeldSessionChatSends",
+        ChatRpcMethod::CancelHeldSessionChatSend => "cancelHeldSessionChatSend",
         ChatRpcMethod::Other(_) => "other",
     }
 }

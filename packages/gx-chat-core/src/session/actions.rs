@@ -34,6 +34,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         // in a read result, because no frame carries those fields.
         ActionKind::Refresh => request_resync(state, context),
         ActionKind::LoadEarlier => load_earlier(state, context),
+        ActionKind::ComputerRetry => crate::session::computer::retry(state),
         _ => Vec::new(),
     }
 }
@@ -86,7 +87,12 @@ pub fn load_window_ending_at(
         generation: state.messages.generation,
         island: true,
     });
-    vec![issue_read(state, context, ReadKind::Page, Some(before_offset))]
+    vec![issue_read(
+        state,
+        context,
+        ReadKind::Page,
+        Some(before_offset),
+    )]
 }
 
 /// The automatic boundary fill: a transcript whose first row does not open a turn starts

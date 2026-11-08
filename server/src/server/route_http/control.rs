@@ -78,6 +78,14 @@ pub(super) async fn route_control_http(
                 &body_json,
             )
         }
+        path if crate::connected_computers::HELD_SEND_ENDPOINTS.contains(&path) => {
+            crate::connected_computers::handle_held_sends_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+        }
         path if crate::connected_computers::CONNECTED_COMPUTER_ENDPOINTS.contains(&path) => {
             crate::connected_computers::handle_connected_computers_http(
                 &state,
