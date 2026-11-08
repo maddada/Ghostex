@@ -14,9 +14,10 @@ use crate::connected_computers::ConnectedComputer;
 use crate::coordinators::{
     agent_message, list_remote_threads, prompt_summary, record_remote_thread_progress,
     record_remote_thread_report, remote_chat_last_row, remote_chat_reading,
-    remote_screen_fingerprint, report_body, set_remote_thread_resolved, MessageSender,
-    RemoteStallDue, RemoteStallWatch, RemoteThreadKey, RemoteThreadRecord, StallNudge,
-    ThreadReport, REMOTE_STALL_CHAT_ROWS,
+    remote_screen_fingerprint, remote_undelivered_messages, report_body,
+    set_remote_thread_resolved, MessageSender, RemoteStallDue, RemoteStallWatch, RemoteThreadKey,
+    RemoteThreadRecord, RemoteUndelivered, StallNudge, ThreadReport, REMOTE_STALL_CHAT_ROWS,
+    REMOTE_UNDELIVERED_CHECK_EVERY_MS,
 };
 use crate::session_chat_interactive::SessionChatInteractivePrompt;
 
@@ -160,6 +161,12 @@ pub(super) struct RemoteSupervisorMemory {
     pub(super) in_flight: HashSet<RemoteThreadKey>,
     /// Each working thread's output clock (coordinators/remote_stall.rs).
     pub(super) stalls: HashMap<RemoteThreadKey, RemoteStallWatch>,
+    /// When an idle thread's queue there was last read for messages it marked Not sent
+    /// (coordinators/remote_undelivered.rs).
+    pub(super) queue_checked_at: HashMap<RemoteThreadKey, i64>,
+    /// The queue rows already reported as not delivered. In memory only: after a restart a row is
+    /// reported under the same send id, which the coordinator's send ledger types once.
+    pub(super) undelivered_reported: HashSet<(RemoteThreadKey, String)>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -177,6 +184,8 @@ pub(super) enum RemoteReport {
     TurnEnded {
         due: RemoteStallDue,
     },
+    /// A message its coordinator sent that the other computer's queue marked Not sent.
+    Undelivered(RemoteUndelivered),
 }
 
 pub(super) struct PendingRemoteReport {
@@ -413,6 +422,44 @@ pub(super) fn tick_at(
                 RemoteObservation::Closed => Some(RemoteReport::Closed),
                 RemoteObservation::Idle | RemoteObservation::Sleeping => None,
             };
+            let report = match report {
+                None if observation == RemoteObservation::Idle
+                    && guard.queue_checked_at.get(&key).is_none_or(|checked| {
+                        now - checked >= REMOTE_UNDELIVERED_CHECK_EVERY_MS
+                    }) =>
+                {
+                    guard.queue_checked_at.insert(key.clone(), now);
+                    // The read goes over the network: deliveries may take the lock meanwhile.
+                    drop(guard);
+                    let failed = remote_rpc(
+                        &computer,
+                        "/api/readSessionChatQueue",
+                        json!({ "projectId": thread.project_id, "sessionId": thread.session_id }),
+                    )
+                    .map(|queue| {
+                        let (project_id, session_id) = thread.coordinator_key();
+                        remote_undelivered_messages(
+                            &queue,
+                            &crate::ids::create_global_session_ref(
+                                state.metadata.server_id.as_str(),
+                                &project_id,
+                                &session_id,
+                            ),
+                        )
+                    })
+                    .unwrap_or_default();
+                    guard = memory.lock().unwrap_or_else(|error| error.into_inner());
+                    failed
+                        .into_iter()
+                        .find(|row| {
+                            !guard
+                                .undelivered_reported
+                                .contains(&(key.clone(), row.row_id.clone()))
+                        })
+                        .map(RemoteReport::Undelivered)
+                }
+                report => report,
+            };
             if record_remote_thread_progress(
                 &db,
                 &key,
@@ -602,7 +649,7 @@ async fn deliver(
         },
     });
     let chat = match report.kind {
-        RemoteReport::Closed => None,
+        RemoteReport::Closed | RemoteReport::Undelivered(_) => None,
         _ => tokio::task::spawn_blocking(move || {
             remote_rpc(&computer, "/api/readSessionChat", chat_params)
         })
@@ -736,6 +783,21 @@ async fn deliver(
             None,
             String::new(),
         ),
+        RemoteReport::Undelivered(ref row) => (
+            report_body(
+                &ThreadReport::Undelivered {
+                    excerpt: &row.excerpt,
+                    evidence: Some(&format!(
+                        "the message was marked Not sent on {}: {}",
+                        report.computer.name,
+                        row.reason.trim()
+                    )),
+                },
+                &thread_ref,
+            ),
+            None,
+            String::new(),
+        ),
     };
     let message = agent_message(&sender_for(&report), &body);
     let request_id = format!(
@@ -746,6 +808,7 @@ async fn deliver(
         match (&report.kind, stall_due) {
             (RemoteReport::Stalled { .. }, Some(due)) =>
                 format!("stall:{}:{}", due.quiet_since, due.round),
+            (RemoteReport::Undelivered(row), _) => format!("undelivered:{}", row.row_id),
             _ => prompt_key
                 .clone()
                 .or_else(|| message_id.clone())
@@ -763,6 +826,13 @@ async fn deliver(
     .is_ok();
     let closed = matches!(report.kind, RemoteReport::Closed);
     let stalled = matches!(report.kind, RemoteReport::Stalled { .. });
+    let undelivered = match &report.kind {
+        RemoteReport::Undelivered(row) => Some(row.row_id.clone()),
+        _ => None,
+    };
+    if let (true, Some(row_id), Ok(mut memory)) = (sent, undelivered.clone(), memory.lock()) {
+        memory.undelivered_reported.insert((key.clone(), row_id));
+    }
     if sent {
         if let (Some(due), Ok(mut memory)) = (stall_due, memory.lock()) {
             if let Some(watch) = memory.stalls.get_mut(&key) {
@@ -784,8 +854,9 @@ async fn deliver(
         };
         if closed {
             let _ = set_remote_thread_resolved(&db, &key, true);
-        } else if stalled {
-            // Still working: a stall report clears nothing the next finished report needs.
+        } else if stalled || undelivered.is_some() {
+            // A stall report clears nothing the next finished report needs, and a message that
+            // was not delivered leaves the thread as it was.
         } else {
             let _ = record_remote_thread_report(
                 &db,
