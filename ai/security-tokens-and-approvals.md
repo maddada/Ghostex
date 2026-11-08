@@ -65,8 +65,6 @@ keep their own endpoint allow-lists).
 | `OwnSession`, `ProjectSessions`, `AgentWritableSettings` | yes | yes | yes | yes |
 | `ManageOwnThreads` | no | yes | yes | yes |
 | `ManageAnyThreads` | no | no | no | yes |
-| `AnswerAnyPrompt` (answer another session's permission prompt without asking) | no | no | yes | no |
-| `SteerAnySession` (type into and interrupt another session without asking) | no | no | yes | no |
 | `OwnerSettings` | no | no | no | no |
 | `RequestSensitiveAction` (may ask) | yes | yes | yes | yes |
 | `DecideApprovals` (list, approve, deny, approver keys) | no | no | no | no |
@@ -83,9 +81,9 @@ session itself (its own `gxs_` token) may create a secret request for its chat
 (`/api/createSecretRequest`) and wait for the answer (`/api/waitSecretRequest`).
 
 `Principal::skips_approval(action)` is the one rule for which sensitive actions a caller skips:
-`AnswerOtherSessionPrompt` with `AnswerAnyPrompt`, `TypeIntoOtherSession`,
-`InterruptOtherSession` and `ReachOtherProject` with `SteerAnySession`, and nothing else for
-anyone.
+`AnswerOtherSessionPrompt`, `TypeIntoOtherSession` and `InterruptOtherSession`, for every caller
+(user, after 11.1.2: "please let agents manage other sessions like before"; only Chief's are still
+written to the security log, as `allowed`), and nothing else for anyone.
 
 ### Settings only: `OwnerSetup` (11.1.1, #495 follow-up)
 
@@ -165,12 +163,8 @@ Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in 
 | Autopilot | `autopilotAnswerApprovals`, `autopilotLiftLimits` | `security_gates.rs` | `/api/autopilot` `op: "set"` with `answerApprovals: true`, or `limits`. |
 | GBots | `gbotsEnable`, `gbotsAddBot`, `gbotsChangeSenders` | `security_gates.rs` | `updateSettingsPatch` turning `gbotsEnabled` on or changing `gbotsComputer`; `/api/gbots` `action: "create"`. Who may message a bot is set inside the GBots sidecar, not through gxserver. |
 | Settings | `settingsWeakenSecurity` (target: the keys) | `security_gates.rs`, desktop `owner_security/settings.rs` | One rule, `ghostex_settings_catalog::security_relaxing::needs_owner_presence`: a key on the Remote, Accounts, Secrets, Sync or Connectors page, or holding a token, password, secret, API key or credential. Through the API (`updateSettingsPatch`), a key the API may not write at all is refused by `settings_agent_writable.rs` before any approval; the rest (Sync's, GBots') ask. The desktop's own Settings window shows the system prompt (Touch ID / Windows Hello / polkit) before it saves such a change, and shows the saved values again when the prompt is declined. Collab's keys are left to the Collab routes. |
-| Prompts | `answerOtherSessionPrompt` | `security_gates.rs` | `/api/answerSessionChatPrompt` by anyone but the owner's devices for a session that isn't the caller's own, a coordinator answering its own threads included (user decision 2; Autopilot keeps its own actions). |
-| Terminal input | `typeIntoOtherSession` | `security_gates.rs` | `/api/sendSessionText` (send-text, send-key), `/api/sendSessionEnter`, `/api/sendSessionMessage` by anyone but the owner's devices into a session that isn't the caller's own, a coordinator's threads included (user decision). A coordinator's Escape or Ctrl-C to its own thread passes; chat messages through the chat queue (`ghostex agents send`) never ask. |
-| Interrupting | `interruptOtherSession` | `security_gates.rs` | `/api/interruptSessionChat` by anyone but the owner's devices for a session that is neither the caller's own nor one of its threads (user decision). |
 | Approvers | `addApproverKey` | `security_http.rs` | A second owner key, or any approver key after the first. |
-| Other projects | `reachOtherProject` (target: the project id, or `folder:<path>`) | `security_cross_project.rs` | A session token's chat message, queued prompt or delayed send to a session of another project, or a create (`createSession`, `createAgentSession`, `createWorktreeSession`, `createWorkspaceTerminal`, `forkSession`) in another project or a new folder. A project's worktrees count as the project. Never for the owner's devices, the token file (it has no project of its own; the web build and the CLI in the user's terminal use it), a coordinator's own threads, a coordinator's creates (it starts its threads that way) or Chief. Approved once, it is remembered for that session (`<project>:<session>`) and that project in `security.json` (`approvedProjectReach`), across gxserver restarts, until the session is deleted or closed (stopped; the 5-minute security sweep) (`SecurityState::project_reach_approved`). |
-| Full access | `forceFullAccess` | `security_cross_project.rs` | A create with `launchSettings.acceptAllMode: "enabled"` when neither "Agent approvals: accept all" nor the agent's own launcher setting is on, in any project, whoever but the owner's devices calls (Chief included). Every time; an approval also counts as the project's reach approval. |
+| Full access | `forceFullAccess` | `security_full_access.rs` | A create with `launchSettings.acceptAllMode: "enabled"` when neither "Agent approvals: accept all" nor the agent's own launcher setting is on, in any project, whoever but the owner's devices calls (Chief included). Every time. |
 | Teams | `teamSyncConnect` (target: the backend's address) | `security_gates.rs` | `/api/connectTeamSync` by anyone but the owner's devices. It is `ghostex team deploy`'s last step, which Settings > Workspaces sends the owner to a terminal for, so it asks instead of being refused; the rest of team setup is Settings only. |
 | Cloud Boxes | `cloudBoxShareLogins` | `security_gates.rs` | `/api/cloudBoxes` `create`, `setAgentLogin` with `allowed: true`, `projectSettings` with `settings`, by anyone but the owner's devices: they put the owner's agent logins and a project's secret files onto a box. Turning a login off and reading never ask. `connectInfo` is unchanged. |
 
@@ -210,12 +204,9 @@ state.security.record_performed(grant.approval.action, grant.approval.target, &c
   sends the call again (never on the main thread). The `ghostex` CLI prints what it waits for on
   stderr, polls `/api/readApprovalRequest` and repeats the call (`--no-wait` returns at once).
 - A person's own action in a chat (Stop, answering a prompt, typing into a session) sends
-  `params.finishWhenApproved: true` (desktop and web `native_chat/rpc.rs`; the flag is not part of
-  the digest). When it waits, gxserver answers `approvalPending` with a plain message ("Waiting for
-  your approval: …. Approve it on <computer> … and it goes ahead by itself.", never the
-  `approvalId` instruction), and repeats the call itself with the approval once it is approved,
-  through its own HTTP route and the caller's own token (the token file or the session's token):
-  `server/approval_finish.rs`. No app prompts for `approvalPending`.
+  `params.finishWhenApproved: true` (desktop and web `native_chat/rpc.rs`) for a connected
+  computer still on gxserver 11.1.0 or 11.1.1, which asked about these; a later gxserver never
+  asks for them and ignores the flag.
 - The desktop's Stop, prompt answers and typing on a connected computer's sessions go as its owner
   session there, which skips these approvals. Until it has one (another owner is enrolled there and
   has not approved this app's owner key: one `addApproverKey` request that waits a day), the
@@ -405,3 +396,10 @@ test key in `GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY`) to test against a local copy
   an approval-gated owner session for `ghostex web`, and a token the box gives home at boot that
   agents on the box can't read. The desktop (local and over SSH), the phone and `ghostex attach`
   don't use `/api/terminal`.
+
+Retired after 11.1.2 (user: "let's please stop limiting agents from talking to other projects this
+is dumb", and "please let agents manage other sessions like before"): the `reachOtherProject`
+question (11.1.1 and 11.1.2: an agent's first message to, or new session in, another project) with
+its remembered approvals (`approvedProjectReach` in `security.json` is read and ignored, and the
+next save drops it), and the `answerOtherSessionPrompt`, `typeIntoOtherSession` and
+`interruptOtherSession` questions, which nobody is asked any more.

@@ -77,13 +77,6 @@ pub enum Capability {
     AgentWritableSettings,
     /// Change the other settings that don't weaken security.
     OwnerSettings,
-    /// Answer another session's permission prompt without asking. The owner's devices and
-    /// Chief (the head role); any other agent, a coordinator answering its own threads
-    /// included, asks (`SensitiveAction::AnswerOtherSessionPrompt`).
-    AnswerAnyPrompt,
-    /// Type into and interrupt any session without asking. The owner's devices and Chief;
-    /// any other agent asks (`TypeIntoOtherSession`, `InterruptOtherSession`).
-    SteerAnySession,
     /// Ask for a sensitive action (the call becomes an approval request).
     RequestSensitiveAction,
     /// See the pending approval requests, deny them, and post signed approvals.
@@ -107,8 +100,6 @@ impl Capability {
         Self::ManageAnyThreads,
         Self::AgentWritableSettings,
         Self::OwnerSettings,
-        Self::AnswerAnyPrompt,
-        Self::SteerAnySession,
         Self::RequestSensitiveAction,
         Self::DecideApprovals,
         Self::OwnerSecrets,
@@ -138,7 +129,7 @@ impl Principal {
 
     /*
     CDXC:Security 2026-11-08 DECISION:
-    User (#495 follow-up): an approval is needed for any agent answering another session's permission prompt, including a coordinator answering its own threads ("the playbook already says only the user answers those"); Autopilot stays under its own gated actions. So no session or token-file caller holds `AnswerAnyPrompt`, Chief's head role aside (CDXC:Chief 2026-11-08 at `skips_approval`). The token file (the CLI in the user's own terminal) keeps thread management (decision 3A), everything else of it is an agent's.
+    User (#495 follow-up): the token file (the CLI in the user's own terminal) keeps thread management (decision 3A), everything else of it is an agent's. Answering, typing into and interrupting other sessions ask nobody (CDXC:Security 2026-11-08 at `skips_approval`).
     */
     pub fn has(&self, capability: Capability) -> bool {
         use Capability::*;
@@ -149,7 +140,6 @@ impl Principal {
                     true
                 }
                 ManageOwnThreads => matches!(role, SessionRole::Coordinator | SessionRole::Head),
-                AnswerAnyPrompt | SteerAnySession => *role == SessionRole::Head,
                 ManageAnyThreads | OwnerSettings | DecideApprovals | OwnerSecrets | OwnerSetup => {
                     false
                 }
@@ -166,8 +156,7 @@ impl Principal {
                     | RequestSensitiveAction
             ),
             // Agents on a connected computer reach only `PEER_ALLOWED_ENDPOINTS`
-            // (connected_computers/scope.rs), among them answering a prompt and typing into a
-            // session here, so they may ask for those like an agent here does.
+            // (connected_computers/scope.rs), and may ask for what those need.
             Self::Peer { .. } => capability == RequestSensitiveAction,
             // Guests and extensions keep their own endpoint allow-lists
             // (`collab_shim::registry::GUEST_READ_ENDPOINTS`, the extension registry) and never ask.
@@ -179,20 +168,18 @@ impl Principal {
     CDXC:Chief 2026-11-08 DECISION:
     User (Q1749, Q1750): Chief gets "a head role granted once" with no Touch ID: it reads every session and types into, interrupts and messages any session freely, and answers other agents' approval prompts without asking ("prompts free"). "We already don't allow agents to manage stuff related to collab/access/pairing/security, agents should just point to the settings for these", so every other sensitive action still asks, for Chief exactly as for any agent. This is the one place that says which approvals a caller skips.
     */
-    /// Whether this caller may do `action` without the owner's approval. Only the three
-    /// "steer another session" actions can be skipped, and only by a caller holding the matching
-    /// capability (the owner's devices and the head); every other sensitive action asks whoever
-    /// calls.
+    /*
+    CDXC:Security 2026-11-08 DECISION:
+    User, after 11.1.2: "please let agents manage other sessions like before. no need to limit this." Answering another session's permission prompt, typing into it and interrupting it ask nobody again, as before 11.1.x: agents here, the token file, and agents on a connected computer within what its grant allows. Chief's are still written to the security log as `allowed` (`security_gates::record_head_steering`).
+    */
+    /// Whether this caller may do `action` without the owner's approval: the three "steer
+    /// another session" actions, for everyone; every other sensitive action asks whoever calls.
     pub fn skips_approval(&self, action: &ghostex_gx_protocol::approval::SensitiveAction) -> bool {
         use ghostex_gx_protocol::approval::SensitiveAction::*;
-        match action {
-            AnswerOtherSessionPrompt => self.has(Capability::AnswerAnyPrompt),
-            TypeIntoOtherSession | InterruptOtherSession => self.has(Capability::SteerAnySession),
-            // Chief messages and starts sessions in any project (its head role); forcing full
-            // access still asks it like any agent.
-            ReachOtherProject => self.has(Capability::SteerAnySession),
-            _ => false,
-        }
+        matches!(
+            action,
+            AnswerOtherSessionPrompt | TypeIntoOtherSession | InterruptOtherSession
+        )
     }
 
     /// Whether this caller is Chief with its head role (settled for this request).

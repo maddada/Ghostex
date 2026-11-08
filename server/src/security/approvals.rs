@@ -279,55 +279,6 @@ impl ApprovalStore {
         Ok(stored.request.clone())
     }
 
-    /// Who asked for request `id`.
-    pub fn requester_of(&self, id: &str) -> Option<Principal> {
-        self.lock().get(id).map(|stored| stored.requester.clone())
-    }
-
-    /// Gives every other pending request for the same action and target from the same asker
-    /// (whatever its parameters) or, for a shared one, every shared one with the same parameters,
-    /// the owner's answer to `id`, and returns them, so their cards close with it. For actions whose approval covers the
-    /// target as a whole (`ReachOtherProject`); a no-op while `id` is still pending.
-    pub fn settle_same_target(&self, id: &str, now_ms: u64) -> Vec<ApprovalRequest> {
-        let mut requests = self.lock();
-        sweep(&mut requests, now_ms);
-        let Some(decided) = requests.get(id) else {
-            return Vec::new();
-        };
-        let status = decided.request.status.clone();
-        if !matches!(status, ApprovalStatus::Approved | ApprovalStatus::Denied) {
-            return Vec::new();
-        }
-        let requester = decided.requester.clone();
-        let shared = decided.shared;
-        let action = decided.request.action.clone();
-        let target = decided.request.target.clone();
-        let digest = decided.request.params_digest.clone();
-        let decided_by = decided.request.decided_by.clone();
-        let expires_at_ms = decided.request.expires_at_ms;
-        let mut settled = Vec::new();
-        for (other_id, stored) in requests.iter_mut() {
-            let request = &mut stored.request;
-            if other_id == id
-                || request.status != ApprovalStatus::Pending
-                || !(stored.requester == requester
-                    || (shared && stored.shared && request.params_digest == digest))
-                || request.action != action
-                || request.target != target
-            {
-                continue;
-            }
-            request.status = status.clone();
-            request.decided_at_ms = Some(now_ms);
-            request.decided_by = decided_by.clone();
-            if status == ApprovalStatus::Approved {
-                request.expires_at_ms = expires_at_ms;
-            }
-            settled.push(request.clone());
-        }
-        settled
-    }
-
     /// Spends approval `id` on `action` for `caller`, who must be the one that asked (or one of
     /// the owner's devices). Single use: a second call with the same id fails.
     pub fn consume(
@@ -438,8 +389,6 @@ fn write_canonical(value: &Value, out: &mut String) {
 fn strip_approval_id(mut params: Value) -> Value {
     if let Value::Object(map) = &mut params {
         map.remove(ghostex_gx_protocol::approval::APPROVAL_ID_PARAM);
-        // How the caller wants to be answered, not part of the change (server/approval_finish.rs).
-        map.remove("finishWhenApproved");
     }
     params
 }

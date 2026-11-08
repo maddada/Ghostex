@@ -401,15 +401,8 @@ fn handle(
                 .map_err(|error| approval_error(&error))?;
             security.publish(security::SecurityEvent::ApprovalApproved {
                 request: request.clone(),
-                key_id: key_id.clone(),
+                key_id,
             });
-            for alike in super::security_cross_project::settle_reach_decision(state, &request, now)
-            {
-                security.publish(security::SecurityEvent::ApprovalApproved {
-                    request: alike,
-                    key_id: key_id.clone(),
-                });
-            }
             Ok(json!({ "request": request }))
         }
         security::APPROVALS_DENY_ENDPOINT => {
@@ -422,13 +415,6 @@ fn handle(
                 request: request.clone(),
                 by: caller.clone(),
             });
-            for alike in super::security_cross_project::settle_reach_decision(state, &request, now)
-            {
-                security.publish(security::SecurityEvent::ApprovalDenied {
-                    request: alike,
-                    by: caller.clone(),
-                });
-            }
             crate::audit::record(
                 crate::audit::Action::from_approval(&request),
                 crate::audit::Actor::from(caller),
@@ -535,13 +521,9 @@ pub(crate) fn start_security_events(state: std::sync::Arc<AppState>) {
                     if ticks % 20 == 0 {
                         let paths = state.paths.clone();
                         let security = state.security.clone();
-                        let server_id = state.metadata.server_id.clone();
                         let _ = tokio::task::spawn_blocking(move || {
                             if let Some(live) = live_sessions(&paths) {
                                 security::revoke_tokens_of_deleted_sessions(&security, &live);
-                            }
-                            if let Some(roots) = project_roots(&paths, &server_id) {
-                                security::tidy_project_reach(&security, &roots);
                             }
                         })
                         .await;
@@ -573,33 +555,6 @@ pub(crate) fn start_security_events(state: std::sync::Arc<AppState>) {
             }
         }
     });
-}
-
-/// Every project's id → its root project (the project a worktree registered as its own project
-/// belongs to, else itself), or `None` when the database can't be read (then nothing is tidied).
-fn project_roots(
-    paths: &crate::paths::GxserverPaths,
-    server_id: &str,
-) -> Option<std::collections::HashMap<String, String>> {
-    let db = crate::storage::open_gxserver_database(paths).ok()?;
-    let repository = crate::domain::DomainRepository::new(&db, server_id);
-    let projects = repository.list_projects().ok()?;
-    Some(
-        projects
-            .iter()
-            .filter_map(|project| {
-                let id = project.get("projectId")?.as_str()?.to_string();
-                let root = project
-                    .pointer("/worktree/parentProjectId")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::trim)
-                    .filter(|parent| !parent.is_empty())
-                    .map(str::to_string)
-                    .unwrap_or_else(|| id.clone());
-                Some((id, root))
-            })
-            .collect(),
-    )
 }
 
 /// Every session's `(project id, session id)`, or `None` when the database can't be read (then

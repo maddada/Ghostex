@@ -35,19 +35,8 @@ pub struct PersistedSecurity {
     /// Connected computers the owner approved, by server id, with when (ms).
     #[serde(default)]
     pub approved_computers: std::collections::BTreeMap<String, u64>,
-    /// Projects the owner let an agent session reach (`reachOtherProject`), kept until that
-    /// session is closed or deleted.
-    #[serde(default)]
-    pub approved_project_reach: Vec<PersistedProjectReach>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PersistedProjectReach {
-    /// The agent session, as `<project id>:<session id>`.
-    pub caller: String,
-    /// The project it may reach (a project id, or `folder:<path>`).
-    pub target: String,
+    // 11.1.1 and 11.1.2 also saved `approvedProjectReach` (the retired "reach another project"
+    // approvals); an old file still loads, the field is ignored, and the next save drops it.
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

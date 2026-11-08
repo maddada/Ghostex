@@ -45,7 +45,8 @@ pub(super) async fn request(
 }
 
 /// The user's own Stop and prompt answers ask gxserver to finish them itself if they wait for an
-/// approval, and to say so in plain words (server/src/server/approval_finish.rs).
+/// approval, and to say so in plain words (a connected computer's gxserver 11.1.0 and 11.1.1; a
+/// later gxserver never asks for these and ignores the flag).
 fn finish_when_approved(endpoint: &str, params: &Value) -> Value {
     let mut params = params.clone();
     if matches!(

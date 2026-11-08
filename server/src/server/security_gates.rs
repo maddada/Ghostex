@@ -8,18 +8,17 @@
 //! | `/api/autopilot` `op: "set"` | `answerApprovals` goes on, `limits` change |
 //! | `/api/gbots` `action: "create"` | always (a new bot) |
 //! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a security-relaxing setting changes, or GBots goes on |
-//! | `/api/answerSessionChatPrompt` | anyone but the owner's devices and Chief answers another session's prompt |
-//! | `/api/interruptSessionChat` | anyone but the owner's devices and Chief stops a session that is neither their own nor one of their threads |
-//! | `/api/sendSessionText`, `/api/sendSessionEnter`, `/api/sendSessionMessage` | anyone but the owner's devices and Chief types into a session that isn't their own, its threads included (a coordinator's Escape or Ctrl-C to its own thread doesn't ask) |
 //! | `/api/cloudBoxes` `create`, `setAgentLogin` (allowed), `projectSettings` (write) | anyone but the owner's devices: logins and project secrets go onto a box |
-//! | chat messages and creates into another project, a create forcing full access | see security_cross_project.rs |
+//! | a create forcing full access | see security_full_access.rs |
 //!
 //! What only the owner's devices may do at all, with no approval to ask for, is refused before
 //! these (`security_owner_only.rs`).
 //!
-//! Which callers skip those three is `Principal::skips_approval` (security/capability.rs); Chief
-//! (the head role, settled per request by `crate::chief::settle_principal`) skips them and nothing
-//! else.
+//! Answering another session's prompt, typing into it and interrupting it
+//! (`/api/answerSessionChatPrompt`, `/api/sendSessionText`, `/api/sendSessionEnter`,
+//! `/api/sendSessionMessage`, `/api/interruptSessionChat`) never ask: every caller skips them
+//! (`Principal::skips_approval`, security/capability.rs), and only Chief's (the head role, settled
+//! per request by `crate::chief::settle_principal`) are still written to the security log.
 //!
 //! Pairing and Collab routes are gated by their own threads with the same
 //! `require_owner_presence`.
@@ -113,33 +112,10 @@ pub(crate) fn gate(
     }
     let decided = match &computer {
         Some(_) => computer_presence(state, caller, action, body, endpoint_path, request_id),
-        None if super::approval_finish::wants_finish(endpoint_path, body) => {
-            match presence_outcome(state, caller, action, body) {
-                security::PresenceOutcome::Pending(request) => {
-                    if let Some(answer) = super::approval_finish::waiting_answer(
-                        state,
-                        caller,
-                        endpoint_path,
-                        request_id,
-                        body,
-                        &request,
-                    ) {
-                        return Some(answer);
-                    }
-                    presence_outcome_response(
-                        security::PresenceOutcome::Pending(request),
-                        endpoint_path,
-                        request_id,
-                    )
-                }
-                outcome => presence_outcome_response(outcome, endpoint_path, request_id),
-            }
-        }
         None => require_owner_presence(state, caller, action, body, endpoint_path, request_id),
     };
     match decided {
         Ok(grant) => {
-            super::security_cross_project::remember_approved(state, caller, &grant.approval);
             if let Some((server_id, _)) = computer {
                 state
                     .security
@@ -148,12 +124,8 @@ pub(crate) fn gate(
             // These routes' handlers keep no security log entry of their own.
             if matches!(
                 grant.approval.action,
-                SensitiveAction::AnswerOtherSessionPrompt
-                    | SensitiveAction::TypeIntoOtherSession
-                    | SensitiveAction::InterruptOtherSession
-                    | SensitiveAction::SettingsWeakenSecurity
+                SensitiveAction::SettingsWeakenSecurity
                     | SensitiveAction::GbotsEnable
-                    | SensitiveAction::ReachOtherProject
                     | SensitiveAction::ForceFullAccess
                     | SensitiveAction::CloudBoxShareLogins
                     | SensitiveAction::TeamSyncConnect
@@ -401,8 +373,8 @@ fn sensitive_action(
         "/api/interruptSessionChat" => interrupt_action(state, caller, params),
         "/api/cloudBoxes" => cloud_box_action(state, caller, params),
         "/api/connectTeamSync" => team_connect_action(caller, params),
-        path if super::security_cross_project::is_cross_project_route(path) => {
-            super::security_cross_project::cross_project_action(state, caller, path, params)
+        path if super::security_full_access::is_full_access_route(path) => {
+            super::security_full_access::full_access_action(state, caller, params)
         }
         _ => match security::route_access(endpoint_path) {
             RouteAccess::Presence(action) => Some(
@@ -685,9 +657,8 @@ fn settings_action(params: &Map<String, Value>) -> Option<ActionRequest> {
     )
 }
 
-/// A session answers its own prompt; anyone else asks, unless the gate lets them through
-/// (`Principal::skips_approval`: the owner's devices and Chief; user decision 2 of #495,
-/// CDXC:Security in security/capability.rs).
+/// Answering another session's prompt: never asks (`Principal::skips_approval`); the request
+/// only names it for Chief's security log entry.
 fn prompt_action(caller: &Principal, params: &Map<String, Value>) -> Option<ActionRequest> {
     let project_id = text(params, "projectId")?;
     let session_id = text(params, "sessionId")?;
@@ -718,7 +689,7 @@ fn is_interrupt(text: &str) -> bool {
 
 /*
 CDXC:Security 2026-11-08 DECISION:
-User (#495 follow-up): raw terminal input (send-text / send-key) into ANY other session needs approval, own threads included, since otherwise a coordinator could answer its threads' prompts by typing (decision 2). Interrupting a session (the Escape / Ctrl-C that interrupt-session-chat sends) stays allowed for a coordinator's own threads, because coordinators heal stuck threads with it; chat messages through the chat queue (`ghostex agents send`) are not raw input and stay as they are.
+User (#495 follow-up): raw terminal input (send-text / send-key) into another session, own threads included, and interrupting a session that is neither the caller's own nor one of its threads, were asked about from 11.1.0; since the user's "please let agents manage other sessions like before" (CDXC:Security at `Principal::skips_approval`) nobody is asked, and these requests only name the change for Chief's security log entry.
 */
 fn input_action(
     state: &AppState,

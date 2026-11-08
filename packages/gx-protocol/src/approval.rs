@@ -76,7 +76,8 @@ open_string_enum! {
         // Settings
         /// Change a setting marked security-relaxing (the target is the setting key).
         SettingsWeakenSecurity => "settingsWeakenSecurity",
-        // Prompts
+        // Prompts. These three never ask since the user's "let agents manage other sessions like
+        // before" (11.1.2); gxserver still names them in Chief's security log entries.
         /// Answer an approval prompt of a session that is not the caller's own thread.
         AnswerOtherSessionPrompt => "answerOtherSessionPrompt",
         /// Type raw terminal input (text, Enter, a key) into a session that is not the caller's
@@ -93,11 +94,9 @@ open_string_enum! {
         /// (the target is the component's name, such as `collab`). Updating an installed one,
         /// turning it off and uninstalling it never ask.
         InstallExtensionComponent => "installExtensionComponent",
-        // Other projects (#495 follow-up)
-        /// An agent's first message to, or new session in, a project other than its own (the
-        /// target is the project's id); approved once, it is remembered for that agent session
-        /// and that project.
-        ReachOtherProject => "reachOtherProject",
+        // Other projects (#495 follow-up). `reachOtherProject` (11.1.1 and 11.1.2: an agent's
+        // first message to, or new session in, another project) is retired: agents reach any
+        // project freely, and an old audit entry naming it reads as `Other`.
         /// A create call that starts an agent with approvals off (`acceptAllMode: "enabled"`)
         /// when the owner's own setting for it doesn't. Asks every time.
         ForceFullAccess => "forceFullAccess",

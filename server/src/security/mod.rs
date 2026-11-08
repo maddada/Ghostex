@@ -96,9 +96,6 @@ pub struct SecurityState {
     /// Connected computers the owner approved (server id → when, ms); see
     /// [`SecurityState::computer_approved`].
     approved_computers: Arc<std::sync::Mutex<std::collections::BTreeMap<String, u64>>>,
-    /// Projects the owner let another project's agents reach (caller's project, project reached),
-    /// saved in security.json: see [`SecurityState::project_reach_approved`].
-    approved_project_reach: Arc<std::sync::Mutex<std::collections::BTreeSet<(String, String)>>>,
     /// `gxserver/auth/security.json`; `None` in tests that need no disk.
     persist_path: Option<Arc<PathBuf>>,
     save_lock: Arc<std::sync::Mutex<()>>,
@@ -116,7 +113,6 @@ impl SecurityState {
             owner_challenges: OwnerChallenges::default(),
             session_tokens: SessionTokens::default(),
             approved_computers: Arc::default(),
-            approved_project_reach: Arc::default(),
             persist_path: None,
             save_lock: Arc::default(),
             events: broadcast::channel(256).0,
@@ -136,14 +132,6 @@ impl SecurityState {
             .approved_computers
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = saved.approved_computers;
-        *state
-            .approved_project_reach
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = saved
-            .approved_project_reach
-            .into_iter()
-            .map(|reach| (pair_caller(reach.caller), reach.target))
-            .collect();
         state.persist_path = Some(Arc::new(path));
         Ok(state)
     }
@@ -170,16 +158,6 @@ impl SecurityState {
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .clone(),
-                approved_project_reach: self
-                    .approved_project_reach
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .iter()
-                    .map(|(caller, target)| persist::PersistedProjectReach {
-                        caller: caller.clone(),
-                        target: target.clone(),
-                    })
-                    .collect(),
             },
         )
     }
@@ -275,48 +253,6 @@ impl SecurityState {
         let _ = self.save();
     }
 
-    /*
-    CDXC:Security 2026-11-08 DECISION:
-    User (#495 follow-up, Q1863 "ask once per project"): an agent's first message to, or new session in, a project other than its own asks the owner.
-    CDXC:Security 2026-11-08 DECISION:
-    User, on the in-memory first version: "make these approvals not save in memory pls so u dont ask me to approve again later". They are saved in security.json with the other security state and loaded at start, so a gxserver restart asks nothing again.
-    CDXC:Security 2026-11-08 DECISION:
-    User, after 11.1.2 asked once per agent session: one approval lets every agent in a project reach the other project (ask once per project pair). The approval is kept under the caller's project (its root, when it is a worktree registered as its own project) and the project reached, and goes when either project is removed (`/api/removeProject`, or the security sweep, `tidy_project_reach`), not when an agent closes. Entries saved per agent session by 11.1.2 (`<project>:<session>`) carry over as their project pair.
-    */
-    /// Whether the owner already let agents of project `caller_key` (the caller's root project, or
-    /// `localAgent`) reach project `project_id`.
-    pub fn project_reach_approved(&self, caller_key: &str, project_id: &str) -> bool {
-        self.approved_project_reach
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .contains(&(caller_key.to_string(), project_id.to_string()))
-    }
-
-    /// Remembers that the owner let agents of `caller_key` reach project `project_id`.
-    pub fn approve_project_reach(&self, caller_key: &str, project_id: &str) {
-        self.approved_project_reach
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert((caller_key.to_string(), project_id.to_string()));
-        let _ = self.save();
-    }
-
-    /// Drops every remembered reach from or to project `project_id` (it was removed).
-    pub fn forget_project_reach_of(&self, project_id: &str) {
-        let forgot = {
-            let mut approved = self
-                .approved_project_reach
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let before = approved.len();
-            approved.retain(|(caller, target)| caller != project_id && target != project_id);
-            approved.len() != before
-        };
-        if forgot {
-            let _ = self.save();
-        }
-    }
-
     /// Adds an approver key: the first one directly (it is the owner's call, checked by the
     /// route), later ones only after the route spent an `addApproverKey` approval.
     pub fn add_approver_key(
@@ -378,50 +314,6 @@ pub fn revoke_tokens_of_deleted_sessions(
         if !live.contains(&(project_id.clone(), session_id.clone())) {
             state.revoke_session_token(&project_id, &session_id);
         }
-    }
-}
-
-/// Tidies the remembered reach approvals against the projects that exist (`roots`: every
-/// project's id → its root project, itself unless it is a worktree registered as its own
-/// project): a pair whose caller project or project reached is gone goes, and a caller saved
-/// under a worktree project moves to its root. A folder reached (`folder:<path>`) stays while its
-/// caller project does.
-pub fn tidy_project_reach(
-    state: &SecurityState,
-    roots: &std::collections::HashMap<String, String>,
-) {
-    let changed = {
-        let mut approved = state
-            .approved_project_reach
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let tidied: std::collections::BTreeSet<(String, String)> = approved
-            .iter()
-            .filter_map(|(caller, target)| {
-                let root = if caller == "localAgent" {
-                    caller.clone()
-                } else {
-                    roots.get(caller)?.clone()
-                };
-                (target.starts_with("folder:") || roots.contains_key(target))
-                    .then(|| (root, target.clone()))
-            })
-            .collect();
-        let changed = tidied != *approved;
-        *approved = tidied;
-        changed
-    };
-    if changed {
-        let _ = state.save();
-    }
-}
-
-/// The caller project of a saved reach: 11.1.2 saved `<project>:<session>`, which carries over as
-/// its project.
-fn pair_caller(saved: String) -> String {
-    match saved.split_once(':') {
-        Some((project, _)) => project.to_string(),
-        None => saved,
     }
 }
 
