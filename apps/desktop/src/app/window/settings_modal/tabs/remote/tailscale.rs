@@ -18,10 +18,10 @@ use super::easy_connect::{
 };
 use super::model::BadgeTone;
 use super::style::*;
-use super::{PathCard, RemoteTab, ssh_row};
+use super::{PathCard, RemoteTab};
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use gpui_component::{h_flex, v_flex};
 
@@ -47,7 +47,6 @@ pub(super) fn tailscale_status_badge(
 pub(super) fn tailscale_card(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
-    window: &mut Window,
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
     let enabled = tab.store.read(cx).bool("remoteTailscaleEnabled");
@@ -75,7 +74,7 @@ pub(super) fn tailscale_card(
         cx,
     );
     let body = Some(if enabled {
-        tailscale_body(tab, t, window, cx)
+        tailscale_body(tab, t, cx)
     } else {
         div()
             .w_full()
@@ -153,7 +152,6 @@ fn step(
 fn tailscale_body(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
-    window: &mut Window,
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
     let access = tab.access.clone();
@@ -199,18 +197,10 @@ fn tailscale_body(
         }
         Some(_) => "Install Tailscale on this computer and sign in.".to_string(),
     };
-    let ssh_step_children = (!ssh_on).then(|| {
-        ssh_row::ssh_access_row(
-            tab,
-            t,
-            "tailscale-ssh",
-            "Your phone signs in over SSH.",
-            "Your phone signs in over SSH.",
-            true,
-            window,
-            cx,
-        )
-    });
+    // SSH access is set in the Current machine card above the tabs; the step links there
+    // (CDXC:RemotePairing 2026-11-08 in current_machine.rs).
+    let ssh_step_children =
+        (!ssh_on).then(|| super::current_machine::ssh_status_line(tab, t, "tailscale-ssh", cx));
     let qr_left = match &code {
         Some(_) => hidden_qr(
             tab,
@@ -325,9 +315,9 @@ fn tailscale_body(
             ssh_on,
             "Turn on SSH access",
             if ssh_on {
-                "Ghostex checked it just now.".to_string()
+                "SSH access is on. Your phone signs in over SSH.".to_string()
             } else {
-                "Ghostex can enable it; your computer asks for an admin password once.".to_string()
+                "Your phone signs in over SSH.".to_string()
             },
             ssh_step_children,
         ))

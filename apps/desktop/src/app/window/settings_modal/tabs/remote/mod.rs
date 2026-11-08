@@ -43,6 +43,7 @@ pub(crate) fn machine_with_easy_connect_code(
 
 mod advanced;
 mod app_update;
+mod current_machine;
 mod easy_connect;
 mod machines;
 mod model;
@@ -235,7 +236,7 @@ pub(crate) struct RemoteTab {
     pub(super) advanced: advanced::AdvancedState,
     pub(super) relay: relay::RelayState,
     pub(super) machine_dialog: Option<machines::MachineDialog>,
-    /// This computer's short-name field in the Remote machines card, made on its first draw.
+    /// This computer's short-name field in the Current machine card, made on its first draw.
     pub(super) local_short_name: Option<(
         Entity<gpui_component::input::InputState>,
         gpui::Subscription,
@@ -246,6 +247,12 @@ pub(crate) struct RemoteTab {
     /// The path cards' and the machine tiles' bounds last frame, for the deep-link scrolls.
     card_bounds: [Rc<Cell<Option<Bounds<Pixels>>>>; 2],
     machines_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// The Current machine card's bounds last frame, for a setup step's "turn it on" link.
+    current_machine_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// When a setup step's link last brought you to the Current machine card's SSH access row,
+    /// which stays highlighted for `current_machine::SSH_HIGHLIGHT`.
+    pub(super) ssh_highlight: Option<std::time::Instant>,
+    ssh_highlight_task: Option<Task<()>>,
     pending_scroll: Option<ScrollTarget>,
     pub(super) installs: HashMap<String, GxserverInstall>,
     /// Each connected machine's Ghostex version and update row (`remoteAppUpdateState`).
@@ -409,6 +416,9 @@ impl RemoteTab {
             kept_machine_form: None,
             card_bounds: [Rc::new(Cell::new(None)), Rc::new(Cell::new(None))],
             machines_bounds: Rc::new(Cell::new(None)),
+            current_machine_bounds: Rc::new(Cell::new(None)),
+            ssh_highlight: None,
+            ssh_highlight_task: None,
             pending_scroll: None,
             installs: HashMap::new(),
             app_updates: HashMap::new(),
@@ -894,6 +904,24 @@ impl RemoteTab {
         cx.notify();
     }
 
+    /// A setup step's "turn it on in Current machine": scroll up to the card and highlight its SSH
+    /// access row for a moment.
+    pub(super) fn show_current_machine_ssh(&mut self, cx: &mut Context<Self>) {
+        self.pending_scroll = Some(ScrollTarget::CurrentMachine);
+        self.ssh_highlight = Some(std::time::Instant::now());
+        self.ssh_highlight_task = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(current_machine::SSH_HIGHLIGHT)
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.ssh_highlight = None;
+                this.ssh_highlight_task = None;
+                cx.notify();
+            });
+        }));
+        cx.notify();
+    }
+
     pub(super) fn post(&self, message: Value, cx: &mut App) {
         post_store_message(&self.store, message, cx);
     }
@@ -1055,7 +1083,10 @@ impl RemoteTab {
         }
         if matches!(
             state,
-            "remote-tailscale" | "remote-tailscale-manual" | "remote-tailscale-qr"
+            "remote-tailscale"
+                | "remote-tailscale-manual"
+                | "remote-tailscale-qr"
+                | "remote-ssh-link"
         ) {
             self.section = RemoteSection::Tailscale;
         }
@@ -1076,9 +1107,10 @@ impl RemoteTab {
                 self.qr_preview_focus.focus(window, cx);
             }
             "remote-ssh-popover" => {
-                self.os_popover = Some(("easy-connect-ssh".into(), "windows"));
+                self.os_popover = Some(("current-machine-ssh".into(), "windows"));
             }
             "remote-tailscale-manual" => self.manual_open = true,
+            "remote-ssh-link" => self.show_current_machine_ssh(cx),
             "remote-paired-confirm" => self.confirming_device = Some("dev-1".to_string()),
             "remote-advanced" => {
                 self.section = RemoteSection::Advanced;
@@ -1142,13 +1174,27 @@ impl Render for RemoteTab {
             if self.pair_again_waiting > 0 {
                 layout = layout.child(pair_again::pair_again_line(&t, self.pair_again_waiting, cx));
             }
+            // The Current machine card sits above the tab strip on every tab (CDXC:RemotePairing
+            // 2026-11-08 in current_machine.rs); a search shows it only when it matches.
+            if !searching || should_show_section(&search.section("currentMachine"), None) {
+                let card = current_machine::current_machine_card(self, &t, window, cx);
+                layout = layout.child(
+                    div()
+                        .w_full()
+                        .on_children_prepainted(capture_child_bounds(
+                            self.current_machine_bounds.clone(),
+                            0,
+                        ))
+                        .child(card),
+                );
+            }
             layout = layout.child(self.section_tabs(&t, cx));
             layout = layout.child(match self.section {
                 RemoteSection::EasyConnect | RemoteSection::Tailscale => {
                     self.connect_section(&t, rpc, window, cx)
                 }
                 RemoteSection::Machines => {
-                    let section = machines::machines_section(self, &t, window, cx);
+                    let section = machines::machines_section(self, &t, cx);
                     div()
                         .w_full()
                         .on_children_prepainted(capture_child_bounds(
@@ -1202,6 +1248,8 @@ pub(super) enum ScrollTarget {
     Card(PathCard),
     /// `scrollIntoView({ block: 'center' })` on the machine tiles.
     Machines,
+    /// The Current machine card, from a setup step's "turn it on in Current machine" link.
+    CurrentMachine,
 }
 
 impl RemoteTab {
@@ -1284,7 +1332,7 @@ impl RemoteTab {
         } else {
             let (card, bounds) = if self.section == RemoteSection::Tailscale {
                 (
-                    tailscale::tailscale_card(self, t, window, cx),
+                    tailscale::tailscale_card(self, t, cx),
                     self.card_bounds[1].clone(),
                 )
             } else {
@@ -1316,6 +1364,7 @@ impl RemoteTab {
             ScrollTarget::Card(PathCard::EasyConnect) => self.card_bounds[0].clone(),
             ScrollTarget::Card(PathCard::Tailscale) => self.card_bounds[1].clone(),
             ScrollTarget::Machines => self.machines_bounds.clone(),
+            ScrollTarget::CurrentMachine => self.current_machine_bounds.clone(),
         };
         let Some(bounds) = cell.get() else {
             cx.on_next_frame(window, |_, _, cx| cx.notify());
@@ -1335,7 +1384,7 @@ impl RemoteTab {
             ScrollTarget::Machines => {
                 content_top - (viewport.size.height - bounds.size.height) / 2.0
             }
-            ScrollTarget::Card(_) => content_top,
+            ScrollTarget::Card(_) | ScrollTarget::CurrentMachine => content_top,
         };
         let to = f32::from(target_top.max(px(0.0)).min(handle.max_offset().y));
         tracker.borrow_mut().smooth = Some(SmoothScroll::new(-f32::from(offset.y), to));

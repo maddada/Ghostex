@@ -31,7 +31,7 @@ use super::super::super::fields::{
 };
 use super::model::easy_connect_status_badge;
 use super::style::*;
-use super::{PathCard, RemoteTab, paired_devices, ssh_row};
+use super::{PathCard, RemoteTab, paired_devices};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, ClickEvent, Context, FontWeight, InteractiveElement as _, IntoElement,
@@ -40,9 +40,6 @@ use gpui::{
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::json;
-
-const SSH_REQUIRED_ON: &str = "Required. Easy Connect carries SSH to this computer.";
-const SSH_REQUIRED_OFF: &str = "Required. Easy Connect carries SSH to this computer; turning it on asks for an admin password once.";
 
 /// `.settings-remote-path-card`: the bordered card with its header row (the accordion handle
 /// and the switch beside it) and, while open, its body.
@@ -211,14 +208,12 @@ fn easy_connect_body(
     if let Some(error) = install_error {
         body = body.child(error_line(t, error));
     }
-    body = body.child(ssh_row::ssh_access_row(
+    // SSH access is set in the Current machine card above the tabs; this step only says whether
+    // it is on (CDXC:RemotePairing 2026-11-08 in current_machine.rs).
+    body = body.child(super::current_machine::ssh_status_line(
         tab,
         t,
         "easy-connect-ssh",
-        SSH_REQUIRED_OFF,
-        SSH_REQUIRED_ON,
-        false,
-        window,
         cx,
     ));
     body = if is_on {

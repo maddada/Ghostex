@@ -5,6 +5,7 @@ pub(crate) fn page() -> Page {
         id: "remote",
         title: "Remote",
         sections: vec![
+            current_machine(),
             easy_connect(),
             tailscale(),
             remote_machines(),
@@ -13,13 +14,24 @@ pub(crate) fn page() -> Page {
     }
 }
 
+pub(crate) fn current_machine() -> Section {
+    section(
+        "currentMachine",
+        "Current machine",
+        vec![
+            row("computerName", "Name", "This computer's name, set by the system; your phone and other computers show it."),
+            row("computerShortName", "Short name", "This computer's 2-character name on the sidebar's computer pills; empty uses one made from its name."),
+            row("sshAccess", "SSH access", "Lets your phone and other computers sign in to this one; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt."),
+        ],
+    )
+}
+
 pub(crate) fn easy_connect() -> Section {
     section(
         "easyConnect",
         "Easy Connect",
         vec![
             row("easyConnectEnabled", "Easy Connect", "Connect a phone or a remote machine. Install the Tailcat CLI helper with one click."),
-            row("sshAccess", "SSH access", "Easy Connect carries SSH to this computer; Ghostex can turn it on with one admin prompt."),
             row("pairingCode", "Pairing code", "Connect a Phone with a QR, or Connect a Remote machine with Copy Easy Connect code and its SSH username and password."),
             row("pairedDevices", "Paired devices", "Phones and computers paired with this computer; remove one to unpair it and revoke its access."),
             row("pairedDevicesOnly", "Only paired devices can connect", "Easy Connect lets in only paired phones and the keys listed under Advanced; a new phone can still pair while the QR is showing."),
@@ -47,7 +59,7 @@ pub(crate) fn remote_machines() -> Section {
         vec![
             row("addMachine", "Add a machine", "Add a computer by SSH details or an Easy Connect code; saved machines appear as sidebar sections."),
             row("showInSidebar", "Show in sidebar", "Hide a saved remote machine from the sidebar without deleting it."),
-            row("shortName", "Short names", "Each computer's 2-character name on the sidebar's computer pills, this one's included."),
+            row("shortName", "Short names", "Each remote machine's 2-character name on the sidebar's computer pills, set in its settings."),
             row("sshHost", "SSH host", "Remote machine SSH host."),
             row("sshUser", "SSH user", "Remote machine SSH user."),
             row("sshPort", "SSH port", "Remote machine SSH port."),

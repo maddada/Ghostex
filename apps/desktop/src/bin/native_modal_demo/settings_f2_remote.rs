@@ -6,7 +6,8 @@
 //! States: `remote` (the Remote story), `remote-easy-connect` (Easy Connect expanded),
 //! `remote-computer` (its Connect a computer tab), `remote-qr` (the Show QR dialog),
 //! `remote-paired-confirm` (a paired device's Remove confirmation), `remote-ssh-off`
-//! (RemoteSshAccessOff, Easy Connect expanded), `remote-ssh-popover` (SSH off with the Windows
+//! (RemoteSshAccessOff, Easy Connect expanded), `remote-ssh-link` (SSH off on the Tailscale tab,
+//! its "turn it on in Current machine" link just followed), `remote-ssh-popover` (SSH off with the Windows
 //! instructions open), `remote-ec-off` (RemoteEasyConnectOff, expanded), `remote-tailscale`,
 //! `remote-tailscale-manual` (Tailscale expanded, typed values shown), `remote-tailscale-qr`
 //! (Tailscale's code in the Show QR dialog), `remote-machines` (the Remote machines tab),
@@ -63,7 +64,10 @@ fn iso_now_minus_hours(hours: i64) -> String {
 
 fn fixture_for(state: &str) -> RemoteFixture {
     let easy_connect_enabled = state != "remote-ec-off";
-    let ssh_enabled = !matches!(state, "remote-ssh-off" | "remote-ssh-popover");
+    let ssh_enabled = !matches!(
+        state,
+        "remote-ssh-off" | "remote-ssh-popover" | "remote-ssh-link"
+    );
     RemoteFixture {
         easy_connect: json!({
             "allowedClientKeys": [],
