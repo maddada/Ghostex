@@ -12,14 +12,25 @@ use std::collections::BTreeMap;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource, StartupDelivery};
 
 use crate::session::appended_notes::without_appended_notes;
-use crate::session::constants::PENDING_ID_PREFIX;
-use crate::session::text::{is_staged_path_input, normalize_pending_text, parse_command_envelope};
+use crate::session::constants::{DELIVERY_UNCONFIRMED, PENDING_ID_PREFIX};
+use crate::session::text::{
+    is_js_space, is_staged_path_input, normalize_pending_text, parse_command_envelope,
+};
 use crate::state::PendingSend;
 use crate::transcript::local_command::{shell_command_message, shell_command_prompt_text};
 
 /// `sessionChatPendingContentKey`: what two sends must agree on to be the same prompt.
+///
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// The key ignores whitespace altogether, not only its amount (#509). Codex on Windows recorded a
+/// queued file-annotation message with its line breaks gone ("(lines 9–10)Comment on:" where the
+/// chat sent "(lines 9–10)\nComment on:"), so the folded texts differed by one space and the queue
+/// card stayed under the finished turn saying the conversation didn't show it. Two prompts that
+/// differ only in where their spaces and line breaks fall are the same prompt.
 pub fn content_key(text: &str, image_paths: &[String]) -> String {
-    let normalized = shell_command_key(normalize_pending_text(text));
+    let normalized: String = shell_command_key(normalize_pending_text(text))
+        .split(is_js_space)
+        .collect();
     if !normalized.is_empty() {
         return format!("text:{normalized}");
     }
@@ -197,8 +208,8 @@ fn user_texts(messages: &[&ChatMessage], advanced: bool) -> Vec<String> {
     texts
 }
 
-/// User rows with a later non-user turn, as (id, normalized text).
-fn answered_user_rows<'a>(messages: &[&'a ChatMessage]) -> Vec<(&'a str, String)> {
+/// User rows as (id, normalized text); with `answered`, only those a later non-user turn follows.
+fn user_rows<'a>(messages: &[&'a ChatMessage], answered: bool) -> Vec<(&'a str, String)> {
     let mut rows = Vec::new();
     let mut waiting = Vec::new();
     for message in messages {
@@ -209,6 +220,9 @@ fn answered_user_rows<'a>(messages: &[&'a ChatMessage]) -> Vec<(&'a str, String)
             ));
             continue;
         }
+        rows.append(&mut waiting);
+    }
+    if !answered {
         rows.append(&mut waiting);
     }
     rows
@@ -392,6 +406,8 @@ fn filter_pending_sends(
     /*
     CDXC:SessionChat 2026-10-08 WHY:
     An echo is matched by text, so a recorded prompt that differs from what the composer sent stranded it under the real turn forever: on 2026-10-08 a late first paste made Claude record the message twice as one prompt, and the single-message echo stayed below the answer. A repeated message is matched above; for any other difference, an echo still unmatched once two answered user turns follow its send is retired by order, taking the first of them. One turn is not enough: a send typed while an earlier one is still being answered is recorded only after that turn ends.
+    CDXC:SessionChat 2026-11-08 WHY:
+    A queued send whose row left the queue and that still matches no turn once its time on its way is up (`DELIVERY_UNCONFIRMED`, session/startup_sends.rs) is retired by order too, by the first user turn after its send that no echo claims, and that turn need not be answered yet to hide the card. gxserver types one queued row per idle window, so that turn is the one it typed. On #509 Codex on Windows recorded a queued file-annotation message in other words than the chat sent, and its card sat for good under a turn that had finished, saying the conversation didn't show it. Rows still in the queue or on their way keep waiting for their own text.
     */
     let pending_texts: Vec<String> = pending
         .iter()
@@ -400,19 +416,24 @@ fn filter_pending_sends(
     let mut claimed: Vec<&str> = Vec::new();
     let mut superseded: Vec<usize> = Vec::new();
     for (index, entry) in still_open.iter().enumerate() {
+        let delivered = entry
+            .startup_delivery
+            .as_ref()
+            .is_some_and(|delivery| delivery.state == DELIVERY_UNCONFIRMED);
         if glued.contains(&index)
             || embedded.contains(&index)
-            || entry.queued_prompt_id.is_some()
-            || entry.startup_delivery.is_some()
+            || (!delivered
+                && (entry.queued_prompt_id.is_some() || entry.startup_delivery.is_some()))
         {
             continue;
         }
+        let answered = !delivered || mode == Mode::Advanced;
         let rows: Vec<(&str, String)> =
-            answered_user_rows(&messages_after_boundary(messages, entry))
+            user_rows(&messages_after_boundary(messages, entry), answered)
                 .into_iter()
                 .filter(|(id, text)| !claimed.contains(id) && !pending_texts.contains(text))
                 .collect();
-        if rows.len() >= 2 {
+        if rows.len() >= if delivered { 1 } else { 2 } {
             claimed.push(rows[0].0);
             superseded.push(index);
         }
