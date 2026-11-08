@@ -35,7 +35,7 @@ every route as `RouteHttpRequest::caller`.
 | --- | --- | --- |
 | `Owner { device_id }` | `gxo_…`, in the desktop app's memory only | Opened with the owner key (`/api/openOwnerSession`). gxserver keeps only its hash (newest four per device), so it survives a gxserver restart. |
 | `Device { device_id }` | `gxd_…`, bound to the phone's device key | A paired phone; `device_id` is its row in Paired devices (pairing v2, see below). |
-| `Session { project_id, session_id, role }` | `gxs_…`, in the session's `GHOSTEX_SESSION_TOKEN` | Issued when an agent or terminal starts (zmx and wmx), the same token again when that session starts again, revoked when the session is deleted (and by a 5-minute sweep for sessions deleted another way). `role` from the coordinator markers: `agent`, `coordinator`, `thread`. The `ghostex` CLI inside a session sends it. |
+| `Session { project_id, session_id, role }` | `gxs_…`, in the session's `GHOSTEX_SESSION_TOKEN` | Issued when an agent or terminal starts (zmx and wmx), the same token again when that session starts again, revoked when the session is deleted (and by a 5-minute sweep for sessions deleted another way). `role` from the coordinator markers: `agent`, `coordinator`, `thread`; `head` is never stored (see "Chief's head role" below). The `ghostex` CLI inside a session sends it. |
 | `LocalAgent` | the token file `gxserver/auth/token` | Agent level plus thread management (user decision 3A). Hooks, plugins, older sessions and the CLI in the user's own terminal use it. |
 | `Peer { server_id, name }` | a connected computer's grant | Keeps `PEER_ALLOWED_ENDPOINTS`. May ask (answering a prompt or typing into a session here go through the same gate as an agent here). |
 | `Guest { share_id }` | `gxshare_…` | Keeps `GUEST_ENDPOINTS`. |
@@ -60,14 +60,33 @@ box's own token file, peers and extensions open no socket. Test:
 `RequestSensitiveAction`; guests, extensions and anonymous callers have none of these (all of them
 keep their own endpoint allow-lists).
 
-| Capability | Session agent/thread | Coordinator | LocalAgent |
-| --- | --- | --- | --- |
-| `OwnSession`, `ProjectSessions`, `AgentWritableSettings` | yes | yes | yes |
-| `ManageOwnThreads` | no | yes | yes |
-| `ManageAnyThreads` | no | no | yes |
-| `OwnerSettings`, `AnswerAnyPrompt` (answer another session's permission prompt without asking) | no | no | no |
-| `RequestSensitiveAction` (may ask) | yes | yes | yes |
-| `DecideApprovals` (list, approve, deny, approver keys) | no | no | no |
+| Capability | Session agent/thread | Coordinator | Chief (head) | LocalAgent |
+| --- | --- | --- | --- | --- |
+| `OwnSession`, `ProjectSessions`, `AgentWritableSettings` | yes | yes | yes | yes |
+| `ManageOwnThreads` | no | yes | yes | yes |
+| `ManageAnyThreads` | no | no | no | yes |
+| `AnswerAnyPrompt` (answer another session's permission prompt without asking) | no | no | yes | no |
+| `SteerAnySession` (type into and interrupt another session without asking) | no | no | yes | no |
+| `OwnerSettings` | no | no | no | no |
+| `RequestSensitiveAction` (may ask) | yes | yes | yes | yes |
+| `DecideApprovals` (list, approve, deny, approver keys) | no | no | no | no |
+
+`Principal::skips_approval(action)` is the one rule for which sensitive actions a caller skips:
+`AnswerOtherSessionPrompt` with `AnswerAnyPrompt`, `TypeIntoOtherSession` and
+`InterruptOtherSession` with `SteerAnySession`, and nothing else for anyone.
+
+### Chief's head role
+
+Chief (`server/src/chief/`) is one coordinator session per computer that the user lets steer every
+other session (CDXC:Chief). No token is stored with `SessionRole::Head`: Chief's token holds
+`coordinator` like any coordinator's, and the auth gate makes it `Head` per request
+(`chief::settle_principal`) only when its `(project, session)` is the one in gxserver's Chief
+record (`metadata.chiefSession`, written only when gxserver itself creates that session) and the
+`chiefHidden` setting (user-only, not agent-writable) is off. Turning Chief off, New Chat and
+Change Agent therefore take the role away on the next request. `/api/chief` `open`, `newChat` and
+`setAgent` accept only the owner's devices and the token file. Tests:
+`server/src/security/capability.rs` (every capability and every sensitive action, head against
+every other caller), `server/src/server/tests/chief_head_routes.rs` (the HTTP gate).
 
 `Principal::may_manage_thread_of(coordinator_session_id)` is the check for "coordinators manage
 their own threads"; the gate refuses a session that links threads to, edits or promotes a

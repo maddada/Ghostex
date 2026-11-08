@@ -37,6 +37,10 @@ pub(super) async fn route_control_http(
         "/api/draftFeedback" | "/api/sendFeedback" => {
             handle_feedback_http(endpoint.path, request_id, &body_json).await
         }
+        crate::chief::CHIEF_ENDPOINT => {
+            crate::chief::handle_chief_http(&state, &caller, endpoint.path, request_id, &body_json)
+                .await
+        }
         "/api/startFeedbackAgent" => {
             handle_start_feedback_agent_http(&state, endpoint.path, request_id, &body_json).await
         }

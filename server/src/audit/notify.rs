@@ -79,6 +79,14 @@ const OTHER_ACTORS: &[&str] = &[
     "collabGuest",
 ];
 
+/// What Chief's head role does without an approval (`Principal::skips_approval`), logged with the
+/// `allowed` outcome.
+const HEAD_STEERING_ACTIONS: &[&str] = &[
+    "answerOtherSessionPrompt",
+    "typeIntoOtherSession",
+    "interruptOtherSession",
+];
+
 /// Refused or denied this many times in `REPEAT_WINDOW_MS` (the same action), the third notifies.
 const REPEATED_REFUSALS: usize = 3;
 const REPEAT_WINDOW_MS: i64 = 10 * 60 * 1000;
@@ -103,6 +111,8 @@ pub(crate) fn notifies(entry: &StoredEntry, earlier: &[StoredEntry]) -> bool {
         "pending" => false,
         // A refusal on its own is the gate working; only a repeat (above) is news.
         "refused" => false,
+        // CDXC:Chief 2026-11-08 DECISION: Coordinator, on the user's behalf: Chief's approval-free steering goes into the security log with a quiet outcome and never reaches the bell or the phone, although it is done with an agent's session token (which otherwise always notifies).
+        "allowed" if HEAD_STEERING_ACTIONS.contains(&entry.action.as_str()) => false,
         _ if OTHER_ACTORS.contains(&entry.actor.kind.as_str()) => true,
         _ if !ended => false,
         _ if OPENING_ACTIONS.contains(&entry.action.as_str()) => true,
@@ -543,6 +553,31 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Chief's approval-free steering is logged as `allowed` and stays out of the bell, while the
+    /// same actions approved for any other agent's token still notify.
+    #[test]
+    fn chiefs_steering_stays_in_the_log() {
+        for action in HEAD_STEERING_ACTIONS {
+            assert!(
+                !notifies(&entry(1, 0, action, "session", "allowed"), &[]),
+                "{action}"
+            );
+            assert!(
+                notifies(&entry(1, 0, action, "session", "approved"), &[]),
+                "{action}"
+            );
+        }
+        // Only those three: anything else an agent's token did still notifies, whatever its outcome.
+        assert!(notifies(
+            &entry(1, 0, "collabEnable", "session", "allowed"),
+            &[]
+        ));
+        assert!(notifies(
+            &entry(1, 0, "easyConnectEnable", "session", "done"),
+            &[]
+        ));
     }
 
     /// The entries behind the user's screenshot: what they did themselves stays in the log,

@@ -16,6 +16,7 @@ pub mod board;
 mod box_cli;
 pub mod browser_mcp;
 mod built_in_extensions;
+mod chief;
 mod claude_cloud_cli;
 mod cloud_attach;
 mod cloud_cli;
@@ -111,6 +112,7 @@ pub fn run() -> i32 {
 /// global help gate.
 const HELP_GATE_EXCLUDED: &[&str] = &[
     "account-login",
+    "chief",
     "security",
     "agent-guide",
     "computers",
@@ -421,6 +423,7 @@ fn is_known_command(name: &str) -> bool {
         "ports",
         "resources",
         "computers",
+        "chief",
         "autopilot",
         "security",
         "install-browser-skill",
@@ -495,6 +498,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         }
         "agents" => agents::run(args),
         "computers" => computers::run(args),
+        "chief" => chief::run(args),
         "autopilot" => autopilot::autopilot_command(args),
         "security" => security::run(args),
         "box" => box_cli::run(args),

@@ -207,6 +207,8 @@ pub(super) fn to_cli_session(
     insert_js(&mut map, "sessionNote", &[p("sessionNote")]);
     // CDXC:Coordinators 2026-10-01 SEE-ALSO: mobile_summary.rs forwards it too; the phone's session row draws the coordinator crown from it (apps/mobile/app/src/components/sessions/SessionRow.tsx) and nests threads under it from the three fields after it (apps/mobile/app/src/contract/coordinatorTree.ts).
     insert_js(&mut map, "coordinatorRole", &[p("coordinatorRole")]);
+    // CDXC:Chief 2026-11-08 WHY: the phone draws Chief's row from this flag and leaves the session out of its project (apps/mobile/app ChiefRow).
+    insert_js(&mut map, "isChief", &[p("isChief")]);
     insert_js(
         &mut map,
         "coordinatorProjectId",

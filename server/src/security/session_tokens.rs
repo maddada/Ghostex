@@ -54,7 +54,7 @@ impl SessionTokens {
         let principal = Principal::Session {
             project_id: project_id.to_string(),
             session_id: session_id.to_string(),
-            role,
+            role: role.stored(),
         };
         let key = session_key(project_id, session_id);
         let mut tokens = self.write();
@@ -229,7 +229,7 @@ impl SessionTokens {
                 Principal::Session {
                     project_id: entry.project_id.clone(),
                     session_id: entry.session_id.clone(),
-                    role: entry.role,
+                    role: entry.role.stored(),
                 },
             );
             tokens.session_token.insert(
@@ -327,6 +327,24 @@ mod tests {
         for token in &later {
             assert!(restarted.resolve(token).is_some());
         }
+    }
+
+    #[test]
+    fn no_token_holds_the_head_role_even_when_minted_or_restored_with_it() {
+        let tokens = SessionTokens::default();
+        let minted = tokens.mint_session("p", "s", SessionRole::Head);
+        assert!(matches!(
+            tokens.resolve(&minted),
+            Some(Principal::Session {
+                role: SessionRole::Coordinator,
+                ..
+            })
+        ));
+        let mut saved = tokens.snapshot();
+        saved[0].role = SessionRole::Head;
+        let restarted = SessionTokens::default();
+        restarted.restore(saved);
+        assert!(!restarted.resolve(&minted).unwrap().is_head());
     }
 
     #[test]

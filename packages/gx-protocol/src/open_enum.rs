@@ -18,6 +18,9 @@ macro_rules! open_string_enum {
         }
 
         impl $name {
+            /// Every known value, in declaration order (tables and tests walk it).
+            pub const KNOWN: &'static [Self] = &[$(Self::$variant,)+];
+
             /// The wire spelling of this value.
             pub fn as_str(&self) -> &str {
                 match self {

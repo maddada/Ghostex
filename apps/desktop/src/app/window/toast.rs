@@ -184,6 +184,8 @@ pub(crate) enum GpuiAppToastAction {
     /// Undo on a settings sync note: this computer's value of a synced setting comes back on every
     /// computer (`id` is the note's, server/src/settings_sync/).
     UndoSyncedChange { id: String },
+    /// Undo on "Chief turned off": turns the Chief extension back on (native_sidebar/chief.rs).
+    UndoChiefDisable,
     /// An approval card's Approve (`deny: false`, drawn next to its Deny) or Deny: GitHub #495,
     /// app/owner_security/ui.rs.
     SecurityApproval {
@@ -200,7 +202,7 @@ impl GpuiAppToastAction {
             Self::OpenAccounts { .. } => "Open Accounts",
             Self::OpenViewSettings => "Open Settings",
             Self::OpenUpdateDownloadPage => "Open download page",
-            Self::UndoSyncedChange { .. } => "Undo",
+            Self::UndoSyncedChange { .. } | Self::UndoChiefDisable => "Undo",
             Self::SecurityApproval { deny: false, .. } => "Approve",
             Self::SecurityApproval { deny: true, .. } => "Deny",
             Self::NativeProjectPathAction { label, .. } | Self::RunInNewTerminal { label, .. } => {

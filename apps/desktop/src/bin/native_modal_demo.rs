@@ -4,7 +4,7 @@ Standalone preview of the native GPUI app modals so their look can be checked
 against the React Storybook stories without launching Ghostex. Run with:
     cargo run --release --bin native-modal-demo
 Environment:
-    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|updates-menu|... (which modal; default export-transcript)
+    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|updates-menu|chief-row|... (which modal; default export-transcript)
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
     GHOSTEX_NATIVE_MODAL_DEMO_STATE=<per-modal state name>    (default: the opening state)
     GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND=1                    (open without taking focus, for screenshots)
@@ -47,6 +47,10 @@ mod agent_hooks_required_modal;
 mod agents_hub_demo;
 #[path = "../app/window/agents_hub/mod.rs"]
 mod agents_hub_modal;
+#[path = "native_modal_demo/chief_row.rs"]
+mod chief_row_demo;
+#[path = "../app/native_sidebar/chief_row_view.rs"]
+mod chief_row_view;
 #[path = "native_modal_demo/coordinator_details.rs"]
 mod coordinator_details_demo;
 #[path = "../app/window/coordinator_details_modal.rs"]
@@ -589,6 +593,7 @@ fn main() {
                 "new-orchestrator" => new_coordinator_demo::open(&demo, cx),
                 "orchestrator-memory" => coordinator_details_demo::open(&demo, cx),
                 "session-note" => session_note_demo::open(&demo, cx),
+                "chief-row" => chief_row_demo::open(&demo, cx),
                 "voice-panel" => voice_panel_demo::open(&demo, cx),
                 "permission-guide" => permission_guide_demo::open(&demo, cx),
                 "install-hooks" => agent_hooks_required_demo::open(&demo, cx),

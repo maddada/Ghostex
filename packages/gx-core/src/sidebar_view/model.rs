@@ -855,6 +855,14 @@ impl SidebarViewModel {
             },
             now_ms,
         });
+        state.view.chiefs = super::chief::chief_rows(
+            store,
+            effective,
+            &machine,
+            merging,
+            &state.focus,
+            &row_context,
+        );
         // The waiting copy of an empty sidebar moves with the clock alone.
         state.next_deadline_ms = min_deadline(
             state.next_deadline_ms,

@@ -70,6 +70,7 @@ pub(crate) fn outcome_words(outcome: &str) -> (&'static str, ListItemStatus) {
         "denied" => ("You said no", ListItemStatus::Neutral),
         "refused" => ("Refused", ListItemStatus::Warning),
         "failed" => ("Failed", ListItemStatus::Warning),
+        "allowed" => ("Allowed for Chief", ListItemStatus::Neutral),
         _ => ("Recorded", ListItemStatus::Neutral),
     }
 }

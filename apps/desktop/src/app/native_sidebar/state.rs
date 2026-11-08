@@ -26,6 +26,13 @@ pub(crate) struct NativeSidebarState {
     pub(crate) next_menu_request: u64,
     /// Where the sidebar menu button was last painted, so its menu can drop down from it.
     pub(crate) more_button_bounds: std::rc::Rc<std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>>,
+    /// Chief's row (native_sidebar/chief.rs): where it was last painted, for its menus; whether
+    /// the other computers' Chiefs are unfolded under it; and the agents its Change Agent offers
+    /// with the one it runs on, from the last `/api/chief` status.
+    pub(crate) chief_row_bounds: super::menus::MenuOwner,
+    pub(crate) chief_others_expanded: bool,
+    pub(crate) chief_agents: Vec<(String, String)>,
+    pub(crate) chief_agent_id: Option<String>,
     /// The trigger of the menu the last outside press dismissed, and where that press landed: a
     /// click on that trigger made by the same press is the closing half of a toggle (menus.rs).
     pub(crate) menu_dismissed_by_press: Option<(String, gpui::Point<gpui::Pixels>)>,

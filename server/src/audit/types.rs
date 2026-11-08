@@ -35,6 +35,8 @@ pub enum Actor {
     Owner { device: Option<String> },
     /// A Ghostex session, known from its own token.
     Session { session_id: String },
+    /// Chief, with its head role (a session's own token, settled by the auth gate).
+    Chief { session_id: String },
     /// A caller holding this computer's shared token: the desktop app, the CLI or an agent;
     /// `claimed_session` is the session the CLI said it runs in, which nothing proves yet.
     SharedToken { claimed_session: Option<String> },
@@ -75,6 +77,9 @@ impl Actor {
                 format!("Session {session_id}"),
                 Some(session_id.clone()),
             ),
+            Self::Chief { session_id } => {
+                ("session", "Chief".to_string(), Some(session_id.clone()))
+            }
             Self::SharedToken { claimed_session } => (
                 "sharedToken",
                 match claimed_session {
@@ -124,6 +129,9 @@ pub enum Outcome {
     Refused(String),
     /// It was allowed but failed, with the error.
     Failed(String),
+    /// Chief's head role let it through without an approval (typing into, interrupting or
+    /// answering the prompt of another session). Kept in the log, never in the bell.
+    Allowed,
 }
 
 impl Outcome {
@@ -135,6 +143,7 @@ impl Outcome {
             Self::Denied => ("denied", None),
             Self::Refused(reason) => ("refused", Some(reason.clone())),
             Self::Failed(reason) => ("failed", Some(reason.clone())),
+            Self::Allowed => ("allowed", None),
         }
     }
 

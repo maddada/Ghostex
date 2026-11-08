@@ -8,9 +8,13 @@
 //! | `/api/autopilot` `op: "set"` | `answerApprovals` goes on, `limits` change |
 //! | `/api/gbots` `action: "create"` | always (a new bot) |
 //! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a security-relaxing setting changes, or GBots goes on |
-//! | `/api/answerSessionChatPrompt` | anyone but the owner's devices answers another session's prompt |
-//! | `/api/interruptSessionChat` | anyone but the owner's devices stops a session that is neither their own nor one of their threads |
-//! | `/api/sendSessionText`, `/api/sendSessionEnter`, `/api/sendSessionMessage` | anyone but the owner's devices types into a session that isn't their own, its threads included (a coordinator's Escape or Ctrl-C to its own thread doesn't ask) |
+//! | `/api/answerSessionChatPrompt` | anyone but the owner's devices and Chief answers another session's prompt |
+//! | `/api/interruptSessionChat` | anyone but the owner's devices and Chief stops a session that is neither their own nor one of their threads |
+//! | `/api/sendSessionText`, `/api/sendSessionEnter`, `/api/sendSessionMessage` | anyone but the owner's devices and Chief types into a session that isn't their own, its threads included (a coordinator's Escape or Ctrl-C to its own thread doesn't ask) |
+//!
+//! Which callers skip those three is `Principal::skips_approval` (security/capability.rs); Chief
+//! (the head role, settled per request by `crate::chief::settle_principal`) skips them and nothing
+//! else.
 //!
 //! Pairing and Collab routes are gated by their own threads with the same
 //! `require_owner_presence`.
@@ -23,7 +27,7 @@ use serde_json::{json, Map, Value};
 use crate::{
     domain::read_domain_rpc_params,
     protocol::rpc_error,
-    security::{self, ActionRequest, Capability, Principal, RouteAccess, SensitiveAction},
+    security::{self, ActionRequest, Principal, RouteAccess, SensitiveAction},
 };
 
 use super::{require_owner_presence, routed_json, AppState, RoutedResponse};
@@ -63,6 +67,17 @@ pub(crate) fn gate(
         }
     }
     let params = read_domain_rpc_params(body).ok()?;
+    if chief_turned_off_for(state, caller, endpoint_path, &params) {
+        return Some(routed_json(
+            Some(endpoint_path.to_string()),
+            StatusCode::CONFLICT,
+            rpc_error(
+                "turnedOff",
+                crate::chief::chief_off_message(),
+                Some(request_id.to_string()),
+            ),
+        ));
+    }
     if let Some(message) = coordinator_refusal(caller, endpoint_path, &params) {
         return Some(forbidden(endpoint_path, request_id, message));
     }
@@ -71,6 +86,12 @@ pub(crate) fn gate(
         Some((_, action)) => Some(action.clone()),
         None => sensitive_action(state, caller, endpoint_path, &params),
     }?;
+    if computer.is_none() && caller.skips_approval(&action.action) {
+        if caller.is_head() {
+            record_head_steering(caller, &action);
+        }
+        return None;
+    }
     match require_owner_presence(state, caller, action, body, endpoint_path, request_id) {
         Ok(grant) => {
             if let Some((server_id, _)) = computer {
@@ -98,6 +119,48 @@ pub(crate) fn gate(
         }
         Err(response) => Some(response),
     }
+}
+
+/// Whether this call messages Chief's session while Chief is off (chief/feature.rs). The settings
+/// file is read only when the target is Chief's session.
+fn chief_turned_off_for(
+    state: &AppState,
+    caller: &Principal,
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+) -> bool {
+    let target = text(params, "projectId").zip(text(params, "sessionId"));
+    let chief = crate::chief::chief_key(&state.paths);
+    let targets_chief = matches!((target, &chief), (Some((project, session)), Some((chief_project, chief_session)))
+        if project == chief_project && session == chief_session);
+    targets_chief
+        && crate::chief::refuses_message(
+            caller.is_owner_device(),
+            endpoint_path,
+            target,
+            chief.as_ref(),
+            crate::chief::chief_on(&state.paths),
+        )
+}
+
+/// The security-log entry for what Chief's head role let through without an approval: kept in the
+/// log with the quiet `allowed` outcome, which the bell leaves out (audit/notify.rs).
+fn record_head_steering(caller: &Principal, request: &ActionRequest) {
+    let mut action = crate::audit::Action::new(request.action.as_str(), request.summary.clone());
+    if let Some(target) = &request.target {
+        action = action.target(target.clone());
+    }
+    crate::audit::record(
+        action,
+        match crate::audit::Actor::from(caller) {
+            crate::audit::Actor::Session { session_id } => {
+                crate::audit::Actor::Chief { session_id }
+            }
+            other => other,
+        },
+        crate::audit::Outcome::Allowed,
+        None,
+    );
 }
 
 fn forbidden(endpoint_path: &str, request_id: &str, message: &str) -> RoutedResponse {
@@ -394,12 +457,10 @@ fn settings_action(params: &Map<String, Value>) -> Option<ActionRequest> {
     )
 }
 
-/// The owner's devices answer any prompt; a session answers its own; everyone else asks
-/// (user decision 2 of #495, CDXC:Security in security/capability.rs).
+/// A session answers its own prompt; anyone else asks, unless the gate lets them through
+/// (`Principal::skips_approval`: the owner's devices and Chief; user decision 2 of #495,
+/// CDXC:Security in security/capability.rs).
 fn prompt_action(caller: &Principal, params: &Map<String, Value>) -> Option<ActionRequest> {
-    if caller.has(Capability::AnswerAnyPrompt) {
-        return None;
-    }
     let project_id = text(params, "projectId")?;
     let session_id = text(params, "sessionId")?;
     if let Principal::Session {
@@ -437,9 +498,6 @@ fn input_action(
     endpoint_path: &str,
     params: &Map<String, Value>,
 ) -> Option<ActionRequest> {
-    if caller.has(Capability::AnswerAnyPrompt) {
-        return None;
-    }
     let session_id = text(params, "sessionId")?;
     let project_id = text(params, "projectId").unwrap_or_default();
     if let Principal::Session {
@@ -498,9 +556,6 @@ fn interrupt_action(
     caller: &Principal,
     params: &Map<String, Value>,
 ) -> Option<ActionRequest> {
-    if caller.has(Capability::AnswerAnyPrompt) {
-        return None;
-    }
     let session_id = text(params, "sessionId")?;
     let project_id = text(params, "projectId").unwrap_or_default();
     if let Principal::Session {
@@ -620,12 +675,12 @@ mod tests {
         assert!(prompt_action(&own, params).is_none());
         assert!(prompt_action(&coordinator, params).is_some());
         assert!(prompt_action(&Principal::LocalAgent, params).is_some());
-        assert!(prompt_action(
-            &Principal::Device {
-                device_id: "phone".into()
-            },
-            params
-        )
-        .is_none());
+        // The gate lets the owner's devices (and Chief) through: `skips_approval`.
+        let phone = Principal::Device {
+            device_id: "phone".into(),
+        };
+        let request = prompt_action(&phone, params).expect("a request");
+        assert!(phone.skips_approval(&request.action));
+        assert!(!coordinator.skips_approval(&request.action));
     }
 }

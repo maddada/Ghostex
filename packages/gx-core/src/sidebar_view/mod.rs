@@ -11,6 +11,7 @@
 pub(crate) mod agents;
 mod armed_actions;
 mod assemble;
+mod chief;
 mod close_after_done;
 pub(crate) mod close_successor;
 pub(crate) mod collections;
@@ -62,6 +63,7 @@ pub use close_successor::{
     close_project_group_is_active, close_project_successor_candidates,
     close_project_successor_group_order, first_awake_successor_session_id, is_awake_successor_row,
 };
+pub use chief::ChiefRowView;
 pub use collections::{Collection, CollectionsState};
 pub use daemon_wait::{
     DAEMON_RETRY_INTERVAL_MS, SERVICE_START_FAILED_TITLE, SESSIONS_LOADING_DETAIL,

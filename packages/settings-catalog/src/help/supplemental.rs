@@ -578,6 +578,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "chiefHidden",
+        tab: EXTENSIONS,
+        group: None,
+        section: "official",
+        section_title: "Built-in",
+        title: "Turn off Chief",
+        subtitle: "Turn off Chief everywhere: its row under the Spaces bar, here and in the phone app. Its agent stops and loses its control over your other agents; its chat and memory are kept for when you turn it back on. On by default. Only you can change this, not an agent.",
+        options: &[],
+        user_only: true,
+    },
+    Supplemental {
         key: "defaultEditorCommand",
         tab: OPEN_TARGETS,
         group: None,

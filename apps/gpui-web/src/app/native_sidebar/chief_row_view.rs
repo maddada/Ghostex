@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_sidebar/chief_row_view.rs

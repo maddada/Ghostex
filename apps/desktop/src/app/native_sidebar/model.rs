@@ -36,6 +36,14 @@ pub(crate) struct NativeSidebarSnapshot {
     pub(crate) collections: Vec<NativeSidebarCollection>,
     pub(crate) order: Vec<NativeSidebarOrderItem>,
     pub(crate) more_menu: Value,
+    /// The Chief built-in extension is on (`chiefHidden`), so its row is drawn under the Spaces
+    /// bar (native_sidebar/chief.rs).
+    #[serde(default)]
+    pub(crate) chief_enabled: bool,
+    /// Each computer's Chief: the selected machine's, or with computers combined this computer's
+    /// first (gx-core `SidebarView::chiefs`).
+    #[serde(default)]
+    pub(crate) chiefs: Vec<NativeSidebarChief>,
     pub(crate) search_shortcut: Option<String>,
     pub(crate) commands_shortcut: Option<String>,
 }
@@ -248,4 +256,26 @@ fn deserialize_sessions<'de, D: serde::Deserializer<'de>>(
 ) -> Result<Vec<Arc<NativeSidebarSession>>, D::Error> {
     Vec::<NativeSidebarSession>::deserialize(deserializer)
         .map(|sessions| sessions.into_iter().map(Arc::new).collect())
+}
+
+/// One computer's Chief row (gx-core `ChiefRowView`).
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NativeSidebarChief {
+    /// `local`, or the remote machine's id.
+    pub(crate) machine_id: String,
+    pub(crate) machine_label: String,
+    pub(crate) is_local: bool,
+    pub(crate) project_id: String,
+    pub(crate) session_id: String,
+    /// The row's sidebar session id (`<machine>:<project>:<session>` for a remote one).
+    pub(crate) sidebar_session_id: String,
+    pub(crate) activity: String,
+    pub(crate) has_question: bool,
+    pub(crate) awaiting_approval: bool,
+    pub(crate) has_background_work: bool,
+    /// A failed model change, a failed program status or a stuck turn: the red dot.
+    pub(crate) failed: bool,
+    pub(crate) lifecycle_state: String,
+    pub(crate) is_focused: bool,
 }

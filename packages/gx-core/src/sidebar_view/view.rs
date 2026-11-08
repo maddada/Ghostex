@@ -56,6 +56,10 @@ pub struct SidebarView {
     /// The selected remote machine is not connected, so the list says why above whatever it still
     /// holds (`machines::machine_notice`). Absent for this computer and a connected machine.
     pub machine_notice: Option<MachineNotice>,
+    /// Chief's rows (`chief.rs`): the selected machine's, or with computers combined this
+    /// computer's first and then each other computer's. Drawn under the Spaces bar whether or
+    /// not the Chief extension is on; the host leaves them out while it is off.
+    pub chiefs: Vec<super::chief::ChiefRowView>,
 }
 
 /// What the list of a remote machine that is not connected says about its connection.
