@@ -24,6 +24,13 @@ pub(crate) const SECTION_CLOSE: &str = "\u{E000}/section";
 const IN_PROGRESS_DARK: u32 = 0xc68a06;
 const IN_PROGRESS_LIGHT: u32 = 0xc68a06;
 
+/// CDXC:MarkedHandovers 2026-11-08 DECISION:
+/// User: "please make Needs you pinkish color in the handover section headings, and make blocked red". "Needs you" takes the sidebar's pink question dot (`QUESTION_COLOR` #f472b6 in native_sidebar/status.rs) and "Blocked" its red dot (`FAILED_COLOR` #ef4444), on the dark chat; the light chat keeps a darker shade of each so the text stays readable on white (pink #be185d, red #dc2626). It replaces the orange #fb923c / #c2410c "Needs you" of 2026-10-12. "Kicked off" stays pink as before, so the two share a hue.
+const NEED_DARK: u32 = 0xf472b6;
+const NEED_LIGHT: u32 = 0xbe185d;
+const BLOCKED_DARK: u32 = 0xef4444;
+const BLOCKED_LIGHT: u32 = 0xdc2626;
+
 /// How the chat draws marked sections (`markedHandoversStyle`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MarkerStyle {
@@ -173,14 +180,14 @@ pub(crate) fn blend_strength(palette: Hsla, text: Hsla, strength: f32) -> Hsla {
 /// A kind's colour in the chat's light or dark appearance (the mockup's palette).
 pub(crate) fn kind_color(kind: &str, light: bool) -> Hsla {
     let (dark, light_color) = match kind {
-        "need" => (0xfb923c, 0xc2410c),
+        "need" => (NEED_DARK, NEED_LIGHT),
         "done" => (0x4ade80, 0x15803d),
         "read" => (0xfbbf24, 0xb45309),
         "kicked" => (0xf472b6, 0xbe185d),
         "progress" => (IN_PROGRESS_DARK, IN_PROGRESS_LIGHT),
         "untested" => (0x2dd4bf, 0x0f766e),
         "shipped" => (0x818cf8, 0x4f46e5),
-        "blocked" => (0xf87171, 0xdc2626),
+        "blocked" => (BLOCKED_DARK, BLOCKED_LIGHT),
         "comms" => (0xa3e635, 0x4d7c0f),
         "parked" => (0x94a3b8, 0x475569),
         "held" => (0xd6a77a, 0x92400e),
