@@ -40,6 +40,14 @@ pub fn approver_key_id(public_key: &[u8]) -> String {
     hex::encode(&Sha256::digest(public_key)[..16])
 }
 
+/// The key id `key` gets once enrolled (from its public key, whatever `key.key_id` says).
+pub fn key_id_of(key: &ApproverKey) -> Result<String, ApproverKeyError> {
+    STANDARD
+        .decode(&key.public_key)
+        .map(|bytes| approver_key_id(&bytes))
+        .map_err(|_| ApproverKeyError::BadPublicKey)
+}
+
 /// Checks `signature` (base64) over `payload` with `key`.
 pub fn verify_approval_signature(
     key: &ApproverKey,
@@ -136,6 +144,14 @@ impl ApproverKeys {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .insert(key.key_id.clone(), key.clone());
         Ok(key)
+    }
+
+    /// Puts back keys loaded from disk, each checked again as [`Self::insert`] does; a key
+    /// that no longer parses is dropped.
+    pub fn restore(&self, keys: Vec<ApproverKey>) {
+        for key in keys {
+            let _ = self.insert(key);
+        }
     }
 
     /// Removing a key is always allowed for the owner's devices: it only closes a door.

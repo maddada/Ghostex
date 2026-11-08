@@ -183,8 +183,92 @@ pub(crate) fn route_security_http(
             ))
         }
     };
+    if endpoint_path == security::APPROVER_KEYS_ENROLL_ENDPOINT
+        || endpoint_path == security::OWNER_KEY_ENROLL_ENDPOINT
+    {
+        return Some(
+            match enroll_key(state, caller, endpoint_path, request_id, body, params) {
+                Ok(result) => reply(StatusCode::OK, Ok(result)),
+                Err(EnrollRefusal::Reply(code, message)) => {
+                    reply(StatusCode::OK, Err((code, message)))
+                }
+                Err(EnrollRefusal::Response(response)) => response,
+            },
+        );
+    }
     let result = handle(state, caller, endpoint_path, params);
     Some(reply(StatusCode::OK, result))
+}
+
+enum EnrollRefusal {
+    Reply(&'static str, String),
+    Response(RoutedResponse),
+}
+
+/// `/api/enrollOwnerKey` and `/api/enrollApproverKey`. The first key of each kind is taken on
+/// the owner's word (first owner key: any local caller; first approver key: the desktop's owner
+/// session); every later key needs an approved `addApproverKey` signed by a key already there.
+fn enroll_key(
+    state: &AppState,
+    caller: &Principal,
+    endpoint_path: &str,
+    request_id: &str,
+    body: &Value,
+    params: Map<String, Value>,
+) -> Result<Value, EnrollRefusal> {
+    use ghostex_gx_protocol::approval::{EnrollKeyParams, SensitiveAction};
+    let security = &state.security;
+    let now = security::now_ms();
+    let EnrollKeyParams { key } =
+        parse(params.clone()).map_err(|(code, message)| EnrollRefusal::Reply(code, message))?;
+    let key_id = security::key_id_of(&key)
+        .map_err(|error| EnrollRefusal::Reply("badRequest", error.to_string()))?;
+    let owner = endpoint_path == security::OWNER_KEY_ENROLL_ENDPOINT;
+    let registry = if owner {
+        &security.owner_keys
+    } else {
+        &security.approver_keys
+    };
+    if let Some(known) = registry.get(&key_id) {
+        return Ok(json!({ "key": known }));
+    }
+    let first = registry.is_empty();
+    if first && owner {
+        let key = security
+            .enroll_first_owner_key(key, now)
+            .map_err(|error| EnrollRefusal::Reply("badRequest", error.to_string()))?;
+        return Ok(json!({ "key": key }));
+    }
+    if first && !matches!(caller, Principal::Owner { .. }) {
+        return Err(EnrollRefusal::Reply(
+            "forbidden",
+            "The first approver key is added by Ghostex on your computer.".to_string(),
+        ));
+    }
+    if !first {
+        let summary = format!(
+            "Let {} ({}) {}",
+            key.label,
+            key.platform,
+            if owner {
+                "act as the owner of Ghostex on this computer"
+            } else {
+                "approve requests for this computer"
+            }
+        );
+        let action = ActionRequest::new(SensitiveAction::AddApproverKey, summary)
+            .target(key_id.clone())
+            .params(Value::Object(params));
+        require_owner_presence(state, caller, action, body, endpoint_path, request_id)
+            .map_err(EnrollRefusal::Response)?;
+    }
+    let added = if owner {
+        security.add_owner_key(key)
+    } else {
+        security.add_approver_key(key, now)
+    }
+    .map_err(|error| EnrollRefusal::Reply("badRequest", error.to_string()))?;
+    Ok(json!({ "key": added }))
 }
 
 fn parse<T: serde::de::DeserializeOwned>(
@@ -262,18 +346,45 @@ fn handle(
                 .approver_keys
                 .remove(key_id)
                 .ok_or(("notFound", "No such approver key.".to_string()))?;
+            security.save().map_err(|error| {
+                (
+                    "internalError",
+                    format!("Ghostex could not save its keys: {error}"),
+                )
+            })?;
             security.publish(security::SecurityEvent::ApproverKeyRemoved {
                 key: key.clone(),
                 by: caller.clone(),
             });
             Ok(json!({ "key": key }))
         }
-        security::APPROVER_KEYS_ENROLL_ENDPOINT => Err((
-            "notImplemented",
-            "Adding approver keys arrives with the desktop's Touch ID / Windows Hello / polkit approvals."
-                .to_string(),
+        security::OWNER_CHALLENGE_ENDPOINT => Ok(json!(security.owner_challenge(now))),
+        security::OWNER_SESSION_ENDPOINT => {
+            let ghostex_gx_protocol::approval::OpenOwnerSessionParams {
+                key_id,
+                challenge,
+                signature,
+            } = parse(params)?;
+            security
+                .open_owner_session(&key_id, &challenge, &signature, now)
+                .map(|opened| json!(opened))
+                .map_err(|error| ("forbidden", error.to_string()))
+        }
+        security::SECURITY_STATUS_ENDPOINT => Ok(json!({
+            "serverId": &*security.server_id,
+            "caller": caller,
+            "ownerKeys": security.owner_keys.list(),
+            "approverKeys": security.approver_keys.list(),
+            "pendingApprovals": if caller.has(security::Capability::DecideApprovals) {
+                security.approvals.list_pending(now).len()
+            } else {
+                0
+            },
+        })),
+        _ => Err((
+            "notFound",
+            format!("{endpoint_path} is not an approval endpoint."),
         )),
-        _ => Err(("notFound", format!("{endpoint_path} is not an approval endpoint."))),
     }
 }
 
@@ -285,4 +396,51 @@ fn approval_error(error: &security::ApprovalError) -> (&'static str, String) {
         _ => "badRequest",
     };
     (code, error.to_string())
+}
+
+/// The event `/api/events` carries whenever the approval requests change; the desktop and the
+/// phone refresh their approval cards from it (`request` is the request that changed).
+pub(crate) const APPROVALS_CHANGED_EVENT_TYPE: &str = "approvalRequestsChanged";
+
+/// For gxserver's lifetime: forwards approval changes to `/api/events` and expires lapsed
+/// requests every 15 seconds.
+pub(crate) fn start_security_events(state: std::sync::Arc<AppState>) {
+    let mut events = state.security.subscribe();
+    let mut shutdown = state.shutdown_tx.subscribe();
+    let weak = std::sync::Arc::downgrade(&state);
+    drop(state);
+    tokio::spawn(async move {
+        let mut sweep = tokio::time::interval(std::time::Duration::from_secs(15));
+        loop {
+            tokio::select! {
+                _ = shutdown.recv() => return,
+                _ = sweep.tick() => {
+                    let Some(state) = weak.upgrade() else { return };
+                    state.security.expire_lapsed(security::now_ms());
+                }
+                event = events.recv() => {
+                    let event = match event {
+                        Ok(event) => event,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(_) => return,
+                    };
+                    let Some(state) = weak.upgrade() else { return };
+                    let (change, request) = match &event {
+                        security::SecurityEvent::ApprovalRequested { request } => ("requested", request),
+                        security::SecurityEvent::ApprovalApproved { request, .. } => ("approved", request),
+                        security::SecurityEvent::ApprovalDenied { request, .. } => ("denied", request),
+                        security::SecurityEvent::ApprovalExpired { request } => ("expired", request),
+                        _ => continue,
+                    };
+                    state.event_hub.broadcast(json!({
+                        "type": APPROVALS_CHANGED_EVENT_TYPE,
+                        "protocolVersion": crate::constants::GXSERVER_PROTOCOL_VERSION,
+                        "serverId": state.metadata.server_id.clone(),
+                        "change": change,
+                        "request": request,
+                    }));
+                }
+            }
+        }
+    });
 }

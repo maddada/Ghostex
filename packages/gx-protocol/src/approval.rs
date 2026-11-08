@@ -279,6 +279,66 @@ pub fn approval_signing_payload(
     Ok(payload.into_bytes())
 }
 
+/// First line of the payload the desktop's owner key signs to open an owner session.
+pub const OWNER_SESSION_SIGNING_DOMAIN: &str = "ghostex-owner-session-v1";
+
+/// `/api/ownerChallenge` → a one-time challenge the owner key signs.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OwnerChallenge {
+    pub challenge: String,
+    pub expires_at_ms: u64,
+}
+
+/// `/api/openOwnerSession`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenOwnerSessionParams {
+    pub key_id: String,
+    pub challenge: String,
+    /// The signature over [`owner_session_signing_payload`], base64 standard with padding.
+    pub signature: String,
+}
+
+/// `/api/openOwnerSession` → the owner session token, held only in the desktop app's memory.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenOwnerSessionResult {
+    pub token: String,
+    pub device_id: String,
+}
+
+/// `/api/enrollOwnerKey` and `/api/enrollApproverKey`: the public key to add. gxserver
+/// recomputes `keyId` and sets `addedAtMs`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnrollKeyParams {
+    pub key: ApproverKey,
+}
+
+/// The exact bytes the owner key signs to open an owner session on gxserver `server_id`:
+/// `ghostex-owner-session-v1\n<server id>\n<challenge>\n<key id>`.
+pub fn owner_session_signing_payload(
+    server_id: &str,
+    challenge: &str,
+    key_id: &str,
+) -> Result<Vec<u8>, SigningPayloadError> {
+    let fields: [(&'static str, &str); 3] = [
+        ("serverId", server_id),
+        ("challenge", challenge),
+        ("keyId", key_id),
+    ];
+    let mut payload = String::from(OWNER_SESSION_SIGNING_DOMAIN);
+    for (field, value) in fields {
+        if value.is_empty() || value.contains(['\n', '\r']) {
+            return Err(SigningPayloadError { field });
+        }
+        payload.push('\n');
+        payload.push_str(value);
+    }
+    Ok(payload.into_bytes())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -330,6 +390,15 @@ mod tests {
             approval_signing_payload("", &request()).unwrap_err().field,
             "serverId"
         );
+    }
+
+    #[test]
+    fn owner_session_payload_is_line_based() {
+        assert_eq!(
+            owner_session_signing_payload("S90", "ch", "k1").unwrap(),
+            b"ghostex-owner-session-v1\nS90\nch\nk1".to_vec()
+        );
+        assert!(owner_session_signing_payload("S90", "c\nh", "k1").is_err());
     }
 
     #[test]

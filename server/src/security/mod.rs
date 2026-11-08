@@ -17,6 +17,8 @@ mod approvals;
 mod approver_keys;
 mod capability;
 mod events;
+mod owner;
+pub mod persist;
 mod presence;
 mod session_tokens;
 
@@ -26,18 +28,20 @@ pub use approvals::{
 #[cfg(test)]
 pub(crate) use approver_keys::test_keys;
 pub use approver_keys::{
-    approver_key_id, verify_approval_signature, ApproverKeyError, ApproverKeys,
+    approver_key_id, key_id_of, verify_approval_signature, ApproverKeyError, ApproverKeys,
 };
 pub use capability::{route_access, Capability, Principal, RouteAccess, SessionRole};
 pub use events::SecurityEvent;
 pub use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
+pub use owner::{OwnerChallenges, OwnerError, OWNER_CHALLENGE_TTL_MS};
 pub use presence::{requester_for, PresenceGrant, PresenceOutcome};
 pub use session_tokens::{
     SessionTokens, OWNER_TOKEN_PREFIX, SESSION_TOKEN_ENV, SESSION_TOKEN_PREFIX,
 };
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
+use ghostex_gx_protocol::approval::ApproverKey;
 use tokio::sync::broadcast;
 
 /// Pending requests, oldest first (owner's devices).
@@ -50,10 +54,20 @@ pub const APPROVALS_APPROVE_ENDPOINT: &str = "/api/approveApprovalRequest";
 pub const APPROVALS_DENY_ENDPOINT: &str = "/api/denyApprovalRequest";
 /// The registered approver keys (owner's devices).
 pub const APPROVER_KEYS_LIST_ENDPOINT: &str = "/api/listApproverKeys";
-/// Add an approver key; itself a sensitive action after the first key (Phase 2).
+/// Add an approver key `{ key }` (owner's devices); the first one directly, every later one
+/// through an approved `addApproverKey`.
 pub const APPROVER_KEYS_ENROLL_ENDPOINT: &str = "/api/enrollApproverKey";
 /// Remove an approver key with `{ keyId }` (owner's devices).
 pub const APPROVER_KEYS_REMOVE_ENDPOINT: &str = "/api/removeApproverKey";
+/// Enroll the desktop's owner key `{ key }`: the first one from any local caller (trust on
+/// first use), the same one again is a no-op, another one through an approved `addApproverKey`.
+pub const OWNER_KEY_ENROLL_ENDPOINT: &str = "/api/enrollOwnerKey";
+/// A one-time challenge for the owner key (any local caller).
+pub const OWNER_CHALLENGE_ENDPOINT: &str = "/api/ownerChallenge";
+/// `{ keyId, challenge, signature }` → `{ token, deviceId }`: the desktop's owner session.
+pub const OWNER_SESSION_ENDPOINT: &str = "/api/openOwnerSession";
+/// Whether an owner key and approver keys are enrolled, and who the caller is (any caller).
+pub const SECURITY_STATUS_ENDPOINT: &str = "/api/securityStatus";
 
 pub const SECURITY_ENDPOINTS: &[&str] = &[
     APPROVALS_LIST_ENDPOINT,
@@ -63,6 +77,10 @@ pub const SECURITY_ENDPOINTS: &[&str] = &[
     APPROVER_KEYS_LIST_ENDPOINT,
     APPROVER_KEYS_ENROLL_ENDPOINT,
     APPROVER_KEYS_REMOVE_ENDPOINT,
+    OWNER_KEY_ENROLL_ENDPOINT,
+    OWNER_CHALLENGE_ENDPOINT,
+    OWNER_SESSION_ENDPOINT,
+    SECURITY_STATUS_ENDPOINT,
 ];
 
 /// Everything security-related one gxserver holds; cheap to clone (shared inside).
@@ -73,19 +91,62 @@ pub struct SecurityState {
     pub server_id: Arc<str>,
     pub approvals: ApprovalStore,
     pub approver_keys: ApproverKeys,
+    /// The desktop app's owner keys (normally one per computer).
+    pub owner_keys: ApproverKeys,
+    pub owner_challenges: OwnerChallenges,
     pub session_tokens: SessionTokens,
+    /// `gxserver/auth/security.json`; `None` in tests that need no disk.
+    persist_path: Option<Arc<PathBuf>>,
+    save_lock: Arc<std::sync::Mutex<()>>,
     events: broadcast::Sender<SecurityEvent>,
 }
 
 impl SecurityState {
+    /// An empty state that is never saved (tests).
     pub fn new(server_id: &str) -> Self {
         Self {
             server_id: Arc::from(server_id),
             approvals: ApprovalStore::default(),
             approver_keys: ApproverKeys::default(),
+            owner_keys: ApproverKeys::default(),
+            owner_challenges: OwnerChallenges::default(),
             session_tokens: SessionTokens::default(),
+            persist_path: None,
+            save_lock: Arc::default(),
             events: broadcast::channel(256).0,
         }
+    }
+
+    /// The state saved in `auth_dir`, saved there again on every change.
+    pub fn load(auth_dir: &std::path::Path, server_id: &str) -> std::io::Result<Self> {
+        let path = persist::security_file(auth_dir);
+        let saved = persist::load(&path)?;
+        let mut state = Self::new(server_id);
+        state.owner_keys.restore(saved.owner_keys);
+        state.approver_keys.restore(saved.approver_keys);
+        state.session_tokens.restore(saved.session_tokens);
+        state.persist_path = Some(Arc::new(path));
+        Ok(state)
+    }
+
+    /// Writes the keys and session token hashes to disk (no-op without a path).
+    pub fn save(&self) -> std::io::Result<()> {
+        let Some(path) = &self.persist_path else {
+            return Ok(());
+        };
+        let _guard = self
+            .save_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        persist::save(
+            path,
+            &persist::PersistedSecurity {
+                version: 1,
+                owner_keys: self.owner_keys.list(),
+                approver_keys: self.approver_keys.list(),
+                session_tokens: self.session_tokens.snapshot(),
+            },
+        )
     }
 
     /// Every security event from now on. A slow subscriber loses the oldest events
@@ -120,6 +181,54 @@ impl SecurityState {
         for request in self.approvals.expire(now_ms) {
             self.publish(SecurityEvent::ApprovalExpired { request });
         }
+    }
+
+    /// A fresh token for a session that is starting (any earlier token of it stops working).
+    pub fn mint_session_token(
+        &self,
+        project_id: &str,
+        session_id: &str,
+        role: SessionRole,
+    ) -> std::io::Result<String> {
+        let token = self
+            .session_tokens
+            .mint_session(project_id, session_id, role);
+        self.save()?;
+        self.publish(SecurityEvent::SessionTokenMinted {
+            principal: Principal::Session {
+                project_id: project_id.to_string(),
+                session_id: session_id.to_string(),
+                role,
+            },
+        });
+        Ok(token)
+    }
+
+    /// Revokes a session's token when the session ends.
+    pub fn revoke_session_token(&self, session_id: &str) {
+        let removed = self.session_tokens.revoke_session(session_id);
+        if removed.is_empty() {
+            return;
+        }
+        let _ = self.save();
+        for principal in removed {
+            self.publish(SecurityEvent::SessionTokenRevoked { principal });
+        }
+    }
+
+    /// Adds an approver key: the first one directly (it is the owner's call, checked by the
+    /// route), later ones only after the route spent an `addApproverKey` approval.
+    pub fn add_approver_key(
+        &self,
+        mut key: ApproverKey,
+        now_ms: u64,
+    ) -> Result<ApproverKey, OwnerError> {
+        key.added_at_ms = now_ms;
+        let key = self.approver_keys.insert(key).map_err(OwnerError::Key)?;
+        self.save()
+            .map_err(|error| OwnerError::Save(error.to_string()))?;
+        self.publish(SecurityEvent::ApproverKeyAdded { key: key.clone() });
+        Ok(key)
     }
 }
 

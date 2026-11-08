@@ -85,6 +85,59 @@ impl SessionTokens {
         removed
     }
 
+    /// The session tokens to persist (owner sessions are never written).
+    pub fn snapshot(&self) -> Vec<super::persist::PersistedSessionToken> {
+        let mut tokens: Vec<_> = self
+            .by_hash
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .filter_map(|(hash, principal)| match principal {
+                Principal::Session {
+                    project_id,
+                    session_id,
+                    role,
+                } => Some(super::persist::PersistedSessionToken {
+                    hash: hash.clone(),
+                    project_id: project_id.clone(),
+                    session_id: session_id.clone(),
+                    role: *role,
+                }),
+                _ => None,
+            })
+            .collect();
+        tokens.sort_by(|a, b| a.session_id.cmp(&b.session_id));
+        tokens
+    }
+
+    /// Puts back the session tokens saved before a restart.
+    pub fn restore(&self, tokens: Vec<super::persist::PersistedSessionToken>) {
+        let mut map = self.write();
+        for token in tokens {
+            map.insert(
+                token.hash,
+                Principal::Session {
+                    project_id: token.project_id,
+                    session_id: token.session_id,
+                    role: token.role,
+                },
+            );
+        }
+    }
+
+    /// The session ids that hold a token.
+    pub fn session_ids(&self) -> Vec<String> {
+        self.by_hash
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .values()
+            .filter_map(|principal| match principal {
+                Principal::Session { session_id, .. } => Some(session_id.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
     pub fn revoke_token(&self, token: &str) -> Option<Principal> {
         self.write().remove(&hash_token(token))
     }

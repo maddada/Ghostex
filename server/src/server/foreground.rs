@@ -187,11 +187,12 @@ pub async fn run_gxserver_foreground(
         presentation_event_sequence.clone(),
     );
 
+    let security = load_security_state(&paths, metadata.server_id.as_str(), &logger);
     let state = Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: auth.token,
         device_api_tokens: load_device_api_tokens(&paths),
-        security: crate::security::SecurityState::new(metadata.server_id.as_str()),
+        security,
         cef_devtools: Default::default(),
         automation_runtime,
         delayed_send_runtime,
@@ -379,6 +380,7 @@ pub async fn run_gxserver_foreground(
     crate::settings_sync::start_settings_sync(state.clone());
     workspaces_switch::start_workspaces_switch_watch(state.clone());
     crate::connectors::start_connectors(state.clone());
+    super::security_http::start_security_events(state.clone());
     bot_sync::start_bot_project_sync(state.clone());
     close_after_done_runtime::start_close_after_done_runtime(state.clone());
     coordinator_runtime::start_coordinator_runtime(state.clone());
@@ -677,4 +679,35 @@ fn load_device_api_tokens(paths: &GxserverPaths) -> crate::auth::DeviceApiTokens
         let _ = crate::remote_access::reload_device_api_tokens(&db, &tokens);
     }
     tokens
+}
+
+/// The keys and session tokens saved in `auth/security.json`. A file that can't be read is
+/// moved aside and gxserver starts with none (the desktop enrolls its key again), rather than
+/// refusing to start.
+fn load_security_state(
+    paths: &GxserverPaths,
+    server_id: &str,
+    logger: &GxserverLogger,
+) -> crate::security::SecurityState {
+    match crate::security::SecurityState::load(&paths.auth_dir, server_id) {
+        Ok(state) => state,
+        Err(error) => {
+            let file = crate::security::persist::security_file(&paths.auth_dir);
+            let aside =
+                file.with_extension(format!("json.unreadable-{}", crate::security::now_ms()));
+            let _ = std::fs::rename(&file, &aside);
+            let _ = logger.log(GxserverLogInput {
+                level: crate::logging::LogLevel::Error,
+                event: "securityStateUnreadable".to_string(),
+                server_id: None,
+                request_id: None,
+                client: None,
+                duration_ms: None,
+                error: Some(error.to_string()),
+                details: Some(json!({ "movedTo": aside.display().to_string() })),
+            });
+            crate::security::SecurityState::load(&paths.auth_dir, server_id)
+                .unwrap_or_else(|_| crate::security::SecurityState::new(server_id))
+        }
+    }
 }

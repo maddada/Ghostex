@@ -1157,7 +1157,10 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/denyApprovalRequest"
         | "/api/listApproverKeys"
         | "/api/enrollApproverKey"
-        | "/api/removeApproverKey" => remote_allowed(path),
+        | "/api/removeApproverKey"
+        | "/api/securityStatus" => remote_allowed(path),
+        // CDXC:Security 2026-11-08 WHY: the desktop proves its owner key to this computer's own gxserver only; the loopback listener (and the tunnels that forward to it) serves these, never the remote listener.
+        "/api/enrollOwnerKey" | "/api/ownerChallenge" | "/api/openOwnerSession" => full_local(path),
         "/api/updateAuth"
         | "/api/updateListenerConfig"
         | "/api/installTool"

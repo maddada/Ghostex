@@ -43,9 +43,9 @@ and anonymous callers have none of these (they keep their own endpoint allow-lis
 | Capability | Session agent/thread | Coordinator | LocalAgent |
 | --- | --- | --- | --- |
 | `OwnSession`, `ProjectSessions`, `AgentWritableSettings` | yes | yes | yes |
-| `ManageOwnThreads`, `AnswerOwnThreadsPrompts` | no | yes | threads yes, prompts no |
+| `ManageOwnThreads` | no | yes | yes |
 | `ManageAnyThreads` | no | no | yes |
-| `OwnerSettings`, `AnswerAnyPrompt` | no | no | no |
+| `OwnerSettings`, `AnswerAnyPrompt` (answer another session's permission prompt without asking) | no | no | no |
 | `RequestSensitiveAction` (may ask) | yes | yes | yes |
 | `DecideApprovals` (list, approve, deny, approver keys) | no | no | no |
 
@@ -80,7 +80,7 @@ Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in 
 | Autopilot | `autopilotAnswerApprovals`, `autopilotLiftLimits` | core thread |
 | GBots | `gbotsEnable`, `gbotsAddBot`, `gbotsChangeSenders` | core thread |
 | Settings | `settingsWeakenSecurity` (target: the setting key) | core thread |
-| Prompts | `answerOtherSessionPrompt` (the design's "Ask" for an agent answering a session that isn't its thread) | core thread |
+| Prompts | `answerOtherSessionPrompt` (any agent answering another session's permission prompt, a coordinator answering its own threads included; user decision 2026-11-08. The owner's own devices answer without it; Autopilot keeps its own actions) | core thread |
 | Approvers | `addApproverKey` | core thread |
 
 Add a new action here, in the enum, and in the phone's TypeScript port together.

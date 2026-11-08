@@ -1,15 +1,15 @@
 //! Who is calling and what they may do: the principal behind a token, its capabilities, and the
 //! access each route declares.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// The role a session token was minted for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SessionRole {
     /// An ordinary agent session.
     Agent,
-    /// A coordinator: may also manage its own threads and answer their prompts.
+    /// A coordinator: may also manage its own threads.
     Coordinator,
     /// A thread started by a coordinator; same powers as an agent.
     Thread,
@@ -61,9 +61,9 @@ pub enum Capability {
     AgentWritableSettings,
     /// Change the other settings that don't weaken security.
     OwnerSettings,
-    /// Answer an approval prompt of its own threads.
-    AnswerOwnThreadsPrompts,
-    /// Answer any session's approval prompt without asking.
+    /// Answer another session's permission prompt without asking. Only the owner's devices:
+    /// any agent, a coordinator answering its own threads included, asks
+    /// (`SensitiveAction::AnswerOtherSessionPrompt`).
     AnswerAnyPrompt,
     /// Ask for a sensitive action (the call becomes an approval request).
     RequestSensitiveAction,
@@ -91,6 +91,10 @@ impl Principal {
         matches!(self, Self::Owner { .. } | Self::Device { .. })
     }
 
+    /*
+    CDXC:Security 2026-11-08 DECISION:
+    User (#495 follow-up): an approval is needed for any agent answering another session's permission prompt, including a coordinator answering its own threads ("the playbook already says only the user answers those"); Autopilot stays under its own gated actions. So no session or token-file caller holds `AnswerAnyPrompt`. The token file (the CLI in the user's own terminal) keeps thread management (decision 3A), everything else of it is an agent's.
+    */
     pub fn has(&self, capability: Capability) -> bool {
         use Capability::*;
         match self {
@@ -99,7 +103,7 @@ impl Principal {
                 OwnSession | ProjectSessions | AgentWritableSettings | RequestSensitiveAction => {
                     true
                 }
-                ManageOwnThreads | AnswerOwnThreadsPrompts => *role == SessionRole::Coordinator,
+                ManageOwnThreads => *role == SessionRole::Coordinator,
                 ManageAnyThreads | OwnerSettings | AnswerAnyPrompt | DecideApprovals => false,
             },
             // The design's "CLI in your own terminal" column: thread management stays, the rest
@@ -169,7 +173,15 @@ pub fn route_access(path: &str) -> RouteAccess {
         | super::APPROVER_KEYS_REMOVE_ENDPOINT => RouteAccess::Needs(Capability::DecideApprovals),
         // The asking caller polls its own request; the handler checks it is the requester.
         super::APPROVALS_READ_ENDPOINT => RouteAccess::Needs(Capability::RequestSensitiveAction),
-        super::APPROVER_KEYS_ENROLL_ENDPOINT => RouteAccess::Presence(A::AddApproverKey),
+        // The handler takes the first key on the owner's word and gates every later one
+        // behind `addApproverKey`.
+        super::APPROVER_KEYS_ENROLL_ENDPOINT => RouteAccess::Needs(Capability::DecideApprovals),
+        // The desktop starts with only the token file: it enrolls its owner key (first one,
+        // trust on first use) and opens its owner session from there.
+        super::OWNER_KEY_ENROLL_ENDPOINT
+        | super::OWNER_CHALLENGE_ENDPOINT
+        | super::OWNER_SESSION_ENDPOINT => RouteAccess::Needs(Capability::RequestSensitiveAction),
+        super::SECURITY_STATUS_ENDPOINT => RouteAccess::Needs(Capability::OwnSession),
         "/api/registerConnectedComputer" => RouteAccess::Presence(A::ComputerRegister),
         "/api/issueComputerGrant" => RouteAccess::Presence(A::ComputerGrant),
         _ => RouteAccess::Needs(Capability::ProjectSessions),

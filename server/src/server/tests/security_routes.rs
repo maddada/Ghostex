@@ -120,3 +120,99 @@ async fn an_agent_asks_the_owner_approves_with_a_signature_and_the_retry_is_gran
     assert!(require_owner_presence(&state, &agent, easy_connect(), &retry, "/x", "r").is_ok());
     assert!(require_owner_presence(&state, &agent, easy_connect(), &retry, "/x", "r").is_err());
 }
+
+#[tokio::test]
+async fn the_desktop_enrolls_its_keys_and_a_second_approver_needs_an_approval() {
+    use ghostex_gx_protocol::approval::owner_session_signing_payload;
+    let (_temp, state) = temp_state();
+    let main = state.auth_token.clone();
+    let owner_key = TestApprover::new("owner");
+    let mac = TestApprover::new("mac");
+    let phone = TestApprover::new("phone");
+
+    // First owner key: trusted from the token file; a different one afterwards is refused.
+    let (status, body) = post(
+        &state,
+        "/api/enrollOwnerKey",
+        &main,
+        json!({ "key": owner_key.key }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, _) = post(
+        &state,
+        "/api/enrollOwnerKey",
+        &main,
+        json!({ "key": phone.key }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // Owner session from a signed challenge.
+    let (_, challenge) = post(&state, "/api/ownerChallenge", &main, json!({})).await;
+    let challenge = challenge["result"]["challenge"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let signature = owner_key
+        .sign(&owner_session_signing_payload("S1", &challenge, &owner_key.key.key_id).unwrap());
+    let (status, opened) = post(
+        &state,
+        "/api/openOwnerSession",
+        &main,
+        json!({ "keyId": owner_key.key.key_id, "challenge": challenge, "signature": signature }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{opened}");
+    let owner = opened["result"]["token"].as_str().unwrap().to_string();
+
+    // The token file can't add an approver key; the owner session adds the first one directly.
+    let (status, _) = post(
+        &state,
+        "/api/enrollApproverKey",
+        &main,
+        json!({ "key": mac.key }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, body) = post(
+        &state,
+        "/api/enrollApproverKey",
+        &owner,
+        json!({ "key": mac.key }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    // A second approver key needs the first key's signed approval.
+    let (status, pending) = post(
+        &state,
+        "/api/enrollApproverKey",
+        &owner,
+        json!({ "key": phone.key }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(pending["error"], "approvalRequired", "{pending}");
+    assert_eq!(pending["approval"]["action"], "addApproverKey");
+    let request: crate::security::ApprovalRequest =
+        serde_json::from_value(pending["approval"].clone()).unwrap();
+    let signature = mac.sign(&approval_signing_payload("S1", &request).unwrap());
+    let (status, _) = post(
+        &state,
+        "/api/approveApprovalRequest",
+        &owner,
+        json!({ "id": request.id, "keyId": mac.key.key_id, "signature": signature }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = post(
+        &state,
+        "/api/enrollApproverKey",
+        &owner,
+        json!({ "key": phone.key, "approvalId": request.id }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(state.security.approver_keys.list().len(), 2);
+}
