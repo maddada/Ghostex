@@ -134,9 +134,14 @@ pub fn flush_due(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
         _ => return Vec::new(),
     }
     state.messages.persist_due_ms = None;
-    let Some(snapshot) = state.messages.snapshot.clone() else {
+    let Some(snapshot) = state.messages.snapshot.as_ref() else {
         return Vec::new();
     };
+    // Measured before it is copied: an oversized snapshot deletes the record (`encode`).
+    if !fits_record_bound(snapshot) {
+        return vec![Effect::WriteRetainedSnapshot { value: None }];
+    }
+    let snapshot = snapshot.clone();
     let record = StoredSnapshot {
         key: state.messages.retained_key.clone(),
         // `Date.now()` is an integer, and the record is read back by JavaScript.
@@ -159,9 +164,42 @@ pub fn is_fresh(record: &StoredSnapshot, now_ms: f64) -> bool {
 /// The TypeScript measures `JSON.stringify(snapshot).length * 2`, which is the UTF-16 byte size of
 /// the serialized value; an oversized snapshot is dropped rather than sliced, because slicing
 /// would leave an invalid pagination cursor behind.
+///
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// The check serialized the whole snapshot to measure it, once a second while rows arrived. A chat scrolled far up holds tens of megabytes of rows, far over the bound, so every flush wrote out the whole transcript only to throw it away, which was a fifth of the chat worker's time per new row on a 19,000-row chat (the user's "gets slower with time until it becomes super slow"). The writer below counts as it goes and stops at the bound, so an oversized snapshot costs what the bound costs, and the answer is the same.
 pub fn fits_record_bound(snapshot: &FoldedSnapshot) -> bool {
-    let Ok(text) = serde_json::to_string(snapshot) else {
-        return false;
+    let mut counter = Utf16Counter {
+        units: 0,
+        limit: PERSISTED_MAX_RECORD_BYTES / 2,
     };
-    text.encode_utf16().count() * 2 <= PERSISTED_MAX_RECORD_BYTES
+    serde_json::to_writer(&mut counter, snapshot).is_ok()
+}
+
+/// Counts the UTF-16 code units of the UTF-8 it is written, and fails once they pass `limit`.
+struct Utf16Counter {
+    units: usize,
+    limit: usize,
+}
+
+impl std::io::Write for Utf16Counter {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        // Each UTF-8 lead byte starts one character: a four-byte one (0xF0 and up) is two UTF-16
+        // units, and continuation bytes (0b10xx_xxxx) add nothing, however the writes are split.
+        self.units += bytes
+            .iter()
+            .map(|byte| match byte {
+                0x80..=0xBF => 0,
+                0xF0..=0xFF => 2,
+                _ => 1,
+            })
+            .sum::<usize>();
+        if self.units > self.limit {
+            return Err(std::io::Error::other("over the record bound"));
+        }
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
