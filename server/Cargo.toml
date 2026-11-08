@@ -80,6 +80,9 @@ vt100 = "0.18"
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
 jsonc-parser = { version = "0.34", features = ["cst", "serde"] }
+# CDXC:Automations 2026-11-08 WHY:
+# A daily, weekly or cron automation runs at its wall time in the schedule's own zone (`local` or an IANA name the desktop writes), so gxserver reads the system tz database through jiff to resolve the zone and its DST gaps and folds (automations/schedule_zone.rs). chrono alone knows only UTC and this computer's zone.
+jiff = "0.2.38"
 
 # CDXC:Release 2026-10-23 DECISION: The user chose to link macOS's own SQLite (/usr/lib/libsqlite3.dylib) instead of compiling SQLite into the app and gxserver, which takes about 1.2 MB off the DMG. Copies of every agent database Ghostex reads (OpenCode, Hermes' full-text index, Codex, zcode, Antigravity) and of Ghostex's own databases opened with the SQLite of macOS 13 (3.39) and 14 (3.43) on 2026-10-23, and Ghostex's own SQL needs nothing newer than 3.39; an agent schema that adopts a newer SQLite feature would stop that agent's history showing on those macOS versions. Every other platform keeps the bundled SQLite. Each crate that links rusqlite into the app or gxserver keeps `bundled` in a non-macOS section like this one: one plain `bundled` anywhere in the build turns the compiled copy back on for all of them.
 # SEE-ALSO: apps/desktop/Cargo.toml, packages/find/Cargo.toml, packages/project-docs/Cargo.toml, packages/client-storage-native/Cargo.toml.

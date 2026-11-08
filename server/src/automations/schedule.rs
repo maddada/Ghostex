@@ -1,12 +1,17 @@
 use std::collections::HashSet;
 
-use chrono::{Datelike, NaiveDate, TimeZone, Utc};
+use chrono::{Datelike, Timelike, Utc};
+use jiff::tz::TimeZone;
 
+#[cfg(test)]
+use chrono::TimeZone as _;
 #[cfg(test)]
 use serde_json::json;
 use serde_json::Value;
 
 use crate::domain::DomainStateError;
+
+use super::schedule_zone::{schedule_zone, wall_now, wall_time_instant};
 
 #[cfg(test)]
 use super::*;
@@ -16,114 +21,115 @@ pub(super) fn compute_next_run_at(
     after: Option<chrono::DateTime<Utc>>,
 ) -> Option<String> {
     let now = after.unwrap_or_else(Utc::now);
-    match schedule.get("kind").and_then(Value::as_str)? {
+    let next = match schedule.get("kind").and_then(Value::as_str)? {
         "once" => {
             let run_at = chrono::DateTime::parse_from_rfc3339(
                 schedule.get("runAt").and_then(Value::as_str)?,
             )
             .ok()?
             .with_timezone(&Utc);
-            (run_at > now).then(|| run_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+            (run_at > now).then_some(run_at)?
         }
         "interval" => {
             let every_ms = schedule.get("everyMs").and_then(Value::as_i64)?;
-            Some(
-                (now + chrono::Duration::milliseconds(every_ms))
-                    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            )
+            now + chrono::Duration::milliseconds(every_ms)
         }
         "daily" => {
             let (hour, minute) = parse_time(schedule.get("time").and_then(Value::as_str)?)?;
-            next_daily(now, hour, minute)
+            next_weekly(&schedule_zone(schedule), now, hour, minute, &ALL_DAYS)?
         }
         "weekly" => {
             let (hour, minute) = parse_time(schedule.get("time").and_then(Value::as_str)?)?;
             let days = schedule.get("days").and_then(Value::as_array)?;
-            next_weekly(
-                now,
-                hour,
-                minute,
-                days.iter().filter_map(Value::as_u64).collect(),
-            )
+            let days = days.iter().filter_map(Value::as_u64).collect::<Vec<_>>();
+            next_weekly(&schedule_zone(schedule), now, hour, minute, &days)?
         }
-        "cron" => next_basic_cron(now, schedule.get("expression").and_then(Value::as_str)?),
-        _ => None,
-    }
+        "cron" => next_basic_cron(
+            &schedule_zone(schedule),
+            now,
+            schedule.get("expression").and_then(Value::as_str)?,
+        )?,
+        _ => return None,
+    };
+    Some(next.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
 }
 
 pub(super) fn is_one_shot_schedule(schedule: &Value) -> bool {
     schedule.get("kind").and_then(Value::as_str) == Some("once")
 }
 
-fn next_daily(now: chrono::DateTime<Utc>, hour: u32, minute: u32) -> Option<String> {
-    let today = candidate_utc(now.date_naive(), hour, minute)?;
-    let next = if today > now {
-        today
-    } else {
-        candidate_utc(now.date_naive().succ_opt()?, hour, minute)?
-    };
-    Some(next.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
-}
+const ALL_DAYS: [u64; 7] = [0, 1, 2, 3, 4, 5, 6];
 
+/// The first `hour:minute` in `zone` after `now` on one of `days` (0 = Sunday), stored as UTC.
 fn next_weekly(
+    zone: &TimeZone,
     now: chrono::DateTime<Utc>,
     hour: u32,
     minute: u32,
-    days: Vec<u64>,
-) -> Option<String> {
-    let day_set = days.into_iter().collect::<HashSet<_>>();
+    days: &[u64],
+) -> Option<chrono::DateTime<Utc>> {
+    let day_set = days.iter().copied().collect::<HashSet<_>>();
+    let today = wall_now(zone, now)?.date_naive();
+    // Eight days: today's time may already have passed, and a DST jump can push a candidate later.
     for offset in 0..=7 {
-        let date = now
-            .date_naive()
-            .checked_add_signed(chrono::Duration::days(offset))?;
+        let date = today.checked_add_signed(chrono::Duration::days(offset))?;
         let weekday = date.weekday().num_days_from_sunday() as u64;
         if !day_set.contains(&weekday) {
             continue;
         }
-        let candidate = candidate_utc(date, hour, minute)?;
+        let candidate = wall_time_instant(zone, date, hour, minute)?;
         if candidate > now {
-            return Some(candidate.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+            return Some(candidate);
         }
     }
     None
 }
 
-fn next_basic_cron(now: chrono::DateTime<Utc>, expression: &str) -> Option<String> {
+fn next_basic_cron(
+    zone: &TimeZone,
+    now: chrono::DateTime<Utc>,
+    expression: &str,
+) -> Option<chrono::DateTime<Utc>> {
     let parts = expression.split_whitespace().collect::<Vec<_>>();
     if parts.len() != 5 {
         return None;
     }
     if let Some(step) = parts[0]
         .strip_prefix("*/")
-        .and_then(|value| value.parse::<i64>().ok())
+        .and_then(|value| value.parse::<u32>().ok())
     {
         if parts[1] == "*" && parts[2] == "*" && parts[3] == "*" && parts[4] == "*" && step > 0 {
-            let current_minute = now.timestamp() / 60;
-            let next_minute = ((current_minute / step) + 1) * step;
-            return Utc
-                .timestamp_opt(next_minute * 60, 0)
-                .single()
-                .map(|date| date.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+            return next_minute_step(zone, now, step);
         }
     }
     let minute = parts[0].parse::<u32>().ok()?;
     let hour = parts[1].parse::<u32>().ok()?;
-    if parts[2] != "*" || parts[3] != "*" {
+    if parts[2] != "*" || parts[3] != "*" || hour > 23 || minute > 59 {
         return None;
     }
     if parts[4] == "*" {
-        return next_daily(now, hour, minute);
+        return next_weekly(zone, now, hour, minute, &ALL_DAYS);
     }
     let days = parts[4]
         .split(',')
         .filter_map(|day| day.parse::<u64>().ok())
+        .map(|day| day % 7)
         .collect::<Vec<_>>();
-    next_weekly(now, hour, minute, days)
+    next_weekly(zone, now, hour, minute, &days)
 }
 
-fn candidate_utc(date: NaiveDate, hour: u32, minute: u32) -> Option<chrono::DateTime<Utc>> {
-    Utc.from_local_datetime(&date.and_hms_opt(hour, minute, 0)?)
-        .single()
+/// CDXC:Automations 2026-11-08 WHY:
+/// `*/N * * * *` matches the minutes of the hour on the zone's clock that divide by N, then minute 0 of the next hour, as cron and the desktop's own preview read it. Counting from the epoch in UTC put a step such as `*/45` on the wrong minutes in a zone like UTC+5:45 and let `*/7` drift across hours.
+fn next_minute_step(
+    zone: &TimeZone,
+    now: chrono::DateTime<Utc>,
+    step: u32,
+) -> Option<chrono::DateTime<Utc>> {
+    let wall = wall_now(zone, now)?;
+    let next_minute = ((wall.minute() / step) + 1) * step;
+    let minutes_ahead = next_minute.min(60) - wall.minute();
+    let this_minute = now.timestamp() - i64::from(wall.second());
+    chrono::DateTime::from_timestamp(this_minute + i64::from(minutes_ahead) * 60, 0)
 }
 
 fn parse_time(value: &str) -> Option<(u32, u32)> {

@@ -8,6 +8,7 @@ mod records;
 mod run_results;
 mod runtime;
 mod schedule;
+mod schedule_zone;
 mod targets;
 mod values;
 
