@@ -1140,7 +1140,9 @@ fn quick_access_loading(p: &QuickAccessPalette, label: &str) -> AnyElement {
             .flex_shrink_0()
             .with_animation(
                 "quick-access-loading-spinner",
-                Animation::new(std::time::Duration::from_millis(800)).repeat(),
+                Animation::new(std::time::Duration::from_millis(800))
+                    .repeat()
+                    .with_max_fps(crate::app::helpers::INDICATOR_MAX_FPS),
                 |svg, delta| {
                     svg.with_transformation(Transformation::rotate(radians(
                         delta * std::f32::consts::TAU,

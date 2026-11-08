@@ -243,7 +243,9 @@ pub(crate) fn modal_spinner(color: Rgba) -> AnyElement {
     modal_icon(ICON_LOADER, 15.0, color)
         .with_animation(
             "native-modal-spinner",
-            Animation::new(Duration::from_millis(900)).repeat(),
+            Animation::new(Duration::from_millis(900))
+                .repeat()
+                .with_max_fps(crate::app::helpers::INDICATOR_MAX_FPS),
             |svg, delta| {
                 svg.with_transformation(Transformation::rotate(radians(
                     delta * std::f32::consts::TAU,

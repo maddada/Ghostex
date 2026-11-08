@@ -351,7 +351,9 @@ pub(super) fn spinning_icon(
         .flex_shrink_0()
         .with_animation(
             SharedString::from(format!("{id}-spin")),
-            Animation::new(Duration::from_millis(1000)).repeat(),
+            Animation::new(Duration::from_millis(1000))
+                .repeat()
+                .with_max_fps(crate::app::helpers::INDICATOR_MAX_FPS),
             |icon, delta| {
                 icon.with_transformation(Transformation::rotate(radians(
                     delta * std::f32::consts::TAU,

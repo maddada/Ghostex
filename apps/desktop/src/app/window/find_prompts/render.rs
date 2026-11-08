@@ -783,7 +783,9 @@ impl GpuiFindPromptsModalWindow {
         element
             .with_animation(
                 id,
-                Animation::new(Duration::from_millis(1400)).repeat(),
+                Animation::new(Duration::from_millis(1400))
+                    .repeat()
+                    .with_max_fps(crate::app::helpers::INDICATOR_MAX_FPS),
                 |element, delta| {
                     let phase = if delta < 0.5 {
                         delta * 2.0

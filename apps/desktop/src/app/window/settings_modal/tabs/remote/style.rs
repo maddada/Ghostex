@@ -183,7 +183,9 @@ pub(super) fn spinner(
         .flex_shrink_0()
         .with_animation(
             id,
-            Animation::new(Duration::from_millis(period_ms)).repeat(),
+            Animation::new(Duration::from_millis(period_ms))
+                .repeat()
+                .with_max_fps(crate::app::helpers::INDICATOR_MAX_FPS),
             |svg, delta| {
                 svg.with_transformation(Transformation::rotate(radians(
                     delta * std::f32::consts::TAU,

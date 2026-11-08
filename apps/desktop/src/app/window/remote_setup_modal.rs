@@ -745,7 +745,9 @@ impl GpuiRemoteSetupModalWindow {
         modal_icon(ICON_LOADER, 16.0, color)
             .with_animation(
                 "remote-setup-spinner",
-                Animation::new(Duration::from_millis(900)).repeat(),
+                Animation::new(Duration::from_millis(900))
+                    .repeat()
+                    .with_max_fps(crate::app::helpers::INDICATOR_MAX_FPS),
                 |svg, delta| {
                     svg.with_transformation(Transformation::rotate(radians(
                         delta * std::f32::consts::TAU,

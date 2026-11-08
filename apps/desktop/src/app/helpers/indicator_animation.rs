@@ -18,6 +18,12 @@ use web_time::Instant;
 /// Each frame used to be armed 33ms after the render that asked for it, so the wait for the display's next frame and the render itself were added on top: measured in the GPUI web build, the account-switch card's bar got a new frame only every 50 to 85ms (about 17 per second) and jumped up to 29px at a time. Frames now land on a fixed grid, one interval after the previous frame was due, so the rate really is thirty. An indicator whose eye-tracked motion needs more (`ThrottledAnimation::frame_interval`) may ask for a shorter interval for itself, or for every display frame; keep that to short-lived indicators, for the whole-window cost above. A 16ms timer is not sixty frames: its wake-up usually misses the display frame it aimed at and draws on the one after, which measured about 27 frames a second.
 pub(crate) const INDICATOR_FRAME_INTERVAL: Duration = Duration::from_millis(33);
 
+/// CDXC:SessionChat 2026-11-09 WHY:
+/// The rate for a repeating GPUI `with_animation` (`Animation::with_max_fps`), such as a modal's
+/// loading spinner: uncapped, one asks for every display frame, 120 a second on ProMotion, and
+/// redraws its window each time. Thirty matches the indicators above.
+pub(crate) const INDICATOR_MAX_FPS: f32 = 30.0;
+
 /// A clock idle this many intervals starts over instead of catching up on the frames it missed.
 const FRAME_GRID_RESTART_INTERVALS: u32 = 4;
 

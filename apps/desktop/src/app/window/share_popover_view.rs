@@ -299,7 +299,9 @@ fn spinner(p: Palette, size: f32) -> AnyElement {
     icon(p, ICON_LOADER, size, 0.85)
         .with_animation(
             "share-popover-spinner",
-            Animation::new(std::time::Duration::from_millis(900)).repeat(),
+            Animation::new(std::time::Duration::from_millis(900))
+                .repeat()
+                .with_max_fps(crate::app::helpers::INDICATOR_MAX_FPS),
             |svg, delta| {
                 svg.with_transformation(Transformation::rotate(radians(
                     delta * std::f32::consts::TAU,

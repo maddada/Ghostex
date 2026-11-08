@@ -62,6 +62,9 @@ pub(crate) mod helpers {
 
     use super::consts::*;
 
+    /// The app's spinner rate (app/helpers/indicator_animation.rs).
+    pub(crate) const INDICATOR_MAX_FPS: f32 = 30.0;
+
     pub(crate) fn titlebar_active_text_color() -> Hsla {
         rgb(0xffffff).into()
     }

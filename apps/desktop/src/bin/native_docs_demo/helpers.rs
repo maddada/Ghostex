@@ -11,3 +11,6 @@ pub(crate) fn titlebar_tooltip(
 ) -> gpui::AnyView {
     gpui_component::tooltip::Tooltip::new(text).build(window, cx)
 }
+
+/// The app's spinner rate (app/helpers/indicator_animation.rs).
+pub(crate) const INDICATOR_MAX_FPS: f32 = 30.0;

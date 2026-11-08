@@ -109,7 +109,9 @@ pub(super) fn spinner(id: impl Into<SharedString>, color: gpui::Rgba) -> AnyElem
         .text_color(hsla(color))
         .with_animation(
             gpui::ElementId::Name(id.into()),
-            Animation::new(Duration::from_millis(900)).repeat(),
+            Animation::new(Duration::from_millis(900))
+                .repeat()
+                .with_max_fps(crate::app::helpers::INDICATOR_MAX_FPS),
             |icon, delta| icon.with_transformation(Transformation::rotate(percentage(delta))),
         )
         .into_any_element()
