@@ -124,6 +124,15 @@ fn window_glass_video() -> (Option<std::path::PathBuf>, bool) {
     (video, videos.only_on_power)
 }
 
+/// CDXC:Theming 2026-11-08 DECISION:
+/// User: "can we please on macos detect if the app is put into native macos fullscreen and the app is transparent mode then we show the bg of the desktop behind the app instead of showing black bg like we do now??". On macOS a workspace window in native fullscreen whose glass would show the live blur (Behind the glass set to Desktop and windows, or Picture or Live with nothing chosen for this appearance) shows the screen's desktop picture instead, held against the screen as macOS places it and blurred and tinted exactly as the glass is (Blur, Strength). Leaving fullscreen returns to the live blur. Wallpaper only, a chosen picture and Live already show their own backdrop and are unchanged.
+///
+/// CDXC:Theming 2026-11-08 WHY:
+/// A fullscreen window sits alone in its own Space, so the live behind-window blur has nothing behind it but black. The picture is the Wallpaper only backdrop the macOS backend already draws (gpui_macos window_wallpaper.rs): read through `desktopImageURLForScreen:` and its options, built-in wallpapers through their still, decoded and blurred once per picture, screen size and blur and cached, and re-read when the window changes screens or Spaces or Ghostex becomes active. A picture it cannot read (a solid colour wallpaper from the colour picker, a wallpaper provider it does not know) leaves the live blur, which is today's black, never a broken image. Nothing is read while the window is not fullscreen or the glass is off.
+fn window_glass_fullscreen_shows_desktop(window: &Window, blurred: bool) -> bool {
+    cfg!(target_os = "macos") && blurred && window.is_fullscreen()
+}
+
 /// Whether the glass shows a picture, animation or video rather than the live blur: Wallpaper
 /// only always does, Custom image and Live only once one is chosen for the current appearance.
 fn window_glass_uses_backdrop(
@@ -168,6 +177,8 @@ static APPLIED_WINDOW_GLASS: std::sync::Mutex<
 struct AppliedWindowGlass {
     /// 1 opaque, 2 live blur, 3 wallpaper blur.
     code: u8,
+    /// Native fullscreen showing the desktop picture in place of the live blur.
+    fullscreen_desktop: bool,
     blur: u8,
     behind_blur: gpui::BehindWindowBlur,
     image: Option<std::path::PathBuf>,
@@ -664,14 +675,23 @@ impl GhostexGpuiApp {
 /// changed.
 fn apply_workspace_window_glass(window: &Window) -> Option<(u8, u8)> {
     let wanted = window_glass_background_appearance();
-    window.set_background_wallpaper_follows_screen(
-        WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.load(Ordering::Relaxed),
-    );
     let image = window_glass_custom_image();
     let video = window_glass_video();
     let live = window_glass_live::window_glass_live();
     // Custom image or Live with nothing chosen for this appearance is the live blur.
-    let wallpaper = window_glass_uses_backdrop(&image, &video.0, &live);
+    let backdrop = window_glass_uses_backdrop(&image, &video.0, &live);
+    // In native fullscreen the live blur has only black behind it: show the desktop picture.
+    let fullscreen_desktop = !backdrop
+        && window_glass_fullscreen_shows_desktop(
+            window,
+            wanted == WindowBackgroundAppearance::Blurred,
+        );
+    let wallpaper = backdrop || fullscreen_desktop;
+    // The desktop picture stands where macOS draws it on the screen, which a fullscreen window
+    // below a camera housing does not fill.
+    window.set_background_wallpaper_follows_screen(
+        fullscreen_desktop || WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.load(Ordering::Relaxed),
+    );
     let code = match (wanted == WindowBackgroundAppearance::Blurred, wallpaper) {
         (false, _) => 1,
         (true, false) => 2,
@@ -679,6 +699,7 @@ fn apply_workspace_window_glass(window: &Window) -> Option<(u8, u8)> {
     };
     let wanted_glass = AppliedWindowGlass {
         code,
+        fullscreen_desktop,
         blur: WINDOW_GLASS_BLUR_RADIUS.load(Ordering::Relaxed),
         behind_blur: window_glass_behind_window_blur(),
         image: image.clone(),
@@ -697,9 +718,9 @@ fn apply_workspace_window_glass(window: &Window) -> Option<(u8, u8)> {
     let previous = previous_glass.map_or(0, |glass| glass.code);
     window.set_background_blur_style(window_glass_blur_radius(), false);
     window.set_background_behind_window_blur(wanted_glass.behind_blur);
-    window.set_background_live(live);
-    window.set_background_video(video.0, video.1);
-    window.set_background_wallpaper_image(image);
+    window.set_background_live(if fullscreen_desktop { None } else { live });
+    window.set_background_video(if fullscreen_desktop { None } else { video.0 }, video.1);
+    window.set_background_wallpaper_image(if fullscreen_desktop { None } else { image });
     window.set_background_wallpaper(wallpaper && wanted == WindowBackgroundAppearance::Blurred);
     window.set_background_appearance(wanted);
     Some((previous, code))
