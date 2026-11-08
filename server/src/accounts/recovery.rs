@@ -753,45 +753,26 @@ pub(crate) fn plan_session(
         .and_then(|o| o.selection.model.as_ref())
         .map(|m| m.value.clone())
         .unwrap_or_default();
-    // An account this session automatically left counts again only once a reading taken after it left says so: candidates no longer need a fresh reading (see `trusted_room`), and an older one would bounce the session straight back to the account whose limit it just hit.
-    let left = session
-        .pointer("/runtimeSettings/accountSwitch")
-        .filter(|progress| progress["source"] == "automatic")
-        .and_then(|progress| {
-            Some((
-                progress["fromAccountId"].as_str()?,
-                time(progress.get("updatedAt"))?,
-            ))
-        });
-    let read_since_left = |id: &str| {
-        left.is_none_or(|(from, at)| {
-            id != from
-                || snapshot
-                    .accounts
-                    .iter()
-                    .find(|d| endpoint::account_id(d) == id)
-                    .and_then(reading_time)
-                    .is_some_and(|t| t > at)
-        })
-    };
     // A session on its own login keeps waiting for its limit to reset instead of moving to an account (CDXC:AgentProviders 2026-10-09 in launch.rs).
-    let switch_account = if notice.kind == "usageLimit"
+    let target = if notice.kind == "usageLimit"
         && policy.at_limit == LimitAction::Switch
         && !launch::session_uses_own_login(provider, &session)
     {
-        ranked(
+        switch_target(
             &registry,
             snapshot,
             provider,
             current_id.as_deref(),
             &model,
             policy.priority,
+            &session,
         )
-        .into_iter()
-        .find(|account| read_since_left(&account.id))
-        .map(|account| account.id.clone())
     } else {
-        None
+        SwitchTarget::None
+    };
+    let switch_account = match &target {
+        SwitchTarget::Move(id) => Some(id.clone()),
+        _ => None,
     };
     if recovery.is_null() || recovery["status"].as_str() != Some("waiting") {
         let last_attempt_at = recovery["lastAttemptAt"].clone();
@@ -897,7 +878,16 @@ pub(crate) fn plan_session(
                     })
                     .max()
             });
-            let reason = if policy.at_limit == LimitAction::Switch {
+            let held_back = match &target {
+                SwitchTarget::HeldBack { name, left_at, .. } => Some(format!(
+                    "Waiting for a new usage reading of {name} before moving back to it: this session left it at {}.",
+                    left_at.with_timezone(&chrono::Local).format("%-I:%M %p")
+                )),
+                _ => None,
+            };
+            let reason = if let Some(held_back) = held_back.as_deref() {
+                held_back
+            } else if policy.at_limit == LimitAction::Switch {
                 super::limit_wait::NO_ROOM
             } else {
                 "Waiting for this account's usage to reset."
@@ -920,15 +910,20 @@ pub(crate) fn plan_session(
                             "usageError": found.and_then(|d| d.usage_error.as_deref()),
                             "usageUpdatedAt": found.and_then(|d| d.usage_updated_at.as_deref()),
                             "maxUsedPercent": found.map(|d| d.usage.iter().filter(|w| relevant(w, &model)).map(|w| w.used_percent).fold(0f64, f64::max)),
+                            "heldBackUntilNewReading": matches!(&target, SwitchTarget::HeldBack { id, .. } if *id == a.id),
                         })
                     })
                     .collect();
                 log(
                     state,
                     LogLevel::Warn,
-                    "accountRecoveryNoAccountWithRoom",
+                    if held_back.is_some() {
+                        "accountRecoveryWaitingForReading"
+                    } else {
+                        "accountRecoveryNoAccountWithRoom"
+                    },
                     None,
-                    json!({ "projectId": pid, "sessionId": sid, "model": model, "accounts": candidates }),
+                    json!({ "projectId": pid, "sessionId": sid, "model": model, "leftAt": left_account(&session).map(|(_, at)| at.to_rfc3339()), "accounts": candidates }),
                 );
             }
             recovery["reason"] = json!(reason);
@@ -943,7 +938,8 @@ pub(crate) fn plan_session(
                 .to_rfc3339());
             // An untracked default login has no trustworthy quota reading. Retry it conservatively rather than inventing an available percentage.
             if current_id.is_some() {
-                if policy.at_limit == LimitAction::Switch {
+                // Not the every-account-full card: an account has room, it only needs a newer reading.
+                if policy.at_limit == LimitAction::Switch && held_back.is_none() {
                     let wait = super::limit_wait::describe(
                         &registry,
                         snapshot,
@@ -1048,6 +1044,68 @@ fn trusted_room(account: &DiscoveredAccount, model: &str) -> bool {
 fn has_room(account: &DiscoveredAccount, model: &str, now: DateTime<Utc>) -> bool {
     trusted_room(account, model)
         && reading_time(account).is_some_and(|t| now - t < chrono::Duration::minutes(5))
+}
+/// Where an automatic switch at a usage limit takes the session.
+#[derive(Debug, PartialEq)]
+pub(super) enum SwitchTarget {
+    /// The best account with room.
+    Move(String),
+    /// The only accounts with room include the one this session automatically left, whose last reading predates leaving: it may still show the limit the session left it for.
+    HeldBack {
+        id: String,
+        name: String,
+        left_at: DateTime<Utc>,
+    },
+    /// No account has room.
+    None,
+}
+/// The account this session last left by an automatic switch, and when.
+///
+/// CDXC:AgentProviders 2026-11-08 WHY:
+/// The coordinator G9jt7 hit account 4's weekly limit at 08:27 (Dubai) and logged "no account with room" although account 5 was ready at 42%: it had moved from 5 to 4 automatically on 6 Nov, and this read the leave time from `accountSwitch.updatedAt`, which every later phase change re-stamps. A message sent from the composer marks the old switch `cancelled` (`user_action`), so the coordinator's reports at 08:25 and 08:27 moved "left at" past account 5's 08:24 reading, and account 5 was held back as if just left. The switch now stamps `leftAt` once; a record saved before that falls back to `updatedAt` only while no later `cancelled` has overwritten it.
+pub(super) fn left_account(session: &Value) -> Option<(&str, DateTime<Utc>)> {
+    let progress = session
+        .pointer("/runtimeSettings/accountSwitch")
+        .filter(|progress| progress["source"] == "automatic")?;
+    let at = time(progress.get("leftAt")).or_else(|| {
+        (progress["phase"] != "cancelled")
+            .then(|| time(progress.get("updatedAt")))
+            .flatten()
+    })?;
+    Some((progress["fromAccountId"].as_str()?, at))
+}
+/// The account a usage-limit switch moves `session` to. An account this session automatically left counts again only once a reading taken after it left says so: candidates no longer need a fresh reading (see `trusted_room`), and an older one would bounce the session straight back to the account whose limit it just hit.
+pub(super) fn switch_target(
+    registry: &Registry,
+    snapshot: &Snapshot,
+    provider: Provider,
+    current: Option<&str>,
+    model: &str,
+    priority: Priority,
+    session: &Value,
+) -> SwitchTarget {
+    let left = left_account(session);
+    let mut held_back = SwitchTarget::None;
+    for account in ranked(registry, snapshot, provider, current, model, priority) {
+        let Some((from, at)) = left.filter(|(from, _)| *from == account.id) else {
+            return SwitchTarget::Move(account.id.clone());
+        };
+        let read_since = snapshot
+            .accounts
+            .iter()
+            .find(|d| endpoint::account_id(d) == from)
+            .and_then(reading_time)
+            .is_some_and(|t| t > at);
+        if read_since {
+            return SwitchTarget::Move(account.id.clone());
+        }
+        held_back = SwitchTarget::HeldBack {
+            id: account.id.clone(),
+            name: account.name.clone(),
+            left_at: at,
+        };
+    }
+    held_back
 }
 pub(super) fn ranked<'a>(
     registry: &'a Registry,
@@ -1368,4 +1426,152 @@ pub(crate) fn user_action(
     runtime.insert("accountRecoverySuppressed".into(), json!(stop));
     endpoint::update_session(&repo, &row, runtime)?;
     endpoint::publish(state, &repo, &row)
+}
+
+#[cfg(test)]
+mod switch_target_tests {
+    use super::*;
+
+    fn discovered(selector: &str, email: &str, used: f64, read_at: &str) -> DiscoveredAccount {
+        DiscoveredAccount {
+            provider: Provider::Claude,
+            selector: selector.into(),
+            identity: format!("{email}:org"),
+            name: email.into(),
+            email: email.into(),
+            status: "ready".into(),
+            shared_history: true,
+            usage: vec![UsageWindow {
+                id: "seven_day".into(),
+                label: "7d".into(),
+                used_percent: used,
+                limit_window_seconds: None,
+                resets_at: Some("2026-11-09T08:00:00Z".into()),
+                model: None,
+            }],
+            reset_credits: None,
+            reset_credit_details: None,
+            reset_credits_error: None,
+            usage_updated_at: Some(read_at.into()),
+            usage_error: None,
+            usage_stale: false,
+        }
+    }
+    fn saved(found: &DiscoveredAccount) -> SavedAccount {
+        SavedAccount {
+            id: endpoint::account_id(found),
+            provider: Provider::Claude,
+            selector: found.selector.clone(),
+            identity: found.identity.clone(),
+            name: found.name.clone(),
+            color: "neutral".into(),
+            indicator: String::new(),
+            show_in_titlebar: true,
+            eligible: true,
+            shared_history: true,
+            disabled: None,
+            user_disabled: false,
+            login_expired_at: None,
+            login_confirmed_at: None,
+            synced: None,
+        }
+    }
+    /// 8 Nov 08:27 (Dubai): account 4 at its weekly limit, account 5 at 42%, both read at 04:24:26Z.
+    fn morning() -> (Registry, Snapshot, String, String) {
+        let four = discovered(
+            "4",
+            "maddada123spam@gmail.com",
+            100.,
+            "2026-11-08T04:24:26Z",
+        );
+        let five = discovered("5", "sharptabs.com@gmail.com", 42., "2026-11-08T04:24:26Z");
+        let registry = Registry {
+            accounts: vec![saved(&four), saved(&five)],
+            ..Registry::default()
+        };
+        let (four_id, five_id) = (endpoint::account_id(&four), endpoint::account_id(&five));
+        let snapshot = Snapshot {
+            accounts: vec![four, five],
+            ..Snapshot::default()
+        };
+        (registry, snapshot, four_id, five_id)
+    }
+    fn target(
+        registry: &Registry,
+        snapshot: &Snapshot,
+        current: &str,
+        session: &Value,
+    ) -> SwitchTarget {
+        switch_target(
+            registry,
+            snapshot,
+            Provider::Claude,
+            Some(current),
+            "opus[1m]",
+            Priority::SoonestReset,
+            session,
+        )
+    }
+
+    /// G9jt7 moved 5 -> 4 automatically on 6 Nov; its composer messages at 08:25 and 08:27 marked that old switch `cancelled`, re-stamping `updatedAt` after account 5's 08:24 reading.
+    #[test]
+    fn an_old_switch_restamped_by_a_later_message_does_not_hold_back_the_account_with_room() {
+        let (registry, snapshot, four, five) = morning();
+        let saved_before_left_at = json!({"runtimeSettings": {"accountSwitch": {
+            "source": "automatic", "phase": "cancelled",
+            "fromAccountId": five, "toAccountId": four,
+            "updatedAt": "2026-11-08T04:27:53Z",
+        }}});
+        assert_eq!(
+            target(&registry, &snapshot, &four, &saved_before_left_at),
+            SwitchTarget::Move(five.clone())
+        );
+        let with_left_at = json!({"runtimeSettings": {"accountSwitch": {
+            "source": "automatic", "phase": "cancelled",
+            "fromAccountId": five, "toAccountId": four,
+            "leftAt": "2026-11-06T01:18:40Z", "updatedAt": "2026-11-08T04:27:53Z",
+        }}});
+        assert_eq!(
+            target(&registry, &snapshot, &four, &with_left_at),
+            SwitchTarget::Move(five)
+        );
+    }
+
+    /// The bounce-back guard still holds right after a switch, and says which account it waits on.
+    #[test]
+    fn an_account_just_left_waits_for_a_reading_taken_after_leaving() {
+        let (registry, snapshot, four, five) = morning();
+        let just_left = json!({"runtimeSettings": {"accountSwitch": {
+            "source": "automatic", "phase": "success",
+            "fromAccountId": five, "toAccountId": four,
+            "leftAt": "2026-11-08T04:26:00Z", "updatedAt": "2026-11-08T04:26:05Z",
+        }}});
+        assert_eq!(
+            target(&registry, &snapshot, &four, &just_left),
+            SwitchTarget::HeldBack {
+                id: five.clone(),
+                name: "sharptabs.com@gmail.com".into(),
+                left_at: "2026-11-08T04:26:00Z".parse().unwrap(),
+            }
+        );
+        let manual = json!({"runtimeSettings": {"accountSwitch": {
+            "source": "manual", "phase": "success",
+            "fromAccountId": five, "toAccountId": four,
+            "leftAt": "2026-11-08T04:26:00Z",
+        }}});
+        assert_eq!(
+            target(&registry, &snapshot, &four, &manual),
+            SwitchTarget::Move(five)
+        );
+    }
+
+    #[test]
+    fn no_account_with_room_is_none() {
+        let (registry, mut snapshot, four, _) = morning();
+        snapshot.accounts[1].usage[0].used_percent = 100.;
+        assert_eq!(
+            target(&registry, &snapshot, &four, &json!({})),
+            SwitchTarget::None
+        );
+    }
 }

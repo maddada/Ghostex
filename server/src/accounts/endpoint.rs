@@ -898,6 +898,8 @@ pub(crate) fn select(
         "phase": "switching",
         "fromAccountId": super::session_identity::display_account_id(registry, provider, session, &state.paths.home_dir),
         "toAccountId": id,
+        // When the session left `fromAccountId`; `updatedAt` follows every later phase (recovery::left_account).
+        "leftAt": chrono::Utc::now().to_rfc3339(),
         "updatedAt": chrono::Utc::now().to_rfc3339(),
     }));
     // Only what the switch changed, onto the row as stored now (CDXC:Notifications 2026-10-31 in

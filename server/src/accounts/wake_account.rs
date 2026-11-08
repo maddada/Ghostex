@@ -51,6 +51,7 @@ pub(crate) fn rebind_exhausted(
             "accountReady": true,
             "fromAccountId": current,
             "toAccountId": account.id,
+            "leftAt": switched_at.to_rfc3339(),
             "updatedAt": switched_at.to_rfc3339(),
         }),
     );
