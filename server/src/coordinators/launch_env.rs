@@ -35,6 +35,15 @@ pub const COORDINATOR_SESSION_ENV: &str = "GHOSTEX_COORDINATOR_SESSION";
 /// counts for that one start only and is never stored.
 pub const COORDINATOR_THREAD_OF_PARAM: &str = "coordinatorThreadOf";
 
+/// The `createWorktreeSession` param naming the coordinator (its global ref) on another computer
+/// that started this worktree thread. Unlike `COORDINATOR_THREAD_OF_PARAM` it sets no coordinator
+/// markers (that computer keeps no record of the link, issue #463); it is kept on the session as
+/// `REMOTE_COORDINATOR_THREAD_KEY` so its folder-trust question is answered like a local
+/// thread's (`coordinator_thread_folder_trusted`).
+pub const REMOTE_COORDINATOR_THREAD_OF_PARAM: &str = "remoteCoordinatorThreadOf";
+/// The session's runtime setting holding `REMOTE_COORDINATOR_THREAD_OF_PARAM`.
+pub const REMOTE_COORDINATOR_THREAD_KEY: &str = "remoteCoordinatorThreadOf";
+
 /// The coordinator variables for the agent of session `project_id`/`session_id`, from the
 /// coordinator records as they are now. `resolve_global_ref` answers a coordinator session's global
 /// ref; `thread_of` is a just-created thread's coordinator ref (`COORDINATOR_THREAD_OF_PARAM`).

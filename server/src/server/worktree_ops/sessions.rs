@@ -242,6 +242,12 @@ pub(crate) fn normalize_worktree_session_create_request(
             "teleportCloudSession",
             crate::claude_cloud::TELEPORT_RUNTIME_KEY,
         ),
+        // A coordinator on another computer started this thread (CDXC:Coordinators 2026-11-08
+        // at `coordinator_thread_folder_trusted`).
+        (
+            crate::coordinators::REMOTE_COORDINATOR_THREAD_OF_PARAM,
+            crate::coordinators::REMOTE_COORDINATOR_THREAD_KEY,
+        ),
     ] {
         if let Some(value) = params
             .get(param)

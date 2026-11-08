@@ -79,6 +79,9 @@ pub(crate) const STATUSLINE_WATCH_POLL: Duration = Duration::from_millis(100);
 /// answering without the screen-derived fields. See
 /// `CDXC:AgentScreenDetection` and `CDXC:AgentScreenDetection`.
 pub(crate) const SEED_OPTION_DETECTION_DEADLINE: Duration = Duration::from_millis(500);
+/// How long a read waits for that probe when the session has not reported its conversation yet:
+/// its screen is all its chat can show (CDXC:SessionChat 2026-11-08 in session_chat_read.rs).
+pub(crate) const STARTING_SESSION_DETECTION_DEADLINE: Duration = Duration::from_millis(3_000);
 /// How long the steady-state model/effort/notice probe may take before the
 /// reconcile pass abandons it. The probe runs on the blocking pool but is
 /// awaited inline, so without a deadline a daemon that accepts the capture

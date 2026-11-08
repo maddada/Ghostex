@@ -429,6 +429,8 @@ fn stored_prompt_key(stored: &str) -> String {
 /// CDXC:Coordinators 2026-09-30 DECISION:
 /// User (question 1, answer 1B): a coordinator's threads trust the worktrees of a project the user already trusted, so a worktree thread starts without stopping at the agent's folder-trust question. The project counts as trusted because its coordinator runs in it (the user created it there and answered that folder's own question). Only an open thread qualifies, and only in the project's own folder or a worktree Ghostex made for it; any other folder still asks.
 /// SEE-ALSO: server/src/session_chat_trust_memory.rs (`session_folders_remembered` asks this), the "Trust and Remember" decision there.
+/// CDXC:Coordinators 2026-11-08 DECISION:
+/// GitHub #502: threads a Mac coordinator started on a connected headless Linux computer stopped at Claude Code's "Trust this folder?", and only someone at that computer could answer. User (question 1, answer 1A): a coordinator's thread on a connected computer, in a worktree Ghostex made there, gets its folder-trust question answered like a local thread's. That computer keeps no record of the link, so `start-thread --computer --worktree` names the coordinator on the create (`REMOTE_COORDINATOR_THREAD_OF_PARAM`) and the session keeps it; only the worktree Ghostex made for that session counts, never the project's own folder or any other.
 pub fn coordinator_thread_folder_trusted(
     repository: &crate::domain::DomainRepository<'_>,
     project_id: &str,
@@ -436,7 +438,7 @@ pub fn coordinator_thread_folder_trusted(
 ) -> bool {
     let Ok(Some(thread)) = super::records::read_thread(repository.db, project_id, session_id)
     else {
-        return false;
+        return remote_coordinator_worktree_thread(repository, project_id, session_id);
     };
     if thread.is_resolved() {
         return false;
@@ -472,4 +474,32 @@ pub fn coordinator_thread_folder_trusted(
         Some(cwd) => crate::worktree_sessions::read_worktree_session_marker(&session)
             .is_some_and(|marker| marker.path.trim() == cwd),
     }
+}
+
+/// A session a coordinator on another computer started in a worktree Ghostex made for it, running
+/// in that worktree (the 2026-11-08 decision on `coordinator_thread_folder_trusted`).
+fn remote_coordinator_worktree_thread(
+    repository: &crate::domain::DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+) -> bool {
+    let Ok(Some(session)) = repository.get_session(project_id, session_id) else {
+        return false;
+    };
+    let started_remotely = session
+        .pointer(&format!(
+            "/runtimeSettings/{}",
+            super::REMOTE_COORDINATOR_THREAD_KEY
+        ))
+        .and_then(Value::as_str)
+        .is_some_and(|reference| !reference.trim().is_empty());
+    let cwd = session
+        .get("cwd")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+    started_remotely
+        && !cwd.is_empty()
+        && crate::worktree_sessions::read_worktree_session_marker(&session)
+            .is_some_and(|marker| marker.path.trim() == cwd)
 }

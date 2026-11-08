@@ -708,9 +708,22 @@ pub(crate) async fn handle_read_session_chat_http(
         // CDXC:AgentProviders 2026-10-07 WHY: a missed deadline answers with the last settled
         // reading, however old, instead of none. Leaving it out drew the loading skeleton over a
         // chat whose model gxserver knew seconds earlier (a reopened Cursor chat sat 3.6s on it).
+        // CDXC:SessionChat 2026-11-08 WHY: GitHub #502: of two new Claude threads on a headless
+        // Linux computer, both at "Trust this folder?", one could not be opened in chat mode. A
+        // session that has not reported its conversation gets into chat only when this read
+        // carries its screen's notice (the desktop's `probe_agents_chat_notice_admission`), and
+        // nothing had read that unfollowed screen before, so a capture slower than half a second
+        // answered with no notice and the click was refused. Such a session has no transcript to
+        // show yet, so its read waits for the screen longer; a session with a conversation keeps
+        // the short wait.
         let detector = SessionChatOptionDetector::new(state);
+        let detection_deadline = if agent_session_id.is_none() {
+            crate::session_chat::STARTING_SESSION_DETECTION_DEADLINE
+        } else {
+            crate::session_chat::SEED_OPTION_DETECTION_DEADLINE
+        };
         let detection = match tokio::time::timeout(
-            crate::session_chat::SEED_OPTION_DETECTION_DEADLINE,
+            detection_deadline,
             detector.detect(&project_id, &session_id, terminal_agent.as_deref(), false),
         )
         .await

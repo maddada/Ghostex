@@ -226,6 +226,12 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         if remote_server_id.is_none() && !coordinator_ref.is_empty() {
             create[crate::coordinators::COORDINATOR_THREAD_OF_PARAM] = json!(coordinator_ref);
         }
+        // There it is kept on the session instead, so the worktree it gets is trusted like a local
+        // thread's (CDXC:Coordinators 2026-11-08 at `coordinator_thread_folder_trusted`).
+        if remote_server_id.is_some() && !coordinator_ref.is_empty() {
+            create[crate::coordinators::REMOTE_COORDINATOR_THREAD_OF_PARAM] =
+                json!(coordinator_ref);
+        }
         let created = call_gxserver_rpc("/api/createWorktreeSession", &create, &flags)?;
         (
             agents::text(&created, "sessionId").to_string(),
