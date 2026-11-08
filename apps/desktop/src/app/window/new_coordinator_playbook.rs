@@ -235,6 +235,11 @@ pub(crate) fn playbook_view_body(
                     ..Default::default()
                 });
             style.is_dark = !c.light;
+            style.highlight_theme = if c.light {
+                gpui_component::highlighter::HighlightTheme::default_light()
+            } else {
+                gpui_component::highlighter::HighlightTheme::default_dark()
+            };
             gpui_component::text::TextView::markdown(
                 SharedString::from(format!("{id}-ghostex-part")),
                 text.clone(),
@@ -350,6 +355,12 @@ impl GpuiNewCoordinatorModalWindow {
         cx.notify();
     }
 
+    /// The preview binary's `…-view-end` state: the page scrolled to its end, where the overrides
+    /// are.
+    pub(crate) fn scroll_playbook_view_to_end(&self) {
+        self.playbook_view_scroll.scroll_to_bottom();
+    }
+
     pub(super) fn close_playbook_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.viewing = false;
         self.name_input
@@ -377,6 +388,7 @@ impl GpuiNewCoordinatorModalWindow {
             modal_header(&p, PLAYBOOK_VIEW_TITLE, Some(PLAYBOOK_VIEW_DESCRIPTION)),
             div()
                 .id("new-coordinator-playbook-view-scroll")
+                .track_scroll(&self.playbook_view_scroll)
                 .w_full()
                 .flex_1()
                 .min_h_0()

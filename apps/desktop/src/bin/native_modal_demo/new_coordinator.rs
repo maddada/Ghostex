@@ -4,6 +4,7 @@
 //! `overrides` (the user wrote playbook overrides), `overrides-edit` (their editor open),
 //! `old-playbook` (an edited full playbook saved before overrides is still in use, editor open),
 //! `view` (the read-only playbook page, no overrides), `overrides-view` (the page with overrides),
+//! `overrides-view-end` (that page scrolled to the overrides),
 //! `effort-menu` (the Effort menu open), `all-efforts` (Show all effort levels on, the Effort menu
 //! open on every level of the model).
 use super::new_coordinator_modal::*;
@@ -142,7 +143,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     };
     let open_effort_menu = matches!(demo.state.as_str(), "effort-menu" | "all-efforts");
     let open_editor = matches!(demo.state.as_str(), "overrides-edit" | "old-playbook");
-    let open_view = demo.state.ends_with("view");
+    let open_view = demo.state.ends_with("view") || demo.state.ends_with("view-end");
+    let view_end = demo.state.ends_with("view-end");
     let _ = super::open_modal_window(
         NEW_COORDINATOR_MODAL_WIDTH,
         NEW_COORDINATOR_MODAL_INITIAL_HEIGHT,
@@ -158,6 +160,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 modal.set_playbook_guide(Ok(demo_guide()), cx);
                 if open_view {
                     modal.open_playbook_view(window, cx);
+                }
+                if view_end {
+                    // Applied when the page first lays out its content.
+                    modal.scroll_playbook_view_to_end();
                 }
                 modal
             })

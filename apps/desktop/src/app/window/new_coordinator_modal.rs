@@ -124,6 +124,8 @@ pub(crate) struct GpuiNewCoordinatorModalWindow {
     playbook_guide: Option<Result<String, String>>,
     /// The read-only playbook page is open.
     viewing: bool,
+    /// The read-only playbook page's scroll position.
+    playbook_view_scroll: gpui::ScrollHandle,
     fit: ModalFit,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
@@ -204,6 +206,7 @@ impl GpuiNewCoordinatorModalWindow {
             editor: None,
             playbook_guide: None,
             viewing: false,
+            playbook_view_scroll: gpui::ScrollHandle::new(),
             fit: ModalFit::fixed(),
             focus_handle: cx.focus_handle(),
             _subscriptions: subscriptions,
