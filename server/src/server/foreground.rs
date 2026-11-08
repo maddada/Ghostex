@@ -100,6 +100,10 @@ pub async fn run_gxserver_foreground(
         }
     }
 
+    // Before the storage opens and anything changes the pairing data (security_upgrade.rs).
+    if let Err(error) = crate::security_upgrade::snapshot_before_pairing_changes(&paths) {
+        eprintln!("gxserver: the security upgrade notice could not be prepared: {error:#}");
+    }
     let storage = initialize_gxserver_storage(&paths)?;
     crate::storage::hold_gxserver_database_open(&paths)?;
     let config = read_gxserver_config(&paths)?;

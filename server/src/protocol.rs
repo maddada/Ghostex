@@ -1103,7 +1103,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         "/api/publishVisualPage" => full_local(path),
         // CDXC:Security 2026-11-08 WHY: the security log is read by this computer's own Settings and CLI (and a phone through its tunnel, which lands on this listener); it names devices and computers, so it never answers on the remote listener.
-        crate::audit::SECURITY_LOG_ENDPOINT => full_local(path),
+        crate::audit::SECURITY_LOG_ENDPOINT
+        | crate::security_upgrade::SECURITY_UPGRADE_NOTICE_ENDPOINT => full_local(path),
         /*
         CDXC:ServerApi 2026-10-11 WHY:
         A page card's picture is read by the chat on this computer (or the phone through its forward to this listener) and stored only by this computer's desktop app, from a page of this gxserver it showed (visual_pages/thumbnail.rs).

@@ -104,6 +104,7 @@ mod renderer_commands;
 mod rpc;
 mod rpc_types;
 mod runtime_facts;
+mod security_notice;
 mod session_deep_link;
 mod session_links;
 mod session_walk;

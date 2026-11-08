@@ -184,6 +184,9 @@ pub(crate) enum GpuiAppToastAction {
     /// Undo on a settings sync note: this computer's value of a synced setting comes back on every
     /// computer (`id` is the note's, server/src/settings_sync/).
     UndoSyncedChange { id: String },
+    /// Settings > Remote, where phones and computers are paired again (the 11.0.1 security
+    /// notice, gx_store/security_notice.rs).
+    OpenRemoteSettings,
 }
 
 impl GpuiAppToastAction {
@@ -193,6 +196,7 @@ impl GpuiAppToastAction {
             Self::OpenViewSettings => "Open Settings",
             Self::OpenUpdateDownloadPage => "Open download page",
             Self::UndoSyncedChange { .. } => "Undo",
+            Self::OpenRemoteSettings => "Open Remote settings",
             Self::NativeProjectPathAction { label, .. } | Self::RunInNewTerminal { label, .. } => {
                 label
             }

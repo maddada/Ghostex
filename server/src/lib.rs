@@ -88,6 +88,7 @@ pub mod runtime;
 pub(crate) mod secret_providers;
 pub(crate) mod secret_requests;
 pub mod security;
+pub(crate) mod security_upgrade;
 pub mod server;
 pub mod session_approval;
 pub mod session_auto_sleep;

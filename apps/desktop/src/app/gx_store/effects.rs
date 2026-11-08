@@ -154,6 +154,7 @@ impl GhostexGpuiApp {
                 if machine.is_local() {
                     self.navigation_history_refresh(cx);
                     self.gx_store_refresh_cloud_boxes(cx);
+                    self.gx_store_check_security_upgrade_notice(cx);
                 }
                 self.gx_store_perform_hud_effect(Effect::MachineLive { machine }, cx);
             }

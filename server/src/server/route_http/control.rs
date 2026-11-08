@@ -40,6 +40,25 @@ pub(super) async fn route_control_http(
         "/api/startFeedbackAgent" => {
             handle_start_feedback_agent_http(&state, endpoint.path, request_id, &body_json).await
         }
+        crate::security_upgrade::SECURITY_UPGRADE_NOTICE_ENDPOINT => {
+            let params = crate::domain::read_domain_rpc_params(&body_json).unwrap_or_default();
+            match crate::security_upgrade::handle_endpoint(&state.paths, &params) {
+                Ok(result) => routed_json(
+                    Some(endpoint.path),
+                    StatusCode::OK,
+                    rpc_success(request_id, result),
+                ),
+                Err(error) => routed_json(
+                    Some(endpoint.path),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    crate::protocol::rpc_error(
+                        "internalError",
+                        format!("{error:#}"),
+                        Some(request_id),
+                    ),
+                ),
+            }
+        }
         crate::audit::SECURITY_LOG_ENDPOINT => {
             crate::audit::handle_security_log_http(endpoint.path, request_id, &body_json).await
         }

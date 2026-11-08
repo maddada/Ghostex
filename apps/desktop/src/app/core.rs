@@ -886,6 +886,8 @@ pub struct GhostexGpuiApp {
     pub(crate) app_toasts: Vec<GpuiAppToast>,
     pub(crate) app_toast_epoch: u64,
     pub(crate) app_toast_id_counter: u64,
+    /// The 11.0.1 security notice was asked for this run (gx_store/security_notice.rs).
+    pub(crate) security_upgrade_notice_checked: bool,
     pub(crate) agents_terminal_runtime_osc_states:
         HashMap<AgentsTerminalRuntimeSessionId, GpuiTerminalRuntimeOscState>,
     pub(crate) command_terminal_runtime_osc_states:

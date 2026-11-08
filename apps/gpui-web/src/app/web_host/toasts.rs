@@ -153,6 +153,12 @@ impl GhostexGpuiApp {
             // Raised only by the app's settings sync notes (gx_store/settings_sync.rs), which a page
             // does not get.
             GpuiAppToastAction::UndoSyncedChange { .. } => {}
+            GpuiAppToastAction::OpenRemoteSettings => self.dispatch_gpui_workspace_action_toast(
+                "info",
+                "Not in the browser",
+                "Phones and computers are paired in the Ghostex app's Settings > Remote.",
+                cx,
+            ),
         }
     }
 
