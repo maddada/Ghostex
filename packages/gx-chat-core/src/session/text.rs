@@ -6,21 +6,30 @@
 //! no regex dependency on purpose, so each pattern is spelled out below with the JavaScript it
 //! reproduces quoted beside it. Behaviour, not shape, is what must match.
 
-/// `/^\[Image #\d+\]\s*/`: the marker the agent records in front of an attached image prompt.
+/// `/^(?:\[Image #\d+\]\s*)+/`: the markers the agent records in front of an attached image prompt,
+/// one per picture.
 ///
 /// Stripped so an optimistic echo matches its transcript twin.
+///
+/// CDXC:SessionChat 2026-11-08 WHY: Codex records a message with two pictures as `[Image #1]
+/// [Image #2] text` (#509). Stripping only the first marker left `[Image #2] text`, which matched
+/// no echo, so the queued message's card stayed under the finished turn.
+/// SEE-ALSO: transcript/image_markers.rs strips the same markers from the row the chat draws.
 pub fn strip_image_prompt_marker(text: &str) -> &str {
-    let Some(rest) = text.strip_prefix("[Image #") else {
-        return text;
-    };
-    let digits = rest.chars().take_while(char::is_ascii_digit).count();
-    if digits == 0 {
-        return text;
+    let mut rest = text;
+    loop {
+        let Some(after) = rest.strip_prefix("[Image #") else {
+            return rest;
+        };
+        let digits = after.chars().take_while(char::is_ascii_digit).count();
+        if digits == 0 {
+            return rest;
+        }
+        let Some(after) = after[digits..].strip_prefix(']') else {
+            return rest;
+        };
+        rest = after.trim_start_matches(is_js_space);
     }
-    let Some(rest) = rest[digits..].strip_prefix(']') else {
-        return text;
-    };
-    rest.trim_start_matches(is_js_space)
 }
 
 /// `/[\u0000-\u0008\u000b\u000c\u000e-\u001a\u001c-\u001f\u007f]/g`.

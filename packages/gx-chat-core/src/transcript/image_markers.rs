@@ -32,8 +32,18 @@ fn leading_space(value: &str) -> usize {
         .sum()
 }
 
-/// `^\[Image #\d+\](?:\s+|$)`.
+/// `^(?:\[Image #\d+\](?:\s+|$|(?=\[Image #)))+`: every marker in front of the prompt, one per
+/// picture (Codex writes `[Image #1] [Image #2] text` for two, #509).
 fn image_prompt_marker_len(text: &str) -> Option<usize> {
+    let mut length = 0;
+    while let Some(marker) = single_image_prompt_marker_len(&text[length..]) {
+        length += marker;
+    }
+    (length > 0).then_some(length)
+}
+
+/// `^\[Image #\d+\](?:\s+|$|(?=\[Image #))`.
+fn single_image_prompt_marker_len(text: &str) -> Option<usize> {
     let rest = text.strip_prefix("[Image #")?;
     let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
     if digits == 0 || !rest[digits..].starts_with(']') {
@@ -41,7 +51,7 @@ fn image_prompt_marker_len(text: &str) -> Option<usize> {
     }
     let after = "[Image #".len() + digits + 1;
     let space = leading_space(&text[after..]);
-    if space == 0 && after != text.len() {
+    if space == 0 && after != text.len() && !text[after..].starts_with("[Image #") {
         return None;
     }
     Some(after + space)
