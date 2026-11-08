@@ -84,6 +84,145 @@ pub fn settled_by_index<'a>(index: &'a [Value], kind: &str) -> HashMap<&'a str, 
         .collect()
 }
 
+/// The session's resource index (`SessionState::resource_index`): gxserver's records as they came,
+/// with what the chat reads from them worked out once per index rather than once per use.
+///
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// User: "ghostex app gets slower with time until it becomes super slow ... even pasting an image takes long". Every chat event assembles the document again, and the Resources pill, the forms and their sync asked the index about each form one at a time: each question rebuilt a map of the whole index (`settled_by_index`) or scanned it, and the records were re-read from JSON after comparing the whole index with the last one read. A coordinator chat with ~500 forms and an 800-record index spent most of the chat worker's time there (the worker sat at 100% in the user's app, and a pasted image waited behind it). The lookups are now built when the index changes and shared by every reader until it changes again; writing to the index through `DerefMut` drops them.
+#[derive(Clone, Debug, Default)]
+pub struct ResourceIndex {
+    entries: Vec<Value>,
+    view: std::sync::OnceLock<std::sync::Arc<IndexView>>,
+}
+
+/// What the chat reads from a resource index, built once per index.
+#[derive(Debug, Default)]
+pub struct IndexView {
+    /// `settled_by_index(index, "form")`, owned.
+    forms: HashMap<String, &'static str>,
+    /// `settled_by_index(index, "page")`, owned.
+    pages: HashMap<String, &'static str>,
+    /// The forms `answered_in_transcript` holds.
+    forms_in_transcript: HashSet<String>,
+    /// The records, read from JSON (an entry that does not read is left out).
+    records: std::sync::Arc<Vec<ResourceEntry>>,
+}
+
+impl IndexView {
+    fn new(index: &[Value]) -> Self {
+        let settled = |kind: &str| -> HashMap<String, &'static str> {
+            settled_by_index(index, kind)
+                .into_iter()
+                .map(|(id, status)| {
+                    let status = if status == "answered" {
+                        "answered"
+                    } else {
+                        "withdrawn"
+                    };
+                    (id.to_string(), status)
+                })
+                .collect()
+        };
+        let forms_in_transcript = index
+            .iter()
+            .filter(|entry| {
+                entry.get("kind").and_then(Value::as_str) == Some("form")
+                    && entry.get("status").and_then(Value::as_str) == Some("answered")
+                    && entry.get("answersOffset").is_some_and(Value::is_u64)
+            })
+            .filter_map(|entry| entry.get("id").and_then(Value::as_str))
+            .map(str::to_string)
+            .collect();
+        Self {
+            forms: settled("form"),
+            pages: settled("page"),
+            forms_in_transcript,
+            records: std::sync::Arc::new(
+                index
+                    .iter()
+                    .filter_map(|value| serde_json::from_value(value.clone()).ok())
+                    .collect(),
+            ),
+        }
+    }
+
+    /// The forms the index records answered or withdrawn, by id (`settled_by_index`).
+    pub fn settled_forms(&self) -> &HashMap<String, &'static str> {
+        &self.forms
+    }
+
+    /// The question pages the index records answered or withdrawn, by id (`settled_by_index`).
+    pub fn settled_pages(&self) -> &HashMap<String, &'static str> {
+        &self.pages
+    }
+
+    /// Whether the index records the form answered (`settled_by_index` says `answered`).
+    pub fn form_answered(&self, id: &str) -> bool {
+        self.forms.get(id) == Some(&"answered")
+    }
+
+    /// [`answered_in_transcript`] for this index.
+    pub fn answered_in_transcript(&self, id: &str) -> bool {
+        self.forms_in_transcript.contains(id)
+    }
+
+    /// The index's records.
+    pub fn records(&self) -> &std::sync::Arc<Vec<ResourceEntry>> {
+        &self.records
+    }
+}
+
+impl ResourceIndex {
+    /// The lookups for the index as it stands, built on first use after a change.
+    pub fn view(&self) -> &IndexView {
+        self.view
+            .get_or_init(|| std::sync::Arc::new(IndexView::new(&self.entries)))
+    }
+}
+
+impl From<Vec<Value>> for ResourceIndex {
+    fn from(entries: Vec<Value>) -> Self {
+        Self {
+            entries,
+            view: std::sync::OnceLock::new(),
+        }
+    }
+}
+
+impl FromIterator<Value> for ResourceIndex {
+    fn from_iter<I: IntoIterator<Item = Value>>(entries: I) -> Self {
+        Vec::from_iter(entries).into()
+    }
+}
+
+impl std::ops::Deref for ResourceIndex {
+    type Target = Vec<Value>;
+
+    fn deref(&self) -> &Vec<Value> {
+        &self.entries
+    }
+}
+
+impl std::ops::DerefMut for ResourceIndex {
+    /// A write can change any record, so what was read from them goes.
+    fn deref_mut(&mut self) -> &mut Vec<Value> {
+        self.view = std::sync::OnceLock::new();
+        &mut self.entries
+    }
+}
+
+impl PartialEq for ResourceIndex {
+    fn eq(&self, other: &Self) -> bool {
+        self.entries == other.entries
+    }
+}
+
+impl PartialEq<Vec<Value>> for ResourceIndex {
+    fn eq(&self, other: &Vec<Value>) -> bool {
+        &self.entries == other
+    }
+}
+
 /// Marks the loaded askers the index records as settled (`settled_by_index`): answered, or
 /// withdrawn when the loaded rows do not say answered. The loaded rows can hold a question without
 /// its answer (a jump read's window, a reload), and a Q-tag link, the ? pill and the Resources row

@@ -32,7 +32,7 @@ pub fn answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a Value> {
 /// Asks once for the answers of each loaded form the index records answered in the transcript when
 /// neither the loaded rows, the Resources modal nor this client's own send carries them.
 pub fn sync(state: &mut ChatState) -> Vec<Effect> {
-    let index = &state.session.resource_index;
+    let index = state.session.resource_index.view();
     let missing: Vec<String> = state
         .transcript_view
         .question_forms
@@ -40,7 +40,7 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
         .filter(|form| form.error.is_empty())
         .map(|form| form.id.clone())
         .filter(|id| !state.questions.recorded_answers.asked.contains(id))
-        .filter(|id| crate::questions::resource_index::answered_in_transcript(index, id))
+        .filter(|id| index.answered_in_transcript(id))
         .filter(|id| {
             !state
                 .transcript_view
@@ -128,7 +128,8 @@ mod tests {
         let id = state.transcript_view.question_forms[0].id.clone();
         state.session.resource_index = vec![json!({
             "id": id, "kind": "form", "status": "answered", "offset": 100, "answersOffset": 200
-        })];
+        })]
+        .into();
         (state, id)
     }
 

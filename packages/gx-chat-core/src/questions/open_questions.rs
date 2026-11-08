@@ -288,14 +288,11 @@ pub fn waiting(state: &ChatState) -> Vec<&Asker> {
 fn settled_by_index(
     state: &ChatState,
 ) -> (
-    std::collections::HashMap<&str, &str>,
-    std::collections::HashMap<&str, &str>,
+    &std::collections::HashMap<String, &'static str>,
+    &std::collections::HashMap<String, &'static str>,
 ) {
-    let index = &state.session.resource_index;
-    (
-        crate::questions::resource_index::settled_by_index(index, "form"),
-        crate::questions::resource_index::settled_by_index(index, "page"),
-    )
+    let view = state.session.resource_index.view();
+    (view.settled_forms(), view.settled_pages())
 }
 
 /// The forms and pages put off For later that still wait: their cards say For later
@@ -348,41 +345,12 @@ pub(crate) fn indexed(state: &ChatState) -> Vec<ResourceEntry> {
     indexed_entries(state).as_ref().clone()
 }
 
-thread_local! {
-    /// The last resource indexes read as records, newest first, each with the JSON it was read from.
-    static INDEXED: std::cell::RefCell<Vec<(Vec<serde_json::Value>, std::rc::Rc<Vec<ResourceEntry>>)>> =
-        const { std::cell::RefCell::new(Vec::new()) };
-}
-
-/// How many chats' indexes `INDEXED` keeps: the worker drives every open chat on one thread.
-const INDEXED_KEPT: usize = 4;
-
 /// The session's resource index as records, read once per index rather than once per use.
 ///
 /// CDXC:SessionChat 2026-11-04 WHY:
-/// The ? pill and the Resources list are projected again on every chat event (each streamed token), and each projection read the whole index from JSON two or three times: on a coordinator chat with hundreds of pages and questions that was most of the chat worker's CPU while a visible chat streamed (issues-1027/macos-perf). The records are kept with the JSON they came from and reused while the index is equal to it, so what the list shows is exactly what reading it again would give.
-fn indexed_entries(state: &ChatState) -> std::rc::Rc<Vec<ResourceEntry>> {
-    let index = &state.session.resource_index;
-    if index.is_empty() {
-        return std::rc::Rc::default();
-    }
-    INDEXED.with_borrow_mut(|kept| {
-        if let Some(at) = kept.iter().position(|(source, _)| source == index) {
-            let hit = kept.remove(at);
-            let entries = std::rc::Rc::clone(&hit.1);
-            kept.insert(0, hit);
-            return entries;
-        }
-        let entries = std::rc::Rc::new(
-            index
-                .iter()
-                .filter_map(|value| serde_json::from_value(value.clone()).ok())
-                .collect::<Vec<ResourceEntry>>(),
-        );
-        kept.insert(0, (index.clone(), std::rc::Rc::clone(&entries)));
-        kept.truncate(INDEXED_KEPT);
-        entries
-    })
+/// The ? pill and the Resources list are projected again on every chat event (each streamed token), and each projection read the whole index from JSON two or three times: on a coordinator chat with hundreds of pages and questions that was most of the chat worker's CPU while a visible chat streamed (issues-1027/macos-perf). The records are read when the index changes (`ResourceIndex`) and shared until it changes again, so what the list shows is exactly what reading it again would give.
+fn indexed_entries(state: &ChatState) -> std::sync::Arc<Vec<ResourceEntry>> {
+    std::sync::Arc::clone(state.session.resource_index.view().records())
 }
 
 /// The index records the loaded rows do not hold: older than what the chat has loaded, or from a
@@ -1162,7 +1130,8 @@ mod tests {
             indexed("form", "form", "answered", 1_000),
             indexed("page", "page", "answered", 2_000),
             indexed("asked-again", "form", "withdrawn", 3_000),
-        ];
+        ]
+        .into();
         // No form send state survives a reload, and no answer or withdrawal is in this window.
         assert!(state.questions.forms.is_empty());
         let pill = project(&state, &ChatContext::default());
@@ -1182,7 +1151,7 @@ mod tests {
             .transcript_view
             .askers
             .push(asker("old", AskerKind::Form, Some(1_000)));
-        state.session.resource_index = vec![indexed("old", "form", "waiting", 1_000)];
+        state.session.resource_index = vec![indexed("old", "form", "waiting", 1_000)].into();
         assert_eq!(project(&state, &ChatContext::default()).count, 1);
         let effects = previous(&mut state, &ChatContext::default());
         assert!(!effects.is_empty(), "the click loads the older window");
@@ -1705,7 +1674,8 @@ mod tests {
             indexed("old-page", "page", "other", 3_000),
             // The loaded row for this id says answered; the index record is stale.
             indexed("loaded", "form", "waiting", 9_000),
-        ];
+        ]
+        .into();
         let pill = project(&state, &ChatContext::default());
         assert_eq!(
             pill.total, 4,
@@ -1772,7 +1742,7 @@ mod tests {
         let mut page = indexed("tp", "page", "other", 7_000);
         page["thread"] =
             serde_json::json!({"title": "Fix the sidebar", "projectId": "p", "sessionId": "s"});
-        state.session.resource_index = vec![page];
+        state.session.resource_index = vec![page].into();
         let pill = project(&state, &ChatContext::default());
         assert_eq!(pill.total, 2);
         let ids: Vec<&str> = pill.sections.iter().map(|s| s.id.as_str()).collect();
@@ -1795,7 +1765,8 @@ mod tests {
             thread_page,
             indexed("old-form", "form", "waiting", 3),
             no_place("placeless", "waiting", 4),
-        ];
+        ]
+        .into();
         let context = ChatContext::default();
         let open = |state: &mut ChatState, id: &str| jump_to_id(state, &context, id);
         match &open(&mut state, "own-page")[..] {
@@ -1840,7 +1811,7 @@ mod tests {
     #[test]
     fn a_waiting_record_with_no_place_is_not_counted() {
         let mut state = ChatState::default();
-        state.session.resource_index = vec![no_place("gone", "waiting", 5)];
+        state.session.resource_index = vec![no_place("gone", "waiting", 5)].into();
         let pill = project(&state, &ChatContext::default());
         assert_eq!(pill.count, 0);
         assert_eq!(with_status(&pill, "withdrawn"), vec!["gone"]);
@@ -1932,11 +1903,11 @@ mod paged_labels_tests {
     fn an_index_that_changes_in_place_is_read_again() {
         let entry = |status: &str| serde_json::json!({"id": "r1", "kind": "form", "title": "One", "atMs": 5, "status": status, "offset": 1});
         let mut state = ChatState::default();
-        state.session.resource_index = vec![entry("answered")];
+        state.session.resource_index = vec![entry("answered")].into();
         assert_eq!(project(&state, &ChatContext::default()).count, 0);
-        state.session.resource_index = vec![entry("waiting")];
+        state.session.resource_index = vec![entry("waiting")].into();
         assert_eq!(project(&state, &ChatContext::default()).count, 1);
-        state.session.resource_index = vec![entry("answered")];
+        state.session.resource_index = vec![entry("answered")].into();
         assert_eq!(project(&state, &ChatContext::default()).count, 0);
         state.session.resource_index.clear();
         assert_eq!(project(&state, &ChatContext::default()).total, 0);

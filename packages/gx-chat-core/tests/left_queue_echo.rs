@@ -106,7 +106,8 @@ fn answers_gxserver_indexed_as_answered_go_at_once() {
     // The user's own case: the file lost the answers, but the index saw them before that.
     let mut state = claude_with_queue(vec![queued_row("Q8f07", ANSWERS)]);
     before_compose(&mut state, &at(OPENED));
-    state.session.resource_index = vec![json!({"id": PAGE, "kind": "form", "status": "answered"})];
+    state.session.resource_index =
+        vec![json!({"id": PAGE, "kind": "form", "status": "answered"})].into();
     state.session.queue_prompts = Some(Vec::new());
     before_compose(&mut state, &at(OPENED + 500.0));
     assert!(state.pending.sends.is_empty());
@@ -117,7 +118,8 @@ fn a_held_row_is_not_confirmed_by_the_index() {
     let mut row = queued_row("Q2", ANSWERS);
     row["state"] = json!("failed");
     let mut state = claude_with_queue(vec![row]);
-    state.session.resource_index = vec![json!({"id": PAGE, "kind": "form", "status": "answered"})];
+    state.session.resource_index =
+        vec![json!({"id": PAGE, "kind": "form", "status": "answered"})].into();
     before_compose(&mut state, &at(OPENED));
     assert_eq!(delivery_state(&state), ["failed"], "Retry stays on offer");
 }

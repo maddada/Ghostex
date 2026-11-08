@@ -81,8 +81,14 @@ pub fn apply_state_frame(
     if let Some(ids) = frame.state.removed_question_ids.clone() {
         state.session.removed_question_ids = ids;
     }
-    if let Some(index) = frame.state.resource_index.clone() {
-        state.session.resource_index = index;
+    // An index equal to the one held keeps its lookups (`ResourceIndex`).
+    if let Some(index) = frame
+        .state
+        .resource_index
+        .as_ref()
+        .filter(|index| state.session.resource_index != **index)
+    {
+        state.session.resource_index = index.clone().into();
     }
     apply_selected_options(state, frame.state.selected_options.as_ref());
     state.session.terminal_notice = frame.state.terminal_notice.clone();
@@ -172,7 +178,7 @@ pub fn apply_agent_identity(state: &mut ChatState, patch: &AgentIdentity) {
         session.later_question_ids = Vec::new();
         session.unavailable_modes = Vec::new();
         session.removed_question_ids = Vec::new();
-        session.resource_index = Vec::new();
+        session.resource_index = Default::default();
     }
     if patch.agent.is_some() {
         session.agent = patch.agent.clone();
@@ -458,8 +464,13 @@ pub fn apply_authoritative(
     if let Some(ids) = result.state.removed_question_ids.clone() {
         state.session.removed_question_ids = ids;
     }
-    if let Some(index) = result.state.resource_index.clone() {
-        state.session.resource_index = index;
+    if let Some(index) = result
+        .state
+        .resource_index
+        .as_ref()
+        .filter(|index| state.session.resource_index != **index)
+    {
+        state.session.resource_index = index.clone().into();
     }
     // The status machine decides whether this becomes the working strip's activity, a transient
     // status row, the streaming bubble or the pending tool row.

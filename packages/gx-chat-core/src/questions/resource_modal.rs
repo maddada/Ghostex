@@ -495,7 +495,7 @@ mod tests {
     fn a_form_older_than_the_loaded_rows_is_read_back_and_shown() {
         let id = form_id();
         let mut state = ChatState::default();
-        state.session.resource_index = vec![index_entry(&id, "form", Some(100))];
+        state.session.resource_index = vec![index_entry(&id, "form", Some(100))].into();
         let effects = open(&mut state, &id);
         let request_id = match &effects[..] {
             [Effect::SendRpc {
@@ -530,7 +530,7 @@ mod tests {
     fn a_form_that_cannot_be_read_says_why() {
         let id = form_id();
         let mut state = ChatState::default();
-        state.session.resource_index = vec![index_entry(&id, "form", None)];
+        state.session.resource_index = vec![index_entry(&id, "form", None)].into();
         let request_id = match &open(&mut state, &id)[..] {
             [Effect::SendRpc { request_id, .. }] => *request_id,
             other => panic!("{other:?}"),
@@ -582,7 +582,7 @@ mod tests {
         let mut state = ChatState::default();
         let mut entry = index_entry(&id, "form", Some(5_000));
         entry["turnEnd"] = json!(5_900);
-        state.session.resource_index = vec![entry];
+        state.session.resource_index = vec![entry].into();
         state.messages.has_more = true;
         state.messages.before_offset = 90_000;
         let effects = go_to(&mut state, &context, &id);
@@ -610,7 +610,7 @@ mod tests {
     fn go_to_chat_without_a_recorded_position_says_so() {
         let id = form_id();
         let mut state = ChatState::default();
-        state.session.resource_index = vec![index_entry(&id, "form", None)];
+        state.session.resource_index = vec![index_entry(&id, "form", None)].into();
         let effects = go_to(&mut state, &ChatContext::default(), &id);
         assert!(matches!(&effects[..], [Effect::Toast { .. }]));
         assert!(state.questions.resource_go.is_none());
@@ -619,7 +619,7 @@ mod tests {
     fn fetched_state(answers: Option<&str>) -> (ChatState, String) {
         let id = form_id();
         let mut state = ChatState::default();
-        state.session.resource_index = vec![index_entry(&id, "form", Some(100))];
+        state.session.resource_index = vec![index_entry(&id, "form", Some(100))].into();
         let request_id = match &open(&mut state, &id)[..] {
             [Effect::SendRpc { request_id, .. }] => *request_id,
             other => panic!("{other:?}"),
@@ -739,7 +739,7 @@ mod tests {
         let mut state = ChatState::default();
         let mut entry = index_entry(&id, "form", Some(5_000));
         entry["turnEnd"] = json!(180_000);
-        state.session.resource_index = vec![entry];
+        state.session.resource_index = vec![entry].into();
         state.messages.has_more = true;
         state.messages.before_offset = 90_000;
         let settle = |state: &mut ChatState, request_id: u64, messages: Value| {
@@ -801,7 +801,7 @@ mod tests {
         let id = form_id();
         let context = ChatContext::default();
         let mut state = ChatState::default();
-        state.session.resource_index = vec![index_entry(&id, "form", Some(5_000))];
+        state.session.resource_index = vec![index_entry(&id, "form", Some(5_000))].into();
         state.messages.has_more = true;
         state.messages.before_offset = 90_000;
         let request_id = match &go_to(&mut state, &context, &id)[..] {
@@ -870,7 +870,7 @@ mod tests {
 
         // A fresh chat with only an old waiting question: the pill goes to it.
         let mut state = ChatState::default();
-        state.session.resource_index = vec![index_entry(&id, "form", Some(7_000))];
+        state.session.resource_index = vec![index_entry(&id, "form", Some(7_000))].into();
         match &crate::questions::open_questions::previous(&mut state, &context)[..] {
             [Effect::SendRpc {
                 method: ChatRpcMethod::ReadSessionChat,

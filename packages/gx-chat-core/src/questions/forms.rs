@@ -64,9 +64,7 @@ pub(crate) fn received_answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a
 /// Whether the session's resource index records the form answered, also when its answers are
 /// outside the loaded rows or wait in the queue (`questions/open_questions.rs`, `settled_by_index`).
 pub(crate) fn answered_by_index(state: &ChatState, id: &str) -> bool {
-    crate::questions::resource_index::settled_by_index(&state.session.resource_index, "form")
-        .get(id)
-        == Some(&"answered")
+    state.session.resource_index.view().form_answered(id)
 }
 
 /// Whether the session's queue holds answers for the form.
@@ -91,10 +89,11 @@ pub(crate) fn queued_in_queue(state: &ChatState, id: &str) -> bool {
 /// A form answered while the agent worked, with "Wait for turn end before sending form answers" on, read Answered in its header while the card under it said "Waiting for the agent to finish its turn…": the pending card's row counted as the transcript carrying the answers. The header reads Queued (or Sending) until a real transcript row, this client's confirmation or the session's resource index records them.
 fn awaiting_delivery(state: &ChatState, id: &str) -> bool {
     if state.questions.form_answer_index.holds(id)
-        || crate::questions::resource_index::answered_in_transcript(
-            &state.session.resource_index,
-            id,
-        )
+        || state
+            .session
+            .resource_index
+            .view()
+            .answered_in_transcript(id)
     {
         return false;
     }
@@ -607,24 +606,23 @@ pub fn storage_loaded(state: &mut ChatState, id: &str, value: Option<&str>) {
 pub fn sync(state: &mut ChatState) -> Vec<Effect> {
     let mut effects = Vec::new();
     let session_key = state.identity.session_key.clone();
-    let answered: Vec<String> = state
+    let answered: std::collections::HashSet<&str> = state
         .transcript_view
         .page_answers
         .iter()
-        .map(|answers| answers.page_id.clone())
+        .map(|answers| answers.page_id.as_str())
         .chain(
             state
                 .questions
                 .resource_modal
                 .iter()
                 .filter(|modal| modal.answers.is_some())
-                .map(|modal| modal.id.clone()),
+                .map(|modal| modal.id.as_str()),
         )
         .collect();
-    let index = &state.session.resource_index;
+    let index = state.session.resource_index.view();
     for (id, entry) in state.questions.forms.iter_mut() {
-        let in_transcript = answered.contains(id)
-            || crate::questions::resource_index::answered_in_transcript(index, id);
+        let in_transcript = answered.contains(id.as_str()) || index.answered_in_transcript(id);
         if !entry.cleared && in_transcript {
             entry.cleared = true;
             effects.push(Effect::WriteStorage {
@@ -723,7 +721,7 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
 fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
     let later = crate::questions::open_questions::later_waiting(state);
     let removed = crate::questions::later::removed_ids(state);
-    let index = &state.session.resource_index;
+    let index = state.session.resource_index.view();
     let on_the_way = crate::questions::open_questions::answers_on_the_way(state);
     all_forms(state)
         .map(|form| {
@@ -748,7 +746,7 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
                 }
                 (Some(answers), _) => (
                     // Recorded in the transcript where this client's confirmation missed it.
-                    if crate::questions::resource_index::answered_in_transcript(index, &form.id) {
+                    if index.answered_in_transcript(&form.id) {
                         "answered"
                     } else if entry.held_for_owner.is_some()
                         || (entry.sent.is_none() && held.is_some())
@@ -965,7 +963,8 @@ mod canceled_tests {
         let (mut state, id) = state_with_form();
         state.session.resource_index = vec![json!({
             "id": id, "kind": "form", "status": "answered", "answersOffset": 300
-        })];
+        })]
+        .into();
         assert!(state.transcript_view.page_answers.is_empty());
         assert!(state.questions.forms[&id].sent.is_none());
         let form = &project(&state)[&id];
@@ -997,7 +996,8 @@ mod canceled_tests {
         assert_eq!(project(&state)[&id]["state"], "queued");
         assert_eq!(project(&state)[&id]["canSend"], false);
         state.session.resource_index =
-            vec![json!({"id": id, "kind": "form", "status": "answered", "answersOffset": 900})];
+            vec![json!({"id": id, "kind": "form", "status": "answered", "answersOffset": 900})]
+                .into();
         assert_eq!(
             project(&state)[&id]["state"],
             "answered",
@@ -1011,7 +1011,7 @@ mod canceled_tests {
     fn an_answer_only_in_the_queue_reads_queued() {
         let (mut state, id) = state_with_form();
         state.session.resource_index =
-            vec![json!({"id": id, "kind": "form", "status": "answered"})];
+            vec![json!({"id": id, "kind": "form", "status": "answered"})].into();
         let form = &state.transcript_view.question_forms[0];
         let text =
             crate::transcript::question_forms::answers_message(form, &json!({"Which?": "A"}));
