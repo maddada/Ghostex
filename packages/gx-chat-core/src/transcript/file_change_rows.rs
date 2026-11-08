@@ -309,7 +309,8 @@ fn common_folder(files: &[Value]) -> String {
 /// all), then a row per file with an icon, the filename before its folder, the counts and a
 /// five-block change bar. A row opens to a diff with the file's own line numbers and each hunk's
 /// heading, with "Show all N changed lines" and Open file under the preview. Simple mode keeps its
-/// "Edited N files" fold, which opens to this card. It replaces the activity-rail stack of one card
+/// "Edited N files" fold, which opens to this card (shown only while its turn's card is open since
+/// 2026-11-08, `turn_files_fold`). It replaces the activity-rail stack of one card
 /// per file. The rows had an Edited/New/Deleted tag until the user said "remove Edit/New etc next
 /// to the file names please, no need"; the file icon's colour still tells them apart.
 /// SEE-ALSO: apps/desktop/src/app/native_chat/file_change_card.rs,
@@ -341,4 +342,52 @@ pub fn file_change_card(files: &[Value]) -> Value {
         "addShare": if total == 0 { 0.0 } else { added as f64 / total as f64 },
         "paths": paths,
     })
+}
+
+/// What a finished turn's files fold ("Edited N files", "N files changed") shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TurnFilesFold {
+    /// No fold: the turn's card is closed, or the turn changed no files.
+    Hidden,
+    /// The fold, opening onto the turn's file change card.
+    Files,
+    /// The fold over a turn whose rows are still on the server: only the changed paths are known,
+    /// so it opens onto the notice that reads them.
+    Unread,
+}
+
+/// CDXC:SessionChat 2026-11-08 DECISION:
+/// User, on seeing the files edited twice (the closed "Previous turn" card's "2 files" pill, then a
+/// collapsed "Edited 2 files" fold under it): "Just remove \"Edit 2 files\" collapsed area below
+/// the Previous turn card and instead make those file edits show collapsed right below the
+/// working/previous turn card when it's expanded". A finished turn's card ("Worked for …",
+/// "Previous turn") shows its files fold only while the card is open, right under the card and
+/// above the work log, and the fold itself starts collapsed; a closed card leaves the files to its
+/// "N files" pill. A file row still opens onto its diff as before. Supersedes the fold always
+/// drawn under the card (the 2026-10-11 decision on `file_change_card` above).
+/// SEE-ALSO: apps/desktop/src/app/native_chat/completed_work_row.rs,
+/// apps/mobile/app/src/chat/native/transcript/TranscriptItemRow.tsx (`CompletedWorkRow`).
+pub fn turn_files_fold(item: &crate::TranscriptItem, turn_open: bool) -> TurnFilesFold {
+    let crate::TranscriptItem::CompletedWork {
+        files, deferred, ..
+    } = item
+    else {
+        return TurnFilesFold::Hidden;
+    };
+    if !turn_open {
+        return TurnFilesFold::Hidden;
+    }
+    if !files.is_empty() {
+        return TurnFilesFold::Files;
+    }
+    // An older turn arrives collapsed with only the paths its unread work changed.
+    let unread = deferred
+        .as_ref()
+        .and_then(|work| work["filePaths"].as_array())
+        .is_some_and(|paths| !paths.is_empty());
+    if unread {
+        TurnFilesFold::Unread
+    } else {
+        TurnFilesFold::Hidden
+    }
 }
