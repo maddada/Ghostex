@@ -36,7 +36,7 @@ pub(crate) fn state_paths() -> crate::paths::GxserverPaths {
 /// turns Collab off, once. Run at gxserver start, before anything reads a share.
 pub fn migrate_at_start(paths: &crate::paths::GxserverPaths) {
     if config::migrate(paths, &[shares::SHARES_FILE, shares::HELD_FILE]) {
-        eprintln!("[collab] 11.0.1: ended the shares made before Collab's security update and turned Collab off");
+        eprintln!("[collab] 11.1.0: ended the shares made before Collab's security update and turned Collab off");
     }
 }
 

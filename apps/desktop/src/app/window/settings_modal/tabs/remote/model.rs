@@ -481,7 +481,7 @@ pub(super) fn format_paired_device_day(iso: &str, now: i64) -> String {
 /// `formatPairedDeviceDetail`.
 pub(super) fn format_paired_device_detail(device: &PairedDevice, now: i64) -> String {
     if device.legacy {
-        return "Paired before Ghostex 11.0.1, so it no longer connects. Pair it again from the phone, or remove it.".to_string();
+        return "Paired before Ghostex 11.1.0, so it no longer connects. Pair it again from the phone, or remove it.".to_string();
     }
     let paired = format!(
         "Paired {}",

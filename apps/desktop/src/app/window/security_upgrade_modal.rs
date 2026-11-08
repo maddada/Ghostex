@@ -192,8 +192,9 @@ impl GpuiSecurityUpgradeModalWindow {
                             .text_size(px(13.0))
                             .line_height(px(20.0))
                             .text_color(hsla(p.muted))
+                            // CDXC:Security 2026-11-08 WHY: User: "what do users who use tailscale need to do … we need to mention tailscale". The rows are only Easy Connect pairings; a phone or computer on Tailscale, the LAN or SSH logs in over SSH, has no pairing to redo, and keeps working.
                             .child(format!(
-                                "Ghostex now gives every phone and computer its own key when you pair it, so a copied code or file can no longer let anyone in. {how}"
+                                "Ghostex now gives every phone and computer its own key when you pair it, so a copied code or file can no longer let anyone in. {how} Phones and computers that connect over Tailscale, your local network or SSH aren't listed: they keep working without pairing again."
                             )),
                     ),
             )
