@@ -176,4 +176,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0064_side_chat_index",
     "0065_gbots",
     "0066_gbots_routines",
+    "0067_gbots_problems",
 ];

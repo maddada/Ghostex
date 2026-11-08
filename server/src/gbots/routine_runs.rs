@@ -123,16 +123,39 @@ pub(crate) struct SettledRoutineRun<'a> {
     pub session: Option<&'a str>,
 }
 
-/// Tells Chief of Staff about a run that found something, needs you or failed, when the routine
-/// delivers there.
+/// Tells Chief of Staff about a run that found something or needs you, when the routine delivers
+/// there. A run that failed is a GBot problem whatever the routine delivers to (problems/), so
+/// Chief of Staff hears of it once, as a problem it can retry.
 pub(crate) fn routine_run_settled(state: &AppState, db: &Connection, run: SettledRoutineRun<'_>) {
+    let chat_key = run.session.and_then(|session_id| {
+        let project_id: String = db
+            .query_row(
+                "SELECT projectId FROM sessions WHERE sessionId = ?1",
+                [session_id],
+                |row| row.get(0),
+            )
+            .ok()?;
+        Some(format!("{project_id}:{session_id}"))
+    });
+    if matches!(
+        run.status,
+        "failed" | "findings" | "no_findings" | "needs_attention"
+    ) {
+        super::problems::routine_run_settled(
+            db,
+            run.bot_id,
+            run.automation_id,
+            run.status == "failed",
+            run.summary,
+            chat_key.as_deref(),
+        );
+    }
     if run.deliver != "chief" {
         return;
     }
     let what = match run.status {
         "findings" => "found something",
         "needs_attention" => "needs you",
-        "failed" => "failed",
         _ => return,
     };
     let Some((chief_project, chief_session)) = crate::chief::chief_key(&state.paths) else {

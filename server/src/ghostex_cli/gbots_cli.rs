@@ -55,10 +55,11 @@ const HELP_TAIL: &str = "
 
 fn help() -> String {
     format!(
-        "{HELP_HEAD}{}{}{}{HELP_TAIL}",
+        "{HELP_HEAD}{}{}{}{}{HELP_TAIL}",
         super::gbots_department_cli::DEPARTMENT_HELP,
         super::gbots_memory_cli::MEMORY_HELP,
-        super::gbots_routine_cli::ROUTINE_HELP
+        super::gbots_routine_cli::ROUTINE_HELP,
+        super::gbots_problem_cli::PROBLEM_HELP
     )
 }
 
@@ -134,6 +135,8 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "memory" => return super::gbots_memory_cli::run_memory(rest, &flags),
         "prefs" => return super::gbots_memory_cli::run_prefs(rest, &flags),
         "routine" | "routines" => return super::gbots_routine_cli::run_routine(rest, &flags),
+        "problem" | "problems" => return super::gbots_problem_cli::run_problem(rest, &flags),
+        "flag" => return super::gbots_problem_cli::run_flag(rest, &flags),
         "department" | "departments" => {
             return super::gbots_department_cli::run_department(rest, &flags)
         }

@@ -20,6 +20,8 @@
 //! | `undo` | `change` | you; Chief of Staff for its own changes |
 //! | `routines`, `routineAdd`, `routineEdit`, `routinePause`, `routineResume`, `routineRemove`, `routineRunNow` | routines.rs | you, Chief of Staff, the GBot's own chats |
 //! | `memory…`, `prefs…` | see memory/ops.rs | the bot's own chats, you, Chief of Staff |
+//! | `problems` (`all?`), `problemRetry`, `problemRebrief` (`text`), `problemClose` (`handed?`) | `problem` | you, Chief of Staff (problems/ops.rs) |
+//! | `flag` | `text` | a GBot's own chat |
 //!
 //! Every op is refused while GBots are off (feature.rs). An approval level above `ask` is set from
 //! your own computer or phone only.
@@ -117,6 +119,18 @@ pub(crate) async fn handle_gbots_http(
                 message: super::gbots_off_message(&state.paths),
             },
         );
+    }
+    // A retry restarts a chat, which awaits gxserver's own lifecycle calls (problems/ops.rs).
+    if text(&params, "op") == Some("problemRetry") {
+        let may_manage = Asker::of(&caller).may_manage();
+        return match super::problems::retry(state, may_manage, params).await {
+            Ok(result) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, result),
+            ),
+            Err(error) => error_response(endpoint_path, request_id, error),
+        };
     }
     let outcome = tokio::task::spawn_blocking(move || run(&state, &caller, &params)).await;
     match outcome {
@@ -329,10 +343,28 @@ fn run(
             };
             super::memory::run(state, &db, &repository, memory_caller, op, params)
         }
+        op if super::problems::handles(op) => {
+            let own_chat = match (own_bot(&db, caller)?, caller_session(caller)) {
+                (Some(bot), Some((project, session))) => {
+                    Some((bot.bot_id, project.to_string(), session.to_string()))
+                }
+                _ => None,
+            };
+            super::problems::run(
+                state,
+                &db,
+                &repository,
+                asker.may_manage(),
+                asker.label(),
+                own_chat,
+                op,
+                params,
+            )
+        }
         // A GBot's routines (routines.rs).
         op if op.starts_with("routine") => super::routines::run(state, &db, &repository, caller, asker, op, params),
         other => Err(DomainStateError::bad_request(format!(
-            "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat, closeChat, ask, assignments, changes, change, undo, a department op (departments, departmentCreate, …), a memory op (memoryShow, memoryAdd, …) or a routine op."
+            "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat, closeChat, ask, assignments, changes, change, undo, a department op (departments, departmentCreate, …), a memory op (memoryShow, memoryAdd, …), a routine op, a problem op (problems, problemRetry, problemRebrief, problemClose) or flag."
         ))),
     }
 }

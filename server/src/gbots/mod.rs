@@ -23,6 +23,8 @@
 //! - [`endpoint`]: `/api/gbots`.
 //! - [`routines`]: a GBot's routines (`/api/gbots` `routine…` ops, the "Routine set" card, Undo);
 //!   [`routine_runs`]: whether one may run, the chat it runs in and where its result goes.
+//! - [`problems`]: problems and escalations of GBot chats, reported to Chief of Staff
+//!   (`ghostex gbots problem …`, `ghostex gbots flag`).
 //! - [`retire`]: the one-time removal of the previous GBots; [`trash`]: folders to the Trash.
 //!
 //! CDXC:GBots 2026-11-08 DECISION:
@@ -40,6 +42,7 @@ mod feature;
 mod folder;
 mod memory;
 mod presentation;
+mod problems;
 mod project;
 mod record;
 mod retire;
@@ -60,6 +63,8 @@ pub(crate) use memory::{
 pub(crate) use presentation::{
     insert_gbots_project_presentation, insert_gbots_session_presentation,
 };
+pub(crate) use problems::start_gbots_problem_watch;
+pub(crate) use project::gbots_bot_id as gbots_project_bot_id;
 pub(crate) use record::name_problem;
 pub(crate) use retire::retire_previous_gbots;
 pub(crate) use routine_runs::{

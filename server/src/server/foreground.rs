@@ -401,6 +401,7 @@ pub async fn run_gxserver_foreground(
     crate::claude_cloud::start_claude_cloud_poller(state.clone());
     crate::gbots::retire_previous_gbots(state.clone());
     crate::gbots::start_gbots_sweep(state.clone());
+    crate::gbots::start_gbots_problem_watch(state.clone());
     /*
     CDXC:SessionChat 2026-08-21:
     The queue scheduler is built HERE rather than beside the other runtimes

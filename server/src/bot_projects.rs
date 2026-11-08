@@ -83,13 +83,19 @@ pub(crate) fn is_bot_project(project: &Value) -> bool {
     project.pointer("/launchSettings/isBot") == Some(&Value::Bool(true))
 }
 
-/// BLOCKING (SQLite). [`is_bot_project`] for a session's project id.
+/// BLOCKING (SQLite). Whether a session's project is a Hermes bot's: its conversation takes no
+/// self-heal "carry on" and no coordinator nudge.
+///
+/// CDXC:GBots 2026-11-09 WHY:
+/// A GBot's project is marked `isBot` too (so older clients keep it out of the projects list), but its chats are coordinator sessions doing work (plan section 0, approved by the user: "delegated ones are nudged like threads"). So a GBot chat handed work is nudged and told to carry on after a restart like any thread, and its sender hears about the restart, or about Ghostex giving up; chats nobody supervises are watched by gbots/problems/. Autopilot still never acts in GBot chats (`is_bot_project`, autopilot_runtime.rs).
 pub(crate) fn is_bot_conversation(repository: &DomainRepository<'_>, project_id: &str) -> bool {
     repository
         .get_project(project_id)
         .ok()
         .flatten()
-        .is_some_and(|project| is_bot_project(&project))
+        .is_some_and(|project| {
+            is_bot_project(&project) && crate::gbots::gbots_project_bot_id(&project).is_none()
+        })
 }
 
 /// The Hermes profile a bot project stands for. `None` for any other project, and for a stored

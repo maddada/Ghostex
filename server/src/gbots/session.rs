@@ -335,7 +335,13 @@ pub(crate) fn create_bot_chat_with(
     }
     restore_parked_project_for_new_session(state, db, repository, &project_id)?;
     schedule_presentation_session_delta(state, db, repository, &project_id, &session_id)?;
-    let started = crate::chief::start_provider(state, db, repository, &project_id, &session_id);
+    // A plain start failure is tried once more; a chat nobody supervises that still did not start
+    // is a problem for Chief of Staff (problems/), while a linked chat's sender hears it from `ask`.
+    let started = crate::chief::start_provider(state, db, repository, &project_id, &session_id)
+        || crate::chief::start_provider(state, db, repository, &project_id, &session_id);
+    if !started && opening.link.is_none() {
+        super::problems::chat_did_not_start(db, &bot.bot_id, &project_id, &session_id);
+    }
     let session = repository
         .get_session(&project_id, &session_id)?
         .unwrap_or(session);
