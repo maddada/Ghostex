@@ -25,6 +25,35 @@ pub(crate) fn chief_off_message() -> String {
     built_in_extensions::turned_off_message(CHIEF)
 }
 
+/// The routes that put a message or keystrokes into a session (`ghostex agents send` uses the
+/// first two).
+const MESSAGE_ROUTES: &[&str] = &[
+    "/api/queueSessionChatPrompt",
+    "/api/sendSessionChatMessage",
+    "/api/sendSessionMessage",
+    "/api/sendSessionText",
+    "/api/sendSessionEnter",
+];
+
+/*
+CDXC:Chief 2026-11-08 DECISION:
+Coordinator, on the user's behalf: refuse `agents send` to Chief's session while the extension is off. A message would wake its sleeping agent (the send wakes a session) although the user turned Chief off; only the user's own devices may still reach it.
+*/
+/// Whether a call to `endpoint_path` puts something into session `target` that is Chief's while
+/// Chief is off, from a caller other than the owner's devices.
+pub(crate) fn refuses_message(
+    caller_is_owner_device: bool,
+    endpoint_path: &str,
+    target: Option<(&str, &str)>,
+    chief: Option<&crate::coordinators::SessionKey>,
+    on: bool,
+) -> bool {
+    !on && !caller_is_owner_device
+        && MESSAGE_ROUTES.contains(&endpoint_path)
+        && matches!((target, chief), (Some((project, session)), Some((chief_project, chief_session)))
+            if project == chief_project && session == chief_session)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -37,6 +66,56 @@ mod tests {
         assert!(chief_on_in(Some(&json!({ "chiefHidden": false }))));
         assert!(!chief_on_in(Some(&json!({ "chiefHidden": true }))));
         assert!(chief_on_in(Some(&json!({ "showBetaFeatures": false }))));
+    }
+
+    #[test]
+    fn messages_to_chief_are_refused_only_while_it_is_off() {
+        let chief = ("P0".to_string(), "CHIEF".to_string());
+        let send = "/api/queueSessionChatPrompt";
+        assert!(refuses_message(
+            false,
+            send,
+            Some(("P0", "CHIEF")),
+            Some(&chief),
+            false
+        ));
+        assert!(!refuses_message(
+            false,
+            send,
+            Some(("P0", "CHIEF")),
+            Some(&chief),
+            true
+        ));
+        assert!(!refuses_message(
+            false,
+            send,
+            Some(("P0", "OTHER")),
+            Some(&chief),
+            false
+        ));
+        assert!(!refuses_message(
+            true,
+            send,
+            Some(("P0", "CHIEF")),
+            Some(&chief),
+            false
+        ));
+        assert!(!refuses_message(
+            false,
+            "/api/readSessionChat",
+            Some(("P0", "CHIEF")),
+            Some(&chief),
+            false
+        ));
+        for route in MESSAGE_ROUTES {
+            assert!(refuses_message(
+                false,
+                route,
+                Some(("P0", "CHIEF")),
+                Some(&chief),
+                false
+            ));
+        }
     }
 
     #[test]

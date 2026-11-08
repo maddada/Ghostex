@@ -21,7 +21,7 @@ mod session;
 mod sweep;
 
 pub(crate) use endpoint::{handle_chief_http, CHIEF_ENDPOINT};
-pub(crate) use feature::{chief_off_message, chief_on};
+pub(crate) use feature::{chief_off_message, chief_on, refuses_message};
 pub(crate) use head::settle_principal;
 pub(crate) use record::chief_key;
 #[cfg(test)]

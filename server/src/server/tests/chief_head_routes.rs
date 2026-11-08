@@ -143,6 +143,21 @@ async fn a_head_token_steers_any_session_but_every_owner_action_still_stops_it()
         }
     }
 
+    // Each step Chief took without an approval is in the security log, quietly.
+    let logged = crate::audit::live_log().read_recent(500);
+    for action in [
+        "typeIntoOtherSession",
+        "interruptOtherSession",
+        "answerOtherSessionPrompt",
+    ] {
+        assert!(
+            logged.iter().any(|entry| entry.action == action
+                && entry.outcome == "allowed"
+                && entry.actor.id.as_deref() == Some("P0:CHIEF")),
+            "{action} by Chief is not in the log"
+        );
+    }
+
     for (path, params) in owner_only_routes() {
         let (head_status, head_body) = post(&state, path, &head, params.clone()).await;
         let (agent_status, agent_body) = post(&state, path, &agent, params.clone()).await;
@@ -182,6 +197,41 @@ async fn the_head_role_vanishes_when_chief_is_turned_off_or_moves_to_a_new_chat(
     crate::chief::record_chief_for_tests(&state.paths, "P0", "NEWCHIEF");
     let (_, body) = post(&state, path, &head, params).await;
     assert_eq!(error_code(&body), "approvalRequired", "old chat: {body}");
+}
+
+#[tokio::test]
+async fn messages_to_chief_are_refused_while_it_is_off() {
+    let (_temp, state) = temp_state();
+    let agent = state
+        .security
+        .session_tokens
+        .mint_session("P1", "AGENT", SessionRole::Agent);
+    crate::chief::record_chief_for_tests(&state.paths, "P0", "CHIEF");
+    let to_chief = json!({ "projectId": "P0", "sessionId": "CHIEF", "text": "hello" });
+    set_chief_hidden(&state, true);
+    for path in [
+        "/api/queueSessionChatPrompt",
+        "/api/sendSessionChatMessage",
+        "/api/sendSessionText",
+    ] {
+        for token in [agent.as_str(), state.auth_token.as_str()] {
+            let (status, body) = post(&state, path, token, to_chief.clone()).await;
+            assert_eq!(status, StatusCode::CONFLICT, "{path}: {body}");
+            assert_eq!(error_code(&body), "turnedOff", "{path}: {body}");
+        }
+    }
+    // Another session is not affected, and Chief is reachable again once it is back on.
+    let (_, body) = post(
+        &state,
+        "/api/queueSessionChatPrompt",
+        &agent,
+        json!({ "projectId": "P0", "sessionId": "OTHER", "text": "hello" }),
+    )
+    .await;
+    assert_ne!(error_code(&body), "turnedOff", "{body}");
+    set_chief_hidden(&state, false);
+    let (_, body) = post(&state, "/api/queueSessionChatPrompt", &agent, to_chief).await;
+    assert_ne!(error_code(&body), "turnedOff", "{body}");
 }
 
 #[tokio::test]
