@@ -125,6 +125,7 @@ impl SecurityState {
         state.owner_keys.restore(saved.owner_keys);
         state.approver_keys.restore(saved.approver_keys);
         state.session_tokens.restore(saved.session_tokens);
+        state.session_tokens.restore_owner(saved.owner_sessions);
         state.persist_path = Some(Arc::new(path));
         Ok(state)
     }
@@ -145,6 +146,7 @@ impl SecurityState {
                 owner_keys: self.owner_keys.list(),
                 approver_keys: self.approver_keys.list(),
                 session_tokens: self.session_tokens.snapshot(),
+                owner_sessions: self.session_tokens.owner_snapshot(),
             },
         )
     }

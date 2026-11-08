@@ -128,6 +128,8 @@ impl SecurityState {
             .map_err(|_| OwnerError::BadChallenge)?;
         verify_approval_signature(&key, &payload, signature_b64).map_err(OwnerError::Key)?;
         let token = self.session_tokens.mint_owner(&key.device_id);
+        self.save()
+            .map_err(|error| OwnerError::Save(error.to_string()))?;
         self.publish(SecurityEvent::SessionTokenMinted {
             principal: super::Principal::Owner {
                 device_id: key.device_id.clone(),

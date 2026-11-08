@@ -28,6 +28,16 @@ pub struct PersistedSecurity {
     pub approver_keys: Vec<ApproverKey>,
     #[serde(default)]
     pub session_tokens: Vec<PersistedSessionToken>,
+    /// The desktop's owner sessions, as hashes only: the token itself lives in the app's memory.
+    #[serde(default)]
+    pub owner_sessions: Vec<PersistedOwnerSession>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersistedOwnerSession {
+    pub hash: String,
+    pub device_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

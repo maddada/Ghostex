@@ -26,7 +26,12 @@ struct Tokens {
     /// `<project id>:<session id>` → its token, so a session started again (or attached through a script that
     /// may start it) gets the same token its running processes already hold.
     session_token: HashMap<String, String>,
+    /// Owner session hashes, oldest first, with their device.
+    owner_sessions: Vec<(String, String)>,
 }
+
+/// Owner sessions kept per device; opening another drops the oldest (an app restart opens one).
+pub const OWNER_SESSIONS_PER_DEVICE: usize = 4;
 
 /*
 CDXC:Security 2026-11-08 WHY:
@@ -72,13 +77,61 @@ impl SessionTokens {
     /// An owner session for the desktop app on `device_id`, after it proved the owner key.
     pub fn mint_owner(&self, device_id: &str) -> String {
         let token = mint(OWNER_TOKEN_PREFIX);
-        self.write().by_hash.insert(
-            hash_token(&token),
+        let hash = hash_token(&token);
+        let mut tokens = self.write();
+        tokens.by_hash.insert(
+            hash.clone(),
             Principal::Owner {
                 device_id: device_id.to_string(),
             },
         );
+        tokens.owner_sessions.push((hash, device_id.to_string()));
+        let mut kept = tokens
+            .owner_sessions
+            .iter()
+            .filter(|(_, device)| device == device_id)
+            .count();
+        while kept > OWNER_SESSIONS_PER_DEVICE {
+            let Some(index) = tokens
+                .owner_sessions
+                .iter()
+                .position(|(_, device)| device == device_id)
+            else {
+                break;
+            };
+            let (old, _) = tokens.owner_sessions.remove(index);
+            tokens.by_hash.remove(&old);
+            kept -= 1;
+        }
         token
+    }
+
+    /// The owner sessions to save (hashes only).
+    pub fn owner_snapshot(&self) -> Vec<super::persist::PersistedOwnerSession> {
+        self.inner
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .owner_sessions
+            .iter()
+            .map(|(hash, device_id)| super::persist::PersistedOwnerSession {
+                hash: hash.clone(),
+                device_id: device_id.clone(),
+            })
+            .collect()
+    }
+
+    /// Puts back the owner sessions saved before a restart.
+    pub fn restore_owner(&self, saved: Vec<super::persist::PersistedOwnerSession>) {
+        let mut tokens = self.write();
+        for entry in saved {
+            tokens.by_hash.insert(
+                entry.hash.clone(),
+                Principal::Owner {
+                    device_id: entry.device_id.clone(),
+                },
+            );
+            tokens.owner_sessions.push((entry.hash, entry.device_id));
+        }
     }
 
     pub fn resolve(&self, token: &str) -> Option<Principal> {
@@ -247,6 +300,21 @@ mod tests {
             restarted.issue_session("p", "s", SessionRole::Thread).0,
             first
         );
+    }
+
+    #[test]
+    fn owner_sessions_survive_a_restart_and_only_the_newest_are_kept() {
+        let tokens = SessionTokens::default();
+        let first = tokens.mint_owner("mac");
+        let later: Vec<_> = (0..OWNER_SESSIONS_PER_DEVICE)
+            .map(|_| tokens.mint_owner("mac"))
+            .collect();
+        assert!(tokens.resolve(&first).is_none());
+        let restarted = SessionTokens::default();
+        restarted.restore_owner(tokens.owner_snapshot());
+        for token in &later {
+            assert!(restarted.resolve(token).is_some());
+        }
     }
 
     #[test]
