@@ -58,7 +58,31 @@ fn background_task_statuses(message: &ChatMessage) -> Vec<StatusRow> {
 
 /// Whether the row reports background tasks ending, so it is drawn and counted as tool calls.
 pub fn is_background_task_row(message: &ChatMessage) -> bool {
-    omp_job_list(message).is_some() || !background_task_statuses(message).is_empty()
+    let message = notification_part(message);
+    omp_job_list(&message).is_some() || !background_task_statuses(&message).is_empty()
+}
+
+/// The row as the harness wrote it: without the agent's calls the chat's tool fold put after it
+/// (`takes_tool_burst_row`), which are not part of what it reports.
+fn notification_part(message: &ChatMessage) -> Cow<'_, ChatMessage> {
+    let is_tool = |block: &ChatBlock| {
+        matches!(
+            block,
+            ChatBlock::ToolCall { .. } | ChatBlock::ToolResult { .. }
+        )
+    };
+    if !message.blocks.iter().any(is_tool) {
+        return Cow::Borrowed(message);
+    }
+    Cow::Owned(ChatMessage {
+        blocks: message
+            .blocks
+            .iter()
+            .filter(|block| !is_tool(block))
+            .cloned()
+            .collect(),
+        ..message.clone()
+    })
 }
 
 /// The jobs an OMP `async-result` row reports (`details.jobs`), or `None` for any other row.
@@ -272,7 +296,7 @@ fn result_text(status: &StatusRow, result: Option<&str>, output_file: Option<&st
 /// The row as one tool call and its result per task, under the same id, for every reader that
 /// draws or counts tool calls. Any other row comes back as it is.
 pub fn background_task_source(message: &ChatMessage) -> Cow<'_, ChatMessage> {
-    let tasks = background_tasks(message);
+    let tasks = background_tasks(&notification_part(message));
     if tasks.is_empty() {
         return Cow::Borrowed(message);
     }
@@ -296,6 +320,20 @@ pub fn background_task_source(message: &ChatMessage) -> Cow<'_, ChatMessage> {
             patch: None,
         });
     }
+    // The agent's calls right after the task's end folded into this row (`takes_tool_burst_row`):
+    // they follow the task's own call on the same card.
+    blocks.extend(
+        message
+            .blocks
+            .iter()
+            .filter(|block| {
+                matches!(
+                    block,
+                    ChatBlock::ToolCall { .. } | ChatBlock::ToolResult { .. }
+                )
+            })
+            .cloned(),
+    );
     Cow::Owned(ChatMessage {
         role: ChatRole::Assistant,
         blocks,

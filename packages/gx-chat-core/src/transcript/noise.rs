@@ -800,12 +800,27 @@ pub fn classify_suppressed_turn(message: &ChatMessage) -> Option<SuppressedTurn>
             label: crate::transcript::side_question::SIDE_QUESTION_LABEL.to_string(),
         });
     }
-    if message.blocks.iter().any(|block| {
+    let is_tool = |block: &ChatBlock| {
         matches!(
             block,
             ChatBlock::ToolCall { .. } | ChatBlock::ToolResult { .. }
         )
-    }) {
+    };
+    if message.blocks.iter().any(is_tool) {
+        // A background task's end that took the agent's calls after it (`takes_tool_burst_row`
+        // in tool_fold.rs) is still that end, not a prompt.
+        if message.role == ChatRole::User && !parse_task_notifications(&text).is_empty() {
+            let notification = ChatMessage {
+                blocks: message
+                    .blocks
+                    .iter()
+                    .filter(|block| !is_tool(block))
+                    .cloned()
+                    .collect(),
+                ..message.clone()
+            };
+            return classify_suppressed_turn(&notification);
+        }
         return None;
     }
     // A peer Claude session's message is the message-from-another-agent card, a turn of its own

@@ -117,6 +117,19 @@ pub fn takes_tool_burst(role: &ChatRole) -> bool {
     )
 }
 
+/// [`takes_tool_burst`] for the chat's own rows: a background task's end is also drawn as tool
+/// calls (`background_rows.rs`), so the calls the agent makes right after it join its card.
+///
+/// CDXC:SessionChat 2026-11-08 DECISION: User, of a turn a finished background task woke: "Used 1
+/// tool" then "Used 2 tools · 49.4s", two cards with nothing between them. The `<task-notification>`
+/// row is a user row as written, so the agent's calls after it could not fold into it; it is drawn
+/// as the background command's call, and takes the run after it like a tool row does
+/// (`background_task_source` keeps those calls after the task's own).
+pub fn takes_tool_burst_row(message: &ChatMessage) -> bool {
+    takes_tool_burst(&message.role)
+        || crate::transcript::background_rows::is_background_task_row(message)
+}
+
 /// Folds consecutive tool-only messages INTO their preceding assistant or reasoning turn.
 ///
 /// A reasoning summary therefore owns the tool activity that immediately follows it, independent of
@@ -129,21 +142,23 @@ pub fn fold_tool_messages(
 ) -> Vec<ChatMessage> {
     let mut output: Vec<ChatMessage> = Vec::with_capacity(messages.len());
     let mut anchor_index: Option<usize> = None;
+    let mut anchor_takes = false;
     for message in messages {
         let step = tool_burst_step(message, is_transparent(message));
         if step == ToolBurstStep::PassesOver {
             output.push(message.clone());
             continue;
         }
-        if step == ToolBurstStep::Joins
-            && anchor_index.is_some_and(|index| takes_tool_burst(&output[index].role))
-        {
-            let index = anchor_index.expect("an anchor role implies an anchor index");
+        // Whether the anchor takes the run is read off the row as it arrived, before the calls it
+        // took changed its blocks.
+        if step == ToolBurstStep::Joins && anchor_takes {
+            let index = anchor_index.expect("an anchor that takes a run has an index");
             output[index].blocks.extend(message.blocks.iter().cloned());
             continue;
         }
         output.push(message.clone());
         anchor_index = Some(output.len() - 1);
+        anchor_takes = takes_tool_burst_row(message);
     }
     output
 }
