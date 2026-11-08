@@ -26,9 +26,7 @@ impl Routes {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = get_gxserver_paths(Some(temp.path().join("gx")));
         let state = test_app_state(paths.clone());
-        // The owner's own app: while credentials are stored, a new path is the owner's alone
-        // (#495 follow-up, route_http/work_source.rs `set_command`).
-        let token = state.security.session_tokens.mint_owner("test-desktop");
+        let token = state.auth_token.clone();
         let program = temp.path().join("fixture-source");
         fs::write(
             &program,

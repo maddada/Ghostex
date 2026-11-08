@@ -9,7 +9,6 @@
 //! | `/api/saveSecretProvider`, `/api/removeSecretProvider` | always |
 //! | `/api/joinTeamSync`, `/api/createTeamSyncInvite`, `/api/setTeamLinearKey`, `/api/setOwnLinearKey`, `/api/setSlackFlowSettings` | always (leaving a team stays open) |
 //! | `/api/updateAgentSettings` | it turns `agentAcceptAllEnabled` on |
-//! | `/api/setWorkSource` | it sets a new ticket command for a workspace that has credentials stored (route_http/work_source.rs, which knows the workspace) |
 //!
 //! The always-owner-only routes are declared in `security::route_access`
 //! (`Capability::OwnerSetup`); this file words their refusal and checks the rest.

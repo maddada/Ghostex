@@ -35,10 +35,8 @@ pub(super) async fn route_work_source_http(
         endpoint,
         request_id,
         body_json,
-        caller,
         ..
     } = request;
-    let owner = caller.has(crate::security::Capability::OwnerSetup);
     let path = endpoint.path.clone();
     let worker_request_id = request_id.clone();
     // Off the async runtime: setting a command or its credentials runs its `info` (10 s at most).
@@ -51,7 +49,7 @@ pub(super) async fn route_work_source_http(
             &body_json,
             |repository, db, params, _| match route.as_str() {
                 "/api/readWorkSource" => read_work_source(&state, db, params),
-                "/api/setWorkSource" => set_command(&state, owner, repository, db, params),
+                "/api/setWorkSource" => set_command(&state, repository, db, params),
                 _ => set_credentials(&state, db, params),
             },
         )
@@ -130,27 +128,13 @@ fn summary(
 ///
 /// Each change's errors leave through the store's one mask (`WorkSourceChange::mask`), and the
 /// route words its own errors after it with the same one, like a credential save.
-///
-/// CDXC:WorkMode 2026-11-08 DECISION:
-/// GitHub #495 follow-up (the audit's leftovers, "settings only"): a new ticket command keeps the
-/// credentials stored for the workspace, so a command an agent picks would run with them. Only the
-/// owner's devices set a new path while credentials are stored; anyone else is refused and told
-/// to clear them first. Checking the stored command again and clearing it stay open.
 fn set_command(
     state: &AppState,
-    owner: bool,
     repository: &DomainRepository,
     db: &rusqlite::Connection,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     let workspace_id = workspace_of(db, params)?;
-    let sets_path = matches!(params.get("path"), Some(Value::String(_)));
-    if sets_path && !owner && has_stored_credentials(state, &workspace_id) {
-        return Err(DomainStateError {
-            code: "forbidden",
-            message: "This workspace has ticket credentials stored, so only you can set a new ticket command. Clear the credentials first (ghostex issues source credential <name> --clear), then set the command and enter them again.".to_string(),
-        });
-    }
     let references = || referenced_source_ids(repository, &read_sidebar_workspaces(db)?);
     let switch = params.get("switch").and_then(Value::as_bool) == Some(true);
     let check = params.get("check").and_then(Value::as_bool) == Some(true);
@@ -171,22 +155,6 @@ fn set_command(
     };
     let answer = summary(state, db, &workspace_id).map_err(|error| masked(&mask, error))?;
     with_check(state, answer, failed)
-}
-
-/// Whether any ticket command credential is stored for the workspace; an unreadable file counts
-/// as stored, so a new command never gets what couldn't be checked.
-fn has_stored_credentials(state: &AppState, workspace_id: &str) -> bool {
-    crate::work_mode::read_workspace_source_credentials(&state.paths, workspace_id)
-        .map(|sources| {
-            sources.values().any(|fields| {
-                fields.as_object().is_some_and(|fields| {
-                    fields
-                        .values()
-                        .any(|value| value.as_str().is_some_and(|text| !text.trim().is_empty()))
-                })
-            })
-        })
-        .unwrap_or(true)
 }
 
 /// A set's failed check, which the answer carries, and its mask; any other error is the request's.

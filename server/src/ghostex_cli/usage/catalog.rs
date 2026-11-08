@@ -509,7 +509,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "issues source [set <path> [--switch] | check | clear | credential <name> [--clear]] [--workspace name|id]",
-            "A workspace's ticket command, a program that describes its own tracker: show it, set or re-check its path (it runs the command's info and keeps the id it answers with; --switch accepts a new id), clear it (its credentials stay), or store one of its credentials from stdin (--clear removes it). Only this computer can set it, and a team workspace can't. While credentials are stored, only the user sets a new path: clear them first, then set the path and store them again",
+            "A workspace's ticket command, a program that describes its own tracker: show it, set or re-check its path (it runs the command's info and keeps the id it answers with; --switch accepts a new id), clear it (its credentials stay), or store one of its credentials from stdin (--clear removes it). Only this computer can set it, and a team workspace can't",
         ),
         format_help_command(
             "issues tracker [linear|github|<command id>] [--workspace name|id | --project-id id | --path path]",

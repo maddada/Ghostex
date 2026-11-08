@@ -102,7 +102,6 @@ computers are refused with a message naming the Settings page
 | `/api/saveSecretProvider`, `/api/removeSecretProvider` | always | Secrets |
 | `/api/joinTeamSync`, `/api/createTeamSyncInvite`, `/api/setTeamLinearKey`, `/api/setOwnLinearKey`, `/api/setSlackFlowSettings` | always (leaving a team, and linking your Slack user with the one-time code Slack sends you, stay open) | Workspaces |
 | `/api/updateAgentSettings` | it turns `agentAcceptAllEnabled` on | Agents |
-| `/api/setWorkSource` | it sets a new ticket command path while the workspace has ticket credentials stored (they would go to the new command); clear them first | (CLI only today) |
 | `updateSettingsPatch` | a key the catalog doesn't mark `agentWritable` (`settings_agent_writable.rs`) | the key's page |
 
 The settings keys that loosen security are off the agent-writable list
