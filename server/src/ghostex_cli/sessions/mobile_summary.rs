@@ -873,6 +873,10 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         &[s("modelSelectionFailure")],
     );
     insert_js(&mut map, "sendFailure", &[s("sendFailure")]);
+    // CDXC:Notifications 2026-11-08 SEE-ALSO: the phone row draws the desktop row's blocked red
+    // dot beside the send-failure dot; absent while not blocked, which is also what an older daemon sends.
+    insert_js(&mut map, "blockedSince", &[s("blockedSince")]);
+    insert_js(&mut map, "blockedReason", &[s("blockedReason")]);
     insert_js(
         &mut map,
         "closeAfterDoneDeadlineAt",
