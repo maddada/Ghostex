@@ -1,0 +1,1 @@
+../../../../desktop/src/app/window/notice_modal.rs

@@ -35,6 +35,7 @@ pub(crate) mod native_modal_kit;
 pub(crate) mod new_coordinator_modal;
 pub(crate) mod new_gbot_modal;
 pub(crate) mod new_thread_picker;
+pub(crate) mod notice_modal;
 pub(crate) mod onboarding;
 pub(crate) mod popup_dismissal;
 pub(crate) mod popup_frame;

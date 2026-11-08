@@ -492,6 +492,7 @@ impl GhostexGpuiApp {
                 app_toasts: Vec::new(),
                 app_toast_epoch: 0,
                 app_toast_id_counter: 0,
+                app_notices: Default::default(),
                 security_upgrade_notice_checked: false,
                 security_notice_code_shown: false,
                 security_notice_computer_pairing: Vec::new(),

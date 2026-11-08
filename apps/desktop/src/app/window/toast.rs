@@ -148,6 +148,9 @@ pub(crate) struct GpuiAppToast {
     pub(crate) level: GpuiAppToastLevel,
     pub(crate) title: String,
     pub(crate) description: Option<String>,
+    /// The raw error behind Copy details. A toast with it, or with an `action`, is never drawn as
+    /// a toast: it waits in the notice modal (app/notice_modal_host.rs, CDXC:AppModal 2026-11-08
+    /// in window/notice_modal.rs).
     pub(crate) copy_text: Option<String>,
     /// A button that takes the user to where the toast's problem is fixed.
     pub(crate) action: Option<GpuiAppToastAction>,
@@ -157,8 +160,8 @@ pub(crate) struct GpuiAppToast {
     pub(crate) epoch: u64,
 }
 
-/// What a toast's action button opens. The host runs it (`run_gpui_app_toast_action`) and the
-/// toast closes.
+/// What a notice's button opens. The host runs it (`run_gpui_app_toast_action`) and the notice
+/// closes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiAppToastAction {
     /// Settings > Accounts, on this agent's accounts (`claude`, `codex`) when one is named.
@@ -191,13 +194,15 @@ pub(crate) enum GpuiAppToastAction {
     /// scale: Interface scale back to 100% (app/display_scale_offer.rs).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     ResetInterfaceScale,
-    /// An approval card's Approve (`deny: false`, drawn next to its Deny) or Deny: GitHub #495,
+    /// An approval notice's Approve (`deny: false`) or Deny: GitHub #495,
     /// app/owner_security/ui.rs.
     SecurityApproval {
         request: Box<ghostex_gx_protocol::approval::ApprovalRequest>,
         deny: bool,
         /// The remote computer that asked; `None` for this computer.
         machine_id: Option<String>,
+        /// That computer's name as the notice shows it; `None` for this computer.
+        computer: Option<String>,
     },
 }
 
@@ -404,14 +409,7 @@ pub(crate) fn gpui_app_toast_estimated_height(toast: &GpuiAppToast) -> f32 {
                 } * GPUI_APP_TOAST_DESCRIPTION_LINE_HEIGHT
         })
         .unwrap_or(0.0);
-    GPUI_APP_TOAST_VERTICAL_PADDING * 2.0
-        + title_height
-        + description_height
-        + if toast.copy_text.is_some() || toast.action.is_some() {
-            34.0
-        } else {
-            0.0
-        }
+    GPUI_APP_TOAST_VERTICAL_PADDING * 2.0 + title_height + description_height
 }
 
 pub(crate) fn gpui_app_toast_stack_height(toasts: &[GpuiAppToast]) -> f32 {
@@ -592,47 +590,6 @@ impl GpuiAppToastWindow {
     }
 }
 
-impl GpuiAppToastWindow {
-    /// The toast's action button (Open Accounts): runs the action in the app and closes the toast.
-    fn render_action_button(
-        &self,
-        toast_id: String,
-        action: GpuiAppToastAction,
-        ink: Hsla,
-    ) -> AnyElement {
-        let app = self.app.clone();
-        let label = action.label().to_string();
-        div()
-            .id(format!("toast-action-{toast_id}"))
-            .mt(px(6.0))
-            .h(px(26.0))
-            .px(px(8.0))
-            .flex()
-            .items_center()
-            .rounded(px(4.0))
-            .border_1()
-            .border_color(ink.opacity(0.25))
-            .text_size(px(12.0))
-            .text_color(ink)
-            .cursor_pointer()
-            .hover(move |button| button.bg(ink.opacity(0.094)))
-            .on_click(move |_, _, cx| {
-                cx.stop_propagation();
-                let app = app.clone();
-                let toast_id = toast_id.clone();
-                let action = action.clone();
-                cx.defer(move |cx| {
-                    let _ = app.update(cx, |app, cx| {
-                        app.remove_gpui_app_toast(&toast_id, cx);
-                        app.run_gpui_app_toast_action(&action, cx);
-                    });
-                });
-            })
-            .child(label)
-            .into_any_element()
-    }
-}
-
 /// The frames a toast window's frosted region is built from, collected while it draws.
 type ToastFrames = std::rc::Rc<std::cell::RefCell<Vec<(Bounds<Pixels>, Pixels)>>>;
 
@@ -792,75 +749,6 @@ impl Render for GpuiAppToastWindow {
                                                         )
                                                         .child(description),
                                                 )
-                                            })
-                                            .when_some(toast.copy_text.clone(), |column, report| {
-                                                column.child(
-                                                    div()
-                                                        .id(format!(
-                                                            "toast-copy-diagnostics-{}",
-                                                            toast.id
-                                                        ))
-                                                        .mt(px(6.0))
-                                                        .h(px(26.0))
-                                                        .px(px(8.0))
-                                                        .flex()
-                                                        .items_center()
-                                                        .rounded(px(4.0))
-                                                        .border_1()
-                                                        .border_color(colors.title.opacity(0.25))
-                                                        .text_size(px(12.0))
-                                                        .text_color(colors.title)
-                                                        .cursor_pointer()
-                                                        .hover(move |button| {
-                                                            button.bg(colors.title.opacity(0.094))
-                                                        })
-                                                        .on_click(move |_, _, cx| {
-                                                            cx.stop_propagation();
-                                                            gpui_copy_to_clipboard(
-                                                                ClipboardItem::new_string(
-                                                                    report.clone(),
-                                                                ),
-                                                                cx,
-                                                            );
-                                                        })
-                                                        .child("Copy details"),
-                                                )
-                                            })
-                                            .when_some(toast.action.clone(), |column, action| {
-                                                // An approval card has Approve and Deny side by side.
-                                                if let GpuiAppToastAction::SecurityApproval {
-                                                    request,
-                                                    deny: false,
-                                                    machine_id,
-                                                } = &action
-                                                {
-                                                    let deny =
-                                                        GpuiAppToastAction::SecurityApproval {
-                                                            request: request.clone(),
-                                                            deny: true,
-                                                            machine_id: machine_id.clone(),
-                                                        };
-                                                    return column.child(
-                                                        div()
-                                                            .flex()
-                                                            .gap(px(6.0))
-                                                            .child(self.render_action_button(
-                                                                toast.id.clone(),
-                                                                action.clone(),
-                                                                colors.title,
-                                                            ))
-                                                            .child(self.render_action_button(
-                                                                format!("{}-deny", toast.id),
-                                                                deny,
-                                                                colors.title,
-                                                            )),
-                                                    );
-                                                }
-                                                column.child(self.render_action_button(
-                                                    toast.id.clone(),
-                                                    action,
-                                                    colors.title,
-                                                ))
                                             }),
                                     ),
                             ),

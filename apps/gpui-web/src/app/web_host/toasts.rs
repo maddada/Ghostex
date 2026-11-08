@@ -5,6 +5,10 @@ use gpui::{
 };
 
 use crate::GhostexGpuiApp;
+use crate::app::window::notice_modal::{
+    GpuiNoticeModalWindow, NOTICE_MODAL_INITIAL_HEIGHT, NOTICE_MODAL_WIDTH, NoticeModalHost,
+    NoticeModalItem,
+};
 use crate::app::window::toast::{
     GPUI_APP_TOAST_BOTTOM_MARGIN, GPUI_APP_TOAST_DEFAULT_DURATION_MS, GPUI_APP_TOAST_MAX_VISIBLE,
     GPUI_APP_TOAST_WINDOW_WIDTH, GpuiAppToast, GpuiAppToastAction, GpuiAppToastLevel,
@@ -80,6 +84,11 @@ impl GhostexGpuiApp {
     ) {
         toast.description =
             gpui_normalized_app_toast_description(&toast.title, toast.description.as_deref());
+        // A toast with a button waits in the centred notice modal instead, as on the desktop
+        // (notice_modal_host.rs).
+        let Some(toast) = self.app_notice_take(toast, cx) else {
+            return;
+        };
         // The desktop's repeat rule (CDXC:AppModal 2026-10-24 in `window/toast.rs`).
         let Some(mut toast) = gpui_app_toast_without_repeats(&self.web_host.toasts.toasts, toast)
         else {
@@ -124,7 +133,7 @@ impl GhostexGpuiApp {
         self.sync_web_toasts(cx);
     }
 
-    /// A toast's action button. The page has no Settings, so it says where to go.
+    /// A notice's button. The page has no Settings, so it says where to go.
     pub(crate) fn run_gpui_app_toast_action(
         &mut self,
         action: &GpuiAppToastAction,
@@ -166,6 +175,7 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn remove_gpui_app_toast(&mut self, toast_id: &str, cx: &mut Context<Self>) {
+        self.app_notice_remove(toast_id, cx);
         let before = self.web_host.toasts.toasts.len();
         self.web_host
             .toasts
@@ -177,6 +187,23 @@ impl GhostexGpuiApp {
     }
 
     fn sync_web_toasts(&mut self, cx: &mut Context<Self>) {
+        // A toast given a button after it was raised moves to the notice modal (the desktop's
+        // `sync_gpui_app_toast_window`).
+        if self
+            .web_host
+            .toasts
+            .toasts
+            .iter()
+            .any(GpuiAppToast::has_buttons)
+        {
+            let (notices, toasts) = std::mem::take(&mut self.web_host.toasts.toasts)
+                .into_iter()
+                .partition(GpuiAppToast::has_buttons);
+            self.web_host.toasts.toasts = toasts;
+            for notice in notices {
+                self.app_notice_insert(notice, cx);
+            }
+        }
         let toasts = self.web_host.toasts.toasts.clone();
         match &self.web_host.toasts.view {
             Some(view) => view.update(cx, |view, cx| view.set_toasts(toasts, cx)),
@@ -218,4 +245,66 @@ impl GhostexGpuiApp {
                 .into_any_element(),
         )
     }
+
+    /// The notice modal as an overlay window centred on the page (the desktop's
+    /// app/notice_modal_window.rs), separate from the page's one dialog slot so it never closes an
+    /// open dialog.
+    pub(crate) fn open_app_notice_window(
+        &mut self,
+        palette: crate::app::window::ModalPalette,
+        host: NoticeModalHost,
+        items: Vec<NoticeModalItem>,
+        cx: &mut Context<Self>,
+    ) -> Option<(
+        gpui::WindowHandle<gpui_component::Root>,
+        Entity<GpuiNoticeModalWindow>,
+    )> {
+        let page = web_sys::window()
+            .map(|window| {
+                let dimension = |value: Result<wasm_bindgen::JsValue, wasm_bindgen::JsValue>| {
+                    value.ok().and_then(|value| value.as_f64()).unwrap_or(800.0) as f32
+                };
+                (
+                    dimension(window.inner_width()),
+                    dimension(window.inner_height()),
+                )
+            })
+            .unwrap_or((1280.0, 800.0));
+        let bounds = gpui::Bounds::centered_at(
+            gpui::point(px(page.0 / 2.0), px(page.1 / 2.0)),
+            gpui::size(px(NOTICE_MODAL_WIDTH), px(NOTICE_MODAL_INITIAL_HEIGHT)),
+        );
+        let options = gpui::WindowOptions {
+            kind: crate::app::window::popup_frame::child_window_kind(),
+            window_bounds: Some(gpui::WindowBounds::Windowed(bounds)),
+            focus: true,
+            show: true,
+            is_resizable: false,
+            is_minimizable: false,
+            titlebar: None,
+            ..Default::default()
+        };
+        let slot: std::rc::Rc<std::cell::RefCell<Option<Entity<GpuiNoticeModalWindow>>>> =
+            Default::default();
+        let out = slot.clone();
+        let window_border = palette.window_border();
+        let window = cx
+            .open_window(options, move |window, cx| {
+                crate::app::window::popup_frame::frame_app_modal_window(window, window_border);
+                window.activate_window();
+                let view =
+                    cx.new(|cx| GpuiNoticeModalWindow::new(palette, host, items, window, cx));
+                *out.borrow_mut() = Some(view.clone());
+                let frame = cx.new(|_| crate::app::window::ModalWindowFrame::new(view, palette));
+                cx.new(|cx| {
+                    gpui_component::Root::new(frame, window, cx).bg(gpui::transparent_black())
+                })
+            })
+            .ok()?;
+        let view = slot.borrow_mut().take()?;
+        Some((window, view))
+    }
+
+    /// The page gives focus back by itself when the notice window goes.
+    pub(crate) fn app_notice_window_closed(&mut self, _cx: &mut Context<Self>) {}
 }

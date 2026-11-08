@@ -205,6 +205,10 @@ impl GhostexGpuiApp {
     ) {
         toast.description =
             gpui_normalized_app_toast_description(&toast.title, toast.description.as_deref());
+        // A toast with a button waits in the centred notice modal instead (app/notice_modal_host.rs).
+        let Some(toast) = self.app_notice_take(toast, cx) else {
+            return;
+        };
         let Some(mut toast) = gpui_app_toast_without_repeats(&self.app_toasts, toast) else {
             return;
         };
@@ -235,7 +239,7 @@ impl GhostexGpuiApp {
         self.sync_gpui_app_toast_window(cx);
     }
 
-    /// A toast's action button (`GpuiAppToastAction`).
+    /// A notice's button (`GpuiAppToastAction`), from the notice modal (app/notice_modal_host.rs).
     pub(crate) fn run_gpui_app_toast_action(
         &mut self,
         action: &GpuiAppToastAction,
@@ -276,6 +280,7 @@ impl GhostexGpuiApp {
                 request,
                 deny,
                 machine_id,
+                ..
             } => {
                 self.owner_security_decide(request, *deny, machine_id.as_deref(), cx);
             }

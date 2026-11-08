@@ -1843,14 +1843,77 @@ a:hover {
   overflow-wrap: anywhere;
 }
 
-.w-toast-action {
-  border: 0;
-  background: transparent;
-  color: var(--w-accent);
-  font: inherit;
-  font-weight: 500;
-  cursor: default;
-  padding: 2px 4px;
+/* A notice with a button (a link's Undo): centred in the view, never a toast (toast.tsx). */
+.w-ask-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.w-ask {
+  width: min(400px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  border: 1px solid var(--w-line-strong);
+  border-radius: 14px;
+  background: var(--w-menu);
+  color: var(--w-text);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+.w-ask-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.w-ask-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--w-muted-bg);
+  color: var(--w-text);
+}
+
+.w-ask-words {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.w-ask-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 21px;
+  overflow-wrap: anywhere;
+}
+
+.w-ask-text {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--w-text-2);
+  overflow-wrap: anywhere;
+}
+
+.w-ask-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.w-ask-buttons > .w-btn {
+  flex: 1 1 0;
 }
 
 .w-toast-close {

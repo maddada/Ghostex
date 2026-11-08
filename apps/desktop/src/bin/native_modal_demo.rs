@@ -4,7 +4,7 @@ Standalone preview of the native GPUI app modals so their look can be checked
 against the React Storybook stories without launching Ghostex. Run with:
     cargo run --release --bin native-modal-demo
 Environment:
-    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|updates-menu|start-menu|chief-row|... (which modal; default export-transcript)
+    GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|updates-menu|start-menu|chief-row|notice-modal|... (which modal; default export-transcript)
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
     GHOSTEX_NATIVE_MODAL_DEMO_SIDEBAR_THEME=dark-green|...    (a dark theme's text colours)
     GHOSTEX_NATIVE_MODAL_DEMO_CHROME=<rrggbb>                 (tint the modal from a theme chrome)
@@ -85,6 +85,10 @@ mod new_coordinator_modal;
 mod new_thread_picker;
 #[path = "native_modal_demo/new_thread_picker.rs"]
 mod new_thread_picker_demo;
+#[path = "../app/window/notice_modal.rs"]
+mod notice_modal;
+#[path = "native_modal_demo/notice_modal.rs"]
+mod notice_modal_demo;
 #[path = "../app/window/onboarding/mod.rs"]
 mod onboarding;
 #[path = "native_modal_demo/onboarding.rs"]
@@ -609,6 +613,7 @@ fn main() {
                 "add-project" => add_project_demo::open(&demo, cx),
                 "new-thread-picker" => new_thread_picker_demo::open(&demo, cx),
                 "update-available" => update_available_demo::open(&demo, cx),
+                "notice-modal" => notice_modal_demo::open(&demo, cx),
                 "updates-menu" => updates_menu_demo::open(&demo, cx),
                 "share-popover" => share_popover_demo::open(&demo, cx),
                 "start-menu" => start_menu_demo::open(&demo, cx),

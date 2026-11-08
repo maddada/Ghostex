@@ -59,6 +59,7 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn remove_gpui_app_toast(&mut self, toast_id: &str, cx: &mut gpui::Context<Self>) {
+        self.app_notice_remove(toast_id, cx);
         let previous_len = self.app_toasts.len();
         self.app_toasts.retain(|toast| toast.id != toast_id);
         if self.app_toasts.len() != previous_len {
@@ -67,6 +68,17 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn sync_gpui_app_toast_window(&mut self, cx: &mut gpui::Context<Self>) {
+        // A toast given a button after it was raised (the daemon's start failure gets its Copy
+        // details once the report is read) moves to the notice modal: toasts never carry buttons.
+        if self.app_toasts.iter().any(GpuiAppToast::has_buttons) {
+            let (notices, toasts) = std::mem::take(&mut self.app_toasts)
+                .into_iter()
+                .partition(GpuiAppToast::has_buttons);
+            self.app_toasts = toasts;
+            for notice in notices {
+                self.app_notice_insert(notice, cx);
+            }
+        }
         if self.app_toasts.is_empty() {
             self.app_toast_window_height = px(0.0);
             if let Some(handle) = self.app_toast_window.take() {

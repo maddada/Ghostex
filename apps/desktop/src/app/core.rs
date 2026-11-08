@@ -886,6 +886,8 @@ pub struct GhostexGpuiApp {
     pub(crate) app_toasts: Vec<GpuiAppToast>,
     pub(crate) app_toast_epoch: u64,
     pub(crate) app_toast_id_counter: u64,
+    /// Toasts with a button wait here, shown in the centred notice modal (notice_modal_host.rs).
+    pub(crate) app_notices: crate::app::notice_modal_host::AppNotices,
     /// The 11.0.1 security notice was asked for this run (gx_store/security_notice.rs).
     pub(crate) security_upgrade_notice_checked: bool,
     /// The open security notice's Show code was clicked: its poll asks for the live pairing code.

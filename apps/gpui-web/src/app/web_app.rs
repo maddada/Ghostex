@@ -69,6 +69,8 @@ pub(crate) struct GhostexGpuiApp {
     pub(crate) titlebar_notification_bell_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     /// Toasts and the page's other stand-ins for the desktop's app-level services (`web_host/`).
     pub(crate) web_host: crate::app::web_host::WebHostState,
+    /// Toasts with a button, waiting in the centred notice modal (the desktop's notice_modal_host.rs).
+    pub(crate) app_notices: crate::app::notice_modal_host::AppNotices,
     /// The native dialog open over the page, under the desktop's field name so its modal files compile unchanged.
     pub(crate) native_app_modal: Option<crate::app::native_app_modal_lifecycle::NativeAppModal>,
     /// The Git menu the header's Git button opens, as the desktop's titlebar holds it (`gx_store/git/hud.rs` writes it).
@@ -136,6 +138,7 @@ impl GhostexGpuiApp {
             notification_feed_state: Default::default(),
             titlebar_notification_bell_bounds: Rc::new(std::cell::Cell::new(None)),
             web_host: Default::default(),
+            app_notices: Default::default(),
             native_app_modal: None,
             titlebar_git_menu_state: None,
             pending_export_transcript_reveal_path: None,

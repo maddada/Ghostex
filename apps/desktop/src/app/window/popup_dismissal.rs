@@ -20,6 +20,23 @@ pub(crate) struct MainWindowPointerPress {
 
 impl gpui::Global for MainWindowPointerPress {}
 
+thread_local! {
+    /// The notice modal's window while it is open (app/notice_modal_window.rs).
+    static NOTICE_WINDOW: std::cell::Cell<Option<gpui::AnyWindowHandle>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Records the notice modal's window, or `None` once it closed.
+///
+/// CDXC:AppModal 2026-11-08 WHY: an approval can arrive while Settings is open (adding a remote computer asks Windows Hello for it). The notice modal takes focus over Settings, which is not a click away: Settings stays open behind it, with what the user typed.
+pub(crate) fn set_notice_window(window: Option<gpui::AnyWindowHandle>) {
+    NOTICE_WINDOW.with(|notice| notice.set(window));
+}
+
+fn is_notice_window(window: gpui::AnyWindowHandle) -> bool {
+    NOTICE_WINDOW.with(|notice| notice.get() == Some(window))
+}
+
 /// How long a Linux focus loss waits for another Ghostex window to report focus before it counts
 /// as focus leaving the app: the lost and the gained focus arrive as separate X11 events.
 #[cfg(target_os = "linux")]
@@ -236,7 +253,11 @@ fn close_app_modal_when_clicked_away<V: super::native_modal_kit::ModalCornerClos
                     let left = focus_left_app();
                     left_app.set(left);
                     let clicked_away = match cx.active_window() {
-                        Some(active) => active != modal && (other_apps_close || !left),
+                        Some(active) => {
+                            active != modal
+                                && !is_notice_window(active)
+                                && (other_apps_close || !left)
+                        }
                         None => other_apps_close && left,
                     };
                     if clicked_away {

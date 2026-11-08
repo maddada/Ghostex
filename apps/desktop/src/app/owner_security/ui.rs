@@ -1,7 +1,7 @@
-//! The approval card: a request an agent (or a phone, or the CLI) made on this computer or a
-//! connected one shows as a toast with Approve and Deny; Approve runs the system prompt and signs
-//! it for that computer's gxserver. The card goes when the request is decided anywhere (here, on
-//! the phone) or expires.
+//! The approval notice: a request an agent (or a phone, or the CLI) made on this computer or a
+//! connected one shows in the centred notice modal with Deny and Approve (app/notice_modal_host.rs);
+//! Approve runs the system prompt and signs it for that computer's gxserver. The notice goes when
+//! the request is decided anywhere (here, on the phone) or expires.
 
 use ghostex_gx_protocol::approval::ApprovalRequest;
 
@@ -71,41 +71,34 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let id = card_id(machine_id.as_deref(), &request.id);
-        let asker = if request.requested_by.kind == "owner" {
-            "Ghostex".to_string()
-        } else if request.requested_by.label.is_empty() {
-            "An agent".to_string()
-        } else {
-            request.requested_by.label.clone()
-        };
-        let mut description = format!("{asker} asks to: {}.", request.summary);
+        // The notice modal draws the request's own words with who asked and on which computer
+        // (app/notice_modal_host.rs `notice_item`); the description is that line for any other
+        // reader of the toast.
+        let mut description = request.summary.clone();
         if let Some(detail) = request
             .detail
             .as_deref()
             .filter(|detail| !detail.is_empty())
         {
-            description.push(' ');
+            description.push_str(". ");
             description.push_str(detail);
         }
-        let title = match machine_id.as_deref() {
-            Some(machine) => format!(
-                "Approval needed on {}",
-                crate::app::helpers::gpui_remote_machine_name_from_settings(machine)
-                    .unwrap_or_else(|| machine.to_string())
-            ),
-            None => "Approval needed".to_string(),
-        };
+        let computer = machine_id.as_deref().map(|machine| {
+            crate::app::helpers::gpui_remote_machine_name_from_settings(machine)
+                .unwrap_or_else(|| machine.to_string())
+        });
         self.upsert_gpui_app_toast(
             GpuiAppToast {
                 id,
                 level: GpuiAppToastLevel::Warning,
-                title,
+                title: "Approval needed".to_string(),
                 description: Some(description),
                 copy_text: None,
                 action: Some(GpuiAppToastAction::SecurityApproval {
                     request: Box::new(request),
                     deny: false,
                     machine_id,
+                    computer,
                 }),
                 loading: false,
                 persistent: true,

@@ -260,11 +260,15 @@ function WorkApp() {
       .then((result) => {
         refreshDetails();
         const undo = result.undo;
+        const linked = `Linked ${item.id} to ‘${session.title}’`;
+        const hasUndo = !!undo && Object.keys(undo).length > 0;
         setToast({
           id: Date.now(),
-          text: `Linked ${item.id} to ‘${session.title}’`,
+          // With Undo it is a notice in the middle of the view (work/toast.tsx), titled.
+          title: hasUndo ? `Linked ${item.id}` : undefined,
+          text: hasUndo ? `It's in the links of ‘${session.title}’ now. Undo takes it out again.` : linked,
           action:
-            undo && Object.keys(undo).length > 0
+            hasUndo && undo
               ? {
                   label: 'Undo',
                   run: () => {
