@@ -570,7 +570,7 @@ impl NativeChatView {
                 .absolute()
                 .top(px(-7.0 * s))
                 .right(px(-7.0 * s))
-                .size(px(20.0 * s))
+                .size(px(crate::app::window::round_close_button::ROUND_CLOSE_BUTTON_SIZE * s))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -620,9 +620,7 @@ impl NativeChatView {
                         })
                         .child(
                             crate::app::window::round_close_button::round_close_x_icon(
-                                crate::app::window::round_close_button::RoundCloseXSize::BoardCard {
-                                    scale: s,
-                                },
+                                s,
                                 if armed {
                                     red
                                 } else {

@@ -6,7 +6,8 @@ use gpui::{Hsla, Styled as _, Svg, px, rgb, svg};
 /// The toast's round × is a see-through light gray in both appearances, with a dark gray ×.
 ///
 /// CDXC:Theming 2026-11-04 DECISION:
-/// 2026-11-08 follow-up, User: "the x button here is so dim i can't tell there's an x without squinting please make it 1px thicker here and for the toasts in the gpui app". The × is drawn 1px thicker on both buttons (`round-close-x-board.svg`: 1.83px at its 11px size; `round-close-x-toast.svg`: 1.67px at its 8px size, up from 0.83px and 0.67px) and its gray is a step darker (dark: 0x2b2b2b to 0x151515; light: 0x4a4a4a to 0x2a2a2a) so it separates from the circle; the circle keeps its fill and border.
+/// 2026-11-08 follow-up, User: "the x button here is so dim i can't tell there's an x without squinting please make it 1px thicker here and for the toasts in the gpui app". The × is drawn 1px thicker on both buttons (`round-close-x.svg`: 1.83px at its 11px size; the toast's was 0.67px at 8px) and its gray is a step darker (dark: 0x2b2b2b to 0x151515; light: 0x4a4a4a to 0x2a2a2a) so it separates from the circle; the circle keeps its fill and border.
+/// 2026-11-08 follow-up, User: "make both have the same as the board remove one". The toast's dismiss button is the board card's remove button: the same 20px circle, 11px × and colours, from this one module.
 /// User, of the toast's close button: solid black stood out against the frosted toasts; it should be light gray so it fits the see-through UI. The fill keeps some of what is behind it in dark and light alike, its hover is a step stronger, and the × is dark gray so it still reads on the light fill.
 pub(crate) fn gpui_app_toast_close_button_color(light: bool) -> Hsla {
     if light {
@@ -40,19 +41,13 @@ pub(crate) fn gpui_app_toast_close_button_icon_color(light: bool) -> Hsla {
     }
 }
 
-/// Which round close button a glyph is drawn for.
-#[derive(Clone, Copy)]
-pub(crate) enum RoundCloseXSize {
-    /// The toast's 18px dismiss button (the glyph size is scaled by `scale`).
-    Toast { scale: f32 },
-    /// The board card's 20px remove button (the glyph size is scaled by `scale`).
-    BoardCard { scale: f32 },
-}
+/// The circle's size, shared by the board card's remove button and the toast's dismiss button.
+pub(crate) const ROUND_CLOSE_BUTTON_SIZE: f32 = 20.0;
 
-pub(crate) fn round_close_x_icon(size: RoundCloseXSize, color: Hsla) -> Svg {
-    let (path, px_size) = match size {
-        RoundCloseXSize::Toast { scale } => ("titlebar/round-close-x-toast.svg", 8.0 * scale),
-        RoundCloseXSize::BoardCard { scale } => ("titlebar/round-close-x-board.svg", 11.0 * scale),
-    };
-    svg().size(px(px_size)).path(path).text_color(color)
+/// The × inside the circle, scaled by `scale` (the board's chat scale; the toast draws at 1.0).
+pub(crate) fn round_close_x_icon(scale: f32, color: Hsla) -> Svg {
+    svg()
+        .size(px(11.0 * scale))
+        .path("titlebar/round-close-x.svg")
+        .text_color(color)
 }

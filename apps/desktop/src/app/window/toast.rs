@@ -10,7 +10,8 @@ pub(crate) const GPUI_APP_TOAST_GAP: f32 = 10.0;
 pub(crate) const GPUI_APP_TOAST_BOTTOM_MARGIN: f32 = 47.0;
 pub(crate) const GPUI_APP_TOAST_MAX_VISIBLE: usize = 4;
 pub(crate) const GPUI_APP_TOAST_DEFAULT_DURATION_MS: u64 = 8_000;
-pub(crate) const GPUI_APP_TOAST_CLOSE_SIZE: f32 = 18.0;
+pub(crate) const GPUI_APP_TOAST_CLOSE_SIZE: f32 =
+    super::round_close_button::ROUND_CLOSE_BUTTON_SIZE;
 pub(crate) const GPUI_APP_TOAST_CLOSE_OUTSET: f32 = GPUI_APP_TOAST_CLOSE_SIZE / 2.0;
 pub(crate) const GPUI_APP_TOAST_CLOSE_WINDOW_INSET: f32 = 5.0;
 pub(crate) const GPUI_APP_TOAST_CLOSE_TOP_INSET: f32 = 5.0;
@@ -569,7 +570,7 @@ impl GpuiAppToastWindow {
                 }),
             )
             .child(super::round_close_button::round_close_x_icon(
-                super::round_close_button::RoundCloseXSize::Toast { scale: 1.0 },
+                1.0,
                 gpui_app_toast_close_button_icon_color(light),
             ))
             .when_some(region, |button, region| {

@@ -4,35 +4,27 @@
 //! window draws both over a frosted-looking backdrop, at 1x and enlarged 4x beside it.
 use super::round_close_button::*;
 use gpui::{
-    App, AppContext as _, Context, Hsla, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, div, px, rgb,
+    App, AppContext as _, Context, Hsla, IntoElement, ParentElement as _, Render, Styled as _,
+    Window, div, px, rgb,
 };
 
 struct CloseButtonsDemo {
     light: bool,
 }
 
-/// One button as the app draws it: the circle, its border, fill and × (board: 20px circle, 11px ×;
-/// toast: 18px circle, 8px ×).
-fn button(size: RoundCloseXSize, circle: f32, light: bool, zoom: f32) -> impl IntoElement {
+/// The button both the board card and the toast draw: the circle, its border, fill and ×.
+fn button(light: bool, zoom: f32) -> impl IntoElement {
     div()
         .flex()
         .items_center()
         .justify_center()
-        .size(px(circle * zoom))
+        .size(px(ROUND_CLOSE_BUTTON_SIZE * zoom))
         .rounded_full()
         .border(px(zoom))
         .border_color(gpui_app_toast_close_button_border_color(light))
         .bg(gpui_app_toast_close_button_color(light))
         .child(round_close_x_icon(
-            match size {
-                RoundCloseXSize::Toast { scale } => RoundCloseXSize::Toast {
-                    scale: scale * zoom,
-                },
-                RoundCloseXSize::BoardCard { scale } => RoundCloseXSize::BoardCard {
-                    scale: scale * zoom,
-                },
-            },
+            zoom,
             gpui_app_toast_close_button_icon_color(light),
         ))
 }
@@ -53,7 +45,7 @@ impl Render for CloseButtonsDemo {
                 rgb(0xe7e7ea).into(),
             )
         };
-        let row = |label: &'static str, size: RoundCloseXSize, circle: f32| {
+        let row = |label: &'static str| {
             div()
                 .flex()
                 .items_center()
@@ -77,10 +69,10 @@ impl Render for CloseButtonsDemo {
                                 .absolute()
                                 .top(px(-7.0))
                                 .right(px(-7.0))
-                                .child(button(size, circle, light, 1.0)),
+                                .child(button(light, 1.0)),
                         ),
                 )
-                .child(button(size, circle, light, 4.0))
+                .child(button(light, 4.0))
         };
         div()
             .size_full()
@@ -89,16 +81,8 @@ impl Render for CloseButtonsDemo {
             .flex()
             .flex_col()
             .gap(px(28.0))
-            .child(row(
-                "Board card remove",
-                RoundCloseXSize::BoardCard { scale: 1.0 },
-                20.0,
-            ))
-            .child(row(
-                "Toast dismiss",
-                RoundCloseXSize::Toast { scale: 1.0 },
-                18.0,
-            ))
+            .child(row("Board card remove"))
+            .child(row("Toast dismiss"))
     }
 }
 
