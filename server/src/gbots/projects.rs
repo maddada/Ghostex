@@ -414,6 +414,7 @@ fn merge_twins(
                 .cloned()
                 .unwrap_or_default();
             runtime.remove("titleSource");
+            runtime.remove(GBOTS_TITLE_KEY);
             update.insert("runtimeSettings".to_string(), Value::Object(runtime));
         }
         for flag in ["isPinned", "isFavorite"] {
@@ -452,14 +453,36 @@ fn merge_twins(
     Ok(Some(kept))
 }
 
-/// A title the user gave a conversation: neither one GBots gives it (the bot's name, the runtime's
-/// title) nor a Ghostex message. A rename keeps `titleSource`, so the title itself tells.
+/// A title the user gave a conversation (any rename: desktop, phone, CLI).
 fn user_titled(session: &Value, generated: &[&str]) -> bool {
+    !gbots_owns_title(session, generated)
+}
+
+/// Whether the session's title is still one GBots gave it, which the sync may replace.
+///
+/// CDXC:GBots 2026-11-08 DECISION:
+/// User, through the coordinator: a GBots conversation the user renamed keeps their title. A rename goes through several doors (the desktop's and phone's rename request, `ghostex rename-session`'s plain session update) and none of them touched `titleSource`, so the runtime's title for the conversation replaced the user's. The sync now records the title it writes (`gbotsTitle`) and only replaces a title that still equals it; any other title is the user's, whichever door renamed it. A session from before the record counts as GBots' while its title is the bot's name, the runtime's title or a Ghostex message.
+fn gbots_owns_title(session: &Value, generated: &[&str]) -> bool {
+    if session
+        .pointer("/runtimeSettings/titleSource")
+        .and_then(Value::as_str)
+        != Some(GBOTS_TITLE_SOURCE)
+    {
+        return false;
+    }
     let title = text(session, "title");
     let title = title.trim();
-    !title.is_empty()
-        && !generated.contains(&title)
-        && !crate::agents::is_ghostex_system_message(title)
+    match session
+        .pointer(&format!("/runtimeSettings/{GBOTS_TITLE_KEY}"))
+        .and_then(Value::as_str)
+    {
+        Some(given) => title == given.trim(),
+        None => {
+            title.is_empty()
+                || generated.contains(&title)
+                || crate::agents::is_ghostex_system_message(title)
+        }
+    }
 }
 
 /// How much the user used a session, to pick which of a conversation's twins stays.
@@ -530,6 +553,7 @@ fn add_conversation_session(
         .unwrap_or_default();
     stamp_thread(&mut runtime, bot_id, thread_id);
     runtime.insert("titleSource".to_string(), json!(GBOTS_TITLE_SOURCE));
+    runtime.insert(GBOTS_TITLE_KEY.to_string(), json!(title));
     create.insert("runtimeSettings".to_string(), Value::Object(runtime));
     repository.create_session(&create, false)
 }
@@ -720,6 +744,9 @@ pub(crate) fn new_conversation(
 /// CDXC:GBots 2026-11-07 WHY: a thread a bot starts shows "Message from <the bot's conversation>", named by that session's live title like every agent's card, so the conversation must not be called "Conversation". As a Hermes bot's session is titled after the bot until Hermes names it, a new conversation is titled after its bot and takes the runtime's title for it (from its first message) when one arrives; a title the user gave stays.
 const GBOTS_TITLE_SOURCE: &str = "gbots";
 
+/// The session's `runtimeSettings` key holding the title GBots last gave it.
+const GBOTS_TITLE_KEY: &str = "gbotsTitle";
+
 fn rename_untouched_conversation(
     state: &AppState,
     db: &rusqlite::Connection,
@@ -729,10 +756,7 @@ fn rename_untouched_conversation(
     title: &str,
     bot_name: &str,
 ) -> Result<(), DomainStateError> {
-    let untouched = session
-        .pointer("/runtimeSettings/titleSource")
-        .and_then(Value::as_str)
-        == Some(GBOTS_TITLE_SOURCE);
+    let untouched = gbots_owns_title(session, &[bot_name, title]);
     // A title a Ghostex message gave it before Ghostex filtered those goes back to the bot's name
     // until the runtime has a real one.
     let title =
@@ -752,6 +776,13 @@ fn rename_untouched_conversation(
         );
     }
     update.insert("title".to_string(), json!(title));
+    let mut runtime = session
+        .get("runtimeSettings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    runtime.insert(GBOTS_TITLE_KEY.to_string(), json!(title));
+    update.insert("runtimeSettings".to_string(), Value::Object(runtime));
     repository.update_session(&update)?;
     schedule_presentation_session_delta(
         state,

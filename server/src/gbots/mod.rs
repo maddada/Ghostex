@@ -27,6 +27,11 @@ pub(crate) use mirror::{
     resolve_gbots_chat_transcript_path, sync_gbots_transcript_mirror_for_path,
 };
 pub(crate) use projects::{gbots_agent_config, gbots_bot_id, published_bot_activity};
+
+/// Whether a session shows a GBots conversation.
+pub(crate) fn is_conversation_session(session: &serde_json::Value) -> bool {
+    projects::session_thread(session).is_some()
+}
 pub(crate) use send::{interrupt_gbots_session, send_chat_text};
 #[allow(unused_imports)]
 pub(crate) use settings::gbots_enabled;
