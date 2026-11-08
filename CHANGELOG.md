@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+## 11.1.2 - 2026-11-08
+
+**Ghostex 11.1.2 is out.** Bots get your connected apps and sign-ins, pasted images send with your message, one approval card per agent and project, Chief of Staff in the Unified sidebar, and fixes for local network access on macOS and coordinator messages.
+
+### 🤖 Bots
+
+- **GBots bots get every app you connect in Settings > Connectors**, with the same Ask, Allow and Never rules and approval cards in the bot's chat, plus your gh and Google sign-ins, and they answer setup questions with Ghostex's own screens.
+- **Bot chats stay calm:** no Autopilot or Ghostex nudges, and a Ghostex message never becomes a bot chat's title.
+- **One sidebar session per bot chat**, with existing twins merged; a renamed bot chat keeps its name, and renaming no longer types "/rename" to the bot. The first bot shows as Primary Bot.
+
+### 💬 Chat
+
+- **Enter waits for a pasted image and sends your text and the image together**, on the desktop, the web and the phone, and pasting is faster.
+- **Red error lines become one-line cards**, and tool cards line up: even heights and gaps, and calls after a background task or a rejected call join the card.
+- **The working row drops a finished tool's label.**
+
+### 🔐 Approvals
+
+- **An agent reaching another project asks with one card**, however many messages it sends, and approving or denying closes it everywhere at once.
+- **"Ask once per project" answers survive a restart**, and Stop on a connected computer's session never shows a raw approval line.
+
+### 🩹 Fixes and polish
+
+- **Chief is now Chief of Staff**, shows in the Unified sidebar, stays out of the Bots views, and dims its chevron when it has nothing to fold.
+- **macOS: programs in your sessions reach the local network again** (#504).
+- **Coordinators: a message and a thread report sent at the same moment both arrive** (#505, #506), and a finished report no longer raises a false "not moving".
+- **Pins are one filled and outline pair everywhere**, and right-clicking a pinned extension's header icon offers Unpin and Disable.
+- **The extensions menu's Terminal chip reads in the light theme**, and the × on toasts and board cards is easier to see.
+- **Linear tickets linked by their ID open in the right workspace.**
+
 ## 11.1.1 - 2026-11-08
 
 **Ghostex 11.1.1 is out.** Connected computers ask for your approval once instead of over and over, the pair-again notice walks you through each device, the settings that open your computer up are yours alone, agent skills arrive signed, Linux follows COSMIC's display scale, and many fixes.
