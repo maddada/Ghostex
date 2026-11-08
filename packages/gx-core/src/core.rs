@@ -190,9 +190,10 @@ pub enum Effect {
     /// `settingsSyncNote` from this computer's gxserver: a synced setting changed on two computers
     /// apart and the later edit won (the "changed on X · Undo" note; `note` as gxserver sends it).
     SettingsSyncNote { note: Value },
-    /// `approvalRequestsChanged` from this computer's gxserver: show a new approval request as a
-    /// card with Approve and Deny, or drop the card of one decided elsewhere.
+    /// `approvalRequestsChanged` from a computer's gxserver: show a new approval request as a card
+    /// with Approve and Deny, or drop the card of one decided elsewhere.
     ApprovalRequestsChanged {
+        machine: MachineId,
         change: String,
         request: Option<ghostex_gx_protocol::approval::ApprovalRequest>,
     },
@@ -575,9 +576,11 @@ impl Core {
                     .effects
                     .push(Effect::SettingsSyncNote { note: frame.note });
             }
-            ServerEvent::ApprovalRequestsChanged(frame) if machine.is_local() => {
+            // Each computer's gxserver asks for its own approvals; the app answers on that one.
+            ServerEvent::ApprovalRequestsChanged(frame) => {
                 let frame = *frame;
                 output.effects.push(Effect::ApprovalRequestsChanged {
+                    machine: machine.clone(),
                     change: frame.change,
                     request: frame.request,
                 });

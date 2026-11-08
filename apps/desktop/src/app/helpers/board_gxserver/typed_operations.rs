@@ -47,17 +47,16 @@ pub(crate) fn gxserver_post_typed_operation(
     };
     // The app's own sensitive click: the system prompt now, then the same call with its approval
     // (CDXC:Security 2026-11-08 in app/owner_security/mod.rs).
-    if let Some(approval_id) = crate::app::owner_security::approve_own_call(*status, body) {
-        let mut params = params.clone();
-        if let Some(object) = params.as_object_mut() {
-            object.insert("approvalId".to_string(), serde_json::json!(approval_id));
-            return gxserver_post_typed_operation_across_restart(
-                path,
-                &params,
-                timeout,
-                Duration::ZERO,
-            );
-        }
+    let transport = crate::app::owner_security::Transport::Local;
+    if let Some(params) = crate::app::owner_security::approve_own_call(&transport, *status, body)
+        .and_then(|approval_id| crate::app::owner_security::with_approval_id(params, &approval_id))
+    {
+        return gxserver_post_typed_operation_across_restart(
+            path,
+            &params,
+            timeout,
+            Duration::ZERO,
+        );
     }
     answer
 }

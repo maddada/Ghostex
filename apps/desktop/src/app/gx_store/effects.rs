@@ -163,9 +163,16 @@ impl GhostexGpuiApp {
             }
             Effect::RefetchCloudBoxes => self.gx_store_refresh_cloud_boxes(cx),
             Effect::SettingsSyncNote { note } => self.gx_store_show_settings_sync_note(&note, cx),
-            Effect::ApprovalRequestsChanged { change, request } => {
-                self.owner_security_on_approval_change(&change, request, cx)
-            }
+            Effect::ApprovalRequestsChanged {
+                machine,
+                change,
+                request,
+            } => self.owner_security_on_approval_change(
+                machine.remote_id().map(str::to_string),
+                &change,
+                request,
+                cx,
+            ),
             _ => {}
         }
     }

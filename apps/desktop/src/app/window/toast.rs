@@ -189,6 +189,8 @@ pub(crate) enum GpuiAppToastAction {
     SecurityApproval {
         request: Box<ghostex_gx_protocol::approval::ApprovalRequest>,
         deny: bool,
+        /// The remote computer that asked; `None` for this computer.
+        machine_id: Option<String>,
     },
 }
 
@@ -853,12 +855,14 @@ impl Render for GpuiAppToastWindow {
                                                 if let GpuiAppToastAction::SecurityApproval {
                                                     request,
                                                     deny: false,
+                                                    machine_id,
                                                 } = &action
                                                 {
                                                     let deny =
                                                         GpuiAppToastAction::SecurityApproval {
                                                             request: request.clone(),
                                                             deny: true,
+                                                            machine_id: machine_id.clone(),
                                                         };
                                                     return column.child(
                                                         div()

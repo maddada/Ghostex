@@ -1,13 +1,14 @@
-//! The desktop's side of GitHub #495: the owner session with this computer's gxserver, and
-//! approving or denying approval requests with Touch ID / Windows Hello / polkit.
+//! The desktop's side of GitHub #495: the owner session with each gxserver it talks to (this
+//! computer's, and every connected remote computer's through its tunnel), and approving or
+//! denying approval requests with Touch ID / Windows Hello / polkit.
 //!
 //! - The owner key (`ghostex-owner-keys`, in the OS key store) opens a `gxo_` owner session at
-//!   first use; every local gxserver call then sends it instead of the token file
-//!   (`read_gpui_gxserver_auth_token`). Until it is open, or when it can't be, the app runs on the
-//!   token file's agent level.
+//!   first use; every call to that gxserver then sends it instead of that computer's token file
+//!   (`read_gpui_gxserver_auth_token` here, the remote transport for a remote computer). Until it
+//!   is open, or when it can't be, the app runs on the token file's agent level.
 //! - A call of the app's own that gxserver answers with `approvalRequired` (the user just clicked
 //!   something sensitive) shows the system prompt at once, approves, and is sent again with
-//!   `approvalId` (`typed_operations.rs`).
+//!   `approvalId` (`typed_operations.rs`, `remote/ide_open.rs`).
 //! - A request an agent made shows as a card with Approve and Deny (`ui.rs`).
 //!
 //! Contract: `ai/security-tokens-and-approvals.md`.
@@ -16,6 +17,7 @@ pub(crate) mod ui;
 
 use std::{
     cell::Cell,
+    collections::HashMap,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -26,88 +28,167 @@ use ghostex_gx_protocol::approval::{
 };
 use serde_json::{Value, json};
 
-use crate::app::helpers::gpui_gxserver_rpc_result_with_code;
+use crate::app::helpers::{
+    gpui_gxserver_rpc_result_with_code, gpui_remote_gxserver_post_typed_operation,
+};
+use crate::app::model::GpuiRemoteGxserverRequestTarget;
 
 const CALL_TIMEOUT: Duration = Duration::from_secs(15);
-/// How long after a failed attempt the next call tries to open the owner session again.
+/// How long after a failed attempt the next call tries to open an owner session again.
 const RETRY_AFTER: Duration = Duration::from_secs(60);
+/// The key of this computer's own gxserver in [`SESSIONS`].
+const LOCAL: &str = "local";
 
+/// Which gxserver: this computer's, or a connected computer's through its tunnel.
+#[derive(Clone)]
+pub(crate) enum Transport {
+    Local,
+    Remote(GpuiRemoteGxserverRequestTarget),
+}
+
+impl Transport {
+    /// The owner session's key: `local`, or the remote computer's token file token, which names
+    /// that gxserver and never leaves memory.
+    fn key(&self) -> String {
+        match self {
+            Self::Local => LOCAL.to_string(),
+            Self::Remote(target) => format!("remote:{}", target.token),
+        }
+    }
+}
+
+#[derive(Default)]
 struct OwnerSession {
     token: Option<String>,
     last_attempt: Option<Instant>,
     opening: bool,
 }
 
-static OWNER_SESSION: Mutex<OwnerSession> = Mutex::new(OwnerSession {
-    token: None,
-    last_attempt: None,
-    opening: false,
-});
+static SESSIONS: Mutex<Option<HashMap<String, OwnerSession>>> = Mutex::new(None);
 
 thread_local! {
-    /// Set while this thread runs an approval of its own, so a call inside it that needs an
-    /// approval (a second approver key) is not answered by prompting again.
-    static IN_APPROVAL: Cell<bool> = const { Cell::new(false) };
+    /// Set while this thread runs an approval or opens an owner session, so a call inside it
+    /// neither prompts again nor waits on an owner session that is being opened.
+    static IN_SECURITY_FLOW: Cell<bool> = const { Cell::new(false) };
 }
 
-fn session() -> std::sync::MutexGuard<'static, OwnerSession> {
-    OWNER_SESSION
+fn with_session<R>(key: &str, run: impl FnOnce(&mut OwnerSession) -> R) -> R {
+    let mut sessions = SESSIONS
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    run(sessions
+        .get_or_insert_with(HashMap::new)
+        .entry(key.to_string())
+        .or_default())
 }
 
-/// The owner session's token when it is open. When it isn't, a background thread tries to open
-/// it (at most once a minute) and this call returns `None`, so the caller uses the token file.
-pub(crate) fn cached_owner_token() -> Option<String> {
-    let mut state = session();
-    if let Some(token) = &state.token {
-        return Some(token.clone());
+fn in_security_flow<R>(run: impl FnOnce() -> R) -> R {
+    let outer = IN_SECURITY_FLOW.with(|flag| flag.replace(true));
+    let result = run();
+    IN_SECURITY_FLOW.with(|flag| flag.set(outer));
+    result
+}
+
+/// The owner session's token for `transport` when it is open. When it isn't, a background
+/// thread tries to open it (at most once a minute) and this returns `None`, so the caller uses
+/// the token file.
+fn cached_token(transport: &Transport) -> Option<String> {
+    if IN_SECURITY_FLOW.with(Cell::get) {
+        return with_session(&transport.key(), |session| session.token.clone());
     }
-    let due = state
-        .last_attempt
-        .is_none_or(|last| last.elapsed() >= RETRY_AFTER);
-    if due && !state.opening {
-        state.opening = true;
-        state.last_attempt = Some(Instant::now());
-        drop(state);
+    let key = transport.key();
+    let start = with_session(&key, |session| {
+        if session.token.is_some() {
+            return None;
+        }
+        let due = session
+            .last_attempt
+            .is_none_or(|last| last.elapsed() >= RETRY_AFTER);
+        (due && !session.opening).then(|| {
+            session.opening = true;
+            session.last_attempt = Some(Instant::now());
+        })
+    });
+    if start.is_some() {
+        let transport = transport.clone();
         let _ = std::thread::Builder::new()
             .name("ghostex-owner-session".into())
-            .spawn(|| {
-                let opened = open_owner_session();
-                let mut state = session();
-                state.opening = false;
-                match opened {
-                    Ok(token) => state.token = Some(token),
-                    Err(error) => log::warn!("owner session not opened: {error}"),
-                }
+            .spawn(move || {
+                let opened = in_security_flow(|| open_owner_session(&transport));
+                with_session(&transport.key(), |session| {
+                    session.opening = false;
+                    match opened {
+                        Ok(token) => session.token = Some(token),
+                        Err(error) => log::warn!("owner session not opened: {error}"),
+                    }
+                });
             });
     }
-    None
+    with_session(&key, |session| session.token.clone())
 }
 
-/// gxserver refused the owner session token (its state was reset): forget it, so the next call
+/// The owner session's token for this computer's gxserver, when it is open.
+pub(crate) fn cached_owner_token() -> Option<String> {
+    cached_token(&Transport::Local)
+}
+
+/// The owner session's token for the remote computer `target` reaches, when it is open.
+pub(crate) fn cached_remote_owner_token(
+    target: &GpuiRemoteGxserverRequestTarget,
+) -> Option<String> {
+    cached_token(&Transport::Remote(target.clone()))
+}
+
+/// A gxserver refused owner session `token` (its state was reset): forget it, so the next call
 /// uses the token file and opens a new one.
 pub(crate) fn forget_owner_token(token: &str) {
-    let mut state = session();
-    if state.token.as_deref() == Some(token) {
-        state.token = None;
-        state.last_attempt = None;
+    let mut sessions = SESSIONS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    for session in sessions.get_or_insert_with(HashMap::new).values_mut() {
+        if session.token.as_deref() == Some(token) {
+            session.token = None;
+            session.last_attempt = None;
+        }
     }
 }
 
-/// The owner session, opened now on this thread if it isn't yet.
-fn require_owner_session() -> Result<String, String> {
-    if let Some(token) = session().token.clone() {
+/// The owner session for `transport`, opened now on this thread if it isn't yet.
+fn require_owner_session(transport: &Transport) -> Result<String, String> {
+    if let Some(token) = with_session(&transport.key(), |session| session.token.clone()) {
         return Ok(token);
     }
-    let token = open_owner_session()?;
-    session().token = Some(token.clone());
+    let token = open_owner_session(transport)?;
+    with_session(&transport.key(), |session| {
+        session.token = Some(token.clone())
+    });
     Ok(token)
 }
 
-fn rpc(endpoint: &str, params: Value) -> Result<Value, (Option<String>, String)> {
-    gpui_gxserver_rpc_result_with_code(endpoint, &params, CALL_TIMEOUT)
-        .map_err(|error| (error.code, error.message))
+fn rpc(
+    transport: &Transport,
+    endpoint: &str,
+    params: Value,
+) -> Result<Value, (Option<String>, String)> {
+    match transport {
+        Transport::Local => gpui_gxserver_rpc_result_with_code(endpoint, &params, CALL_TIMEOUT)
+            .map_err(|error| (error.code, error.message)),
+        Transport::Remote(target) => {
+            let (status, body) =
+                gpui_remote_gxserver_post_typed_operation(target, endpoint, &params, CALL_TIMEOUT)
+                    .map_err(|message| (None, message))?;
+            let envelope: Value = serde_json::from_str(&body)
+                .map_err(|_| (None, "gxserver returned invalid JSON.".to_string()))?;
+            if (200..300).contains(&status) {
+                return Ok(envelope.get("result").cloned().unwrap_or(Value::Null));
+            }
+            Err((
+                text(&envelope, "error"),
+                text(&envelope, "message")
+                    .unwrap_or_else(|| format!("gxserver request failed with HTTP {status}.")),
+            ))
+        }
+    }
 }
 
 fn text(value: &Value, key: &str) -> Option<String> {
@@ -151,101 +232,114 @@ fn key_json(public_key: &str, device_public_key: &str, role: &str) -> Value {
     })
 }
 
-/// Enrolls the owner key (trusted on first use) and opens an owner session with it.
-fn open_owner_session() -> Result<String, String> {
-    let key = ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
-    let enrolled = rpc(
-        "/api/enrollOwnerKey",
-        json!({ "key": key_json(&key.public_key_b64(), &key.public_key_b64(), "Ghostex app") }),
-    )
-    .map_err(|(code, message)| match code.as_deref() {
-        Some(APPROVAL_REQUIRED_ERROR) => "Another owner key is enrolled on this computer's Ghostex. Approve this app from a device you trust.".to_string(),
-        _ => message,
-    })?;
-    let key_id = enrolled
-        .get("key")
-        .and_then(|key| text(key, "keyId"))
-        .ok_or("gxserver didn't return the owner key")?;
-    let status = rpc("/api/securityStatus", json!({})).map_err(|(_, message)| message)?;
-    let server_id = text(&status, "serverId").ok_or("gxserver didn't say its id")?;
-    let challenge = rpc("/api/ownerChallenge", json!({})).map_err(|(_, message)| message)?;
-    let challenge = text(&challenge, "challenge").ok_or("gxserver gave no challenge")?;
-    let payload = owner_session_signing_payload(&server_id, &challenge, &key_id)
-        .map_err(|error| error.to_string())?;
-    let signature = key.sign_b64(&payload).map_err(|error| error.to_string())?;
-    let opened = rpc(
-        "/api/openOwnerSession",
-        json!({ "keyId": key_id, "challenge": challenge, "signature": signature }),
-    )
-    .map_err(|(_, message)| message)?;
-    text(&opened, "token").ok_or_else(|| "gxserver opened no owner session".to_string())
+/// Enrolls the owner key on `transport`'s gxserver (trusted on first use there) and opens an
+/// owner session with it.
+fn open_owner_session(transport: &Transport) -> Result<String, String> {
+    in_security_flow(|| {
+        let key =
+            ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
+        let public_key = key.public_key_b64();
+        let enrolled = rpc(
+            transport,
+            "/api/enrollOwnerKey",
+            json!({ "key": key_json(&public_key, &public_key, "Ghostex app") }),
+        )
+        .map_err(|(code, message)| match code.as_deref() {
+            Some(APPROVAL_REQUIRED_ERROR) => "Another owner key is enrolled on that computer's Ghostex. Approve this app from a device you trust.".to_string(),
+            _ => message,
+        })?;
+        let key_id = enrolled
+            .get("key")
+            .and_then(|key| text(key, "keyId"))
+            .ok_or("gxserver didn't return the owner key")?;
+        let status =
+            rpc(transport, "/api/securityStatus", json!({})).map_err(|(_, message)| message)?;
+        let server_id = text(&status, "serverId").ok_or("gxserver didn't say its id")?;
+        let challenge =
+            rpc(transport, "/api/ownerChallenge", json!({})).map_err(|(_, message)| message)?;
+        let challenge = text(&challenge, "challenge").ok_or("gxserver gave no challenge")?;
+        let payload = owner_session_signing_payload(&server_id, &challenge, &key_id)
+            .map_err(|error| error.to_string())?;
+        let signature = key.sign_b64(&payload).map_err(|error| error.to_string())?;
+        let opened = rpc(
+            transport,
+            "/api/openOwnerSession",
+            json!({ "keyId": key_id, "challenge": challenge, "signature": signature }),
+        )
+        .map_err(|(_, message)| message)?;
+        text(&opened, "token").ok_or_else(|| "gxserver opened no owner session".to_string())
+    })
 }
 
 /// Shows the system prompt with the request's summary, signs the request with this computer's
-/// approver key (enrolling it the first time) and approves it.
-pub(crate) fn approve_request(request: &ApprovalRequest) -> Result<(), String> {
-    IN_APPROVAL.with(|flag| flag.set(true));
-    let result = approve_request_inner(request);
-    IN_APPROVAL.with(|flag| flag.set(false));
-    result
-}
-
-fn approve_request_inner(request: &ApprovalRequest) -> Result<(), String> {
-    require_owner_session()?;
-    let owner_key =
-        ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
-    let (key, presence) = ghostex_owner_keys::unlock_approver_key(&request.summary)
-        .map_err(|error| error.to_string())?;
-    let mut wire_key = key_json(
-        &key.public_key_b64(),
-        &owner_key.public_key_b64(),
-        "approvals",
-    );
-    wire_key["presence"] = json!(presence.wire_name());
-    let enrolled =
-        rpc("/api/enrollApproverKey", json!({ "key": wire_key })).map_err(|(code, message)| {
-            match code.as_deref() {
+/// approver key (enrolling it on that gxserver the first time) and approves it there.
+pub(crate) fn approve_request(
+    transport: &Transport,
+    request: &ApprovalRequest,
+) -> Result<(), String> {
+    in_security_flow(|| {
+        require_owner_session(transport)?;
+        let owner_key =
+            ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
+        let (key, presence) = ghostex_owner_keys::unlock_approver_key(&request.summary)
+            .map_err(|error| error.to_string())?;
+        let mut wire_key = key_json(
+            &key.public_key_b64(),
+            &owner_key.public_key_b64(),
+            "approvals",
+        );
+        wire_key["presence"] = json!(presence.wire_name());
+        let enrolled = rpc(
+            transport,
+            "/api/enrollApproverKey",
+            json!({ "key": wire_key }),
+        )
+        .map_err(|(code, message)| match code.as_deref() {
             Some(APPROVAL_REQUIRED_ERROR) => {
                 "Approve adding this computer as an approver on your phone first, then try again."
                     .to_string()
             }
             _ => message,
-        }
         })?;
-    let key_id = enrolled
-        .get("key")
-        .and_then(|key| text(key, "keyId"))
-        .ok_or("gxserver didn't return the approver key")?;
-    let status = rpc("/api/securityStatus", json!({})).map_err(|(_, message)| message)?;
-    let server_id = text(&status, "serverId").ok_or("gxserver didn't say its id")?;
-    let payload =
-        approval_signing_payload(&server_id, request).map_err(|error| error.to_string())?;
-    let signature = key.sign_b64(&payload).map_err(|error| error.to_string())?;
-    rpc(
-        "/api/approveApprovalRequest",
-        json!({ "id": request.id, "keyId": key_id, "signature": signature }),
-    )
-    .map(|_| ())
-    .map_err(|(_, message)| message)
+        let key_id = enrolled
+            .get("key")
+            .and_then(|key| text(key, "keyId"))
+            .ok_or("gxserver didn't return the approver key")?;
+        let status =
+            rpc(transport, "/api/securityStatus", json!({})).map_err(|(_, message)| message)?;
+        let server_id = text(&status, "serverId").ok_or("gxserver didn't say its id")?;
+        let payload =
+            approval_signing_payload(&server_id, request).map_err(|error| error.to_string())?;
+        let signature = key.sign_b64(&payload).map_err(|error| error.to_string())?;
+        rpc(
+            transport,
+            "/api/approveApprovalRequest",
+            json!({ "id": request.id, "keyId": key_id, "signature": signature }),
+        )
+        .map(|_| ())
+        .map_err(|(_, message)| message)
+    })
 }
 
 /// Denies a request; no prompt, saying no only closes a door.
-pub(crate) fn deny_request(id: &str) -> Result<(), String> {
-    require_owner_session()?;
-    rpc("/api/denyApprovalRequest", json!({ "id": id }))
-        .map(|_| ())
-        .map_err(|(_, message)| message)
+pub(crate) fn deny_request(transport: &Transport, id: &str) -> Result<(), String> {
+    in_security_flow(|| {
+        require_owner_session(transport)?;
+        rpc(transport, "/api/denyApprovalRequest", json!({ "id": id }))
+            .map(|_| ())
+            .map_err(|(_, message)| message)
+    })
 }
 
 /*
 CDXC:Security 2026-11-08 WHY:
-A sensitive change the user starts in the app (turning on Easy Connect, a security-relaxing setting) reaches gxserver as an owner call that still needs a signed approval. Showing the system prompt right then, with gxserver's summary, and sending the call again is what the user expects from their own click; a card would make them approve their own click twice. Never on the main thread (the prompt would freeze the window) and never inside an approval already running.
+A sensitive change the user starts in the app (turning on Easy Connect, connecting a computer, a security-relaxing setting) reaches gxserver as an owner call that still needs a signed approval. Showing the system prompt right then, with gxserver's summary, and sending the call again is what the user expects from their own click; a card would make them approve their own click twice. Never on the main thread (the prompt would freeze the window) and never inside an approval or owner-session flow already running.
 */
-/// For a call of the app's own that gxserver answered with `approvalRequired` (`body`): prompts,
-/// approves, and returns the approval id to send the call again with. `None` when the answer
-/// isn't one, the user didn't approve, or this thread can't prompt.
-pub(crate) fn approve_own_call(status: u16, body: &str) -> Option<String> {
-    if status != 403 || IN_APPROVAL.with(Cell::get) {
+/// For a call of the app's own that `transport`'s gxserver answered with `approvalRequired`
+/// (`body`): prompts, approves, and returns the approval id to send the call again with. `None`
+/// when the answer isn't one, the user didn't approve, or this thread can't prompt.
+pub(crate) fn approve_own_call(transport: &Transport, status: u16, body: &str) -> Option<String> {
+    if status != 403 || IN_SECURITY_FLOW.with(Cell::get) {
         return None;
     }
     if std::thread::current().name() == Some("main") {
@@ -257,11 +351,20 @@ pub(crate) fn approve_own_call(status: u16, body: &str) -> Option<String> {
     }
     let request: ApprovalRequest =
         serde_json::from_value(envelope.get("approval")?.clone()).ok()?;
-    match approve_request(&request) {
+    match approve_request(transport, &request) {
         Ok(()) => Some(request.id),
         Err(error) => {
             log::info!("own call not approved: {error}");
             None
         }
     }
+}
+
+/// `params` with `approvalId` set, for the call sent again after its approval.
+pub(crate) fn with_approval_id(params: &Value, approval_id: &str) -> Option<Value> {
+    let mut params = params.clone();
+    params
+        .as_object_mut()?
+        .insert("approvalId".to_string(), json!(approval_id));
+    Some(params)
 }
