@@ -1173,6 +1173,15 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             true,
             Transport::Http,
         ),
+        // A phone signing in over SSH asks to pair through that login, with the token file it
+        // reads there (remote_access/pair_device.rs `begin_ssh_pairing`).
+        "/api/pairOverSsh" => descriptor(
+            path,
+            ApiPermission::FullLocal,
+            true,
+            true,
+            Transport::Http,
+        ),
         /*
         CDXC:Security 2026-11-08 WHY:
         The approval API (crate::security, server/src/server/security_http.rs). The phone and a desktop connected to this computer list, approve and deny requests too; approving needs a signature from a registered approver key, and only the owner's devices pass the capability check, so the listener is not what protects it.

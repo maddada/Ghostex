@@ -260,7 +260,15 @@ fn pending_device_row(
                     t.foreground,
                 ))
                 .child(device.name.clone())
-                .child(detail(t, "· waiting for your approval", false)),
+                .child(detail(
+                    t,
+                    if device.over_ssh {
+                        "· signs in over SSH · waiting for your approval"
+                    } else {
+                        "· waiting for your approval"
+                    },
+                    false,
+                )),
         )
         .child(
             div()

@@ -315,6 +315,57 @@ pub(crate) async fn handle_remote_access_http(
             })
             .await
         }
+        // A phone signing in over SSH asks to pair through that login (CDXC:RemotePairing
+        // 2026-11-08 at `begin_ssh_pairing`). Only the token file asks: its SSH login is how a
+        // phone reads it; an agent session's own token, a peer or a paired phone has no business here.
+        "/api/pairOverSsh" => {
+            if !matches!(caller, Principal::LocalAgent) {
+                return RemoteAccessHttpError {
+                    status: StatusCode::FORBIDDEN,
+                    code: "forbidden",
+                    message: "Only a phone signing in over SSH asks to pair this way.".to_string(),
+                }
+                .into_response(endpoint_path, request_id);
+            }
+            let params = match parse_ssh_pairing_params(&params) {
+                Ok(params) => params,
+                Err(error) => {
+                    return RemoteAccessHttpError::from(error)
+                        .into_response(endpoint_path, request_id)
+                }
+            };
+            tokio::task::spawn_blocking(move || {
+                let device_name = params.device_name.clone();
+                let started = begin_ssh_pairing(&pairing_runtime, &security, params);
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "pairing.request",
+                        "A phone that signs in over SSH asked to pair with this computer",
+                    )
+                    .target(device_name.clone()),
+                    crate::audit::Actor::PairedDevice {
+                        id: None,
+                        name: device_name,
+                    },
+                    match &started {
+                        Ok(_) => crate::audit::Outcome::Pending,
+                        Err(error) => pair_device_error_outcome(error),
+                    },
+                    None,
+                );
+                let SshPairingStarted { started, nonce } = started?;
+                Ok(json!({
+                    "status": PairingStatus::Pending,
+                    "pendingId": started.pending_id,
+                    "nonce": nonce,
+                    "words": started.words,
+                    "expiresAtMs": started.expires_at_ms,
+                    "user": started.user,
+                    "computerName": started.computer_name,
+                }))
+            })
+            .await
+        }
         "/api/pairingStatus" => {
             let ask = match parse_signed_ask(&params) {
                 Ok(ask) => ask,

@@ -28,6 +28,11 @@ pub fn paired_device_json(device: &RemotePairedDeviceRecord) -> Value {
         "status": device.status.as_str(),
         "deviceKeyId": device.device_key.as_ref().map(|key| key.key_id.as_str()),
         "tokenExpiresAt": device.api_token_expires_at,
+        // Paired through its own SSH login (`/api/pairOverSsh`): a token, but neither an SSH key
+        // line nor an Easy Connect key.
+        "overSsh": device.api_token_hash.is_some()
+            && device.ssh_key_fingerprint.is_empty()
+            && device.tailcat_client_key.is_none(),
     })
 }
 

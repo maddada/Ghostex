@@ -237,6 +237,9 @@ pub fn route_access(path: &str) -> RouteAccess {
         }
         // The Collab component's calls: its handler takes only the host token gxserver gave it.
         "/api/collabHost" => RouteAccess::Public,
+        // Only asks: the phone becomes Pending until the owner approves it with matching words.
+        // The handler takes only the token file (a phone's SSH login), not a session's token.
+        "/api/pairOverSsh" => RouteAccess::Needs(Capability::RequestSensitiveAction),
         super::APPROVALS_LIST_ENDPOINT
         | super::APPROVALS_APPROVE_ENDPOINT
         | super::APPROVALS_DENY_ENDPOINT

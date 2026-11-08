@@ -223,6 +223,9 @@ pub struct PendingPairing {
     /// Empty for a computer.
     pub ssh_public_key: String,
     pub kind: super::pair_device::PairingDeviceKind,
+    /// A phone that asked over its own SSH login (`/api/pairOverSsh`): no SSH key line and no
+    /// Easy Connect allow-list entry, only its device token.
+    pub over_ssh: bool,
     pub tailcat_client_key: Option<String>,
     pub device_key: StoredDeviceKey,
     pub approver_key: Option<ApproverKey>,
@@ -260,6 +263,7 @@ impl PendingPairing {
             approval_id: self.approval_id.clone(),
             requested_at_ms: self.requested_at_ms,
             expires_at_ms: self.expires_at_ms,
+            over_ssh: self.over_ssh,
         }
     }
 

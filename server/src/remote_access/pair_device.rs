@@ -306,9 +306,25 @@ fn approval_action(
     fingerprint: &str,
     words: &[String],
     approver_key_id: Option<&str>,
+    over_ssh: bool,
 ) -> ActionRequest {
     // The name is the device's own; say so, since gxserver didn't write it.
     let (summary, detail) = match params.kind {
+        PairingDeviceKind::Phone if over_ssh => (
+            format!(
+                "Pair {} that calls itself \"{}\" and signs in over SSH",
+                match params.platform.to_ascii_lowercase().as_str() {
+                    "ios" => "an iPhone",
+                    "android" => "an Android phone",
+                    _ => "a phone",
+                },
+                params.device_name
+            ),
+            format!(
+                "Approve only if the phone shows the same three words: {}. It already signs in with its own SSH login; approving lets its answers, Stop and typing go through without asking each time, until you remove it in Settings › Remote.",
+                words.join(" · ")
+            ),
+        ),
         PairingDeviceKind::Phone => (
             format!(
                 "Pair a new {} device that calls itself \"{}\" with this computer",
@@ -346,6 +362,7 @@ fn approval_action(
             "tailcatClientKey": params.tailcat_client_key,
             "approverKeyId": approver_key_id,
             "words": words,
+            "overSsh": over_ssh,
         }))
 }
 
@@ -414,6 +431,7 @@ pub fn begin_pairing(
         &fingerprint,
         &words,
         approver_key.as_ref().map(|key| key.key_id.as_str()),
+        false,
     );
     let now = now_ms();
     let requester = ApprovalRequester {
@@ -439,6 +457,7 @@ pub fn begin_pairing(
         platform: params.platform.clone(),
         ssh_public_key: params.ssh_public_key.trim().to_string(),
         kind: params.kind,
+        over_ssh: false,
         tailcat_client_key: params.tailcat_client_key.clone(),
         device_key: StoredDeviceKey {
             algorithm: device_key.algorithm.clone(),
@@ -462,6 +481,146 @@ pub fn begin_pairing(
         expires_at_ms: request.expires_at_ms,
         user: identity.username,
         computer_name: identity.computer_name,
+    })
+}
+
+/*
+CDXC:RemotePairing 2026-11-08 DECISION:
+User (GitHub #495, Q1850-Q1852): "Trust this phone" for phones that sign in over Tailscale, the
+local network or SSH, with the matching words: such a phone reaches gxserver with the token file
+its SSH login reads, which Ghostex treats like an agent on the computer, so its answers, Stop and
+typing waited for the owner's approval every time. It now pairs through that login: it sends its
+own device key to `/api/pairOverSsh`, becomes Pending with three words worked out from a fresh
+nonce and its key (the phone works out the same words from the nonce it gets back), and the
+owner approves on the computer with Touch ID, or on a phone already paired with Face ID, only if
+the words match the phone in their hand. The finished pairing is the Easy Connect one without
+its SSH key line and allow-list entry (the phone keeps its own SSH login): the device row, a
+device token bound to the key, and the phone's approver key. An agent on the computer can ask
+too, and gets a Pending entry whose words match no phone the owner holds.
+SEE-ALSO: apps/mobile/app/src/machines/sshPairing.ts (the phone's side).
+*/
+/// `/api/pairOverSsh`'s answer: the phone is Pending; `nonce` lets it work out the words itself.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SshPairingStarted {
+    pub started: PairingStarted,
+    pub nonce: String,
+}
+
+/// `/api/pairOverSsh`: a phone signed in over SSH, holding the token file, asks to pair. The body
+/// is `/api/pairDevice`'s without the code, the SSH key and the tailcat key.
+pub fn parse_ssh_pairing_params(body: &Value) -> Result<PairDeviceParams, PairDeviceError> {
+    let mut body = body.clone();
+    if let Some(object) = body.as_object_mut() {
+        object.insert("secret".to_string(), json!("over-ssh"));
+        object.remove("sshPublicKey");
+        object.remove("tailcatClientKey");
+        object.insert("kind".to_string(), json!("phone"));
+    }
+    let params = parse_pair_device_params(&body)?;
+    Ok(PairDeviceParams {
+        secret: String::new(),
+        ssh_public_key: String::new(),
+        tailcat_client_key: None,
+        ..params
+    })
+}
+
+/// Makes a phone that signs in over SSH Pending, like [`begin_pairing`] does for a QR's phone.
+pub fn begin_ssh_pairing(
+    pairing_runtime: &RemotePairingRuntime,
+    security: &SecurityState,
+    params: PairDeviceParams,
+) -> Result<SshPairingStarted, PairDeviceError> {
+    record_pair_device_attempt()?;
+    let device_key = params
+        .device_key
+        .clone()
+        .ok_or(PairDeviceError::NeedsAppUpdate)?;
+    let device_key_bytes = validate_device_key(&device_key)?;
+    let approver_key = params
+        .approver_key
+        .as_ref()
+        .map(|key| {
+            ApproverKeys::default()
+                .insert(ApproverKey {
+                    key_id: String::new(),
+                    device_id: String::new(),
+                    label: params.device_name.clone(),
+                    platform: params.platform.clone(),
+                    algorithm: key.algorithm.clone(),
+                    public_key: key.public_key.trim().to_string(),
+                    presence: key.presence.clone(),
+                    added_at_ms: 0,
+                })
+                .map_err(|error| PairDeviceError::BadRequest(format!("approverKey: {error}")))
+        })
+        .transpose()?;
+    if pairing_runtime.pending_count(now_ms()) >= PENDING_PAIRING_LIMIT {
+        return Err(PairDeviceError::RateLimited);
+    }
+    let mut nonce_bytes = [0_u8; 24];
+    rand::Rng::fill_bytes(&mut rand::rng(), &mut nonce_bytes);
+    let nonce = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(nonce_bytes);
+    let pending_id = format!("pd_{}", uuid::Uuid::new_v4().simple());
+    let words = match_words(&nonce, &device_key.public_key);
+    let key_id = approver_key_id(&device_key_bytes);
+    let action = approval_action(
+        &pending_id,
+        &params,
+        &key_id,
+        "",
+        &words,
+        approver_key.as_ref().map(|key| key.key_id.as_str()),
+        true,
+    );
+    let now = now_ms();
+    let requester = ApprovalRequester {
+        kind: "newDevice".to_string(),
+        label: format!(
+            "A {} phone signing in over SSH, \"{}\"",
+            params.platform, params.device_name
+        ),
+        device_id: Some(pending_id.clone()),
+        ..Default::default()
+    };
+    let (request, _) = security
+        .approvals
+        .create(&Principal::Anonymous, requester, &action, now);
+    security.publish(SecurityEvent::ApprovalRequested {
+        request: request.clone(),
+    });
+    pairing_runtime.insert_pending(PendingPairing {
+        id: pending_id.clone(),
+        name: params.device_name.clone(),
+        platform: params.platform.clone(),
+        ssh_public_key: String::new(),
+        kind: PairingDeviceKind::Phone,
+        over_ssh: true,
+        tailcat_client_key: None,
+        device_key: StoredDeviceKey {
+            algorithm: device_key.algorithm.clone(),
+            public_key: device_key.public_key.clone(),
+            key_id,
+        },
+        approver_key,
+        words: words.clone(),
+        action,
+        approval_id: request.id.clone(),
+        requested_at_ms: now,
+        expires_at_ms: request.expires_at_ms,
+        last_ask_ms: 0,
+        state: PendingState::Waiting,
+    });
+    let identity = read_remote_access_identity()?;
+    Ok(SshPairingStarted {
+        started: PairingStarted {
+            pending_id,
+            words,
+            expires_at_ms: request.expires_at_ms,
+            user: identity.username,
+            computer_name: identity.computer_name,
+        },
+        nonce,
     })
 }
 
@@ -626,8 +785,9 @@ fn finish_pairing(
     pending: &PendingPairing,
 ) -> Result<Value, PairDeviceError> {
     let phone = pending.kind == PairingDeviceKind::Phone;
-    // A computer gets neither an SSH key line nor a token (CDXC:RemotePairing 2026-11-08 above).
-    let key = if phone {
+    // A computer gets neither an SSH key line nor a token (CDXC:RemotePairing 2026-11-08 above); a
+    // phone that paired over its own SSH login gets the token only (`begin_ssh_pairing`).
+    let key = if phone && !pending.over_ssh {
         Some(
             parse_ssh_public_key(&pending.ssh_public_key)
                 .map_err(|error| PairDeviceError::BadRequest(format!("{error:#}")))?,
@@ -732,7 +892,9 @@ fn finish_pairing(
     crate::audit::record(
         crate::audit::Action::new(
             "pairing.pair",
-            if phone {
+            if pending.over_ssh {
+                "A phone that signs in over SSH paired with this computer"
+            } else if phone {
                 "A phone paired with this computer"
             } else {
                 "A computer paired with this computer through Easy Connect"

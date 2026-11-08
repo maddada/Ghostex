@@ -24,6 +24,8 @@ const ICON_SHIELD: &str = "modals/settings/shield-check.svg";
 const ICON_PHONE: &str = "modals/settings/device-mobile.svg";
 const ICON_COMPUTER: &str = "modals/settings/device-desktop.svg";
 const ICON_PAIRED: &str = "modals/install-hooks/circle-check.svg";
+/// The one row for phones that sign in over SSH (`sshPhones` of `/api/securityUpgradeNotice`).
+pub(crate) const SSH_PHONES_ROW_ID: &str = "ssh-phones";
 const QR_SIZE: f32 = 156.0;
 const QR_PANEL_WIDTH: f32 = 196.0;
 
@@ -35,6 +37,8 @@ pub(crate) enum SecurityNoticeRowStatus {
     /// Scanned the new code and waits for the owner's approval (pairing v2): the row shows the
     /// three words and Approve.
     Pending,
+    /// Nothing to do: a computer reached over SSH, shown only to say so.
+    Info,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,6 +67,11 @@ pub(crate) enum SecurityNoticeCode {
 pub(crate) struct SecurityUpgradeModalState {
     pub(crate) phones: Vec<SecurityNoticeRow>,
     pub(crate) computers: Vec<SecurityNoticeRow>,
+    /// Phones that sign in over Tailscale, the local network or SSH: they pair once through that
+    /// login (one row for them all, or the one waiting with its words).
+    pub(crate) ssh_phones: Vec<SecurityNoticeRow>,
+    /// Computers this one reaches over SSH: nothing to pair again (`Info` rows).
+    pub(crate) ssh_computers: Vec<SecurityNoticeRow>,
     pub(crate) code: SecurityNoticeCode,
 }
 
@@ -150,15 +159,31 @@ impl GpuiSecurityUpgradeModalWindow {
 
     fn render_header(&self) -> AnyElement {
         let p = self.palette;
-        let how = match (
+        let mut how: Vec<&str> = Vec::new();
+        match (
             self.state.phones.is_empty(),
             self.state.computers.is_empty(),
         ) {
             (false, false) => {
-                "Scan this code with each phone, and pair each computer with its button."
+                how.push("Scan this code with each phone, and pair each computer with its button.")
             }
-            (false, true) => "Scan this code with each phone.",
-            _ => "Pair each computer with its button.",
+            (false, true) => how.push("Scan this code with each phone."),
+            (true, false) => how.push("Pair each computer with its button."),
+            (true, true) => {}
+        }
+        if !self.state.ssh_phones.is_empty() {
+            how.push("A phone that signs in over Tailscale, your network or SSH pairs once: open Ghostex on it, then approve it here when its three words match. Until then, answers, Stop and typing from it don't go through.");
+        }
+        if !self.state.ssh_computers.is_empty() {
+            how.push(
+                "Computers you reach over SSH don't pair again; they may ask you once to approve.",
+            );
+        }
+        let how = how.join(" ");
+        let title = if self.state.phones.is_empty() && self.state.computers.is_empty() {
+            "Pair your phone with this computer"
+        } else {
+            "Pair your devices again"
         };
         h_flex()
             .w_full()
@@ -185,16 +210,16 @@ impl GpuiSecurityUpgradeModalWindow {
                             .line_height(px(21.0))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(hsla(p.foreground))
-                            .child("Pair your devices again"),
+                            .child(title),
                     )
                     .child(
                         div()
                             .text_size(px(13.0))
                             .line_height(px(20.0))
                             .text_color(hsla(p.muted))
-                            // CDXC:Security 2026-11-08 WHY: User: "what do users who use tailscale need to do … we need to mention tailscale". The rows are only Easy Connect pairings; a phone or computer on Tailscale, the LAN or SSH logs in over SSH, has no pairing to redo, and keeps working.
+                            // CDXC:Security 2026-11-08 DECISION: User: "what do users who use tailscale need to do … we need to mention tailscale", then "outline this in the message": each route says what it needs (server/src/security_upgrade.rs `SshPhones`).
                             .child(format!(
-                                "Ghostex now gives every phone and computer its own key when you pair it, so a copied code or file can no longer let anyone in. {how} Phones and computers that connect over Tailscale, your local network or SSH aren't listed: they keep working without pairing again."
+                                "Ghostex now gives every phone and computer its own key when you pair it, so a copied code or file can no longer let anyone in. {how}"
                             )),
                     ),
             )
@@ -270,7 +295,11 @@ impl GpuiSecurityUpgradeModalWindow {
                 .text_size(px(12.0))
                 .text_color(hsla(p.muted))
                 .child(modal_icon(ICON_PAIRED, 14.0, p.success))
-                .child("Paired again")
+                .child(if row.id == SSH_PHONES_ROW_ID {
+                    "Paired"
+                } else {
+                    "Paired again"
+                })
                 .into_any_element(),
             SecurityNoticeRowStatus::Waiting if computer => {
                 let id = row.id.clone();
@@ -293,6 +322,12 @@ impl GpuiSecurityUpgradeModalWindow {
                 .text_size(px(12.0))
                 .text_color(hsla(p.muted))
                 .child("Waiting")
+                .into_any_element(),
+            SecurityNoticeRowStatus::Info => div()
+                .flex_shrink_0()
+                .text_size(px(12.0))
+                .text_color(hsla(p.muted))
+                .child("Nothing to do")
                 .into_any_element(),
             SecurityNoticeRowStatus::Pending => {
                 let approval_id = row.approval_id.clone().unwrap_or_default();
@@ -385,6 +420,20 @@ impl GpuiSecurityUpgradeModalWindow {
         if !self.state.computers.is_empty() {
             list = list.child(group("Computers"));
             for (index, row) in self.state.computers.iter().enumerate() {
+                list = list.child(self.render_row(row, ICON_COMPUTER, index == 0, true, cx));
+            }
+        }
+        if !self.state.ssh_phones.is_empty() {
+            list = list.child(group(
+                "Phones on Tailscale, your network or SSH \u{b7} open Ghostex on the phone",
+            ));
+            for (index, row) in self.state.ssh_phones.iter().enumerate() {
+                list = list.child(self.render_row(row, ICON_PHONE, index == 0, false, cx));
+            }
+        }
+        if !self.state.ssh_computers.is_empty() {
+            list = list.child(group("Computers over SSH \u{b7} nothing to pair again"));
+            for (index, row) in self.state.ssh_computers.iter().enumerate() {
                 list = list.child(self.render_row(row, ICON_COMPUTER, index == 0, true, cx));
             }
         }
