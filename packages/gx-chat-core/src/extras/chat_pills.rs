@@ -226,6 +226,9 @@ pub const STASHED_PILL: &str = "stashed";
 ///
 /// CDXC:SessionChat 2026-11-02 DECISION:
 /// User, of the empty left side of the pill strip: "i want to show some status related stuff there, for example if I enabled summary mode, show "Summary view" there with an x that appears next to it when i hover so we can disable it easily. same for if verbose is enabled". Then Verbose was retired and the levels became one choice (transcript/view_level.rs), so the chips are "Summary view" and "Detailed view", at most one at a time, and each one's X sets Normal. A chip alone is enough to show the strip. The chips are quieter than the pills on the right, the same height, and stay pinned left while the pills scroll; the X shows on hover on the desktop and always on the phone (apps/mobile/app/src/chat/native/cards/PillsStrip.tsx).
+///
+/// CDXC:SessionChat 2026-11-08 DECISION:
+/// User, of the chip with no icon and an empty gap kept at its right for the X: "This is bad, why do we have no icon on its left and gap on the right. please make the icon of summary view itself turn to x so no empty space there for the x. do same for detailed view also". Each chip shows its view's own icon (the View menu's: list-check for Summary, list-details for Detailed) at its left, and while hovered the X replaces that icon in the same spot and size, so no room is kept at the right. Supersedes the 2026-11-02 X that sat after the label.
 pub fn view_chips(level: &str) -> Vec<ViewChip> {
     use crate::transcript::view_level::{DETAILED, SUMMARY};
     let (id, label) = match level {

@@ -30,6 +30,14 @@ use std::{
 };
 use web_time::Instant;
 
+/// A view chip's icon, the one its View menu row shows (actions.rs `view_modes_row`).
+fn view_chip_icon(id: &str) -> &'static str {
+    match id {
+        "summary" => "titlebar/list-check.svg",
+        _ => "titlebar/list-details.svg",
+    }
+}
+
 /// The strip's height (unscaled): a pill's 22px with 5px above and below, and its 1px hairline.
 const STRIP_HEIGHT: f32 = 22.0 + 2.0 * 5.0;
 
@@ -153,7 +161,7 @@ impl NativeChatView {
     }
 
     /// The view status chip at the strip's left: a click goes back to Normal view, and it shows an X
-    /// while hovered (gx-chat-core extras/chat_pills.rs `view_chips` has the user's words).
+    /// while hovered in the place of its icon (gx-chat-core extras/chat_pills.rs `view_chips` has the user's words).
     fn view_chips(&self, p: &ChatAppearance, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let s = p.scale;
         let chips = self.snapshot["viewChips"]
@@ -174,9 +182,8 @@ impl NativeChatView {
                     .flex()
                     .items_center()
                     .flex_shrink_0()
-                    .gap(px(4.0 * s))
-                    .pl(px(8.0 * s))
-                    .pr(px(5.0 * s))
+                    .gap(px(5.0 * s))
+                    .px(px(8.0 * s))
                     .py(px(2.0 * s))
                     .rounded_full()
                     // A pill's height (its border included), quieter: a faint fill, no outline.
@@ -189,17 +196,34 @@ impl NativeChatView {
                     .text_color(p.card_muted.opacity(0.85))
                     .chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.07)))
-                    .child(chip["label"].as_str().unwrap_or_default().to_string())
                     .child(
-                        // Its room is kept while hidden, so the hover moves nothing.
-                        svg()
-                            .path("titlebar/x.svg")
-                            .size(px(10.0 * s))
+                        // The view's own icon, which the X replaces in the same spot and size
+                        // while the chip is hovered, so no room is kept for the X.
+                        div()
+                            .relative()
+                            .size(px(12.0 * s))
                             .flex_shrink_0()
-                            .text_color(p.foreground)
-                            .opacity(0.0)
-                            .group_hover(group, |style| style.opacity(0.75)),
+                            .child(
+                                svg()
+                                    .path(view_chip_icon(&id))
+                                    .absolute()
+                                    .inset_0()
+                                    .size(px(12.0 * s))
+                                    .text_color(p.card_muted.opacity(0.85))
+                                    .group_hover(group.clone(), |style| style.opacity(0.0)),
+                            )
+                            .child(
+                                svg()
+                                    .path("titlebar/x.svg")
+                                    .absolute()
+                                    .inset_0()
+                                    .size(px(12.0 * s))
+                                    .text_color(p.foreground)
+                                    .opacity(0.0)
+                                    .group_hover(group, |style| style.opacity(0.75)),
+                            ),
                     )
+                    .child(chip["label"].as_str().unwrap_or_default().to_string())
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
                         this.invoke(command.clone(), cx);
