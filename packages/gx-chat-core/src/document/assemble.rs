@@ -13,13 +13,38 @@ use crate::{composer, extras, menus, questions, session, transcript};
 
 /// The whole document for this state.
 pub fn assemble(state: &ChatState, context: &ChatContext) -> Document {
+    assemble_with(state, context, &mut AssembleCache::default())
+}
+
+/// What one core keeps between documents: each part with the inputs it was built from, reused
+/// while they hold, so an event that moves something else does not build it again.
+#[derive(Clone, Debug, Default)]
+pub struct AssembleCache {
+    forms: Option<(
+        crate::questions::forms::FormsInputs,
+        crate::document::SharedForms,
+    )>,
+    board: Option<crate::extras::coordinator_board::KeptBoard>,
+    question_list: Option<crate::questions::open_questions::KeptList>,
+}
+
+/// [`assemble`], reusing what `cache` kept: the same document, built once per change of inputs.
+pub fn assemble_with(
+    state: &ChatState,
+    context: &ChatContext,
+    cache: &mut AssembleCache,
+) -> Document {
     let mut document = Document::default();
     session::document(state, context, &mut document);
     transcript::document(state, context, &mut document);
     questions::document(state, context, &mut document);
+    document.question_forms = crate::questions::forms::project_kept(state, &mut cache.forms);
+    document.open_questions =
+        crate::questions::open_questions::project_with(state, context, &mut cache.question_list);
     composer::document(state, context, &mut document);
     menus::document(state, context, &mut document);
-    extras::document(state, context, &mut document);
+    let board = crate::extras::coordinator_board::project_kept(state, context, &mut cache.board);
+    extras::document_with_board(state, context, &mut document, board);
     crate::read_aloud::document(state, context, &mut document);
     document
 }

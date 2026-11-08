@@ -7,8 +7,8 @@
 
 use crate::dispatch::events;
 use crate::document::{
-    assemble, frame_parts, frame_parts_with_items, Document, Frame, FrameParts, ItemsSplice,
-    MinimapMarker, RowDetails, TranscriptItem,
+    assemble, assemble_with, frame_parts, frame_parts_with_items, Document, Frame, FrameParts,
+    ItemsSplice, MinimapMarker, RowDetails, TranscriptItem,
 };
 use crate::effect::Effect;
 use crate::event::Event;
@@ -63,6 +63,8 @@ pub struct ChatCore {
     /// Whether `parts.items` is the projection's current list, so a publish the projection did not
     /// rebuild for can keep it instead of copying and comparing every row again.
     parts_items_current: bool,
+    /// The document parts kept with their inputs, reused by every assembly while those hold.
+    assemble_cache: crate::document::AssembleCache,
 }
 
 /// The parts the host already has, which is what turns a whole list into a splice.
@@ -359,7 +361,11 @@ impl ChatCore {
         if chain_continued && !requested {
             return;
         }
-        let mut probe = assemble(&self.state, &self.published_context);
+        let mut probe = assemble_with(
+            &self.state,
+            &self.published_context,
+            &mut self.assemble_cache,
+        );
         // A rebuilt projection is a publish of its own: `update` rebuilds only when one of its
         // inputs changed identity, every one of those is a `useState` value the lifecycle
         // republishes on, and `take` then ships the new (if equal) array as a degenerate splice.
@@ -397,7 +403,7 @@ impl ChatCore {
             // twice (a page answer, then the loading flag) reads its panel clock twice.
             self.state.menus.panel_clock_ms = Some(self.context.clock_read(usize::MAX));
         }
-        let document = assemble(&self.state, &self.context);
+        let document = assemble_with(&self.state, &self.context, &mut self.assemble_cache);
         // The rows only change when the projection rebuilt (`transcript::rows` hands back its
         // list), so without a rebuild the list already held is kept: copying it and comparing it
         // row by row on every publish was most of a keystroke's cost on a long chat.

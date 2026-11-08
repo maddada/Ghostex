@@ -722,6 +722,105 @@ fn notes_from_answers(form: &QuestionForm, answers: &Value) -> String {
         .to_string()
 }
 
+/// Everything [`project`] reads, kept beside the map it built (`document::AssembleCache`).
+///
+/// CDXC:SessionChat 2026-11-09 WHY:
+/// User: "ghostex app gets slower with time until it becomes super slow". Every chat event assembled the document again, and projecting the question forms (every form of the chat written out with its picks, links and state) was a third of an event on the Main Coordinator chat, and the largest part of the document, which was then compared with the last one and dropped value by value. Nothing in the projection reads the clock or the transcript rows, so the map is kept while what it reads is equal and handed to the next document as the same shared map.
+/// The parts of the questions state the kept projections read (the forms, the board's question
+/// rows): not the content scan, the open-questions pill's state or the prompt card's, which move
+/// with every reply and every keystroke in a question card.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct QuestionsInputs {
+    forms: BTreeMap<String, FormState>,
+    form_answer_index: crate::session::answer_echoes::AnswerIndex,
+    inline_answers: crate::questions::inline_answers::InlineAnswersState,
+    later: crate::questions::later::LaterState,
+    recorded_answers: crate::questions::recorded_answers::RecordedAnswers,
+    resource_modal: Option<crate::questions::resource_modal::ResourceModal>,
+}
+
+impl QuestionsInputs {
+    pub(crate) fn of(questions: &crate::state::QuestionsState) -> Self {
+        Self {
+            forms: questions.forms.clone(),
+            form_answer_index: questions.form_answer_index.clone(),
+            inline_answers: questions.inline_answers.clone(),
+            later: questions.later.clone(),
+            recorded_answers: questions.recorded_answers.clone(),
+            resource_modal: questions.resource_modal.clone(),
+        }
+    }
+
+    pub(crate) fn matches(&self, questions: &crate::state::QuestionsState) -> bool {
+        self.forms == questions.forms
+            && self.form_answer_index == questions.form_answer_index
+            && self.inline_answers == questions.inline_answers
+            && self.later == questions.later
+            && self.recorded_answers == questions.recorded_answers
+            && self.resource_modal == questions.resource_modal
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FormsInputs {
+    question_forms: Vec<QuestionForm>,
+    askers: Vec<crate::transcript::open_questions::Asker>,
+    page_answers: Vec<crate::transcript::page_answers::PageAnswers>,
+    questions: QuestionsInputs,
+    queue_prompts: Option<Vec<Value>>,
+    resource_index: crate::questions::resource_index::ResourceIndex,
+    later_question_ids: Vec<String>,
+    removed_question_ids: Vec<String>,
+    collab: Option<Value>,
+    collab_guest: Option<Value>,
+}
+
+impl FormsInputs {
+    fn of(state: &ChatState) -> Self {
+        Self {
+            question_forms: state.transcript_view.question_forms.clone(),
+            askers: state.transcript_view.askers.clone(),
+            page_answers: state.transcript_view.page_answers.clone(),
+            questions: QuestionsInputs::of(&state.questions),
+            queue_prompts: state.session.queue_prompts.clone(),
+            resource_index: state.session.resource_index.clone(),
+            later_question_ids: state.session.later_question_ids.clone(),
+            removed_question_ids: state.session.removed_question_ids.clone(),
+            collab: state.session.collab.clone(),
+            collab_guest: state.session.collab_guest.clone(),
+        }
+    }
+
+    /// Whether `state` holds exactly these inputs, compared where they are, without copies.
+    fn matches(&self, state: &ChatState) -> bool {
+        self.question_forms == state.transcript_view.question_forms
+            && self.askers == state.transcript_view.askers
+            && self.page_answers == state.transcript_view.page_answers
+            && self.questions.matches(&state.questions)
+            && self.queue_prompts == state.session.queue_prompts
+            && self.resource_index == state.session.resource_index
+            && self.later_question_ids == state.session.later_question_ids
+            && self.removed_question_ids == state.session.removed_question_ids
+            && self.collab == state.session.collab
+            && self.collab_guest == state.session.collab_guest
+    }
+}
+
+/// [`project`], reused while its inputs are the ones `kept` was built from.
+pub fn project_kept(
+    state: &ChatState,
+    kept: &mut Option<(FormsInputs, crate::document::SharedForms)>,
+) -> crate::document::SharedForms {
+    if let Some((inputs, forms)) = kept.as_ref() {
+        if inputs.matches(state) {
+            return forms.clone();
+        }
+    }
+    let forms = crate::document::SharedForms::from(project(state));
+    *kept = Some((FormsInputs::of(state), forms.clone()));
+    forms
+}
+
 /// The document's `questionForms`: each form with what the reader picked, or what was sent.
 pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
     let mut projected = project_each(state);

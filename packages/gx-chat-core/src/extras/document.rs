@@ -21,6 +21,19 @@ use crate::state::{ChatContext, ChatState};
 /// frame that can carry them and does not; the strips and panels here are their projections and
 /// are never gated on `working`, because subagents outlive the turn that spawned them.
 pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
+    let board = crate::document::SharedValue::from(crate::extras::coordinator_board::project(
+        state, context,
+    ));
+    document_with_board(state, context, into, board);
+}
+
+/// [`document`] with the coordinator's board already projected (`coordinator_board::project_kept`).
+pub fn document_with_board(
+    state: &ChatState,
+    context: &ChatContext,
+    into: &mut Document,
+    board: crate::document::SharedValue,
+) {
     let extras = &state.extras;
     into.terminal_activity = tri(state.session.terminal_activity.clone());
     into.agent_fleet = tri(state.session.agent_fleet.clone());
@@ -64,7 +77,6 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     // User, of the strip reading "Resources 605 · Board · Workers · Stashed": "i asked u to swap the
     // placement of board and resources pills here, pls do it". Order: ?, Board, Resources, Workers.
     // This is the one place the order is set, so the desktop, the web build and the phone follow.
-    let board = crate::extras::coordinator_board::project(state, context);
     if let Some(pill) = crate::extras::coordinator_board::pill(&board) {
         into.chat_pills.insert(0, pill);
         // Blocked, before the Board pill (just after the renderers' ? pill), while anything is

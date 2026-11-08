@@ -981,6 +981,94 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     })
 }
 
+/// Everything [`coordinator_board`] reads besides the clock, kept beside the board it built
+/// (`document::AssembleCache`).
+///
+/// CDXC:Coordinators 2026-11-09 WHY:
+/// User: "ghostex app gets slower with time until it becomes super slow". The board was projected and written out to JSON on every event of a coordinator chat, a large part of each event's document. It reads the clock only for its rows' ages, which move in whole minutes (`age_label`), so a kept board stands until the first of its rows' next minute, or until anything else it reads changes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BoardInputs {
+    threads: Option<Value>,
+    panels: crate::state::PanelsState,
+    askers: Vec<crate::transcript::open_questions::Asker>,
+    questions: crate::questions::forms::QuestionsInputs,
+    resource_index: crate::questions::resource_index::ResourceIndex,
+    later_question_ids: Vec<String>,
+    removed_question_ids: Vec<String>,
+}
+
+impl BoardInputs {
+    fn of(state: &ChatState) -> Self {
+        Self {
+            threads: state.session.coordinator_threads.clone(),
+            panels: state.extras.panels.clone(),
+            askers: state.transcript_view.askers.clone(),
+            questions: crate::questions::forms::QuestionsInputs::of(&state.questions),
+            resource_index: state.session.resource_index.clone(),
+            later_question_ids: state.session.later_question_ids.clone(),
+            removed_question_ids: state.session.removed_question_ids.clone(),
+        }
+    }
+
+    fn matches(&self, state: &ChatState) -> bool {
+        self.threads == state.session.coordinator_threads
+            && self.panels == state.extras.panels
+            && self.askers == state.transcript_view.askers
+            && self.questions.matches(&state.questions)
+            && self.resource_index == state.session.resource_index
+            && self.later_question_ids == state.session.later_question_ids
+            && self.removed_question_ids == state.session.removed_question_ids
+    }
+}
+
+/// A kept board: its inputs, the clock it was built at, the moment its first age label changes,
+/// and the value.
+pub type KeptBoard = (BoardInputs, i64, Option<i64>, crate::document::SharedValue);
+
+/// When the first age on the board changes after `now_ms`: the next whole minute since any row's
+/// time (`age_label` reads only whole minutes), over every row the board can show.
+fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
+    let next = |at: i64| at + ((now_ms - at).max(0) / 60_000 + 1) * 60_000;
+    let board_rows = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("board"))
+        .and_then(|board| board.get("groups"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|group| group.get("rows").and_then(Value::as_array))
+        .flatten()
+        .filter_map(|row| at_ms(text(row, "at")));
+    let questions = crate::questions::open_questions::unanswered(state)
+        .into_iter()
+        .filter_map(|asker| asker.at);
+    board_rows.chain(questions).map(next).min()
+}
+
+/// [`project`], reused while its inputs are the ones `kept` was built from and no age on it moved.
+pub fn project_kept(
+    state: &ChatState,
+    context: &ChatContext,
+    kept: &mut Option<KeptBoard>,
+) -> crate::document::SharedValue {
+    let now_ms = context.now_millis();
+    if let Some((inputs, built_at, changes_at, board)) = kept.as_ref() {
+        if now_ms >= *built_at && changes_at.is_none_or(|at| now_ms < at) && inputs.matches(state) {
+            return board.clone();
+        }
+    }
+    let board = crate::document::SharedValue::from(project(state, context));
+    *kept = Some((
+        BoardInputs::of(state),
+        now_ms,
+        ages_change_at(state, now_ms),
+        board.clone(),
+    ));
+    board
+}
+
 /// The document value, `null` when there is no board.
 pub fn project(state: &ChatState, context: &ChatContext) -> Value {
     coordinator_board(state, context)

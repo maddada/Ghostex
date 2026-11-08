@@ -671,8 +671,59 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
     found
 }
 
+/// Everything [`list_rows`] reads, kept beside the list it built (`document::AssembleCache`).
+///
+/// CDXC:SessionChat 2026-11-09 WHY:
+/// User: "ghostex app gets slower with time until it becomes super slow". Every event of the Main Coordinator chat listed its ~1,300 forms, pages and charts again for the ? pill and the Resources panel, a fifth of an idle event, though the list only moves with the questions themselves. The rows without their time fields read no clock, so they are kept while what they are built from is equal; the page shown is cut from them and given its time fields on every event, as before.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ListInputs {
+    askers: Vec<Asker>,
+    questions: crate::questions::forms::QuestionsInputs,
+    content: Vec<crate::questions::content::ContentItem>,
+    queue_prompts: Option<Vec<serde_json::Value>>,
+    resource_index: crate::questions::resource_index::ResourceIndex,
+    later_question_ids: Vec<String>,
+    removed_question_ids: Vec<String>,
+}
+
+impl ListInputs {
+    fn of(state: &ChatState) -> Self {
+        Self {
+            askers: state.transcript_view.askers.clone(),
+            questions: crate::questions::forms::QuestionsInputs::of(&state.questions),
+            content: state.questions.content.items.clone(),
+            queue_prompts: state.session.queue_prompts.clone(),
+            resource_index: state.session.resource_index.clone(),
+            later_question_ids: state.session.later_question_ids.clone(),
+            removed_question_ids: state.session.removed_question_ids.clone(),
+        }
+    }
+
+    fn matches(&self, state: &ChatState) -> bool {
+        self.askers == state.transcript_view.askers
+            && self.questions.matches(&state.questions)
+            && self.content == state.questions.content.items
+            && self.queue_prompts == state.session.queue_prompts
+            && self.resource_index == state.session.resource_index
+            && self.later_question_ids == state.session.later_question_ids
+            && self.removed_question_ids == state.session.removed_question_ids
+    }
+}
+
+/// A kept unlabelled list and the inputs it was built from.
+pub type KeptList = (ListInputs, std::sync::Arc<Vec<QuestionListSection>>);
+
 /// The document's `openQuestions`.
 pub fn project(state: &ChatState, context: &ChatContext) -> OpenQuestions {
+    project_with(state, context, &mut None)
+}
+
+/// [`project`], listing the rows again only when what they are built from changed.
+pub fn project_with(
+    state: &ChatState,
+    context: &ChatContext,
+    kept: &mut Option<KeptList>,
+) -> OpenQuestions {
     let open = unanswered(state);
     // The loaded rows' unanswered questions, plus the ones older than what the chat has loaded.
     let count = (open.len() + indexed_waiting(state, &indexed_entries(state)).len()) as u32;
@@ -681,7 +732,14 @@ pub fn project(state: &ChatState, context: &ChatContext) -> OpenQuestions {
     CDXC:SessionChat 2026-11-04 WHY:
     This runs on every chat event (each streamed token) to learn whether the document changed, and it listed every form, page and chart with its time labels and copied each row twice to keep the first page: on a coordinator chat with hundreds of them that was the chat worker's main cost while a visible chat streamed (issues-1027/macos-perf). Rows are listed without their time fields, moved rather than copied, and only the rows on the page get their time fields (`label_row`), which reads them exactly as listing them would.
     */
-    let all = list_rows(state, context, false);
+    let all = match kept.as_ref().filter(|(inputs, _)| inputs.matches(state)) {
+        Some((_, all)) => std::sync::Arc::clone(all),
+        None => {
+            let all = std::sync::Arc::new(list_rows(state, context, false));
+            *kept = Some((ListInputs::of(state), std::sync::Arc::clone(&all)));
+            all
+        }
+    };
     let total = all.iter().map(|section| section.count).sum();
     let later = all
         .iter()
@@ -708,21 +766,38 @@ pub fn project(state: &ChatState, context: &ChatContext) -> OpenQuestions {
                 .count() as u32,
         })
         .collect();
-    let (sections, remaining) = page_sections(
-        all.into_iter()
-            .filter_map(|mut section| {
-                section.rows.retain(|row| filter_shows(filter, &row.kind));
-                (!section.rows.is_empty()).then(|| QuestionListSection {
-                    count: section.rows.len() as u32,
-                    remaining: 0,
-                    ..section
-                })
+    // `page_sections` over the filtered sections, copying only the rows the page keeps.
+    let budget = (state.questions.open_questions.pages as usize + 1) * LIST_PAGE;
+    let mut remaining = 0u32;
+    let mut sections: Vec<QuestionListSection> = all
+        .iter()
+        .filter_map(|section| {
+            let shown = || {
+                section
+                    .rows
+                    .iter()
+                    .filter(|row| filter_shows(filter, &row.kind))
+            };
+            let count = shown().count();
+            if count == 0 {
+                return None;
+            }
+            let keep = if always_whole(&section.id) {
+                count
+            } else {
+                count.min(budget)
+            };
+            remaining += (count - keep) as u32;
+            Some(QuestionListSection {
+                id: section.id.clone(),
+                title: section.title.clone(),
+                count: count as u32,
+                rows: shown().take(keep).cloned().collect(),
+                remaining: (count - keep) as u32,
             })
-            .collect(),
-        state.questions.open_questions.pages,
-    );
+        })
+        .collect();
     // "Earlier" has a header only beside another group.
-    let mut sections = sections;
     for row in sections
         .iter_mut()
         .flat_map(|section| section.rows.iter_mut())

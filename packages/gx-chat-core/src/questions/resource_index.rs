@@ -91,7 +91,9 @@ pub fn settled_by_index<'a>(index: &'a [Value], kind: &str) -> HashMap<&'a str, 
 /// User: "ghostex app gets slower with time until it becomes super slow ... even pasting an image takes long". Every chat event assembles the document again, and the Resources pill, the forms and their sync asked the index about each form one at a time: each question rebuilt a map of the whole index (`settled_by_index`) or scanned it, and the records were re-read from JSON after comparing the whole index with the last one read. A coordinator chat with ~500 forms and an 800-record index spent most of the chat worker's time there (the worker sat at 100% in the user's app, and a pasted image waited behind it). The lookups are now built when the index changes and shared by every reader until it changes again; writing to the index through `DerefMut` drops them.
 #[derive(Clone, Debug, Default)]
 pub struct ResourceIndex {
-    entries: Vec<Value>,
+    /// Shared, so a kept copy (`document::AssembleCache`) is the same records and compares by
+    /// address; a write copies them first.
+    entries: std::sync::Arc<Vec<Value>>,
     view: std::sync::OnceLock<std::sync::Arc<IndexView>>,
 }
 
@@ -183,7 +185,7 @@ impl ResourceIndex {
 impl From<Vec<Value>> for ResourceIndex {
     fn from(entries: Vec<Value>) -> Self {
         Self {
-            entries,
+            entries: std::sync::Arc::new(entries),
             view: std::sync::OnceLock::new(),
         }
     }
@@ -207,19 +209,19 @@ impl std::ops::DerefMut for ResourceIndex {
     /// A write can change any record, so what was read from them goes.
     fn deref_mut(&mut self) -> &mut Vec<Value> {
         self.view = std::sync::OnceLock::new();
-        &mut self.entries
+        std::sync::Arc::make_mut(&mut self.entries)
     }
 }
 
 impl PartialEq for ResourceIndex {
     fn eq(&self, other: &Self) -> bool {
-        self.entries == other.entries
+        std::sync::Arc::ptr_eq(&self.entries, &other.entries) || self.entries == other.entries
     }
 }
 
 impl PartialEq<Vec<Value>> for ResourceIndex {
     fn eq(&self, other: &Vec<Value>) -> bool {
-        &self.entries == other
+        *self.entries == *other
     }
 }
 

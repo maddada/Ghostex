@@ -161,7 +161,7 @@ pub struct Document {
     pub async_questions: AsyncQuestions,
     /// The question forms (```questions blocks) by id, with the reader's picks or the sent answers
     /// (`questions/forms.rs`); the transcript's Markdown names each by id where it is drawn.
-    pub question_forms: BTreeMap<String, Value>,
+    pub question_forms: SharedForms,
     /// The form or chart a Resources row opened in the floating modal, or `null`
     /// (`questions/resource_modal.rs`); a form's picks are in `questionForms` under its id.
     #[serde(default)]
@@ -254,7 +254,7 @@ pub struct Document {
     /// A coordinator's Threads panel, or `null`. Family f.
     pub coordinator_threads_panel: Tri<Value>,
     /// A coordinator's board (`extras::coordinator_board`), or `null`. Family f.
-    pub coordinator_board: Tri<Value>,
+    pub coordinator_board: Tri<SharedValue>,
     /// A coordinator's "How to use coordinators" tips (`extras::coordinator_intro`), or `null` where
     /// its pill does not show. Family f.
     pub coordinator_intro: Tri<Value>,
@@ -373,5 +373,59 @@ impl Document {
         let mut copy = self.clone();
         copy.async_questions = Default::default();
         copy
+    }
+}
+
+/// The document's `questionForms`, shared rather than copied: the core keeps the projection it
+/// built and hands the same map to every document assembled while its inputs stay the same
+/// (`document::AssembleCache`), so an unchanged map is neither copied, compared nor dropped value
+/// by value. Serialized as the bare map.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SharedForms(pub std::sync::Arc<BTreeMap<String, Value>>);
+
+impl PartialEq for SharedForms {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
+    }
+}
+
+impl std::ops::Deref for SharedForms {
+    type Target = BTreeMap<String, Value>;
+
+    fn deref(&self) -> &BTreeMap<String, Value> {
+        &self.0
+    }
+}
+
+impl From<BTreeMap<String, Value>> for SharedForms {
+    fn from(forms: BTreeMap<String, Value>) -> Self {
+        Self(std::sync::Arc::new(forms))
+    }
+}
+
+/// A document value kept by the core across documents (`document::AssembleCache`): the same value
+/// is shared rather than copied, compared or dropped while its inputs hold. Serialized as the value.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SharedValue(pub std::sync::Arc<Value>);
+
+impl PartialEq for SharedValue {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
+    }
+}
+
+impl std::ops::Deref for SharedValue {
+    type Target = Value;
+
+    fn deref(&self) -> &Value {
+        &self.0
+    }
+}
+
+impl From<Value> for SharedValue {
+    fn from(value: Value) -> Self {
+        Self(std::sync::Arc::new(value))
     }
 }
