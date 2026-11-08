@@ -104,8 +104,9 @@ pub const LEGACY_AT_LOGIN: &str = "com.madda.ghostex.gxserver-at-login";
 pub const BUNDLED_AGENT_ENV: &str = "GHOSTEX_GXSERVER_BUNDLED_AGENT";
 /// Where the bundled plists live inside the app, and the program they run (`BundleProgram`).
 pub const BUNDLED_AGENTS_DIR: &str = "Contents/Library/LaunchAgents";
-pub const BUNDLED_GXSERVER_PROGRAM: &str =
-    "Contents/Resources/Web/gxserver/GhostexServer.app/Contents/MacOS/gxserver";
+/// The `bin/gxserver` link, the path the legacy plist runs too: gxserver derives its package root
+/// and the hook commands it writes from the path it was started by (see build-macos-app.sh).
+pub const BUNDLED_GXSERVER_PROGRAM: &str = "Contents/Resources/Web/gxserver/bin/gxserver";
 
 fn uid() -> u32 {
     unsafe { libc::getuid() }

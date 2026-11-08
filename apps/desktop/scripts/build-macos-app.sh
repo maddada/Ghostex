@@ -1131,7 +1131,11 @@ stage_code_server_payload_if_changed() {
 # BundleProgram must match packages/paths/src/macos_launch_agent.rs. Each plist is the same for every
 # user: gxserver works out the user's PATH and its launch log itself when GHOSTEX_GXSERVER_BUNDLED_AGENT
 # is set. Only rewritten when its text changes, so an unchanged app keeps its signature.
-GPUI_BUNDLED_GXSERVER_PROGRAM="Contents/Resources/Web/gxserver/GhostexServer.app/Contents/MacOS/gxserver"
+# The bin/gxserver link, exactly what the legacy plist runs: gxserver finds its package root (bundled
+# zmx, skills, CLI links) and writes hook commands from the path it was started by, which must end in
+# gxserver/bin/gxserver (server/src/toolchain.rs `gxserver_root_from_executable_path`). Running the
+# real file inside GhostexServer.app left every root empty and no session could start (2026-11-08).
+GPUI_BUNDLED_GXSERVER_PROGRAM="Contents/Resources/Web/gxserver/bin/gxserver"
 write_gpui_bundled_launch_agent() {
 	local label="$1" argument="$2" extra="$3" target
 	target="$APP_PATH/Contents/Library/LaunchAgents/$label.plist"
