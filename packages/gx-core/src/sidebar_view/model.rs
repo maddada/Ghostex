@@ -725,6 +725,9 @@ impl SidebarViewModel {
             }
         }
 
+        // Chief of Staff's row joins the home's group wherever its session lives (`chief.rs`).
+        super::chief::lift_chief_into_home(&mut plans);
+
         // Every machine's projects in this one list (`merged.rs`), unless Separate by machine.
         if merging {
             let (cache, outcome) = super::merged::merge_machines(

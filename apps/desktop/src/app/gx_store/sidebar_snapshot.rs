@@ -1018,6 +1018,7 @@ fn build_session(
     }
     NativeSidebarSession {
         session_id: row.sidebar_session_id.clone(),
+        is_chief: row.is_chief,
         display_title: Some(row.display_title.clone()),
         alias: row.alias.clone(),
         activity: row.activity.clone(),

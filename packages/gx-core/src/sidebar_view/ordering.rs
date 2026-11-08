@@ -269,6 +269,27 @@ fn sort_pinned(
     pinned: &mut [usize],
     pinned_order: super::inputs::PinnedSessionOrder,
 ) {
+    sort_pinned_by_rule(rows, pinned, pinned_order);
+    // CDXC:Chief 2026-11-08 DECISION:
+    // User: "always pin 1 thread to the top of Main Hub called Chief of Staff ... and can have multiple chiefs of staff from different machines in 1 place". The Chief of Staff rows lead the Pinned group whatever its order rule: this computer's first, then the other computers' (merged.rs adds theirs to the one home list).
+    pinned.sort_by_key(|index| {
+        let row = &rows[*index];
+        match (
+            row.is_chief,
+            row.key.as_ref().is_some_and(|key| key.machine.is_local()),
+        ) {
+            (true, true) => 0,
+            (true, false) => 1,
+            (false, _) => 2,
+        }
+    });
+}
+
+fn sort_pinned_by_rule(
+    rows: &[std::sync::Arc<SessionRow>],
+    pinned: &mut [usize],
+    pinned_order: super::inputs::PinnedSessionOrder,
+) {
     match pinned_order {
         super::inputs::PinnedSessionOrder::Manual => {
             pinned.sort_by_key(|index| rows[*index].sidebar_order.unwrap_or(i64::MAX));

@@ -17,8 +17,11 @@ use gpui::{
 };
 use gpui_component::{h_flex, v_flex};
 
-/// Chief's name on its row and in its menu ("Main Hub", Q1931; server/src/chief/mod.rs `CHIEF_TITLE`).
-pub(crate) const CHIEF_LABEL: &str = "Main Hub";
+/// Chief's name on its row and in its menus: "Chief of Staff" (server/src/chief/mod.rs
+/// `CHIEF_TITLE`, CDXC:Chief 2026-11-08 there).
+pub(crate) const CHIEF_LABEL: &str = "Chief of Staff";
+/// The home project's name on its header and card: "Main Hub". The one place the desktop spells it.
+pub(crate) const HOME_LABEL: &str = "Main Hub";
 /// The Ghostex flower in one colour (Q1735).
 pub(crate) const FLOWER_ICON: &str = "titlebar/ghostex-flower.svg";
 /// How much of the muted colour the chevron keeps while nothing can unfold under it.
@@ -168,7 +171,7 @@ pub(crate) const MAIN_HUB_TOOLTIP_WIDTH: f32 = 264.0;
 pub(crate) fn main_hub_tooltip_lines() -> [&'static str; 2] {
     [
         "The home for chats that don't belong to a project: quick questions, terminals and agents started in your home folder.",
-        "Its agent sees and steers every Ghostex agent on this computer, and talks to the Main Hubs on your other computers.",
+        "Chief of Staff, pinned at the top, is the agent that sees and steers every Ghostex agent on this computer, and talks to the Chiefs of Staff on your other computers.",
     ]
 }
 
@@ -212,7 +215,7 @@ pub(crate) fn main_hub_tooltip_content(scale: f32, foreground: Hsla, secondary: 
                         .line_height(px(18.0 * scale))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(foreground)
-                        .child(CHIEF_LABEL),
+                        .child(HOME_LABEL),
                 ),
         )
         .children(lines.into_iter().map(|line| {
@@ -228,8 +231,8 @@ pub(crate) fn main_hub_tooltip_content(scale: f32, foreground: Hsla, secondary: 
                 .gap(px(10.0 * scale))
                 .text_size(px(10.5 * scale))
                 .text_color(secondary)
-                .child(hint("Click", "open the chat"))
-                .child(hint("Right-click", "more")),
+                .child(hint("Click", "fold"))
+                .child(hint("Right-click", "Main Hub settings")),
         )
 }
 

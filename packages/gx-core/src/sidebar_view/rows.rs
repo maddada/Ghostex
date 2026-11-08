@@ -341,7 +341,8 @@ pub(crate) fn session_row(
         agent_icon: agent_icon.map(str::to_string),
         session_kind: Some(session_kind),
         lifecycle_state: lifecycle_state.to_string(),
-        is_pinned: session.is_pinned,
+        is_pinned: session.is_pinned || session.is_chief,
+        is_chief: session.is_chief,
         sidebar_order: session
             .sidebar_order
             .filter(|order| order.is_finite())

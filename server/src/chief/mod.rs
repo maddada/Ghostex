@@ -44,8 +44,8 @@ pub(crate) const CHIEF_PLAYBOOK: &str = include_str!("playbook.md");
 /// apps/mobile/app/src/contract/chief.ts).
 ///
 /// CDXC:Chief 2026-11-08 DECISION:
-/// User (Q1931): the name users see is "Main Hub" everywhere: the row on the desktop and the phone (the home's header), its session title and breadcrumb, the Extensions card, its menus, Settings, notifications and Help. It was "Chief" (Q1746), then "Chief of Staff" (Q1896). Internal ids, the `chiefHidden` setting and the `ghostex chief` command keep their names so nothing breaks.
-pub(crate) const CHIEF_TITLE: &str = "Main Hub";
-/// The session titles Chief was created with before the renames; sweep.rs renames such a session
+/// User: "Please don't make Main Hub a thread AND a project header ... Let's just always pin 1 thread to the top of Main Hub called Chief of Staff". The agent is "Chief of Staff" again everywhere users see it (its row and session title, its menus, the Extensions card, notifications, Help); "Main Hub" names only the home project (its header and card). It was "Chief" (Q1746), "Chief of Staff" (Q1896), then "Main Hub" (Q1931), which this supersedes for the agent. Internal ids, the `chiefHidden` setting and the `ghostex chief` command keep their names so nothing breaks.
+pub(crate) const CHIEF_TITLE: &str = "Chief of Staff";
+/// The session titles Chief was created with under earlier names; sweep.rs renames such a session
 /// once (a title the user gave it stays).
-pub(crate) const OLD_CHIEF_TITLES: &[&str] = &["Chief", "Chief of Staff"];
+pub(crate) const OLD_CHIEF_TITLES: &[&str] = &["Chief", "Main Hub"];

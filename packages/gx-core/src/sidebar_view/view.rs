@@ -642,7 +642,12 @@ pub struct SessionRow {
     pub session_kind: Option<String>,
     /// The sidebar's own lifecycle vocabulary: `running`, `sleeping`, `error`, `done`.
     pub lifecycle_state: String,
+    /// Pinned by the user, or this is a computer's Chief of Staff, which is always pinned
+    /// (`is_chief`).
     pub is_pinned: bool,
+    /// A computer's Chief of Staff (gxserver's `isChief`): pinned first in its group, ahead of
+    /// every other pinned row (ordering.rs `sort_pinned`).
+    pub is_chief: bool,
     /// gxserver's `sidebarOrder`: the manual place the Project sidebar gives the row among its
     /// project's rows (and the order of its Pinned), which the Unified sidebar's pinned cards
     /// follow too (unified_sidebar/build.rs). `None` when the row has none.

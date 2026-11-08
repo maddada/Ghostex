@@ -1,5 +1,5 @@
 //! The home: the project rooted at this computer's home folder (`~`, `C:\Users\<name>` on
-//! Windows). Main Hub's row is its header on every client, its loose sessions (terminals,
+//! Windows), shown as "Main Hub" on every client: its loose sessions (terminals,
 //! agents, quick questions started there) are listed under it, and Chief's own chats run in it.
 //!
 //! CDXC:Chief 2026-11-08 DECISION:

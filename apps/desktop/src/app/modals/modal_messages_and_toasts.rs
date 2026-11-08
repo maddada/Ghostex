@@ -294,7 +294,7 @@ impl GhostexGpuiApp {
             GpuiAppToast {
                 id: format!("gpui-app-toast-{}", self.app_toast_id_counter),
                 level: GpuiAppToastLevel::Info,
-                title: "Main Hub turned off".to_string(),
+                title: "Chief of Staff turned off".to_string(),
                 description: Some(
                     "Its chat and memory are kept. Turn it back on in Settings > Extensions."
                         .to_string(),

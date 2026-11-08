@@ -81,8 +81,9 @@ fn confirm_new_chat_on() -> bool {
 }
 
 const CONFIRM_NEW_CHAT_SETTING: &str = "chiefConfirmNewChat";
+const SHOW_ON_ALL_SPACES_SETTING: &str = "chiefShowOnAllSpaces";
 
-/// The Main Hub card's key for the row under the Spaces bar (a home header's is its group id).
+/// The Chief of Staff card's key for the row under the Spaces bar (a home header's is its group id).
 const STATIC_ROW_KEY: &str = "chief-row";
 
 /// The status dot a Chief row draws, the same dots and order as a session card's.
@@ -171,7 +172,7 @@ impl GhostexGpuiApp {
             local.and_then(|chief| chief_status(chief, scale)),
         )
         .on_prepaint(super::menus::record_menu_owner(&owner))
-        // Resting on the row opens Main Hub's card beside the sidebar.
+        // Resting on the row opens Chief of Staff's card beside the sidebar.
         .on_hover({
             let owner = owner.clone();
             cx.listener(move |app, hovered: &bool, _, cx| {
@@ -187,9 +188,9 @@ impl GhostexGpuiApp {
                     .id("native-sidebar-chief-fold")
                     .role(gpui::Role::Button)
                     .aria_label(if expanded {
-                        "Fold Main Hub on the other computers"
+                        "Fold Chief of Staff on the other computers"
                     } else {
-                        "Show Main Hub on the other computers"
+                        "Show Chief of Staff on the other computers"
                     })
                     .absolute()
                     .left_0()
@@ -267,7 +268,7 @@ impl GhostexGpuiApp {
         )
     }
 
-    /// The pointer entered (`hovered`) or left a Main Hub row whose top in the window is `top`:
+    /// The pointer entered (`hovered`) or left a Chief of Staff row whose top in the window is `top`:
     /// after the tooltip delay its card opens beside the sidebar (window/main_hub_card.rs on the
     /// desktop, web_host/main_hub_card.rs on the web), and it closes when the pointer leaves.
     pub(crate) fn hover_main_hub_row(
@@ -323,6 +324,144 @@ impl GhostexGpuiApp {
         if self.native_sidebar.main_hub_card_open.is_some() {
             self.close_main_hub_card(cx);
         }
+    }
+
+    /// The "Pick an agent" row at the top of a home group whose computer has no Chief of Staff yet:
+    /// a click asks which agent runs it, then its real row takes this place.
+    pub(crate) fn render_native_sidebar_chief_placeholder(
+        &self,
+        group: &super::model::NativeSidebarGroup,
+        appearance: &SidebarAppearance,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
+        let snapshot = self.native_sidebar.snapshot.as_ref()?;
+        let home = snapshot
+            .home_headers
+            .iter()
+            .find(|home| home.group_id == group.group_id)?;
+        if home.chief.is_some() || !chief_row_shown(snapshot.chief_enabled, snapshot.bots_mode) {
+            return None;
+        }
+        let scale = appearance.scale;
+        let command = chief_command("open", &home.machine_id);
+        Some(
+            gpui_component::h_flex()
+                .id(format!(
+                    "native-sidebar-chief-placeholder-{}",
+                    home.machine_id
+                ))
+                .role(gpui::Role::Button)
+                .aria_label(format!(
+                    "{}: pick the agent it runs on",
+                    super::chief_row_view::CHIEF_LABEL
+                ))
+                .h(px(34.0 * scale))
+                .mx(px(3.0 * scale))
+                .pl(px(8.0 * scale))
+                .pr(px(8.0 * scale))
+                .gap(px(8.0 * scale))
+                .rounded(px(5.0 * scale))
+                .cursor_pointer()
+                .hover(|row| row.bg(appearance.session_hover))
+                .child(
+                    gpui::svg()
+                        .path(super::chief_row_view::FLOWER_ICON)
+                        .size(px(14.0 * scale))
+                        .flex_shrink_0()
+                        .text_color(appearance.muted),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .font_weight(gpui::FontWeight::LIGHT)
+                        .child(super::chief_row_view::CHIEF_LABEL),
+                )
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(12.0 * scale))
+                        .text_color(appearance.muted)
+                        .child("Pick an agent"),
+                )
+                .on_click(cx.listener(move |app, _, window, cx| {
+                    cx.stop_propagation();
+                    app.handle_native_sidebar_action(
+                        &NativeSidebarAction {
+                            command: command.clone(),
+                        },
+                        window,
+                        cx,
+                    );
+                }))
+                .into_any_element(),
+        )
+    }
+
+    /// Main Hub's own items over the home project's menu: where it shows, whether New Chat asks,
+    /// the secret folders, and Start Chief of Staff before its first open.
+    ///
+    /// CDXC:Chief 2026-11-08 DECISION:
+    /// User: "Please don't make Main Hub a thread AND a project header ... Let's just always pin 1 thread to the top of Main Hub called Chief of Staff, and we can have general sessions there too". Main Hub's header is only the home project's: a click folds it, its menu is the project's with Main Hub's settings on top, and its card stays. Chief of Staff is a session row pinned first under it whose own menu has New Chat, Change Agent and its editors (`native_sidebar_session_menu_with_chief`); before the first open a "Pick an agent" row stands in its place (rows.rs). Supersedes the header that opened Chief's chat.
+    pub(crate) fn native_sidebar_home_menu(&self, machine_id: &str) -> Value {
+        let mut items = Vec::new();
+        if chief_on() && self.native_sidebar_chief_of(machine_id).is_none() {
+            items.push(json!({ "label": format!("Start {}", super::chief_row_view::CHIEF_LABEL), "icon": "plus", "command": chief_command("open", machine_id) }));
+        }
+        // The settings are this computer's; another computer's home is drawn in its own entry
+        // only when this one has none.
+        if machine_id == ghostex_gx_core::LOCAL_MACHINE_ID {
+            let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+            let settings = settings.object();
+            let on = |key: &str, default: bool| {
+                settings
+                    .get(key)
+                    .and_then(Value::as_bool)
+                    .unwrap_or(default)
+            };
+            items.push(json!({
+                "label": "Show on All Spaces",
+                "checked": on(SHOW_ON_ALL_SPACES_SETTING, false),
+                "command": { "type": "chief", "op": "toggleSetting", "key": SHOW_ON_ALL_SPACES_SETTING },
+            }));
+            items.push(json!({
+                "label": "Ask Before New Chat",
+                "checked": on(CONFIRM_NEW_CHAT_SETTING, true),
+                "command": { "type": "chief", "op": "toggleSetting", "key": CONFIRM_NEW_CHAT_SETTING },
+            }));
+            if cfg!(not(target_arch = "wasm32")) {
+                items.push(json!({ "label": "Folders Agents Can't Read…", "icon": "lock", "command": chief_command("homeSettings", machine_id) }));
+            }
+        }
+        json!(items)
+    }
+
+    /// A session row's menu, with Chief of Staff's own items first when the row is a Chief.
+    pub(crate) fn native_sidebar_session_menu_with_chief(
+        &self,
+        session: &super::model::NativeSidebarSession,
+        menu: &Value,
+    ) -> Value {
+        if !session.is_chief {
+            return menu.clone();
+        }
+        let machine = ghostex_gx_core::SessionKey::parse_sidebar_session_id(&session.session_id)
+            .map(|key| {
+                key.machine
+                    .remote_id()
+                    .unwrap_or(ghostex_gx_core::LOCAL_MACHINE_ID)
+                    .to_string()
+            })
+            .unwrap_or_else(|| ghostex_gx_core::LOCAL_MACHINE_ID.to_string());
+        let mut items = self
+            .native_sidebar_chief_menu(Some(&machine))
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        items.push(json!({ "separator": true }));
+        items.extend(menu.as_array().cloned().unwrap_or_default());
+        Value::Array(items)
     }
 
     /// The row's right-click menu, for `machine_id`'s Chief (the selected computer's when `None`).
@@ -425,6 +564,24 @@ impl GhostexGpuiApp {
                 }
             }
             "disable" => self.set_native_sidebar_chief_enabled(false, cx),
+            "toggleSetting" => {
+                if let Some(key @ (SHOW_ON_ALL_SPACES_SETTING | CONFIRM_NEW_CHAT_SETTING)) =
+                    command.get("key").and_then(Value::as_str)
+                {
+                    let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+                    let default = key == CONFIRM_NEW_CHAT_SETTING;
+                    let current = settings
+                        .object()
+                        .get(key)
+                        .and_then(Value::as_bool)
+                        .unwrap_or(default);
+                    self.save_native_sidebar_chief_setting(key, !current, cx);
+                }
+            }
+            "homeSettings" => {
+                #[cfg(not(target_arch = "wasm32"))]
+                self.open_gpui_settings_tab("agents", Some(window), cx);
+            }
             _ => {}
         }
     }
@@ -543,18 +700,32 @@ impl GhostexGpuiApp {
 
     /// Saves `chiefConfirmNewChat` the way Settings does.
     fn save_native_sidebar_chief_confirm(&mut self, ask: bool, cx: &mut gpui::Context<Self>) {
+        self.save_native_sidebar_chief_setting(CONFIRM_NEW_CHAT_SETTING, ask, cx);
+    }
+
+    /// Saves one of Main Hub's switches the way Settings does.
+    fn save_native_sidebar_chief_setting(
+        &mut self,
+        key: &str,
+        on: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
         #[cfg(not(target_arch = "wasm32"))]
-        self.handle_gpui_app_modal_update_settings_patch_message(
-            &json!({
-                "patch": { CONFIRM_NEW_CHAT_SETTING: ask },
-                "source": "sidebar:chief",
-                "type": "updateSettingsPatch",
-            }),
-            cx,
-        );
+        {
+            let mut patch = serde_json::Map::new();
+            patch.insert(key.to_string(), json!(on));
+            self.handle_gpui_app_modal_update_settings_patch_message(
+                &json!({
+                    "patch": patch,
+                    "source": "sidebar:chief",
+                    "type": "updateSettingsPatch",
+                }),
+                cx,
+            );
+        }
         #[cfg(target_arch = "wasm32")]
         {
-            let _ = (ask, cx);
+            let _ = (key, on, cx);
         }
     }
 
@@ -643,7 +814,7 @@ impl GhostexGpuiApp {
                     Err(error) => {
                         app.dispatch_gpui_app_modal_toast(
                             "warning",
-                            "Main Hub isn't available",
+                            "Chief of Staff isn't available",
                             &error.message,
                             cx,
                         );
@@ -660,7 +831,7 @@ impl GhostexGpuiApp {
                     app.focus_native_sidebar_chief(&row_id, cx);
                     return;
                 }
-                let mut items = vec![json!({ "label": "Which agent runs Main Hub?", "disabled": true })];
+                let mut items = vec![json!({ "label": "Which agent runs Chief of Staff?", "disabled": true })];
                 items.extend(app.native_sidebar.chief_agents.iter().map(|(agent_id, name)| {
                     json!({
                         "label": name,
@@ -670,7 +841,7 @@ impl GhostexGpuiApp {
                 if items.len() == 1 {
                     app.dispatch_gpui_app_modal_toast(
                         "warning",
-                        "No agent can run Main Hub",
+                        "No agent can run Chief of Staff",
                         "Set up Claude, Codex or another coordinator agent in Settings > Agents first.",
                         cx,
                     );
@@ -730,7 +901,7 @@ impl GhostexGpuiApp {
                 }
                 Err(error) => app.dispatch_gpui_app_modal_toast(
                     "warning",
-                    "Main Hub didn't start",
+                    "Chief of Staff didn't start",
                     &error.message,
                     cx,
                 ),

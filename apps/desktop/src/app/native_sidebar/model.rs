@@ -118,6 +118,10 @@ pub(crate) struct NativeSidebarSection {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct NativeSidebarSession {
     pub(crate) session_id: String,
+    /// A computer's Chief of Staff (gx-core `SessionRow::is_chief`): its right-click menu starts
+    /// with New Chat, Change Agent and its editors (native_sidebar/chief.rs).
+    #[serde(default)]
+    pub(crate) is_chief: bool,
     pub(crate) display_title: Option<String>,
     pub(crate) alias: String,
     pub(crate) activity: String,

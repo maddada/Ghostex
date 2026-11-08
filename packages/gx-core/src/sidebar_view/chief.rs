@@ -173,3 +173,25 @@ fn chief_row_for(
         machine_label,
     })
 }
+
+/// Moves the Chief of Staff row into the home project's group when its session lives in another
+/// project: a Chief started before the home existed runs in the Ghostex config folder's project
+/// until its next New Chat, and its row still belongs at the top of Main Hub.
+pub(crate) fn lift_chief_into_home(plans: &mut [super::groups::GroupPlan]) {
+    let Some(home) = plans.iter().position(|plan| {
+        plan.kind == super::groups::GroupKind::Project
+            && plan.project.as_ref().is_some_and(|project| project.is_home)
+    }) else {
+        return;
+    };
+    for index in 0..plans.len() {
+        if index == home {
+            continue;
+        }
+        if let Some(at) = plans[index].rows.iter().position(|row| row.row.is_chief) {
+            let row = plans[index].rows.remove(at);
+            plans[home].rows.insert(0, row);
+            return;
+        }
+    }
+}

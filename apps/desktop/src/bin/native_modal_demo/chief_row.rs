@@ -10,6 +10,7 @@
 //! row heads the home project and its loose sessions, then the next project), `home-combined`
 //! (computers combined: the home section's title, then each computer's header with its own home
 //! sessions), `home-earlier` (the home unfolded with Chief's earlier chats asleep in it),
+//! `home-setup` (Main Hub before Chief of Staff's first open: the Pick an agent row),
 //! `home-tooltip` (the Main Hub tooltip under the header, drawn in the tooltip bubble's look).
 use super::chief_row_view::*;
 use gpui::prelude::FluentBuilder;
@@ -235,32 +236,75 @@ impl Render for ChiefRowPreview {
         let home_session = |title: &str, asleep: bool, status: Option<AnyElement>| {
             home_chat(title, asleep, None, status)
         };
-        let home_header = |label: &str, fold: ChiefFold, status: Option<AnyElement>| {
+        // Main Hub's header: the project header with the flower and "Main Hub" (project_header.rs).
+        let home_header = |fold: ChiefFold| {
             chief_block(1.0).pb(px(0.0)).child(chief_header_row(
-                label, 1.0, colors, fold, false, false, None, status,
+                HOME_LABEL, 1.0, colors, fold, false, false, None, None,
             ))
+        };
+        // A section heading (sections.rs): 12px, light, faint.
+        let heading = |label: &str| {
+            div()
+                .pl(px(24.0 + 3.0 + 5.0))
+                .h(px(20.0))
+                .flex()
+                .items_center()
+                .text_size(px(12.0))
+                .font_weight(gpui::FontWeight::LIGHT)
+                .text_color(hsla(ink, 0.34))
+                .child(label.to_string())
+                .into_any_element()
+        };
+        let chief_row = |machine: Option<&str>, status: Option<AnyElement>| {
+            home_chat(CHIEF_LABEL, false, machine, status).into_any_element()
         };
         let home_rows: Vec<AnyElement> = match state {
             "home" | "home-tooltip" => vec![
-                home_header(CHIEF_LABEL, ChiefFold::Unfolded, Some(dot(WORKING)))
-                    .into_any_element(),
+                home_header(ChiefFold::Unfolded).into_any_element(),
+                heading("Pinned"),
+                chief_row(None, Some(dot(WORKING))),
+                heading("Sessions"),
                 home_session("Preventing Mac screen lock", false, Some(dot(WORKING)))
                     .into_any_element(),
                 home_session("Disk cleanup and move to /Volumes", false, None).into_any_element(),
                 home_session("CPU usage investigation", true, None).into_any_element(),
-                home_session("Install opencode via mise", true, None).into_any_element(),
+            ],
+            "home-setup" => vec![
+                home_header(ChiefFold::Unfolded).into_any_element(),
+                home_chat(
+                    CHIEF_LABEL,
+                    true,
+                    None,
+                    Some(
+                        div()
+                            .text_size(px(12.0))
+                            .text_color(colors.muted)
+                            .child("Pick an agent")
+                            .into_any_element(),
+                    ),
+                )
+                .into_any_element(),
+                home_session("Preventing Mac screen lock", false, None).into_any_element(),
+                home_session("CPU usage investigation", true, None).into_any_element(),
             ],
             "home-earlier" => vec![
-                home_header(CHIEF_LABEL, ChiefFold::Unfolded, None).into_any_element(),
+                home_header(ChiefFold::Unfolded).into_any_element(),
+                heading("Pinned"),
+                chief_row(None, None),
+                heading("Sessions"),
                 home_session("Preventing Mac screen lock", false, Some(dot(WORKING)))
                     .into_any_element(),
-                home_session("Main Hub \u{b7} 8 Nov, 13:30", true, None).into_any_element(),
-                home_session("Main Hub \u{b7} 7 Nov, 09:12", true, None).into_any_element(),
+                home_session("Chief of Staff \u{b7} 8 Nov, 13:30", true, None).into_any_element(),
+                home_session("Chief of Staff \u{b7} 7 Nov, 09:12", true, None).into_any_element(),
                 home_session("CPU usage investigation", true, None).into_any_element(),
             ],
             "home-combined" => vec![
-                home_header(CHIEF_LABEL, ChiefFold::Unfolded, Some(dot(WORKING)))
-                    .into_any_element(),
+                home_header(ChiefFold::Unfolded).into_any_element(),
+                heading("Pinned"),
+                chief_row(None, Some(dot(WORKING))),
+                chief_row(Some("Hetzner"), Some(dot(QUESTION))),
+                chief_row(Some("WN"), None),
+                heading("Sessions"),
                 home_chat(
                     "Preventing Mac screen lock",
                     false,
@@ -268,8 +312,6 @@ impl Render for ChiefRowPreview {
                     Some(dot(WORKING)),
                 )
                 .into_any_element(),
-                home_chat("Main Hub", false, Some("Hetzner"), Some(dot(QUESTION)))
-                    .into_any_element(),
                 home_chat("Restart the relay", false, Some("Hetzner"), None).into_any_element(),
                 home_chat("Game launcher setup", true, Some("WN"), None).into_any_element(),
                 home_chat("CPU usage investigation", true, None, None).into_any_element(),
@@ -311,7 +353,7 @@ impl Render for ChiefRowPreview {
             .relative()
             .flex_shrink_0()
             .w(px(300.0))
-            .h(px(if home { 380.0 } else { 330.0 }))
+            .h(px(if home { 420.0 } else { 330.0 }))
             .bg(background)
             .text_color(hsla(ink, 1.0))
             .text_size(px(TEXT_SIZE))
@@ -410,7 +452,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     };
     let light = demo.palette.light;
     let height = if state.starts_with("home") {
-        380.0
+        420.0
     } else {
         330.0
     };

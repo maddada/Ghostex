@@ -318,7 +318,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("chiefHidden")),
         ("appWide", J::Bool(true)),
-        ("title", J::Str("Main Hub")),
+        ("title", J::Str("Chief of Staff")),
     ]),
     // CDXC:VoiceMode 2026-10-21 DECISION:
     // User: Read aloud ships as a Ghostex extension, disabled by default (2026-10-20), and (Q23) as a built-in extension, not a Store extension: a Store extension cannot reach the chat composer, a message's actions or the phone. A whole-feature entry like Workspaces, with a new key (`readAloudHidden`, default on = hidden) because the settings file stores every default; off hides the reply action, the ⋯ menu rows, the Voice and Speed rows and the two hotkeys, and keeps their saved values. No `platforms` list: the switch also governs the phone and Ghostex in a browser that talk to this computer, so it exists on Linux too, where the desktop draws no controls (Q25; `readAloudUnavailable` says why).

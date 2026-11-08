@@ -51,101 +51,105 @@ impl GhostexGpuiApp {
         // User: don't show the Sessions label under a project or worktree when it's the only label there (no pinned, drafts or parked sessions). Superseded 2026-10-04: it no longer comes back while a session is dragged, because a drag must never change the sidebar's layout.
         let hide_lone_sessions_heading =
             matches!(group.sections.as_slice(), [only] if only.id == "sessions");
-        let body =
-            self.native_sidebar
-                .disclosures
-                .present(&key, group.collapsed)
-                .then(|| {
-                    let content = v_flex()
-                        .w_full()
-                        .pb(px(3.0 * scale))
-                        .when(
-                            group.sessions.is_empty() && group.project_context.is_some(),
-                            |column| {
-                                let id = group.group_id.clone();
-                                let is_bot = group.bot_status().is_some();
-                                // A GBot's "+" starts a conversation (gbots), a Hermes bot's a session.
-                                let label = if group.is_gbot() {
-                                    "New conversation"
-                                } else {
-                                    "New Session"
-                                };
-                                column.child(
-                                    div()
-                                        .id(format!("native-empty-project-{id}"))
-                                        .h(px(34.0 * scale))
-                                        .mx(px(3.0 * scale))
-                                        .pl(px(26.0 * scale))
-                                        .flex()
-                                        .items_center()
-                                        .rounded(px(5.0 * scale))
-                                        .hover(|row| row.bg(appearance.hover))
-                                        .relative()
-                                        .child(label)
-                                        .sidebar_drop_target("session-group", id.clone(), None, cx)
-                                        .on_click(cx.listener(move |app, _, _, cx| {
-                                            cx.stop_propagation();
-                                            app.start_native_sidebar_empty_group_session(
-                                                &id, is_bot, cx,
-                                            );
-                                        })),
-                                )
-                            },
-                        )
-                        .children(group.sections.iter().enumerate().map(|(index, section)| {
-                            let key = format!("section:{}:{}", group.group_id, section.id);
-                            let ids = self.native_sidebar.disclosures.section_ids(
-                                &key,
-                                &section.session_ids,
-                                section.collapsed,
-                            );
-                            let body = self
-                                .native_sidebar
-                                .disclosures
-                                .present(&key, section.collapsed)
-                                .then(|| {
-                                    let sessions = group
-                                        .sessions
-                                        .iter()
-                                        .map(|session| (session.session_id.as_str(), session))
-                                        .collect::<std::collections::HashMap<_, _>>();
-                                    let rows = self.render_native_session_rows(
-                                        group,
-                                        ids.iter()
-                                            .filter_map(|id| {
-                                                sessions
-                                                    .get(id.as_str())
-                                                    .map(|session| (*session).clone())
-                                            })
-                                            .collect(),
-                                        appearance,
-                                        cx,
-                                    );
-                                    self.render_native_disclosure(key, rows, cx)
-                                });
-                            v_flex()
-                                .w_full()
-                                .flex_shrink_0()
-                                .when(index > 0 && group.sections[index - 1].collapsed, |column| {
-                                    column.mt(px(8.0 * scale))
-                                })
-                                .when(!hide_lone_sessions_heading, |column| {
-                                    column.child(self.render_native_section_header(
-                                        group, section, appearance, cx,
-                                    ))
-                                })
-                                .children(body)
-                                .into_any_element()
-                        }));
-                    self.render_native_project_fold(
-                        key,
-                        content.into_any_element(),
-                        session_groups,
-                        hud,
-                        appearance,
-                        cx,
+        let body = self
+            .native_sidebar
+            .disclosures
+            .present(&key, group.collapsed)
+            .then(|| {
+                let content = v_flex()
+                    .w_full()
+                    .pb(px(3.0 * scale))
+                    // Main Hub before Chief of Staff's first open: its row's place (chief.rs).
+                    .children(self.render_native_sidebar_chief_placeholder(group, appearance, cx))
+                    .when(
+                        group.sessions.is_empty() && group.project_context.is_some(),
+                        |column| {
+                            let id = group.group_id.clone();
+                            let is_bot = group.bot_status().is_some();
+                            // A GBot's "+" starts a conversation (gbots), a Hermes bot's a session.
+                            let label = if group.is_gbot() {
+                                "New conversation"
+                            } else {
+                                "New Session"
+                            };
+                            column.child(
+                                div()
+                                    .id(format!("native-empty-project-{id}"))
+                                    .h(px(34.0 * scale))
+                                    .mx(px(3.0 * scale))
+                                    .pl(px(26.0 * scale))
+                                    .flex()
+                                    .items_center()
+                                    .rounded(px(5.0 * scale))
+                                    .hover(|row| row.bg(appearance.hover))
+                                    .relative()
+                                    .child(label)
+                                    .sidebar_drop_target("session-group", id.clone(), None, cx)
+                                    .on_click(cx.listener(move |app, _, _, cx| {
+                                        cx.stop_propagation();
+                                        app.start_native_sidebar_empty_group_session(
+                                            &id, is_bot, cx,
+                                        );
+                                    })),
+                            )
+                        },
                     )
-                });
+                    .children(group.sections.iter().enumerate().map(|(index, section)| {
+                        let key = format!("section:{}:{}", group.group_id, section.id);
+                        let ids = self.native_sidebar.disclosures.section_ids(
+                            &key,
+                            &section.session_ids,
+                            section.collapsed,
+                        );
+                        let body = self
+                            .native_sidebar
+                            .disclosures
+                            .present(&key, section.collapsed)
+                            .then(|| {
+                                let sessions = group
+                                    .sessions
+                                    .iter()
+                                    .map(|session| (session.session_id.as_str(), session))
+                                    .collect::<std::collections::HashMap<_, _>>();
+                                let rows = self.render_native_session_rows(
+                                    group,
+                                    ids.iter()
+                                        .filter_map(|id| {
+                                            sessions
+                                                .get(id.as_str())
+                                                .map(|session| (*session).clone())
+                                        })
+                                        .collect(),
+                                    appearance,
+                                    cx,
+                                );
+                                self.render_native_disclosure(key, rows, cx)
+                            });
+                        v_flex()
+                            .w_full()
+                            .flex_shrink_0()
+                            .when(index > 0 && group.sections[index - 1].collapsed, |column| {
+                                column.mt(px(8.0 * scale))
+                            })
+                            .when(!hide_lone_sessions_heading, |column| {
+                                column.child(
+                                    self.render_native_section_header(
+                                        group, section, appearance, cx,
+                                    ),
+                                )
+                            })
+                            .children(body)
+                            .into_any_element()
+                    }));
+                self.render_native_project_fold(
+                    key,
+                    content.into_any_element(),
+                    session_groups,
+                    hud,
+                    appearance,
+                    cx,
+                )
+            });
         // The line of a project drop is drawn on the project's whole block, header and sessions,
         // because a project dropped after an expanded one lands after its sessions too.
         let drop_line = self.native_sidebar_project_drop_line("group", &group.group_id);

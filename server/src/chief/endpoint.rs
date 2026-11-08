@@ -51,7 +51,7 @@ pub(crate) async fn handle_chief_http(
             request_id,
             DomainStateError {
                 code: "forbidden",
-                message: "Only you can open Main Hub, start a new chat with it or change its agent, from its row in the sidebar.".to_string(),
+                message: "Only you can open Chief of Staff, start a new chat with it or change its agent, from its row in the sidebar.".to_string(),
             },
         );
     }
@@ -79,7 +79,7 @@ pub(crate) async fn handle_chief_http(
             request_id,
             DomainStateError {
                 code: "internalError",
-                message: format!("Main Hub could not answer: {error}"),
+                message: format!("Chief of Staff could not answer: {error}"),
             },
         ),
     }
@@ -114,13 +114,13 @@ fn run(state: &AppState, op: &str, params: &Map<String, Value>) -> Result<Value,
         "setAgent" => {
             if agent_id.is_none_or(|id| id.trim().is_empty()) {
                 return Err(DomainStateError::bad_request(
-                    "Pass the agentId Main Hub should run on.",
+                    "Pass the agentId Chief of Staff should run on.",
                 ));
             }
             replace_chief(state, agent_id)
         }
         other => Err(DomainStateError::bad_request(format!(
-            "Unknown Main Hub op {other}: use status, guide, open, newChat or setAgent."
+            "Unknown Chief of Staff op {other}: use status, guide, open, newChat or setAgent."
         ))),
     }
 }

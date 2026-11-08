@@ -353,7 +353,8 @@ pub(super) fn merge_machines(
                         plans[entry].rows.push(row);
                     }
                 }
-                // That computer's Main Hub chat is a row of the one home list (Q1993).
+                // That computer's Chief of Staff is a row of the one home list, pinned right under
+                // this computer's (ordering.rs `sort_pinned`).
                 if let Some(key) = project
                     .is_home
                     .then(|| chief_row_key(store, &guest.machine))
@@ -626,7 +627,7 @@ fn mergeable(
 const HOME_KEY: &str = "home:";
 
 /// CDXC:Chief 2026-11-08 DECISION:
-/// User (Q1993): with computers combined, Main Hub is "one list with a small computer chip on each chat instead of one header per computer (keep the Main Hub row as the header)". Every computer's home project (`is_home`) has the same key, so the homes are one entry headed by Main Hub's row, each other computer's chat carrying that computer's chip like any merged project's; the other computers' own Main Hub chats join it as rows too (`chief_row_key`). Supersedes one header per computer (Q1913).
+/// User (Q1993): with computers combined, Main Hub is "one list with a small computer chip on each chat instead of one header per computer"; then: "can have multiple chiefs of staff from different machines in 1 place". Every computer's home project (`is_home`) has the same key, so the homes are one entry under the Main Hub header, each other computer's chat carrying that computer's chip like any merged project's, and each computer's Chief of Staff pinned at the top (`chief_row_key`, ordering.rs `sort_pinned`). Supersedes one header per computer (Q1913).
 fn identity_of(project: &ProjectContextInput) -> RepoIdentity {
     if project.is_home {
         return RepoIdentity {
@@ -672,8 +673,8 @@ fn last_used_copy(plan: &GroupPlan, copies: &[Copy]) -> Option<PlanActionTarget>
     })
 }
 
-/// `machine`'s Main Hub session, which its own list draws as its home's header and the combined
-/// list as a row of the one home entry.
+/// `machine`'s Chief of Staff session, listed in the one home entry even when it still lives in
+/// that computer's Ghostex config folder project.
 fn chief_row_key(store: &PresentationStore, machine: &MachineId) -> Option<SessionKey> {
     let loaded = store.machine(machine)?.loaded()?;
     let session = loaded.server_sessions().find(|session| session.is_chief)?;

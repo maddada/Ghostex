@@ -1,5 +1,5 @@
 //! Chief's session: created by gxserver in the home project (the project at the home folder,
-//! home.rs), as a coordinator titled "Main Hub".
+//! home.rs), as a coordinator titled "Chief of Staff".
 //!
 //! CDXC:Chief 2026-11-08 DECISION:
 //! User: "one per computer" (Q1741); "ask which agent on first open" (Q1740); "one ongoing chat, plus New Chat that keeps its memory" (Q1742); right-click Change Agent. New Chat and Change Agent start a new session and move the coordinator's goal, instructions, memory, threads and board items to it, then point the record at it, so the head role moves with it (head.rs) and nothing it was following is lost.
@@ -33,7 +33,7 @@ const CHIEF_GOAL: &str =
     "Answer the user about anything in Ghostex, and steer their agents and coordinators for them.";
 
 /// What follows the coordinator skill line in Chief's first message.
-pub(super) const CHIEF_FIRST_REQUEST: &str = "You are Main Hub, the Ghostex-wide coordinator on this computer: the user asks you about any session, agent, project or computer, or about Ghostex itself. Before your first reply, and again after any context compaction, run `ghostex chief guide` and follow it; where it differs from the coordinator guide, it wins. Then say in one short line that you're ready and wait for the user.";
+pub(super) const CHIEF_FIRST_REQUEST: &str = "You are Chief of Staff, the Ghostex-wide coordinator on this computer: the user asks you about any session, agent, project or computer, or about Ghostex itself. Before your first reply, and again after any context compaction, run `ghostex chief guide` and follow it; where it differs from the coordinator guide, it wins. Then say in one short line that you're ready and wait for the user.";
 
 /// The launchers Chief can run on: set up to start, and an agent family a coordinator runs on.
 pub(super) fn chief_agent_rows(projects: &[Value]) -> Vec<Value> {
@@ -89,7 +89,7 @@ pub(super) fn open_chief(
     let Some(agent_id) = agent_id.map(str::trim).filter(|id| !id.is_empty()) else {
         return Err(DomainStateError {
             code: "chiefNeedsAgent",
-            message: "Pick the agent Main Hub runs on first.".to_string(),
+            message: "Pick the agent Chief of Staff runs on first.".to_string(),
         });
     };
     // A Chief whose session was removed keeps its earlier chats.
@@ -111,7 +111,7 @@ pub(super) fn replace_chief(
     let Some(old) = read_record(&db) else {
         return Err(DomainStateError {
             code: "chiefNeedsAgent",
-            message: "Main Hub has not been opened yet. Open it and pick its agent first."
+            message: "Chief of Staff has not been opened yet. Open it and pick its agent first."
                 .to_string(),
         });
     };
@@ -174,7 +174,7 @@ fn live_earlier(repository: &DomainRepository<'_>, chats: Vec<EarlierChat>) -> V
         .collect()
 }
 
-/// An earlier chat still titled "Main Hub" is renamed after the day it started ("Chief of
+/// An earlier chat still titled "Chief of Staff" is renamed after the day it started ("Chief of
 /// Staff · 8 Nov, 13:30"), so the rows under the header tell the chats apart. A title the user gave
 /// it stays.
 fn retitle_earlier(
@@ -239,7 +239,7 @@ fn create_chief_session(
         .any(|row| row.get("agentId").and_then(Value::as_str) == Some(agent_id))
     {
         return Err(DomainStateError::bad_request(format!(
-            "Main Hub can't run on {agent_id}: pick one of {}.",
+            "Chief of Staff can't run on {agent_id}: pick one of {}.",
             crate::coordinators::coordinator_agent_families_text()
         )));
     }
@@ -328,7 +328,7 @@ pub(super) fn move_coordinator(
 ) -> Result<(), DomainStateError> {
     let sql = |error: rusqlite::Error| DomainStateError {
         code: "internalError",
-        message: format!("SQLite Main Hub error: {error}"),
+        message: format!("SQLite Chief of Staff error: {error}"),
     };
     if let Some(mut record) = read_coordinator(db, &old.0, &old.1)? {
         record.project_id = new.0.clone();

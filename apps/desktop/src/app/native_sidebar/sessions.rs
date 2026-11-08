@@ -319,7 +319,9 @@ impl GhostexGpuiApp {
                 .on_mouse_down(MouseButton::Right, cx.listener(move |app, event: &gpui::MouseDownEvent, window, cx| {
                     cx.stop_propagation();
                     if !selected { app.dispatch_native_sidebar_ui(json!({"type": "selectSession", "mode": "clear", "sessionId": context_id}), cx); }
-                    Self::show_native_sidebar_context_menu(context_session.details.get("menu").unwrap_or(&Value::Null), app.native_sidebar.session_card_bounds.get(&context_id).copied(), event.position, scale, window, cx);
+                    // Chief of Staff's row starts its menu with its own items (chief.rs).
+                    let menu = app.native_sidebar_session_menu_with_chief(&context_session, context_session.details.get("menu").unwrap_or(&Value::Null));
+                    Self::show_native_sidebar_context_menu(&menu, app.native_sidebar.session_card_bounds.get(&context_id).copied(), event.position, scale, window, cx);
                 })))
             .into_any_element()
     }

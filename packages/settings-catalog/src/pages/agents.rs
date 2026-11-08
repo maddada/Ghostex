@@ -32,7 +32,7 @@ pub(crate) fn home_folder() -> Section {
         "Home folder",
         vec![
             row("chiefShowOnAllSpaces", "Show Main Hub on all Spaces", "Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to."),
-            row("chiefConfirmNewChat", "Ask before New Chat", "Ask before New Chat or Change Agent starts a new chat with Main Hub. Your earlier chats stay under its row either way."),
+            row("chiefConfirmNewChat", "Ask before New Chat", "Ask before New Chat or Change Agent starts a new chat with Chief of Staff. Your earlier chats stay in Main Hub either way."),
             row("homeSecretFolders", "Folders agents can't read in your home folder", "Agents Ghostex starts in your home folder are kept out of these folders and files. Claude Code's file tools and every Codex command are held to the list; Claude's shell commands and other agents are not."),
         ],
     )

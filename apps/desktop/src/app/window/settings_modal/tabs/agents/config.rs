@@ -336,7 +336,7 @@ impl AgentsTab {
                 p,
                 CONFIRM_NEW_CHAT,
                 RowSpec::new("Ask before New Chat").description(
-                    "Ask before New Chat or Change Agent starts a new chat with Main Hub. Your earlier chats stay under its row either way.",
+                    "Ask before New Chat or Change Agent starts a new chat with Chief of Staff. Your earlier chats stay in Main Hub either way.",
                 ),
                 values.bool(CONFIRM_NEW_CHAT),
                 cx,

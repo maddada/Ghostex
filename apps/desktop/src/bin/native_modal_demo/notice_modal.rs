@@ -91,7 +91,7 @@ fn case(state: &str) -> NoticeModalItem {
         "chief-undo" => item(
             "chief-undo",
             Info,
-            "Main Hub turned off",
+            "Chief of Staff turned off",
             "Its chat and memory are kept. Turn it back on in Settings > Extensions.",
             Some("Undo"),
             None,
