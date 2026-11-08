@@ -62,3 +62,9 @@ pub(crate) mod space_editor_modal {
     use crate::*;
     include!(concat!(env!("OUT_DIR"), "/space_editor_modal.rs"));
 }
+
+/// The Security upgrade notice's size (desktop `window/security_upgrade_modal.rs`), which the
+/// shared `model/app_modal_kind.rs` names; the page never opens that window (it reads Settings
+/// widgets the web build does not compile), so only the numbers come here.
+pub(crate) const SECURITY_UPGRADE_MODAL_WIDTH: f32 = 640.0;
+pub(crate) const SECURITY_UPGRADE_MODAL_INITIAL_HEIGHT: f32 = 520.0;
