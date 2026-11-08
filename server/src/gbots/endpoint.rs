@@ -25,13 +25,30 @@ pub(crate) async fn gbots_action(
     state: Arc<AppState>,
     params: Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
-    tokio::task::spawn_blocking(move || run(&state, &params))
-        .await
-        .unwrap_or_else(|error| {
-            Err(DomainStateError::corrupt_state(format!(
-                "GBots action failed: {error}"
-            )))
-        })
+    // Read here: the blocking pool does not see the request's caller.
+    let actor = crate::audit::Actor::current();
+    tokio::task::spawn_blocking(move || {
+        let result = run(&state, &params);
+        if text(&params, "action") == "create" {
+            crate::audit::record(
+                crate::audit::Action::new("gbots.create", "Added a GBots bot")
+                    .target(text(&params, "name")),
+                actor,
+                match &result {
+                    Ok(_) => crate::audit::Outcome::Done,
+                    Err(error) => crate::audit::Outcome::Failed(error.message.clone()),
+                },
+                None,
+            );
+        }
+        result
+    })
+    .await
+    .unwrap_or_else(|error| {
+        Err(DomainStateError::corrupt_state(format!(
+            "GBots action failed: {error}"
+        )))
+    })
 }
 
 /// `/api/gbotsHome {action}`: the part of GBots another computer's desktop may ask for, to show
@@ -40,10 +57,21 @@ pub(crate) async fn gbots_home_action(
     state: Arc<AppState>,
     params: Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
+    let actor = crate::audit::Actor::current();
     tokio::task::spawn_blocking(move || match text(&params, "action").as_str() {
         "status" => run(&state, &params_with_action("status")),
         "claim" => {
-            super::settings::claim_home(&text(&params, "by")).map_err(|error| {
+            let claimed = super::settings::claim_home(&text(&params, "by"));
+            crate::audit::record(
+                crate::audit::Action::new(
+                    "gbots.claim",
+                    "Made this computer the one GBots runs on",
+                ),
+                actor,
+                crate::audit::Outcome::of(&claimed),
+                None,
+            );
+            claimed.map_err(|error| {
                 refused(format!("Could not make this the GBots computer: {error}"))
             })?;
             run(&state, &params_with_action("status"))
