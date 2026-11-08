@@ -7,7 +7,8 @@ use std::rc::Rc;
 /// CDXC:Settings 2026-10-29 DECISION:
 /// User (Q5, "tiers"): the General page is gone; each of its rail groups is a page of its own
 /// (Chat, Sidebar & Sessions, Terminal, Notifications, Files & Links, Power & Sleep), and the rail
-/// shows three labelled tiers (`RailTier`): App, Setup and More. Q7: the Tools group is called
+/// shows three labelled tiers (`RailTier`): App, Setup and More (superseded by the six groups of
+/// CDXC:Settings 2026-11-08 at `RailTier`). Q7: the Tools group is called
 /// Files & Links. Q8: Terminal is always in the rail. Q6 ("keep mode", superseded the same day
 /// by the Advanced fold, CDXC:Settings 2026-10-29 in search.rs): advanced rows fold at the bottom
 /// of their page. Sleeping Sessions joined Sidebar & Sessions and
@@ -49,15 +50,34 @@ pub(crate) enum SettingsTabId {
     VoiceAgent,
 }
 
-/// The rail's tiers (CDXC:Settings 2026-10-29 above): a label above each run of pages.
+/// The rail's groups (CDXC:Settings 2026-11-08 below): a label above each run of pages.
+///
+/// CDXC:Settings 2026-11-08 DECISION:
+/// User: the rail showed only two labels (App, Setup) and they asked for more. Q1770 (option C,
+/// "Six groups by task"): Working (Chat, Sidebar & Sessions, Terminal, Files & Links), Appearance
+/// (Interface, Notifications, Hotkeys), Voice (Dictation, Voice Agent), Agents & Accounts (Agents,
+/// Accounts, Autopilot, Secrets), Connections (Remote, Sync, Projects, Collab, Integrations) and
+/// Privacy & System (Security, Power & Sleep, About). Q1771: Updates stays alone on top with no
+/// label. Extensions and the pages that fold under it are unchanged. Every page keeps its own
+/// show/hide rule; a group whose pages are all hidden (Voice with Voice Agent off and no Dictation
+/// match while searching, for one) shows no label, since a label is drawn only above a shown page
+/// ([`RailTier::label_before`]). Supersedes the App and Setup tiers of the 2026-10-29 note above.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum RailTier {
-    /// Updates, alone above the labelled tiers (CDXC:Updates 2026-11-05 in tabs/updates/mod.rs).
+    /// Updates, alone above the labelled groups (CDXC:Updates 2026-11-05 in tabs/updates/mod.rs).
     Top,
-    /// The pages General split into, with Theme and Hotkeys: how the app looks and behaves.
-    App,
-    /// Agents, Accounts, Integrations, Remote, Projects and About.
-    Setup,
+    /// Chat, Sidebar & Sessions, Terminal, Files & Links.
+    Working,
+    /// Interface, Notifications, Hotkeys.
+    Appearance,
+    /// Dictation, Voice Agent.
+    Voice,
+    /// Agents, Accounts, Autopilot, Secrets.
+    AgentsAccounts,
+    /// Remote, Sync, Projects, Collab, Integrations.
+    Connections,
+    /// Security, Power & Sleep, About.
+    PrivacySystem,
     /// The Extensions page and the pages that fold under it.
     More,
 }
@@ -66,40 +86,52 @@ impl RailTier {
     pub(crate) fn title(self) -> &'static str {
         match self {
             RailTier::Top => "",
-            RailTier::App => "App",
-            RailTier::Setup => "Setup",
+            RailTier::Working => "Working",
+            RailTier::Appearance => "Appearance",
+            RailTier::Voice => "Voice",
+            RailTier::AgentsAccounts => "Agents & Accounts",
+            RailTier::Connections => "Connections",
+            RailTier::PrivacySystem => "Privacy & System",
             RailTier::More => "More",
         }
+    }
+
+    /// The group label to draw above shown page `tab` when the page shown before it was in group
+    /// `previous`: one at the start of each group's run of shown pages, none for Updates. Hidden
+    /// pages never reach the rail, so a group with none shown gets no label.
+    pub(crate) fn label_before(previous: Option<RailTier>, tab: SettingsTabId) -> Option<RailTier> {
+        let tier = tab.tier();
+        (previous != Some(tier) && tier != RailTier::Top).then_some(tier)
     }
 }
 
 impl SettingsTabId {
-    /// The rail order: the App tier, the Setup tier ending with About, then the Extensions page
-    /// (the catalog) at the rail's bottom with the pages that fold under it
-    /// ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration, Connectors, Debugging,
-    /// the built-in extensions' pages) leave the rail while they are off.
+    /// The rail order: Updates, the six labelled groups (CDXC:Settings 2026-11-08 at `RailTier`)
+    /// ending with About, then the Extensions page (the catalog) at the rail's bottom with the pages
+    /// that fold under it ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration,
+    /// Connectors, Debugging, the built-in extensions' pages) leave the rail while they are off.
     pub(crate) const RAIL_ORDER: [SettingsTabId; 30] = [
         SettingsTabId::Updates,
         SettingsTabId::Chat,
         SettingsTabId::Sidebar,
         SettingsTabId::Terminal,
+        SettingsTabId::FilesLinks,
         SettingsTabId::Theme,
         SettingsTabId::Notifications,
-        SettingsTabId::FilesLinks,
-        SettingsTabId::PowerSleep,
+        SettingsTabId::Hotkeys,
         SettingsTabId::Dictation,
         SettingsTabId::VoiceAgent,
-        SettingsTabId::Hotkeys,
         SettingsTabId::Agents,
         SettingsTabId::Accounts,
         SettingsTabId::Autopilot,
-        SettingsTabId::Collab,
         SettingsTabId::Secrets,
-        SettingsTabId::Security,
-        SettingsTabId::Integrations,
         SettingsTabId::Remote,
         SettingsTabId::Sync,
         SettingsTabId::Projects,
+        SettingsTabId::Collab,
+        SettingsTabId::Integrations,
+        SettingsTabId::Security,
+        SettingsTabId::PowerSleep,
         SettingsTabId::About,
         SettingsTabId::Extensions,
         SettingsTabId::Workspaces,
@@ -115,7 +147,7 @@ impl SettingsTabId {
     /// User, about the old "Store" row inside the group: "I dont like how store looks like the other ones here and i dont like that it's hidden there and i dont like that it's called store". Q640-Q641: the catalog page is called "Extensions" and is its own rail row at the bottom, drawn like the other top-level rows; clicking it opens the page, and a chevron "below the extensinos button" folds and unfolds the switched-on extensions' pages listed here. About moves up "to be last one with the ones up top so it's not next to extensions". Q642: no update count. Q643: the phone is left alone. This supersedes the 2026-10-19 Q308 decision (the page renamed "Store", first item in the group, a header that only folds); the rest of 2026-10-19 still holds: Q306 the group holds Workspaces, Connectors, Cloud Boxes, Actions, Open In, OS Integration and Debugging; Q307 the fold is "Collapsed the first time, then remembers" (`settingsModalNavigation`); a search opens it and lists only its matching pages; a deep link to one of its pages opens it; folded over the open page, its chevron row shows the selected fill. Q313: Connectors, OS Integration and Debugging are built-in extensions with "Switch on top of the gate" (CDXC:Extensions 2026-10-19 in official_extensions.rs).
     /// CDXC:VoiceMode 2026-10-25 DECISION:
     /// User: "voice agent needs to be moved under extensions in the sidebar of the settings of the gpui app too". Voice agent is the group's first page now that the voice agent is a built-in extension (official_extensions.rs). Deep links (`initialTab: "voiceAgent"`, the voice panel's Open Settings, `ghostex settings open --tab voiceAgent`) open the group like any page in it.
-    /// CDXC:VoiceMode 2026-11-08 DECISION: User: "we need to call Voice page in settings "Dictation" and have "Voice Agent" as a separate page"; Q1710: Voice Agent sits right under Dictation, both in the App tier after Power & Sleep. Dictation has the new `dictation` id and `voice` opens it; Voice Agent keeps `voiceAgent` and leaves the rail while its extension is off (`settingsPages` in official_extensions.rs), since Dictation now holds the keys it needs and the Dictation history. Supersedes Q1269's single Voice page (2026-11-05) and the 2026-10-25 move under Extensions.
+    /// CDXC:VoiceMode 2026-11-08 DECISION: User: "we need to call Voice page in settings "Dictation" and have "Voice Agent" as a separate page"; Q1710: Voice Agent sits right under Dictation, both in the App tier after Power & Sleep. Dictation has the new `dictation` id and `voice` opens it; Voice Agent keeps `voiceAgent` and leaves the rail while its extension is off (`settingsPages` in official_extensions.rs), since Dictation now holds the keys it needs and the Dictation history. Supersedes Q1269's single Voice page (2026-11-05) and the 2026-10-25 move under Extensions. The two pages now make the rail's Voice group (CDXC:Settings 2026-11-08 at `RailTier`), Voice Agent still right under Dictation.
     pub(crate) const EXTENSIONS_GROUP: [SettingsTabId; 7] = [
         SettingsTabId::Workspaces,
         SettingsTabId::CloudBoxes,
@@ -131,31 +163,30 @@ impl SettingsTabId {
         Self::EXTENSIONS_GROUP.contains(&self)
     }
 
-    /// The rail tier the page is listed under.
+    /// The rail group the page is listed under (CDXC:Settings 2026-11-08 at `RailTier`).
     pub(crate) fn tier(self) -> RailTier {
         match self {
             SettingsTabId::Updates => RailTier::Top,
             SettingsTabId::Chat
             | SettingsTabId::Sidebar
             | SettingsTabId::Terminal
-            | SettingsTabId::Theme
-            | SettingsTabId::Notifications
-            | SettingsTabId::FilesLinks
-            | SettingsTabId::PowerSleep
-            | SettingsTabId::Dictation
-            | SettingsTabId::VoiceAgent
-            | SettingsTabId::Hotkeys => RailTier::App,
+            | SettingsTabId::FilesLinks => RailTier::Working,
+            SettingsTabId::Theme | SettingsTabId::Notifications | SettingsTabId::Hotkeys => {
+                RailTier::Appearance
+            }
+            SettingsTabId::Dictation | SettingsTabId::VoiceAgent => RailTier::Voice,
             SettingsTabId::Agents
             | SettingsTabId::Accounts
             | SettingsTabId::Autopilot
-            | SettingsTabId::Collab
-            | SettingsTabId::Secrets
-            | SettingsTabId::Security
-            | SettingsTabId::Integrations
-            | SettingsTabId::Remote
+            | SettingsTabId::Secrets => RailTier::AgentsAccounts,
+            SettingsTabId::Remote
             | SettingsTabId::Sync
             | SettingsTabId::Projects
-            | SettingsTabId::About => RailTier::Setup,
+            | SettingsTabId::Collab
+            | SettingsTabId::Integrations => RailTier::Connections,
+            SettingsTabId::Security | SettingsTabId::PowerSleep | SettingsTabId::About => {
+                RailTier::PrivacySystem
+            }
             _ => RailTier::More,
         }
     }
@@ -499,11 +530,10 @@ pub(crate) type SettingsModalHost = Rc<dyn Fn(SettingsModalCommand, &mut gpui::A
 mod tests {
     use super::{RailTier, SettingsTabId};
 
-    /// CDXC:Settings 2026-10-29: General's groups are pages in the App tier, `settings` still opens
-    /// Chat, and every tier is one unbroken run of the rail; Updates stands alone above them
-    /// (CDXC:Updates 2026-11-05 in tabs/updates/mod.rs).
+    /// CDXC:Settings 2026-10-29: General's groups are pages of their own and `settings` still
+    /// opens Chat.
     #[test]
-    fn general_split_into_tiered_pages() {
+    fn general_split_into_pages() {
         assert_eq!(
             SettingsTabId::from_id("settings"),
             Some(SettingsTabId::Chat)
@@ -517,45 +547,139 @@ mod tests {
             SettingsTabId::general_page("system"),
             Some(SettingsTabId::PowerSleep)
         );
-        assert_eq!(SettingsTabId::RAIL_ORDER[0], SettingsTabId::Updates);
-        assert_eq!(SettingsTabId::RAIL_ORDER[1], SettingsTabId::Chat);
-        let tiers: Vec<RailTier> = SettingsTabId::RAIL_ORDER
-            .iter()
-            .map(|tab| tab.tier())
-            .collect();
-        let mut runs = tiers.clone();
-        runs.dedup();
-        assert_eq!(
-            runs,
-            [
-                RailTier::Top,
-                RailTier::App,
-                RailTier::Setup,
-                RailTier::More
-            ]
-        );
         for tab in SettingsTabId::RAIL_ORDER {
             assert_eq!(SettingsTabId::from_id(tab.id()), Some(tab), "{tab:?}");
             assert_eq!(tab.is_general_page(), tab.general_group().is_some());
         }
     }
 
-    /// CDXC:VoiceMode 2026-11-08: Dictation sits in the App tier after Power & Sleep with Voice
-    /// Agent right under it; `voice` opens Dictation and `voiceAgent` Voice Agent.
+    /// CDXC:Settings 2026-11-08 (Q1770, Q1771): Updates alone on top, then the six groups in the
+    /// user's order, each one unbroken run, then Extensions and its folded pages.
     #[test]
-    fn dictation_then_voice_agent_follow_power_and_sleep() {
+    fn rail_lists_updates_then_six_groups_then_extensions() {
+        use SettingsTabId as T;
+        let labelled: Vec<(&str, Vec<&str>)> = {
+            let mut groups: Vec<(&str, Vec<&str>)> = Vec::new();
+            for tab in SettingsTabId::RAIL_ORDER {
+                if tab == T::Extensions || tab.in_extensions_group() {
+                    continue;
+                }
+                match groups.last_mut() {
+                    Some((title, pages)) if *title == tab.tier().title() => pages.push(tab.title()),
+                    _ => groups.push((tab.tier().title(), vec![tab.title()])),
+                }
+            }
+            groups
+        };
+        assert_eq!(
+            labelled,
+            [
+                ("", vec!["Updates"]),
+                (
+                    "Working",
+                    vec!["Chat", "Sidebar & Sessions", "Terminal", "Files & Links"]
+                ),
+                ("Appearance", vec!["Interface", "Notifications", "Hotkeys"]),
+                ("Voice", vec!["Dictation", "Voice Agent"]),
+                (
+                    "Agents & Accounts",
+                    vec!["Agents", "Accounts", "Autopilot", "Secrets"]
+                ),
+                (
+                    "Connections",
+                    vec!["Remote", "Sync", "Projects", "Collab", "Integrations"]
+                ),
+                (
+                    "Privacy & System",
+                    vec!["Security", "Power & Sleep", "About"]
+                ),
+            ]
+        );
+        let mut runs: Vec<RailTier> = SettingsTabId::RAIL_ORDER
+            .iter()
+            .map(|tab| tab.tier())
+            .collect();
+        runs.dedup();
+        assert_eq!(
+            runs,
+            [
+                RailTier::Top,
+                RailTier::Working,
+                RailTier::Appearance,
+                RailTier::Voice,
+                RailTier::AgentsAccounts,
+                RailTier::Connections,
+                RailTier::PrivacySystem,
+                RailTier::More
+            ]
+        );
+    }
+
+    /// The labels the rail draws for the shown pages `shown`, in order (rail.rs `render_rail`).
+    fn labels(shown: &[SettingsTabId]) -> Vec<&'static str> {
+        let mut previous = None;
+        let mut labels = Vec::new();
+        for tab in shown {
+            if let Some(tier) = RailTier::label_before(previous, *tab) {
+                labels.push(tier.title());
+            }
+            previous = Some(tab.tier());
+        }
+        labels
+    }
+
+    /// CDXC:Settings 2026-11-08: a group whose pages are all hidden shows no label, and Updates
+    /// never gets one.
+    #[test]
+    fn group_with_every_page_hidden_shows_no_label() {
+        use SettingsTabId as T;
+        let shown = |hidden: &[T]| -> Vec<T> {
+            SettingsTabId::RAIL_ORDER
+                .into_iter()
+                .filter(|tab| *tab != T::Extensions && !tab.in_extensions_group())
+                .filter(|tab| !hidden.contains(tab))
+                .collect()
+        };
+        let all = [
+            "Working",
+            "Appearance",
+            "Voice",
+            "Agents & Accounts",
+            "Connections",
+            "Privacy & System",
+        ];
+        assert_eq!(labels(&shown(&[])), all);
+        // Voice Agent off and Dictation filtered out by a search: no Voice label.
+        assert_eq!(
+            labels(&shown(&[T::Dictation, T::VoiceAgent])),
+            [
+                "Working",
+                "Appearance",
+                "Agents & Accounts",
+                "Connections",
+                "Privacy & System"
+            ]
+        );
+        // One page left of a group still gets its label.
+        assert_eq!(labels(&shown(&[T::VoiceAgent])), all);
+        // A search that matches only Collab: one label, Connections.
+        assert_eq!(labels(&[T::Collab]), ["Connections"]);
+        assert_eq!(labels(&[T::Updates, T::Collab]), ["Connections"]);
+        assert!(labels(&[T::Updates]).is_empty());
+    }
+
+    /// CDXC:VoiceMode 2026-11-08: Voice Agent sits right under Dictation in the Voice group; `voice`
+    /// opens Dictation and `voiceAgent` Voice Agent.
+    #[test]
+    fn voice_agent_follows_dictation() {
         let order = SettingsTabId::RAIL_ORDER;
         let position = |tab| order.iter().position(|t| *t == tab).unwrap();
-        assert_eq!(
-            position(SettingsTabId::Dictation),
-            position(SettingsTabId::PowerSleep) + 1
-        );
         assert_eq!(
             position(SettingsTabId::VoiceAgent),
             position(SettingsTabId::Dictation) + 1
         );
         for tab in [SettingsTabId::Dictation, SettingsTabId::VoiceAgent] {
-            assert_eq!(tab.tier(), RailTier::App);
+            assert_eq!(tab.tier(), RailTier::Voice);
             assert!(!tab.in_extensions_group());
         }
         assert_eq!(SettingsTabId::Dictation.title(), "Dictation");

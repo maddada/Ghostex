@@ -258,7 +258,7 @@ fn rail_fold(
     )
 }
 
-/// A tier's label above its pages (CDXC:Settings 2026-10-29 in model.rs).
+/// A group's label above its pages (CDXC:Settings 2026-11-08 in model.rs).
 fn render_tier_label(p: &SettingsPalette, tier: RailTier, spaced: bool) -> AnyElement {
     if tier == RailTier::Top {
         return div().into_any_element();
@@ -703,10 +703,12 @@ pub(crate) fn render_rail(
         } else if tab.in_extensions_group() {
             extension_pages.push(element);
         } else {
-            if tier != Some(tab.tier()) {
-                groups.push(render_tier_label(p, tab.tier(), tier.is_some()));
-                tier = Some(tab.tier());
+            // A label opens each group's run of shown pages, so a group whose pages are all hidden
+            // shows none (CDXC:Settings 2026-11-08 in model.rs).
+            if let Some(label) = RailTier::label_before(tier, tab) {
+                groups.push(render_tier_label(p, label, tier.is_some()));
             }
+            tier = Some(tab.tier());
             groups.push(element);
         }
     }

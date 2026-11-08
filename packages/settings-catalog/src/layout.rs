@@ -4,7 +4,8 @@
 //! User (Q5, "tiers"): General is gone. Each of its rail groups is a Settings page of its own (Chat,
 //! Sidebar & Sessions, Terminal, Notifications, Files & Links, Power & Sleep), listed in the rail's
 //! App tier with Theme and Hotkeys; the Setup tier holds Agents, Accounts, Integrations, Remote,
-//! Projects and About; Extensions and its folded pages stay at the bottom. Q7: the Tools group is
+//! Projects and About; Extensions and its folded pages stay at the bottom. (The App and Setup tiers
+//! are superseded by six labelled groups, CDXC:Settings 2026-11-08 at `RailTier` in model.rs.) Q7: the Tools group is
 //! called Files & Links. Q8: the Terminal page is always in the rail. The old Advanced group is
 //! gone too: Sleeping Sessions joined Sidebar & Sessions and Experimental moved to About. Q6 ("keep
 //! mode", superseded the same day by the Advanced fold, CDXC:Settings 2026-10-29 in
