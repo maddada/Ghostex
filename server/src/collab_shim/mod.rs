@@ -165,7 +165,7 @@ const LEGACY_FILES: &[&str] = &[
     "collab-held.json.tmp",
 ];
 
-/// The 11.0.1 move (GitHub #495): Collab starts not installed. 11.0.0's choices and shares in
+/// The 11.1.0 move (GitHub #495): Collab starts not installed. 11.0.0's choices and shares in
 /// gxserver's state folder are removed once, at start, so no old share or switch survives; the
 /// component keeps its own files in its own folder (sidecar.rs `data_dir`).
 pub(crate) fn migrate_at_start(paths: &crate::paths::GxserverPaths) {
@@ -178,6 +178,6 @@ pub(crate) fn migrate_at_start(paths: &crate::paths::GxserverPaths) {
         removed |= std::fs::remove_file(paths.app_state_dir.join(name)).is_ok();
     }
     if removed {
-        eprintln!("[collab] 11.0.1: removed the Collab settings and shares kept before Collab became an extension");
+        eprintln!("[collab] 11.1.0: removed the Collab settings and shares kept before Collab became an extension");
     }
 }

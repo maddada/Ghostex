@@ -310,7 +310,7 @@ pub fn start_computer_pairing(paths: &GxserverPaths, code: ComputerPairingCode) 
         started.get("words").and_then(Value::as_array),
     ) else {
         tunnel.stop();
-        bail!("Update Ghostex on the other computer to 11.0.1 or later, then try again.");
+        bail!("Update Ghostex on the other computer to 11.1.0 or later, then try again.");
     };
     let words: Vec<String> = words
         .iter()
