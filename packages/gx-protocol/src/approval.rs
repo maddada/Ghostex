@@ -82,6 +82,9 @@ open_string_enum! {
         /// Type raw terminal input (text, Enter, a key) into a session that is not the caller's
         /// own, its threads included; a coordinator interrupting its own thread doesn't ask.
         TypeIntoOtherSession => "typeIntoOtherSession",
+        /// Stop what a session that is neither the caller's own nor one of its threads is doing
+        /// (`interrupt-session-chat`).
+        InterruptOtherSession => "interruptOtherSession",
         // Approvers
         /// Add another approver key (a second desktop or a phone) after the first one.
         AddApproverKey => "addApproverKey",

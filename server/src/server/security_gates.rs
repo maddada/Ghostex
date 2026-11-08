@@ -9,6 +9,7 @@
 //! | `/api/gbots` `action: "create"` | always (a new bot) |
 //! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a security-relaxing setting changes, or GBots goes on |
 //! | `/api/answerSessionChatPrompt` | anyone but the owner's devices answers another session's prompt |
+//! | `/api/interruptSessionChat` | anyone but the owner's devices stops a session that is neither their own nor one of their threads |
 //! | `/api/sendSessionText`, `/api/sendSessionEnter`, `/api/sendSessionMessage` | anyone but the owner's devices types into a session that isn't their own, its threads included (a coordinator's Escape or Ctrl-C to its own thread doesn't ask) |
 //!
 //! Pairing and Collab routes are gated by their own threads with the same
@@ -82,6 +83,7 @@ pub(crate) fn gate(
                 grant.approval.action,
                 SensitiveAction::AnswerOtherSessionPrompt
                     | SensitiveAction::TypeIntoOtherSession
+                    | SensitiveAction::InterruptOtherSession
                     | SensitiveAction::SettingsWeakenSecurity
                     | SensitiveAction::GbotsEnable
             ) {
@@ -200,6 +202,7 @@ fn sensitive_action(
         "/api/sendSessionText" | "/api/sendSessionEnter" | "/api/sendSessionMessage" => {
             input_action(state, caller, endpoint_path, params)
         }
+        "/api/interruptSessionChat" => interrupt_action(state, caller, params),
         _ => match security::route_access(endpoint_path) {
             RouteAccess::Presence(action) => Some(
                 ActionRequest::new(
@@ -483,6 +486,45 @@ fn input_action(
         .target(format!("{project_id}:{session_id}"))
         .params(Value::Object(params.clone()))
         .detail(format!("Typed: {shown}")),
+    )
+}
+
+/*
+CDXC:Security 2026-11-08 DECISION:
+User (#495 follow-up): limit interrupt-session-chat to a session's own threads (and the owner), consistent with typing into a session. A session stops itself and a coordinator stops its own threads without asking (coordinators heal stuck threads that way); anyone else asks.
+*/
+fn interrupt_action(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Option<ActionRequest> {
+    if caller.has(Capability::AnswerAnyPrompt) {
+        return None;
+    }
+    let session_id = text(params, "sessionId")?;
+    let project_id = text(params, "projectId").unwrap_or_default();
+    if let Principal::Session {
+        project_id: own_project,
+        session_id: own_session,
+        role,
+    } = caller
+    {
+        if own_session == session_id && (project_id.is_empty() || own_project == project_id) {
+            return None;
+        }
+        if *role == security::SessionRole::Coordinator
+            && is_own_thread(state, own_project, own_session, project_id, session_id)
+        {
+            return None;
+        }
+    }
+    Some(
+        ActionRequest::new(
+            SensitiveAction::InterruptOtherSession,
+            format!("Stop what session {session_id} is doing"),
+        )
+        .target(format!("{project_id}:{session_id}"))
+        .params(Value::Object(params.clone())),
     )
 }
 

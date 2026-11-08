@@ -380,3 +380,49 @@ async fn typing_into_another_sessions_terminal_asks_and_ones_own_does_not() {
     .await;
     assert!(!asks(&body), "{body}");
 }
+
+/// Interrupting asks unless it is one's own session or thread, or the owner's device.
+#[tokio::test]
+async fn interrupting_another_session_asks() {
+    let (_temp, state) = temp_state();
+    let coordinator =
+        state
+            .security
+            .session_tokens
+            .mint_session("P1", "G1", SessionRole::Coordinator);
+    let asks = |body: &Value| body["error"] == "approvalRequired";
+    let (_, body) = post(
+        &state,
+        "/api/interruptSessionChat",
+        &coordinator,
+        json!({ "projectId": "P1", "sessionId": "G2" }),
+    )
+    .await;
+    assert!(asks(&body), "{body}");
+    assert_eq!(body["approval"]["action"], "interruptOtherSession");
+    let (_, body) = post(
+        &state,
+        "/api/interruptSessionChat",
+        &state.auth_token.clone(),
+        json!({ "projectId": "P1", "sessionId": "G2" }),
+    )
+    .await;
+    assert!(asks(&body), "{body}");
+    let (_, body) = post(
+        &state,
+        "/api/interruptSessionChat",
+        &coordinator,
+        json!({ "projectId": "P1", "sessionId": "G1" }),
+    )
+    .await;
+    assert!(!asks(&body), "{body}");
+    let owner = state.security.session_tokens.mint_owner("mac");
+    let (_, body) = post(
+        &state,
+        "/api/interruptSessionChat",
+        &owner,
+        json!({ "projectId": "P1", "sessionId": "G2" }),
+    )
+    .await;
+    assert!(!asks(&body), "{body}");
+}
