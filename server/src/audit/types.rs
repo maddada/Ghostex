@@ -48,6 +48,8 @@ pub enum Actor {
     CollabGuest { name: String },
     /// Autopilot, deciding for an agent on its own.
     Autopilot,
+    /// Settings sync, carrying a change made on another of the user's computers.
+    SettingsSync { computer: String },
     /// gxserver acting on its own (a sweep, an expiry, startup).
     Ghostex,
 }
@@ -92,6 +94,11 @@ impl Actor {
             Self::Extension { id } => ("extension", format!("Extension {id}"), Some(id.clone())),
             Self::CollabGuest { name } => ("collabGuest", format!("A Collab guest ({name})"), None),
             Self::Autopilot => ("autopilot", "Autopilot".to_string(), None),
+            Self::SettingsSync { computer } => (
+                "settingsSync",
+                format!("Settings sync from {computer}"),
+                None,
+            ),
             Self::Ghostex => ("ghostex", "Ghostex".to_string(), None),
         };
         ActorRecord {

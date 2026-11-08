@@ -36,6 +36,42 @@ const PLAYBOOK_ALL: &str = "coordinator/playbook/all";
 const PLAYBOOK_PROJECT_PREFIX: &str = "coordinator/playbook/project/";
 const PLAYBOOK_OVERRIDES: &str = "coordinator/playbook/overrides";
 
+/// Keys that carry what agents are told or run: coordinator playbooks, the user's own skills and
+/// the agents' commands.
+fn carries_agent_instructions(key: &str) -> bool {
+    key.starts_with("coordinator/playbook/")
+        || key.starts_with(ghostex_gx_core::settings_sync::OWN_SKILL_KEY_PREFIX)
+        || key.starts_with(ghostex_gx_core::settings_sync::AGENT_KEY_PREFIX)
+}
+
+/// CDXC:Security 2026-11-08 WHY: a playbook, a skill or an agent's command that arrives from another computer becomes what this computer's agents are told or run, so it is a way to put words into a coordinator from elsewhere (the design review, GitHub #495, section 5). These categories sync only when the user turns them on (CDXC:SettingsSync 2026-11-07 DECISION in gx-core lists.rs); each such change is recorded in the security log with its notification, so the user sees it when it happens. Holding them for the owner's approval is the approvals gate's part.
+fn log_incoming_instructions(wanted: &[(String, Option<Value>, String)]) {
+    for (key, _, origin) in wanted {
+        if !carries_agent_instructions(key) {
+            continue;
+        }
+        let what = if key.starts_with("coordinator/playbook/") {
+            "A coordinator playbook"
+        } else if key.starts_with(ghostex_gx_core::settings_sync::OWN_SKILL_KEY_PREFIX) {
+            "A skill"
+        } else {
+            "An agent's command"
+        };
+        crate::audit::record(
+            crate::audit::Action::new(
+                "settingsSync.instructions",
+                format!("{what} changed by settings sync from {origin}"),
+            )
+            .target(key.clone()),
+            crate::audit::Actor::SettingsSync {
+                computer: origin.clone(),
+            },
+            crate::audit::Outcome::Done,
+            None,
+        );
+    }
+}
+
 impl Engine<'_> {
     /// What this computer has for category `prefix`, by synced key, and the keys still at their
     /// default (a fresh computer's defaults never seed).
@@ -143,6 +179,7 @@ impl Engine<'_> {
             if wanted.is_empty() {
                 continue;
             }
+            log_incoming_instructions(&wanted);
             if LIST_CATEGORIES.contains(&prefix) {
                 self.write_list_values(prefix, &wanted)?;
             }
@@ -194,5 +231,27 @@ impl Engine<'_> {
             }
         }
         Ok(patch)
+    }
+}
+
+#[cfg(test)]
+mod instruction_tests {
+    #[test]
+    fn playbooks_skills_and_agent_commands_carry_instructions() {
+        for key in [
+            "coordinator/playbook/all",
+            "coordinator/playbook/project/github.com/a/b",
+            "skills/own/review",
+            "agentRoster/agent/claude",
+        ] {
+            assert!(super::carries_agent_instructions(key), "{key}");
+        }
+        for key in [
+            "appearance/theme",
+            "skills/bundled/ghostex-help",
+            "agentRoster/order",
+        ] {
+            assert!(!super::carries_agent_instructions(key), "{key}");
+        }
     }
 }
