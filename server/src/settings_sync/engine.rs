@@ -1,13 +1,14 @@
 //! One sync step on this computer: take its own edits into the entries, merge another computer's
 //! entries, and write back what the entries now say.
 
+use std::collections::BTreeMap;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use ghostex_gx_core::settings_sync::{
     apply_spaces_entries, category_enabled, derive_spaces_edits, describe_list_key,
     describe_setting_key, describe_spaces_key, entries_digest, hlc_wall_ms, key_category,
     local_edit, member_key, merge_entries, merge_spaces_by_name, next_hlc, removed_key,
-    repair_folded_spaces, spaces_named_apart, LocalSpaces, SyncEntry, GROUP_CATEGORY,
+    repair_folded_spaces, spaces_moves, spaces_named_apart, LocalSpaces, SyncEntry, GROUP_CATEGORY,
     SYNC_CATEGORIES,
 };
 use rusqlite::Connection;
@@ -178,6 +179,11 @@ impl Engine<'_> {
             self.repair_folded_spaces()?;
         }
         let read = read_local_spaces(self.db, &self.server_id, &self.store.entries)?;
+        // CDXC:SettingsSync 2026-11-08 WHY:
+        // Until every project's git origin and repository root are probed (a moment after gxserver starts) its key falls back to its folder name (`dir:trading`), and once they are its real key looked new next to that baseline: every start wrote each project's place again with a fresh stamp, so a computer with nothing filed undid the other computers' Spaces each time it started (found proving #488's follow-up on two throwaway gxservers). Spaces wait for the probe.
+        if !read.remotes_probed {
+            return Ok(());
+        }
         let baseline = self.store.spaces_baseline.clone();
         let edits = derive_spaces_edits(
             local(&read),
@@ -224,7 +230,71 @@ impl Engine<'_> {
             "[gxserver] settings sync: put back the Spaces of projects that share a repository from {} (#488)",
             path.display()
         );
-        write_local_spaces(self.state, self.db, &repaired.spaces, &repaired.collections)
+        write_local_spaces(self.state, self.db, &repaired.spaces, &repaired.collections)?;
+        let moved = self.describe_moves(&read, &repaired.spaces, &repaired.collections)?;
+        if let Some(moved) = moved {
+            let file = path
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_default();
+            self.store.add_move(
+                format!("Put back where they were before Ghostex 11.0.0's sync moved them (from backups/{file}): {moved}"),
+                now_ms(),
+            );
+        }
+        Ok(())
+    }
+
+    /// Which projects the new documents move, as one sentence (`product-x, ai and 3 more to
+    /// Product; trading out of its Space`), or `None` when none moves.
+    fn describe_moves(
+        &self,
+        read: &LocalSpacesRead,
+        spaces: &Value,
+        collections: &Value,
+    ) -> Result<Option<String>, DomainStateError> {
+        let moves = spaces_moves(&read.spaces, &read.collections, spaces, collections);
+        if moves.is_empty() {
+            return Ok(None);
+        }
+        let names: BTreeMap<String, String> =
+            crate::domain::DomainRepository::new(self.db, &self.server_id)
+                .list_projects()?
+                .iter()
+                .filter_map(|project| {
+                    Some((
+                        project.get("projectId")?.as_str()?.to_string(),
+                        project.get("name")?.as_str()?.to_string(),
+                    ))
+                })
+                .collect();
+        let mut by_place: Vec<(Option<String>, Vec<String>)> = Vec::new();
+        for moved in moves {
+            let name = names.get(&moved.project).cloned().unwrap_or(moved.project);
+            match by_place.iter_mut().find(|(to, _)| *to == moved.to) {
+                Some((_, names)) => names.push(name),
+                None => by_place.push((moved.to, vec![name])),
+            }
+        }
+        let parts: Vec<String> = by_place
+            .into_iter()
+            .map(|(to, names)| {
+                let listed = match names.len() {
+                    1 => names[0].clone(),
+                    2..=4 => format!(
+                        "{} and {}",
+                        names[..names.len() - 1].join(", "),
+                        names[names.len() - 1]
+                    ),
+                    count => format!("{} and {} more", names[..3].join(", "), count - 3),
+                };
+                match to {
+                    Some(to) => format!("{listed} to {to}"),
+                    None => format!("{listed} out of every Space"),
+                }
+            })
+            .collect();
+        Ok(Some(parts.join("; ")))
     }
 
     /// Merges another computer's entries, returning the new notes. On the first sync with that
@@ -285,6 +355,9 @@ impl Engine<'_> {
             return Ok(());
         }
         let read = read_local_spaces(self.db, &self.server_id, &self.store.entries)?;
+        if !read.remotes_probed {
+            return Ok(());
+        }
         let applied = apply_spaces_entries(&self.store.entries, local(&read));
         if applied.spaces != read.spaces || applied.collections != read.collections {
             if !self.store.spaces_backed_up {
@@ -292,6 +365,23 @@ impl Engine<'_> {
                 self.store.spaces_backed_up = true;
             }
             write_local_spaces(self.state, self.db, &applied.spaces, &applied.collections)?;
+            // CDXC:SettingsSync 2026-11-08 WHY:
+            // #488: a sync that moved 14 projects at once left no trace but the backup file. One sync step moving several projects now leaves a line in Settings > Sync saying which went where, and when.
+            let moved = spaces_moves(
+                &read.spaces,
+                &read.collections,
+                &applied.spaces,
+                &applied.collections,
+            )
+            .len();
+            if moved >= SEVERAL_MOVES {
+                if let Some(text) =
+                    self.describe_moves(&read, &applied.spaces, &applied.collections)?
+                {
+                    self.store
+                        .add_move(format!("Sync moved {moved} projects: {text}"), now_ms());
+                }
+            }
             let written = read_local_spaces(self.db, &self.server_id, &self.store.entries)?;
             self.store.spaces_baseline = Some(baseline_of(written));
         }
@@ -365,6 +455,9 @@ fn baseline_of(read: LocalSpacesRead) -> SpacesBaseline {
         repos: read.repos,
     }
 }
+
+/// How many projects one sync step moves before Settings > Sync lists it.
+const SEVERAL_MOVES: usize = 3;
 
 /// The oldest Spaces backup sync saved here (the one taken before it first wrote them), with
 /// its path.

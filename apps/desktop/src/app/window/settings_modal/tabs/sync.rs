@@ -291,13 +291,47 @@ impl SyncTab {
                 Some(control),
             ));
         }
-        settings_section(
+        let conflicts = settings_section(
             p,
             "Changed on two computers",
             Some("When two computers changed the same thing while apart, the later change wins on both. Undo puts the other one back everywhere.".into()),
             None,
             rows,
-        )
+        );
+        // CDXC:SettingsSync 2026-11-08 WHY: #488's reporter found 14 projects moved into one Space with no trace but the backup file. A sync step that moves three or more projects at once is listed here, with what went where and when.
+        let moves: Vec<AnyElement> = list(&status, "moves")
+            .into_iter()
+            .take(10)
+            .map(|moved| {
+                let at = moved.get("atMs").and_then(Value::as_u64).unwrap_or(now);
+                settings_list_item(
+                    p,
+                    None,
+                    None,
+                    text(&moved, "text"),
+                    Some(div().child(ago(now, at)).into_any_element()),
+                    None,
+                )
+            })
+            .collect();
+        let moves = settings_section(
+            p,
+            "Projects moved by sync",
+            Some("When one sync moves three or more projects between Spaces at once. Ghostex keeps a copy of your Spaces from before sync first changed them in the backups folder of its state folder.".into()),
+            None,
+            moves,
+        );
+        match (conflicts, moves) {
+            (None, None) => None,
+            (conflicts, moves) => Some(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(24.0))
+                    .children(conflicts)
+                    .children(moves),
+            ),
+        }
     }
 }
 

@@ -95,6 +95,69 @@ pub fn repair_folded_spaces(
     })
 }
 
+/// One project a rewrite of the Spaces documents moved: where it is now, by name (a Space's name
+/// or a group's title), or `None` when it is in no Space any more.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpacesMove {
+    pub project: String,
+    pub to: Option<String>,
+}
+
+/// The projects that sit somewhere else in `after` than in `before`, in `after`'s order (then the
+/// ones only `before` listed).
+pub fn spaces_moves(
+    before_spaces: &Value,
+    before_collections: &Value,
+    after_spaces: &Value,
+    after_collections: &Value,
+) -> Vec<SpacesMove> {
+    let mut projects: Vec<String> = Vec::new();
+    for (spaces, collections) in [
+        (after_spaces, after_collections),
+        (before_spaces, before_collections),
+    ] {
+        let listed = ordered(collections, "collections")
+            .into_iter()
+            .flat_map(|(_, group)| strings(group.get("projectIds")))
+            .chain(
+                ordered(spaces, "spaces")
+                    .into_iter()
+                    .flat_map(|(_, space)| strings(space.get("memberProjectIds"))),
+            );
+        for project in listed {
+            if !projects.contains(&project) {
+                projects.push(project);
+            }
+        }
+    }
+    let name = |document: &Value, list: &str, id: &str, field: &str| {
+        document
+            .get(list)
+            .and_then(|items| items.get(id))
+            .and_then(|item| item.get(field))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| id.to_string())
+    };
+    projects
+        .into_iter()
+        .filter_map(|project| {
+            let after = place_of(after_spaces, after_collections, &project);
+            if after == place_of(before_spaces, before_collections, &project) {
+                return None;
+            }
+            let to = match after {
+                Place::Group(group) => {
+                    Some(name(after_collections, "collections", &group, "title"))
+                }
+                Place::Space(space) => Some(name(after_spaces, "spaces", &space, "name")),
+                Place::Nowhere => None,
+            };
+            Some(SpacesMove { project, to })
+        })
+        .collect()
+}
+
 fn place_of(spaces: &Value, collections: &Value, project: &str) -> Place {
     for (group_id, group) in ordered(collections, "collections") {
         if strings(group.get("projectIds"))

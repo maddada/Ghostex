@@ -44,29 +44,31 @@ pub(super) fn read_local_spaces(
     })
 }
 
-/// [`repo_keys`] for this computer's projects now, by repository alone: the key a coordinator
-/// playbook edited for one project is synced under.
+/// [`repo_keys`] for this computer's projects now: the key a coordinator playbook edited for one
+/// project is synced under.
 pub(super) fn project_repo_keys(
     db: &Connection,
     server_id: &str,
     entries: &BTreeMap<String, SyncEntry>,
-) -> Result<Vec<(String, String)>, DomainStateError> {
+    key_by: KeyBy,
+) -> Result<RepoKeys, DomainStateError> {
     let projects = DomainRepository::new(db, server_id).list_projects()?;
-    Ok(repo_keys(&projects, entries, KeyBy::Repository).repos)
+    Ok(repo_keys(&projects, entries, key_by))
 }
 
 /// What a synced project key names.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum KeyBy {
+pub(super) enum KeyBy {
     /// The repository alone (`github.com/o/monorepo`).
     Repository,
     /// The repository and the project's folder inside it (`github.com/o/monorepo#trading`).
     RepositoryAndFolder,
 }
 
-struct RepoKeys {
-    repos: Vec<(String, String)>,
-    remotes_probed: bool,
+pub(super) struct RepoKeys {
+    pub(super) repos: Vec<(String, String)>,
+    /// Every shareable project's git origin and repository root have been probed.
+    pub(super) remotes_probed: bool,
 }
 
 /// Project id → repository key for every project filed like its copies on other computers (not a

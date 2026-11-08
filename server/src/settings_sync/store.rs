@@ -14,6 +14,8 @@ use crate::domain::DomainStateError;
 const METADATA_KEY: &str = "settingsSync";
 /// Notes kept for Settings > Sync, newest last.
 const MAX_NOTES: usize = 50;
+/// Moved-projects lines kept for Settings > Sync, newest last.
+const MAX_MOVES: usize = 20;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -29,10 +31,23 @@ pub(crate) struct SyncStore {
     /// Spaces sync keys projects by repository and folder here, and the Spaces an older sync
     /// folded together were put back from the backup (#488, `repair_folded_spaces`).
     pub(crate) spaces_keyed_by_folder: bool,
+    /// A coordinator playbook edited for one project syncs under `coordinator/playbook/folder/`,
+    /// keyed by repository and folder, instead of the repository-only `…/project/` keys (#488).
+    pub(crate) playbooks_keyed_by_folder: bool,
     /// Each value category's keys and values as the last sync left this computer (missing while
     /// the category is off, so turning it on seeds again).
     pub(crate) value_baselines: BTreeMap<String, BTreeMap<String, Value>>,
     pub(crate) peers: BTreeMap<String, PeerRecord>,
+    /// The times one sync step moved several projects between Spaces here, newest last.
+    pub(crate) moves: Vec<MoveNote>,
+}
+
+/// A line for Settings > Sync saying which projects one sync step moved, and when.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MoveNote {
+    pub(crate) text: String,
+    pub(crate) at_ms: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -99,6 +114,13 @@ impl SyncStore {
         )
         .map_err(sql_error)?;
         Ok(())
+    }
+
+    /// Adds a moved-projects line, keeping the newest.
+    pub(crate) fn add_move(&mut self, text: String, at_ms: u64) {
+        self.moves.push(MoveNote { text, at_ms });
+        let overflow = self.moves.len().saturating_sub(MAX_MOVES);
+        self.moves.drain(..overflow);
     }
 
     /// Adds notes not seen before (the same conflict reaches a computer from several others).

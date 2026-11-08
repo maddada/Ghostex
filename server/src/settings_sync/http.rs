@@ -163,7 +163,15 @@ fn status(engine: &Engine<'_>) -> Value {
         .rev()
         .map(|note| note_view(note, &engine.server_id))
         .collect();
+    let moves: Vec<Value> = engine
+        .store
+        .moves
+        .iter()
+        .rev()
+        .map(|note| json!({ "text": note.text, "atMs": note.at_ms }))
+        .collect();
     json!({
+        "moves": moves,
         "serverId": engine.server_id,
         "name": engine.name,
         "categories": categories,

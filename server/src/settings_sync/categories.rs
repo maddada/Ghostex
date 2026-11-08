@@ -9,7 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ghostex_gx_core::settings_sync::{
-    category_setting_values, key_category, seed_hlc, setting_of_sync_key, SyncEntry,
+    category_setting_values, hlc_wall_ms, key_category, seed_hlc, setting_of_sync_key, SyncEntry,
 };
 use serde_json::{Map, Value};
 
@@ -17,7 +17,7 @@ use crate::domain::DomainStateError;
 
 use super::engine::Engine;
 use super::lists_bridge::LIST_CATEGORIES;
-use super::spaces_bridge::project_repo_keys;
+use super::spaces_bridge::{project_repo_keys, KeyBy};
 
 /// Every category but Spaces, in Settings > Sync order.
 pub(super) const VALUE_CATEGORIES: [&str; 8] = [
@@ -33,8 +33,17 @@ pub(super) const VALUE_CATEGORIES: [&str; 8] = [
 
 const MODEL_PIN_PREFIX: &str = "agents/modelPin/";
 const PLAYBOOK_ALL: &str = "coordinator/playbook/all";
+/// A project's playbook keyed by its repository alone, before #488's follow-up: every folder of
+/// one monorepo shared it. Kept in the entries for computers that still read it, never written or
+/// deleted by a computer that keys by folder.
 const PLAYBOOK_PROJECT_PREFIX: &str = "coordinator/playbook/project/";
+/// A project's playbook keyed by its repository and its folder inside it
+/// (`unified_sidebar::project_repo_key`), as Spaces are.
+const PLAYBOOK_FOLDER_PREFIX: &str = "coordinator/playbook/folder/";
 const PLAYBOOK_OVERRIDES: &str = "coordinator/playbook/overrides";
+
+/// The prefix project playbooks sync under, and project id → key under it.
+type PlaybookKeys = (&'static str, Vec<(String, String)>);
 
 /// Keys that carry what agents are told or run: coordinator playbooks, the user's own skills and
 /// the agents' commands.
@@ -94,10 +103,10 @@ impl Engine<'_> {
                 if let Some(all) = all {
                     values.insert(PLAYBOOK_ALL.to_string(), all);
                 }
-                let repos = project_repo_keys(self.db, &self.server_id, &self.store.entries)?;
+                let (key_prefix, repos) = self.playbook_keys()?;
                 for (project_id, copy) in projects {
                     if let Some((_, repo)) = repos.iter().find(|(id, _)| *id == project_id) {
-                        values.insert(format!("{PLAYBOOK_PROJECT_PREFIX}{repo}"), copy);
+                        values.insert(format!("{key_prefix}{repo}"), copy);
                     }
                 }
             }
@@ -107,12 +116,106 @@ impl Engine<'_> {
         Ok((values, defaults.into_iter().collect()))
     }
 
+    /// The prefix project playbooks sync under here and each project's key under it.
+    fn playbook_keys(&self) -> Result<PlaybookKeys, DomainStateError> {
+        let (prefix, key_by) = if self.store.playbooks_keyed_by_folder {
+            (PLAYBOOK_FOLDER_PREFIX, KeyBy::RepositoryAndFolder)
+        } else {
+            (PLAYBOOK_PROJECT_PREFIX, KeyBy::Repository)
+        };
+        let keys = project_repo_keys(self.db, &self.server_id, &self.store.entries, key_by)?;
+        Ok((prefix, keys.repos))
+    }
+
+    /// A Coordinator entry this computer neither takes in nor tells about: a repository-only
+    /// playbook once playbooks are keyed by folder here, and a folder playbook another computer
+    /// only seeded where this one already has that project's playbook.
+    ///
+    /// CDXC:SettingsSync 2026-11-08 WHY:
+    /// #488's follow-up: keyed by repository alone, every folder project of one monorepo shared one playbook key, so another computer gave only the first of them a playbook. Playbooks now sync under `coordinator/playbook/folder/<repository#folder>` (the Spaces rule). Switching keys must not delete or overwrite anything elsewhere: the old `…/project/` entries stay as they are for computers that still read them (this one stops reading them, since it can't tell which folder one was for), and each computer seeds its folder playbooks (`seed_hlc`, older than any real edit), which only fill a project that has no playbook on another computer and never replace one it has.
+    fn playbook_entry_ignored(&self, entry: &SyncEntry, current: &BTreeMap<String, Value>) -> bool {
+        (self.store.playbooks_keyed_by_folder && entry.key.starts_with(PLAYBOOK_PROJECT_PREFIX))
+            || (entry.key.starts_with(PLAYBOOK_FOLDER_PREFIX)
+                && hlc_wall_ms(&entry.hlc) == 0
+                && current.contains_key(&entry.key))
+    }
+
+    /// Once, when every project's repository root is known: project playbooks move to keys by
+    /// repository and folder, seeding this computer's under the new keys (CDXC:SettingsSync
+    /// 2026-11-08 above) and forgetting the old keys without deleting them anywhere.
+    fn key_playbooks_by_folder(&mut self) -> Result<(), DomainStateError> {
+        if self.store.playbooks_keyed_by_folder || !self.enabled("coordinator/") {
+            return Ok(());
+        }
+        let keys = project_repo_keys(
+            self.db,
+            &self.server_id,
+            &self.store.entries,
+            KeyBy::RepositoryAndFolder,
+        )?;
+        if !keys.remotes_probed {
+            return Ok(());
+        }
+        self.store.playbooks_keyed_by_folder = true;
+        // Before the first sync of this category everything seeds anyway.
+        if !self.store.value_baselines.contains_key("coordinator") {
+            return Ok(());
+        }
+        let (current, _) = self.category_values("coordinator")?;
+        let seeds: Vec<(String, Value)> = current
+            .into_iter()
+            .filter(|(key, _)| key.starts_with(PLAYBOOK_FOLDER_PREFIX))
+            .collect();
+        for (key, value) in &seeds {
+            if !self.store.entries.contains_key(key) {
+                self.store.entries.insert(
+                    key.clone(),
+                    SyncEntry {
+                        key: key.clone(),
+                        value: Some(value.clone()),
+                        hlc: seed_hlc(&self.server_id),
+                        parent: None,
+                        origin: self.server_id.clone(),
+                        origin_name: self.name.clone(),
+                    },
+                );
+            }
+        }
+        if let Some(baseline) = self.store.value_baselines.get_mut("coordinator") {
+            baseline.retain(|key, _| !key.starts_with(PLAYBOOK_PROJECT_PREFIX));
+            baseline.extend(seeds);
+        }
+        Ok(())
+    }
+
+    /// Whether category `prefix` can sync this step. Coordinator waits until every project's git
+    /// origin and repository root are probed (a moment after gxserver starts).
+    ///
+    /// CDXC:SettingsSync 2026-11-08 WHY:
+    /// Until then a project's playbook key falls back to its folder name (`dir:trading`), so the first step after every start deleted each repository's playbook key on every computer and wrote `dir:` copies; found proving #488's follow-up on two throwaway gxservers.
+    fn category_ready(&self, prefix: &str) -> Result<bool, DomainStateError> {
+        if prefix != "coordinator" {
+            return Ok(true);
+        }
+        let keys = project_repo_keys(
+            self.db,
+            &self.server_id,
+            &self.store.entries,
+            KeyBy::Repository,
+        )?;
+        Ok(keys.remotes_probed)
+    }
+
     /// Takes what changed in each value category since the last sync into the entries.
     pub(super) fn export_values(&mut self) -> Result<(), DomainStateError> {
+        self.key_playbooks_by_folder()?;
         for prefix in VALUE_CATEGORIES {
             if !self.enabled(&format!("{prefix}/")) {
                 // Turned off: the next time it is on, this computer's values seed again.
                 self.store.value_baselines.remove(prefix);
+                continue;
+            }
+            if !self.category_ready(prefix)? {
                 continue;
             }
             let (current, defaults) = self.category_values(prefix)?;
@@ -158,7 +261,7 @@ impl Engine<'_> {
     pub(super) fn import_values(&mut self) -> Result<Map<String, Value>, DomainStateError> {
         let mut patch = Map::new();
         for prefix in VALUE_CATEGORIES {
-            if !self.enabled(&format!("{prefix}/")) {
+            if !self.enabled(&format!("{prefix}/")) || !self.category_ready(prefix)? {
                 continue;
             }
             let (current, _) = self.category_values(prefix)?;
@@ -168,6 +271,7 @@ impl Engine<'_> {
                 .values()
                 .filter(|entry| key_category(&entry.key) == prefix)
                 .filter(|entry| current.get(&entry.key) != entry.value.as_ref())
+                .filter(|entry| !self.playbook_entry_ignored(entry, &current))
                 .map(|entry| {
                     (
                         entry.key.clone(),
@@ -185,7 +289,7 @@ impl Engine<'_> {
             }
             let mut playbook_all: Option<Option<&Value>> = None;
             let mut playbook_projects: Vec<(String, Option<&Value>)> = Vec::new();
-            let repos = project_repo_keys(self.db, &self.server_id, &self.store.entries)?;
+            let (playbook_prefix, repos) = self.playbook_keys()?;
             for (key, value, _) in &wanted {
                 if let Some(setting) = setting_of_sync_key(key) {
                     let value = value.clone().or_else(|| {
@@ -204,7 +308,7 @@ impl Engine<'_> {
                     crate::coordinators::write_synced_playbook_overrides(self.db, value.as_ref())?;
                 } else if key == PLAYBOOK_ALL {
                     playbook_all = Some(value.as_ref());
-                } else if let Some(repo) = key.strip_prefix(PLAYBOOK_PROJECT_PREFIX) {
+                } else if let Some(repo) = key.strip_prefix(playbook_prefix) {
                     if let Some((project_id, _)) = repos.iter().find(|(_, known)| known == repo) {
                         playbook_projects.push((project_id.clone(), value.as_ref()));
                     }
