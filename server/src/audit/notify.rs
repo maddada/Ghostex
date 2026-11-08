@@ -65,6 +65,8 @@ const OPENING_ACTIONS: &[&str] = &[
     "gbotsAddBot",
     "gbots.create",
     "gbotsChangeSenders",
+    // Installing Collab: downloads a component and runs it
+    "installExtensionComponent",
 ];
 
 /// Actor kinds that are not you at this computer: an agent's own session token, a paired phone,
@@ -380,6 +382,7 @@ mod tests {
         ("typeIntoOtherSession", LogOnly),
         ("interruptOtherSession", LogOnly),
         ("addApproverKey", Notifies),
+        ("installExtensionComponent", Notifies),
         ("computers.grant", NotifiesWhenApproved),
         ("computers.revoke", LogOnly),
         ("easyConnect.enable", Notifies),
@@ -430,7 +433,8 @@ mod tests {
             | AnswerOtherSessionPrompt
             | TypeIntoOtherSession
             | InterruptOtherSession
-            | AddApproverKey => "known",
+            | AddApproverKey
+            | InstallExtensionComponent => "known",
             Other(_) => "other",
         }
     }
@@ -500,6 +504,7 @@ mod tests {
             "typeIntoOtherSession",
             "interruptOtherSession",
             "addApproverKey",
+            "installExtensionComponent",
         ] {
             assert_eq!(
                 approval_kind(SensitiveAction::from_wire(name)),
