@@ -685,6 +685,12 @@ How to use this file:
 ### Secrets agents ask for
 
 - **Private secret requests** `secretRequests` (Settings UI row without a settings key; use `ghostex settings open`): When an agent needs a password, API key or token, it asks in a private card above the chat box instead of in the chat. What you type goes to a private file only that agent's commands can read, deleted after 24 hours; it never appears in the chat or reaches the model. With a 1Password account added, you can answer with an op:// reference instead.
+## Security (tab `security`)
+
+### Security log
+
+- **Security log check** `securityLogCheck` (Settings UI row without a settings key; use `ghostex settings open`): Whether the security log is intact. Each entry is chained to the one before it, so an entry that was changed or removed after it was written shows here.
+- **Security log** `securityLog` (Settings UI row without a settings key; use `ghostex settings open`): Every sensitive action on this computer, newest first: pairing a phone, Easy Connect changes, sharing a chat in Collab, letting a connected computer's agents in, Autopilot answering an approval, and attempts to change settings only you can change. Each says who asked, when and how it ended. Each one also shows in the notification bell and on your paired phones. `ghostex security log` reads the same list.
 ## Workspaces (tab `workspaces`)
 
 ### Workspaces
