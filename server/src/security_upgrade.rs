@@ -200,8 +200,13 @@ fn current_phones(paths: &GxserverPaths) -> Vec<CurrentPhone> {
     let Ok(db) = crate::storage::open_gxserver_database(paths) else {
         return Vec::new();
     };
-    let Ok(mut statement) =
-        db.prepare("SELECT id, name, platform, pairedAt FROM remote_paired_devices")
+    // A phone paired over its SSH login is the SSH row's, never an Easy Connect row's re-pairing. A
+    // table from before pairing v2 has no columns to tell, and no such phone either.
+    let Ok(mut statement) = db
+        .prepare(&format!(
+            "SELECT id, name, platform, pairedAt FROM remote_paired_devices WHERE NOT ({PAIRED_OVER_SSH})"
+        ))
+        .or_else(|_| db.prepare("SELECT id, name, platform, pairedAt FROM remote_paired_devices"))
     else {
         return Vec::new();
     };
@@ -243,6 +248,91 @@ pub(crate) fn easy_connect_computers(settings: Option<&Value>) -> Vec<NoticeComp
                 id: text("id"),
                 name,
                 address: text("easyConnectAddress"),
+            })
+        })
+        .collect()
+}
+
+/// A device row paired over its own SSH login (`/api/pairOverSsh`): a phone's token, but neither
+/// an SSH key line nor an Easy Connect key.
+const PAIRED_OVER_SSH: &str = "status = 'paired' AND apiTokenHash IS NOT NULL \
+     AND COALESCE(sshKeyFingerprint, '') = '' AND tailcatClientKey IS NULL";
+
+/*
+CDXC:Security 2026-11-08 DECISION:
+User (GitHub #495): "outline this in the message talking about what needs to be reconnected", and
+"make the notice also open for people who have no Easy Connect pairings but whose phone has signed
+in over SSH lately", with each kind of device in its own row. A phone that signs in over Tailscale,
+the local network or SSH leaves no pairing row; the trace gxserver keeps is its notification
+registration, which a phone on the token file makes with no `deviceId` and renews whenever it
+connects (push/registration.rs). One row stands for those phones: it waits until a phone pairs
+over SSH (`/api/pairOverSsh`), shows the words while one is Pending, and is done once one has
+paired since the update. Computers this one reaches over SSH get a row that only says what they
+may ask once; it needs nothing, so it never keeps the notice open by itself.
+*/
+/// What the notice knows of phones that sign in over SSH.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SshPhones {
+    /// Phones whose notification registration came over the token file in the last month.
+    pub(crate) recent: usize,
+    /// Phones paired over SSH since the update.
+    pub(crate) paired_since_update: usize,
+}
+
+fn ssh_phones(paths: &GxserverPaths, taken_at_ms: i64, now_ms: i64) -> SshPhones {
+    let recent = crate::push::PushRegistrationStore::open(paths)
+        .read()
+        .map(|data| {
+            data.registrations
+                .iter()
+                .filter(|registration| registration.device_id.is_none())
+                .filter(|registration| {
+                    chrono::DateTime::parse_from_rfc3339(&registration.registered_at)
+                        .is_ok_and(|at| at.timestamp_millis() >= now_ms - UNUSED_FOR_MS)
+                })
+                .count()
+        })
+        .unwrap_or(0);
+    let taken_at = chrono::DateTime::from_timestamp_millis(taken_at_ms)
+        .map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+        .unwrap_or_default();
+    let paired_since_update = crate::storage::open_gxserver_database(paths)
+        .ok()
+        .and_then(|db| {
+            db.query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM remote_paired_devices WHERE {PAIRED_OVER_SSH} AND pairedAt >= ?1"
+                ),
+                [taken_at],
+                |row| row.get::<_, i64>(0),
+            )
+            .ok()
+        })
+        .unwrap_or(0) as usize;
+    SshPhones {
+        recent,
+        paired_since_update,
+    }
+}
+
+/// The remote computers this one reaches over SSH (Tailscale, the local network) and not turned off.
+pub(crate) fn ssh_computers(settings: Option<&Value>) -> Vec<Value> {
+    settings
+        .and_then(|settings| settings.get("remoteMachines"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|machine| {
+            machine.get("transport").and_then(Value::as_str) != Some("easyConnect")
+                && machine.get("disabled").and_then(Value::as_bool) != Some(true)
+        })
+        .filter_map(|machine| {
+            let name = machine.get("name").and_then(Value::as_str)?.trim();
+            (!name.is_empty()).then(|| {
+                json!({
+                    "id": machine.get("id").and_then(Value::as_str).unwrap_or(name),
+                    "name": name,
+                })
             })
         })
         .collect()
@@ -404,6 +494,32 @@ pub(crate) fn view_with_pending(
     settings: Option<&Value>,
     now_ms: i64,
 ) -> Value {
+    view_with_ssh(
+        notice,
+        current,
+        pending,
+        &SshPhones::default(),
+        settings,
+        now_ms,
+    )
+}
+
+/// [`view_with_pending`] with the phones that sign in over SSH and the computers reached over SSH.
+pub(crate) fn view_with_ssh(
+    notice: &UpgradeNotice,
+    current: &[CurrentPhone],
+    pending: &[PendingDevice],
+    ssh: &SshPhones,
+    settings: Option<&Value>,
+    now_ms: i64,
+) -> Value {
+    let ssh_pending = pending.iter().find(|device| device.over_ssh);
+    let pending: Vec<PendingDevice> = pending
+        .iter()
+        .filter(|device| !device.over_ssh)
+        .cloned()
+        .collect();
+    let pending = pending.as_slice();
     // A record from before the rows were kept has names only: one waiting row per name.
     let legacy_names = notice.phone_rows.is_empty()
         && notice.computer_rows.is_empty()
@@ -467,9 +583,35 @@ pub(crate) fn view_with_pending(
             }));
         }
     }
+    let ssh_phones = if ssh_pending.is_some() || ssh.recent > 0 || ssh.paired_since_update > 0 {
+        let status = if ssh_pending.is_some() {
+            RowStatus::Pending
+        } else if ssh.paired_since_update > 0 {
+            RowStatus::Paired
+        } else {
+            RowStatus::Waiting
+        };
+        let mut row = json!({
+            "id": "ssh-phones",
+            "count": ssh.recent.max(ssh.paired_since_update).max(1),
+            "status": status.wire(),
+        });
+        if let Some(device) = ssh_pending {
+            row["name"] = json!(device.name);
+            row["kind"] = json!(phone_kind(&device.platform));
+            row["words"] = json!(device.words);
+            row["approvalId"] = json!(device.approval_id);
+            row["pendingId"] = json!(device.id);
+        }
+        vec![row]
+    } else {
+        Vec::new()
+    };
+    let ssh_computers = ssh_computers(settings);
     let waiting = phones
         .iter()
         .chain(computers.iter())
+        .chain(ssh_phones.iter())
         .filter(|row| row["status"] == "waiting" || row["status"] == "pending")
         .count();
     let due = !notice.seen && notice.remind_at_ms.is_none_or(|at| now_ms >= at);
@@ -478,6 +620,8 @@ pub(crate) fn view_with_pending(
         "waiting": waiting,
         "phones": phones,
         "computers": computers,
+        "sshPhones": ssh_phones,
+        "sshComputers": ssh_computers,
         "remindersLeft": notice.reminders_left,
         "takenAtMs": notice.taken_at_ms,
     })
@@ -545,10 +689,11 @@ pub(crate) fn handle_endpoint_with_pending(
         }
         _ => {}
     }
-    Ok(view_with_pending(
+    Ok(view_with_ssh(
         &notice,
         &current_phones(paths),
         pending,
+        &ssh_phones(paths, notice.taken_at_ms, now_ms),
         crate::shared_settings_file::read_shared_settings(paths).as_ref(),
         now_ms,
     ))
@@ -727,6 +872,7 @@ mod tests {
             approval_id: "apr_1".into(),
             requested_at_ms: 0,
             expires_at_ms: 0,
+            over_ssh: false,
         }];
         let notice = UpgradeNotice {
             phone_rows: phones,

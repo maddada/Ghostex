@@ -8,7 +8,7 @@
 //! Settings > Remote. A phone that scanned it and waits on the owner's approval is a `pending` row
 //! with its three words (server/src/security_upgrade.rs, `phone_statuses_with_pending`); Approve
 //! there runs the system prompt and signs (`owner_security::approve_local_request_id`).
-use crate::app::gx_store::security_notice::{SECURITY_NOTICE_ENDPOINT, notice_rows};
+use crate::app::gx_store::security_notice::{SECURITY_NOTICE_ENDPOINT, notice_rows, ssh_rows};
 use crate::app::gx_store::{gx_rpc, remote_last_connected_ms};
 use crate::app::window::*;
 use crate::*;
@@ -39,9 +39,12 @@ fn security_notice_state(view: &Value, code: SecurityNoticeCode) -> SecurityUpgr
         &remote_last_connected_ms,
         chrono::Utc::now().timestamp_millis(),
     );
+    let (ssh_phones, ssh_computers) = ssh_rows(view);
     SecurityUpgradeModalState {
         phones,
         computers,
+        ssh_phones,
+        ssh_computers,
         code,
     }
 }
@@ -53,7 +56,8 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let state = security_notice_state(view, SecurityNoticeCode::Loading);
-        if state.phones.is_empty() && state.computers.is_empty() {
+        // Computers over SSH need nothing, so they never open the notice by themselves.
+        if state.phones.is_empty() && state.computers.is_empty() && state.ssh_phones.is_empty() {
             return;
         }
         let palette = self.gpui_native_dialog_palette();

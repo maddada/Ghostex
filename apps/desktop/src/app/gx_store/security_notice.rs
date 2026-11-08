@@ -112,6 +112,56 @@ pub(crate) fn notice_rows(
     (phones, computers)
 }
 
+/// The rows for phones that sign in over SSH (one row for them all, or the one waiting with its
+/// words) and for computers reached over SSH (nothing to do), from `sshPhones` and `sshComputers`.
+pub(crate) fn ssh_rows(view: &Value) -> (Vec<SecurityNoticeRow>, Vec<SecurityNoticeRow>) {
+    let text = |row: &Value, key: &str| row[key].as_str().unwrap_or_default().to_string();
+    let phones = view["sshPhones"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|row| {
+            let count = row["count"].as_u64().unwrap_or(1).max(1);
+            let pending_name = text(row, "name");
+            let status = status(row);
+            SecurityNoticeRow {
+                id: crate::app::window::SSH_PHONES_ROW_ID.to_string(),
+                name: if status == SecurityNoticeRowStatus::Pending && !pending_name.is_empty() {
+                    pending_name
+                } else if count == 1 {
+                    "Your phone".to_string()
+                } else {
+                    format!("{count} phones")
+                },
+                detail: match status {
+                    SecurityNoticeRowStatus::Pending => {
+                        "Approve if the phone shows the same words".to_string()
+                    }
+                    SecurityNoticeRowStatus::Paired => "Signs in over SSH".to_string(),
+                    _ => "Open Ghostex on it to pair".to_string(),
+                },
+                status,
+                words: words(row),
+                approval_id: approval_id(row),
+            }
+        })
+        .collect();
+    let computers = view["sshComputers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|row| SecurityNoticeRow {
+            id: text(row, "id"),
+            name: text(row, "name"),
+            detail: "May ask once: Touch ID to let its agents connect".to_string(),
+            status: SecurityNoticeRowStatus::Info,
+            words: Vec::new(),
+            approval_id: None,
+        })
+        .collect();
+    (phones, computers)
+}
+
 impl GhostexGpuiApp {
     /// Asks this computer's gxserver whether the notice is due and opens it. Asked once per run:
     /// Remind me later brings it back on a later day, so a run never asks twice.

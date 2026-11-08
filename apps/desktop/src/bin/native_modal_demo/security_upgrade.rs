@@ -1,6 +1,7 @@
 //! Preview host for the 11.0.1 security notice. States: `mixed` (default: phones waiting, one
 //! computer paired again), `ticked` (a phone paired again too), `no-code` (Easy Connect off),
-//! `computers-only`.
+//! `computers-only`, `ssh-only` (a phone that signs in over SSH waiting with its words, and a
+//! computer reached over SSH).
 use super::security_upgrade_modal::*;
 use gpui::{App, AppContext as _};
 use std::rc::Rc;
@@ -59,9 +60,46 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             "ghostex://pair?v=2&a=tc1q8v3k2m9x7p4r6t8w1y5z2a4c6e8g0j3l5n7q9s1u3w5y7a9c1e3g5i7k9m1&n=Studio&u=madda&p=58744&s=22&nonce=Jr7h2Qm9xLw4".to_string(),
         )
     };
+    let ssh_only = demo.state == "ssh-only";
+    let (phones, computers) = if ssh_only {
+        (Vec::new(), Vec::new())
+    } else {
+        (phones, computers)
+    };
+    let ssh_phones = vec![SecurityNoticeRow {
+        id: SSH_PHONES_ROW_ID.to_string(),
+        name: if ssh_only { "iPhone 16" } else { "Your phone" }.to_string(),
+        detail: if ssh_only {
+            "Approve if the phone shows the same words"
+        } else {
+            "Open Ghostex on it to pair"
+        }
+        .to_string(),
+        status: if ssh_only {
+            SecurityNoticeRowStatus::Pending
+        } else {
+            SecurityNoticeRowStatus::Waiting
+        },
+        words: if ssh_only {
+            vec!["harbor".into(), "cotton".into(), "falcon".into()]
+        } else {
+            Vec::new()
+        },
+        approval_id: ssh_only.then(|| "apr_demo".to_string()),
+    }];
+    let ssh_computers = vec![SecurityNoticeRow {
+        id: "m3".to_string(),
+        name: "Build box".to_string(),
+        detail: "May ask once: Touch ID to let its agents connect".to_string(),
+        status: SecurityNoticeRowStatus::Info,
+        words: Vec::new(),
+        approval_id: None,
+    }];
     let state = SecurityUpgradeModalState {
         phones,
         computers,
+        ssh_phones,
+        ssh_computers,
         code,
     };
     let host: SecurityUpgradeModalHost = Rc::new(move |command, cx: &mut App| {

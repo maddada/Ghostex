@@ -64,6 +64,7 @@ pub(super) async fn route_control_http(
         | "/api/pairedDevices"
         | "/api/removePairedDevice"
         | "/api/pairDevice"
+        | "/api/pairOverSsh"
         | "/api/pairingStatus"
         | "/api/renewDeviceToken"
         | "/api/pairComputer"

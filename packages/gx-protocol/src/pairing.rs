@@ -101,6 +101,10 @@ pub struct PendingDevice {
     pub approval_id: String,
     pub requested_at_ms: u64,
     pub expires_at_ms: u64,
+    /// A phone that signs in over SSH (Tailscale, the local network) and asked through that
+    /// login (`/api/pairOverSsh`), not with the Show QR code.
+    #[serde(default)]
+    pub over_ssh: bool,
 }
 
 /// 256 short, distinct, everyday English words: one per byte value. Never reorder or edit: the

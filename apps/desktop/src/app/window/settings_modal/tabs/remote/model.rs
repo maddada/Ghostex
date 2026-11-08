@@ -278,6 +278,8 @@ pub(crate) struct PairedDevice {
     pub(super) tailcat_client_key: Option<String>,
     /// Paired before 11.0.1 (`status: "legacy"`): it has no access left and must pair again.
     pub(super) legacy: bool,
+    /// Paired through its own SSH login (Tailscale, the local network), GitHub #495.
+    pub(super) over_ssh: bool,
 }
 
 /// `GxserverPendingDevice`: a phone that scanned the QR and waits for the owner's approval
@@ -291,6 +293,8 @@ pub(crate) struct PendingDevice {
     pub(super) words: Vec<String>,
     /// Its `pairingApproveDevice` approval request.
     pub(super) approval_id: String,
+    /// It asked over its own SSH login (`/api/pairOverSsh`), not with the Show QR code.
+    pub(super) over_ssh: bool,
 }
 
 /// The `pending` half of `/api/pairedDevices` (and of `/api/removePairedDevice`'s answer); empty
@@ -315,6 +319,7 @@ pub(super) fn read_pending_devices(value: &Value) -> Vec<PendingDevice> {
                         platform: text(device, "platform").unwrap_or_default(),
                         words,
                         approval_id: text(device, "approvalId").unwrap_or_default(),
+                        over_ssh: device.get("overSsh").and_then(Value::as_bool) == Some(true),
                     })
                 })
                 .collect()
@@ -341,6 +346,7 @@ pub(super) fn read_paired_devices_result(value: &Value) -> Result<Vec<PairedDevi
             last_seen_at: non_empty(device, "lastSeenAt"),
             tailcat_client_key: non_empty(device, "tailcatClientKey"),
             legacy: text(device, "status").as_deref() == Some("legacy"),
+            over_ssh: device.get("overSsh").and_then(Value::as_bool) == Some(true),
         })
         .collect())
 }
@@ -484,7 +490,12 @@ pub(super) fn format_paired_device_detail(device: &PairedDevice, now: i64) -> St
         return "Paired before Ghostex 11.1.0, so it no longer connects. Pair it again from the phone, or remove it.".to_string();
     }
     let paired = format!(
-        "Paired {}",
+        "{} {}",
+        if device.over_ssh {
+            "Signs in over SSH · paired"
+        } else {
+            "Paired"
+        },
         format_paired_device_day(&device.paired_at, now)
     );
     if is_paired_device_connected_now(device, now) {
