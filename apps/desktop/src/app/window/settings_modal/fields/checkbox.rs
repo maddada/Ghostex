@@ -72,19 +72,14 @@ pub(crate) fn settings_small_switch(
     checked: bool,
     disabled: bool,
 ) -> AnyElement {
-    let thumb = if checked || p.light {
-        p.surface
-    } else {
+    let thumb = if checked {
+        SWITCH_ON_THUMB
+    } else if !p.light {
         p.foreground
-    };
-    let thumb = if p.glass && !checked && !p.light {
-        p.foreground
-    } else if p.glass && !p.light {
-        super::glass_checked_thumb(p)
     } else if p.glass {
         p.modal.solid_surface
     } else {
-        thumb
+        p.surface
     };
     div()
         .flex_shrink_0()
@@ -98,7 +93,7 @@ pub(crate) fn settings_small_switch(
             hsla(p.hairline)
         })
         .bg(hsla(if checked {
-            p.foreground
+            switch_on_track(p.foreground, p.light)
         } else {
             p.raised_hover
         }))

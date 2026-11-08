@@ -18,21 +18,16 @@ use std::rc::Rc;
 /// User: never show On or Off text beside a toggle in Settings; the switch itself is the state. A view that cannot be turned off shows a locked-on switch instead of an "Always on" caption.
 /// The Settings switch: a 32x20 track with a 6px radius and a 1px edge, a 16px thumb with a 4px
 /// radius. Off: the raised-hover track with a hairline edge and a foreground thumb (dark) or
-/// surface thumb (light). On: a foreground track and a surface thumb.
+/// surface thumb (light). On: the mid-tone `switch_on_track` and a white thumb.
 pub(crate) fn settings_switch(p: &SettingsPalette, checked: bool, disabled: bool) -> AnyElement {
-    let thumb = if checked || p.light {
-        p.surface
-    } else {
+    let thumb = if checked {
+        SWITCH_ON_THUMB
+    } else if !p.light {
         p.foreground
-    };
-    let thumb = if p.glass && !checked && !p.light {
-        p.foreground
-    } else if p.glass && !p.light {
-        glass_checked_thumb(p)
     } else if p.glass {
         p.modal.solid_surface
     } else {
-        thumb
+        p.surface
     };
     div()
         .flex_shrink_0()
@@ -46,7 +41,7 @@ pub(crate) fn settings_switch(p: &SettingsPalette, checked: bool, disabled: bool
             hsla(p.hairline)
         })
         .bg(hsla(if checked {
-            p.foreground
+            switch_on_track(p.foreground, p.light)
         } else {
             p.raised_hover
         }))
@@ -62,14 +57,6 @@ pub(crate) fn settings_switch(p: &SettingsPalette, checked: bool, disabled: bool
                 .shadow_sm(),
         )
         .into_any_element()
-}
-
-/// The thumb of an on switch under dark glass: a light gray on the light track.
-///
-/// CDXC:Settings 2026-11-06 DECISION:
-/// The on switch drew the theme chrome (`solid_surface`, near-black on the default theme) as its thumb, a black square on the Extensions cards under glass. The user does not want black or near-black fills on the glass design, so the thumb is a light gray that still stands apart from the light track.
-pub(crate) fn glass_checked_thumb(p: &SettingsPalette) -> gpui::Rgba {
-    p.muted
 }
 
 /// A clickable switch plus the press that flips it, so the row that holds it can flip it from a

@@ -137,23 +137,45 @@ pub(crate) fn modal_switch(p: &ModalPalette, checked: bool, disabled: bool) -> A
         .h(px(20.0))
         .rounded(px(6.0))
         .border_2()
-        .border_color(if checked {
-            hsla(p.primary)
+        .border_color(transparent())
+        .bg(hsla(if checked {
+            switch_on_track(p.foreground, p.light)
         } else {
-            transparent()
-        })
-        .bg(hsla(if checked { p.primary } else { p.switch_off }))
+            p.switch_off
+        }))
         .when(disabled, |this| this.opacity(0.5))
         .child(
             div()
                 .size(px(16.0))
                 .ml(px(if checked { 12.0 } else { 0.0 }))
                 .rounded(px(4.0))
-                .bg(hsla(p.background))
+                .bg(hsla(if checked {
+                    SWITCH_ON_THUMB
+                } else {
+                    p.background
+                }))
                 .shadow_sm(),
         )
         .into_any_element()
 }
+
+/// The track of an on switch: the theme's ink at partial strength, a mid grey that carries the
+/// theme's hue (the dark themes' foregrounds are tinted), so the white [`SWITCH_ON_THUMB`] stands
+/// out on it in every look and the track never turns black on glass.
+///
+/// CDXC:Switches 2026-11-08 DECISION:
+/// User, of an on Settings switch under dark glass (a near-white track with a light grey handle): "i dont like how this looks when enabled fam please make it look better (the color of the handle blends with the white of the toggle)". Every on switch (Settings rows, Settings cards, the modal kit's app-wide switch) now draws a mid-tone track (the foreground at 42% in dark looks, 62% in light ones) under a white handle with a soft shadow, the same in glass and solid. The off state keeps its faint track and its foreground or surface handle at the left, so on reads as a brighter track with a white handle at the right. The light on track was the near-black foreground, which the user does not want as a fill on glass.
+pub(crate) fn switch_on_track(foreground: Rgba, light: bool) -> Rgba {
+    rgba_of(foreground, if light { 0.62 } else { 0.42 })
+}
+
+/// The handle of an on switch: white, over [`switch_on_track`].
+pub(crate) const SWITCH_ON_THUMB: Rgba = Rgba {
+    r: 1.0,
+    g: 1.0,
+    b: 1.0,
+    a: 1.0,
+};
 
 /// The faint wash a switch row shows while the pointer is over it: the foreground at 4%, so it is
 /// a light veil on a dark surface and a dark one on a light surface, never a solid fill.

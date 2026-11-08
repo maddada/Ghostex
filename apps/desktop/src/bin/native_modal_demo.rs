@@ -6,6 +6,8 @@ against the React Storybook stories without launching Ghostex. Run with:
 Environment:
     GHOSTEX_NATIVE_MODAL_DEMO=export-transcript|updates-menu|start-menu|chief-row|... (which modal; default export-transcript)
     GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light                (default dark)
+    GHOSTEX_NATIVE_MODAL_DEMO_SIDEBAR_THEME=dark-green|...    (a dark theme's text colours)
+    GHOSTEX_NATIVE_MODAL_DEMO_CHROME=<rrggbb>                 (tint the modal from a theme chrome)
     GHOSTEX_NATIVE_MODAL_DEMO_STATE=<per-modal state name>    (default: the opening state)
     GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND=1                    (open without taking focus, for screenshots)
     GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT=<png>                  (any preview, built with
@@ -195,8 +197,27 @@ impl DemoEnv {
                 modal
             },
             state: env("GHOSTEX_NATIVE_MODAL_DEMO_STATE"),
-            palette: ModalPalette::resolve(env("GHOSTEX_NATIVE_MODAL_DEMO_THEME") == "light", None),
+            palette: demo_palette(),
         }
+    }
+}
+
+/// The demo's palette: `GHOSTEX_NATIVE_MODAL_DEMO_THEME`, plus
+/// `GHOSTEX_NATIVE_MODAL_DEMO_SIDEBAR_THEME=dark-green|dark-blue|...` (a dark theme's text colours)
+/// and `GHOSTEX_NATIVE_MODAL_DEMO_CHROME=<rrggbb>` (the theme chrome the app tints modals from), so
+/// the theme colours of Settings > Interface can be previewed.
+fn demo_palette() -> ModalPalette {
+    let sidebar_theme = env("GHOSTEX_NATIVE_MODAL_DEMO_SIDEBAR_THEME");
+    let palette = ModalPalette::resolve(
+        env("GHOSTEX_NATIVE_MODAL_DEMO_THEME") == "light",
+        (!sidebar_theme.is_empty()).then_some(sidebar_theme.as_str()),
+    );
+    match u32::from_str_radix(
+        env("GHOSTEX_NATIVE_MODAL_DEMO_CHROME").trim_start_matches('#'),
+        16,
+    ) {
+        Ok(chrome) => palette.tinted(gpui::rgb(chrome)),
+        Err(_) => palette,
     }
 }
 
