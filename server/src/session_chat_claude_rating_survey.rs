@@ -12,7 +12,9 @@
 //! ```
 //!
 //! On the 24-row grid a hidden session rests at, a tall turn footer (a task list) and the survey
-//! push the input box below the bottom row, so the screen ends at the survey.
+//! push the input box below the bottom row, so the screen ends at the survey. Claude Code 2.1.319
+//! draws one row more of the box on that grid: its top rule, carrying the session's name, and its
+//! empty `❯` row are the bottom two rows, and the bottom rule and status line are cut off.
 
 use std::time::Duration;
 
@@ -31,9 +33,9 @@ const RATINGS: &[(&str, &str)] = &[("1:", "Bad"), ("2:", "Fine"), ("3:", "Good")
 const UNSURE: (&str, &str) = ("4:", "Unsure");
 const DISMISS: (&str, &str) = ("0:", "Dismiss");
 
-/// Rows Claude may draw between the survey and the bottom of a screen that cut the input box off
-/// ("Update available! Run: …", and the input box's top rule).
-const ROWS_AFTER_SURVEY: usize = 2;
+/// Notice rows Claude may draw between the survey and the input box ("Update available! Run: …",
+/// "new task? /clear to save 553.7k tokens").
+const NOTICE_ROWS_AFTER_SURVEY: usize = 2;
 
 /// The least indent of Claude's notice row; the rating row is indented two.
 const NOTICE_INDENT: usize = 3;
@@ -94,18 +96,39 @@ fn is_rating_row(row: &str) -> bool {
     pairs == expected
 }
 
-/// Only Claude's notice row follows the survey, and at most the input box's top rule as the very
-/// last row: the input box itself is below the bottom of the screen.
+/// Only Claude's notice rows follow the survey, then at most the input box's top rule (plain or
+/// carrying the session's name) and its empty `❯` row as the last rows: the rest of the input box
+/// is below the bottom of the screen.
+///
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// The coordinator (S90:P3lv0:G9jt7) sat idle from 06:47 to 10:40 UTC with five thread reports held
+/// as "Waiting for agent" until the user's Full Reload. Its 24-row hidden grid ended in the survey,
+/// "new task? /clear to save 553.7k tokens", `──── Main Coordinator ─` and a bare `❯`: Claude Code
+/// 2.1.319 draws the box's top rule and input row before the cut, one row lower than 2.1.311 did.
+/// That read as no survey, so nothing dismissed it, and as no input box, since the bottom rule that
+/// closes the box was off screen; the Ctrl+L and resize repaints drew the same frame for hours.
+/// The `❯` row must be empty: a `0` typed after a draft would join the draft instead of answering
+/// the survey.
 fn input_box_cut_off(after: &[String]) -> bool {
-    if after.len() > ROWS_AFTER_SURVEY {
-        return false;
-    }
-    match after.split_last() {
-        None => true,
-        Some((last, rest)) => {
-            rest.iter().all(|line| is_notice_row(line)) && (is_notice_row(last) || is_rule(last))
+    let mut rows = after;
+    if let Some((last, rest)) = rows.split_last() {
+        if is_empty_input_row(last) {
+            let Some((_, notices)) = rest.split_last().filter(|(top, _)| is_rule(top)) else {
+                return false;
+            };
+            rows = notices;
+        } else if is_rule(last) {
+            rows = rest;
         }
     }
+    rows.len() <= NOTICE_ROWS_AFTER_SURVEY && rows.iter().all(|line| is_notice_row(line))
+}
+
+/// The input box's `❯` row with nothing typed in it.
+fn is_empty_input_row(line: &str) -> bool {
+    line.trim()
+        .strip_prefix('❯')
+        .is_some_and(|rest| rest.trim().is_empty())
 }
 
 /// The row Claude right-aligns over its input box ("◐ medium · /effort", "You've used 90% of your
