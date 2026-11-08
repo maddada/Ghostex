@@ -287,7 +287,27 @@ fn request_gxserver_body(
     body: &Value,
     flags: &Flags,
 ) -> CliResult<Value> {
-    let body = request_gxserver_envelope(target, pathname, body, flags)?;
+    let body = match request_gxserver_envelope(target, pathname, body, flags) {
+        Err(CliError::Rpc { message, response })
+            if response.get("error").and_then(Value::as_str)
+                == Some(ghostex_gx_protocol::approval::APPROVAL_REQUIRED_ERROR)
+                && !flags.truthy("no-wait") =>
+        {
+            let approval_id = wait_for_approval(target, &message, &response, flags)?;
+            let mut retry = body.clone();
+            match retry.get_mut("params").and_then(Value::as_object_mut) {
+                Some(params) => {
+                    params.insert(
+                        ghostex_gx_protocol::approval::APPROVAL_ID_PARAM.to_string(),
+                        Value::String(approval_id),
+                    );
+                }
+                None => return Err(CliError::Rpc { message, response }),
+            }
+            request_gxserver_envelope(target, pathname, &retry, flags)?
+        }
+        other => other?,
+    };
     let mut merged = Map::new();
     merged.insert("ok".to_string(), Value::Bool(true));
     if let Some(result) = body.get("result").and_then(Value::as_object) {
@@ -300,6 +320,66 @@ fn request_gxserver_body(
         body.get("requestId").cloned().unwrap_or(Value::Null),
     );
     Ok(Value::Object(merged))
+}
+
+/*
+CDXC:Security 2026-11-08 WHY:
+An agent or the user's own terminal can only ask for a sensitive action (GitHub #495): gxserver answers `approvalRequired` and shows the request on the computer and phone. The CLI says so on stderr, waits for the answer (`--no-wait` returns at once), and repeats the same call with the approval id, which gxserver spends only on that exact change.
+*/
+fn wait_for_approval(
+    target: &Target,
+    message: &str,
+    response: &Value,
+    flags: &Flags,
+) -> CliResult<String> {
+    let id = response
+        .pointer("/approval/id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CliError::Other(message.to_string()))?
+        .to_string();
+    let expires_at_ms = response
+        .pointer("/approval/expiresAtMs")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let summary = response
+        .pointer("/approval/summary")
+        .and_then(Value::as_str)
+        .unwrap_or("this change");
+    eprintln!(
+        "Waiting for your approval on your computer or phone: {summary}. (Ghostex shows it there; Ctrl+C to stop waiting.)"
+    );
+    loop {
+        std::thread::sleep(Duration::from_secs(2));
+        let read = request_gxserver_envelope(
+            target,
+            crate::security::APPROVALS_READ_ENDPOINT,
+            &json!({ "params": { "id": id }, "protocolVersion": GXSERVER_PROTOCOL_VERSION }),
+            flags,
+        )?;
+        let status = read
+            .pointer("/result/request/status")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        match status {
+            "approved" => return Ok(id),
+            "denied" => return Err(CliError::Other(format!("You denied this: {summary}."))),
+            "expired" | "consumed" => {
+                return Err(CliError::Other(format!(
+                    "Nobody approved this in time: {summary}. Run the command again to ask again."
+                )))
+            }
+            _ => {}
+        }
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_millis() as u64)
+            .unwrap_or(0);
+        if expires_at_ms > 0 && now_ms > expires_at_ms + 5_000 {
+            return Err(CliError::Other(format!(
+                "Nobody approved this in time: {summary}. Run the command again to ask again."
+            )));
+        }
+    }
 }
 
 /// CDXC:Coordinators 2026-11-05 DECISION:
