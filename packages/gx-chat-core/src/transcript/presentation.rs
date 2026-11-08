@@ -679,8 +679,13 @@ pub struct ProjectionScope<'a> {
     /// the user's fold into one `grouped-work` row (`grouped_work.rs`).
     pub grouped_work: bool,
     /// Agent work is Quiet (`transcript/chat_look.rs`): the grouped rows move every reply's calls
-    /// into their work and the rows outside them leave theirs out (`grouped_work::hide_work`).
+    /// into their work.
     pub hidden_work: bool,
+    /// [`crate::session::working::hides_running_response`]: the running response draws only what
+    /// needs the user (`grouped_work::hide_work`).
+    pub hides_running: bool,
+    /// [`crate::session::working::quiet_finished_before`].
+    pub quiet_finished_before: Option<i64>,
     /// [`TranscriptViewState::picture_digests`]: which pictures read from disk the user already
     /// showed (`read_images.rs`).
     pub picture_digests: &'a std::collections::HashMap<String, u64>,
@@ -755,6 +760,8 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         tool_cards: view.effective_tool_cards(),
         grouped_work: view.grouped_work(),
         hidden_work: view.hidden_work(),
+        hides_running: crate::session::working::hides_running_response(state),
+        quiet_finished_before: crate::session::working::quiet_finished_before(state),
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),
     }
@@ -1208,7 +1215,7 @@ pub(crate) fn build_items(
     items
 }
 
-/// Agent work Quiet, while the agent works: the running response's rows leave their work out
+/// Agent work Quiet, while the agent works: the running response draws only what needs the user
 /// (`grouped_work::hide_work`). Runs once the waiting call is marked, never inside `build_items`
 /// (`chat_look::needs_the_user`).
 pub(crate) fn hide_running_work(
@@ -1216,8 +1223,21 @@ pub(crate) fn hide_running_work(
     scope: &ProjectionScope,
     projection: &TranscriptProjection,
 ) {
-    if scope.hidden_work && scope.working && !scope.summary {
-        crate::transcript::grouped_work::hide_work(items, &projection.live_ids);
+    let live = hidden_live(scope, projection);
+    if !live.is_empty() {
+        crate::transcript::grouped_work::hide_work(items, &live, scope.quiet_finished_before);
+    }
+}
+
+/// The rows [`hide_running_work`] judges: the running response's, while Quiet hides it.
+fn hidden_live<'p>(
+    scope: &ProjectionScope,
+    projection: &'p TranscriptProjection,
+) -> std::collections::HashSet<&'p str> {
+    if scope.hides_running && scope.working && !scope.summary {
+        projection.live_ids.iter().map(String::as_str).collect()
+    } else {
+        Default::default()
     }
 }
 
@@ -1290,6 +1310,9 @@ fn turn_items(
             })
             .collect()
     } else {
+        // Agent work Quiet hides the running response's rows by what they hold, so it reads the
+        // rows themselves: a stand-in would show their words and could hold a form.
+        let hidden_live = hidden_live(scope, projection);
         projection
             .items
             .iter()
@@ -1299,6 +1322,7 @@ fn turn_items(
                 let eager = builder.eager(first + index);
                 let turn = match item {
                     RenderItem::Message(message) => {
+                        let eager = eager || hidden_live.contains(message.id.as_str());
                         let mut row = builder.message_or_placeholder(message, eager, Draw::Row);
                         running_thinking.mark(message, &mut row);
                         crate::transcript::tool_card::mark_live_card(

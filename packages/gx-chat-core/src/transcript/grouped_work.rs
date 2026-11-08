@@ -15,10 +15,12 @@
 use serde_json::Value;
 
 use crate::document::{GroupedTurn, TranscriptItem};
-use crate::transcript::chat_look::{needs_the_user, waits_on_approval};
+use crate::transcript::chat_look::{
+    asks_in_words, holds_only_answered_cards, needs_the_user, waits_on_approval,
+};
 use crate::transcript::file_change_rows::file_change_card;
 use crate::transcript::read_images::{images_stat, push_once};
-use crate::transcript::simple::{edit_label, edited_and_failed_paths};
+use crate::transcript::simple::{edit_label, edited_and_failed_paths, tool_count_label};
 use crate::transcript::turns::worked_duration_label;
 use crate::transcript::work_summary::counted_work_stats;
 
@@ -213,45 +215,120 @@ fn strip_calls(row: &mut crate::document::ProjectedMessage) {
     }
 }
 
-/// Agent work Quiet, while the agent works: the rows of the response still running (`live`, from
-/// its start, `TranscriptProjection::live_ids`) leave their calls and edits out, the working card
-/// or status line saying what runs, and a row that is only work (a thought, or calls with no
-/// words) is dropped. A row that needs the user always stays (`chat_look::needs_the_user`), whole
-/// when a call or edit of it waits on an approval, and a row still waiting to be projected keeps
-/// its place. Finished rows outside grouped rows keep their calls, drawn as Reduced draws them,
-/// since no button would reach them.
-pub fn hide_work(items: &mut Vec<TranscriptItem>, live: &[String]) {
+/// Agent work Quiet, while the agent works: the status line says what runs, so the rows of the
+/// response still running (`live`, from its start, `TranscriptProjection::live_ids`) are dropped.
+/// A row that needs the user always stays (`chat_look::needs_the_user`): one with a call or edit
+/// waiting on an approval draws only that ([`only_what_waits`]), any other without its calls and
+/// edits, and so do the replies of the runs that finished up to `finished_before`
+/// (`working::quiet_finished_before`) and a row that reports an error or a status. A row kept only
+/// for an answered card draws the card alone (`chat_look::holds_only_answered_cards`): the words it
+/// holds are the agent's between its tool calls. Finished rows outside grouped rows keep their
+/// calls, drawn as Reduced draws them, since no button would reach them. A row is judged whole: the
+/// live rows are projected at once (`presentation::turn_items`), so a stand-in only reaches here
+/// for a row the cache cannot hold, and keeps its place.
+pub fn hide_work(
+    items: &mut Vec<TranscriptItem>,
+    live: &std::collections::HashSet<&str>,
+    finished_before: Option<i64>,
+) {
     items.retain_mut(|item| {
         let TranscriptItem::Message { message } = item else {
             return true;
         };
-        if !message["id"]
-            .as_str()
-            .is_some_and(|id| live.iter().any(|known| known == id))
-        {
+        if !live.contains(message["id"].as_str().unwrap_or_default()) {
             return true;
         }
         let role = message["role"].as_str().unwrap_or_default();
         if !matches!(role, "assistant" | "reasoning") || message["pending"] == true {
             return true;
         }
+        let finished_reply = role == "assistant"
+            && message["text"]
+                .as_str()
+                .is_some_and(|text| !text.is_empty())
+            && message["timestamp"]
+                .as_i64()
+                .zip(finished_before)
+                .is_some_and(|(at, before)| at <= before);
         if waits_on_approval(message) {
+            only_what_waits(message, finished_reply);
             return true;
         }
         let has = |key: &str| message[key].as_array().is_some_and(|list| !list.is_empty());
-        let shows = needs_the_user(message)
-            || (role != "reasoning"
-                && (message["text"]
-                    .as_str()
-                    .is_some_and(|text| !text.is_empty())
-                    || ["apiError", "systemCard", "suppressed", "sideQuestion"]
-                        .iter()
-                        .any(|key| message[*key].is_object())));
+        let reports = role != "reasoning"
+            && ["apiError", "systemCard", "suppressed", "sideQuestion"]
+                .iter()
+                .any(|key| message[*key].is_object());
+        let shows = needs_the_user(message) || finished_reply || reports;
         if shows && (has("tools") || has("files")) {
             strip_calls(message);
         }
+        if !finished_reply && !reports && holds_only_answered_cards(message) {
+            drop_words(message);
+        }
         shows
     });
+}
+
+/// `row` showing only its calls and edits that wait on an approval: the rest of its calls keep
+/// their places, since the disclosure keys and details count by place, and draw no row, as a call
+/// with a card of its own does. Its words go too, unless they are a finished reply or ask a
+/// question.
+fn only_what_waits(row: &mut crate::document::ProjectedMessage, keep_words: bool) {
+    let keep_words = keep_words || asks_in_words(row);
+    let Value::Object(fields) = std::sync::Arc::make_mut(row) else {
+        return;
+    };
+    let mut waiting = 0;
+    if let Some(Value::Array(tools)) = fields.get_mut("tools") {
+        for tool in tools.iter_mut() {
+            if let Value::Object(tool) = tool {
+                if tool.get("awaitingApproval") == Some(&Value::Bool(true)) {
+                    waiting += 1;
+                } else {
+                    tool.insert("exchange".into(), Value::Bool(true));
+                }
+            }
+        }
+    }
+    fields.insert("simpleToolLabel".into(), tool_count_label(waiting).into());
+    fields.remove("fileCard");
+    let waiting_files = fields
+        .get_mut("files")
+        .and_then(Value::as_array_mut)
+        .map(|files| {
+            files.retain(|file| file["awaitingApproval"] == true);
+            (!files.is_empty()).then(|| file_change_card(files))
+        });
+    // The edit line and its card count only the edits still drawn.
+    if let Some(Some(card)) = waiting_files {
+        fields.insert("simpleFileLabel".into(), card["title"].clone());
+        fields.insert("fileCard".into(), card);
+    }
+    for key in ["toolFold", "toolsShowAllRows", "readImages"] {
+        fields.remove(key);
+    }
+    if !keep_words {
+        drop_words(row);
+    }
+}
+
+/// `row` without its words and what acts on them. Find reads the same text, so it follows.
+fn drop_words(row: &mut crate::document::ProjectedMessage) {
+    let Value::Object(fields) = std::sync::Arc::make_mut(row) else {
+        return;
+    };
+    fields.insert("text".into(), Value::String(String::new()));
+    for key in [
+        "actionContent",
+        "copyText",
+        "markdownReferences",
+        "time",
+        "thinkingCard",
+        "reasoning",
+    ] {
+        fields.remove(key);
+    }
 }
 
 /// The time in a "Worked for 1m 16s" label, `None` for a label without one ("Worked", "Previous

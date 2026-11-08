@@ -117,11 +117,19 @@ fn build_after(
             .map(|at| composed[*at].clone())
             .collect()
     };
-    // Agent work Quiet: an active chunk has hidden its rows' calls, one of which an approval may be
-    // waiting on, so while one is up the running turn's rows stay in the stretch, read whole.
-    let hides_waiting = view.hidden_work() && approval_wait.is_some();
+    // Agent work Quiet: an active chunk has hidden its rows, so it stands only while they are still
+    // hidden, and not while an approval may be waiting on a call in one of them: then the running
+    // turn's rows stay in the stretch, read whole.
+    let hides_running = crate::session::working::hides_running_response(state);
+    let quiet_reads_whole = view.hidden_work() && (approval_wait.is_some() || !hides_running);
+    // They hid every row after this time, so a new run's time is theirs to draw again.
+    let quiet_finished_before = crate::session::working::quiet_finished_before(state);
+    if settled.has_active() && settled.quiet_finished_before != quiet_finished_before {
+        settled.drop_active();
+    }
+    settled.quiet_finished_before = quiet_finished_before;
     // The running turn's chunks stand only while it works, in the verbose list.
-    if settled.has_active() && (!working || summary || hides_waiting) {
+    if settled.has_active() && (!working || summary || quiet_reads_whole) {
         settled.drop_active();
     }
     let mut stretch = rows_after(settled);
@@ -178,6 +186,8 @@ fn build_after(
         tool_cards: view.effective_tool_cards(),
         grouped_work: view.grouped_work(),
         hidden_work: view.hidden_work(),
+        hides_running,
+        quiet_finished_before,
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),
     };
@@ -251,7 +261,7 @@ fn build_after(
     // pass reuses while the turn keeps working.
     if working
         && !summary
-        && !hides_waiting
+        && !quiet_reads_whole
         && live_side_question.is_none()
         && stretch.len() >= ACTIVE_STRETCH_ROWS
         && !restarts_response(&tail.0)

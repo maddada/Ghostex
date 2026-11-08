@@ -31,8 +31,8 @@
 //!    merged in that order.
 //!  * The call an approval waits on is searched for in the rows after the prefix, then in the
 //!    chunks' drawn rows; one found in a chunk has the list built again. Under Agent work Quiet a
-//!    running turn's rows join no active chunk while an approval is up, since a chunk has hidden
-//!    their calls for good.
+//!    running turn's rows join an active chunk only while they are hidden and no approval is up,
+//!    since a chunk has hidden them for good.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -222,6 +222,8 @@ pub struct SettledPrefix {
     /// nothing: the prefix's names, the roster, the deliveries and what the stretch after the
     /// prefix taught.
     checked_names: Option<NamesRead>,
+    /// [`crate::session::working::quiet_finished_before`] as the active chunks hid their rows.
+    quiet_finished_before: Option<i64>,
     chunks: Vec<Chunk>,
 }
 
@@ -1078,6 +1080,7 @@ impl SettledPrefix {
             names: LearnedNames::default(),
             names_revision: 0,
             checked_names: None,
+            quiet_finished_before: None,
             chunks: Vec::new(),
         };
         // Each turn's projection first: the eager tail and the newest reply are counted on the
@@ -1224,6 +1227,8 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         tool_cards: view.effective_tool_cards(),
         grouped_work: view.grouped_work(),
         hidden_work: view.hidden_work(),
+        hides_running: crate::session::working::hides_running_response(state),
+        quiet_finished_before: crate::session::working::quiet_finished_before(state),
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),
     }

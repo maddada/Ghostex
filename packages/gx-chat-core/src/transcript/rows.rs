@@ -72,7 +72,14 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
     // in for "this is a new array".
     // `update()` runs the sticky fold before its change check, so a working blip over an unchanged
     // transcript rebuilds nothing.
-    let live = crate::session::working::transcript_working(state);
+    crate::session::working::track_quiet_card(state);
+    let holds_open = crate::session::working::quiet_holds_turn_open(state);
+    let live = crate::session::working::transcript_working(state) || holds_open;
+    // A turn held open has not settled, whatever a working blip before its card recorded, so
+    // answering the card does not draw it as finished until its next row.
+    if holds_open {
+        state.transcript_view.fold_settled_at = None;
+    }
     crate::transcript::turns::sticky_transcript_working(
         &state.messages.composed,
         live,
@@ -82,6 +89,8 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
         composed: Vec::new(),
         composition_identity: state.messages.compose_generation,
         working: crate::transcript::foreign::is_working(state),
+        hides_running: crate::session::working::hides_running_response(state),
+        quiet_finished_before: crate::session::working::quiet_finished_before(state),
         summary: state.transcript_view.summary_mode,
         detail_revision: state.transcript_view.detail_revision,
         backfill_revision: state.transcript_view.backfill_revision,

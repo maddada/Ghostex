@@ -32,10 +32,11 @@
 //!   row of the reply `workCarrier` names (on a row of its own after the tails when it is absent),
 //!   and it opens the same `work:<id>` fold right under that row. Every reply's own calls and
 //!   edits are moved into `work` (a row with the reply's id and no words), and while the agent works
-//!   the running response's rows carry no calls or edits unless one waits for an approval, a row
-//!   that is only work being left out (`transcript/grouped_work.rs` `hide_work`); finished rows
-//!   outside grouped rows keep theirs. `workCarrier` is a final reply with actions (assistant,
-//!   `actionContent.copyable`, in `finalIds`). Find walks the same order.
+//!   the running response draws only the rows that need the user, with no calls or edits unless
+//!   one waits for an approval and no words when it is kept only for an answered card
+//!   (`transcript/grouped_work.rs` `hide_work`); finished rows outside grouped rows keep theirs.
+//!   `workCarrier` is a final reply with actions (assistant, `actionContent.copyable`, in
+//!   `finalIds`). Find walks the same order.
 //! - No callbacks into the core, no generics and no lifetimes at the public boundary, so the same
 //!   API works over UniFFI.
 //!

@@ -48,6 +48,17 @@ pub const BACKFILL_BATCH: usize = 96;
 pub const ROOT_AGENT_PATH: &str = "/root";
 
 /// What the transcript projection remembers between frames.
+/// Agent work Quiet: a card the agent waits on, and the gap after it leaves.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum QuietCard {
+    #[default]
+    None,
+    /// A card is up.
+    Up,
+    /// The card left and nothing has reported since: the newest row it rests on.
+    Left(String),
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TranscriptViewState {
     /// Whether the transcript is folded into one row per turn.
@@ -158,6 +169,9 @@ pub struct TranscriptViewState {
     /// transcript last settled, which keeps a landed fold folded through a working blip
     /// ([`crate::transcript::turns::sticky_transcript_working`]).
     pub fold_settled_at: Option<String>,
+    /// Agent work Quiet: where a card the agent waits on stands
+    /// ([`crate::session::working::track_quiet_card`]).
+    pub quiet_card: QuietCard,
     /// The projection was rebuilt and the publish that ships it has not run yet.
     pub projection_rebuilt: bool,
     /// Bumped by `ChatCore::republish` when it publishes a rebuilt projection, which is what the
@@ -232,6 +246,12 @@ pub struct ProjectionInputs {
     /// (`MessagesState::compose_generation`: a new array whenever the memo re-ran).
     pub composition_identity: u64,
     pub working: bool,
+    /// [`crate::session::working::hides_running_response`], which a lifecycle or a row can move
+    /// while `working` stays the same.
+    pub hides_running: bool,
+    /// [`crate::session::working::quiet_finished_before`], which a new run's lifecycle can move with
+    /// no row changing.
+    pub quiet_finished_before: Option<i64>,
     pub summary: bool,
     pub detail_revision: u64,
     pub backfill_revision: u64,
@@ -295,6 +315,7 @@ impl Default for TranscriptViewState {
             pending_simple_override: None,
             projection_inputs: None,
             fold_settled_at: None,
+            quiet_card: QuietCard::None,
             projection_rebuilt: false,
             projection_revision: 0,
             settled: None,

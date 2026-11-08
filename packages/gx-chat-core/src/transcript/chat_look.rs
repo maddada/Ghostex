@@ -15,7 +15,7 @@
 //! Message spacing (`chatMessageSpacing`). User: "I think there is a lot of space going on between messages, is that something that we can reduce and also adjust?" Compact halves the row gap (16px to 8px) and a quiet line sits closer to the agent text above it. It changes no row the core projects, so the renderers read it from the document's `chatLook.spacing`, which is present only at Compact. Default keeps today's spacing: "all of these things need to be advanced mode and if we don't enable anything then it should remain to look like it does now".
 //!
 //! CDXC:SessionChat 2026-11-07 DECISION:
-//! The hover footer and the work button (Agent work Quiet, named Hidden on 2026-11-07). User: "the hover buttons are not great ... the buttons need to show on the screen ... without cluttering the text. So even the compact view would still need to have room for them"; "not always visible, like it is right now, they appear on hover, but the space needs to be reserved for the bar to show and not bother the text". So at Compact every message keeps a small footer row under it whose buttons and time show on hover (the phone, which has no hover, shows its tappable parts there), replacing the floating bar Compact first had. And: "another option would be to hide what the agent did ... put that into a button that is part of the hover ... 'expand what the agent did'"; "the agent information would show up in the floating bar after the text, only if the agent information needs to be hidden from the option. If not, it will show before the message like it right now"; "I think it should be embedded in the agent work setting". So Agent work Quiet projects the work as Reduced (one `grouped-work` row per message of yours, its `workButton` saying "24s · 5 tools · 2 files"), with every reply's own calls moved into the row's work and the running response's calls left out while the agent works (`grouped_work::hide_work`), and the renderers draw no line before the reply: the button sits at the left of the reply's hover row (the footer at Compact, today's action row at Default) and opens the steps under it. While the agent works nothing is drawn before the reply; the working card or status line says what runs. Default and Reduced keep the work before the reply.
+//! The hover footer and the work button (Agent work Quiet, named Hidden on 2026-11-07). User: "the hover buttons are not great ... the buttons need to show on the screen ... without cluttering the text. So even the compact view would still need to have room for them"; "not always visible, like it is right now, they appear on hover, but the space needs to be reserved for the bar to show and not bother the text". So at Compact every message keeps a small footer row under it whose buttons and time show on hover (the phone, which has no hover, shows its tappable parts there), replacing the floating bar Compact first had. And: "another option would be to hide what the agent did ... put that into a button that is part of the hover ... 'expand what the agent did'"; "the agent information would show up in the floating bar after the text, only if the agent information needs to be hidden from the option. If not, it will show before the message like it right now"; "I think it should be embedded in the agent work setting". So Agent work Quiet projects the work as Reduced (one `grouped-work` row per message of yours, its `workButton` saying "24s · 5 tools · 2 files"), with every reply's own calls moved into the row's work and the running response left out while the agent works (`grouped_work::hide_work`), and the renderers draw no line before the reply: the button sits at the left of the reply's hover row (the footer at Compact, today's action row at Default) and opens the steps under it. While the agent works nothing is drawn before the reply; the working card or status line says what runs. Default and Reduced keep the work before the reply.
 //!
 //! CDXC:SessionChat 2026-11-07 SEE-ALSO:
 //! packages/settings-catalog/src/general/chat.rs (the rows), server/src/session_chat_read.rs (`chatLook` on every read), apps/desktop/src/app/gx_chat/boot.rs and world.rs (the desktop host's read and live updates), apps/desktop/src/app/native_chat/ (desktop and web) and apps/mobile/app/src/chat/ (phone) draw the document's `chatLook` and must match.
@@ -204,20 +204,51 @@ fn apply(view: &mut crate::state::TranscriptViewState, settings: &ChatLookSettin
 
 /// Whether a row holds something the user must see or answer: a call or edit waiting on an approval ([`waits_on_approval`]), a question it asks (a form, one-click answers or a question page), or a card that stays out of the work. This is the one check every look that hides work makes first (`grouped_work::hide_work`), so such a row is never dropped.
 ///
-/// CDXC:SessionChat 2026-11-08 DECISION: User: "we can't block that AT ALL, the only thing I want to is to hide all the tool calls and the file edits, a question or approval needs to surface IMMEDIATELY". Agent work Reduced and Quiet may hide tool calls and file edits and nothing that needs the user, in a running or a finished turn, from the first frame it exists. The cards above the composer (the question card, permission and plan dialogs, relayed approvals, the async question strip) read no look at all; a transcript row's waiting call is marked (`approval_wait::open_waiting_call`) before anything is hidden, and is named eagerly even far up the list, and while an approval is up under Quiet the running turn's rows join no settled chunk, which would have hidden them already (`settled_build::build_after`). The agent's thinking and what it writes between tool calls are not part of this rule and stay folded where these looks fold them (user: "that's why we have the status bar").
+/// CDXC:SessionChat 2026-11-08 DECISION: User: "we can't block that AT ALL, the only thing I want to is to hide all the tool calls and the file edits, a question or approval needs to surface IMMEDIATELY". Agent work Reduced and Quiet may hide tool calls and file edits and nothing that needs the user, in a running or a finished turn, from the first frame it exists. The cards above the composer (the question card, permission and plan dialogs, relayed approvals, the async question strip) read no look at all; a transcript row's waiting call is marked (`approval_wait::open_waiting_call`) before anything is hidden, and is named eagerly even far up the list, and while an approval is up under Quiet the running turn's rows join no settled chunk, which would have hidden them already (`settled_build::build_after`). Under Quiet a turn waiting on the user counts as running, so only what waits draws beside its card (`working::quiet_holds_turn_open`, `grouped_work::only_what_waits`). Quiet shows only the status line while the agent runs: its thinking and what it writes between tool calls stay out until the reply is done (user: "that's why we have the status bar to show that"), and everything in this rule still draws at once; a row kept only for a card that was already answered or needs no answer draws that card alone ([`holds_only_answered_cards`]); Reduced keeps drawing them as it runs.
 pub(crate) fn needs_the_user(row: &serde_json::Value) -> bool {
-    use crate::transcript::inline_answers::ANSWERS_OPEN;
-    use crate::transcript::native_markdown::{NATIVE_QUESTIONS_OPEN, NATIVE_VISUAL_OPEN};
     let has = |key: &str| row[key].as_array().is_some_and(|list| !list.is_empty());
     waits_on_approval(row)
-        || ["questions", "sentMessages", "gbotCards", "workflows", "images"]
-            .iter()
-            .any(|key| has(key))
-        || row["text"].as_str().is_some_and(|text| {
-            [NATIVE_QUESTIONS_OPEN, ANSWERS_OPEN, NATIVE_VISUAL_OPEN]
-                .iter()
-                .any(|mark| text.contains(mark))
-        })
+        || [
+            "questions",
+            "sentMessages",
+            "gbotCards",
+            "workflows",
+            "images",
+        ]
+        .iter()
+        .any(|key| has(key))
+        || row["agentMessage"].is_object()
+        || asks_in_words(row)
+}
+
+/// Whether a row needs the user only for an answered question, a sent message, a "GBot added" card or a Workflow card: nothing in it waits for an answer, and its words are the agent's between its tool calls (`grouped_work::hide_work`). A form, a page, a picture or a message from another agent still needs what the row holds.
+pub(crate) fn holds_only_answered_cards(row: &serde_json::Value) -> bool {
+    let has = |key: &str| row[key].as_array().is_some_and(|list| !list.is_empty());
+    ["questions", "sentMessages", "gbotCards", "workflows"]
+        .iter()
+        .any(|key| has(key))
+        && !has("images")
+        && !row["agentMessage"].is_object()
+        && !asks_in_words(row)
+        && !waits_on_approval(row)
+}
+
+/// Whether a row's words hold a form, one-click answers, a page or a picture.
+pub(crate) fn asks_in_words(row: &serde_json::Value) -> bool {
+    use crate::transcript::inline_answers::ANSWERS_OPEN;
+    use crate::transcript::native_markdown::{
+        NATIVE_IMAGE_OPEN, NATIVE_QUESTIONS_OPEN, NATIVE_VISUAL_OPEN,
+    };
+    row["text"].as_str().is_some_and(|text| {
+        [
+            NATIVE_QUESTIONS_OPEN,
+            ANSWERS_OPEN,
+            NATIVE_VISUAL_OPEN,
+            NATIVE_IMAGE_OPEN,
+        ]
+        .iter()
+        .any(|mark| text.contains(mark))
+    })
 }
 
 /// Whether one of a row's calls or edits waits on an approval (`approval_wait::open_waiting_call`).

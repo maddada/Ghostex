@@ -124,7 +124,7 @@ pub struct TranscriptProjection {
     pub hidden_rows: Vec<String>,
     /// The ids of the rows of the response still running, from its start
     /// (`active_response_start_index`, the boundary `completed_work_render_items` keeps open);
-    /// empty when the agent is not working. Agent work Quiet leaves their calls out
+    /// empty when the agent is not working. Agent work Quiet leaves them out
     /// (`grouped_work::hide_work`).
     pub live_ids: Vec<String>,
 }

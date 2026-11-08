@@ -101,7 +101,7 @@ fn has_text_content(message: &ChatMessage) -> bool {
     })
 }
 
-fn has_agent_response_content(message: &ChatMessage) -> bool {
+pub(crate) fn has_agent_response_content(message: &ChatMessage) -> bool {
     message.role == ChatRole::Assistant
         && message.id != STREAMING_ID
         && message.blocks.iter().any(|block| match block {
