@@ -1,0 +1,43 @@
+name: Publish agent skills
+
+# CDXC:AgentSkills 2026-11-08 DECISION:
+# GitHub #495 follow-up ("pin skills"): gxserver installs a bundled skill downloaded from GitHub
+# only when it matches a statement Ghostex signed with its component signing key
+# (server/src/agent_skills_remote.rs). This workflow signs the skills at the dispatched commit
+# (tooling/release-gpui/sign-agent-skills.mjs) and publishes the statement as the `agent-skills`
+# release's ghostex-skills.json, replacing the previous one. Run it after a skill change on main
+# should reach installed apps; until it runs, they keep the skills they have.
+
+on:
+  workflow_dispatch:
+
+env:
+  GHOSTEX_COMPONENT_SIGNING_KEY: ${{ secrets.GHOSTEX_COMPONENT_SIGNING_KEY }}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-agent-skills
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Sign the bundled skills
+        run: node tooling/release-gpui/sign-agent-skills.mjs "$RUNNER_TEMP/ghostex-skills.json"
+      - name: Publish the signed skill list
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view agent-skills --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create agent-skills --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Agent skills (signed)" \
+              --notes "The signed list of Ghostex's bundled agent skills that installed apps download. Not an app release." \
+              --latest=false
+          fi
+          gh release upload agent-skills "$RUNNER_TEMP/ghostex-skills.json" --repo "$GITHUB_REPOSITORY" --clobber

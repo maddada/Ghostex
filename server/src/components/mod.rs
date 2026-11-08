@@ -140,7 +140,7 @@ pub(crate) fn sealed_in(manifest: &Value, name: &str, platform: &str) -> Option<
 
 /// The public key component signatures are checked with: Ghostex's, or (debug builds only, for
 /// tests) `GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY`.
-fn signing_public_key() -> Option<[u8; 32]> {
+pub(crate) fn signing_public_key() -> Option<[u8; 32]> {
     use ghostex_gx_protocol::component_signing::{
         decode_public_key, COMPONENT_SIGNING_PUBLIC_KEY_HEX,
     };

@@ -175,9 +175,9 @@ fn install_agent_skills_blocking(
         .get("remote")
         .and_then(Value::as_bool)
         .unwrap_or(true);
-    let remote_catalog = (remote_requested && agent_skills_remote::remote_skills_enabled())
-        .then(agent_skills_remote::RemoteSkillsCatalog::fetch);
     let cache_root = agent_skills_remote::remote_skills_cache_root(paths);
+    let remote_catalog = (remote_requested && agent_skills_remote::remote_skills_enabled())
+        .then(|| agent_skills_remote::RemoteSkillsCatalog::fetch(&cache_root));
     let mut remote_errors: Vec<String> = Vec::new();
     if let Some(Err(error)) = &remote_catalog {
         remote_errors.push(error.clone());
@@ -234,7 +234,7 @@ fn install_agent_skills_blocking(
             }
         }
         let source_label = if source_kind == "github" {
-            format!("GitHub {}", agent_skills_remote::AGENT_SKILLS_REMOTE_REF)
+            format!("GitHub ({})", agent_skills_remote::AGENT_SKILLS_REMOTE_REF)
         } else {
             "the app bundle".to_string()
         };

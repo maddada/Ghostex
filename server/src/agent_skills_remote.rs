@@ -11,7 +11,7 @@ use std::{
 };
 
 use serde_json::{json, Value};
-use sha1::{Digest, Sha1};
+use sha2::{Digest, Sha256};
 
 use crate::{
     agent_skills::{
@@ -29,8 +29,22 @@ User: bundled skills must be updatable without pushing a new app version. gxserv
 This supersedes the 2026-09-02 bundle-only installs. That change dropped `npx skills add` because it needed Node on the app's PATH and a reachable npm registry; both reasons still hold, so the download is a plain HTTPS fetch with no Node involved.
 WHY: the listing is one unauthenticated GitHub trees call for `main:skills` (60 an hour per address), and files come from raw.githubusercontent.com whose cache may lag main by a few minutes. Every file is checked against its git blob sha, and a mismatch skips that skill until the next attempt instead of installing a torn copy. Symlinked skill folders are user-managed pins and are never replaced. GHOSTEX_AGENT_SKILLS_REMOTE=off turns the network path off for source checkouts, CI, and air-gapped machines.
 */
+/*
+CDXC:AgentSkills 2026-11-08 DECISION:
+GitHub #495 follow-up (Q1868, "pin skills"): a changed file on main must not reach installed apps unless it matches what Ghostex signed. The two options were pinning to the release's tag or signing with the component key; signing keeps skills updatable between releases, which the 2026-09-10 decision asks for, while a tag pin would freeze them until the next release and a moved tag would still be trusted. So the downloads are no longer checked against GitHub's own listing (git blob shas, which say only that the file is what main has now): gxserver reads one signed manifest, the `agent-skills` release's `ghostex-skills.json`, whose statement names a commit and every bundled skill file's SHA-256, size and mode, signed with Ghostex's Ed25519 component signing key (the `GHOSTEX_COMPONENT_SIGNING_KEY` Actions secret, `.github/workflows/publish-agent-skills.yml`). The signature is checked against the key built into gxserver, the files are fetched at that commit (an immutable URL), and each must match its SHA-256. A manifest older than the last one accepted is refused, so an old signed set can't be replayed. With no manifest, or one that doesn't verify, nothing is downloaded and the app's bundled copy stays the source.
+SEE-ALSO: tooling/release-gpui/sign-agent-skills.mjs (the statement's other half), server/src/components/mod.rs (the key).
+*/
 pub const AGENT_SKILLS_REMOTE_REPOSITORY: &str = "maddada/Ghostex";
-pub const AGENT_SKILLS_REMOTE_REF: &str = "main";
+/// Where the signed skills come from, as reports name it.
+pub const AGENT_SKILLS_REMOTE_REF: &str = "signed release agent-skills";
+/// The release (tag) the signed manifest is published under, and its file name.
+const AGENT_SKILLS_MANIFEST_TAG: &str = "agent-skills";
+const AGENT_SKILLS_MANIFEST_ASSET: &str = "ghostex-skills.json";
+/// First line of the signed statement; must equal `SKILLS_SIGNING_DOMAIN` in
+/// tooling/release-gpui/sign-agent-skills.mjs.
+const AGENT_SKILLS_SIGNING_DOMAIN: &str = "ghostex-skills-v1";
+/// The newest manifest accepted so far (`issuedAtMs`), in the cache folder.
+const AGENT_SKILLS_ACCEPTED_FILE: &str = "accepted-issued-at";
 const AGENT_SKILLS_REMOTE_ROOT: &str = "skills";
 const AGENT_SKILLS_REMOTE_OPT_OUT_ENV: &str = "GHOSTEX_AGENT_SKILLS_REMOTE";
 const AGENT_SKILLS_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -59,95 +73,161 @@ pub fn remote_skills_cache_root(paths: &GxserverPaths) -> PathBuf {
 struct RemoteSkillFile {
     executable: bool,
     relative_path: String,
-    sha: String,
+    /// Lowercase hex SHA-256 of the file, from the signed statement.
+    sha256: String,
     size: u64,
 }
 
-/// The `skills/` folder of the repository at the published ref: one file list
-/// per bundled skill name, with the git blob sha every download is checked
-/// against.
+/// The bundled skills Ghostex signed: one file list per bundled skill name, with the SHA-256
+/// every download is checked against, at the commit the files are fetched from.
 pub struct RemoteSkillsCatalog {
     files_by_skill: BTreeMap<String, Vec<RemoteSkillFile>>,
-    tree_sha: String,
+    commit: String,
 }
 
 impl RemoteSkillsCatalog {
-    pub fn fetch() -> Result<Self, String> {
-        let url = format!(
-            "https://api.github.com/repos/{AGENT_SKILLS_REMOTE_REPOSITORY}/git/trees/{AGENT_SKILLS_REMOTE_REF}:{AGENT_SKILLS_REMOTE_ROOT}?recursive=1"
-        );
+    /// Reads and checks the signed manifest. `cache_root` keeps the newest one accepted, so an
+    /// older signed manifest is refused.
+    pub fn fetch(cache_root: &Path) -> Result<Self, String> {
+        let url = debug_override("GHOSTEX_AGENT_SKILLS_MANIFEST_URL").unwrap_or_else(|| {
+            format!(
+                "https://github.com/{AGENT_SKILLS_REMOTE_REPOSITORY}/releases/download/{AGENT_SKILLS_MANIFEST_TAG}/{AGENT_SKILLS_MANIFEST_ASSET}"
+            )
+        });
         let response = crate::http_agent::agent()
             .get(&url)
-            .header("Accept", "application/vnd.github+json")
             .header("User-Agent", AGENT_SKILLS_USER_AGENT)
-            .header("X-GitHub-Api-Version", "2022-11-28")
             .config()
             .timeout_global(Some(AGENT_SKILLS_REQUEST_TIMEOUT))
             .build()
             .call()
             .map_err(|error| {
                 format!(
-                    "GitHub skill listing failed: {}",
+                    "The signed skill list couldn't be read: {}",
                     summarize_ureq_error(error)
                 )
             })?;
         let value: Value = crate::http_agent::read_json(response)
-            .map_err(|error| format!("GitHub skill listing was not JSON: {error}"))?;
-        if value
-            .get("truncated")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
-            return Err("GitHub skill listing was truncated.".to_string());
-        }
-        let tree_sha = value
-            .get("sha")
+            .map_err(|error| format!("The signed skill list was not JSON: {error}"))?;
+        let catalog = Self::from_signed(&value, signing_public_key().as_ref())?;
+        catalog.accept_newer(cache_root, &value)?;
+        Ok(catalog)
+    }
+
+    /// The catalog of a signed manifest `{ statement, signature }`, checked against `key`.
+    fn from_signed(value: &Value, key: Option<&[u8; 32]>) -> Result<Self, String> {
+        use base64::Engine as _;
+        let statement = value
+            .get("statement")
             .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string();
+            .ok_or("The signed skill list has no statement.")?;
+        let signature = value
+            .get("signature")
+            .and_then(Value::as_str)
+            .and_then(|text| {
+                base64::engine::general_purpose::STANDARD
+                    .decode(text.trim())
+                    .ok()
+            })
+            .ok_or("The signed skill list has no readable signature.")?;
+        let key = key.ok_or("Ghostex's signing key is unreadable.")?;
+        ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key)
+            .verify(statement.as_bytes(), &signature)
+            .map_err(|_| {
+                "The skill list's signature doesn't match Ghostex's, so no skill was downloaded."
+                    .to_string()
+            })?;
+        Self::parse_statement(statement)
+    }
+
+    /// Parses a statement whose signature was checked:
+    /// `ghostex-skills-v1\n<commit>\n<issuedAtMs>\n<skill>/<path> <sha256> <size> <mode>…`.
+    fn parse_statement(statement: &str) -> Result<Self, String> {
+        let mut lines = statement.split('\n');
+        if lines.next() != Some(AGENT_SKILLS_SIGNING_DOMAIN) {
+            return Err("The signed skill list is in a format this Ghostex doesn't read.".into());
+        }
+        let commit = lines
+            .next()
+            .filter(|commit| {
+                commit.len() == 40 && commit.bytes().all(|byte| byte.is_ascii_hexdigit())
+            })
+            .ok_or("The signed skill list names no commit.")?
+            .to_ascii_lowercase();
+        lines
+            .next()
+            .and_then(|issued| issued.parse::<u64>().ok())
+            .ok_or("The signed skill list has no date.")?;
         let mut files_by_skill: BTreeMap<String, Vec<RemoteSkillFile>> = BTreeMap::new();
-        for entry in value
-            .get("tree")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            if entry.get("type").and_then(Value::as_str) != Some("blob") {
-                continue;
-            }
-            let (Some(path), Some(sha)) = (
-                entry.get("path").and_then(Value::as_str),
-                entry.get("sha").and_then(Value::as_str),
+        for line in lines {
+            let mut fields = line.split(' ');
+            let (Some(path), Some(sha256), Some(size), Some(mode), None) = (
+                fields.next(),
+                fields.next(),
+                fields.next(),
+                fields.next(),
+                fields.next(),
             ) else {
-                continue;
+                return Err("The signed skill list has a line it can't read.".into());
             };
             let Some((skill_name, relative_path)) = path.split_once('/') else {
                 continue;
             };
             if !GHOSTEX_AGENT_SKILL_NAMES.contains(&skill_name)
                 || !is_safe_relative_path(relative_path)
+                || sha256.len() != 64
+                || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
             {
                 continue;
             }
+            let size = size
+                .parse::<u64>()
+                .map_err(|_| "The signed skill list has a size it can't read.".to_string())?;
             files_by_skill
                 .entry(skill_name.to_string())
                 .or_default()
                 .push(RemoteSkillFile {
-                    executable: entry.get("mode").and_then(Value::as_str) == Some("100755"),
+                    executable: mode == "100755",
                     relative_path: relative_path.to_string(),
-                    sha: sha.to_string(),
-                    size: entry.get("size").and_then(Value::as_u64).unwrap_or(0),
+                    sha256: sha256.to_ascii_lowercase(),
+                    size,
                 });
         }
         files_by_skill.retain(|_, files| files.iter().any(|file| file.relative_path == "SKILL.md"));
         Ok(Self {
             files_by_skill,
-            tree_sha,
+            commit,
         })
     }
 
-    pub fn tree_sha(&self) -> &str {
-        &self.tree_sha
+    /// Refuses a manifest older than the newest one accepted here, and remembers this one.
+    fn accept_newer(&self, cache_root: &Path, value: &Value) -> Result<(), String> {
+        let issued = value
+            .get("statement")
+            .and_then(Value::as_str)
+            .and_then(|statement| statement.split('\n').nth(2))
+            .and_then(|issued| issued.parse::<u64>().ok())
+            .unwrap_or(0);
+        let marker = cache_root.join(AGENT_SKILLS_ACCEPTED_FILE);
+        let accepted = fs::read_to_string(&marker)
+            .ok()
+            .and_then(|text| text.trim().parse::<u64>().ok())
+            .unwrap_or(0);
+        if issued < accepted {
+            return Err(
+                "The signed skill list is older than one already used, so it was ignored.".into(),
+            );
+        }
+        if issued > accepted {
+            let _ = fs::create_dir_all(cache_root);
+            let _ = fs::write(&marker, issued.to_string());
+        }
+        Ok(())
+    }
+
+    /// The commit the signed files are fetched from.
+    pub fn commit(&self) -> &str {
+        &self.commit
     }
 
     pub fn has_skill(&self, skill_name: &str) -> bool {
@@ -161,26 +241,24 @@ impl RemoteSkillsCatalog {
             return false;
         };
         let mut local = BTreeMap::new();
-        if collect_local_blob_shas(dir, dir, &mut local).is_err() {
+        if collect_local_sha256s(dir, dir, &mut local).is_err() {
             return false;
         }
         local.len() == files.len()
             && files.iter().all(|file| {
                 local
                     .get(&file.relative_path)
-                    .is_some_and(|sha| sha == &file.sha)
+                    .is_some_and(|sha| sha == &file.sha256)
             })
     }
 
     /// Download the skill into `<cache_root>/<skill>` and return that folder.
     /// The files are staged beside the destination and renamed into place only
-    /// after every one of them matched its published checksum. A cache folder
+    /// after every one of them matched the SHA-256 Ghostex signed. A cache folder
     /// that already matches is reused without any request.
     pub fn download_skill(&self, skill_name: &str, cache_root: &Path) -> Result<PathBuf, String> {
         let Some(files) = self.files_by_skill.get(skill_name) else {
-            return Err(format!(
-                "{skill_name} is not published under {AGENT_SKILLS_REMOTE_ROOT}/ on {AGENT_SKILLS_REMOTE_REF}."
-            ));
+            return Err(format!("{skill_name} is not in the signed skill list."));
         };
         let destination = cache_root.join(skill_name);
         if self.local_dir_matches(skill_name, &destination) {
@@ -192,7 +270,7 @@ impl RemoteSkillsCatalog {
         let _ = fs::remove_dir_all(&staging);
         let staged = files
             .iter()
-            .try_for_each(|file| stage_remote_file(skill_name, file, &staging));
+            .try_for_each(|file| stage_remote_file(skill_name, file, &self.commit, &staging));
         if let Err(error) = staged {
             let _ = fs::remove_dir_all(&staging);
             return Err(error);
@@ -209,6 +287,7 @@ impl RemoteSkillsCatalog {
 fn stage_remote_file(
     skill_name: &str,
     file: &RemoteSkillFile,
+    commit: &str,
     staging: &Path,
 ) -> Result<(), String> {
     if file.size > AGENT_SKILLS_MAX_FILE_BYTES {
@@ -218,10 +297,10 @@ fn stage_remote_file(
             AGENT_SKILLS_MAX_FILE_BYTES / (1024 * 1024)
         ));
     }
-    let bytes = fetch_raw_skill_file(skill_name, &file.relative_path)?;
-    if git_blob_sha1(&bytes) != file.sha {
+    let bytes = fetch_raw_skill_file(skill_name, &file.relative_path, commit)?;
+    if sha256_hex(&bytes) != file.sha256 {
         return Err(format!(
-            "{skill_name}/{} did not match its published checksum (the download mirror may be behind main).",
+            "{skill_name}/{} doesn't match what Ghostex signed, so the skill wasn't updated.",
             file.relative_path
         ));
     }
@@ -240,9 +319,17 @@ fn stage_remote_file(
     Ok(())
 }
 
-fn fetch_raw_skill_file(skill_name: &str, relative_path: &str) -> Result<Vec<u8>, String> {
+fn fetch_raw_skill_file(
+    skill_name: &str,
+    relative_path: &str,
+    commit: &str,
+) -> Result<Vec<u8>, String> {
+    let base = debug_override("GHOSTEX_AGENT_SKILLS_FILES_URL").unwrap_or_else(|| {
+        format!("https://raw.githubusercontent.com/{AGENT_SKILLS_REMOTE_REPOSITORY}")
+    });
     let url = format!(
-        "https://raw.githubusercontent.com/{AGENT_SKILLS_REMOTE_REPOSITORY}/{AGENT_SKILLS_REMOTE_REF}/{AGENT_SKILLS_REMOTE_ROOT}/{skill_name}/{relative_path}"
+        "{}/{commit}/{AGENT_SKILLS_REMOTE_ROOT}/{skill_name}/{relative_path}",
+        base.trim_end_matches('/')
     );
     let response = crate::http_agent::agent()
         .get(&url)
@@ -298,14 +385,29 @@ fn is_safe_relative_path(relative_path: &str) -> bool {
         })
 }
 
-fn git_blob_sha1(bytes: &[u8]) -> String {
-    let mut hasher = Sha1::new();
-    hasher.update(format!("blob {}\0", bytes.len()).as_bytes());
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
+/// A URL a debug build may read from the environment instead (a local copy for testing); a
+/// release build always uses GitHub. The signature and SHA-256 checks are the same either way.
+fn debug_override(name: &str) -> Option<String> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
-fn collect_local_blob_shas(
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+/// The key the signed skill list is checked with: Ghostex's component signing key (a debug
+/// build reads `GHOSTEX_COMPONENT_SIGNING_PUBLIC_KEY` for tests, as components do).
+fn signing_public_key() -> Option<[u8; 32]> {
+    crate::components::signing_public_key()
+}
+
+fn collect_local_sha256s(
     root: &Path,
     dir: &Path,
     out: &mut BTreeMap<String, String>,
@@ -322,7 +424,7 @@ fn collect_local_blob_shas(
         let path = entry.path();
         let metadata = fs::symlink_metadata(&path)?;
         if metadata.is_dir() {
-            collect_local_blob_shas(root, &path, out)?;
+            collect_local_sha256s(root, &path, out)?;
         } else if metadata.is_file() {
             let relative = path
                 .strip_prefix(root)
@@ -331,7 +433,7 @@ fn collect_local_blob_shas(
                 .map(|component| component.as_os_str().to_string_lossy().to_string())
                 .collect::<Vec<_>>()
                 .join("/");
-            out.insert(relative, git_blob_sha1(&fs::read(&path)?));
+            out.insert(relative, sha256_hex(&fs::read(&path)?));
         }
     }
     Ok(())
@@ -415,8 +517,8 @@ pub fn refresh_installed_bundled_skills(paths: &GxserverPaths) -> Result<Value, 
             "GitHub skill downloads are disabled ({AGENT_SKILLS_REMOTE_OPT_OUT_ENV}=off)."
         ));
     }
-    let catalog = RemoteSkillsCatalog::fetch()?;
     let cache_root = remote_skills_cache_root(paths);
+    let catalog = RemoteSkillsCatalog::fetch(&cache_root)?;
     let home_dir = paths.agent_config_home_dir();
     let roots = installed_skill_roots(home_dir);
     let canonical_root = home_dir.join(CANONICAL_AGENT_SKILLS_DIR);
@@ -508,7 +610,7 @@ pub fn refresh_installed_bundled_skills(paths: &GxserverPaths) -> Result<Value, 
         "ref": AGENT_SKILLS_REMOTE_REF,
         "removed": removed,
         "repository": AGENT_SKILLS_REMOTE_REPOSITORY,
-        "treeSha": catalog.tree_sha(),
+        "commit": catalog.commit(),
         "type": "agentSkillRefresh",
         "updated": updated,
     }))
