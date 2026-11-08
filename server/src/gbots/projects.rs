@@ -302,9 +302,15 @@ fn apply(
             }
             let sessions = repository.list_sessions(Some(&project_id))?;
             for (thread_id, thread) in &bot.threads {
-                let existing = sessions.iter().find(|session| {
-                    session_thread(session).is_some_and(|(_, thread)| &thread == thread_id)
-                });
+                let twins: Vec<&Value> = sessions
+                    .iter()
+                    .filter(|session| {
+                        session_thread(session).is_some_and(|(_, thread)| &thread == thread_id)
+                    })
+                    .collect();
+                let generated = [bot.name.as_str(), thread.title.as_str()];
+                let merged = merge_twins(state, db, repository, &project_id, &twins, &generated)?;
+                let existing = merged.as_ref();
                 let session_id = match existing {
                     Some(session) => {
                         rename_untouched_conversation(
@@ -365,6 +371,112 @@ fn apply(
         );
     }
     Ok(())
+}
+
+/// The one session a conversation keeps when it has several, and the others removed.
+///
+/// CDXC:GBots 2026-11-08 DECISION:
+/// User, through the coordinator, after every new GBots conversation showed twice in the sidebar: a conversation is one session. "+" (`new_conversation`) and the sync pass for the runtime's `bot` event each added a session for the new thread, the sync first while the POST that made the thread was answered; "+" now takes the session the sync added. The twins already made merge here: the one the user used stays (a title they gave, a pin, favorite or tag, then the latest activity), takes what only the other had (their title, pin, favorite, tag), and the other goes, with its terminal.
+fn merge_twins(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    twins: &[&Value],
+    generated: &[&str],
+) -> Result<Option<Value>, DomainStateError> {
+    let user_titled = |session: &Value| user_titled(session, generated);
+    let Some((keep, rest)) = twins
+        .iter()
+        .copied()
+        .max_by_key(|session| used_rank(session, generated))
+        .map(|keep| {
+            let rest: Vec<&Value> = twins
+                .iter()
+                .copied()
+                .filter(|session| text(session, "sessionId") != text(keep, "sessionId"))
+                .collect();
+            (keep, rest)
+        })
+    else {
+        return Ok(None);
+    };
+    if rest.is_empty() {
+        return Ok(Some(keep.clone()));
+    }
+    let mut update = Map::new();
+    for other in &rest {
+        if !user_titled(keep) && user_titled(other) && !update.contains_key("title") {
+            update.insert("title".to_string(), json!(text(other, "title")));
+            let mut runtime = keep
+                .get("runtimeSettings")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
+            runtime.remove("titleSource");
+            update.insert("runtimeSettings".to_string(), Value::Object(runtime));
+        }
+        for flag in ["isPinned", "isFavorite"] {
+            if other.get(flag).and_then(Value::as_bool) == Some(true)
+                && keep.get(flag).and_then(Value::as_bool) != Some(true)
+            {
+                update.insert(flag.to_string(), json!(true));
+            }
+        }
+        if keep.get("sessionTag").is_none_or(Value::is_null) && !update.contains_key("sessionTag") {
+            if let Some(tag) = other.get("sessionTag").filter(|tag| tag.is_string()) {
+                update.insert("sessionTag".to_string(), tag.clone());
+            }
+        }
+    }
+    for other in &rest {
+        if let Some(zmx_name) = other.get("zmxName").and_then(Value::as_str) {
+            if let Ok(zmx) = crate::toolchain::require_bundled_zmx() {
+                crate::zmx::kill_zmx_session(zmx_name, &zmx.executable_path);
+            }
+        }
+        let mut params = Map::new();
+        params.insert("projectId".to_string(), json!(project_id));
+        params.insert("sessionId".to_string(), json!(text(other, "sessionId")));
+        crate::server::remove_session_row(state, db, repository, &params)?;
+    }
+    let keep_id = text(keep, "sessionId");
+    let kept = if update.is_empty() {
+        keep.clone()
+    } else {
+        update.insert("projectId".to_string(), json!(project_id));
+        update.insert("sessionId".to_string(), json!(keep_id));
+        repository.update_session_for_lifecycle(&update)?
+    };
+    schedule_presentation_session_delta(state, db, repository, project_id, &keep_id)?;
+    Ok(Some(kept))
+}
+
+/// A title the user gave a conversation: neither one GBots gives it (the bot's name, the runtime's
+/// title) nor a Ghostex message. A rename keeps `titleSource`, so the title itself tells.
+fn user_titled(session: &Value, generated: &[&str]) -> bool {
+    let title = text(session, "title");
+    let title = title.trim();
+    !title.is_empty()
+        && !generated.contains(&title)
+        && !crate::agents::is_ghostex_system_message(title)
+}
+
+/// How much the user used a session, to pick which of a conversation's twins stays.
+fn used_rank(
+    session: &Value,
+    generated: &[&str],
+) -> (bool, bool, String, std::cmp::Reverse<String>) {
+    let marked = ["isPinned", "isFavorite"]
+        .iter()
+        .any(|flag| session.get(*flag).and_then(Value::as_bool) == Some(true))
+        || session.get("sessionTag").is_some_and(Value::is_string);
+    (
+        user_titled(session, generated),
+        marked,
+        text(session, "lastActiveAt"),
+        std::cmp::Reverse(text(session, "createdAt")),
+    )
 }
 
 fn text(value: &Value, key: &str) -> String {
@@ -563,6 +675,15 @@ pub(crate) fn new_conversation(
         .to_string();
     let _guard = SYNC_LOCK.lock();
     let session = with_repository(state, |db, repository| {
+        // The runtime announces the new conversation in a `bot` event, whose sync pass may have
+        // added its session while the POST above was answered: that session is this one.
+        if let Some(session) = repository
+            .list_sessions(Some(project_id))?
+            .into_iter()
+            .find(|session| session_thread(session).is_some_and(|(_, thread)| thread == thread_id))
+        {
+            return Ok(session);
+        }
         let session = add_conversation_session(
             db,
             repository,
