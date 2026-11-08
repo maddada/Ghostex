@@ -161,7 +161,8 @@ fn create(
     sweep_saved_files(&state.paths);
     republish(state, &project_id, &session_id);
     watch(state.clone(), id.clone(), project_id, session_id);
-    Ok(json!({ "requestId": id, "status": "pending" }))
+    // `id` too: the `ghostex` CLI's reply carries the RPC call's own `requestId` in place of ours.
+    Ok(json!({ "requestId": id, "id": id, "status": "pending" }))
 }
 
 async fn wait(

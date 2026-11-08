@@ -120,8 +120,9 @@ fn request_command(args: &[String]) -> CliResult<()> {
         &Value::Object(payload),
         &rpc_flags,
     )?;
+    // `id`, not `requestId`: the reply's `requestId` is this RPC call's own id.
     let Some(request_id) = created
-        .get("requestId")
+        .get("id")
         .and_then(Value::as_str)
         .map(str::to_string)
     else {
