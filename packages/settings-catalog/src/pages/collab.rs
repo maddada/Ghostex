@@ -15,7 +15,7 @@ fn switch() -> Section {
         "switch",
         "Ghostex Collab",
         vec![
-            row("collabEnabled", "Ghostex Collab", "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Off by default; while it is off nothing can be shared and every link stops working. Share is in each chat's header."),
+            row("collabEnabled", "Ghostex Collab", "Collab is installed on this computer (Settings > Extensions installs it, with Touch ID or your system's equivalent; this page shows only once it is). Share is in each chat's header, and each share asks for your approval. Uninstall ends every share at once and removes Collab from this computer; it never asks."),
             row("collabOwnerName", "Your name", "The name guests see for you (\"Shared by …\", \"Waiting for …\"). Empty uses this computer's user name."),
         ],
     )
