@@ -20,12 +20,14 @@ pub(crate) fn sync_zmx_provider_existence(
         .iter()
         .filter(|session| {
             session.get("lifecycleState").and_then(Value::as_str) == Some("running")
-                && session
-                    .get("providerState")
-                    .and_then(Value::as_object)
-                    .and_then(|provider| provider.get("lifecycleState"))
-                    .and_then(Value::as_str)
-                    == Some("exists")
+                && matches!(
+                    session
+                        .get("providerState")
+                        .and_then(Value::as_object)
+                        .and_then(|provider| provider.get("lifecycleState"))
+                        .and_then(Value::as_str),
+                    Some("exists" | "missing")
+                )
                 && read_session_persistence_provider(session).as_deref() == Some("zmx")
                 && session
                     .get("createdAt")
@@ -42,16 +44,49 @@ pub(crate) fn sync_zmx_provider_existence(
                 read_session_text(session, "projectId")?,
                 read_session_text(session, "sessionId")?,
                 read_session_text(session, "zmxName")?,
+                session
+                    .get("providerState")?
+                    .get("lifecycleState")?
+                    .as_str()?
+                    .to_string(),
             ))
         })
         .collect::<Vec<_>>();
     let mut sessions_updated_here: HashSet<(String, String)> = HashSet::new();
     if !candidates.is_empty() {
         if let Ok(existing_names) = read_cached_zmx_existing_session_names() {
-            for (candidate_project_id, candidate_session_id, zmx_name) in candidates {
-                if existing_names.contains(&zmx_name) {
-                    continue;
-                }
+            for (candidate_project_id, candidate_session_id, zmx_name, current_provider_state) in
+                candidates
+            {
+                /*
+                CDXC:SessionSleep 2026-11-08 WHY:
+                A running row whose daemon is missing reads as sleeping (GitHub #512,
+                `effective_lifecycle_state`), so a false "missing" here now dims a live
+                session and stops it counting as running everywhere. `zmx list --short`
+                leaves out a daemon that missed its 1s probe (a busy one), and this list
+                is a two-second cache that can predate a wake that just started the
+                daemon (seen on a test gxserver: the woken session flipped straight back
+                to missing). So a listed name is not enough either way: flip to missing
+                only when the daemon's socket is gone too (zmx removes a refused socket
+                in the same `list`), and flip a missing row back to exists when its
+                daemon is listed and its socket is there, since nothing else would.
+                */
+                let listed = existing_names.contains(&zmx_name);
+                let next_provider_state = match (current_provider_state.as_str(), listed) {
+                    ("exists", false)
+                        if crate::zmx::zmx_session_daemon_socket_present(&zmx_name)
+                            == Some(false) =>
+                    {
+                        "missing"
+                    }
+                    ("missing", true)
+                        if crate::zmx::zmx_session_daemon_socket_present(&zmx_name)
+                            == Some(true) =>
+                    {
+                        "exists"
+                    }
+                    _ => continue,
+                };
                 let Some(current) =
                     repository.get_session(&candidate_project_id, &candidate_session_id)?
                 else {
@@ -62,12 +97,14 @@ pub(crate) fn sync_zmx_provider_existence(
                     .and_then(Value::as_object)
                     .cloned()
                     .unwrap_or_default();
-                if provider_state.get("lifecycleState").and_then(Value::as_str) != Some("exists") {
+                if provider_state.get("lifecycleState").and_then(Value::as_str)
+                    != Some(current_provider_state.as_str())
+                {
                     continue;
                 }
                 provider_state.remove("killError");
                 provider_state.remove("probeError");
-                provider_state.insert("lifecycleState".to_string(), json!("missing"));
+                provider_state.insert("lifecycleState".to_string(), json!(next_provider_state));
                 provider_state.insert("probedAt".to_string(), json!(now_iso()));
                 provider_state.insert("zmxName".to_string(), json!(zmx_name));
                 let mut update = Map::new();
@@ -75,16 +112,16 @@ pub(crate) fn sync_zmx_provider_existence(
                 update.insert("sessionId".to_string(), json!(candidate_session_id.clone()));
                 update.insert(
                     "lifecycleState".to_string(),
-                    json!(
-                        if current.get("surface").and_then(Value::as_str) == Some("commands") {
-                            "stopped"
-                        } else {
-                            current
-                                .get("lifecycleState")
-                                .and_then(Value::as_str)
-                                .unwrap_or("running")
-                        }
-                    ),
+                    json!(if next_provider_state == "missing"
+                        && current.get("surface").and_then(Value::as_str) == Some("commands")
+                    {
+                        "stopped"
+                    } else {
+                        current
+                            .get("lifecycleState")
+                            .and_then(Value::as_str)
+                            .unwrap_or("running")
+                    }),
                 );
                 update.insert("providerState".to_string(), Value::Object(provider_state));
                 repository.update_session_for_lifecycle(&update)?;
