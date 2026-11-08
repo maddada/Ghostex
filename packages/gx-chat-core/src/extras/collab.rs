@@ -209,7 +209,7 @@ fn names_line(names: &[String], one: &str, many: &str) -> Option<String> {
 /// projectId, sessionId, shareId, role, owner, mode, viewers: [name], watching, typing, cards,
 /// waiting, guestNote, viewOnly }`.
 pub fn project(state: &ChatState) -> Value {
-    if state.session.collab.is_none() {
+    if !available(state) {
         return Value::Null;
     }
     let Some(collab) = shared(state) else {
@@ -328,6 +328,17 @@ pub fn project(state: &ChatState) -> Value {
 /// The pill's id in `chatPills`.
 pub const COLLAB_PILL: &str = "collab";
 
+/// Whether this computer can share the chat: gxserver said something about Collab, and not that
+/// Collab isn't installed (`available: false`, server/src/collab_shim/mod.rs). Collab is an
+/// extension since 11.0.1 (#495): without it there is no Share button, pill or sheet.
+fn available(state: &ChatState) -> bool {
+    state
+        .session
+        .collab
+        .as_ref()
+        .is_some_and(|collab| collab.get("available") != Some(&Value::Bool(false)))
+}
+
 /// The phone's Share pill: "Share", or "Shared" with how many are watching; it opens the phone's
 /// Share sheet. Only on a touch composer (`StartConfig::touch_composer`): the desktop and the web
 /// build have the header's Share button instead, so a chat never shows both. `None` before
@@ -340,7 +351,7 @@ pub fn pill(state: &ChatState) -> Option<crate::document::ChatPill> {
         .boot_config
         .as_ref()
         .is_some_and(|config| config.touch_composer);
-    if !touch || is_guest(state) {
+    if !touch || is_guest(state) || !available(state) {
         return None;
     }
     let collab = state.session.collab.as_ref()?;
@@ -567,5 +578,21 @@ mod held_answers_tests {
         state.session.collab_guest = None;
         let cards = project(&state)["cards"].clone();
         assert_eq!(cards[0]["answers"]["by"], "Sam");
+    }
+
+    #[test]
+    fn no_share_without_collab_installed() {
+        let mut state = ChatState::default();
+        state.session.boot_config = Some(crate::event::StartConfig {
+            touch_composer: true,
+            ..Default::default()
+        });
+        state.session.collab = Some(json!({"shared": false, "available": true}));
+        assert!(pill(&state).is_some());
+        assert_eq!(project(&state)["shared"], false);
+        // gxserver says Collab isn't installed (or stopped): no pill, no Share, no sheet.
+        state.session.collab = Some(json!({"shared": false, "available": false}));
+        assert!(pill(&state).is_none());
+        assert!(project(&state).is_null());
     }
 }

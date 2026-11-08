@@ -258,27 +258,15 @@ impl CollabSharePanel {
             .children(action)
     }
 
-    fn render_off(&self, cx: &mut gpui::Context<Self>) -> gpui::Div {
-        v_flex()
-            .gap(px(10.0))
-            .p(px(14.0))
-            .child(
-                div()
-                    .text_size(px(12.5))
-                    .text_color(chrome_ink().opacity(0.72))
-                    .child("Ghostex Collab is off. Turn it on to share a chat through a link that opens it in any browser, with no app or account."),
-            )
-            .child(
-                h_flex().child(
-                    panel_button("collab-share-turn-on".into(), "Turn on Ghostex Collab", true).on_click(
-                        cx.listener(|panel, _, _, cx| {
-                            if !panel.busy {
-                                panel.call(json!({"op": "set", "patch": {"enabled": true}}), cx);
-                            }
-                        }),
-                    ),
-                ),
-            )
+    /// Collab isn't installed (or stopped) on this computer: the header's Share button is gone
+    /// then, so this shows only if it went while the popover was open.
+    fn render_off(&self, _cx: &mut gpui::Context<Self>) -> gpui::Div {
+        v_flex().gap(px(10.0)).p(px(14.0)).child(
+            div()
+                .text_size(px(12.5))
+                .text_color(chrome_ink().opacity(0.72))
+                .child("Collab isn't installed on this computer. Install it in Settings > Extensions to share a chat through a link."),
+        )
     }
 
     fn render_unshared(&self, config: &Value, cx: &mut gpui::Context<Self>) -> gpui::Div {

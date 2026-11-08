@@ -329,7 +329,7 @@ async fn only_the_component_reports_shares_and_a_share_token_reads_only_its_chat
     );
     let mut frame = serde_json::Map::new();
     collab_shim::insert_chat_collab(&mut frame, "p", "s");
-    assert!(frame.get("collab").is_none());
+    assert_eq!(frame["collab"]["available"], false);
 }
 
 #[tokio::test(flavor = "multi_thread")]

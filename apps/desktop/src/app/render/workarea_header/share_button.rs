@@ -3,7 +3,10 @@
 //! (window/collab_share.rs).
 //!
 //! CDXC:Collab 2026-11-07 DECISION:
-//! User (Q1615): "Where Share lives: a button in the chat header." It shows on every chat of this computer, Ghostex Collab on or off (the popover offers to turn it on), and is the one place that says a chat is shared, so the header gets no second "Shared" pill.
+//! User (Q1615): "Where Share lives: a button in the chat header." It is the one place that says a chat is shared, so the header gets no second "Shared" pill.
+//!
+//! CDXC:Collab 2026-11-08 DECISION:
+//! User (#495, Q1732): Collab is an extension; the Share button shows only once it is installed and running on this computer (the chat's `collab` part is there).
 
 use std::cell::{Cell, RefCell};
 
@@ -52,6 +55,10 @@ impl GhostexGpuiApp {
     ) -> Option<AnyElement> {
         let (_, chat) = self.share_button_chat()?;
         let collab = chat.read(cx).snapshot["collab"].clone();
+        // No Collab part: Collab isn't installed (or is stopped) on this computer, so no Share.
+        if collab.is_null() {
+            return None;
+        }
         let shared = collab["shared"] == true;
         let watching = collab["viewerCount"].as_u64().unwrap_or(0);
         let label = match (shared, watching) {

@@ -802,8 +802,25 @@ impl SettingsStore {
         })
     }
 
+    /// Collab's component as gxserver last reported it (`/api/extensionComponents`,
+    /// [`refresh_collab_component`]).
+    pub(crate) fn collab_component(&self) -> Value {
+        self.host_payload(COLLAB_COMPONENT_PAYLOAD)
+            .cloned()
+            .unwrap_or(Value::Null)
+    }
+
+    /// CDXC:Collab 2026-11-08 DECISION:
+    /// User (#495, Q1732): Collab is an extension; Settings > Collab shows only once it is installed on this computer (Settings > Extensions installs it).
+    pub(crate) fn collab_installed(&self) -> bool {
+        self.collab_component()["installed"] == true
+    }
+
     /// `resolveSettingsModalTabForVisibility`.
     pub(crate) fn resolve_tab(&self, tab: SettingsTabId) -> SettingsTabId {
+        if tab == SettingsTabId::Collab && !self.collab_installed() {
+            return SettingsTabId::Extensions;
+        }
         if (tab == SettingsTabId::OsIntegration && !self.os_integration_visible())
             || (tab == SettingsTabId::Connectors && !self.connectors_visible())
             || !self.built_in_extension_allows_page(tab)
@@ -1219,6 +1236,39 @@ pub(crate) fn store_host_message(store: &Entity<SettingsStore>, message: Value, 
     host(SettingsModalCommand::HostMessage(message), cx);
 }
 
+/// The host payload kind [`refresh_collab_component`] keeps Collab's component under.
+pub(crate) const COLLAB_COMPONENT_PAYLOAD: &str = "collabComponent";
+
+/// Reads Collab's component from this computer's gxserver (installed, version, an update, an
+/// install under way) into the store.
+pub(crate) fn refresh_collab_component(store: &Entity<SettingsStore>, cx: &mut App) {
+    if !store.read(cx).request().gxserver_rpc_available {
+        return;
+    }
+    let weak = store.downgrade();
+    store_gxserver_rpc(
+        store,
+        "/api/extensionComponents",
+        serde_json::json!({ "op": "list" }),
+        Duration::from_secs(10),
+        move |result, cx| {
+            let Some(mut item) = result.ok().and_then(|answer| {
+                answer["components"].as_array().and_then(|components| {
+                    components
+                        .iter()
+                        .find(|component| component["name"] == "collab")
+                        .cloned()
+                })
+            }) else {
+                return;
+            };
+            item["type"] = Value::String(COLLAB_COMPONENT_PAYLOAD.to_string());
+            let _ = weak.update(cx, |store, cx| store.receive_host_payload(item, cx));
+        },
+        cx,
+    );
+}
+
 /// Creates the store entity.
 pub(crate) fn new_settings_store(
     host: SettingsModalHost,
@@ -1237,5 +1287,7 @@ pub(crate) fn new_settings_store(
         ),
         cx,
     );
+    // The rail lists Settings > Collab only while Collab is installed.
+    refresh_collab_component(&store, cx);
     store
 }

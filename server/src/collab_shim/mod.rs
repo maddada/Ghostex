@@ -60,14 +60,18 @@ pub(crate) fn clear_chat_extras() -> Vec<(String, String)> {
 
 /// `collab` on a chat frame and on `readSessionChat`, while Collab runs: the chat's part as the
 /// component reported it, or `{shared: false}`, both with `available: true` (clients show Share
-/// only then). Nothing at all while Collab isn't installed or isn't running.
+/// only then). `{shared: false, available: false}` while Collab isn't installed or isn't running:
+/// a frame without `collab` leaves a client's last one in place.
 pub(crate) fn insert_chat_collab(
     frame: &mut Map<String, Value>,
     project_id: &str,
     session_id: &str,
 ) {
     if !sidecar::is_running() {
-        frame.remove("collab");
+        frame.insert(
+            "collab".to_string(),
+            json!({ "shared": false, "available": false }),
+        );
         return;
     }
     let mut value = extras()
@@ -170,8 +174,9 @@ mod tests {
         let mut frame = Map::new();
         frame.insert("collab".into(), json!({"shared": true}));
         insert_chat_collab(&mut frame, "p", "s");
-        assert!(
-            frame.get("collab").is_none(),
+        assert_eq!(
+            frame["collab"],
+            json!({"shared": false, "available": false}),
             "no Collab part without the component"
         );
     }

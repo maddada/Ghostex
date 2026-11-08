@@ -13,6 +13,7 @@
 //! the host's "gxserver reachable" flag, the React `createExtensionsModalTransport()` check.
 mod browser;
 pub(crate) mod cards;
+mod collab_card;
 pub(crate) mod data;
 mod delete_view;
 mod detail;
@@ -117,6 +118,8 @@ pub(crate) struct ExtensionsTab {
     preview_applied: bool,
     /// The GBots card's status and computer (gbots_card.rs).
     pub(crate) gbots_card: gbots_card::GbotsCardState,
+    /// The Collab card's install, update and uninstall (collab_card.rs).
+    pub(crate) collab_card: collab_card::CollabCardState,
 }
 
 impl SettingsPage for ExtensionsTab {
@@ -181,6 +184,7 @@ impl ExtensionsTab {
             masked_inputs: std::collections::HashMap::new(),
             preview_applied: false,
             gbots_card: Default::default(),
+            collab_card: Default::default(),
         };
         page.request_plugin_status_if_missing(cx);
         page.read_installed_clis(cx);
