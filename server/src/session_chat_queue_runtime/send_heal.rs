@@ -363,7 +363,7 @@ fn claim_automatic_restart(
 /// (held_reload.rs). Unlike a refused send's restart, a coordinator is reloaded too: the user's
 /// own fix was a coordinator's reload, its threads run in their own sessions and go on, and a
 /// coordinator that cannot take their reports is stuck anyway. Background tasks Claude's footer
-/// counts (`⧉ N`) or its transcript shows still running (`transcript_background_jobs`) refuse it, as do a running turn, compaction, a pending question and the
+/// counts (`· 1 shell`, `⧉ N`) or its transcript shows still running (`transcript_background_jobs`) refuse it, as do a running turn, compaction, a pending question and the
 /// shared ten-minute limit on automatic restarts.
 pub(crate) async fn reload_idle_agent_for_input_box(
     state: &AppState,
@@ -720,7 +720,7 @@ pub(crate) async fn work_a_restart_would_end(
 /// CDXC:SessionChat 2026-11-08 WHY:
 /// Coordinator, after the input-box reload landed: "before reloading any session, also read its
 /// transcript for background jobs still running (Claude's background tasks / bash_id entries that
-/// haven't reported completion), not only the on-screen footer". The footer's `⧉ N` is what a
+/// haven't reported completion), not only the on-screen footer". The footer's count is what a
 /// reload checked, and the screens that need a reload are the ones whose bottom rows (that
 /// footer) are cut off. Claude's transcript names every background shell and monitor it started
 /// in this process and every one that ended (session_chat_claude_background.rs); one started and
@@ -747,17 +747,19 @@ async fn transcript_background_jobs(
     .unwrap_or_default()
 }
 
-/// Claude's footer counts the session's running background tasks as `⧉ N`
-/// (`⏵⏵ bypass permissions on (shift+tab to cycle) · ⧉ 7 · ← for agents`).
+/// Claude's screen shows background shells or monitors still running: its footer (`· 1 shell`,
+/// `· 2 shells, 1 monitor`, or the older `· ⧉ 7`) or its turn-end row (`… · 1 shell still
+/// running`), read by the same recognisers as the chat's background strip and the grey dot
+/// (CDXC:SessionStatus 2026-11-08 at `claude_footer_background_activity`).
 fn shows_claude_background_tasks(screen: &str) -> bool {
-    screen.lines().rev().take(8).any(|line| {
-        line.split('·').any(|part| {
-            part.trim()
-                .strip_prefix('⧉')
-                .and_then(|count| count.trim().parse::<u32>().ok())
-                .is_some_and(|count| count > 0)
-        })
-    })
+    crate::session_chat_terminal_activity::claude_footer_background_activity(screen).is_some()
+        || crate::session_chat_terminal_activity::is_session_chat_background_work_activity(
+            crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
+                Some("claude"),
+                screen,
+            )
+            .as_ref(),
+        )
 }
 
 /// Whether a live agent is doing anything a restart would cut short.

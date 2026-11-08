@@ -307,6 +307,15 @@ pub fn publishable_session_chat_terminal_activity(
 ///
 /// CDXC:SessionStatus 2026-11-06 WHY:
 /// A coordinator's thread (G7h13, 2026-11-05) ended its turn with two background shells and a Monitor running. Claude Code words that as `· 2 shells, 1 monitor still running` on the turn-end row and `· 2 shells, 1 monitor` on its mode line, and the turn-end grammar accepted only one count of one kind, so the session got no grey dot and Auto Sleep (agents sleep after 10 minutes) slept it at 17:59:53. Sleeping stopped Claude, its teardown killed the three jobs (their notifications say `killed`), and the thread sat idle for three hours. The turn-end row now takes a mixed list (`background_running_count`), and the mode line counts too while the agent is not working (`with_claude_footer_background_work`), so a turn-end row Claude redraws or scrolls away still leaves the dot; the mode line never stands in for a live status row.
+///
+/// CDXC:SessionStatus 2026-11-08 WHY:
+/// Coordinator: "make the footer background-job check recognise Claude Code 2.1.319's '· N
+/// shell(s)' (and keep the old '⧉ N'), and check every other place that reads that footer uses the
+/// same recogniser". The automatic restart's guard (session_chat_queue_runtime/send_heal.rs) read
+/// only `⧉ N`, which 2.1.319 no longer draws, so a restart went ahead under `· 1 shell`. It now
+/// asks this recogniser, which the chat's background strip, the grey dot (parked-thread detection,
+/// Auto Sleep and Not moving read it through `backgroundWorkDetectedAt`) and the fleet status
+/// already used; `⧉ N` counts here too, as shells, the unit its tasks were.
 pub(crate) fn claude_footer_background_activity(
     screen_text: &str,
 ) -> Option<SessionChatTerminalActivity> {
@@ -321,6 +330,14 @@ pub(crate) fn claude_footer_background_activity(
         .map_or(0, |index| index + 1);
     let (mut shells, mut monitors) = (0u64, 0u64);
     for line in &lines[footer_start..] {
+        // Older Claude Code counted them as one `⧉ N` segment (`… (shift+tab to cycle) · ⧉ 7 · ←
+        // for agents`); Claude Code 2.1.319 writes `· 1 shell` (CDXC:SessionStatus 2026-11-08
+        // below).
+        shells += line
+            .split(" · ")
+            .filter_map(|segment| segment.trim().strip_prefix('\u{29c9}'))
+            .filter_map(|count| count.trim().parse::<u64>().ok())
+            .sum::<u64>();
         for segment in line.split(" · ").skip(1) {
             for item in segment.split(", ") {
                 let Some((count, unit)) = item.trim().split_once(' ') else {
