@@ -7,7 +7,7 @@
 //! User (Q1610): "we need a page in settings called "Collab" and we need to call this feature Ghostex Collab": the global switch (off by default), the defaults a new share starts with (24-hour expiry, a code the guest types, approve each message) and the list of active shares.
 //!
 //! CDXC:Collab 2026-11-08 DECISION:
-//! User (#495): turning Ghostex Collab on needs the owner's signed approval (Touch ID, Windows Hello or the system password), a link lasts an hour by default and a day at most, a code is always asked, and Send is never a default (it is turned on per chat, with approval). The switch waits here for the approval ("Approve on this computer or your phone").
+//! User (#495): turning Ghostex Collab on needs the owner's signed approval (Touch ID, Windows Hello or the system password), a link lasts an hour by default and a day at most, a code is always asked, and Send is never a default (it is turned on per chat, with approval). The switch waits here for the approval ("Approve on this computer or your phone"), following the request through `/api/collab`'s read (its `approvals`), so the page uses only the Settings host's gxserver call and the Settings preview binary builds it unchanged.
 //! SEE-ALSO: server/src/collab/config.rs (the choices and their defaults), packages/settings-catalog/src/pages/collab.rs (its search rows), apps/desktop/src/app/window/collab_share.rs (a chat's Share popover).
 use super::super::catalog::SettingOption;
 use super::super::fields::{
@@ -47,6 +47,9 @@ pub(crate) struct CollabTab {
     name_edit: u64,
     /// Turning Collab on, waiting for the owner's approval: gxserver's words for it.
     waiting: Option<String>,
+    /// Turning Collab on was asked: gxserver's refusal text (shown if it was no approval request)
+    /// and when, while the page follows the request.
+    following: Option<(String, std::time::Instant)>,
     was_active: bool,
     _refresh: Option<Task<()>>,
 }
@@ -121,6 +124,7 @@ impl CollabTab {
             log: Vec::new(),
             name_edit: 0,
             waiting: None,
+            following: None,
             was_active: true,
             _refresh: Some(refresh),
         }
@@ -192,6 +196,7 @@ impl CollabTab {
                         Ok(answer) => {
                             page.view = Some(answer);
                             page.error = None;
+                            page.follow_approval();
                         }
                         Err(error) => {
                             page.error = Some(error);
@@ -207,56 +212,107 @@ impl CollabTab {
         );
     }
 
-    /// Turns Collab on: gxserver asks for the owner's approval, and turns it on once approved.
+    /// Turns Collab on. gxserver answers with an approval request and turns it on itself once the
+    /// owner approves; the page follows that request through its reads (`approvals` in the read,
+    /// this caller's own requests), so it needs nothing beyond the Settings host's gxserver call.
     fn turn_on(&mut self, cx: &mut Context<Self>) {
-        if self.waiting.is_some() {
+        if self.following.is_some() {
             return;
         }
-        let params = json!({ "op": "set", "patch": { "enabled": true } });
-        self.saving += 1;
-        cx.notify();
-        cx.spawn(async move |page, cx| {
-            let path = "/api/collab";
-            let mut result = crate::app::gx_store::gx_rpc(None, path, params.clone()).await;
-            if let Some(approval) = result
-                .as_ref()
-                .err()
-                .and_then(|error| error.approval_required())
-            {
-                let id = approval["id"].as_str().unwrap_or_default().to_string();
-                let summary = approval["summary"].as_str().unwrap_or_default().to_string();
-                let _ = page.update(cx, |page, cx| {
-                    page.waiting = Some(summary);
-                    page.error = None;
+        if !self.store.read(cx).request().gxserver_rpc_available {
+            self.error = Some("Ghostex's background service is not reachable.".to_string());
+            cx.notify();
+            return;
+        }
+        let this = cx.weak_entity();
+        store_gxserver_rpc(
+            &self.store.clone(),
+            "/api/collab",
+            json!({ "op": "set", "patch": { "enabled": true } }),
+            CALL_TIMEOUT,
+            move |result, cx| {
+                let _ = this.update(cx, |page, cx| {
+                    match result {
+                        Ok(answer) => {
+                            page.view = Some(answer);
+                            page.error = None;
+                        }
+                        Err(error) => {
+                            // Usually the approval request; the next read says which.
+                            page.following = Some((error, std::time::Instant::now()));
+                            page.waiting = Some("Turn on Ghostex Collab".to_string());
+                            page.error = None;
+                            page.follow_approval_soon(cx);
+                        }
+                    }
+                    page.reload(cx);
                     cx.notify();
                 });
-                result = match crate::app::window::collab_share::wait_for_approval(id.clone()).await
-                {
-                    Ok(()) => {
-                        let mut again = params;
-                        again["approvalId"] = json!(id);
-                        crate::app::gx_store::gx_rpc(None, path, again).await
-                    }
-                    Err(message) => Err(crate::app::gx_store::GxRpcError::transport(path, message)),
-                };
-            }
-            let _ = page.update(cx, |page, cx| {
-                page.saving = page.saving.saturating_sub(1);
-                page.waiting = None;
-                match result {
-                    Ok(answer) => {
-                        page.view = Some(answer);
-                        page.error = None;
-                    }
-                    Err(error) => {
-                        page.error = Some(error.to_string());
-                        page.reload(cx);
-                    }
+            },
+            cx,
+        );
+    }
+
+    /// Reads again every two seconds while turning on waits for the owner's approval.
+    fn follow_approval_soon(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |page, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_secs(2)).await;
+                let going = page
+                    .update(cx, |page, cx| {
+                        if page.following.is_some() {
+                            page.reload(cx);
+                        }
+                        page.following.is_some()
+                    })
+                    .unwrap_or(false);
+                if !going {
+                    break;
                 }
-                cx.notify();
-            });
+            }
         })
         .detach();
+    }
+
+    /// Where the turn-on request stands, from a read's `approvals`.
+    fn follow_approval(&mut self) {
+        let Some((refusal, since)) = self.following.clone() else {
+            return;
+        };
+        let view = self.view.clone().unwrap_or(Value::Null);
+        let request = view["approvals"].as_array().and_then(|requests| {
+            requests
+                .iter()
+                .rev()
+                .find(|request| request["action"] == "collabEnable")
+                .cloned()
+        });
+        let finished = |page: &mut Self, error: Option<String>| {
+            page.following = None;
+            page.waiting = None;
+            page.error = error;
+        };
+        if view["config"]["enabled"] == true {
+            return finished(self, None);
+        }
+        match request
+            .as_ref()
+            .and_then(|request| request["status"].as_str())
+        {
+            Some("pending" | "approved") if since.elapsed() < Duration::from_secs(11 * 60) => {
+                self.waiting = request
+                    .as_ref()
+                    .and_then(|request| request["summary"].as_str())
+                    .map(str::to_string);
+            }
+            Some("denied") => finished(self, Some("You didn't approve it.".to_string())),
+            Some("pending" | "approved" | "expired") => finished(
+                self,
+                Some("The approval request ran out. Try again.".to_string()),
+            ),
+            // Not an approval: gxserver refused outright.
+            _ => finished(self, Some(refusal)),
+        }
     }
 
     /// Changes some choices: on screen at once, then saved.

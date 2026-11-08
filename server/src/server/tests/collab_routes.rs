@@ -133,9 +133,29 @@ async fn turning_collab_on_waits_for_the_owners_signed_approval() {
     .await;
     let approval = asked["approval"].clone();
     let id = approval["id"].as_str().expect("id").to_string();
+    // A client can follow its request through a plain read, without the id.
+    let (_, read) = post(state, &setup.agent, json!({"op": "read"})).await;
+    let mine = read["result"]["approvals"]
+        .as_array()
+        .expect("approvals")
+        .clone();
+    assert!(mine.iter().any(|entry| entry["id"] == id.as_str()
+        && entry["action"] == "collabEnable"
+        && entry["status"] == "pending"));
+    let (_, theirs) = post(state, &state.auth_token, json!({"op": "read"})).await;
+    assert!(
+        !theirs["result"]["approvals"].to_string().contains(&id),
+        "another caller doesn't see it"
+    );
     approve(&setup, &approval).await;
     // gxserver turns it on itself once the signature arrives.
     assert!(eventually(|| collab::read_config(&state.paths).enabled).await);
+    let (_, read) = post(state, &setup.agent, json!({"op": "read"})).await;
+    assert!(read["result"]["approvals"]
+        .as_array()
+        .expect("approvals")
+        .iter()
+        .any(|entry| entry["id"] == id.as_str() && entry["status"] == "consumed"));
 
     // The agent repeating its call gets the answer, not a second request.
     let (status, body) = post(

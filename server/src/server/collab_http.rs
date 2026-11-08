@@ -290,7 +290,7 @@ impl From<(&'static str, String)> for OwnerError {
 
 type OwnerResult = Result<Value, OwnerError>;
 
-fn read_all(state: &Arc<AppState>) -> Value {
+fn read_all(state: &Arc<AppState>, caller: &Principal) -> Value {
     let config = collab::read_config(&state.paths);
     let relay = collab::config::relay_url();
     let list: Vec<Value> = shares::list()
@@ -310,6 +310,9 @@ fn read_all(state: &Arc<AppState>) -> Value {
         "relayConnected": super::collab_connector::relay_connected(),
         "guestPage": collab::page_pin::status_json(),
         "shares": list,
+        // This caller's own Collab approval requests of the last minutes and where they stand,
+        // so a client can follow one without its id (Settings > Collab's switch does).
+        "approvals": approvals::asked_by(state, caller),
     })
 }
 
@@ -684,7 +687,7 @@ async fn handle_owner(
         }
         other => return Err(("badRequest", format!("Unknown op {other}.")).into()),
     }
-    Ok(read_all(state))
+    Ok(read_all(state, caller))
 }
 
 /// Approvals Collab asked for, finished by gxserver once the owner signs them.
@@ -699,6 +702,8 @@ pub(crate) mod approvals {
 
     /// How long a finished answer waits for its caller to repeat the call.
     const KEEP_ANSWER_MS: u64 = 10 * 60_000;
+    /// How long a request stays in `asked_by`: past the 10 minutes a pending one lives.
+    const KEEP_ASKED_MS: u64 = 15 * 60_000;
 
     #[derive(Default)]
     struct Book {
@@ -708,6 +713,8 @@ pub(crate) mod approvals {
         running: HashMap<String, Principal>,
         /// Calls gxserver ran, with their answer.
         done: HashMap<String, (Principal, OwnerResult, u64)>,
+        /// Every approval Collab asked for lately, by whom and when.
+        asked: HashMap<String, (Principal, u64)>,
     }
 
     fn book() -> &'static Mutex<Book> {
@@ -720,6 +727,8 @@ pub(crate) mod approvals {
         let now = crate::security::now_ms();
         book.done
             .retain(|_, (_, _, at)| now.saturating_sub(*at) < KEEP_ANSWER_MS);
+        book.asked
+            .retain(|_, (_, at)| now.saturating_sub(*at) < KEEP_ASKED_MS);
         change(&mut book)
     }
 
@@ -738,7 +747,41 @@ pub(crate) mod approvals {
         with_book(|book| {
             book.waiting
                 .insert(approval_id.to_string(), (caller.clone(), params));
+            book.asked
+                .entry(approval_id.to_string())
+                .or_insert_with(|| (caller.clone(), crate::security::now_ms()));
         });
+    }
+
+    /// `caller`'s Collab approval requests of the last minutes, oldest first, as
+    /// `{id, action, target, summary, status}` (`pending`, `approved`, `consumed` once the change
+    /// ran, `denied` or `expired`).
+    pub(crate) fn asked_by(state: &AppState, caller: &Principal) -> Vec<Value> {
+        let ids: Vec<String> = with_book(|book| {
+            book.asked
+                .iter()
+                .filter(|(_, (asked, _))| same_caller(asked, caller))
+                .map(|(id, _)| id.clone())
+                .collect()
+        });
+        let now = crate::security::now_ms();
+        let mut requests: Vec<_> = ids
+            .iter()
+            .filter_map(|id| state.security.approvals.read(id, caller, now))
+            .collect();
+        requests.sort_by_key(|request| request.created_at_ms);
+        requests
+            .into_iter()
+            .map(|request| {
+                json!({
+                    "id": request.id,
+                    "action": request.action,
+                    "target": request.target,
+                    "summary": request.summary,
+                    "status": request.status,
+                })
+            })
+            .collect()
     }
 
     /// A caller repeating its call with `approvalId`: the answer gxserver already got, waiting a
