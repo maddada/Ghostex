@@ -50,12 +50,11 @@ impl GhostexGpuiApp {
         host.models.retain(|machine, _| machines.contains(machine));
         for machine in &machines {
             let inputs = neutral_indicator_inputs(list_inputs, machine);
-            host.models.entry(machine.clone()).or_default().update(
-                &self.gx_store.core,
-                &inputs,
-                changes,
-                now,
-            );
+            // Only the groups are read (`indicator_candidates`), so the list is never laid out.
+            host.models
+                .entry(machine.clone())
+                .or_insert_with(SidebarViewModel::groups_only)
+                .update(&self.gx_store.core, &inputs, changes, now);
         }
         let models: Vec<(MachineId, &SidebarViewModel)> = machines
             .iter()

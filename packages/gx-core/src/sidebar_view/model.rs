@@ -138,11 +138,26 @@ struct CacheState {
 #[derive(Default)]
 pub struct SidebarViewModel {
     state: Option<CacheState>,
+    /// Builds the groups and stops there: no machine tabs and no list (see [`Self::groups_only`]).
+    groups_only: bool,
 }
 
 impl SidebarViewModel {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A model for a reader of [`Self::built_groups`] alone (the menu bar indicators): every update
+    /// builds the same groups the full model builds, and skips the machine tabs and the list
+    /// (`view` stays empty).
+    ///
+    /// CDXC:StatusPet 2026-11-08 WHY:
+    /// User: "ghostex app gets slower with time until it becomes super slow ... even pasting an image takes long". The menu bar indicators kept a full sidebar model per machine with every project shown, and on every session change it laid out the whole list (sections, collections, Spaces, chief rows, home headers, machine tabs) that nothing reads: in the samples taken while the user reproduced the slow paste it was most of the sidebar store's main-thread time, eight times the visible sidebar's own update. The groups the indicators count are built by the same steps; only the list after them is skipped.
+    pub fn groups_only() -> Self {
+        Self {
+            state: None,
+            groups_only: true,
+        }
     }
 
     /// The list as it stands. Empty until the first [`Self::update`].
@@ -790,10 +805,16 @@ impl SidebarViewModel {
                 }
             };
             state.next_deadline_ms = min_deadline(state.next_deadline_ms, build.deadline_ms);
-            builds.insert(plan.group_id.clone(), build.clone());
+            if !self.groups_only {
+                builds.insert(plan.group_id.clone(), build.clone());
+            }
             state
                 .groups
                 .insert(plan.group_id.clone(), CachedGroup { key, build });
+        }
+        if self.groups_only {
+            self.state = Some(state);
+            return true;
         }
 
         // 6. The machine tabs. The selected machine's counts come out of the groups just built;

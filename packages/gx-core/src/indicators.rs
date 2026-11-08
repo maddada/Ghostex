@@ -4,8 +4,9 @@
 //! The rules are the old app runtime's (apps/desktop/sidebar/gxserver-runtime/helpers/status-indicators.ts),
 //! over the same rows: every machine's sidebar groups (this computer's, then each remote machine
 //! that is connected right now, see [`indicator_machines`]), unfiltered by Space, tag or collapse, each in its display order.
-//! The host keeps one [`SidebarViewModel`] per machine with neutral list state for that
-//! (`neutral_indicator_inputs`) and hands over each one's `built_groups`.
+//! The host keeps one groups-only [`SidebarViewModel`] per machine (`SidebarViewModel::groups_only`)
+//! with neutral list state for that (`neutral_indicator_inputs`) and hands over each one's
+//! `built_groups`.
 //!
 //! CDXC:StatusPet 2026-06-26-04:38:
 //! GPUI status indicators consume the same saved shared Settings object as the
