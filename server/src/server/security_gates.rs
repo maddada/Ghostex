@@ -324,9 +324,11 @@ fn computer_gate(
         return None;
     }
     let server_id = text(params, "serverId")?.to_string();
-    if state
-        .security
-        .computer_approved(&server_id, security::now_ms())
+    // A computer is never asked about itself (a saved machine that points back at this one).
+    if server_id.as_str() == &*state.security.server_id
+        || state
+            .security
+            .computer_approved(&server_id, security::now_ms())
     {
         return None;
     }

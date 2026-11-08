@@ -432,6 +432,24 @@ fn handle(
                     now,
                 )
                 .map_err(|error| approval_error(&error))?;
+            /*
+            CDXC:Security 2026-11-08 WHY:
+            Windows repro of GitHub #508: the user entered the PIN for "Let the agents on SSH repro
+            test and this computer reach each other" and the request stayed pending in the
+            security log, because a computer counted as approved only once the call that waited
+            on the request came back with it, and that call never ran again. Approving a
+            computer's request now lets it in for the 30 days at once; the waiting call, when it
+            runs, finds it approved.
+            */
+            if matches!(
+                request.action,
+                ghostex_gx_protocol::approval::SensitiveAction::ComputerGrant
+                    | ghostex_gx_protocol::approval::SensitiveAction::ComputerRegister
+            ) {
+                if let Some(server_id) = request.target.as_deref() {
+                    security.approve_computer(server_id, now);
+                }
+            }
             security.publish(security::SecurityEvent::ApprovalApproved {
                 request: request.clone(),
                 key_id,

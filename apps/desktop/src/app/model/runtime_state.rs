@@ -51,7 +51,7 @@ choose between instead of sending a newer selector and losing the whole action t
 a 400. Keep this to fixed capability names: no daemon paths, ports, tokens, or
 response text may be retained here.
 */
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct GpuiRemoteGxserverCapabilities {
     pub(crate) code_server_prompt_editor: bool,
     pub(crate) browser_tcp_websocket_v1: bool,
@@ -63,6 +63,8 @@ pub(crate) struct GpuiRemoteGxserverCapabilities {
     pub(crate) coordinator_handoff_draft: bool,
     /// The `protocolVersion` the daemon answers health with, `None` when it does not say.
     pub(crate) protocol_version: Option<u64>,
+    /// The daemon's server id from its health answer, `None` when it does not say.
+    pub(crate) server_id: Option<String>,
 }
 
 pub(crate) struct GpuiRemoteGxserverConnection {
@@ -93,7 +95,7 @@ pub(crate) struct GpuiRemoteGxserverConnection {
 impl GpuiRemoteGxserverConnection {
     pub(crate) fn request_target(&self) -> GpuiRemoteGxserverRequestTarget {
         GpuiRemoteGxserverRequestTarget {
-            capabilities: self.capabilities,
+            capabilities: self.capabilities.clone(),
             code_server_component_platform: self.code_server_component_platform.clone(),
             execution_target: self.execution_target.clone(),
             local_port: self.local_port,

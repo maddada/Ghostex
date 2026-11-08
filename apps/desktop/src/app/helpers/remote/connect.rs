@@ -405,7 +405,21 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
                     message.as_str(),
                 );
             }
-            connection.this_computer = this_computer;
+            /*
+            CDXC:RemoteMachines 2026-11-08 WHY:
+            Windows repro of GitHub #508: a machine saved as SSH to 127.0.0.1 on a Windows PC was
+            not seen as this computer, because the identity read above is a POSIX shell command
+            and Windows OpenSSH runs cmd or PowerShell, so it read nothing. The connected-computer
+            registration then ran for it and asked "Let the agents on SSH repro test and this
+            computer reach each other" for the PC's own server id: a Windows Hello prompt for
+            nothing, whose approval had no call to complete. The health answer the tunnel just
+            got names the server on every platform, so it decides too.
+            */
+            connection.this_computer = this_computer
+                || gpui_remote_is_this_computer(
+                    connection.capabilities.server_id.as_deref(),
+                    gpui_local_gxserver_server_id().as_deref(),
+                );
             GpuiRemoteGxserverConnectResult::connected(connection)
         }
         Err(message) => GpuiRemoteGxserverConnectResult::without_connection(

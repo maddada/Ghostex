@@ -287,6 +287,12 @@ pub(crate) fn gpui_remote_gxserver_capabilities_from_health_response(
         protocol_version: value
             .get("protocolVersion")
             .and_then(serde_json::Value::as_u64),
+        server_id: value
+            .get("serverId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(str::to_string),
         zmx_missing: value
             .get("tools")
             .and_then(serde_json::Value::as_array)
