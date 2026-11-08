@@ -18,7 +18,7 @@ How to use this file:
 - **Custom transcript width (set with Transcript width)** `sessionChatCustomTranscriptWidthEnabled` (boolean, default false) [advanced]: On once Transcript width is dragged to a percentage; off keeps Auto, where the transcript matches the prompt composer's width.
 - **Transcript width** `sessionChatTranscriptWidthPercent` (number 50 to 100 step 5 default 75) [advanced]: The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way.
 - **Show file edit previews** `sessionChatFileEditPreviews` (boolean, default false): Show the first seven code lines in each file edit. Turn off to show only the path and change counts.
-- **Tool call cards (preview)** `chatToolCallCards` (boolean, default false): Show each run of tool calls as one card: it counts the calls, says what each one is doing and then did, with its result and time, explains a failure, and folds to one line once the agent writes again. Off keeps the current look.
+- **Tool call cards (preview)** `chatToolCallCards` (boolean, default false): Show each run of tool calls as one line that says which call is running now; click it to see every call with its result, time and the reason for any failure. Off keeps the current look.
 - **Default to Detailed view** `sessionChatDetailedView` (boolean, default false) [advanced]: New chats open in Detailed view, with the work under each agent reply shown. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.
 - **Keep chat box expanded while scrolling** `sessionChatKeepComposerExpanded` (boolean, default false) [advanced]: Keep the desktop chat box at full size while you scroll the transcript instead of shrinking it as you scroll up and growing it back at the end.
 - **Press Escape twice to interrupt** `sessionChatConfirmEscapeInterrupt` (boolean, default true) [advanced]: While the agent is working, the first Escape asks you to press Escape again within 2 seconds before it interrupts. Turn off to interrupt on the first Escape.
@@ -393,6 +393,11 @@ How to use this file:
 - **Default Prompt Agent** `defaultPromptAgentId` (text, default codex): Agent id used when Ghostex sends a prompt on your behalf (for example PR review). Use an id from the configured agents.
 - **Title Generation Agent** `sessionTitleGenerationAgent` (one of codex | cursor | claude | grok | pi | antigravity | empryo | custom; default codex): Headless agent Ghostex uses for first-prompt session title generation. Option labels: codex = Codex, cursor = Cursor CLI, claude = Claude, grok = Grok Build, pi = Pi Agent, antigravity = Antigravity CLI, empryo = Empryo, custom = Custom.
 - **Custom Title Command** `customSessionTitleGenerationCommand` (text, default (empty)) [not agent-writable]: Custom command run with the title prompt on stdin when Title Generation Agent is custom. It should print only the title.
+### Home folder
+
+- **Show Main Hub on all Spaces** `chiefShowOnAllSpaces` (boolean, default false): Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to.
+- **Ask before New Chat** `chiefConfirmNewChat` (boolean, default true): Ask before New Chat or Change Agent starts a new chat with Chief of Staff. Your earlier chats stay in Main Hub either way.
+- **Folders agents can't read in your home folder** `homeSecretFolders` (structured value; change it in Settings, not with `ghostex settings set`): Agents Ghostex starts in your home folder are kept out of these folders and files. Claude Code's file tools and every Codex command are held to the list; Claude's shell commands and other agents are not.
 ### Session resume hooks
 
 - **Session resume hooks** `agentResumeHooks` (Settings UI row without a settings key; use `ghostex settings open`): Hooks let Ghostex capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart. Install one agent's hook from its row, fix every agent that is on with Fix all, install every missing hook with Install all (shown only when a hook is missing), or remove every Ghostex hook with Uninstall all in the ⋯ menu.
@@ -544,7 +549,7 @@ How to use this file:
 - **Turn off OS Integration** `osIntegrationHidden` (boolean, default false): Leave the OS Integration page out of Settings. On by default, and shown only while Enable Experimental Features is on.
 - **Turn off Debugging** `debuggingHidden` (boolean, default false): Leave the Debugging page out of Settings. On by default.
 - **Turn off the voice agent** `voiceAgentHidden` (boolean, default false): Turn off the voice agent everywhere: the headset at the top of the window and its arrow menu, voice calls about one session, the call rows on Settings > Voice and the voice agent hotkeys, on this computer and in the phone app connected to it. A call that is running ends. Dictate keeps working, and the xAI and OpenAI keys stay on Settings > Voice. On by default; your voice settings are kept.
-- **Turn off Chief of Staff** `chiefHidden` (boolean, default false) [not agent-writable]: Turn off Chief of Staff everywhere: its row under the Spaces bar, here and in the phone app. Its agent stops and loses its control over your other agents; its chat and memory are kept for when you turn it back on. On by default. Only you can change this, not an agent.
+- **Turn off Main Hub (beta)** `mainHubHidden` (boolean, default true) [not agent-writable]: Main Hub is a beta extension, off by default: your home folder's project becomes the home for chats that don't belong to a project, with Chief of Staff, an agent that can see and steer your other agents, pinned at the top, here and in the phone app. Off, the home folder is an ordinary project and Chief of Staff's agent stops; its chat and memory are kept for when you turn it back on. Only you can change this, not an agent.
 ### Get more
 
 - **Get more extensions** `store` (Settings UI row without a settings key; use `ghostex settings open`): Browse audited extensions, install them, and manage what is already installed.
@@ -625,10 +630,15 @@ How to use this file:
 - **Send to the box** `projectCloudBoxSecrets` (Settings UI row without a settings key; use `ghostex settings open`): Tick the project's .env files and name the variables a Cloud Box gets at start. Their values are read from this computer each time and never saved in a snapshot.
 ## Remote (tab `remote`)
 
+### Current machine
+
+- **Name** `computerName` (Settings UI row without a settings key; use `ghostex settings open`): This computer's name, set by the system; your phone and other computers show it.
+- **Short name** `computerShortName` (Settings UI row without a settings key; use `ghostex settings open`): This computer's 2-character name on the sidebar's computer pills; empty uses one made from its name.
+- **SSH access** `sshAccess` (Settings UI row without a settings key; use `ghostex settings open`): Lets your phone and other computers sign in to this one; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt.
+- **Short name** `localMachineShortName` (text, default (empty)) [not agent-writable]: Up to 2 characters on the sidebar's computer pills; empty uses one made from the computer's name.
 ### Easy Connect
 
 - **Easy Connect** `easyConnectEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Connect a phone or a remote machine. Install the Tailcat CLI helper with one click.
-- **SSH access** `sshAccess` (Settings UI row without a settings key; use `ghostex settings open`): Easy Connect carries SSH to this computer; Ghostex can turn it on with one admin prompt.
 - **Pairing code** `pairingCode` (Settings UI row without a settings key; use `ghostex settings open`): Connect a Phone with a QR, or Connect a Remote machine with Copy Easy Connect code and its SSH username and password.
 - **Paired devices** `pairedDevices` (Settings UI row without a settings key; use `ghostex settings open`): Phones and computers paired with this computer; remove one to unpair it and revoke its access.
 - **Only paired devices can connect** `pairedDevicesOnly` (Settings UI row without a settings key; use `ghostex settings open`): Easy Connect lets in only paired phones and the keys listed under Advanced; a new phone can still pair while the QR is showing.
@@ -643,7 +653,7 @@ How to use this file:
 
 - **Add a machine** `addMachine` (Settings UI row without a settings key; use `ghostex settings open`): Add a computer by SSH details or an Easy Connect code; saved machines appear as sidebar sections.
 - **Show in sidebar** `showInSidebar` (Settings UI row without a settings key; use `ghostex settings open`): Hide a saved remote machine from the sidebar without deleting it.
-- **Short names** `shortName` (Settings UI row without a settings key; use `ghostex settings open`): Each computer's 2-character name on the sidebar's computer pills, this one's included.
+- **Short names** `shortName` (Settings UI row without a settings key; use `ghostex settings open`): Each remote machine's 2-character name on the sidebar's computer pills, set in its settings.
 - **SSH host** `sshHost` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH host.
 - **SSH user** `sshUser` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH user.
 - **SSH port** `sshPort` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH port.
@@ -651,7 +661,6 @@ How to use this file:
 - **Reuse an existing SSH connection** `reuseSshConnection` (Settings UI row without a settings key; use `ghostex settings open`): Use the SSH connection you already signed in to, for computers that ask for a verification code each time.
 - **Password** `password` (Settings UI row without a settings key; use `ghostex settings open`): SSH passwords are stored in the system keychain.
 - **Install / Connect gxserver** `installGxserver` (Settings UI row without a settings key; use `ghostex settings open`): Install, update, or connect gxserver on a saved remote machine.
-- **This computer's short name** `localMachineShortName` (text, default (empty)) [not agent-writable]: Up to 2 characters on the sidebar's computer pills; empty uses one made from the computer's name.
 ### Advanced
 
 - **Easy Connect served ports** `servedPorts` (Settings UI row without a settings key; use `ghostex settings open`): Local ports Easy Connect exposes to paired phones.

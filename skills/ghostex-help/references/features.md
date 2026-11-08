@@ -167,7 +167,7 @@ by every teammate, and only the team's owners can change them. **Open chat** sho
 and sends nothing. Its arrow opens a menu: Start chat (where you also pick the
 agent and the project), **Link to current session**, which adds the ticket to the
 links of the session you have selected in the sidebar without removing its other
-links (a toast offers **Undo**; it is greyed out with the reason when no session is
+links (a notice in the middle of the view offers **Undo**; it is greyed out with the reason when no session is
 selected, the session is on another computer, or, for a pull request, the session
 already has a different PR), and **Start in cloud**. **Start in cloud** (also its
 own button next to Start chat) lists the clouds Ghostex can start in, Claude Code
@@ -1267,8 +1267,8 @@ where they are while you open, change and close views.
   hover a project's name to see the computers that have it, full name first
   ("Windows (WN)"), when it is on more than one or only on another one. Set a
   machine's in Settings > Remote > Remote machines (its
-  dialog's Short name field) and this computer's in the same card
-  (`localMachineShortName`); empty uses one made from the name (the first
+  dialog's Short name field) and this computer's in Settings > Remote >
+  Current machine (`localMachineShortName`); empty uses one made from the name (the first
   letters of its first two words, or its first letter and the next consonant,
   so Windows is WN), never the same as another computer's.
 
@@ -1613,13 +1613,20 @@ free local dictation app from anomalyco/hex (macOS on Apple silicon, Windows and
 Linux): it transcribes with its own models while it runs on that computer, with
 no key and no internet, and the recording never leaves it. Ghostex no longer has
 a speech model of its own; Hex replaced it. To set Hex up, pick Hex as the
-engine and follow its row: Install Hex installs Hex 3 for you (or Download page
-opens Hex's downloads; an older Hex without Hex 3's local API counts as not
-installed), then open Hex, allow the microphone and download a model in Hex's
+engine and follow its row: Install Hex asks you to confirm (the dialog shows the exact
+command from Hex's own installer: Homebrew's cask on a Mac, Hex's install script on
+Linux and Windows), then your computer's own prompt (Touch ID, Windows Hello or
+your password), and installs Hex 3 for you; a link beside it opens Hex's
+website (anoma.ly/hex) to download it yourself, and a Mac without Homebrew is
+sent there too. If the install fails the row shows the installer's last lines
+and the command to run by hand. An older Hex without Hex 3's local API counts
+as not installed. Then open Hex (Open Hex starts it and checks again by itself),
+allow the microphone and download a model in Hex's
 settings (Parakeet v3 for English and 24 European languages, Whisper for the
 rest); Ghostex finds it by itself and the row becomes a picker of the models
 Hex has ready. Turn on Open at login in Hex so dictation keeps working after a
-restart; when Hex isn't running, the row says so (open Hex, then Check again).
+restart; when Hex isn't running, the row says "Hex isn't running" with Open Hex
+and Check again buttons.
 A computer that used Ghostex's old built-in model moves to Hex (never to a paid
 engine) and shows a one-time note on Settings > Dictation (Got it hides it) and
 with the next dictation that couldn't be transcribed; its old speech models can
@@ -2431,7 +2438,7 @@ While the agent is working, its thinking shows as a closed "Thinking…" card wi
 
 Show thinking in grey (Settings > Interface > Text, off by default) shows the agent's thinking in grey and its replies in the full text colour, so the two are easy to tell apart (`sessionChatMutedThinking`); the phone has the same switch in its Settings > Chat.
 
-Tool call cards (Settings > Chat, a preview, off by default) show each run of tool calls between two pieces of the agent's text as one card: its header stacks the tools' icons and says "Using 3 tools" while they run and "Used 6 tools" with any failures and the time once done, and each call reads like a sentence that changes tense when it ends ("Reading main.rs", then "Read main.rs · 92 lines · 30ms"), with its result and time on the right. A failed call says what failed with the reason underneath, and calls to apps such as Linear, GitHub or Notion show the app's logo. The card folds to one line as soon as the agent writes again; click (or tap) it to open it again, and click a call to see its command and output (`chatToolCallCards`). The phone has its own switch for it in its Settings > Chat.
+Tool call cards (Settings > Chat, a preview, off by default) show each run of tool calls between two pieces of the agent's text as one card: its header stacks the tools' icons and says "Used 6 tools" with any failures and the time once done, and each call reads like a sentence that changes tense when it ends ("Reading main.rs", then "Read main.rs · 92 lines · 30ms"), with its result and time on the right. A failed call says what failed with the reason underneath, and calls to apps such as Linear, GitHub or Notion show the app's logo. The card stays one line while its calls run and after: while a call runs, that line says what it is doing in its own words ("Reading main.rs") with "+2 more" for the card's other calls, and once they are done it says "Used 6 tools". It never opens or folds by itself: click (or tap) it to see every call, and it opens on its own only when a call in it waits for your approval. Click a call to see its command and output (`chatToolCallCards`). The phone has its own switch for it in its Settings > Chat.
 
 Marked handovers: coordinators and their threads begin each part of
 the message they hand back with a marker. What happened comes first: ✅ Done, 🚀 Shipped,
@@ -3690,7 +3697,12 @@ version of the Projects features in Cursor and Claude Code.
   yours. Ghostex's playbook itself is never edited, so its updates keep
   arriving. Edit them in **Settings > Chat > Playbook overrides** (Edit…), from
   the **Playbook overrides** row of the New Coordinator dialog (Edit), or by
-  right-clicking a coordinator and choosing **Playbook overrides…**. The
+  right-clicking a coordinator and choosing **Playbook overrides…**. To read
+  the playbook your coordinators follow, click **View playbook** (in Settings,
+  in the New Coordinator dialog and in the right-click editor): it shows
+  Ghostex's playbook with the reply format you chose, read-only, then your
+  overrides in their own box marked as yours, with **Edit overrides** to
+  change them. It is the same text `ghostex coordinator guide` prints. The
   overrides are one text for every coordinator on that computer; there is no
   per-project playbook. Every coordinator, existing ones too, follows a change
   from its next message, with nothing to do on your side: when a Ghostex update
@@ -3764,44 +3776,61 @@ note list in one call, as the editors save), and `ghostex coordinator guide` (th
 coordinator's own playbook, ending with your playbook overrides). `ghostex coordinator --help` lists every flag. `ghostex orchestrator …`
 is an alias that runs the same commands.
 
-## Chief of Staff (the Ghostex-wide coordinator)
+## Main Hub (beta extension, off by default)
 
-Chief of Staff is one agent per computer that you can ask about anything: any session,
-agent, project or computer, and Ghostex itself ("what's stuck?", "what did the
-sidebar thread decide?", "how do I pair my phone?"). Its row, with the Ghostex
-flower, sits under the Spaces bar, so it stays put while you switch Spaces; the
-phone shows the same row.
+Main Hub is a beta extension, off until you turn it on in **Settings >
+Extensions > Main Hub**. Only you can switch it, not an agent. While it is off,
+your home folder's project (if you have one) is an ordinary project and nothing
+here applies.
 
-- **First open**: click the row and pick the agent Chief of Staff runs on (any agent a
-  coordinator can run on). After that it is one ongoing chat.
-- **What it does**: it reads every session's chat and screen, messages,
-  interrupts and types into any session, and answers other agents' questions
-  and permission prompts, all without asking you each time. It is a coordinator
-  too: work in a project goes to that project's coordinator (or a thread it
-  starts there when the project has none), and work on another computer goes to
-  that computer's Chief of Staff. Questions about Ghostex are answered from this guide.
-  "Ask anything about Ghostex" in the Help menu opens Chief of Staff's chat.
-- **What it can't do**: Collab, sharing, pairing a phone, Easy Connect,
-  connecting computers, Autopilot's approvals and limits, GBots, security
-  settings and installing things stay yours. Chief of Staff explains them and points to
-  the Settings page instead.
-- **Right-click the row**: New Chat starts it fresh while it keeps its goal,
-  memory notes and threads; Change Agent moves it to another agent the same way;
-  Goal & Instructions and Memory open its editors; Disable Extension turns Chief of Staff
-  off. On the phone, a long press on the row offers New Chat and Change Agent.
-- **Several computers**: each computer has its own Chief of Staff for its own projects.
-  With computers combined in the sidebar, the chevron to the left of this
-  computer's Chief of Staff (dimmed while only this computer has one) unfolds
-  the other computers' under it, like a project's sessions; on the phone, tap
-  it. With Separate by machine on, each computer's tab shows its own.
-- **Turning it off**: Settings > Extensions > Chief of Staff (on by default; only you can
-  switch it, not an agent). Off hides the row on the computer and the phone,
-  puts Chief of Staff's agent to sleep and takes away its control over your other agents;
-  its chat and memory are kept for when you turn it back on.
+Turned on, the project at your home folder (`~`, `C:\Users\<name>` on
+Windows) becomes **Main Hub**, with the Ghostex flower on its header: the home
+for chats that don't belong to a project. If you already had a project there, it
+becomes Main Hub as it is, with its sessions, history and settings. Rest the
+pointer on its header and a card beside the sidebar says what it is.
 
-`ghostex chief status`, `ghostex chief guide` (the playbook Chief of Staff follows),
-`ghostex chief new-chat`, `ghostex chief set-agent <agent-id>`, `ghostex chief
-send [--computer <name>] "<text>"`. Setting: `chiefHidden`.
+**Chief of Staff**, pinned first under Main Hub, is one agent per computer you
+can ask about anything: any session, agent, project or computer, and Ghostex
+itself ("what's stuck?", "how do I pair my phone?").
+
+- **Main Hub's header**: click it to fold or unfold, like any project. Right-click
+  for Main Hub's settings (Show on All Spaces, Ask Before New Chat, the folders
+  agents can't read) above the project's own menu (Move to Space, New Terminal
+  and the rest). It sits at the top of the Space it is in, or of every Space with
+  **Show Main Hub on all Spaces** (Settings > Agents > Home folder).
+- **First open**: before Chief of Staff runs, its row says "Pick an agent"; click
+  it and pick the agent it runs on.
+- **What Chief of Staff does**: it reads every session's chat and screen,
+  messages, interrupts and types into any session, and answers other agents'
+  questions and permission prompts, without asking you each time. Work in a
+  project goes to that project's coordinator, and work on another computer to
+  that computer's Chief of Staff. Collab, pairing, Easy Connect, connecting
+  computers, Autopilot's limits, GBots, security settings and installing things
+  stay yours.
+- **New Chat keeps your old chat**: right-click the Chief of Staff row for New
+  Chat (Ghostex asks first; tick Don't ask again to stop asking). The old chat
+  stays in Main Hub, asleep and named after the day it started. Change Agent
+  moves it to another agent the same way. On the phone, a long press on the row
+  offers New Chat and Change Agent.
+- **Your secret folders stay out of reach**: agents Ghostex starts in your home
+  folder can't read the folders listed in **Folders agents can't read in your
+  home folder** (Settings > Agents > Home folder): `.ssh`, `.aws`, `.gnupg`,
+  `.config/gh`, `.netrc`, keychains, password stores, browser profiles, agent
+  logins and the like. Claude Code's file tools are held to it, but its shell
+  commands are not; Codex is held to it for everything it runs; other agents are
+  not.
+- **Several computers**: with computers combined, every computer's home is one
+  Main Hub, each computer's Chief of Staff pinned at the top and other
+  computers' chats marked with their computer's name.
+- **Turning it off again** hides Main Hub and Chief of Staff, puts Chief of
+  Staff's agent to sleep and takes away its control over your other agents; its
+  chat and memory are kept for when you turn it back on.
+
+`ghostex chief status`, `ghostex chief guide`, `ghostex chief new-chat`,
+`ghostex chief set-agent <agent-id>`, `ghostex chief send [--computer <name>]
+"<text>"` (they say Main Hub is turned off while it is). Settings:
+`mainHubHidden`, `chiefShowOnAllSpaces`, `chiefConfirmNewChat`,
+`homeSecretFolders`.
 
 ## Autopilot (keep sessions going while you are away)
 
@@ -4256,11 +4285,17 @@ Ghostex is a client/server system: gxserver runs on each computer and owns its
 sessions, so any client can control agents on any machine.
 
 - **From a phone**: sidebar More Options > Mobile & Remote (Settings >
-  Remote, which has four tabs: Easy Connect, Tailscale, Remote machines (the
-  computers this one connects to) and Advanced; each tab shows its status, such
-  as Running or how many machines are connected, and the page reopens on the
-  last tab). Easy Connect installs the Tailcat helper, turns on SSH access with
-  one admin prompt, and gives a pairing QR code: under Connect a phone, click
+  Remote). At the top, above the tabs, the Current machine card shows the
+  computer you're on: its name (set by the system, the one phones and other
+  computers show), its short name and SSH access, which Easy Connect and
+  Tailscale need; Turn on SSH access asks for an admin password once, or
+  follow the macOS, Windows or Linux steps to do it by hand. Under it are four
+  tabs: Easy Connect, Tailscale, Remote machines (the computers this one
+  connects to) and Advanced; each tab shows its status, such as Running or how
+  many machines are connected, and the page reopens on the last tab. While SSH
+  access is off, the Easy Connect and Tailscale tabs say so with a link that
+  jumps to it. Easy Connect installs the Tailcat helper and gives a pairing QR
+  code: under Connect a phone, click
   the hidden QR to open it in a popup (Settings never shows the code until you ask)
   and scan it with the Ghostex mobile app. If the phone can't scan it, click
   Copy Easy Connect code under the QR and paste it in the phone's Scan code
@@ -4578,6 +4613,11 @@ sessions, so any client can control agents on any machine.
   why, with Reconnect and Remote Settings buttons. Ghostex keeps retrying a
   dropped connection, but a rejected username or password is not retried (so
   the account is not locked out); saving a new SSH password reconnects it.
+  A machine you reach through Easy Connect from before 11.1 that the other
+  computer turns away shows Pair this computer again and is not retried: on
+  the other computer open Settings > Remote and copy its Easy Connect code,
+  then paste it into this machine's Easy Connect code (Settings > Remote,
+  Edit) and Save, or use Pair in the pair-again notice.
   A computer that asks for a verification code (2FA) on every sign-in can't be
   signed in to by Ghostex itself. On macOS or Linux, open Advanced in the
   machine's Edit dialog and turn on **Reuse an existing SSH connection**, give
@@ -4667,7 +4707,7 @@ sessions, so any client can control agents on any machine.
   synced yet. The Ghostex app saves synced settings, so they reach a computer
   while its app is open. When two computers changed the same thing apart, the
   later change wins on both, and the computer whose change lost shows a
-  "Changed on …" note with Undo (the Sync page lists recent ones too). Your
+  "Changed on …" notice in the middle of the window with Undo (the Sync page lists recent ones too). Your
   computers lists each one with its last sync: Remove stops syncing with it,
   Add back lets it sync again. The Ghostex phone app keeps a copy too and
   passes changes on to each computer it connects to, so two computers that
@@ -4927,7 +4967,7 @@ After updating to 11.1, Ghostex shows a one-time notice: Ghostex went through a 
 
 ## Approvals (sensitive changes need your Touch ID, Windows Hello or phone)
 
-Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a bot, change a setting that loosens security (the Sync page's, for example), answer another session's permission prompt, or type into another session's terminal (a coordinator answering or typing into its own threads too), the change waits and an "Approval needed" card shows on your computer with Approve and Deny. A coordinator can still stop its own threads (Escape, Ctrl-C) and message them as before. Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows, or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. An approval is good for that one change only and lapses after 10 minutes unanswered (a connected computer's request waits a day, as one card whoever asks); a connected computer, once approved, stays connected for 30 days. The first time an agent messages a session in another project, or starts a session there (or in a folder that isn't a project yet), it asks too, with one card however many messages it sends meanwhile; once you approve, that agent can reach that project without asking again until it ends, and Approve or Deny closes that card on the computer and the phone at once. An agent's own project and its worktrees, and a coordinator's own threads, never ask. Starting an agent with approvals off ("accept all") when your own setting for that agent doesn't asks every time. Starting a Cloud Box, letting Cloud Boxes use one of your agent logins, and changing what a project's boxes get ask when an agent does them, and so does connecting this computer to a team backend (the last step of `ghostex team deploy`).
+Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a bot, or change a setting that loosens security (the Sync page's, for example), the change waits and an "Approval needed" notice opens in the middle of the Ghostex window on your computer, saying who asked and on which computer, with Deny and Approve. Enter never approves; Escape, Close or the corner X put it aside, still waiting, behind an "Approvals waiting" pill in the work area header: click the pill (or wait for the next notice) to bring it back. When several wait, they show one at a time ("1 of 3"). Agents can message, start sessions in, type into, stop and answer the permission prompts of sessions in any project without asking, as can the `ghostex` CLI and agents on your connected computers (within what you let that computer do). Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows, or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. Adding, editing, hiding or removing a computer that this one connects to (Settings > Remote, Remote machines), saving its SSH password, and changing this computer's short name never ask: they let no one in. An approval is good for that one change only and lapses after 10 minutes unanswered (a connected computer's request waits a day, as one card whoever asks); a connected computer, once approved, stays connected for 30 days. Starting an agent with approvals off ("accept all") when your own setting for that agent doesn't asks every time. Starting a Cloud Box, letting Cloud Boxes use one of your agent logins, and changing what a project's boxes get ask when an agent does them, and so does connecting this computer to a team backend (the last step of `ghostex team deploy`).
 
 Some things only you can do, in Settings, and agents can't even ask for them: installing an extension or turning one on and giving it permissions (Settings > Extensions), adding, changing or removing a secret provider (Settings > Secrets), joining a team, making invites, the team's Linear keys and its Slack flow (Settings > Workspaces), and the settings that loosen security: Agent approvals accept all, Workspaces, Cloud Boxes' Start boxes from your phone, Trust project folders automatically, Connectors, the custom commands Ghostex runs (Custom Title Command, Global worktree command, Custom editor command), Paste protection and Bot automations. An agent asked to do one of these explains it and points you to the page. This includes the `ghostex` CLI in your own terminal, which Ghostex can't tell apart from an agent. Turning things off never asks. Every request, approval and denial is in Settings > Security's log. Each session now gets its own key to Ghostex that ends with the session, and the shared key file only gives agent-level access. The keys that approve are kept in macOS Keychain, Windows Credential Manager or the Linux Secret Service; on Windows and Linux other programs running as you can read those, so the protection there is weaker than on macOS. The CLI waits for your answer (`--no-wait` returns at once).
 
@@ -6207,11 +6247,12 @@ Ghostex restarts. The first time Ghostex finds a display scale above 100% on
 COSMIC while Interface scale is raised, it offers once to set Interface scale back
 to 100%.
 Settings: `interfaceScalePercent`, `interfaceScaleAreasSeparately`, `linuxDisplayScale`, `agentManagerZoomPercent`, `sessionChatZoomPercent`, `filesZoomPercent`, `terminalFontSize`.
-Presets, right above Colours, are twenty theme cards grouped by family: Catppuccin
-(Mocha, Macchiato, Frappé, Latte), Dracula and Alucard, Solarized Dark and Light,
-Tokyo Night (Night, Storm, Moon, Day), Nord, Kanagawa (Wave, Dragon, Lotus),
-Everforest Dark and Light, and Gruvbox Material Dark and Light; a moon or sun marks
-dark and light ones. Use Tab or Shift+Tab to focus a card, then Enter or Space to
+Presets, right above Colours, are twenty theme cards in one row that scrolls
+sideways (swipe sideways, hold Shift and turn the wheel, or drag with a finger); a
+thin line separates families: Catppuccin (Mocha, Macchiato, Frappé, Latte), Dracula
+and Alucard, Solarized, Tokyo Night (Night, Storm, Moon, Day), Nord, Kanagawa (Wave,
+Dragon, Lotus), Everforest, and Gruvbox (Material); a moon or sun marks dark and
+light ones, and the picked card is brought into view when the page opens. Use Tab or Shift+Tab to focus a card, then Enter or Space to
 choose it. Clicking one or choosing it with the keyboard makes Ghostex look like
 that theme in one step: it switches Appearance to the preset's mode, sets that mode's colour to a custom colour
 and Colourfulness to Full so the work area, chat and terminals show the theme's own
@@ -6316,7 +6357,7 @@ in Windows Settings > Personalization > Colors, always makes the window opaque. 
 transparency on or off, or changing any of its choices, applies to every open Ghostex
 window at once, without restarting. On Windows the corners of menus and pop-ups follow
 Windows' own rounding.
-Behind the glass (on macOS, Windows and Linux) is four cards: Desktop and windows (the default) shows everything behind Ghostex. Wallpaper only shows just your desktop wallpaper, so other windows never show through; built-in wallpapers such as Sequoia show as a still picture of that wallpaper, and a solid color wallpaper shows everything behind the window. Picture shows a picture you choose instead, one for dark mode and one for light mode, side by side with Choose and Clear buttons; a mode with no picture shows everything behind the window. Live shows something moving behind the glass, chosen for dark mode and for light mode (only dark mode with Transparency set to Dark only): one of eight calm animations drawn in your theme's colours (Aurora, Ink, Drift, Nebula, Silk, Bokeh, Waves, Mesh), so switching themes or Colourfulness recolours it at once, or, on macOS and Linux, Your video, a .mov, .mp4 or .m4v file you choose, which plays muted, looping and blurred (a mode set to Your video with no file shows everything behind the window). On Windows, Live pauses when Show animations is off in Windows Settings > Accessibility > Visual effects (showing a still frame) and in battery saver. Speed sets how fast the animation moves (a quarter of its pace to twice as fast) and Brightness how bright it glows (60% by default, a soft glow that shows through the tints; every animation is about as bright as the others at the same setting); your own video plays as it is. An animation loops every two minutes without a seam, and changing the animation, theme or brightness, or switching between an animation and your video, fades rather than jumping. Nothing is downloaded. Live pauses whenever Ghostex is in the background, hidden or minimized, while the display sleeps and in Low Power Mode; Reduce Motion shows a still frame; and Play only when plugged in (on by default) pauses it on battery. For Wallpaper, Picture and Your video, Picture position picks Moves with the window (the default: the picture covers the window and moves with it) or Stays with the desktop (the picture stays put while the window moves over it, and can trail the window while you drag it) (`windowGlassSource`, `windowGlassImagePlacement`, `windowGlassImageDark`, `windowGlassImageLight`, `windowGlassLiveStyleDark`, `windowGlassLiveStyleLight`, `windowGlassVideoDark`, `windowGlassVideoLight`, `windowGlassLiveSpeed`, `windowGlassLiveBrightness`, `windowGlassVideoOnlyOnPower`).
+Behind the glass (on macOS, Windows and Linux) is four cards: Desktop and windows (the default) shows everything behind Ghostex; on macOS, in full screen (where nothing sits behind the window) it shows your desktop wallpaper blurred and tinted the same way, and leaving full screen shows everything behind Ghostex again (a solid color wallpaper stays black in full screen). Wallpaper only shows just your desktop wallpaper, so other windows never show through; built-in wallpapers such as Sequoia show as a still picture of that wallpaper, and a solid color wallpaper shows everything behind the window. Picture shows a picture you choose instead, one for dark mode and one for light mode, side by side with Choose and Clear buttons; a mode with no picture shows everything behind the window. Live shows something moving behind the glass, chosen for dark mode and for light mode (only dark mode with Transparency set to Dark only): one of eight calm animations drawn in your theme's colours (Aurora, Ink, Drift, Nebula, Silk, Bokeh, Waves, Mesh), so switching themes or Colourfulness recolours it at once, or, on macOS and Linux, Your video, a .mov, .mp4 or .m4v file you choose, which plays muted, looping and blurred (a mode set to Your video with no file shows everything behind the window). On Windows, Live pauses when Show animations is off in Windows Settings > Accessibility > Visual effects (showing a still frame) and in battery saver. Speed sets how fast the animation moves (a quarter of its pace to twice as fast) and Brightness how bright it glows (60% by default, a soft glow that shows through the tints; every animation is about as bright as the others at the same setting); your own video plays as it is. An animation loops every two minutes without a seam, and changing the animation, theme or brightness, or switching between an animation and your video, fades rather than jumping. Nothing is downloaded. Live pauses whenever Ghostex is in the background, hidden or minimized, while the display sleeps and in Low Power Mode; Reduce Motion shows a still frame; and Play only when plugged in (on by default) pauses it on battery. For Wallpaper, Picture and Your video, Picture position picks Moves with the window (the default: the picture covers the window and moves with it) or Stays with the desktop (the picture stays put while the window moves over it, and can trail the window while you drag it) (`windowGlassSource`, `windowGlassImagePlacement`, `windowGlassImageDark`, `windowGlassImageLight`, `windowGlassLiveStyleDark`, `windowGlassLiveStyleLight`, `windowGlassVideoDark`, `windowGlassVideoLight`, `windowGlassLiveSpeed`, `windowGlassLiveBrightness`, `windowGlassVideoOnlyOnPower`).
 On Linux, transparency works on Xorg and Wayland desktops (the desktop app currently uses XWayland for its embedded pages). Desktop and windows uses your compositor's blur: on Hyprland, keep background blur enabled; on Xorg, run a compositor with transparency and blur support. The compositor controls the blur's strength. Picture and Live animations work without compositor blur. Wallpaper only reads the picture reported by Hyprpaper, swww/awww, GNOME, Cinnamon, MATE or a single-screen Plasma desktop; when no readable picture is available it shows Desktop and windows. Stays with the desktop works on X11 and Hyprland; other native Wayland compositors cannot report the position needed for this mode, so use Moves with the window. Your video requires FFmpeg (included as a Linux package dependency). Live respects battery power, the power-saver profile, and disabled desktop animations (`windowGlass`, `windowGlassSource`, `windowGlassImagePlacement`, `windowGlassVideoOnlyOnPower`).
 While glass is on, four sliders tune it, each in dark mode and in light mode: Sidebar tint and Work area tint set how much of the desktop each area hides, independently, so either can be the darker one; lower shows more of your desktop.
 Keep Awake (Power)

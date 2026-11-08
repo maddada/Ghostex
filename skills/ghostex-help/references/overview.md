@@ -62,9 +62,9 @@ hotkeys Every shortcut and its default binding
   shortcut, and recent session. Cmd+P opens it on Recent Sessions.
 - **Settings** (Cmd+,): **Updates** first (with how many updates count), then six labelled groups:
   **Working** (Chat, Sidebar & Sessions, Terminal, Files & Links), **Appearance** (Interface,
-  Notifications, Hotkeys), **Voice** (Dictation, Voice Agent), **Agents & Accounts** (Agents,
+  Notifications, Hotkeys), **Voice** (Dictation, Voice Agent), **Agents & accounts** (Agents,
   Accounts, Autopilot, Secrets), **Connections** (Remote, Sync, Projects, Collab, Integrations) and
-  **Privacy & System** (Security, Power & Sleep, About); a group shows only while one of its pages
+  **Privacy & system** (Security, Power & Sleep, About); a group shows only while one of its pages
   does. Then **Extensions** at the bottom (the built-in feature
   switches and the extensions you can install), with a chevron under it that folds the
   add-on pages (Workspaces, Cloud Boxes, Connectors, Actions, Open In, OS
