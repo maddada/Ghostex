@@ -126,6 +126,8 @@ mod share_popover_view;
 mod space_editor_demo;
 #[path = "../app/window/space_editor_modal.rs"]
 mod space_editor_modal;
+#[path = "native_modal_demo/start_menu_click.rs"]
+mod start_menu_click_demo;
 #[path = "native_modal_demo/start_menu.rs"]
 mod start_menu_demo;
 #[path = "native_modal_demo/update_available.rs"]
@@ -583,6 +585,7 @@ fn main() {
                 "updates-menu" => updates_menu_demo::open(&demo, cx),
                 "share-popover" => share_popover_demo::open(&demo, cx),
                 "start-menu" => start_menu_demo::open(&demo, cx),
+                "start-menu-click" => start_menu_click_demo::open(&demo, cx),
                 "remote-setup" => remote_setup_demo::open(&demo, cx),
                 "delayed-send" => delayed_send_demo::open(&demo, cx),
                 "space-editor" => space_editor_demo::open(&demo, cx),

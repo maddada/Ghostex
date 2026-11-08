@@ -1,6 +1,7 @@
 //! The Start (Quick Actions) menu's rows: the project's own Actions, then the Global Actions under
 //! a "Global" heading, then Configure. `build_gpui_titlebar_actions_popup_menu` gives it the menu
 //! already styled; the native modal demo draws this same file (`start-menu`).
+//! `on_start_menu_picks` is how the window that hosts the menu hears its rows.
 
 use gpui_component::menu::PopupMenu;
 
@@ -67,5 +68,49 @@ pub(crate) fn titlebar_actions_menu_rows(
                 "Configure".to_string(),
                 false,
             )
+        })
+}
+
+/// What a Start menu row asks for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum StartMenuPick {
+    /// The project's own Action at this position of the menu.
+    Project(usize),
+    /// A Global Action, by id.
+    Global(String),
+    Configure,
+}
+
+/// Registers every row action of the Start menu on the element of the window that hosts it, and
+/// hands each click to `pick`.
+///
+/// CDXC:AgentLauncher 2026-11-08 WHY: the Start menu draws in its own popup window, whose actions
+/// reach the main window only through the listeners that window registers. The Global rows' action
+/// was missing from that list, so a click on a Global Action did nothing (issue #501 follow-up).
+/// The menu's file now owns the list next to the rows that dispatch it, so a new kind of row cannot
+/// be drawn without being heard; the native modal demo registers it the same way.
+pub(crate) fn on_start_menu_picks<E: gpui::InteractiveElement>(
+    element: E,
+    pick: impl Fn(&StartMenuPick, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> E {
+    let pick = std::rc::Rc::new(pick);
+    let (project, global, configure) = (pick.clone(), pick.clone(), pick);
+    element
+        .on_action(move |action: &RunGpuiTitlebarAction, window, cx| {
+            project(
+                &StartMenuPick::Project(action.action_index as usize),
+                window,
+                cx,
+            )
+        })
+        .on_action(move |action: &RunGpuiTitlebarGlobalAction, window, cx| {
+            global(
+                &StartMenuPick::Global(action.command_id.clone()),
+                window,
+                cx,
+            )
+        })
+        .on_action(move |_: &ConfigureGpuiTitlebarActions, window, cx| {
+            configure(&StartMenuPick::Configure, window, cx)
         })
 }

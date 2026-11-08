@@ -833,16 +833,14 @@ impl Render for GhostexGpuiApp {
                     }
                 }),
             )
-            .on_action(
-                cx.listener(|this, action: &RunGpuiTitlebarAction, window, cx| {
-                    this.run_gpui_titlebar_action_index(action.action_index as usize, window, cx);
-                }),
-            )
-            .on_action(
-                cx.listener(|this, action: &RunGpuiTitlebarGlobalAction, window, cx| {
-                    this.run_gpui_titlebar_global_action(&action.command_id, window, cx);
-                }),
-            )
+            .map(|this| {
+                crate::app::titlebar::actions_menu_rows::on_start_menu_picks(
+                    this,
+                    cx.listener(|this, pick: &crate::app::titlebar::actions_menu_rows::StartMenuPick, window, cx| {
+                        this.run_start_menu_pick(pick.clone(), window, cx);
+                    }),
+                )
+            })
             .on_action(
                 cx.listener(|this, action: &RunGpuiTitlebarGitMenuAction, _window, cx| {
                     this.run_gpui_titlebar_git_menu_row(action.row_index as usize, cx);
@@ -874,11 +872,6 @@ impl Render for GhostexGpuiApp {
                         GpuiTitlebarGitMenuActionId::SyncRemote.selector(),
                         cx,
                     );
-                }),
-            )
-            .on_action(
-                cx.listener(|this, _: &ConfigureGpuiTitlebarActions, window, cx| {
-                    this.open_gpui_settings_actions_modal_from_titlebar(window, cx);
                 }),
             )
             .on_action(

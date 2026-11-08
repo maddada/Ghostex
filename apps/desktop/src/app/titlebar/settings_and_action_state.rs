@@ -308,6 +308,25 @@ impl GhostexGpuiApp {
         )
     }
 
+    /// A Start menu row's click, forwarded from the window that hosts the menu.
+    pub(crate) fn run_start_menu_pick(
+        &mut self,
+        pick: crate::app::titlebar::actions_menu_rows::StartMenuPick,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        use crate::app::titlebar::actions_menu_rows::StartMenuPick;
+        match pick {
+            StartMenuPick::Project(index) => self.run_gpui_titlebar_action_index(index, window, cx),
+            StartMenuPick::Global(command_id) => {
+                self.run_gpui_titlebar_global_action(&command_id, window, cx)
+            }
+            StartMenuPick::Configure => {
+                self.open_gpui_settings_actions_modal_from_titlebar(window, cx)
+            }
+        }
+    }
+
     /// A Start menu Global Action row: resolved by `plan_sidebar_command_run` with the global
     /// scope, as a project row's pinned Global Action and `ghostex run-action <id> --scope global`
     /// are, and run in the active project (a Terminal Action in its folder).
@@ -324,6 +343,11 @@ impl GhostexGpuiApp {
     ) {
         if !self.built_in_extension_enabled(ghostex_settings_catalog::built_in_extensions::ACTIONS)
         {
+            self.show_global_action_failed_toast(
+                "Actions is turned off",
+                "Turn it on in Settings > Extensions to run Actions.",
+                cx,
+            );
             return;
         }
         let plan = ghostex_gx_core::plan_sidebar_command_run(
@@ -332,7 +356,14 @@ impl GhostexGpuiApp {
             self.gx_store.core.focus().active_project.as_ref(),
         );
         let payload = match plan {
-            ghostex_gx_core::SidebarCommandRun::Unsupported => return,
+            ghostex_gx_core::SidebarCommandRun::Unsupported => {
+                self.show_global_action_failed_toast(
+                    "Global Action not found",
+                    "It may have been removed. Check it in Settings > Actions.",
+                    cx,
+                );
+                return;
+            }
             ghostex_gx_core::SidebarCommandRun::OpenSettings => {
                 self.open_gpui_settings_actions_modal_from_titlebar(window, cx);
                 return;
@@ -340,6 +371,11 @@ impl GhostexGpuiApp {
             ghostex_gx_core::SidebarCommandRun::Run { action, .. } => action,
         };
         let Ok(action) = gpui_sidebar_command_action_from_json(&payload.to_string()) else {
+            self.show_global_action_failed_toast(
+                "Couldn't run Global Action",
+                "Its saved command or address could not be read. Open it in Settings > Actions and save it again.",
+                cx,
+            );
             return;
         };
         let project_choice = self.active_action_command_id.clone();
@@ -354,6 +390,31 @@ impl GhostexGpuiApp {
             self.active_action_command_id = project_choice;
             cx.notify();
         }
+    }
+
+    /// A Start menu Global Action that could not run says so instead of doing nothing.
+    fn show_global_action_failed_toast(
+        &mut self,
+        title: &str,
+        description: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.app_toast_id_counter = self.app_toast_id_counter.wrapping_add(1);
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: format!("gpui-app-toast-{}", self.app_toast_id_counter),
+                level: GpuiAppToastLevel::Error,
+                title: title.to_string(),
+                description: Some(description.to_string()),
+                copy_text: None,
+                action: None,
+                loading: false,
+                persistent: false,
+                duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
+                epoch: 0,
+            },
+            cx,
+        );
     }
 
     /// The settings poll's read of the titlebar's Actions: only when the sidebar HUD moved since

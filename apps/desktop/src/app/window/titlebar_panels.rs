@@ -7,6 +7,7 @@ mod tips;
 
 use super::resources_style::*;
 use crate::app::helpers::*;
+use crate::app::titlebar::actions_menu_rows::{StartMenuPick, on_start_menu_picks};
 use crate::app::titlebar::resources_clean_ram_prompt::gpui_resources_clean_ram_prompt;
 use crate::*;
 
@@ -306,17 +307,19 @@ impl Render for GpuiTitlebarPopupWindow {
                     });
                 }),
             )
-            .on_action(
-                cx.listener(|this, action: &RunGpuiTitlebarAction, _window, cx| {
-                    this.update_main_window(cx, |app, window, cx| {
-                        app.run_gpui_titlebar_action_index(
-                            action.action_index as usize,
-                            window,
-                            cx,
-                        );
-                    });
-                }),
-            )
+            // The Start menu's rows (project Actions, Global Actions, Configure), registered by the
+            // menu's own file so no row can be left out (actions_menu_rows.rs).
+            .map(|this| {
+                on_start_menu_picks(
+                    this,
+                    cx.listener(|this, pick: &StartMenuPick, _window, cx| {
+                        let pick = pick.clone();
+                        this.update_main_window(cx, move |app, window, cx| {
+                            app.run_start_menu_pick(pick, window, cx);
+                        });
+                    }),
+                )
+            })
             .on_action(
                 cx.listener(|this, action: &LaunchGpuiExtension, window, cx| {
                     let extension_id = action.extension_id.clone();
@@ -415,13 +418,6 @@ impl Render for GpuiTitlebarPopupWindow {
                             GpuiTitlebarGitMenuActionId::SyncRemote.selector(),
                             cx,
                         );
-                    });
-                }),
-            )
-            .on_action(
-                cx.listener(|this, _: &ConfigureGpuiTitlebarActions, _window, cx| {
-                    this.update_main_window(cx, |app, window, cx| {
-                        app.open_gpui_settings_actions_modal_from_titlebar(window, cx);
                     });
                 }),
             )
