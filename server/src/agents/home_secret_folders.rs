@@ -65,7 +65,8 @@ pub(crate) fn with_home_secret_folders_denied(
     if cfg!(test) || command.trim().is_empty() {
         return command.to_string();
     }
-    if !cwd.is_some_and(crate::chief::is_home_folder) {
+    // Part of the Main Hub beta extension: off, launches at the home folder are as before.
+    if !cwd.is_some_and(crate::chief::is_home_folder) || !crate::chief::chief_shown() {
         return command.to_string();
     }
     let folders = home_secret_folders();

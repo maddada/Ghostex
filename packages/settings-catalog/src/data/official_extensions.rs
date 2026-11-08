@@ -309,16 +309,18 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("hotkeys", J::Arr(&[J::Str("toggleVoiceAgent"), J::Str("voiceCallAboutSession"), J::Str("holdToTalk")])),
     ]),
     // CDXC:Chief 2026-11-08 DECISION:
-    // User (Q1734-Q1750): a Ghostex-wide coordinator named Chief, "enabled by default but it's an extension". A whole-feature entry like the voice agent, on by default with a new key (`chiefHidden`, default false) that only the user may change (`user_only`, so no agent can switch it through the API). Off hides its sidebar row on the desktop and the phone, puts its agent to sleep and takes its head role away at once (server/src/chief/), and keeps its chat and memory, so turning it back on picks up where it left off.
-    // SEE-ALSO: server/src/chief/ (the session, the head role), packages/settings-catalog/src/help/supplemental.rs (`chiefHidden`).
+    // User: "please disable chief of staff for now and make it an extension so ppl aren't confused by it until i finish working on it (call it beta in settings pls)", then "i mean the Main Hub thingy". One whole-feature entry, Main Hub, with a Beta badge, off by default (`mainHubHidden`, default true, user-only so no agent can switch it): off, the home project is an ordinary project (gxserver publishes no `isHome` or `isChief`, and hides Chief of Staff's chats), Chief of Staff's agent sleeps and loses its head role, the home folder's secret-folder list is not applied, and nothing says Main Hub or Chief of Staff; on, all of it comes back with its chat and memory. Supersedes Chief's own entry (Q1734-Q1750, on by default).
+    // SEE-ALSO: server/src/chief/ (the session, the head role, `chief_on`), packages/settings-catalog/src/data/defaults.rs (`mainHubHidden`), packages/settings-catalog/src/help/supplemental.rs.
     J::Obj(&[
-        ("description", J::Str("The home for chats that don't belong to a project, led by an agent you can ask about any session, agent, project or computer, or about Ghostex itself. It can message, steer and answer your other agents, and hands project work to that project's coordinator.")),
+        ("description", J::Str("The home for chats that don't belong to a project, with Chief of Staff, an agent that can see and steer all your other agents, pinned at the top.")),
         ("category", J::Str("features")),
         ("id", J::Str("chief")),
         ("placement", J::Str("feature")),
-        ("settingsKey", J::Str("chiefHidden")),
+        ("settingsKey", J::Str("mainHubHidden")),
         ("appWide", J::Bool(true)),
-        ("title", J::Str("Chief of Staff")),
+        ("badge", J::Str("Beta")),
+        ("title", J::Str("Main Hub")),
+        ("settingKeys", J::Arr(&[J::Str("chiefShowOnAllSpaces"), J::Str("chiefConfirmNewChat"), J::Str("homeSecretFolders")])),
     ]),
     // CDXC:VoiceMode 2026-10-21 DECISION:
     // User: Read aloud ships as a Ghostex extension, disabled by default (2026-10-20), and (Q23) as a built-in extension, not a Store extension: a Store extension cannot reach the chat composer, a message's actions or the phone. A whole-feature entry like Workspaces, with a new key (`readAloudHidden`, default on = hidden) because the settings file stores every default; off hides the reply action, the ⋯ menu rows, the Voice and Speed rows and the two hotkeys, and keeps their saved values. No `platforms` list: the switch also governs the phone and Ghostex in a browser that talk to this computer, so it exists on Linux too, where the desktop draws no controls (Q25; `readAloudUnavailable` says why).

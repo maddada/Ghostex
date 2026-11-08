@@ -33,6 +33,8 @@ pub(crate) struct OfficialExtension {
     pub(crate) app_wide: bool,
     pub(crate) requires_agent_cli: Option<String>,
     pub(crate) requires_extension: Option<String>,
+    /// A small label beside the title ("Beta").
+    pub(crate) badge: Option<String>,
 }
 
 pub(crate) fn text(value: &Value, key: &str) -> String {
@@ -102,6 +104,7 @@ pub(crate) fn official_extensions() -> &'static [OfficialExtension] {
                         app_wide: item.get("appWide").and_then(Value::as_bool) == Some(true),
                         requires_agent_cli: optional_text(item, "requiresAgentCli"),
                         requires_extension: optional_text(item, "requiresExtension"),
+                        badge: optional_text(item, "badge"),
                     })
                     .collect()
             })

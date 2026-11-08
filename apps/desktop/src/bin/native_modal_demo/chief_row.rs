@@ -10,7 +10,8 @@
 //! row heads the home project and its loose sessions, then the next project), `home-combined`
 //! (computers combined: the home section's title, then each computer's header with its own home
 //! sessions), `home-earlier` (the home unfolded with Chief's earlier chats asleep in it),
-//! `home-setup` (Main Hub before Chief of Staff's first open: the Pick an agent row),
+//! `home-setup` (Main Hub before Chief of Staff's first open: the Pick an agent row), `home-off`
+//! (the Main Hub extension off, the default: the home folder is an ordinary project),
 //! `home-tooltip` (the Main Hub tooltip under the header, drawn in the tooltip bubble's look).
 use super::chief_row_view::*;
 use gpui::prelude::FluentBuilder;
@@ -111,7 +112,8 @@ impl Render for ChiefRowPreview {
                 .child(glyph.to_string())
         };
         // The project header as project_header.rs lays it out, in its block (render.rs).
-        let project_header = || {
+        // `letter` on a tile of `tile`/`ink` (a favicon-less project's letter tile, project_header.rs).
+        let project_header = |letter: &str, name: &str, tile: Hsla, letter_ink: Hsla| {
             div().pl(px(24.0)).pr(px(7.0)).child(
                 h_flex()
                     .relative()
@@ -136,15 +138,19 @@ impl Render for ChiefRowPreview {
                         div()
                             .size(px(16.0))
                             .rounded(px(3.0))
-                            .bg(rgb(0x3b82f6))
+                            .bg(tile)
                             .text_size(px(10.0))
-                            .text_color(rgb(0xffffff))
+                            .text_color(letter_ink)
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child("G"),
+                            .child(letter.to_string()),
                     )
-                    .child(div().font_weight(gpui::FontWeight::LIGHT).child("Ghostex")),
+                    .child(
+                        div()
+                            .font_weight(gpui::FontWeight::LIGHT)
+                            .child(name.to_string()),
+                    ),
             )
         };
         let session = |title: &str| {
@@ -264,6 +270,21 @@ impl Render for ChiefRowPreview {
                 heading("Pinned"),
                 chief_row(None, Some(dot(WORKING))),
                 heading("Sessions"),
+                home_session("Preventing Mac screen lock", false, Some(dot(WORKING)))
+                    .into_any_element(),
+                home_session("Disk cleanup and move to /Volumes", false, None).into_any_element(),
+                home_session("CPU usage investigation", true, None).into_any_element(),
+            ],
+            // Main Hub off (the default): the home folder is an ordinary project, no Chief of Staff.
+            "home-off" => vec![
+                div()
+                    .child(project_header(
+                        "M",
+                        "madda",
+                        colors.muted.opacity(0.12),
+                        colors.muted,
+                    ))
+                    .into_any_element(),
                 home_session("Preventing Mac screen lock", false, Some(dot(WORKING)))
                     .into_any_element(),
                 home_session("Disk cleanup and move to /Volumes", false, None).into_any_element(),
@@ -393,7 +414,12 @@ impl Render for ChiefRowPreview {
                 column
                     .children(home_rows)
                     .child(div().h(px(10.0)))
-                    .child(project_header())
+                    .child(project_header(
+                        "G",
+                        "Ghostex",
+                        rgb(0x3b82f6).into(),
+                        rgb(0xffffff).into(),
+                    ))
                     .child(session("Main Coordinator"))
             })
             .when(shown && !home, |column| {
@@ -430,7 +456,12 @@ impl Render for ChiefRowPreview {
             })
             .when(!bots && !unified && !home, |column| {
                 column
-                    .child(project_header())
+                    .child(project_header(
+                        "G",
+                        "Ghostex",
+                        rgb(0x3b82f6).into(),
+                        rgb(0xffffff).into(),
+                    ))
                     .child(session("Main Coordinator"))
                     .child(session("Outdated dependencies audit"))
             });

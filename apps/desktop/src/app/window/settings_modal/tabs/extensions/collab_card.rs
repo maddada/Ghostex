@@ -208,6 +208,7 @@ impl ExtensionsTab {
         let card = grid_card(
             p,
             GridCardSpec {
+                badge: None,
                 id: SharedString::from("official-collab"),
                 icon: tabler_tile(p, "modals/settings/users.svg", false),
                 control: Some(control),

@@ -503,7 +503,7 @@ impl GhostexGpuiApp {
         // The page has no settings file of its own to turn the extension off in.
         if cfg!(not(target_arch = "wasm32")) && this_computer {
             items.push(json!({ "separator": true }));
-            items.push(json!({ "label": "Disable Extension", "icon": "power", "command": chief_command("disable", &machine) }));
+            items.push(json!({ "label": "Turn Off Main Hub", "icon": "power", "command": chief_command("disable", &machine) }));
         }
         json!(items)
     }
@@ -910,7 +910,7 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    /// Disable Extension (and its Undo): flips `chiefHidden` in this computer's settings, the way
+    /// Disable Extension (and its Undo): flips `mainHubHidden` in this computer's settings, the way
     /// the extension's switch in Settings > Extensions does.
     pub(crate) fn set_native_sidebar_chief_enabled(
         &mut self,
@@ -921,7 +921,7 @@ impl GhostexGpuiApp {
         {
             self.handle_gpui_app_modal_update_settings_patch_message(
                 &json!({
-                    "patch": { "chiefHidden": !enabled },
+                    "patch": { "mainHubHidden": !enabled },
                     "source": "sidebar:chief",
                     "type": "updateSettingsPatch",
                 }),

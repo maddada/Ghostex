@@ -95,6 +95,8 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
         .and_then(Value::as_array)
         .map(|list| {
             list.iter()
+                // Chief of Staff's chats while Main Hub is off (server/src/chief/presentation.rs).
+                .filter(|session| session.get("mainHubHidden") != Some(&Value::Bool(true)))
                 .filter(|session| match &active_project_ids {
                     None => true,
                     Some(ids) => session
@@ -246,7 +248,7 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
                         insert_present(&mut project_map, "path", project.get("path"));
                         insert_present(&mut project_map, "projectId", project.get("projectId"));
                         // The home project, whose header is Main Hub's row (server/src/chief/home.rs).
-                        if crate::chief::is_home_project(project) {
+                        if crate::chief::is_home_project(project) && crate::chief::chief_shown() {
                             project_map.insert("isHome".to_string(), json!(true));
                         }
                         // The Unified list names a project by its repository, so one repository on two computers is one project (packages/gx-core/src/unified_sidebar/repo.rs).

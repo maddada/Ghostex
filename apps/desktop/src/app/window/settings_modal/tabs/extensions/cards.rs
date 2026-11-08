@@ -209,6 +209,8 @@ pub(crate) struct GridCardSpec {
     pub(crate) control: Option<AnyElement>,
     pub(crate) leading: Option<AnyElement>,
     pub(crate) title: SharedString,
+    /// A small outlined label after the title ("Beta"), like a Settings row's badge.
+    pub(crate) badge: Option<SharedString>,
     pub(crate) description: SharedString,
     /// Extra content under the description (the chat bar option row).
     pub(crate) extra: Option<AnyElement>,
@@ -294,17 +296,35 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                 ),
         )
         .child(
-            div()
+            h_flex()
                 .mt(px(10.0))
                 .w_full()
                 .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .text_size(px(14.0))
-                .line_height(px(20.0))
-                .text_color(hsla(p.foreground))
-                .child(spec.title),
+                .gap(px(6.0))
+                .child(
+                    div()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(px(14.0))
+                        .line_height(px(20.0))
+                        .text_color(hsla(p.foreground))
+                        .child(spec.title),
+                )
+                .children(spec.badge.map(|badge| {
+                    div()
+                        .flex_shrink_0()
+                        .px(px(6.0))
+                        .py(px(1.0))
+                        .rounded(px(6.0))
+                        .border_1()
+                        .border_color(hsla(p.hairline))
+                        .text_size(px(11.0))
+                        .line_height(px(14.0))
+                        .text_color(hsla(p.muted))
+                        .child(badge)
+                })),
         )
         .child(
             div()

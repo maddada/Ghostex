@@ -2,7 +2,7 @@
 //!
 //! - [`record`]: which session is this computer's Chief (`metadata.chiefSession`), written only by
 //!   gxserver itself when it creates that session.
-//! - [`feature`]: the built-in extension's switch (`chiefHidden`, on by default).
+//! - [`feature`]: the built-in extension's switch (`mainHubHidden`, the Main Hub extension, off by default).
 //! - [`head`]: the head role, given per request at the auth gate to that one session while the
 //!   switch is on, and never stored with a token.
 //! - [`home`]: the home project at the home folder, whose header is Chief's row.
@@ -26,7 +26,9 @@ mod session;
 mod sweep;
 
 pub(crate) use endpoint::{handle_chief_http, CHIEF_ENDPOINT};
-pub(crate) use feature::{chief_off_message, chief_on, refuses_message};
+pub(crate) use feature::{
+    chief_off_message, chief_on, chief_shown, refuses_message, remember_chief_shown,
+};
 pub(crate) use head::settle_principal;
 pub(crate) use home::{is_home_folder, is_home_project};
 pub(crate) use presentation::{

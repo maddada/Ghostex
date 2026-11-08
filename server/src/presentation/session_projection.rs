@@ -74,7 +74,7 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
     output.insert("isFavorite".to_string(), value_field(project, "isFavorite"));
     output.insert("isPinned".to_string(), value_field(project, "isPinned"));
     // The home project, whose header is Main Hub's row (chief/home.rs). Present only when true.
-    if crate::chief::is_home_project(project) {
+    if crate::chief::is_home_project(project) && crate::chief::chief_shown() {
         output.insert("isHome".to_string(), Value::Bool(true));
     }
     insert_optional_value(&mut output, "path", project.get("path").cloned());

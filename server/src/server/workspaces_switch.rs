@@ -59,7 +59,9 @@ pub(crate) fn start_workspaces_switch_watch(state: Arc<AppState>) {
     });
 }
 
-fn publish_presentation_snapshot(state: &AppState) -> std::result::Result<(), DomainStateError> {
+pub(crate) fn publish_presentation_snapshot(
+    state: &AppState,
+) -> std::result::Result<(), DomainStateError> {
     let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
         code: "internalError",
         message: format!("SQLite gxserver state error: {error}"),

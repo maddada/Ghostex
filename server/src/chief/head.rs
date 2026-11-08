@@ -6,7 +6,7 @@
 //! get, must vanish when the extension is turned off, and must never cover the owner-only
 //! sensitive actions. So no token is ever stored with the head role (`SessionRole::stored`), the
 //! role is worked out here on every request from two things no agent can write (the record
-//! gxserver keeps for the session it created itself, and the user-only `chiefHidden` setting), and
+//! gxserver keeps for the session it created itself, and the user-only `mainHubHidden` setting), and
 //! what the role skips is one rule (`Principal::skips_approval`). Turning the extension off, New
 //! Chat and Change Agent therefore take the role away at once, with no token to revoke.
 //! SEE-ALSO: server/src/security/capability.rs (`SessionRole::Head`, `skips_approval`),

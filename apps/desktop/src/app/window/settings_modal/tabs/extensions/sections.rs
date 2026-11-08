@@ -304,6 +304,7 @@ impl ExtensionsTab {
                         control: Some(control.into_any_element()),
                         leading: None,
                         title: extension.title.clone().into(),
+                        badge: extension.badge.clone().map(Into::into),
                         description: extension.description.clone().into(),
                         extra,
                         scope_summary: scoped
@@ -662,6 +663,7 @@ impl ExtensionsTab {
         grid_card(
             p,
             GridCardSpec {
+                badge: None,
                 id: SharedString::from(format!("installed-{id}")),
                 icon: extension_icon_tile(p, icon_bytes, has_source, false),
                 control: Some(control.into_any_element()),
@@ -755,6 +757,7 @@ impl ExtensionsTab {
         grid_card(
             p,
             GridCardSpec {
+                badge: None,
                 id: SharedString::from(format!("store-{name}")),
                 icon: extension_icon_tile(p, icon_bytes, has_source, false),
                 control: Some(control.into_any_element()),
@@ -961,6 +964,7 @@ impl ExtensionsTab {
         let card = grid_card(
             p,
             GridCardSpec {
+                badge: None,
                 id: SharedString::from(format!("custom-{id}")),
                 icon: tabler_tile(p, "modals/settings/world.svg", false),
                 control: Some(control.into_any_element()),

@@ -1,5 +1,6 @@
-//! Turning Chief off stops its agent: every five seconds this reads the switch, and when it goes
-//! off (or gxserver starts with it off) it puts Chief's session to sleep. Its chat, memory and
+//! Turning Main Hub off stops Chief's agent: every five seconds this reads the switch, and when it
+//! goes off (or gxserver starts with it off) it puts Chief's session to sleep. A flip either way
+//! also republishes the sidebar, which draws Main Hub only while it is on (presentation.rs). Its chat, memory and
 //! threads stay; the head role is already gone by then (head.rs reads the switch per request).
 
 use std::sync::Arc;
@@ -25,7 +26,18 @@ pub(crate) fn start_chief_sweep(state: Arc<AppState>) {
             }
             let on = super::chief_on(&state.paths);
             let turned_off = !on && was_on != Some(false);
+            let flipped = was_on.is_some_and(|was| was != on);
             was_on = Some(on);
+            super::remember_chief_shown(on);
+            // Main Hub on or off changes the home's header, Chief's rows and every client's list:
+            // one fresh snapshot, as the Workspaces switch sends (server/workspaces_switch.rs).
+            if flipped {
+                let publisher = state.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    crate::server::publish_presentation_snapshot(&publisher)
+                })
+                .await;
+            }
             if !turned_off {
                 continue;
             }

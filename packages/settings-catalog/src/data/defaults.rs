@@ -151,7 +151,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:VoiceMode 2026-10-25 DECISION: the voice agent is a built-in extension, on by default (official_extensions.rs).
     ("voiceAgentHidden", J::Bool(false)),
     // CDXC:Chief 2026-11-08 DECISION: Chief is a built-in extension, on by default (official_extensions.rs).
-    ("chiefHidden", J::Bool(false)),
+    // CDXC:Chief 2026-11-08 DECISION: User: "please disable chief of staff for now and make it an extension so ppl aren't confused by it until i finish working on it (call it beta in settings pls)", "i mean the Main Hub thingy". Main Hub (with Chief of Staff) is off by default under a new key: the settings file stores every default, so a new key is what turns it off once for every install that never chose, while anyone who turns it on after this release keeps it. Supersedes `chiefHidden` (on by default), which nothing reads any more.
+    ("mainHubHidden", J::Bool(true)),
     // CDXC:Chief 2026-11-08 DECISION: User (Q1910): New Chat asks first, with a Don't ask again box that turns this off.
     ("chiefConfirmNewChat", J::Bool(true)),
     // CDXC:Chief 2026-11-08 DECISION: User: the home row "should remain top of the space that it's a part of ... not show on top of all spaces like we have now (make this a setting, default off, 'Show on all spaces')".
