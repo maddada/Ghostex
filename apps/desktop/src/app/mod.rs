@@ -101,6 +101,7 @@ pub(crate) mod remote_setup_modal_lifecycle;
 pub(crate) mod rename_session_modal_lifecycle;
 pub(crate) mod rename_worktree_modal_lifecycle;
 pub(crate) mod render;
+pub(crate) mod security_upgrade_modal_lifecycle;
 pub(crate) mod session_chat;
 mod session_chat_armed_actions;
 pub(crate) mod session_chat_context_menu;

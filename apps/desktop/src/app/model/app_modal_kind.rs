@@ -69,6 +69,9 @@ pub(crate) enum GpuiAppModalKind {
     /// "Paste potentially unsafe text?" for terminal paste protection (terminal_input/paste_and_shortcuts.rs).
     TerminalPasteConfirm,
     CloseSessionsConfirm,
+    /// The one-time 11.0.1 security notice: pair phones and computers again
+    /// (security_upgrade_modal_lifecycle.rs). Opened directly when gxserver says it is due.
+    SecurityUpgrade,
 }
 
 impl GpuiAppModalKind {
@@ -76,6 +79,7 @@ impl GpuiAppModalKind {
         match value {
             "addProject" => Some(Self::AddProject),
             "agentHooksRequired" => Some(Self::AgentHooksRequired),
+            "securityUpgrade" => Some(Self::SecurityUpgrade),
             "settings" => Some(Self::Settings),
             "hotkeys" => Some(Self::Hotkeys),
             "missingProjectFolder" => Some(Self::MissingProjectFolder),
@@ -127,6 +131,7 @@ impl GpuiAppModalKind {
         match self {
             Self::AddProject => "addProject",
             Self::AgentHooksRequired => "agentHooksRequired",
+            Self::SecurityUpgrade => "securityUpgrade",
             Self::Settings => "settings",
             Self::Hotkeys => "hotkeys",
             Self::MissingProjectFolder => "missingProjectFolder",
@@ -176,6 +181,7 @@ impl GpuiAppModalKind {
             Self::BrowserHistory => "Ghostex Browser History",
             Self::AddProject => "Ghostex Add Project",
             Self::AgentHooksRequired => "Ghostex Install Required Hooks",
+            Self::SecurityUpgrade => "Ghostex Pair Your Devices Again",
             Self::Settings => "Ghostex Settings",
             Self::Hotkeys => "Ghostex Hotkeys",
             Self::MissingProjectFolder => "Ghostex Project Folder Missing",
@@ -312,6 +318,10 @@ impl GpuiAppModalKind {
             Self::AgentHooksRequired => size(
                 px(APP_MODAL_HOST_RENAME_SESSION_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_AGENT_HOOKS_REQUIRED_WINDOW_HEIGHT),
+            ),
+            Self::SecurityUpgrade => size(
+                px(crate::app::window::SECURITY_UPGRADE_MODAL_WIDTH),
+                px(crate::app::window::SECURITY_UPGRADE_MODAL_INITIAL_HEIGHT),
             ),
             /*
             CDXC:AppModal 2026-07-26-07:20:
@@ -566,6 +576,7 @@ impl GpuiAppModalKind {
             // also the template the bridge's field allowlist fills in.
             Self::Worktree
             | Self::AgentHooksRequired
+            | Self::SecurityUpgrade
             | Self::DeleteWorktree
             | Self::RenameWorktree
             | Self::SidebarSpaceEditor

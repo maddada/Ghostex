@@ -78,6 +78,12 @@ fn machine_key(machine_id: &str) -> String {
     format!("{MACHINE_KEY_PREFIX}{}", encode_uri_component(machine_id))
 }
 
+/// When this app last stored the machine's rows, which it does while connected to it: the closest
+/// thing to "last connected" the app keeps (the 11.0.1 security notice shows it).
+pub(crate) fn remote_last_connected_ms(machine_id: &str) -> Option<i64> {
+    super::records_storage::read_record_updated_at(STORE, &machine_key(machine_id))
+}
+
 /// The raw payload of one machine's last-seen snapshot, if one is stored and still fresh enough
 /// for the catalog to answer with it.
 pub(super) fn read_last_seen_raw(

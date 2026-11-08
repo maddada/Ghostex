@@ -236,6 +236,8 @@ pub(super) fn rpc(path: &str, params: &Value) -> Result<Value, String> {
                 Ok(result)
             }
             "/api/pairedDevices" => Ok(json!({ "devices": fixture.devices })),
+            // Three pairings from before 11.0.1 still wait (tabs/remote/pair_again.rs).
+            "/api/securityUpgradeNotice" => Ok(json!({ "waiting": 3, "show": false })),
             "/api/removePairedDevice" => {
                 let id = params
                     .get("deviceId")

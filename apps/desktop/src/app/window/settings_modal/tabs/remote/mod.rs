@@ -29,6 +29,7 @@ mod app_update;
 mod easy_connect;
 mod machines;
 mod model;
+mod pair_again;
 mod paired_devices;
 mod relay;
 mod ssh_row;
@@ -241,6 +242,8 @@ pub(crate) struct RemoteTab {
     targeted_machine: Option<String>,
     was_active: bool,
     preview_applied: bool,
+    /// Phones and computers from before 11.0.1 that still wait to be paired again (pair_again.rs).
+    pair_again_waiting: usize,
 }
 
 impl super::HoldsUnsavedInput for RemoteTab {
@@ -395,6 +398,7 @@ impl RemoteTab {
             targeted_machine: None,
             was_active: false,
             preview_applied: false,
+            pair_again_waiting: 0,
         };
         tab.sync_activity(cx);
         tab.restore_open_form(window, cx);
@@ -593,6 +597,21 @@ impl RemoteTab {
             return;
         }
         self.slow_in_flight = true;
+        self.rpc(
+            "/api/securityUpgradeNotice",
+            json!({ "op": "read" }),
+            RPC_TIMEOUT,
+            cx,
+            |this, answer, cx| {
+                let waiting = answer
+                    .map(|answer| pair_again::waiting_of(&answer))
+                    .unwrap_or(0);
+                if this.pair_again_waiting != waiting {
+                    this.pair_again_waiting = waiting;
+                    cx.notify();
+                }
+            },
+        );
         self.rpc(
             "/api/remoteAccessStatus",
             json!({}),
@@ -1038,11 +1057,11 @@ impl Render for RemoteTab {
             }
             let rpc = self.rpc_available(cx);
             // `.settings-management-layout`: the sections 16px apart in one column.
-            let mut layout = v_flex()
-                .w_full()
-                .min_w_0()
-                .gap(px(SECTION_GAP))
-                .child(self.section_tabs(&t, cx));
+            let mut layout = v_flex().w_full().min_w_0().gap(px(SECTION_GAP));
+            if self.pair_again_waiting > 0 {
+                layout = layout.child(pair_again::pair_again_line(&t, self.pair_again_waiting, cx));
+            }
+            layout = layout.child(self.section_tabs(&t, cx));
             layout = layout.child(match self.section {
                 RemoteSection::EasyConnect | RemoteSection::Tailscale => {
                     self.connect_section(&t, rpc, window, cx)

@@ -101,6 +101,10 @@ mod rename_session_modal;
 mod rename_worktree_demo;
 #[path = "../app/window/rename_worktree_modal.rs"]
 mod rename_worktree_modal;
+#[path = "native_modal_demo/security_upgrade.rs"]
+mod security_upgrade_demo;
+#[path = "../app/window/security_upgrade_modal.rs"]
+mod security_upgrade_modal;
 #[path = "native_modal_demo/session_note.rs"]
 mod session_note_demo;
 #[path = "../app/window/session_note_modal.rs"]
@@ -582,6 +586,7 @@ fn main() {
                 "voice-panel" => voice_panel_demo::open(&demo, cx),
                 "permission-guide" => permission_guide_demo::open(&demo, cx),
                 "install-hooks" => agent_hooks_required_demo::open(&demo, cx),
+                "security-upgrade" => security_upgrade_demo::open(&demo, cx),
                 "agents-hub" => agents_hub_demo::open(&demo, cx),
                 "onboarding" => onboarding_demo::open(&demo, cx),
                 "web-runtime-prompt" => web_runtime_prompt_demo::open(&demo, cx),

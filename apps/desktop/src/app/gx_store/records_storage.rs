@@ -42,6 +42,25 @@ pub(crate) fn read_record_raw(
     })
 }
 
+/// When one record was last written (`updatedAt`, epoch ms), whether or not the catalog still
+/// admits its payload: an aged-out copy still says when it was written.
+pub(crate) fn read_record_updated_at(store: RecordStore, key: &str) -> Option<i64> {
+    with_read_connection(|connection| {
+        let value: Option<String> = connection
+            .query_row(
+                "SELECT value FROM records WHERE store=?1 AND key=?2",
+                rusqlite::params![store.id, key],
+                |row| row.get(0),
+            )
+            .ok();
+        Ok(value
+            .and_then(|value| serde_json::from_str::<serde_json::Value>(&value).ok())
+            .and_then(|row| row.get("updatedAt").and_then(serde_json::Value::as_i64)))
+    })
+    .ok()
+    .flatten()
+}
+
 /// Every live record of one store whose key starts with `prefix`, as `(key, raw)` pairs.
 ///
 /// CDXC:SessionChat 2026-09-22 WHY:

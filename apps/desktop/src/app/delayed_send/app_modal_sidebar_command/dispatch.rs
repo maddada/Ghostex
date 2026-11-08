@@ -196,6 +196,10 @@ impl GhostexGpuiApp {
             {
                 self.run_quick_access_command_row(command_type, command, window, cx);
             }
+            // Settings > Remote's Pair again line (tabs/remote/pair_again.rs).
+            "openSecurityUpgradeNotice" => {
+                self.reopen_gpui_security_upgrade_modal(cx);
+            }
             "searchPreviousSessionsByText" => {
                 self.handle_gpui_app_modal_previous_sessions_command(command_type, command, cx);
             }

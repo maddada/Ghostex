@@ -266,9 +266,6 @@ impl GhostexGpuiApp {
             GpuiAppToastAction::UndoSyncedChange { id } => {
                 self.gx_store_undo_settings_sync_change(id, cx);
             }
-            GpuiAppToastAction::OpenRemoteSettings => {
-                self.open_gpui_settings_tab("remote", None, cx);
-            }
         }
     }
 

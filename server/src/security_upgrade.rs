@@ -430,6 +430,7 @@ pub(crate) fn view(
         "phones": phones,
         "computers": computers,
         "remindersLeft": notice.reminders_left,
+        "takenAtMs": notice.taken_at_ms,
     })
 }
 
