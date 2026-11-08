@@ -132,10 +132,22 @@ fn codex_window_kind(window: &CodexRateLimitWindow, primary: bool) -> UsageWindo
     }
 }
 
+/// The window as it stands at `now`, for a reading the agent made some time ago.
+///
+/// CDXC:AgentProviders 2026-11-09 WHY:
+/// GitHub #514: without a saved account a session's limits are the last numbers its agent reported, and an idle coordinator reports nothing new, so its old percentages (5h 78%, 7d 84%) stayed on screen long after the window's reset time. Once `resets_at` has passed, that reading describes a window that no longer exists: it reads as reset (0% used, no reset time to count down to) until the agent, or another session on the same login (gxserver hands the newest of those over), reports fresh numbers.
+fn expire_reading(used_percent: f64, resets_at: Option<f64>, now: f64) -> (f64, Option<f64>) {
+    match resets_at.filter(|value| value.is_finite()) {
+        Some(seconds) if seconds * 1000.0 <= now => (0.0, None),
+        _ => (used_percent, resets_at),
+    }
+}
+
 /// `sessionUsageWindow`: the window this session's own agent last reported.
 fn session_usage_window(
     status: &ContextDetailStatus,
     kind: UsageWindowKind,
+    now: f64,
 ) -> Option<UsageWindowSample> {
     if kind == UsageWindowKind::Model || kind == UsageWindowKind::Spend {
         return None;
@@ -154,10 +166,15 @@ fn session_usage_window(
     });
     if let Some(claude) = claude {
         if claude.used_percentage.is_some_and(f64::is_finite) {
+            let (used_percent, resets_at) = expire_reading(
+                claude.used_percentage.unwrap_or_default(),
+                claude.resets_at,
+                now,
+            );
             return Some(UsageWindowSample {
                 label: fallback_label.to_string(),
-                used_percent: claude.used_percentage.unwrap_or_default(),
-                resets_at: claude.resets_at,
+                used_percent,
+                resets_at,
             });
         }
     }
@@ -170,14 +187,19 @@ fn session_usage_window(
     });
     if let Some(codex) = codex {
         if codex.used_percentage.is_some_and(f64::is_finite) {
+            let (used_percent, resets_at) = expire_reading(
+                codex.used_percentage.unwrap_or_default(),
+                codex.resets_at,
+                now,
+            );
             return Some(UsageWindowSample {
                 // `window.windowMinutes` is read as a truthy check, so zero is no duration.
                 label: match codex.window_minutes {
                     Some(minutes) if minutes != 0.0 => format_window_duration(minutes),
                     _ => fallback_label.to_string(),
                 },
-                used_percent: codex.used_percentage.unwrap_or_default(),
-                resets_at: codex.resets_at,
+                used_percent,
+                resets_at,
             });
         }
     }
@@ -219,10 +241,13 @@ pub fn account_usage_samples(
 pub fn usage_windows(
     status: &ContextDetailStatus,
     kind: UsageWindowKind,
+    now: f64,
 ) -> Vec<UsageWindowSample> {
     match status.account.as_ref() {
         Some(account) => account_usage_samples(account, kind),
-        None => session_usage_window(status, kind).into_iter().collect(),
+        None => session_usage_window(status, kind, now)
+            .into_iter()
+            .collect(),
     }
 }
 

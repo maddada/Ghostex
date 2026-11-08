@@ -224,7 +224,7 @@ fn usage_row_value(
     render: fn(&UsageWindowSample, f64) -> Option<String>,
 ) -> Option<String> {
     join(
-        usage_windows(input.status, kind)
+        usage_windows(input.status, kind, input.now())
             .iter()
             .map(|window| render(window, input.now()))
             .collect::<Vec<_>>(),

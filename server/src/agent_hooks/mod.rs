@@ -24,6 +24,7 @@ pub mod resolution;
 pub mod statusline;
 #[cfg(windows)]
 mod statusline_launch_windows;
+pub(crate) mod statusline_shared_limits;
 #[cfg(test)]
 pub(crate) mod tests;
 #[cfg(windows)]
