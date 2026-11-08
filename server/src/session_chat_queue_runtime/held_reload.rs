@@ -93,7 +93,7 @@ pub(super) async fn reload_for_held_message(
         return false;
     };
     if let Err(refusal) = super::send_heal::reload_idle_agent_for_input_box(&state, &target).await {
-        refused(refusal.reason);
+        refused(&refusal.reason);
         return refusal.lasting;
     }
     // A row the queue would mark Not sent after two minutes of no box waits for the reloaded

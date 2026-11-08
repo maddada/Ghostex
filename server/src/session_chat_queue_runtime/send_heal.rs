@@ -363,43 +363,58 @@ fn claim_automatic_restart(
 /// (held_reload.rs). Unlike a refused send's restart, a coordinator is reloaded too: the user's
 /// own fix was a coordinator's reload, its threads run in their own sessions and go on, and a
 /// coordinator that cannot take their reports is stuck anyway. Background tasks Claude's footer
-/// counts (`⧉ N`) still refuse it, as do a running turn, compaction, a pending question and the
+/// counts (`⧉ N`) or its transcript shows still running (`transcript_background_jobs`) refuse it, as do a running turn, compaction, a pending question and the
 /// shared ten-minute limit on automatic restarts.
 pub(crate) async fn reload_idle_agent_for_input_box(
     state: &AppState,
     target: &crate::session_chat_send::SessionChatSendTarget,
 ) -> Result<(), ReloadRefusal> {
-    let passing = |reason| ReloadRefusal {
+    let passing = |reason: String| ReloadRefusal {
         reason,
         lasting: false,
     };
     let session = &target.session;
     if !can_start_on_its_conversation(state, session).await {
         return Err(ReloadRefusal {
-            reason: "the agent has no conversation to resume",
+            reason: "the agent has no conversation to resume".to_string(),
             lasting: true,
         });
     }
     if agent_is_busy(session).await {
-        return Err(passing("the agent is in the middle of a turn"));
+        return Err(passing("the agent is in the middle of a turn".to_string()));
     }
     let screen = crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
     if screen.as_deref().is_some_and(shows_claude_background_tasks) {
-        return Err(passing("the agent has background tasks a reload would end"));
+        return Err(passing(
+            "the agent has background tasks a reload would end".to_string(),
+        ));
     }
-    claim_automatic_restart(target, None).map_err(passing)?;
+    let jobs = transcript_background_jobs(session).await;
+    if !jobs.is_empty() {
+        let names = jobs
+            .iter()
+            .map(|job| format!("{} ({})", job.title, job.id))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(passing(format!(
+            "its transcript shows {} background job{} still running a reload would end: {names}",
+            jobs.len(),
+            if jobs.len() == 1 { "" } else { "s" }
+        )));
+    }
+    claim_automatic_restart(target, None).map_err(|reason| passing(reason.to_string()))?;
     // A sleep or wake that failed is not retried on its own: the stuck words and bell take over.
     cycle_session(state, &target.project_id, &target.session_id)
         .await
         .map_err(|reason| ReloadRefusal {
-            reason,
+            reason: reason.to_string(),
             lasting: true,
         })
 }
 
 /// Why an input-box reload did not run; a `lasting` one is not tried again for the same message.
 pub(crate) struct ReloadRefusal {
-    pub(crate) reason: &'static str,
+    pub(crate) reason: String,
     pub(crate) lasting: bool,
 }
 
@@ -696,7 +711,40 @@ pub(crate) async fn work_a_restart_would_end(
     if screen.as_deref().is_some_and(shows_claude_background_tasks) {
         return Some("the agent has background tasks a restart would end");
     }
+    if !transcript_background_jobs(&target.session).await.is_empty() {
+        return Some("the agent's transcript shows background jobs still running");
+    }
     None
+}
+
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// Coordinator, after the input-box reload landed: "before reloading any session, also read its
+/// transcript for background jobs still running (Claude's background tasks / bash_id entries that
+/// haven't reported completion), not only the on-screen footer". The footer's `⧉ N` is what a
+/// reload checked, and the screens that need a reload are the ones whose bottom rows (that
+/// footer) are cut off. Claude's transcript names every background shell and monitor it started
+/// in this process and every one that ended (session_chat_claude_background.rs); one started and
+/// not ended refuses the automatic restart, and the input-box reload tries again later.
+/// BLOCKING read on a blocking thread. Claude's only: other agents' transcripts name no jobs.
+async fn transcript_background_jobs(
+    session: &Value,
+) -> Vec<crate::session_chat_terminal_activity::SessionChatBackgroundTask> {
+    if !matches!(
+        crate::agents::identity::normalize_agent_id(
+            session_chat_agent_for_session(session).as_deref()
+        )
+        .as_deref(),
+        Some("claude" | "openclaude")
+    ) {
+        return Vec::new();
+    }
+    let session = session.clone();
+    tokio::task::spawn_blocking(move || {
+        crate::session_chat_claude_fleet::read_claude_background_tasks(&session, u64::MAX)
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// Claude's footer counts the session's running background tasks as `⧉ N`
