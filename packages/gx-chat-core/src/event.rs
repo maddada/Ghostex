@@ -93,6 +93,9 @@ pub enum Event {
     /// the first document it sends is current. A host that never sends this keeps every timer
     /// running.
     Visibility { shown: bool },
+    /// The computer the session runs on, as the host knows it (`session/computer.rs`): its name,
+    /// whether it is another computer and whether it is offline. `None` for a host that cannot tell.
+    ComputerChanged(Option<crate::session::computer::SessionComputer>),
 }
 
 /// One session the host's session list knows (the sidebar on the desktop and the web build, the

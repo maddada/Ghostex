@@ -344,10 +344,18 @@ impl NativeChatView {
         } else {
             self.render_working_card(p, cx)
         };
-        let card_above_box = working_card.is_some();
+        // The session's computer is offline: its card tops the stack, above the working card
+        // (computer_card.rs).
+        let computer_card = if maximized {
+            None
+        } else {
+            self.render_computer_card(p, cx)
+        };
+        let card_above_box = working_card.is_some() || computer_card.is_some();
         // The last transcript row's own gap is the space above the card (working_card.rs).
         footer = footer
             .when(card_above_box, |this| this.pt_0())
+            .children(computer_card)
             .children(working_card);
         // What stacks between the card and the box.
         let mut waiting: Vec<AnyElement> = Vec::new();

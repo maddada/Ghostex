@@ -111,6 +111,9 @@ pub struct SessionState {
     /// The session's Cloud Box is paused or stopped: its host refused a read with
     /// `cloudBoxAsleep` (`session/cloud_box.rs`). A sent message wakes it.
     pub cloud_box_asleep: bool,
+    /// The computer the session runs on and what this computer holds for it
+    /// (`session/computer.rs`).
+    pub computer: crate::session::computer::ComputerState,
     /// Live work as the chat channel itself reports it.
     pub server_working: bool,
     /// The session activity gxserver presents, which is what the sidebar spinner reads.
@@ -192,6 +195,7 @@ impl Default for SessionState {
             agent_message_deliveries: None,
             screen_probed: false,
             cloud_box_asleep: false,
+            computer: Default::default(),
             server_working: false,
             session_activity_working: false,
             external_working: false,

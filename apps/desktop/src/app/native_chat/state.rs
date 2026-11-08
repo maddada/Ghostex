@@ -1022,6 +1022,11 @@ impl NativeChatView {
                 }
                 // The page card's picture (`page_card.rs`), which the view keeps for itself.
                 Some("host") if request["method"] == "pageThumbnail" => self.receive_page_thumbnail(&request["params"], cx),
+                // The offline-computer card's check and Retry name the chat's machine for the app
+                // (remote_conn/chat_computers.rs).
+                Some("host") if matches!(request["method"].as_str(), Some("checkComputer" | "reconnectComputer")) => {
+                    self.host(request["method"].as_str().unwrap_or_default(), json!({"machineId": self.config.machine_id}), cx)
+                }
                 Some("host") => self.host(request["method"].as_str().unwrap_or_default(), request["params"].clone(), cx),
                 Some("chatImage") => self.receive_chat_image(request, cx),
                 // The two arms the Rust brain's `Effect::Copy` and `Effect::Toast` ride in. The
@@ -1070,6 +1075,12 @@ impl NativeChatView {
             return;
         }
         let endpoint = format!("/api/{method}");
+        // A message held for a computer that is offline lives on THIS computer's gxserver
+        // (server/src/connected_computers/held_sends.rs), never on the session's own.
+        let held_send = matches!(
+            method,
+            "holdSessionChatSend" | "listHeldSessionChatSends" | "cancelHeldSessionChatSend"
+        );
         let diagnostic_method = method.to_owned();
         let import_attachments = method == "importNativeAttachments";
         let mut params = request["params"].as_object().cloned().unwrap_or_default();
@@ -1092,18 +1103,22 @@ impl NativeChatView {
                     | "/api/sendSessionChatQueuedPrompt"
                     | "/api/answerSessionChatPrompt"
             );
-            let remote = match crate::app::gx_store::cloud_box_send_target(
-                &config.machine_id,
-                delivers_message,
-            )
-            .await
-            {
-                Ok(Some(target)) => Some(target),
-                Ok(None) => config.remote,
-                Err(refusal) => {
-                    return Err(
-                        json!({"code":refusal.code,"message":refusal.message,"endpoint":endpoint}),
-                    );
+            let remote = if held_send {
+                None
+            } else {
+                match crate::app::gx_store::cloud_box_send_target(
+                    &config.machine_id,
+                    delivers_message,
+                )
+                .await
+                {
+                    Ok(Some(target)) => Some(target),
+                    Ok(None) => config.remote,
+                    Err(refusal) => {
+                        return Err(
+                            json!({"code":refusal.code,"message":refusal.message,"endpoint":endpoint}),
+                        );
+                    }
                 }
             };
             super::rpc::request(remote, &endpoint, &params).await

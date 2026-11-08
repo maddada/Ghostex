@@ -257,6 +257,15 @@ pub(crate) fn computer_badge(
         .filter(|short| !short.is_empty())
         .map_or(full_name, str::to_owned);
     let scale = appearance.scale;
+    // CDXC:RemoteMachines 2026-11-08 DECISION: user, on the offline-notice page (Q1837): "just
+    // show WN with redish color in sidebar to indicate, that's enough". The badge takes the soft
+    // red the machine tab's icon turns when it fails (machines.rs) while that computer is offline
+    // (gx_chat/computers.rs); nothing else on the row changes.
+    let color = if session_computer_offline(session) {
+        gpui::rgb(0xff9494).into()
+    } else {
+        appearance.muted
+    };
     Some(
         div()
             .flex_shrink_0()
@@ -267,18 +276,34 @@ pub(crate) fn computer_badge(
             .child(titlebar_svg_icon(
                 "titlebar/device-desktop.svg",
                 12.0 * scale,
-                appearance.muted,
+                color,
             ))
             .child(
                 div()
                     .min_w_0()
                     .truncate()
                     .text_size(px(11.5 * scale))
-                    .text_color(appearance.muted)
+                    .text_color(color)
                     .child(name),
             )
             .into_any_element(),
     )
+}
+
+/// Whether the computer a row's session runs on is offline, as the chats are told
+/// (`gx_chat/computers.rs`).
+fn session_computer_offline(session: &NativeSidebarSession) -> bool {
+    let Some(key) = ghostex_gx_core::SessionKey::parse_sidebar_session_id(&session.session_id)
+    else {
+        return false;
+    };
+    let Some(machine_id) = key.machine.remote_id() else {
+        return false;
+    };
+    let (_, computers) = crate::app::gx_chat::computers::current();
+    computers
+        .get(machine_id)
+        .is_some_and(|computer| computer.offline)
 }
 
 /// The worktree a session runs in, after its title, on a worktree session its parent project lists

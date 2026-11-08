@@ -380,6 +380,7 @@ pub async fn run_gxserver_foreground(
     storage_cleanup_sweep::start_storage_cleanup_sweep(state.clone());
     sidebar_spaces_switch::start_sidebar_spaces_switch_watch(state.clone());
     crate::settings_sync::start_settings_sync(state.clone());
+    crate::connected_computers::start_held_send_delivery(state.clone());
     workspaces_switch::start_workspaces_switch_watch(state.clone());
     crate::connectors::start_connectors(state.clone());
     super::security_http::start_security_events(state.clone());

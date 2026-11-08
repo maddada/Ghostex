@@ -34,6 +34,7 @@ mod composer_host;
 mod composer_not_ready;
 mod composer_references;
 mod composer_scroll;
+mod computer_card;
 mod coordinator_board;
 mod coordinator_intro;
 mod coordinator_threads;

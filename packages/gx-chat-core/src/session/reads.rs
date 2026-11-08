@@ -224,11 +224,14 @@ pub const UNREACHABLE_MESSAGE: &str = "Couldn't reach Ghostex. It may be restart
 /// [`UNREACHABLE_MESSAGE`] under the `unreachable` code (the desktop's transport failures carried
 /// no code), which is what draws the error line's Retry. The host keeps the transport's own text in
 /// its log (`sessionChat.nativeRpcResult`, apps/desktop/src/app/native_chat/state.rs).
-pub fn humanize_unreachable(outcome: &mut crate::wire::RpcOutcome) {
+///
+/// A session on another computer says that computer's name instead (`session/computer.rs`): the
+/// restart words are for this computer's own Ghostex alone.
+pub fn humanize_unreachable(outcome: &mut crate::wire::RpcOutcome, remote_message: Option<String>) {
     if let crate::wire::RpcOutcome::Err { code, message, .. } = outcome {
         if is_unreachable(code.as_deref()) {
             *code = Some("unreachable".to_string());
-            *message = UNREACHABLE_MESSAGE.to_string();
+            *message = remote_message.unwrap_or_else(|| UNREACHABLE_MESSAGE.to_string());
         }
     }
 }

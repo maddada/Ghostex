@@ -38,7 +38,10 @@ pub enum Family {
 /// must never be able to crash the brain.
 pub fn owner(kind: &ActionKind) -> Option<Family> {
     Some(match kind {
-        ActionKind::Retry | ActionKind::Refresh | ActionKind::LoadEarlier => Family::Session,
+        ActionKind::Retry
+        | ActionKind::Refresh
+        | ActionKind::LoadEarlier
+        | ActionKind::ComputerRetry => Family::Session,
 
         ActionKind::RowDetails
         | ActionKind::ToggleSummary

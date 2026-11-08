@@ -1139,6 +1139,10 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/listConnectedComputers"
         | "/api/issueComputerGrant"
         | "/api/revokeComputerGrant" => full_local(path),
+        // CDXC:RemoteMachines 2026-11-08 WHY: a message held for a computer that is offline (connected_computers/held_sends.rs) is sent later with that computer's token, so only this computer's own clients (and a phone through its tunnel) may hold, list or cancel one.
+        "/api/holdSessionChatSend"
+        | "/api/listHeldSessionChatSends"
+        | "/api/cancelHeldSessionChatSend" => full_local(path),
         // CDXC:RemoteMachines 2026-11-03 WHY: a coordinator's threads on another computer are linked on the coordinator's own computer, by its own CLI, so only this computer's clients may change them.
         "/api/linkRemoteCoordinatorThread"
         | "/api/updateRemoteCoordinatorThread"
