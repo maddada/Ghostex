@@ -6,7 +6,7 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use ghostex_gx_core::settings_sync::{
     apply_spaces_entries, category_enabled, derive_spaces_edits, describe_list_key,
-    describe_setting_key, describe_spaces_key, entries_digest, hlc_wall_ms, key_category,
+    describe_setting_key, describe_spaces_key, entries_digest, is_seed_hlc, key_category,
     local_edit, member_key, merge_entries, merge_spaces_by_name, next_hlc, removed_key,
     repair_folded_spaces, spaces_moves, spaces_named_apart, LocalSpaces, SyncEntry, GROUP_CATEGORY,
     SYNC_CATEGORIES,
@@ -194,8 +194,31 @@ impl Engine<'_> {
             }),
             &self.store.entries,
         );
+        // This computer's first Spaces sync: what it has goes in as seeds (CDXC:SettingsSync
+        // 2026-11-08 in gx-core hlc.rs), filling only what no computer synced yet.
+        let first = baseline.is_none();
+        let seed = ghostex_gx_core::settings_sync::seed_hlc_since(&self.server_id, now_ms());
         for (key, value) in edits {
-            self.edit(&key, value);
+            match value {
+                Some(value) if first => {
+                    if !self.store.entries.contains_key(&key) {
+                        self.store.entries.insert(
+                            key.clone(),
+                            SyncEntry {
+                                key,
+                                value: Some(value),
+                                hlc: seed.clone(),
+                                parent: None,
+                                origin: self.server_id.clone(),
+                                origin_name: self.name.clone(),
+                            },
+                        );
+                    }
+                }
+                value => {
+                    self.edit(&key, value);
+                }
+            }
         }
         self.store.spaces_baseline = Some(baseline_of(read));
         Ok(())
@@ -329,7 +352,7 @@ impl Engine<'_> {
             .into_iter()
             // A value a computer only seeded (CDXC:SettingsSync in categories.rs) was never an edit
             // there, so losing it is no news.
-            .filter(|conflict| hlc_wall_ms(&conflict.lost.hlc) > 0)
+            .filter(|conflict| !is_seed_hlc(&conflict.lost.hlc))
             .filter_map(|conflict| {
                 let text = describe_spaces_key(&conflict, &self.store.entries)
                     .or_else(|| describe_setting_key(&conflict))

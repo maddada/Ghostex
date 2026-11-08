@@ -20,7 +20,7 @@ mod spaces_repair;
 pub use entries::{
     entries_digest, local_edit, merge_entries, MergeOutcome, SyncConflict, SyncEntry,
 };
-pub use hlc::{hlc_wall_ms, next_hlc, seed_hlc};
+pub use hlc::{hlc_wall_ms, is_seed_hlc, next_hlc, seed_hlc, seed_hlc_since};
 pub use lists::{
     account_sync_value, agent_roster_values, apply_agent_roster_entry, apply_synced_account,
     describe_list_key, skill_file_path_safe, skill_fits, skill_hash, skill_name_syncs,

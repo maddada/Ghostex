@@ -448,7 +448,7 @@ pub struct SystemProjectGitRemoteProber;
 impl ProjectGitRemoteProber for SystemProjectGitRemoteProber {
     fn probe(&self, path: &str) -> Option<ProjectGitRemote> {
         let owned_path = path.to_string();
-        probe_project_git_remote_with(&move |args: &[&str]| {
+        probe_project_git_remote_at(path, &move |args: &[&str]| {
             run_project_git_remote_probe_command(&owned_path, args)
         })
     }
@@ -487,6 +487,37 @@ pub fn probe_project_git_remote_with(
         origin_url,
         repository_root_path,
     })
+}
+
+/// [`probe_project_git_remote_with`] for the folder at `path`, with the repository root spelled
+/// as `path` is: `path` without the folders `git rev-parse --show-prefix` says it is below the
+/// root.
+///
+/// CDXC:RemoteMachines 2026-11-08 WHY:
+/// #461 and #488 find a project's folder inside its repository by taking the root off its path. `--show-toplevel` prints the root as the disk spells it, with symlinks resolved, so a project added as `~/Code/Monorepo/trading` on a case-insensitive Mac, or through a symlinked folder, matched no root: every folder fell back to the bare repository key, and the sidebar and Spaces sync folded them together again. Found proving #488's follow-up on throwaway gxservers.
+pub fn probe_project_git_remote_at(
+    path: &str,
+    run: &dyn Fn(&[&str]) -> Option<String>,
+) -> Option<ProjectGitRemote> {
+    let mut remote = probe_project_git_remote_with(run)?;
+    if remote.repository_root_path.is_some() {
+        if let Some(root) = run(&["rev-parse", "--show-prefix"])
+            .and_then(|prefix| root_as_typed(path, prefix.trim()))
+        {
+            remote.repository_root_path = Some(root);
+        }
+    }
+    Some(remote)
+}
+
+/// `path` without its last folders, as many as `prefix` (`trading/`, `company/sub-co/`) has;
+/// `None` when `path` has fewer.
+fn root_as_typed(path: &str, prefix: &str) -> Option<String> {
+    let mut root = path.trim().trim_end_matches(['/', '\\']);
+    for _ in prefix.split('/').filter(|part| !part.is_empty()) {
+        root = root[..root.rfind(['/', '\\'])?].trim_end_matches(['/', '\\']);
+    }
+    (!root.is_empty()).then(|| root.to_string())
 }
 
 #[cfg(test)]
@@ -1094,14 +1125,11 @@ mod tests {
         SystemProjectGitRemoteProber.probe(&path.to_string_lossy())
     }
 
-    /// git reports the RESOLVED work-tree root, and a temp dir on macOS is a
-    /// symlink (`/var/folders/...` -> `/private/var/folders/...`), so the
-    /// expectation has to be resolved the same way.
-    fn resolved(path: &Path) -> String {
-        std::fs::canonicalize(path)
-            .expect("canonical path")
-            .to_string_lossy()
-            .to_string()
+    /// The root is published spelled as the probed path is, not as git resolves it: a temp dir on
+    /// macOS is a symlink (`/var/folders/...` -> `/private/var/folders/...`), and the root keeps
+    /// the `/var/folders/...` the project was added with (`probe_project_git_remote_at`).
+    fn as_typed(path: &Path) -> String {
+        path.to_string_lossy().to_string()
     }
 
     #[test]
@@ -1115,7 +1143,7 @@ mod tests {
 
         assert_eq!(
             probe_path(&root),
-            Some(remote_rooted(None, &resolved(&root))),
+            Some(remote_rooted(None, &as_typed(&root))),
             "a repository with no remote is a null, not an absent key"
         );
 
@@ -1127,7 +1155,7 @@ mod tests {
             probe_path(&root),
             Some(remote_rooted(
                 Some("git@github.com:Owner/Repo.git"),
-                &resolved(&root)
+                &as_typed(&root)
             ))
         );
 
@@ -1144,7 +1172,7 @@ mod tests {
             probe_path(&root),
             Some(remote_rooted(
                 Some("https://github.com/Owner/Repo.git"),
-                &resolved(&root)
+                &as_typed(&root)
             ))
         );
 
@@ -1162,7 +1190,7 @@ mod tests {
             probe_path(&root),
             Some(remote_rooted(
                 Some("https://github.com/Owner/Repo.git"),
-                &resolved(&root)
+                &as_typed(&root)
             ))
         );
 
@@ -1179,7 +1207,7 @@ mod tests {
             probe_path(&sub_package),
             Some(remote_rooted(
                 Some("https://github.com/Owner/Repo.git"),
-                &resolved(&root)
+                &as_typed(&root)
             ))
         );
     }
@@ -1214,7 +1242,7 @@ mod tests {
             probe_path(&worktree),
             Some(remote_rooted(
                 Some("git@github.com:Owner/Repo.git"),
-                &resolved(&worktree)
+                &as_typed(&worktree)
             )),
             "a linked worktree shares its repository's config, so the family agrees"
         );
@@ -1234,7 +1262,7 @@ mod tests {
         set_cached_project_git_remote_for_test(&key, probe_path(&root));
         assert_eq!(
             published_project_git_repository_root_path(&key),
-            Some(json!(resolved(&root))),
+            Some(json!(as_typed(&root))),
             "the worktree row publishes the family root's repository root"
         );
     }
@@ -1305,7 +1333,7 @@ mod tests {
             delta
                 .get("project")
                 .and_then(|project| project.get("gitRepositoryRootPath")),
-            Some(&json!(resolved(&root))),
+            Some(&json!(as_typed(&root))),
             "the same delta carries the repository root the client keys sub-paths on"
         );
     }
@@ -1449,7 +1477,7 @@ mod tests {
             delta
                 .get("project")
                 .and_then(|project| project.get("gitRepositoryRootPath")),
-            Some(&json!(resolved(&root)))
+            Some(&json!(as_typed(&root)))
         );
     }
 }

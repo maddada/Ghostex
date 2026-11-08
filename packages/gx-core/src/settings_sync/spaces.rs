@@ -498,6 +498,9 @@ pub fn describe_spaces_key(
     };
     let show = |value: &Option<Value>| -> String {
         match value {
+            // A place of "nowhere" is JSON null, which arrives as no value: the project (or a
+            // group's Space) was taken out of its Space, nothing was deleted (#488 follow-up).
+            None if kind == "repo" || field == "space" => "not in a Space".to_string(),
             None => "deleted".to_string(),
             Some(Value::Bool(true)) => "kept".to_string(),
             Some(Value::String(text)) if field == "space" => {
@@ -526,6 +529,16 @@ pub fn describe_spaces_key(
         ("repo", _) => repo_label(id),
         _ => return None,
     };
+    // A project taken out of every Space on one computer stays where it is on the others (its
+    // place travels as JSON null, which arrives as no value), so the note says just that.
+    if kind == "repo" && field == "place" && conflict.kept.value.is_none() {
+        return Some(format!(
+            "{subject} was taken out of its Space on {}; the other computers keep it where they have it (it was {} from {}).",
+            conflict.kept.origin_name,
+            show(&conflict.lost.value),
+            conflict.lost.origin_name,
+        ));
+    }
     Some(format!(
         "{subject} is {} from {}, replacing {} from {}.",
         show(&conflict.kept.value),

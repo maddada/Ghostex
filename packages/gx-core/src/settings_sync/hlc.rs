@@ -23,6 +23,25 @@ pub fn seed_hlc(node: &str) -> String {
     format!("{:013}-{:06}-{node}", 0, 0)
 }
 
+/// Stamps below this wall time (2001) are seeds, never real edits.
+const SEED_CEILING_MS: u64 = 1_000_000_000_000;
+
+/// A seed (see [`seed_hlc`]) ranked by when this computer started syncing (`since_ms`): it still
+/// sorts before every real edit, and between two computers' seeds the one that started first
+/// wins, the same on every computer.
+///
+/// CDXC:SettingsSync 2026-11-08 WHY:
+/// #488's follow-up: a computer's first Spaces sync wrote its whole layout (each project "in no Space" too) as real edits, so a newcomer whose first sync came after another computer's arrangement replaced it instead of adopting it. Its first export is now seeds, and plain seeds (`seed_hlc`) would tie between two computers and be decided by server id; ranking by start time lets the shared layout stand and the newcomer fill in only what nobody filed.
+pub fn seed_hlc_since(node: &str, since_ms: u64) -> String {
+    let wall = SEED_CEILING_MS - 1 - (since_ms / 1000).min(SEED_CEILING_MS - 1);
+    format!("{wall:013}-{:06}-{node}", 0)
+}
+
+/// Whether a stamp is a seed rather than an edit someone made.
+pub fn is_seed_hlc(stamp: &str) -> bool {
+    hlc_wall_ms(stamp) < SEED_CEILING_MS
+}
+
 /// The wall time of a stamp in milliseconds (0 for an unreadable one).
 pub fn hlc_wall_ms(stamp: &str) -> u64 {
     parse(stamp).0
