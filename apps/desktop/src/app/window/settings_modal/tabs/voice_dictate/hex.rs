@@ -7,6 +7,9 @@
 
 use super::*;
 
+/// The Hex model picker's width: room for the longest model names Hex lists ("SenseVoice Small").
+const HEX_MODEL_PICKER_WIDTH: f32 = 240.0;
+
 /// How often the row re-reads the install job while Hex installs.
 const INSTALL_POLL: Duration = Duration::from_secs(2);
 
@@ -143,7 +146,7 @@ impl VoiceAgentTab {
                             "dictate-hex-model",
                             &options,
                             &value,
-                            None,
+                            Some(HEX_MODEL_PICKER_WIDTH),
                             false,
                             None,
                             |page: &mut Self, value, _window, cx| {
@@ -158,18 +161,9 @@ impl VoiceAgentTab {
             }
             _ => check_again,
         };
-        // Ready: the model picker on the right. Otherwise what is missing and what to do next, in
-        // full under the label, with its buttons (rows show no description text).
-        if state == "ready" && hex["ready"] == true {
-            return Some(setting_row(
-                p,
-                "dictateHex",
-                RowSpec::new("Hex").description(description),
-                None,
-                control,
-                cx,
-            ));
-        }
+        // Whatever the state, the row is wide: where Hex stands (and, when it isn't ready, what to do
+        // next) in full under the label, then its controls, so the model picker and Check again fit
+        // the Settings window side by side (rows show no description text).
         Some(setting_row(
             p,
             "dictateHex",
