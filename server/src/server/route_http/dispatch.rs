@@ -439,6 +439,12 @@ pub(in crate::server) async fn route_http(
     ) {
         return response;
     }
+    // Route capabilities and the owner's signed approval for sensitive actions (#495).
+    if let Some(response) =
+        super::super::security_gates::gate(&state, &caller, &endpoint.path, &request_id, &body_json)
+    {
+        return response;
+    }
     let request = RouteHttpRequest {
         state,
         endpoint,

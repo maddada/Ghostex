@@ -95,6 +95,9 @@ pub struct SecurityState {
     pub owner_keys: ApproverKeys,
     pub owner_challenges: OwnerChallenges,
     pub session_tokens: SessionTokens,
+    /// Connected computers the owner approved (server id → when, ms); see
+    /// [`SecurityState::computer_approved`].
+    approved_computers: Arc<std::sync::Mutex<std::collections::BTreeMap<String, u64>>>,
     /// `gxserver/auth/security.json`; `None` in tests that need no disk.
     persist_path: Option<Arc<PathBuf>>,
     save_lock: Arc<std::sync::Mutex<()>>,
@@ -111,6 +114,7 @@ impl SecurityState {
             owner_keys: ApproverKeys::default(),
             owner_challenges: OwnerChallenges::default(),
             session_tokens: SessionTokens::default(),
+            approved_computers: Arc::default(),
             persist_path: None,
             save_lock: Arc::default(),
             events: broadcast::channel(256).0,
@@ -126,6 +130,10 @@ impl SecurityState {
         state.approver_keys.restore(saved.approver_keys);
         state.session_tokens.restore(saved.session_tokens);
         state.session_tokens.restore_owner(saved.owner_sessions);
+        *state
+            .approved_computers
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = saved.approved_computers;
         state.persist_path = Some(Arc::new(path));
         Ok(state)
     }
@@ -147,6 +155,11 @@ impl SecurityState {
                 approver_keys: self.approver_keys.list(),
                 session_tokens: self.session_tokens.snapshot(),
                 owner_sessions: self.session_tokens.owner_snapshot(),
+                approved_computers: self
+                    .approved_computers
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .clone(),
             },
         )
     }
@@ -220,6 +233,28 @@ impl SecurityState {
         }
     }
 
+    /*
+    CDXC:Security 2026-11-08 WHY:
+    The desktop renews a connected computer's registration and grant every few minutes (connected_computers/registry.rs keeps them 3 minutes), so asking for an approval on each renewal would prompt all day. The owner approves a computer once; renewals for it pass for 30 days (the design's longest grant), and a new computer, or one whose approval lapsed, asks again. Turning a computer's Agent access off never asks.
+    */
+    /// Whether the owner approved computer `server_id` within the last 30 days.
+    pub fn computer_approved(&self, server_id: &str, now_ms: u64) -> bool {
+        self.approved_computers
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(server_id)
+            .is_some_and(|approved| now_ms.saturating_sub(*approved) < COMPUTER_APPROVAL_MS)
+    }
+
+    /// Remembers that the owner approved computer `server_id` now.
+    pub fn approve_computer(&self, server_id: &str, now_ms: u64) {
+        self.approved_computers
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(server_id.to_string(), now_ms);
+        let _ = self.save();
+    }
+
     /// Adds an approver key: the first one directly (it is the owner's call, checked by the
     /// route), later ones only after the route spent an `addApproverKey` approval.
     pub fn add_approver_key(
@@ -235,6 +270,9 @@ impl SecurityState {
         Ok(key)
     }
 }
+
+/// How long an approved connected computer's renewals pass without asking again.
+pub const COMPUTER_APPROVAL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 
 static INSTALLED: std::sync::OnceLock<SecurityState> = std::sync::OnceLock::new();
 

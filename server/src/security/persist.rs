@@ -31,6 +31,9 @@ pub struct PersistedSecurity {
     /// The desktop's owner sessions, as hashes only: the token itself lives in the app's memory.
     #[serde(default)]
     pub owner_sessions: Vec<PersistedOwnerSession>,
+    /// Connected computers the owner approved, by server id, with when (ms).
+    #[serde(default)]
+    pub approved_computers: std::collections::BTreeMap<String, u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

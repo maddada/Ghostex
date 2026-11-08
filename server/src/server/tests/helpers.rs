@@ -12,7 +12,24 @@ pub(crate) fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
 
 /// A test daemon with its own server id, for tests that run two computers in one process.
 pub(super) fn test_app_state_for(paths: GxserverPaths, server_id: &str) -> Arc<AppState> {
-    test_app_state_on(paths, server_id, None)
+    let state = test_app_state_on(paths, server_id, None);
+    approve_test_computers(&state);
+    state
+}
+
+/// The computers the two-computer route tests connect. Connecting a computer asks the owner once
+/// (GitHub #495, server/src/server/security_gates.rs); these tests run as the user's desktop after
+/// that approval, so their registrations and grants pass like a renewal does.
+pub(super) const TEST_COMPUTER_IDS: &[&str] = &[
+    "S5d", "S5m", "S5p", "S5r", "S5t", "S5w", "S6d", "S6l", "S6m", "S6p", "S6t", "S6w", "S7o",
+    "S8x", "S9r", "S9w",
+];
+
+pub(super) fn approve_test_computers(state: &AppState) {
+    let now = crate::security::now_ms();
+    for id in TEST_COMPUTER_IDS {
+        state.security.approve_computer(id, now);
+    }
 }
 
 /// A test state whose own routes (the loopback the voice agent and automations call) are on

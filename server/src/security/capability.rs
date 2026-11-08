@@ -163,7 +163,6 @@ pub enum RouteAccess {
 /// turns on `answerApprovals`) keeps an ordinary access here and calls
 /// [`super::require_owner_presence`] from its handler for the sensitive part.
 pub fn route_access(path: &str) -> RouteAccess {
-    use ghostex_gx_protocol::approval::SensitiveAction as A;
     match path {
         "/api/health" | "/api/pairDevice" => RouteAccess::Public,
         super::APPROVALS_LIST_ENDPOINT
@@ -182,8 +181,8 @@ pub fn route_access(path: &str) -> RouteAccess {
         | super::OWNER_CHALLENGE_ENDPOINT
         | super::OWNER_SESSION_ENDPOINT => RouteAccess::Needs(Capability::RequestSensitiveAction),
         super::SECURITY_STATUS_ENDPOINT => RouteAccess::Needs(Capability::OwnSession),
-        "/api/registerConnectedComputer" => RouteAccess::Presence(A::ComputerRegister),
-        "/api/issueComputerGrant" => RouteAccess::Presence(A::ComputerGrant),
+        // `/api/registerConnectedComputer` and `/api/issueComputerGrant` ask in
+        // server/security_gates.rs, once per computer for 30 days, not on every renewal.
         _ => RouteAccess::Needs(Capability::ProjectSessions),
     }
 }

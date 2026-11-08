@@ -216,3 +216,110 @@ async fn the_desktop_enrolls_its_keys_and_a_second_approver_needs_an_approval() 
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(state.security.approver_keys.list().len(), 2);
 }
+
+/// The gates in server/security_gates.rs, through the real dispatcher.
+#[tokio::test]
+async fn sensitive_routes_ask_for_approval_and_closing_doors_never_does() {
+    let (_temp, state) = temp_state();
+    let main = state.auth_token.clone();
+    let asks = |body: &Value| body["error"] == "approvalRequired";
+
+    let (status, body) = post(
+        &state,
+        "/api/updateTailcatState",
+        &main,
+        json!({ "kind": "setEnabled", "enabled": true }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert!(asks(&body), "{body}");
+    assert_eq!(body["approval"]["action"], "easyConnectEnable");
+    let (_, body) = post(
+        &state,
+        "/api/updateTailcatState",
+        &main,
+        json!({ "kind": "setEnabled", "enabled": false }),
+    )
+    .await;
+    assert!(!asks(&body), "{body}");
+
+    let (_, body) = post(
+        &state,
+        "/api/issueComputerGrant",
+        &main,
+        json!({ "serverId": "S4n", "name": "New", "agentAccess": true }),
+    )
+    .await;
+    assert!(asks(&body), "{body}");
+    assert_eq!(body["approval"]["action"], "computerGrant");
+    let (_, body) = post(
+        &state,
+        "/api/issueComputerGrant",
+        &main,
+        json!({ "serverId": "S4n", "name": "New", "agentAccess": false }),
+    )
+    .await;
+    assert!(!asks(&body), "{body}");
+
+    let (_, body) = post(
+        &state,
+        "/api/autopilot",
+        &main,
+        json!({ "op": "set", "patch": { "answerApprovals": true } }),
+    )
+    .await;
+    assert_eq!(
+        body["approval"]["action"], "autopilotAnswerApprovals",
+        "{body}"
+    );
+
+    let (_, body) = post(
+        &state,
+        "/api/gbots",
+        &main,
+        json!({ "action": "create", "name": "Helper" }),
+    )
+    .await;
+    assert_eq!(body["approval"]["action"], "gbotsAddBot", "{body}");
+
+    let (_, body) = post(
+        &state,
+        "/api/dispatchRendererCommand",
+        &main,
+        json!({ "action": "updateSettingsPatch", "payload": { "patch": { "syncCoordinator": true } } }),
+    )
+    .await;
+    assert_eq!(
+        body["approval"]["action"], "settingsWeakenSecurity",
+        "{body}"
+    );
+
+    // A coordinator answering its own thread's prompt asks too (user decision 2).
+    let coordinator =
+        state
+            .security
+            .session_tokens
+            .mint_session("P1", "G1", SessionRole::Coordinator);
+    let (_, body) = post(
+        &state,
+        "/api/answerSessionChatPrompt",
+        &coordinator,
+        json!({ "projectId": "P1", "sessionId": "G2", "kind": "terminalChoice", "choiceIndex": 0 }),
+    )
+    .await;
+    assert_eq!(
+        body["approval"]["action"], "answerOtherSessionPrompt",
+        "{body}"
+    );
+
+    // A session links threads only to itself.
+    let (status, body) = post(
+        &state,
+        "/api/linkCoordinatorThread",
+        &coordinator,
+        json!({ "coordinatorProjectId": "P1", "coordinatorSessionId": "G9", "projectId": "P1", "sessionId": "G2" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["error"], "forbidden");
+}

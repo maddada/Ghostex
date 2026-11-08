@@ -1074,9 +1074,12 @@ async fn omp_tool_approval_probe_after_http_action(action: OmpApprovalAction) {
     if let Some(shown) = &shown {
         params["noticeDetectedAt"] = json!(shown);
     }
+    // The user's own app answers (an agent answering another session's prompt asks first,
+    // GitHub #495).
+    let owner = state.security.session_tokens.mint_owner("test-desktop");
     let routed = route_http(
         state.clone(),
-        rpc_request(endpoint, &state.auth_token, json!({ "params": params })),
+        rpc_request(endpoint, &owner, json!({ "params": params })),
         "approval-probe".to_string(),
     )
     .await;

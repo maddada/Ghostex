@@ -155,6 +155,7 @@ mod previous_session_restore_http;
 mod project_docs_http;
 pub mod project_paths;
 mod route_http;
+mod security_gates;
 mod security_http;
 mod session_auto_sleep_sweep;
 mod session_links_sync;
@@ -163,7 +164,6 @@ mod session_self_heal_runtime;
 mod session_stall_runtime;
 pub(crate) use autopilot_http::{handle_autopilot_http, AUTOPILOT_ENDPOINTS};
 pub(crate) use collab_http::{handle_collab_http, COLLAB_ENDPOINTS};
-#[allow(unused_imports)]
 pub(crate) use security_http::require_owner_presence;
 pub mod session_state_sync;
 mod shutdown_bounds;
