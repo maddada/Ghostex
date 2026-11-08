@@ -498,11 +498,28 @@ fn qr_placeholder(
         .into_any_element()
 }
 
-/// `card`'s bare pairing code (gxserver's `text`), what Copy as text puts on the clipboard.
+/*
+CDXC:RemotePairing 2026-11-08 FIX:
+User (GitHub #495, 11.1.1): every copy button must give a code that can pair. Since 11.1.0 gxserver
+puts the one-time secret in the Easy Connect code only while the Show QR sheet is open
+(`openTunnel`); with it closed it answers the address without a secret (an empty QR payload), which
+a phone can't pair with and a computer refuses ("This code can't pair a computer by itself"). So an
+Easy Connect code is copied only when it carries the secret, which its non-empty QR payload says:
+Copy as text shows in the Show QR sheet and nowhere the code can't pair. The Tailscale code carries
+no secret and is copied as before.
+*/
+/// `card`'s bare pairing code (gxserver's `text`), what Copy as text puts on the clipboard: for Easy
+/// Connect only a code that can pair (with its one-time secret, so with a QR payload).
 fn pairing_text(tab: &RemoteTab, card: PathCard) -> Option<String> {
     let pairing = tab.pairing.as_ref()?;
     let text = match card {
-        PathCard::EasyConnect => pairing.easy_connect.as_ref()?.text.clone(),
+        PathCard::EasyConnect => {
+            let code = pairing.easy_connect.as_ref()?;
+            if code.payload.is_empty() {
+                return None;
+            }
+            code.text.clone()
+        }
         PathCard::Tailscale => pairing.tailscale.as_ref()?.text.clone(),
     };
     (!text.is_empty()).then_some(text)
@@ -586,7 +603,10 @@ fn phone_panel(tab: &mut RemoteTab, t: &RemoteTokens, cx: &mut Context<RemoteTab
                 Emph::Plain,
             ),
             ("Copy as text", Emph::Strong),
-            (" and paste the code on the phone.", Emph::Plain),
+            (
+                " under the QR and paste the code on the phone.",
+                Emph::Plain,
+            ),
         ],
     ];
     if let Some(code) = &code {
@@ -687,20 +707,29 @@ fn computer_panel(
         )],
     };
     let steps: Vec<Vec<(&str, Emph)>> = vec![
-        vec![(
-            "On the other computer, open Ghostex → Settings → Remote → Add a machine.",
-            Emph::Plain,
-        )],
         vec![
-            ("Choose ", Emph::Plain),
+            ("Click ", Emph::Plain),
+            ("Show QR", Emph::Strong),
+            (" below, then ", Emph::Plain),
+            ("Copy as text", Emph::Strong),
+            (". The code works once, for 5 minutes.", Emph::Plain),
+        ],
+        vec![
+            (
+                "On the other computer, open Ghostex → Settings → Remote → Add a machine (or that computer’s entry), choose ",
+                Emph::Plain,
+            ),
             ("Easy Connect code", Emph::Strong),
-            (" and paste the copied code.", Emph::Plain),
+            (" and paste it.", Emph::Plain),
         ],
         step_three,
         vec![
             ("Click ", Emph::Plain),
             ("Add machine", Emph::Strong),
-            (", then open it from the sidebar.", Emph::Plain),
+            (
+                ". Both screens show three words: approve the other computer here, under Paired devices, if they match.",
+                Emph::Plain,
+            ),
         ],
     ];
     let list = v_flex()
@@ -733,51 +762,33 @@ fn computer_panel(
                 .text_color(hsla(t.foreground))
                 .child("Use a code on your other computer"),
         )
-        .child("To add this computer on another computer, copy its Easy Connect code below.")
+        .child(
+            "To add this computer on another computer, give it this computer’s Easy Connect code.",
+        )
         .child(list);
-    if paired_only(tab) {
-        // Pairing v2 (CDXC:RemotePairing 2026-11-08 in server/src/remote_access/computer_pairing.rs):
-        // the other computer pairs like a phone, with the code from this computer's Show QR window.
-        meta = meta.child(
-            "Only paired devices can connect, so click Show QR here, then Copy as text, and paste that code on the other computer. Both screens show three words; approve the other computer here if they match.",
-        );
-    }
-    if let Some(code) = &code {
-        let copied = tab.copied.contains("remote-copy-code");
-        // The bare code: every computer's Easy Connect code field reads it, older ones not the link.
-        let payload = code.text.clone();
-        let leading_icon = if copied {
-            ICON_CIRCLE_CHECK_FILLED
-        } else {
-            ICON_COPY
-        };
+    // Pairing v2 (CDXC:RemotePairing 2026-11-08 in server/src/remote_access/computer_pairing.rs):
+    // the other computer pairs like a phone, with the code from this computer's Show QR sheet, the
+    // only place the code carries its one-time secret (CDXC:RemotePairing 2026-11-08 FIX above).
+    if code.is_some() {
         let button = settings_button_sized(
             &t.p,
-            "remote-copy-code",
-            "Copy Easy Connect code",
-            Some(leading_icon),
+            "remote-computer-show-qr",
+            "Show QR",
+            Some(ICON_QRCODE),
             ButtonVariant::Primary,
             ButtonSize::Sm,
             false,
             None,
-            move |tab: &mut RemoteTab, _window, cx| {
-                tab.copy("remote-copy-code".into(), payload.clone(), cx);
+            move |tab: &mut RemoteTab, window, cx| {
+                tab.qr_preview = Some(PathCard::EasyConnect);
+                tab.qr_preview_focus.focus(window, cx);
+                // Ask at once, so the code with its secret is there when the sheet opens.
+                tab.refresh_fast(cx);
+                cx.notify();
             },
             cx,
         );
-        let tooltip: SharedString = if copied {
-            "Copied".into()
-        } else {
-            "Copy Easy Connect code for another computer".into()
-        };
-        meta = meta.child(
-            h_flex().mt(px(2.0)).gap(px(8.0)).child(
-                div()
-                    .id("remote-copy-code-tooltip")
-                    .tooltip(super::super::super::fields::tooltip_text(tooltip))
-                    .child(button),
-            ),
-        );
+        meta = meta.child(h_flex().mt(px(2.0)).gap(px(8.0)).child(button));
     }
     div()
         .w_full()
