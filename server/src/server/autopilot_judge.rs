@@ -26,6 +26,8 @@ const SUPERVISOR_TITLE: &str = "Autopilot supervisor";
 const WAKE_GAP_MS: i64 = 60_000;
 /// A wake that the supervisor has not finished after this long lets the next one through.
 const WAKE_STALE_MS: i64 = 20 * 60_000;
+/// `wake`'s answer while the supervisor is still on an earlier wake: no failure.
+const BUSY: &str = "busy";
 
 /// One thing that needs judgment.
 #[derive(Clone, Debug)]
@@ -47,6 +49,8 @@ struct Judge {
     last_wake_ms: i64,
     wakes: u64,
     waking: bool,
+    /// The last failure to start or wake it, logged once until it changes or a wake gets through.
+    failure: Option<String>,
 }
 
 fn judge() -> &'static Mutex<Judge> {
@@ -236,12 +240,19 @@ pub(super) async fn maybe_wake(state: Arc<AppState>) {
         Ok(n) => {
             judge.last_wake_ms = now;
             judge.wakes = n;
+            judge.failure = None;
             for item in &items {
                 judge.handed.insert((item.key.clone(), item.why.clone()));
             }
         }
         // Busy, or it could not start: the items wait for the next try.
-        Err(_) => {
+        Err(error) => {
+            // A start or a wake that failed (no account with room, a model it can't launch, a send
+            // that didn't land) shows in both logs, once per failure, so it isn't silent.
+            if error != BUSY && judge.failure.as_deref() != Some(error.as_str()) {
+                judge.failure = Some(error.clone());
+                log_failure(&state, &items, &error, now);
+            }
             let mut items = items;
             items.append(&mut judge.queue);
             judge.queue = items;
@@ -261,11 +272,13 @@ async fn wake(
                 presentation_activity(&session, &crate::presentation::now_iso()) == "working";
             let last = judge().lock().map(|judge| judge.last_wake_ms).unwrap_or(0);
             if busy && now - last < WAKE_STALE_MS {
-                return Err("busy".to_string());
+                return Err(BUSY.to_string());
             }
             record
         }
-        None => start_supervisor(state, config).await?,
+        None => start_supervisor(state, config)
+            .await
+            .map_err(|error| format!("Couldn't start the supervisor: {error}"))?,
     };
     let dir = autopilot::ensure_notes(&state.paths).map_err(|error| error.to_string())?;
     let n = autopilot::next_wake_number(&dir);
@@ -283,8 +296,58 @@ async fn wake(
         &(record.project_id.clone(), record.session_id.clone()),
         &message,
     )
-    .await?;
+    .await
+    .map_err(|error| format!("Couldn't wake the supervisor: {error}"))?;
     Ok(n)
+}
+
+/// Logs a supervisor that couldn't start or take a wake, to gxserver's log and Autopilot's.
+fn log_failure(state: &AppState, items: &[JudgmentItem], error: &str, now: i64) {
+    let _ = state.logger.log(GxserverLogInput {
+        level: LogLevel::Warn,
+        event: "autopilotSupervisorFailed".to_string(),
+        server_id: Some(state.metadata.server_id.clone()),
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: Some(error.to_string()),
+        details: Some(json!({ "waiting": items.len() })),
+    });
+    let titles = items
+        .iter()
+        .map(|item| item.title.as_str())
+        .filter(|title| !title.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ");
+    autopilot::append_log(
+        &state.paths,
+        &autopilot::LogEntry {
+            at: crate::coordinators::iso_from_ms(now).unwrap_or_default(),
+            project_id: String::new(),
+            session_id: String::new(),
+            title: SUPERVISOR_TITLE.to_string(),
+            project: "Autopilot".to_string(),
+            saw: format!(
+                "{} waiting for its judgment{}.",
+                if items.len() == 1 {
+                    "1 session".to_string()
+                } else {
+                    format!("{} sessions", items.len())
+                },
+                if titles.is_empty() {
+                    String::new()
+                } else {
+                    format!(": {titles}")
+                }
+            ),
+            did: format!(
+                "{}. It tries again on the next look.",
+                error.trim_end_matches('.')
+            ),
+            rule: "supervisor".to_string(),
+            outcome: autopilot::Outcome::Failed,
+        },
+    );
 }
 
 /// What one wake asks: what the supervisor may and may not do, then each session.

@@ -488,7 +488,16 @@ impl AutopilotTab {
             .map(|view| view["supervisor"].clone())
             .unwrap_or(Value::Null);
         let status = match supervisor["agent"].as_str() {
-            None => "It hasn't been needed yet. The first time something needs judgment, it starts in an Autopilot project in your sidebar, so you can read why it did each thing.".to_string(),
+            // User, on the old "It hasn't been needed yet" line: "why has this never been
+            // needed??" It wakes only for what the rules can't settle, so the line says which.
+            None => format!(
+                "Not started yet. It wakes only for what Autopilot's rules can't settle: a session still frozen after an interrupt and a reload, or (with Answer questions on) a question with no recommended choice. Until then the rules handle everything. It starts in an Autopilot project in your sidebar.{}",
+                if config["answerQuestions"].as_bool() == Some(true) {
+                    ""
+                } else {
+                    " Answer questions is off, so questions stay with you."
+                }
+            ),
             Some(agent) => {
                 let wakes = supervisor["wakes"].as_u64().unwrap_or(0);
                 let waiting = supervisor["waiting"].as_u64().unwrap_or(0);
@@ -501,7 +510,11 @@ impl AutopilotTab {
                         .as_str()
                         .map(|at| format!(", last at {}", when(Some(at))))
                         .unwrap_or_default(),
-                    if waiting > 0 { format!("; {waiting} waiting for it") } else { String::new() },
+                    if waiting > 0 {
+                        format!("; {waiting} waiting for it")
+                    } else {
+                        String::new()
+                    },
                 )
             }
         };
@@ -576,6 +589,19 @@ fn row_id(id: String) -> &'static str {
 
 /// A line of text inside a section's card, with a row's padding; `(text, true)` parts are code.
 pub(super) fn padded_text(p: &SettingsPalette, parts: &[(&str, bool)]) -> AnyElement {
+    // Plain text alone wraps inside the row (a long one in the flex row below stays on one line,
+    // cut off at the right edge).
+    if parts.iter().all(|(_, code)| !code) {
+        let text: String = parts.iter().map(|(part, _)| *part).collect();
+        return div()
+            .w_full()
+            .px(px(ROW_PADDING_X))
+            .py(px(ROW_PADDING_Y + 2.0))
+            .text_size(px(13.0))
+            .text_color(p.muted)
+            .child(text)
+            .into_any_element();
+    }
     let mut line = h_flex().flex_wrap().items_baseline();
     for (part, code) in parts {
         line = line.child(if *code {
