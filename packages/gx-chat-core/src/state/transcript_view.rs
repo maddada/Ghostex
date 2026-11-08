@@ -32,9 +32,17 @@ use crate::transcript::deferred_work::{DeferredWalk, DeferredWorkCache};
 use crate::transcript::items::TranscriptItems;
 
 /// Items from the tail that are fully projected before the first publish; the rest backfill in
-/// batches of the same size.
+/// batches of [`BACKFILL_BATCH`].
 pub const EAGER_TAIL_ITEMS: usize = 12;
-pub const BACKFILL_BATCH: usize = 24;
+/// How many placeholders one backfill pass projects (`rows::advance`), newest first.
+///
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// Every pass rebuilds the transcript list and assembles the document again, which on a long chat
+/// costs far more than projecting the rows themselves: at 24 per pass a 19,000-row chat scrolled
+/// far up kept the chat worker busy for 15 seconds after the rows arrived (the user's app "gets
+/// slower with time ... even pasting an image takes long"). 96 per pass took 8 seconds, and its
+/// slowest pass was no longer than at 48.
+pub const BACKFILL_BATCH: usize = 96;
 
 /// The conversation the main transcript belongs to.
 pub const ROOT_AGENT_PATH: &str = "/root";
