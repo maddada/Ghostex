@@ -56,6 +56,11 @@ pub(crate) struct SettingsPalette {
     pub(crate) ring: Rgba,
 }
 
+/// How much of the window's glass a Settings dialog's tint covers under glass, dark and light
+/// (CDXC:Settings 2026-11-08 on [`SettingsPalette::dialog_surface`]).
+const GLASS_DIALOG_ALPHA_DARK: f32 = 0.42;
+const GLASS_DIALOG_ALPHA_LIGHT: f32 = 0.55;
+
 /// `--ghostex-accent` for the default tint: the sky accent the React modal host publishes before
 /// the settings arrive.
 const DEFAULT_GHOSTEX_ACCENT: u32 = 0x86d3f8;
@@ -175,12 +180,34 @@ impl SettingsPalette {
     }
 
     /// The surface of a dialog drawn inside Settings over its backdrop: the theme's own colour (the
-    /// tinted chrome, opaque even under glass) lifted a step toward the ink's opposite, so the sheet
-    /// reads as a raised pane of the theme instead of a black box.
+    /// tinted chrome) lifted a step toward the ink's opposite, so the sheet reads as a raised pane
+    /// of the theme instead of a black box. Under glass it is that colour thinned to a frosted tint
+    /// ([`GLASS_DIALOG_ALPHA_DARK`], [`GLASS_DIALOG_ALPHA_LIGHT`]) over the page, which the dialog's
+    /// backdrop veils in the theme's colour under glass (fields/nested_glass.rs).
     ///
     /// CDXC:Settings 2026-11-03 DECISION:
-    /// User, of the Remote > Add a machine dialog drawn solid black with near-black fields: "make this not black bg like this, should fit the theme better please with transparency when it's enabled". Every dialog drawn inside Settings takes this themed surface and [`Self::nested_dialog`]'s ink washes for its fields, switches and segmented controls. It stays opaque under glass: a GPUI window blurs only what is behind the window, so a see-through sheet here would show the Settings page's text unblurred through it, the read-through the user turned down for floating surfaces on 2026-10-25.
+    /// User, of the Remote > Add a machine dialog drawn solid black with near-black fields: "make this not black bg like this, should fit the theme better please with transparency when it's enabled". Every dialog drawn inside Settings takes this themed surface and [`Self::nested_dialog`]'s ink washes for its fields, switches and segmented controls.
+    ///
+    /// CDXC:Settings 2026-11-08 DECISION:
+    /// User, of the Playbook overrides editor still drawn as an opaque near-black panel over the glass Settings window: "this isn't transparent like it should be look at other dialogs in settings please", next to the frosted New Coordinator dialog. This supersedes the 2026-11-03 rule that the sheet stays opaque under glass (a GPUI window blurs only what is behind the window, so a see-through sheet showed the page's text sharply through it). Under glass every dialog nested in Settings is a frosted tint like the app's own glass dialogs. Asked whether to hide the page behind an open dialog or keep it dimmed (Q1996), the user answered "dim page": the page stays in view behind the see-through sheet, and under glass the backdrop is a veil of the theme's own colour instead of the black dim (`nested_glass::nested_backdrop`), so its text never reads sharply through the tint and a light theme does not turn grey. Popovers and the Pick Color dialog, drawn without a backdrop, keep the opaque [`Self::solid_dialog_surface`].
     pub(crate) fn dialog_surface(&self) -> Rgba {
+        let solid = self.solid_dialog_surface();
+        if !self.glass {
+            return solid;
+        }
+        Rgba {
+            a: if self.light {
+                GLASS_DIALOG_ALPHA_LIGHT
+            } else {
+                GLASS_DIALOG_ALPHA_DARK
+            },
+            ..solid
+        }
+    }
+
+    /// [`Self::dialog_surface`] kept opaque under glass: a popover or picker drawn over the page
+    /// without hiding it.
+    pub(crate) fn solid_dialog_surface(&self) -> Rgba {
         let base = Rgba {
             a: 1.0,
             ..self.modal.solid_surface

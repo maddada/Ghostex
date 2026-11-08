@@ -250,7 +250,7 @@ fn instructions_popover(
 ) -> Option<AnyElement> {
     let bounds = trigger.get()?;
     let instructions = ssh_access_instructions(platform);
-    let background = t.p.dialog_surface();
+    let background = t.p.solid_dialog_surface();
     let border = if t.p.light {
         modal_rgba(0x000000, 0.12)
     } else {

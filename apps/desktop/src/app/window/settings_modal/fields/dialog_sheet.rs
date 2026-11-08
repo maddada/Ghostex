@@ -54,7 +54,10 @@ pub(crate) fn settings_dialog_layer<V: 'static>(
                     .occlude()
                     .w(viewport.width)
                     .h(viewport.height)
-                    .bg(hsla(modal_rgba(0x000000, backdrop_alpha)))
+                    .bg(hsla(super::nested_glass::nested_backdrop(
+                        window,
+                        backdrop_alpha,
+                    )))
                     .flex()
                     .items_center()
                     .justify_center()
