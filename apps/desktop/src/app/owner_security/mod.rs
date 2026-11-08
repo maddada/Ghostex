@@ -509,6 +509,29 @@ pub(crate) fn approve_request(
     })
 }
 
+/*
+CDXC:Security 2026-11-08 WHY:
+A card only leaves when its gxserver says the request was answered or lapsed, and a card whose word never arrived (the app was away from its event stream when it happened) stayed for good: Approve asked for Touch ID and then failed, and the agent's next try added another card beside it. Before the prompt, the card's request is read back; one no longer waiting just closes.
+*/
+/// Whether request `id` still waits for the owner; `true` when gxserver can't say, so the
+/// decision goes ahead and reports its own error.
+pub(crate) fn request_still_waiting(transport: &Transport, id: &str) -> bool {
+    in_security_flow(|| {
+        require_owner_session(transport)?;
+        match rpc(transport, "/api/readApprovalRequest", json!({ "id": id })) {
+            Ok(answer) => Ok::<bool, String>(
+                answer
+                    .pointer("/request/status")
+                    .and_then(Value::as_str)
+                    .is_none_or(|status| status == "pending"),
+            ),
+            Err((Some(code), _)) if code == "notFound" => Ok(false),
+            Err(_) => Ok(true),
+        }
+    })
+    .unwrap_or(true)
+}
+
 /// [`approve_request`] for request `id` of this computer's gxserver (a phone or computer waiting
 /// to pair, from Settings > Remote or the 11.0.1 notice): reads it, then prompts and signs.
 pub(crate) fn approve_local_request_id(id: &str) -> Result<(), String> {

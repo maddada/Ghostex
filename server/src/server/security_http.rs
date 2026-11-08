@@ -401,8 +401,15 @@ fn handle(
                 .map_err(|error| approval_error(&error))?;
             security.publish(security::SecurityEvent::ApprovalApproved {
                 request: request.clone(),
-                key_id,
+                key_id: key_id.clone(),
             });
+            for alike in super::security_cross_project::settle_reach_decision(state, &request, now)
+            {
+                security.publish(security::SecurityEvent::ApprovalApproved {
+                    request: alike,
+                    key_id: key_id.clone(),
+                });
+            }
             Ok(json!({ "request": request }))
         }
         security::APPROVALS_DENY_ENDPOINT => {
@@ -415,6 +422,13 @@ fn handle(
                 request: request.clone(),
                 by: caller.clone(),
             });
+            for alike in super::security_cross_project::settle_reach_decision(state, &request, now)
+            {
+                security.publish(security::SecurityEvent::ApprovalDenied {
+                    request: alike,
+                    by: caller.clone(),
+                });
+            }
             crate::audit::record(
                 crate::audit::Action::from_approval(&request),
                 crate::audit::Actor::from(caller),

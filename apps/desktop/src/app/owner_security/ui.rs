@@ -140,17 +140,22 @@ impl GhostexGpuiApp {
             },
         };
         let request = request.clone();
+        let card = card_id(machine_id, &request.id);
         let lets_computer_in = matches!(
             request.action,
             ghostex_gx_protocol::approval::SensitiveAction::ComputerGrant
                 | ghostex_gx_protocol::approval::SensitiveAction::ComputerRegister
         );
         let decided = cx.background_executor().spawn(async move {
+            if !super::request_still_waiting(&transport, &request.id) {
+                return Err(None);
+            }
             if deny {
                 super::deny_request(&transport, &request.id)
             } else {
                 super::approve_request(&transport, &request)
             }
+            .map_err(Some)
         });
         cx.spawn(async move |this, cx| {
             let outcome = decided.await;
@@ -160,7 +165,15 @@ impl GhostexGpuiApp {
                 if outcome.is_ok() && lets_computer_in && !deny {
                     this.renew_connected_computers(true, cx);
                 }
-                if let Err(error) = outcome {
+                if let Err(None) = outcome {
+                    this.remove_gpui_app_toast(&card, cx);
+                    this.dispatch_gpui_workspace_action_toast(
+                        "info",
+                        "Already answered",
+                        "That request was already answered or ran out of time.",
+                        cx,
+                    );
+                } else if let Err(Some(error)) = outcome {
                     this.dispatch_gpui_workspace_action_toast(
                         "warning",
                         if deny {

@@ -131,12 +131,56 @@ pub(crate) fn cross_project_action(
     };
     Some(
         ActionRequest::new(SensitiveAction::ReachOtherProject, summary)
+            .params(reach_params(&target))
             .target(target)
-            .params(Value::Object(params.clone()))
             .detail(format!(
                 "Approved once, this agent can message and start sessions in {place} until it is closed."
             )),
     )
+}
+
+/*
+CDXC:Security 2026-11-08 WHY:
+A user on 11.1.1: "I came back to 3 popups for approval of agents talking to each other. I approved the first, and the rest did not disappear." A reach request carried the whole call, message text included, so one agent sending three messages to another project made three cards, and an approval was only remembered when the agent came back with it, so the other cards stayed until they lapsed. The request now names only the project reached (`reach_params`): one card per agent and project, which a retry with any message can spend. Approving or denying it answers the agent's other waiting requests for that project at once (`settle_reach_decision`), and an approval is remembered the moment it is given.
+CDXC:Security 2026-11-08 DECISION:
+To ask once per project pair instead (any agent in project A reaching project B), key the memory on the caller's project in `caller_key`, put that project into `reach_params` and make the request `.shared()`: one waiting card per pair, spendable by any agent of A (the digest still binds it to A).
+*/
+/// What a reach request is about: only the project reached, never the message, so every call
+/// from one agent to one project is the same request.
+fn reach_params(target: &str) -> Value {
+    json!({ "reach": target })
+}
+
+/// The owner just approved or denied `request` (`/api/approveApprovalRequest`,
+/// `/api/denyApprovalRequest`): for a reach, the agent's other waiting requests for that project
+/// get the same answer (returned, so their cards close), and an approval is remembered now, so
+/// the agent's next call passes whatever it sends.
+pub(crate) fn settle_reach_decision(
+    state: &AppState,
+    request: &ghostex_gx_protocol::approval::ApprovalRequest,
+    now_ms: u64,
+) -> Vec<ghostex_gx_protocol::approval::ApprovalRequest> {
+    if request.action != SensitiveAction::ReachOtherProject {
+        return Vec::new();
+    }
+    let settled = state
+        .security
+        .approvals
+        .settle_same_target(&request.id, now_ms);
+    if request.status == ghostex_gx_protocol::approval::ApprovalStatus::Approved {
+        if let Some(requester) = state.security.approvals.requester_of(&request.id) {
+            remember_approved(state, &requester, request);
+            // The agent's next call no longer spends the approval (it is remembered), so the
+            // approval is logged here rather than in the gate.
+            crate::audit::record(
+                crate::audit::Action::from_approval(request),
+                crate::audit::Actor::from(&requester),
+                crate::audit::Outcome::Approved,
+                Some(crate::audit::ApprovalRef::from(request)),
+            );
+        }
+    }
+    settled
 }
 
 /// After the owner approved `request` for `caller`, remember the project it reached.
