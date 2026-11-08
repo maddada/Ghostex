@@ -746,7 +746,18 @@ pub fn resolve_local_gxserver_target() -> CliResult<Target> {
     })
 }
 
+/*
+CDXC:Security 2026-11-08 WHY:
+Inside a Ghostex session the CLI speaks as that session, with the `gxs_` token gxserver gave it at start (`GHOSTEX_SESSION_TOKEN`, crate::security), so gxserver knows which session asked, a coordinator manages only its own threads, and the token dies with the session. Outside a session it falls back to the token file, which now carries agent-level powers only (plus thread management, user decision 3A of #495).
+*/
 pub fn read_local_gxserver_auth_token() -> CliResult<String> {
+    if let Some(token) = std::env::var(crate::security::SESSION_TOKEN_ENV)
+        .ok()
+        .map(|token| token.trim().to_string())
+        .filter(|token| token.starts_with(crate::security::SESSION_TOKEN_PREFIX))
+    {
+        return Ok(token);
+    }
     let token = std::fs::read_to_string(gxserver_auth_token_path())
         .unwrap_or_default()
         .trim()

@@ -411,12 +411,25 @@ pub(crate) fn start_security_events(state: std::sync::Arc<AppState>) {
     drop(state);
     tokio::spawn(async move {
         let mut sweep = tokio::time::interval(std::time::Duration::from_secs(15));
+        let mut ticks: u64 = 0;
         loop {
             tokio::select! {
                 _ = shutdown.recv() => return,
                 _ = sweep.tick() => {
                     let Some(state) = weak.upgrade() else { return };
                     state.security.expire_lapsed(security::now_ms());
+                    // Every 5 minutes, and once at start: tokens of deleted sessions go.
+                    if ticks % 20 == 0 {
+                        let paths = state.paths.clone();
+                        let security = state.security.clone();
+                        let _ = tokio::task::spawn_blocking(move || {
+                            if let Some(live) = live_sessions(&paths) {
+                                security::revoke_tokens_of_deleted_sessions(&security, &live);
+                            }
+                        })
+                        .await;
+                    }
+                    ticks += 1;
                 }
                 event = events.recv() => {
                     let event = match event {
@@ -443,4 +456,21 @@ pub(crate) fn start_security_events(state: std::sync::Arc<AppState>) {
             }
         }
     });
+}
+
+/// Every session's `(project id, session id)`, or `None` when the database can't be read (then
+/// no token is revoked).
+fn live_sessions(
+    paths: &crate::paths::GxserverPaths,
+) -> Option<std::collections::HashSet<(String, String)>> {
+    let db = crate::storage::open_gxserver_database(paths).ok()?;
+    let mut statement = db
+        .prepare("SELECT projectId, sessionId FROM sessions")
+        .ok()?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .ok()?;
+    rows.collect::<Result<_, _>>().ok()
 }

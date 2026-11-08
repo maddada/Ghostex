@@ -33,8 +33,8 @@ pub struct PersistedSecurity {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PersistedSessionToken {
-    /// SHA-256 of the token, hex; the token itself is never written.
-    pub hash: String,
+    /// The session's `gxs_` token (see `session_tokens.rs` for why it is kept whole).
+    pub token: String,
     pub project_id: String,
     pub session_id: String,
     pub role: SessionRole,
@@ -99,7 +99,7 @@ mod tests {
         assert!(load(&path).unwrap().session_tokens.is_empty());
         let state = PersistedSecurity {
             session_tokens: vec![PersistedSessionToken {
-                hash: "h".into(),
+                token: "gxs_t".into(),
                 project_id: "p".into(),
                 session_id: "s".into(),
                 role: SessionRole::Coordinator,

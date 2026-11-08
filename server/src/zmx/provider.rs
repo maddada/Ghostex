@@ -319,6 +319,26 @@ pub(crate) fn start_session_provider_with_observed_state(
             } else {
                 startup_text
             };
+        let coordinator_environment = crate::coordinators::coordinator_launch_environment(
+            repository.db,
+            &lifecycle.project_id,
+            &lifecycle.session_id,
+            params
+                .get(crate::coordinators::COORDINATOR_THREAD_OF_PARAM)
+                .and_then(Value::as_str),
+            |project_id, session_id| {
+                repository
+                    .get_session(project_id, session_id)
+                    .ok()
+                    .flatten()
+                    .and_then(|session| string_field(&session, "globalRef"))
+            },
+        );
+        let session_token = crate::security::session_token_for_launch(
+            &lifecycle.project_id,
+            &lifecycle.session_id,
+            &coordinator_environment,
+        );
         build_zmx_run_command(ZmxRunCommandInput {
             cwd,
             global_session_ref: string_field(&probed_session, "globalRef"),
@@ -329,21 +349,8 @@ pub(crate) fn start_session_provider_with_observed_state(
             session_name: zmx_name.clone(),
             startup_text,
             zmx_executable_path: zmx.executable_path.clone(),
-            coordinator_environment: crate::coordinators::coordinator_launch_environment(
-                repository.db,
-                &lifecycle.project_id,
-                &lifecycle.session_id,
-                params
-                    .get(crate::coordinators::COORDINATOR_THREAD_OF_PARAM)
-                    .and_then(Value::as_str),
-                |project_id, session_id| {
-                    repository
-                        .get_session(project_id, session_id)
-                        .ok()
-                        .flatten()
-                        .and_then(|session| string_field(&session, "globalRef"))
-                },
-            ),
+            coordinator_environment,
+            session_token,
         })
     } else {
         build_zmx_shell_provider_command(ZmxShellProviderCommandInput {
@@ -355,6 +362,11 @@ pub(crate) fn start_session_provider_with_observed_state(
             prompt_editor: prompt_editor_mode_from_params(params)?,
             session_name: zmx_name.clone(),
             zmx_executable_path: zmx.executable_path.clone(),
+            session_token: crate::security::session_token_for_launch(
+                &lifecycle.project_id,
+                &lifecycle.session_id,
+                &[],
+            ),
         })
     };
     let start = run_zmx_start_command(&zmx_name, &zmx.executable_path, command)?;

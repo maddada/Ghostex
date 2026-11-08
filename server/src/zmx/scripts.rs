@@ -29,6 +29,25 @@ pub(crate) struct ZmxRunCommandInput {
     /// `GHOSTEX_COORDINATOR_ROLE` and `GHOSTEX_COORDINATOR_SESSION` for a coordinator's or a
     /// thread's agent (coordinators/launch_env.rs); empty for every other session.
     pub(crate) coordinator_environment: Vec<(&'static str, String)>,
+    /// The session's own `gxs_` token, exported as `GHOSTEX_SESSION_TOKEN` (crate::security).
+    pub(crate) session_token: Option<String>,
+}
+
+impl ZmxRunCommandInput {
+    /// The coordinator variables and the session token, exported after the identity reset.
+    pub(crate) fn launch_environment(&self) -> Vec<(&'static str, String)> {
+        let mut environment = self.coordinator_environment.clone();
+        environment.extend(session_token_environment(self.session_token.as_deref()));
+        environment
+    }
+}
+
+pub(crate) fn session_token_environment(token: Option<&str>) -> Vec<(&'static str, String)> {
+    token
+        .filter(|token| !token.is_empty())
+        .map(|token| (crate::security::SESSION_TOKEN_ENV, token.to_string()))
+        .into_iter()
+        .collect()
 }
 
 pub(crate) struct ZmxShellProviderCommandInput {
@@ -40,6 +59,8 @@ pub(crate) struct ZmxShellProviderCommandInput {
     pub(crate) prompt_editor: Option<String>,
     pub(crate) session_name: String,
     pub(crate) zmx_executable_path: String,
+    /// The terminal's own `gxs_` token, exported as `GHOSTEX_SESSION_TOKEN` (crate::security).
+    pub(crate) session_token: Option<String>,
 }
 
 #[cfg(not(windows))]
@@ -344,7 +365,7 @@ pub(crate) fn build_zmx_run_command(input: ZmxRunCommandInput) -> String {
         &provider_shell_command,
         "zmx_startup_command",
         &input.zmx_executable_path,
-        &input.coordinator_environment,
+        &input.launch_environment(),
     )
 }
 
@@ -381,7 +402,7 @@ pub(crate) fn build_zmx_shell_provider_command(input: ZmxShellProviderCommandInp
         &provider_shell_command,
         "zmx_shell_command",
         &input.zmx_executable_path,
-        &[],
+        &session_token_environment(input.session_token.as_deref()),
     )
 }
 

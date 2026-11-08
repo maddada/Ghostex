@@ -194,6 +194,7 @@ pub(crate) fn create_started_workspace_terminal(
         prompt_editor: prompt_editor.clone(),
         session_name: zmx_name.clone(),
         zmx_executable_path: zmx.executable_path.clone(),
+        session_token: crate::security::session_token_for_launch(&project_id, &session_id, &[]),
     });
     if let Err(error) = run_zmx_start_command(&zmx_name, &zmx.executable_path, start_command) {
         return Err(workspace_terminal_failure_with_cleanup(

@@ -135,6 +135,7 @@ pub(crate) fn build_zmx_exists_command(name: &str, program: &str) -> String {
 }
 
 pub(crate) fn build_zmx_run_command(input: ZmxRunCommandInput) -> String {
+    let environment = input.launch_environment();
     start(
         &input.zmx_executable_path,
         &input.session_name,
@@ -144,7 +145,7 @@ pub(crate) fn build_zmx_run_command(input: ZmxRunCommandInput) -> String {
         input.gxserver_auth_token_file,
         input.gxserver_base_url,
         input.gxserver_protocol_version,
-        input.coordinator_environment,
+        environment,
     )
 }
 pub(crate) fn build_zmx_shell_provider_command(input: ZmxShellProviderCommandInput) -> String {
@@ -157,7 +158,7 @@ pub(crate) fn build_zmx_shell_provider_command(input: ZmxShellProviderCommandInp
         input.gxserver_auth_token_file,
         input.gxserver_base_url,
         input.gxserver_protocol_version,
-        Vec::new(),
+        super::scripts::session_token_environment(input.session_token.as_deref()),
     )
 }
 

@@ -183,30 +183,32 @@ impl SecurityState {
         }
     }
 
-    /// A fresh token for a session that is starting (any earlier token of it stops working).
-    pub fn mint_session_token(
+    /// The token for a session that is starting: the one it already holds, or a new one.
+    pub fn issue_session_token(
         &self,
         project_id: &str,
         session_id: &str,
         role: SessionRole,
     ) -> std::io::Result<String> {
-        let token = self
+        let (token, new) = self
             .session_tokens
-            .mint_session(project_id, session_id, role);
+            .issue_session(project_id, session_id, role);
         self.save()?;
-        self.publish(SecurityEvent::SessionTokenMinted {
-            principal: Principal::Session {
-                project_id: project_id.to_string(),
-                session_id: session_id.to_string(),
-                role,
-            },
-        });
+        if new {
+            self.publish(SecurityEvent::SessionTokenMinted {
+                principal: Principal::Session {
+                    project_id: project_id.to_string(),
+                    session_id: session_id.to_string(),
+                    role,
+                },
+            });
+        }
         Ok(token)
     }
 
     /// Revokes a session's token when the session ends.
-    pub fn revoke_session_token(&self, session_id: &str) {
-        let removed = self.session_tokens.revoke_session(session_id);
+    pub fn revoke_session_token(&self, project_id: &str, session_id: &str) {
+        let removed = self.session_tokens.revoke_session(project_id, session_id);
         if removed.is_empty() {
             return;
         }
@@ -229,6 +231,51 @@ impl SecurityState {
             .map_err(|error| OwnerError::Save(error.to_string()))?;
         self.publish(SecurityEvent::ApproverKeyAdded { key: key.clone() });
         Ok(key)
+    }
+}
+
+static INSTALLED: std::sync::OnceLock<SecurityState> = std::sync::OnceLock::new();
+
+/// Makes `state` the one session launches read their tokens from (gxserver start; the first
+/// call wins). Session launch code runs deep in the zmx and wmx providers, where `AppState`
+/// isn't passed, like the Collab share and connected-computer registries.
+pub fn install(state: &SecurityState) {
+    let _ = INSTALLED.set(state.clone());
+}
+
+/// The token a session starting now exports as [`SESSION_TOKEN_ENV`]; `None` before
+/// [`install`] (tests) or when it can't be saved (the session then runs with the token file's
+/// agent level only). `coordinator_environment` is the session's coordinator variables
+/// (`coordinators::coordinator_launch_environment`), which give its role.
+pub fn session_token_for_launch(
+    project_id: &str,
+    session_id: &str,
+    coordinator_environment: &[(&'static str, String)],
+) -> Option<String> {
+    let state = INSTALLED.get()?;
+    let role = coordinator_environment
+        .iter()
+        .find(|(key, _)| *key == crate::coordinators::COORDINATOR_ROLE_ENV)
+        .map(|(_, value)| match value.as_str() {
+            "coordinator" => SessionRole::Coordinator,
+            "thread" => SessionRole::Thread,
+            _ => SessionRole::Agent,
+        })
+        .unwrap_or(SessionRole::Agent);
+    state.issue_session_token(project_id, session_id, role).ok()
+}
+
+/// Revokes the tokens of sessions that no longer exist (`live` holds every session's
+/// `(project id, session id)`); catches deletions that don't go through `/api/removeSession`,
+/// such as a project removed with its sessions.
+pub fn revoke_tokens_of_deleted_sessions(
+    state: &SecurityState,
+    live: &std::collections::HashSet<(String, String)>,
+) {
+    for (project_id, session_id) in state.session_tokens.sessions() {
+        if !live.contains(&(project_id.clone(), session_id.clone())) {
+            state.revoke_session_token(&project_id, &session_id);
+        }
     }
 }
 

@@ -110,6 +110,8 @@ pub(crate) fn session_identity_environment_keys() -> Vec<&'static str> {
         "GHOSTEX_NATIVE_SESSION_ID",
         "GHOSTEX_SESSION_ID",
         "GHOSTEX_SESSION_STATE_FILE",
+        // A session's own token (crate::security): each session's start sets its own.
+        crate::security::SESSION_TOKEN_ENV,
         "GHOSTEX_WORKSPACE_ID",
         "GHOSTEX_WORKSPACE_ROOT",
         "VSMUX_AGENT",

@@ -188,6 +188,7 @@ pub async fn run_gxserver_foreground(
     );
 
     let security = load_security_state(&paths, metadata.server_id.as_str(), &logger);
+    crate::security::install(&security);
     let state = Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: auth.token,

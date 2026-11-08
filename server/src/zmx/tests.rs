@@ -83,6 +83,7 @@ fn zmx_run_command_uses_initial_command_and_ghostex_identity() {
         startup_text: "codex --yolo\r".to_string(),
         zmx_executable_path: "/repo/zmx/zig-out/bin/zmx".to_string(),
         coordinator_environment: Vec::new(),
+        session_token: None,
     });
     assert!(command.contains(
         "run \"$zmx_session\" -d --initial-command /bin/zsh -lic \"$zmx_startup_command\""
@@ -114,6 +115,7 @@ fn zmx_run_command_exports_coordinator_markers_only_for_coordinators_and_threads
             startup_text: "claude".to_string(),
             zmx_executable_path: "/repo/zmx/zig-out/bin/zmx".to_string(),
             coordinator_environment,
+            session_token: None,
         })
     };
     let thread = run(vec![
@@ -638,4 +640,53 @@ fn startup_text_disposition_never_replays_live_provider_text() {
         "queueAfterTerminalReady"
     );
     assert_eq!(decide_startup_text_disposition("missing", None), "none");
+}
+
+/// A session's own token (crate::security) is exported after the identity reset, so the agent
+/// and the `ghostex` CLI inside it speak as that session.
+#[cfg(not(windows))]
+#[test]
+fn zmx_start_commands_export_the_session_token() {
+    let run = build_zmx_run_command(ZmxRunCommandInput {
+        cwd: "/tmp/project".to_string(),
+        global_session_ref: None,
+        gxserver_auth_token_file: None,
+        gxserver_base_url: None,
+        gxserver_protocol_version: Some(1),
+        prompt_editor: None,
+        session_name: "S7k-P100-G101".to_string(),
+        startup_text: "claude".to_string(),
+        zmx_executable_path: "/repo/zmx/zig-out/bin/zmx".to_string(),
+        coordinator_environment: Vec::new(),
+        session_token: Some("gxs_abc".to_string()),
+    });
+    let reset = run.find("unset ").expect("identity reset");
+    let export = run
+        .find("export GHOSTEX_SESSION_TOKEN=")
+        .expect("run command exports the session token");
+    assert!(export > reset);
+    let shell = build_zmx_shell_provider_command(ZmxShellProviderCommandInput {
+        cwd: "/tmp/project".to_string(),
+        global_session_ref: None,
+        gxserver_auth_token_file: None,
+        gxserver_base_url: None,
+        gxserver_protocol_version: Some(1),
+        prompt_editor: None,
+        session_name: "S7k-P100-G102".to_string(),
+        zmx_executable_path: "/repo/zmx/zig-out/bin/zmx".to_string(),
+        session_token: Some("gxs_def".to_string()),
+    });
+    assert!(shell.contains("gxs_def"));
+    let without = build_zmx_shell_provider_command(ZmxShellProviderCommandInput {
+        cwd: "/tmp/project".to_string(),
+        global_session_ref: None,
+        gxserver_auth_token_file: None,
+        gxserver_base_url: None,
+        gxserver_protocol_version: Some(1),
+        prompt_editor: None,
+        session_name: "S7k-P100-G103".to_string(),
+        zmx_executable_path: "/repo/zmx/zig-out/bin/zmx".to_string(),
+        session_token: None,
+    });
+    assert!(!without.contains("export GHOSTEX_SESSION_TOKEN="));
 }

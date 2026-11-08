@@ -25,6 +25,10 @@ pub(crate) fn remove_session_row(
     crate::agents::kill_draft_session_provider(&session);
     let project_id = value_text(&session, "projectId")?;
     let session_id = value_text(&session, "sessionId")?;
+    // The session's own token ends with it (crate::security).
+    state
+        .security
+        .revoke_session_token(&project_id, &session_id);
     crate::session_chat_queue::forget_session_chat_queue(db, &project_id, Some(&session_id))?;
     // CDXC:Collab 2026-11-08 DECISION: User (#495): "A share ends when its chat is deleted."
     super::collab_http::end_share_of_deleted_chat(&project_id, &session_id);
