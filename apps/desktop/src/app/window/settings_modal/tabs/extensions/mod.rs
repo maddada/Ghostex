@@ -19,7 +19,6 @@ mod delete_view;
 mod detail;
 mod filter_bar;
 mod folder_install;
-mod gbots_card;
 mod remembered_form;
 mod scope_editor;
 mod sections;
@@ -117,8 +116,6 @@ pub(crate) struct ExtensionsTab {
     pub(crate) masked_inputs: std::collections::HashMap<gpui::SharedString, bool>,
     /// The page opened a preview state's dialog or menu already.
     preview_applied: bool,
-    /// The GBots card's status and computer (gbots_card.rs).
-    pub(crate) gbots_card: gbots_card::GbotsCardState,
     /// The Collab card's install, update and uninstall (collab_card.rs).
     pub(crate) collab_card: collab_card::CollabCardState,
 }
@@ -184,7 +181,6 @@ impl ExtensionsTab {
             preferences_draft: None,
             masked_inputs: std::collections::HashMap::new(),
             preview_applied: false,
-            gbots_card: Default::default(),
             collab_card: Default::default(),
         };
         page.request_plugin_status_if_missing(cx);

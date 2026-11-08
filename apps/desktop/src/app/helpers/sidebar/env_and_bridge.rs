@@ -145,11 +145,6 @@ pub(crate) fn gpui_sidebar_agent_icon(value: Option<&str>) -> Option<&'static st
         "dsh" | "dsh-tui" | "deepseek" | "deepseek harness" => Some("dsh"),
         "devin" => Some("devin"),
         "empryo" | "em" => Some("empryo"),
-        // CDXC:GBots 2026-11-08 WHY: a GBots conversation's row names its agent "gbots", but it is
-        // not a launcher agent (it is not in GPUI_DEFAULT_SIDEBAR_AGENTS), so the table fallback
-        // below never found it. The session then had no agent icon, session_chat_agent_for_icon
-        // never ran, and the conversation opened on its terminal only (issue #493).
-        "gbots" => Some("gbots"),
         other => GPUI_DEFAULT_SIDEBAR_AGENTS
             .iter()
             .find(|agent| agent.agent_id == other || agent.icon == other)

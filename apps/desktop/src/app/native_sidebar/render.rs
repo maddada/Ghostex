@@ -271,15 +271,6 @@ impl GhostexGpuiApp {
                                     .left(px(space_offset * appearance.scale))
                                     .opacity(space_opacity)
                                     .children(unified_list)
-                                    .when(
-                                        classic && content.bots_mode && content.bots_gbots,
-                                        |column| {
-                                            column.child(self.render_native_sidebar_new_gbot_row(
-                                                &appearance,
-                                                cx,
-                                            ))
-                                        },
-                                    )
                                     .when(classic && content.automations_row, |column| {
                                         column.child(self.render_native_sidebar_automations_row(
                                             content.automations_today,

@@ -187,8 +187,6 @@ prepare_cef_component() {
 	node -e 'const fs=require("node:fs");fs.writeFileSync(process.argv[1],JSON.stringify({assets:[],version:process.argv[2]},null,2)+"\n")' \
 		"$build_manifest" "$RELEASE_VERSION"
 	mkdir -p "$APP_DIR/resources"
-	# GBots, an on-demand component the GBots computer's gxserver downloads (server/src/gbots/download.rs); release builds only.
-	"$REPO_ROOT/tooling/gbots/seal-component.sh" "linux-$CEF_COMPONENT_ARCH" "$component_manifest"
 	# Collab, the sharing extension gxserver downloads when the owner installs it (server/src/collab_shim/install.rs); release builds only.
 	"$REPO_ROOT/tooling/collab/seal-component.sh" "linux-$CEF_COMPONENT_ARCH" "$component_manifest"
 	node "$REPO_ROOT/tooling/release-gpui/on-demand-manifest.mjs" seal \

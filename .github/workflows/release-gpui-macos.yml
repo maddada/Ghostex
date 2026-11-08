@@ -305,9 +305,7 @@ jobs:
             GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE; do
             printf '%s=%s\n' "$name" "${!name}" >> "$GITHUB_ENV"
           done
-          # Record the GBots component (release-gpui-gbots.yml) before sealing (tooling/gbots/seal-component.sh).
-          echo "GHOSTEX_GBOTS_SEAL=1" >> "$GITHUB_ENV"
-          # And the Collab component (release-gpui-collab.yml, tooling/collab/seal-component.sh).
+          # Record the Collab component (release-gpui-collab.yml, tooling/collab/seal-component.sh) before sealing.
           echo "GHOSTEX_COLLAB_SEAL=1" >> "$GITHUB_ENV"
       - name: Prepare references and GhosttyKit
         env:

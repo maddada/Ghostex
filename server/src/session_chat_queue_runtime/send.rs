@@ -359,23 +359,6 @@ async fn send_session_chat_message_locked(
     if let Some(sent) = cloud_send {
         return sent;
     }
-    // A GBots conversation's terminal runs Ghostex's GBots client; the message goes to its bot.
-    if session_chat_agent_for_session(&target.session).as_deref() == Some("gbots") {
-        if let Some(sent) = super::gbots_send::send_gbots_message(
-            state,
-            project_id,
-            session_id,
-            text,
-            image_paths,
-            source == SessionChatMessageSource::Composer,
-            draft_before_send.as_ref(),
-            draft_version,
-        )
-        .await
-        {
-            return sent;
-        }
-    }
     let agent = session_chat_agent_for_session(&target.session);
     let terminal_agent =
         crate::session_chat_composer::session_chat_composer_agent_id(&target.session)

@@ -460,11 +460,7 @@ pub(crate) fn request_session_rename(
         runtime_settings: object_field(&session, "runtimeSettings"),
         startup_text: None,
     });
-    // CDXC:GBots 2026-11-08 WHY: a GBots conversation's terminal is Ghostex's own chat client, not
-    // an agent with a `/rename` command: a typed `/rename <title>` went to the bot as a message and
-    // the runtime titled the conversation after it. Its title is Ghostex's to set, like a terminal's.
-    if is_agent_associated(&session, &identity) && !crate::gbots::is_conversation_session(&session)
-    {
+    if is_agent_associated(&session, &identity) {
         if identity
             .agent_id
             .as_deref()

@@ -75,7 +75,7 @@ pub use draft_arrivals::{
 };
 pub use drop_landing::{DropLanding, DropWrites, TreeDropTarget};
 pub use inputs::{
-    BotsSource, BrowserTabInput, CloseAfterDoneInput, DelayedSendInput, MachineTabInput,
+    BrowserTabInput, CloseAfterDoneInput, DelayedSendInput, MachineTabInput,
     PinnedSessionOrder, ProjectDiffStats, SectionCollapse, SectionId, SessionSortMode,
     SidebarCollapseState, SidebarHiddenItems, SidebarHostInputs, SidebarInputs, SidebarMode,
     SidebarSettings, SidebarUiState, UnavailableState, GROUP_WORKING_SESSIONS_SETTING_KEY,

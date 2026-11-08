@@ -74,7 +74,7 @@ fn bot_launch_command(profile: &str) -> String {
     format!("hermes -p {profile}")
 }
 
-/// Whether a project is in the Bots space (a Hermes bot or a GBot): its sessions are chats with a
+/// Whether a project is in the Bots space (a Hermes bot): its sessions are chats with a
 /// bot runtime, not agent sessions doing a task.
 ///
 /// CDXC:Bots 2026-11-08 DECISION:

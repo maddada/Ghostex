@@ -1,4 +1,4 @@
-//! `/api/gbots` and `/api/gbotsHome`: GBots (crate::gbots).
+//! `/api/gbots`: GBots (crate::gbots).
 
 use crate::protocol::rpc_success;
 
@@ -7,8 +7,7 @@ use super::*;
 pub(super) async fn route_gbots_http(
     request: RouteHttpRequest,
 ) -> Result<RoutedResponse, RouteHttpRequest> {
-    let home = request.endpoint.path == "/api/gbotsHome";
-    if request.endpoint.path != "/api/gbots" && !home {
+    if request.endpoint.path != "/api/gbots" {
         return Err(request);
     }
     let RouteHttpRequest {
@@ -22,12 +21,7 @@ pub(super) async fn route_gbots_http(
         Ok(params) => params,
         Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
     };
-    let answer = if home {
-        crate::gbots::gbots_home_action(state, params).await
-    } else {
-        crate::gbots::gbots_action(state, params).await
-    };
-    Ok(match answer {
+    Ok(match crate::gbots::gbots_action(state, params).await {
         Ok(value) => routed_json(
             Some(endpoint.path),
             StatusCode::OK,

@@ -69,7 +69,7 @@ async fn run(state: &AppState, id: &str, source: &'static str) {
     } else if let Some(extension) = id.strip_prefix("extension:") {
         update_extension(state, extension).await
     } else if let Some(component) = id.strip_prefix(items::COMPONENT_ITEM_PREFIX) {
-        update_component(state, component).await
+        update_component(component).await
     } else if id == "app" {
         crate::app_update::request_app_update_install(state, source)
             .await
@@ -274,9 +274,9 @@ async fn update_tool(state: &AppState, tool: &str) -> Result<(), Outcome> {
 /// How long a component download and install may take.
 const COMPONENT_WAIT: Duration = Duration::from_secs(15 * 60);
 
-/// Installs the newer component this release sealed (Collab, GBots), the way its own Settings
+/// Installs the newer component this release sealed (Collab), the way its own Settings
 /// card does, and waits for it.
-async fn update_component(state: &AppState, component: &str) -> Result<(), Outcome> {
+async fn update_component(component: &str) -> Result<(), Outcome> {
     let started = Instant::now();
     match component {
         "collab" => {
@@ -315,31 +315,6 @@ async fn update_component(state: &AppState, component: &str) -> Result<(), Outco
                 }
                 if started.elapsed() > COMPONENT_WAIT {
                     return Err(failed("The Collab update took too long."));
-                }
-            }
-        }
-        "gbots" => {
-            use crate::gbots::{download, runtime};
-            let _ = state;
-            download::retry_now();
-            if !download::ensure_downloading() {
-                return Err(failed("This Ghostex has no GBots runtime to install."));
-            }
-            loop {
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                if runtime::installed_runtime().is_some() {
-                    return Ok(());
-                }
-                let status = download::status_value();
-                if status["phase"] == "failed" {
-                    return Err(failed(
-                        status["error"]
-                            .as_str()
-                            .unwrap_or("The GBots update failed."),
-                    ));
-                }
-                if started.elapsed() > COMPONENT_WAIT {
-                    return Err(failed("The GBots update took too long."));
                 }
             }
         }

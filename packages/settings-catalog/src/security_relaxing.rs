@@ -51,8 +51,7 @@ pub fn needs_owner_presence(key: &str, value: &Value) -> bool {
         return value.as_bool() == Some(true);
     }
     // Shortening the home folder's deny list lets agents read what it kept them out of.
-    key == "gbotsComputer"
-        || key == "homeSecretFolders"
+    key == "homeSecretFolders"
         || holds_secret(key)
         || security_relaxing_keys().contains(key)
 }

@@ -411,7 +411,6 @@ pub(super) fn snapshot_from_view(
             .collect(),
         spaces_enabled: view.spaces_enabled,
         bots_enabled: view.bots_enabled,
-        bots_gbots: view.bots_source == ghostex_gx_core::BotsSource::Gbots,
         bots_mode: view.bots_mode,
         automations_row: view.automations_row,
         automations_today: view.automations_today,
@@ -647,13 +646,6 @@ fn project_context(group: &GroupView) -> Option<Value> {
             "botGatewayRunning".to_string(),
             Value::Bool(context.bot_gateway_running),
         );
-    }
-    // A GBots bot's kind and status (server/src/gbots/projects.rs), read by native_sidebar/bots.rs.
-    if let Some(kind) = &context.bot_kind {
-        object.insert("botKind".to_string(), Value::String(kind.clone()));
-    }
-    if let Some(activity) = &context.bot_activity {
-        object.insert("botActivity".to_string(), Value::String(activity.clone()));
     }
     // The Work view and the sidebar's briefcase show while any project has Work mode on
     // (native_sidebar/work_chips.rs, app/work_view/).

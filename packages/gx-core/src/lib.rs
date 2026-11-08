@@ -246,7 +246,7 @@ pub use crate::sidebar_view::{
     machine_state_short_word, machine_tab_layout, machine_tab_reveal_offset,
     machine_tabs_out_of_view, plan_space_sleep, plan_space_switch_restore, project_slot_plan,
     rename_shake_key, rendered_session_ids, reveal_plan, session_is_snoozed, session_slot_plan,
-    space_for_focused_row, space_landing_project_ids, ArmedAction, BotsSource, BrowserTabInput,
+    space_for_focused_row, space_landing_project_ids, ArmedAction, BrowserTabInput,
     CloseAfterDoneInput, Collection, CollectionView, CollectionsState, CoordinatorBadge,
     CoordinatorBadgeTone, DelayedSendInput, DelayedSendView, DropLanding, DropWrites, EmptyState,
     FocusedRowSpace, FoldedStatus, FoldedWorktree, GroupActionTarget, GroupCore, GroupSummary,

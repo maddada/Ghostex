@@ -126,8 +126,6 @@ pub(super) fn to_cli_session(
     insert_non_null(&mut map, "claudeCloud", p("claudeCloud"));
     // CDXC:CloudBoxes 2026-11-02 SEE-ALSO: mobile_summary.rs forwards it too; the phone draws the ☁ badge of a home draft whose tray picked Cloud Box from it (apps/mobile/app/src/components/sessions/CloudBoxBadge.tsx).
     insert_non_null(&mut map, "cloudBox", p("cloudBox"));
-    // CDXC:GBots 2026-11-07 SEE-ALSO: mobile_summary.rs forwards it too; the phone's Bots space reads it.
-    insert_non_null(&mut map, "gbot", p("gbot"));
     // Host-timer chrome for the mobile session menus; absent when the
     // presentation snapshot does not carry resolved timer projections.
     insert_js(&mut map, "closeAfterDone", &[p("closeAfterDone")]);

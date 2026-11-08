@@ -2,7 +2,7 @@
 //!
 //! CDXC:GBots 2026-11-06 DECISION:
 //! User (via coordinator): "creating a bot (name, instructions, agent)", the agent being the user's own Claude Code or Codex. The agent is a segmented pick (the shared control), Claude Code first.
-//! SEE-ALSO: apps/desktop/src/app/new_gbot_modal_lifecycle.rs (open), apps/desktop/src/app/gx_store/create/bot.rs (`gx_store_create_gbot`, the gxserver call), server/src/gbots/create.rs (what a new bot gets).
+//! SEE-ALSO: apps/desktop/src/app/new_gbot_modal_lifecycle.rs (open), apps/desktop/src/app/gx_store/create/bot.rs (`gx_store_create_gbot`, the gxserver call), server/src/gbots/ (what a new bot gets).
 use super::native_modal_kit::*;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable as _,
@@ -27,7 +27,7 @@ const FIELD_AGENT: &str = "Runs on";
 const CANCEL: &str = "Cancel";
 const CREATE: &str = "Create bot";
 
-/// The agents a bot runs on: gxserver's id and the label (server/src/gbots/create.rs `BOT_AGENTS`).
+/// The agents a bot runs on: gxserver's id and the label.
 const AGENTS: [(&str, &str); 2] = [("claude", "Claude Code"), ("codex", "Codex")];
 
 pub(crate) enum NewGbotModalCommand {

@@ -66,12 +66,7 @@ impl GhostexGpuiApp {
                         |column| {
                             let id = group.group_id.clone();
                             let is_bot = group.bot_status().is_some();
-                            // A GBot's "+" starts a conversation (gbots), a Hermes bot's a session.
-                            let label = if group.is_gbot() {
-                                "New conversation"
-                            } else {
-                                "New Session"
-                            };
+                            let label = "New Session";
                             column.child(
                                 div()
                                     .id(format!("native-empty-project-{id}"))

@@ -203,7 +203,6 @@ pub(super) fn agent_display_name(agent: SessionChatTranscriptAgent) -> &'static 
         SessionChatTranscriptAgent::Zcode => "ZCode",
         SessionChatTranscriptAgent::Freebuff => "Freebuff",
         SessionChatTranscriptAgent::Dsh => "DeepSeek Harness",
-        SessionChatTranscriptAgent::Gbots => "GBots",
     }
 }
 

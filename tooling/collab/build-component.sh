@@ -3,7 +3,7 @@
 # that platform and `collab-component.json` naming it. Linux builds are static (musl), so one
 # archive runs on every distribution gxserver runs on. On macOS with --sign-identity the binary is
 # signed with the hardened runtime and notarised (--notary-profile, an `xcrun notarytool
-# store-credentials` profile), like GBots' Node.
+# store-credentials` profile).
 #
 # Usage: tooling/collab/build-component.sh --platform <darwin-arm64|darwin-x64|linux-x64|linux-arm64|windows-x64|windows-arm64>
 #        --out <dir> [--sign-identity <identity>] [--notary-profile <name>]

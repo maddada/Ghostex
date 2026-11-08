@@ -1344,7 +1344,7 @@ async fn send_nudge(
     text: &str,
     ledger_key: String,
 ) -> std::result::Result<(), String> {
-    // A bot's conversation (GBots, Hermes) takes no nudge (CDXC:Bots 2026-11-08, bot_projects.rs).
+    // A bot's conversation (Hermes) takes no nudge (CDXC:Bots 2026-11-08, bot_projects.rs).
     let (checking, project_id) = (state.clone(), key.0.clone());
     let bot = tokio::task::spawn_blocking(move || {
         open_gxserver_database(&checking.paths).is_ok_and(|db| {

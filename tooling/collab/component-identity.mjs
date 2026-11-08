@@ -2,7 +2,7 @@
 // The Collab component's immutable identity: `<crate version>-<12 hex of its build inputs>`, so a
 // release rebuilds `ghostex-collab` only when its source, its lockfile, its toolchain, the wire
 // contract it shares with gxserver, the pinned guest page or the build script change, and
-// otherwise reuses the published archives (like GBots and the code-server component).
+// otherwise reuses the published archives (like the code-server component).
 // Usage: component-identity.mjs [--platform <os-arch>] [--github-output]
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';

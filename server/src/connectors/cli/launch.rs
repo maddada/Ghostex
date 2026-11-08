@@ -72,8 +72,8 @@ pub(crate) fn with_project_cli_env(
 }
 
 /// The variables that hand an agent in `project` its workspace's `gh` and `gws` sign-ins; none
-/// while Connectors is off. GBots bots' turns set them directly (gbots/bot_tools.rs).
-pub(crate) fn project_cli_env(db: &rusqlite::Connection, project: &Value) -> Vec<(String, String)> {
+/// while Connectors is off.
+fn project_cli_env(db: &rusqlite::Connection, project: &Value) -> Vec<(String, String)> {
     let paths = get_gxserver_paths(None);
     if !super::super::connectors_enabled(&paths) {
         return Vec::new();

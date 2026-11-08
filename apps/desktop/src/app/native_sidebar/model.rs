@@ -25,8 +25,6 @@ pub(crate) struct NativeSidebarSnapshot {
     pub(crate) spaces_enabled: bool,
     /// The Bots extension is on, so the Hermes button is drawn.
     pub(crate) bots_enabled: bool,
-    /// The Bots space shows GBots rather than Hermes bots (gx-core `BotsSource`).
-    pub(crate) bots_gbots: bool,
     /// The list shows the Hermes bots rather than the projects.
     pub(crate) bots_mode: bool,
     /// The Bots list starts with the pinned Automations row.

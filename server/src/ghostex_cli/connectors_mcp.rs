@@ -57,9 +57,8 @@ const TOOL_WATCH_FOR: Duration = Duration::from_secs(60 * 60);
 /// Between two waits for a change, so a gxserver that answers at once can't spin the helper.
 const WAIT_SPACING: Duration = Duration::from_secs(1);
 
-/// The session this MCP server runs in: `GHOSTEX_CONNECTORS_SESSION_REF` (a GBots bot's
-/// conversation, set by `ghostex gbots agent`), else `GHOSTEX_GLOBAL_SESSION_REF` (both
-/// `server:project:session`), else the zmx name in `GHOSTEX_SESSION_ID` (`server-project-session`).
+/// The session this MCP server runs in: `GHOSTEX_GLOBAL_SESSION_REF` (`server:project:session`),
+/// else the zmx name in `GHOSTEX_SESSION_ID` (`server-project-session`).
 fn session_from_env() -> (Option<String>, Option<String>) {
     let read = |key: &str| {
         std::env::var(key)
@@ -67,15 +66,10 @@ fn session_from_env() -> (Option<String>, Option<String>) {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
     };
-    for key in [
-        "GHOSTEX_CONNECTORS_SESSION_REF",
-        "GHOSTEX_GLOBAL_SESSION_REF",
-    ] {
-        if let Some(reference) = read(key) {
-            let parts: Vec<&str> = reference.split(':').collect();
-            if parts.len() == 3 && !parts[1].is_empty() && !parts[2].is_empty() {
-                return (Some(parts[1].to_string()), Some(parts[2].to_string()));
-            }
+    if let Some(reference) = read("GHOSTEX_GLOBAL_SESSION_REF") {
+        let parts: Vec<&str> = reference.split(':').collect();
+        if parts.len() == 3 && !parts[1].is_empty() && !parts[2].is_empty() {
+            return (Some(parts[1].to_string()), Some(parts[2].to_string()));
         }
     }
     if let Some(name) = read("GHOSTEX_SESSION_ID") {

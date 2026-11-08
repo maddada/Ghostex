@@ -1,10 +1,12 @@
-//! Open and create for the native New bot dialog (GBots).
+//! Open and create for the native New bot dialog (GBots). Nothing opens it until native GBots
+//! give it a place under Chief of Staff in Main Hub.
 //! SEE-ALSO: apps/desktop/src/app/window/new_gbot_modal.rs (the window), apps/desktop/src/app/gx_store/create/bot.rs (`gx_store_create_gbot`).
 use crate::app::window::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    /// Opens the New bot dialog, from the New bot row at the top of the Bots space.
+    /// Opens the New bot dialog.
+    #[allow(dead_code)]
     pub(crate) fn open_gpui_new_gbot_modal(&mut self, cx: &mut gpui::Context<Self>) {
         let config = NewGbotModalConfig {
             palette: self.gpui_native_dialog_palette(),

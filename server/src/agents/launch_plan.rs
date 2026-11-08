@@ -1065,9 +1065,6 @@ pub(crate) fn resolve_project_agent_config(
     if let Some(bot) = crate::bot_projects::bot_agent_config(project, agent_id) {
         return bot;
     }
-    if let Some(bot) = crate::gbots::gbots_agent_config(project, agent_id) {
-        return bot;
-    }
     if let Some(agent) = project
         .get("customAgents")
         .and_then(Value::as_array)

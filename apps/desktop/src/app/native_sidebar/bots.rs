@@ -22,9 +22,6 @@ use super::navigation::SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 
-/// GBots' mark on the Bots button while the space shows GBots.
-const GBOTS_MARK: &str = "modals/settings/robot.svg";
-
 /// The top-row toggle's width, which the row's compaction math counts.
 pub(crate) const BOTS_TOGGLE_WIDTH: f32 = 30.0;
 /// The hairline and its gap before the Space-row slot, which the slot capacity counts.
@@ -72,11 +69,7 @@ impl GhostexGpuiApp {
                 self.native_sidebar_bots_button(
                     "native-sidebar-bots-space-slot",
                     bots_mode,
-                    if self.native_sidebar_bots_show_gbots() {
-                        bot_tile_color(true)
-                    } else {
-                        hermes_color()
-                    },
+                    hermes_color(),
                     appearance,
                     cx,
                 )
@@ -122,14 +115,6 @@ impl GhostexGpuiApp {
         .into_any_element()
     }
 
-    /// The Bots space shows GBots (gx-core `BotsSource`), so the button draws GBots' mark.
-    fn native_sidebar_bots_show_gbots(&self) -> bool {
-        self.native_sidebar
-            .snapshot
-            .as_ref()
-            .is_some_and(|snapshot| snapshot.bots_gbots)
-    }
-
     /// What both entries share: the button's identity and state, the Hermes mark (a back arrow
     /// while Bots is showing), the toggle and its tooltip. Each entry adds its own size and
     /// selected look; `icon_color` colors only the Hermes mark.
@@ -162,8 +147,6 @@ impl GhostexGpuiApp {
                     15.0 * appearance.scale,
                     appearance.foreground,
                 )
-            } else if self.native_sidebar_bots_show_gbots() {
-                titlebar_svg_icon(GBOTS_MARK, 15.0 * appearance.scale, icon_color)
             } else {
                 titlebar_svg_icon(
                     workspace_tab_agent_icon_path("hermes-agent").unwrap_or_default(),
@@ -195,29 +178,8 @@ impl NativeSidebarGroup {
             .as_bool()
     }
 
-    /// A GBots bot's row (`botKind` is `gbots`).
-    pub(crate) fn is_gbot(&self) -> bool {
-        self.project_context
-            .as_ref()
-            .and_then(|context| context.get("botKind"))
-            .and_then(serde_json::Value::as_str)
-            == Some("gbots")
-    }
-
-    /// The bot row's status, and `None` on every group that is not a bot's: a GBots bot publishes
-    /// `botActivity` (server/src/gbots/projects.rs), a Hermes bot `botGatewayRunning`.
+    /// The bot row's status, and `None` on every group that is not a bot's.
     pub(crate) fn bot_status(&self) -> Option<BotStatus> {
-        let context = self.project_context.as_ref()?;
-        if let Some(activity) = context
-            .get("botActivity")
-            .and_then(serde_json::Value::as_str)
-        {
-            return Some(match activity {
-                "working" => BotStatus::Working,
-                "idle" => BotStatus::Ready,
-                _ => BotStatus::Stopped,
-            });
-        }
         self.bot_gateway_running().map(|running| {
             if running {
                 BotStatus::HermesRunning
@@ -233,11 +195,7 @@ impl NativeSidebarGroup {
 pub(crate) enum BotStatus {
     /// A Hermes bot whose gateway runs.
     HermesRunning,
-    /// A GBot waiting for work.
-    Ready,
-    /// A GBot working on a conversation.
-    Working,
-    /// A stopped gateway, or GBots not running.
+    /// A stopped gateway.
     Stopped,
 }
 
@@ -246,19 +204,9 @@ pub(crate) fn hermes_color() -> gpui::Hsla {
     rgb(workspace_tab_agent_icon_accent_color("hermes-agent")).into()
 }
 
-/// A bot row's letter tile: Hermes yellow for a Hermes bot, a soft periwinkle for a GBot, so the
-/// two kinds never read as one.
-pub(crate) fn bot_tile_color(gbot: bool) -> gpui::Hsla {
-    if gbot {
-        rgb(0x9fb0ff).into()
-    } else {
-        hermes_color()
-    }
-}
-
 /// CDXC:Bots 2026-09-26 DECISION:
 /// User: a bot row shows a letter tile in Hermes yellow and a gateway dot (green running, grey stopped) instead of a project's icon, git stats and status counts, so bots read as bots.
-/// The tile and the dot are drawn by project_header.rs. A GBot's dot is green while it waits, blue while it works and grey while GBots is not running.
+/// The tile and the dot are drawn by project_header.rs.
 pub(crate) fn bot_status_dot(status: BotStatus, appearance: &SidebarAppearance) -> AnyElement {
     let scale = appearance.scale;
     div()
@@ -266,8 +214,7 @@ pub(crate) fn bot_status_dot(status: BotStatus, appearance: &SidebarAppearance) 
         .flex_shrink_0()
         .rounded_full()
         .bg(rgb(match status {
-            BotStatus::HermesRunning | BotStatus::Ready => 0x4ade80,
-            BotStatus::Working => 0x60a5fa,
+            BotStatus::HermesRunning => 0x4ade80,
             BotStatus::Stopped => 0x64748b,
         }))
         .into_any_element()

@@ -47,7 +47,7 @@ pub(crate) fn official(platform: Platform) -> Section {
         row("automate", "Automate", "Turn repeatable project routines into simple workflows you can run whenever you need them."),
         row("bots", "Bots", "Swap the sidebar to your Hermes agents: one row each, with a new session one click away. Needs the Hermes CLI."),
         row("botAutomations", "Bot automations", "A feed of every Hermes cron run, one channel per job, opened from the Bots sidebar. Needs Bots."),
-        row("gbots", "GBots", "Bots that run on your own Claude Code or Codex, in the Bots space. Each bot can start and steer agent sessions on any of your computers."),
+        row("gbots", "GBots", "Your own team of bots under Chief of Staff in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub."),
         row("docs", "Files", "Browse your project’s notes, plans, and reference files together in one focused reading space."),
         row("changes", "Changes", "Review what changed, comment on lines for your agent, revert a hunk, and commit, all beside your sessions."),
         row("terminal", "Terminal", "A command terminal beside your sessions, with its own tabs and splits, that works like the Commands pane but lives in the view panel."),

@@ -59,7 +59,6 @@ pub(super) async fn detect_and_adopt_successor_transcript(
         | SessionChatTranscriptAgent::OpenCode
         | SessionChatTranscriptAgent::Pi
         | SessionChatTranscriptAgent::Zcode
-        | SessionChatTranscriptAgent::Gbots
         | SessionChatTranscriptAgent::Freebuff
         | SessionChatTranscriptAgent::Dsh => return None,
     };

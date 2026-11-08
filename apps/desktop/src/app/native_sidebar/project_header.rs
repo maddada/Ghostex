@@ -265,7 +265,7 @@ impl GhostexGpuiApp {
                             .into_any_element(),
                         _ if bot_status.is_some() => letter_tile(
                             &group.title,
-                            super::bots::bot_tile_color(group.is_gbot()),
+                            super::bots::hermes_color(),
                             rgb(0x111111).into(),
                             scale,
                         ),

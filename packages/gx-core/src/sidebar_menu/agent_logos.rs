@@ -96,12 +96,6 @@ static LOGOS: &[(&str, &str, &str)] = &[
         "#f3c46b",
         include_str!("../../../core-ui/assets/hermes-agent.svg"),
     ),
-    // A GBots conversation (server/src/gbots/): Tabler's robot in GBots' periwinkle.
-    (
-        "gbots",
-        "#9fb0ff",
-        include_str!("../../../core-ui/assets/gbots.svg"),
-    ),
     (
         "mastra",
         "#ffffff",

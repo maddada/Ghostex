@@ -1,4 +1,4 @@
-//! The on-demand components gxserver downloads itself (GBots, Collab): where the release sealed
+//! The on-demand components gxserver downloads itself (Collab): where the release sealed
 //! them, where they are installed, and the checked download.
 //!
 //! The release seals each component's version and per-platform archive (name, SHA-256, size)
@@ -210,7 +210,7 @@ pub(crate) fn unique() -> u128 {
 
 /// Streams the archive to `path`, hashing as it goes, and checks its size and SHA-256 against
 /// what the release sealed. `progress(done, total)` follows the download. `title` names the
-/// component in messages ("GBots", "Collab").
+/// component in messages ("Collab").
 pub(crate) fn fetch_verified(
     component: &SealedComponent,
     title: &str,

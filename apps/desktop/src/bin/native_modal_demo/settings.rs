@@ -204,11 +204,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 ..
             } => {
                 eprintln!("gxserver rpc: {path} {params}");
-                if path == "/api/gbotsHome" {
-                    let result = Ok(gbots_demo_status());
-                    cx.defer(move |cx| reply(result, cx));
-                    return;
-                }
                 if let Some(result) = orchestrator_playbook_rpc(&host_state, &path, &params) {
                     cx.defer(move |cx| reply(result, cx));
                     return;
@@ -257,11 +252,6 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 ..
             } => {
                 eprintln!("remote gxserver rpc ({machine_id}): {path} {params}");
-                if path == "/api/gbotsHome" {
-                    let result = Ok(gbots_demo_status());
-                    cx.defer(move |cx| reply(result, cx));
-                    return;
-                }
                 let result = settings_machines::remote_rpc(&host_state, &path, &params);
                 cx.defer(move |cx| reply(result, cx));
             }
@@ -437,31 +427,5 @@ fn orchestrator_playbook_rpc(
             view["savedFiles"] = json!(saved);
         }
         Some(Ok(view))
-    })
-}
-
-/// The GBots card's status (`/api/gbotsHome status`): `GHOSTEX_NATIVE_MODAL_DEMO_GBOTS` is
-/// `downloading` (the default), `running` or `failed`.
-fn gbots_demo_status() -> Value {
-    let state = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_GBOTS").unwrap_or_default();
-    let (status, download) = match state.as_str() {
-        "running" => ("running", json!({ "phase": "idle" })),
-        "failed" => (
-            "notInstalled",
-            json!({ "phase": "failed", "error": "Could not reach GitHub to download GBots. It tries again on its own." }),
-        ),
-        _ => (
-            "downloading",
-            json!({ "phase": "downloading", "doneBytes": 21_400_000, "totalBytes": 50_267_076 }),
-        ),
-    };
-    json!({
-        "status": status,
-        "download": download,
-        "componentVersion": "0.1.143-gx1-920048073ae4",
-        "computerName": "Studio",
-        "enabled": true,
-        "runsHere": true,
-        "platformSupported": true,
     })
 }

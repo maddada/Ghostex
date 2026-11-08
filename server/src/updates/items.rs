@@ -145,7 +145,7 @@ async fn collect(state: &AppState, fresh: bool) -> Vec<Value> {
         extension_items(state),
         app_item(state),
     );
-    let components = component_items(state);
+    let components = component_items();
     let mut items = Vec::new();
     items.push(app);
     items.extend(agents);
@@ -157,16 +157,13 @@ async fn collect(state: &AppState, fresh: bool) -> Vec<Value> {
 }
 
 /// The on-demand extension components gxserver installs itself, while one is installed here:
-/// Collab and GBots. An app update seals a newer component than the one on disk; Update installs
+/// Collab. An app update seals a newer component than the one on disk; Update installs
 /// it. (The desktop lists its own: the VS Code view's code-server and CEF, app/updates/items.rs.)
 ///
 /// CDXC:Updates 2026-11-08 DECISION:
 /// User (#495, Q1733): every installed extension component with an update shows in the titlebar Updates dropdown and in Settings > Updates, with Update; GBots and Collab were missing. Uninstalled components don't show.
-pub(crate) fn component_items(state: &AppState) -> Vec<Value> {
-    let mut items = Vec::new();
-    items.extend(collab_item());
-    items.extend(gbots_item(state));
-    items
+pub(crate) fn component_items() -> Vec<Value> {
+    collab_item().into_iter().collect()
 }
 
 /// One component's row, from what is on disk and what this release sealed.
@@ -257,61 +254,6 @@ fn collab_item() -> Option<Value> {
         update.is_some(),
         component["running"] == true,
     ))
-}
-
-fn gbots_item(state: &AppState) -> Option<Value> {
-    use crate::gbots::{download, runtime};
-    if !cfg!(unix) || !crate::gbots::settings::runs_here(&state.paths, &state.metadata.server_id) {
-        return None;
-    }
-    let sealed = runtime::sealed_component();
-    let latest = sealed
-        .as_ref()
-        .map(|component| component.component_version.clone());
-    let phase = download::status_value();
-    if let Some(current) = runtime::installed_runtime() {
-        return Some(component_item(
-            "gbots",
-            "GBots",
-            Some(current.version),
-            latest,
-            &json!({ "phase": "idle" }),
-            false,
-            crate::gbots::sidecar::is_running(),
-        ));
-    }
-    // The sealed runtime isn't on disk: an older one left by an app update means an update.
-    let older = older_gbots_version(
-        sealed
-            .as_ref()
-            .map(|component| component.component_version.as_str()),
-    )?;
-    Some(component_item(
-        "gbots",
-        "GBots",
-        Some(older),
-        latest,
-        &phase,
-        sealed.is_some(),
-        false,
-    ))
-}
-
-/// A GBots runtime of another component version on disk (never `dev`).
-fn older_gbots_version(sealed: Option<&str>) -> Option<String> {
-    let root = crate::gbots::runtime::component_root();
-    let platform = crate::gbots::runtime::platform_dir();
-    let mut versions: Vec<String> = std::fs::read_dir(&root)
-        .ok()?
-        .flatten()
-        .map(|entry| entry.file_name().to_string_lossy().to_string())
-        .filter(|name| !name.starts_with('.') && name != "dev" && Some(name.as_str()) != sealed)
-        .filter(|name| {
-            crate::gbots::runtime::read_runtime(&root.join(name).join(&platform)).is_some()
-        })
-        .collect();
-    versions.sort();
-    versions.pop()
 }
 
 /// Which agents this computer uses: switched on in Settings > Agents, used in the last week, or

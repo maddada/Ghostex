@@ -142,14 +142,15 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsKey", J::Str("botAutomationsHidden")),
         ("title", J::Str("Bot automations")),
     ]),
-    // CDXC:GBots 2026-11-06 DECISION:
-    // User: GBots ships "like how we ship cef and vscode updates so it's only downloaded if extension is enabled by the user", and "let's make bots space show either gbots (hermes) or use openmausbot based on option in settings". An app-wide sidebar extension, off by default under a new key that enables (`gbotsEnabled`), so nothing changes until it is turned on. With it on the Bots space exists even while the Hermes Bots extension is off; with both on, `botsSpaceSource` picks which bots the space shows (server/src/gbots/, gx-core `BotsSource`).
+    // CDXC:GBots 2026-11-08 DECISION:
+    // User: native GBots show "under Chief of Staff in Main Hub"; the GBots switch stays and turns them on or off, and needs Main Hub on (`requiresExtension: chief`). Off by default under a key that enables (`gbotsEnabled`); turning it on needs the owner's presence (security_relaxing.rs). Supersedes the 2026-11-06 entry, which put the previous GBots in the Bots space.
     J::Obj(&[
         ("appWide", J::Bool(true)),
-        ("description", J::Str("Bots that run on your own Claude Code or Codex, in the Bots space. Each bot can start and steer agent sessions on any of your computers.")),
-        ("category", J::Str("planning")),
+        ("description", J::Str("Your own team of bots under Chief of Staff in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub.")),
+        ("category", J::Str("features")),
         ("id", J::Str("gbots")),
-        ("placement", J::Str("sidebar")),
+        ("placement", J::Str("feature")),
+        ("requiresExtension", J::Str("chief")),
         ("settingsKey", J::Str("gbotsEnabled")),
         ("settingsKeyEnables", J::Bool(true)),
         ("title", J::Str("GBots")),

@@ -6,7 +6,7 @@
 //! | `/api/updateTailcatState` | Easy Connect goes on, opens a new port, lets new devices in (or empties its allow-list), changes its relay |
 //! | `/api/registerConnectedComputer`, `/api/issueComputerGrant` | a computer not approved in the last 30 days, with Agent access on: one request per computer, whoever asks (registering a computer with Agent access off never asks) |
 //! | `/api/autopilot` `op: "set"` | `answerApprovals` goes on, `limits` change |
-//! | `/api/gbots` `action: "create"` | always (a new bot) |
+//! | `/api/gbots` `op: "create"` | always (a new bot) |
 //! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a security-relaxing setting changes, or GBots goes on |
 //! | `/api/cloudBoxes` `create`, `setAgentLogin` (allowed), `projectSettings` (write) | anyone but the owner's devices: logins and project secrets go onto a box |
 //! | a create forcing full access | see security_full_access.rs |
@@ -358,7 +358,7 @@ fn sensitive_action(
     match endpoint_path {
         "/api/updateTailcatState" => easy_connect_action(state, params),
         "/api/autopilot" => autopilot_action(params),
-        "/api/gbots" if text(params, "action") == Some("create") => {
+        "/api/gbots" if text(params, "op") == Some("create") => {
             let name = text(params, "name").unwrap_or("a new bot");
             Some(
                 ActionRequest::new(SensitiveAction::GbotsAddBot, format!("Add the bot {name}"))
@@ -642,8 +642,7 @@ fn settings_action(params: &Map<String, Value>) -> Option<ActionRequest> {
         })
         .collect::<Vec<_>>()
         .join("; ");
-    let gbots = gated.contains_key("gbotsEnabled") || gated.contains_key("gbotsComputer");
-    let (action, summary) = if gbots && gated.len() <= 2 {
+    let (action, summary) = if gated.contains_key("gbotsEnabled") && gated.len() == 1 {
         (SensitiveAction::GbotsEnable, "Turn on GBots".to_string())
     } else {
         (

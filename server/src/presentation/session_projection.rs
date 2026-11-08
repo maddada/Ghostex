@@ -107,14 +107,6 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
             Value::from(crate::bot_feed::published_bot_runs_today(profile)),
         );
     }
-    if let Some(bot_id) = crate::gbots::gbots_bot_id(project) {
-        output.insert("botProfile".to_string(), Value::String(bot_id.to_string()));
-        output.insert("botKind".to_string(), Value::String("gbots".to_string()));
-        output.insert(
-            "botActivity".to_string(),
-            Value::String(crate::gbots::published_bot_activity(bot_id).to_string()),
-        );
-    }
     if let Some(project_id) = project.get("projectId").and_then(Value::as_str) {
         insert_issues_workflow_fields(
             &mut output,
@@ -321,17 +313,6 @@ pub(crate) fn project_presentation_session(
     if let Some(cloud_box) = crate::cloud_boxes::presentation::presentation_cloud_box_value(session)
     {
         output.insert("cloudBox".to_string(), cloud_box);
-    }
-    // CDXC:GBots 2026-11-07 SEE-ALSO: the phone's Bots space groups a GBot's conversations under the bot with its status from this (apps/mobile/app/src/sessions/gbots.ts); mobile_summary.rs forwards it.
-    if let Some(bot_id) = crate::gbots::gbots_bot_id(project) {
-        output.insert(
-            "gbot".to_string(),
-            serde_json::json!({
-                "botId": bot_id,
-                "name": project.get("name").and_then(Value::as_str).unwrap_or_default(),
-                "activity": crate::gbots::published_bot_activity(bot_id),
-            }),
-        );
     }
     if activity == "attention" {
         output.insert(

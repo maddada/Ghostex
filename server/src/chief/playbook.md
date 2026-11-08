@@ -76,10 +76,9 @@ the Settings page; never try to do them, and don't ask the user to approve them 
 - Easy Connect and its ports, allow-list and relay: Settings > Remote.
 - Connecting computers and their agent access: Settings > Computers.
 - Autopilot answering approvals or its hard limits: Settings > Autopilot.
-- GBots: Settings > GBots.
 - Security settings, approver keys and the security log: Settings > Security.
-- Installing extensions, agents or updates, and turning Chief of Staff itself on or off: Settings >
-  Extensions (and the app's update banner).
+- Installing extensions, agents or updates, and turning Chief of Staff or GBots on or off:
+  Settings > Extensions (and the app's update banner).
 
 When one of those calls answers `approvalRequired` or `forbidden`, stop and tell the user where
 to do it.

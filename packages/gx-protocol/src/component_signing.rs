@@ -1,5 +1,5 @@
 //! Ghostex's signature on every on-demand component archive (Collab, the Code editor's
-//! code-server, GBots, CEF), GitHub #495.
+//! code-server, CEF), GitHub #495.
 //!
 //! The release signs one statement per archive with Ghostex's component signing key (an Ed25519
 //! key held only as the `GHOSTEX_COMPONENT_SIGNING_KEY` Actions secret,

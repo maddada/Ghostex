@@ -292,8 +292,6 @@ impl ExtensionsTab {
                     .as_ref()
                     .map(runtime_meta)
                     .filter(|meta| !meta.is_empty());
-                let extra = (extension.id == "gbots" && enabled)
-                    .then(|| self.render_gbots_card_extra(p, &values, window, cx));
                 let blocked_reason =
                     blocked.map(|blocked| format!("Turn on {} first", blocked.title));
                 let card = grid_card(
@@ -306,7 +304,7 @@ impl ExtensionsTab {
                         title: extension.title.clone().into(),
                         badge: extension.badge.clone().map(Into::into),
                         description: extension.description.clone().into(),
-                        extra,
+                        extra: None,
                         scope_summary: scoped
                             .then(|| self.describe_scope(&scope_key, cx))
                             .flatten(),

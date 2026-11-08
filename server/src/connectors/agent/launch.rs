@@ -19,17 +19,11 @@ use crate::paths::{get_gxserver_paths, GxserverPaths};
 /// The MCP server's name in Claude and Codex: its tools read `mcp__ghostex-connectors__<tool>`.
 pub(crate) const CONNECTORS_MCP_SERVER_NAME: &str = "ghostex-connectors";
 
-/// The session a GBots bot's turn serves (`server:project:session`), which the bot's wrapper sets
-/// for the connector server alone: the bot's own `ghostex` CLI keeps finding its caller the GBots
-/// way (ghostex_cli/agents/identity.rs `gbot_caller`).
-pub(crate) const CONNECTORS_SESSION_REF_ENV: &str = "GHOSTEX_CONNECTORS_SESSION_REF";
-
 /// The variables the `ghostex connectors mcp` process reads to learn its session and reach
 /// gxserver.
-const MCP_SESSION_ENV: [&str; 5] = [
+const MCP_SESSION_ENV: [&str; 4] = [
     "GHOSTEX_SESSION_ID",
     "GHOSTEX_GLOBAL_SESSION_REF",
-    CONNECTORS_SESSION_REF_ENV,
     "GHOSTEX_GXSERVER_BASE_URL",
     "GHOSTEX_GXSERVER_AUTH_TOKEN_FILE",
 ];
@@ -106,9 +100,8 @@ pub(crate) fn with_connector_tools(agent_id: &str, icon: Option<&str>, command: 
 
 /// The arguments that give a `claude` or `codex` (`family`) the connector tools while Connectors
 /// is on, one argument per item; `None` for any other family, while Connectors is off, or when
-/// Claude's config file can't be written. GBots bots' turns get them this way
-/// (gbots/bot_tools.rs), sessions through [`with_connector_tools`].
-pub(crate) fn connector_tool_args(family: &str) -> Option<Vec<String>> {
+/// Claude's config file can't be written; sessions get them through [`with_connector_tools`].
+fn connector_tool_args(family: &str) -> Option<Vec<String>> {
     if !matches!(family, "claude" | "codex") {
         return None;
     }

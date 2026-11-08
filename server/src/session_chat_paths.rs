@@ -116,9 +116,6 @@ pub fn resolve_session_chat_transcript_path(
         SessionChatTranscriptAgent::Hermes => {
             crate::session_chat_hermes::resolve_hermes_chat_transcript_path(session_id)
         }
-        SessionChatTranscriptAgent::Gbots => {
-            crate::gbots::resolve_gbots_chat_transcript_path(session_id)
-        }
         SessionChatTranscriptAgent::Pi => find_pi_family_chat_transcript(session_id),
         SessionChatTranscriptAgent::Empryo
         | SessionChatTranscriptAgent::Zcode

@@ -777,8 +777,6 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     insert_non_null(&mut map, "claudeCloud", s("claudeCloud"));
     // CDXC:CloudBoxes 2026-11-02 WHY: the same second-whitelist trap: the phone's row draws the ☁ badge of a session on a Cloud Box from it.
     insert_non_null(&mut map, "cloudBox", s("cloudBox"));
-    // CDXC:GBots 2026-11-07 WHY: the same second-whitelist trap: the phone's Bots space groups a GBot's conversations under the bot, with its status dot, from it.
-    insert_non_null(&mut map, "gbot", s("gbot"));
     /*
      * CDXC:SessionChat 2026-08-21-b:
      * The phone's session-row queue badge reads these two. This compactor is a

@@ -106,11 +106,7 @@ jobs:
       CARGO_INCREMENTAL: '0'
       KACHE_STORE_SET: linux-${{ inputs.arch }}-1
       GHOSTEX_RELEASE_BUILD_ONLY: ${{ inputs.build_only && '1' || '0' }}
-      # Record the GBots component (release-gpui-gbots.yml) before sealing (tooling/gbots/seal-component.sh);
-      # a build-only run ships without it when it is not published.
-      GHOSTEX_GBOTS_SEAL: '1'
-      GHOSTEX_GBOTS_OPTIONAL: ${{ inputs.build_only && '1' || '0' }}
-      # And the Collab component (release-gpui-collab.yml, tooling/collab/seal-component.sh).
+      # Record the Collab component (release-gpui-collab.yml, tooling/collab/seal-component.sh) before sealing.
       GHOSTEX_COLLAB_SEAL: '1'
       GHOSTEX_COLLAB_OPTIONAL: ${{ inputs.build_only && '1' || '0' }}
       LINUX_ARCH: ${{ inputs.arch }}

@@ -1202,8 +1202,6 @@ pub(super) fn project_context(
         bot_profile: meta.bot_profile(project_id).map(str::to_string),
         bot_gateway_running: project.bot_gateway_running == Some(true),
         bot_runs_today: project.bot_runs_today.unwrap_or_default(),
-        bot_kind: project.bot_kind.clone(),
-        bot_activity: project.bot_activity.clone(),
         work_mode: project.work_mode,
         autopilot: project.autopilot,
         work_linear: project.work_mode && project.work_linear,

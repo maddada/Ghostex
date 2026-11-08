@@ -14,7 +14,7 @@ pub struct SessionChatAgent {
 /// CDXC:SessionChat 2026-10-21 WHY:
 /// gxserver, gx-core, gx-chat-core and the desktop each kept their own copy of this list, and OpenCode 2's chat (10.25.0) reached only gxserver's, so its Chat View toggle stayed dimmed (#267). Every Rust layer reads this table now; add a chat agent here and nowhere else in Rust.
 /// SEE-ALSO: packages/shared/session-chat-agents.ts and its generated phone copy (apps/mobile/app/src/chat/session-chat-agents.generated.ts), apps/mobile/app/src/screens/sessions-screen/sidebar-menus.ts `transcriptAgent` (the phone cannot link this crate).
-pub const SESSION_CHAT_AGENTS: [SessionChatAgent; 14] = [
+pub const SESSION_CHAT_AGENTS: [SessionChatAgent; 13] = [
     SessionChatAgent {
         family: "claude",
         labels: &["claude", "openclaude"],
@@ -79,12 +79,6 @@ pub const SESSION_CHAT_AGENTS: [SessionChatAgent; 14] = [
         family: "dsh",
         labels: &["dsh", "dsh-tui", "deepseek", "deepseek harness"],
         names: &["DeepSeek Harness"],
-    },
-    // CDXC:GBots 2026-11-06 SEE-ALSO: a GBots conversation (server/src/gbots/), read from gxserver's mirror of the bot's messages.
-    SessionChatAgent {
-        family: "gbots",
-        labels: &["gbots"],
-        names: &["GBots"],
     },
 ];
 

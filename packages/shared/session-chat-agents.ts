@@ -51,7 +51,6 @@ export const SESSION_CHAT_SUPPORTED_AGENTS = new Set([
   'freebuff',
   'dsh',
   'dsh-tui',
-  'gbots',
 ]);
 
 export type SessionChatTranscriptAgent =

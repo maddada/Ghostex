@@ -71,8 +71,6 @@ open_string_enum! {
         GbotsEnable => "gbotsEnable",
         /// Add a bot.
         GbotsAddBot => "gbotsAddBot",
-        /// Change who may message a bot.
-        GbotsChangeSenders => "gbotsChangeSenders",
         // Settings
         /// Change a setting marked security-relaxing (the target is the setting key).
         SettingsWeakenSecurity => "settingsWeakenSecurity",

@@ -82,7 +82,6 @@ pub(super) fn compare_views(
     top(
         "botsMode",
         incremental.bots_enabled == scratch.bots_enabled
-            && incremental.bots_source == scratch.bots_source
             && incremental.bots_mode == scratch.bots_mode
             && incremental.automations_row == scratch.automations_row
             && incremental.automations_today == scratch.automations_today,

@@ -156,7 +156,6 @@ pub mod session_chat_decode_cursor;
 pub mod session_chat_decode_dsh;
 pub mod session_chat_decode_empryo;
 pub mod session_chat_decode_freebuff;
-pub mod session_chat_decode_gbots;
 pub mod session_chat_decode_grok;
 pub mod session_chat_decode_hermes;
 pub mod session_chat_decode_pi;
