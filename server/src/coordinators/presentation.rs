@@ -18,6 +18,7 @@ use crate::presentation::now_iso;
 fn insert_fields(
     session: &mut Value,
     is_coordinator: bool,
+    is_chief: bool,
     thread: Option<(&ThreadRecord, Option<&Value>)>,
     generated_at: &str,
 ) {
@@ -26,6 +27,10 @@ fn insert_fields(
     };
     if is_coordinator {
         object.insert("coordinatorRole".to_string(), json!("coordinator"));
+    }
+    // CDXC:Chief 2026-11-08 DECISION: User (Q1734): Chief is "its own row but under spaces bar", so its session is flagged here for every client to lift it out of its project's list.
+    if is_chief {
+        object.insert("isChief".to_string(), json!(true));
     }
     if let Some((thread, raw_session)) = thread {
         if !is_coordinator {
@@ -86,6 +91,7 @@ pub fn insert_coordinator_presentation_payload(
         .map(|thread| (thread.key(), thread))
         .collect::<BTreeMap<_, _>>();
     let generated_at = now_iso();
+    let chief = crate::chief::read_record(db).map(|record| record.key());
     let Some(sessions) = snapshot.get_mut("sessions").and_then(Value::as_array_mut) else {
         return;
     };
@@ -100,6 +106,7 @@ pub fn insert_coordinator_presentation_payload(
         insert_fields(
             session,
             is_coordinator,
+            chief.as_ref() == Some(&key),
             thread.map(|thread| (thread, raw.as_ref())),
             &generated_at,
         );
@@ -124,9 +131,12 @@ pub fn insert_coordinator_session_projection(
     if !is_coordinator && thread.is_none() {
         return;
     }
+    let is_chief = crate::chief::read_record(db)
+        .is_some_and(|record| record.key() == (project_id.clone(), session_id.clone()));
     insert_fields(
         presentation_session,
         is_coordinator,
+        is_chief,
         thread.as_ref().map(|thread| (thread, Some(raw_session))),
         &now_iso(),
     );

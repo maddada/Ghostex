@@ -1042,6 +1042,10 @@ pub struct PresentationSession {
     pub fork_branch_count: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_family_session_ids: Option<Vec<String>>,
+    /// This computer's Chief (server/src/chief/): drawn as its own row under the Spaces bar, never
+    /// in its project's list (`listed_in_sidebar`).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_chief: bool,
     /// `coordinator` for a coordinator session, `thread` for a session a coordinator started;
     /// absent otherwise. A coordinator that is also another coordinator's thread says
     /// `coordinator` and still carries the thread fields below.
@@ -1184,6 +1188,7 @@ impl PresentationSession {
         self.visible_in_sidebar_by_default
             && self.surface != SessionSurface::Commands
             && self.side_chat_parent_session_id.is_none()
+            && !self.is_chief
     }
 }
 

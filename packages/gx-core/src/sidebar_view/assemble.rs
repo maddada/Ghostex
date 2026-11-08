@@ -530,6 +530,8 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             input.ui,
         ),
         hidden_collection_group_ids,
+        // Filled by the caller from the store (`chief.rs`).
+        chiefs: Vec::new(),
         show_all_projects_row: (empty_projects > 0).then_some(ShowAllProjectsRow {
             empty_projects,
             showing: input.ui.show_all_projects,
