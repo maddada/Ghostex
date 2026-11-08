@@ -42,10 +42,28 @@ pub(crate) fn apply(paths: &GxserverPaths, wanted: bool) -> Result<()> {
     if wanted {
         let gxserver = std::env::current_exe().context("find the gxserver executable")?;
         let gxserver = fs::canonicalize(&gxserver).unwrap_or(gxserver);
-        platform::install(&place, &gxserver, paths)
+        platform::install(&place, &package_link(&gxserver), paths)
     } else {
         platform::remove(&place)
     }
+}
+
+/// CDXC:ComputerStartup 2026-11-08 WHY: the realpath of a macOS gxserver is inside its bundle
+/// (`<package>/GhostexServer.app/Contents/MacOS/gxserver`), and the entry ran that path at every
+/// login. The package's own `bin/gxserver` link is the path every other start uses (the app's
+/// launchd job, the remote token read); a start by the bundle path is the one that once found no zmx
+/// (CDXC:Zmx 2026-11-08 in server/src/toolchain.rs). A program that is not in a bundle, or a
+/// package without the link, keeps its own path.
+fn package_link(gxserver: &Path) -> PathBuf {
+    let in_bundle = gxserver
+        .parent()
+        .is_some_and(|folder| folder.file_name() == Some("MacOS".as_ref()));
+    let link = crate::ghostex_cli::launchers::package_bin_dir(gxserver)
+        .filter(|_| in_bundle)
+        .zip(gxserver.file_name())
+        .map(|(bin, name)| bin.join(name))
+        .filter(|link| fs::canonicalize(link).ok().as_deref() == Some(gxserver));
+    link.unwrap_or_else(|| gxserver.to_path_buf())
 }
 
 /// Writes `contents` unless the file already holds exactly that, so routine checks never churn
