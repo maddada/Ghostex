@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use gpui::{
     AnyWindowHandle, AppContext as _, Bounds, ClipboardItem, Context, Entity, Hsla, Pixels,
-    Subscription, Window, rgb,
+    Subscription, Window, px, rgb,
 };
 use gpui_component::input::{InputEvent, TextareaState};
 use serde_json::json;
@@ -25,6 +25,8 @@ use crate::app::helpers::{manage_chat_file_address, manage_chat_file_real_path};
 /// How long Send's outcome stays on the button, and how long Clear stays armed.
 pub(crate) const SEND_STATUS_DURATION: Duration = Duration::from_secs(4);
 pub(crate) const CLEAR_ARM_DURATION: Duration = Duration::from_secs(3);
+/// How long a note's text stays brighter after the Annotations list jumps to it.
+pub(crate) const NOTE_FLASH_DURATION: Duration = Duration::from_millis(1200);
 
 /// Where the last Send went, or why it did not.
 #[derive(Clone, Debug)]
@@ -452,11 +454,80 @@ impl GhostexGpuiApp {
         editor.update(cx, |editor, cx| editor.set_note_highlights(highlights, cx));
     }
 
+    /// A click on a card in the Annotations list: scrolls the document so the note's text sits a
+    /// third of the way down (when it is not already comfortably in view) and briefly brightens
+    /// its highlight. A global note, or one whose quote is no longer in the text, has nowhere to
+    /// go. The list stays open so the next card is one click away.
+    ///
+    /// CDXC:Docs 2026-11-08 DECISION:
+    /// GitHub #511: "Clicking an annotation does not take me to it." Clicking an annotation in the Files view's Annotations list scrolls the file to that annotation's text and briefly highlights it.
+    pub(crate) fn native_docs_reveal_note(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(range) = self
+            .native_docs
+            .note_ranges
+            .iter()
+            .find(|found| found.annotation_index == index)
+            .map(|found| found.range.clone())
+        else {
+            return;
+        };
+        let Some(document) = self.native_docs.active_document() else {
+            return;
+        };
+        let Some(editor) = document.live.clone() else {
+            return;
+        };
+        let scroll = document.scroll.clone();
+        if let Some(top) = editor.read(cx).offset_screen_top(range.start) {
+            let viewport = scroll.bounds();
+            let header_bottom = super::document_view::HEADER_BOUNDS
+                .with(|cell| cell.get())
+                .bottom();
+            let view_top = viewport.top().max(header_bottom);
+            if top < view_top + px(24.0) || top > viewport.bottom() - px(96.0) {
+                let target = view_top + (viewport.bottom() - view_top) / 3.0;
+                let max = scroll.max_offset().y;
+                let mut offset = scroll.offset();
+                offset.y = (offset.y - (top - target)).clamp(-max, px(0.0));
+                scroll.set_offset(offset);
+            }
+        }
+        let started = Instant::now();
+        self.native_docs.note_flash = Some((index, started));
+        let highlights = self.native_docs_note_highlights();
+        editor.update(cx, |editor, cx| editor.set_note_highlights(highlights, cx));
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(NOTE_FLASH_DURATION).await;
+            let _ = this.update(cx, |this, cx| {
+                // A later click restarted the flash; its own timer ends it.
+                if this.native_docs.note_flash.map(|(_, at)| at) != Some(started) {
+                    return;
+                }
+                this.native_docs.note_flash = None;
+                let highlights = this.native_docs_note_highlights();
+                if let Some(editor) = this
+                    .native_docs
+                    .active_document()
+                    .and_then(|document| document.live.clone())
+                {
+                    editor.update(cx, |editor, cx| editor.set_note_highlights(highlights, cx));
+                }
+            });
+        })
+        .detach();
+        self.native_docs_notify(cx);
+    }
+
     /// The editor's highlights for `note_ranges`, in the open document's notes' colours.
     pub(crate) fn native_docs_note_highlights(
         &self,
     ) -> Vec<(std::ops::Range<usize>, Hsla, Option<Hsla>)> {
         let notes = self.native_docs_active_notes();
+        let flash = self
+            .native_docs
+            .note_flash
+            .filter(|(_, at)| at.elapsed() < NOTE_FLASH_DURATION)
+            .map(|(index, _)| index);
         self.native_docs
             .note_ranges
             .iter()
@@ -464,9 +535,17 @@ impl GhostexGpuiApp {
                 let note = notes.get(found.annotation_index)?;
                 let color = note.color();
                 let sent = !note.is_pending();
+                let flashing = flash == Some(found.annotation_index);
+                let alpha = if flashing {
+                    0.6
+                } else if sent {
+                    0.14
+                } else {
+                    0.28
+                };
                 Some((
                     found.range.clone(),
-                    hex(color, if sent { 0.14 } else { 0.28 }),
+                    hex(color, alpha),
                     (note.kind == DocsAnnotationType::Redline).then(|| hex(color, 0.82)),
                 ))
             })

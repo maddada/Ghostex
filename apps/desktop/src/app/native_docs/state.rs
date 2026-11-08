@@ -531,6 +531,9 @@ pub(crate) struct NativeDocsState {
     pub(crate) composer: Option<super::notes::DocsComposer>,
     /// The Annotations list dropdown is open.
     pub(crate) notes_list_open: bool,
+    /// The note an Annotations list click just jumped to (its index among the open file's notes)
+    /// and when, so its text shows a stronger highlight for a moment.
+    pub(crate) note_flash: Option<(usize, std::time::Instant)>,
     /// Rendered diagrams, formulas, images and code colours, shared by every open document.
     pub(crate) blocks: super::blocks::SharedCache,
     /// The formatting bar's view toggles (the Docs editor's defaults: all on).

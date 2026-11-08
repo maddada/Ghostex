@@ -821,9 +821,22 @@ impl GhostexGpuiApp {
                 let redline = note.kind == DocsAnnotationType::Redline;
                 let remove_id = note.id.clone();
                 let edit_id = note.id.clone();
+                let anchored = self
+                    .native_docs
+                    .note_ranges
+                    .iter()
+                    .any(|found| found.annotation_index == index);
                 div()
                     .id(("native-docs-note", index))
                     .relative()
+                    // A card whose text is in the document jumps there (GitHub #511).
+                    .when(anchored, |this| {
+                        this.cursor_pointer()
+                            .hover(|style| style.bg(color.opacity(0.09)))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.native_docs_reveal_note(index, cx);
+                            }))
+                    })
                     .flex()
                     .flex_col()
                     .gap(px(6.0))
@@ -927,6 +940,7 @@ impl GhostexGpuiApp {
                                                     .child(attachment.name.clone()),
                                             )
                                             .on_click(move |_, _, cx| {
+                                                cx.stop_propagation();
                                                 super::notes::open_attachment(&open, cx)
                                             })
                                     }),
@@ -949,6 +963,7 @@ impl GhostexGpuiApp {
                                 .hover(|style| style.bg(p.control_hover))
                                 .child(titlebar_svg_icon("titlebar/pencil.svg", 13.0, p.muted))
                                 .on_click(cx.listener(move |this, _, _, cx| {
+                                    cx.stop_propagation();
                                     let anchor = NOTES_LIST_ANCHOR.with(|cell| cell.get());
                                     this.native_docs_open_composer(
                                         Some(anchor),
@@ -974,6 +989,7 @@ impl GhostexGpuiApp {
                             .hover(|style| style.bg(p.control_hover))
                             .child(titlebar_svg_icon("titlebar/x.svg", 13.0, p.muted))
                             .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
                                 this.native_docs_remove_note(&remove_id, cx);
                             })),
                     )
@@ -991,6 +1007,9 @@ impl GhostexGpuiApp {
             .border_1()
             .border_color(p.border_strong)
             .shadow_lg()
+            // The list takes the pointer, so a wheel over it scrolls only the list and never the
+            // document under it (GitHub #511: "the file and the annotations panel scroll together").
+            .occlude()
             .on_mouse_down_out(cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
                 // A press on the list's own button is left to its click, which toggles it shut.
                 if NOTES_LIST_ANCHOR
@@ -1021,6 +1040,8 @@ impl GhostexGpuiApp {
                     .id("native-docs-notes-list-body")
                     .flex()
                     .flex_col()
+                    .flex_1()
+                    .min_h_0()
                     .gap(px(8.0))
                     .p(px(10.0))
                     .overflow_y_scroll()
