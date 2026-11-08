@@ -113,6 +113,28 @@ pub(crate) fn gate(
     }
     let decided = match &computer {
         Some(_) => computer_presence(state, caller, action, body, endpoint_path, request_id),
+        None if super::approval_finish::wants_finish(endpoint_path, body) => {
+            match presence_outcome(state, caller, action, body) {
+                security::PresenceOutcome::Pending(request) => {
+                    if let Some(answer) = super::approval_finish::waiting_answer(
+                        state,
+                        caller,
+                        endpoint_path,
+                        request_id,
+                        body,
+                        &request,
+                    ) {
+                        return Some(answer);
+                    }
+                    presence_outcome_response(
+                        security::PresenceOutcome::Pending(request),
+                        endpoint_path,
+                        request_id,
+                    )
+                }
+                outcome => presence_outcome_response(outcome, endpoint_path, request_id),
+            }
+        }
         None => require_owner_presence(state, caller, action, body, endpoint_path, request_id),
     };
     match decided {

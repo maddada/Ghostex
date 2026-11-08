@@ -389,6 +389,8 @@ fn write_canonical(value: &Value, out: &mut String) {
 fn strip_approval_id(mut params: Value) -> Value {
     if let Value::Object(map) = &mut params {
         map.remove(ghostex_gx_protocol::approval::APPROVAL_ID_PARAM);
+        // How the caller wants to be answered, not part of the change (server/approval_finish.rs).
+        map.remove("finishWhenApproved");
     }
     params
 }

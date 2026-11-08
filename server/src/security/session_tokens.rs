@@ -239,6 +239,16 @@ impl SessionTokens {
         }
     }
 
+    /// The token session `session_id` holds now, if it holds one.
+    pub fn token_of(&self, project_id: &str, session_id: &str) -> Option<String> {
+        self.inner
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .session_token
+            .get(&session_key(project_id, session_id))
+            .cloned()
+    }
+
     /// The `(project id, session id)` of every session that holds a token.
     pub fn sessions(&self) -> Vec<(String, String)> {
         self.snapshot()

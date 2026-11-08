@@ -209,6 +209,18 @@ state.security.record_performed(grant.approval.action, grant.approval.target, &c
   computer's through the tunnel), shows the system prompt at once with the summary, approves and
   sends the call again (never on the main thread). The `ghostex` CLI prints what it waits for on
   stderr, polls `/api/readApprovalRequest` and repeats the call (`--no-wait` returns at once).
+- A person's own action in a chat (Stop, answering a prompt, typing into a session) sends
+  `params.finishWhenApproved: true` (desktop and web `native_chat/rpc.rs`; the flag is not part of
+  the digest). When it waits, gxserver answers `approvalPending` with a plain message ("Waiting for
+  your approval: …. Approve it on <computer> … and it goes ahead by itself.", never the
+  `approvalId` instruction), and repeats the call itself with the approval once it is approved,
+  through its own HTTP route and the caller's own token (the token file or the session's token):
+  `server/approval_finish.rs`. No app prompts for `approvalPending`.
+- The desktop's Stop, prompt answers and typing on a connected computer's sessions go as its owner
+  session there, which skips these approvals. Until it has one (another owner is enrolled there and
+  has not approved this app's owner key: one `addApproverKey` request that waits a day), the
+  desktop doesn't send them and the chat says what to approve and where
+  (`owner_security::steer_needs_owner`, code `ownerApprovalNeeded`): never a request per action.
 
 ## The approval and owner-key API
 

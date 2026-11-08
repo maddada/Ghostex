@@ -121,6 +121,7 @@ mod agent_message_delivery_runtime;
 pub mod agent_prompt_search_http;
 pub(crate) mod agentbox_http;
 mod app_state;
+mod approval_finish;
 mod autopilot_answers;
 mod autopilot_http;
 mod autopilot_judge;

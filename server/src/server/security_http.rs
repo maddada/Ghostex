@@ -228,6 +228,9 @@ pub(crate) fn route_security_http(
     Some(reply(StatusCode::OK, result))
 }
 
+/// How long another computer's request to act as the owner here waits for an answer.
+const OWNER_KEY_REQUEST_TTL_MS: u64 = 24 * 60 * 60 * 1000;
+
 enum EnrollRefusal {
     Reply(&'static str, String),
     Response(RoutedResponse),
@@ -306,9 +309,20 @@ fn enroll_key(
                 "approve requests for this computer"
             }
         );
-        let action = ActionRequest::new(SensitiveAction::AddApproverKey, summary)
+        let mut action = ActionRequest::new(SensitiveAction::AddApproverKey, summary)
             .target(key_id.clone())
             .params(Value::Object(params));
+        /*
+        CDXC:Security 2026-11-08 WHY:
+        User, after Escape in the chat of a session on their connected Windows PC showed "Waiting for your approval … Stop what session G506f is doing …": "wtf is this line". This Mac acted on Windows at agent level because its owner key there waited on this request, which only Windows' own app or a phone paired with it can approve, and which lapsed after ten minutes while the user was at the Mac. Another computer's app asks it once and waits on it (desktop `owner_security::enroll_owner_key`), so it now waits a day, and the card says what approving it does.
+        */
+        if owner {
+            action = action
+                .pending_ttl(OWNER_KEY_REQUEST_TTL_MS)
+                .detail(
+                    "Asked by Ghostex on another computer you connected to this one. Once approved, Stop, answering prompts and typing in this computer's sessions from there work without asking each time. Approve only if you connected that computer.",
+                );
+        }
         require_owner_presence(state, caller, action, body, endpoint_path, request_id)
             .map_err(EnrollRefusal::Response)?;
     }

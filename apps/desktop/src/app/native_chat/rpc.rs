@@ -10,6 +10,7 @@ pub(super) async fn request(
     endpoint: &str,
     params: &Value,
 ) -> Result<Value, Value> {
+    let params = &finish_when_approved(endpoint, params);
     let response = match shared_read_key(remote.as_ref(), endpoint, params) {
         Some(key) => shared_read(key, || transport(remote, endpoint, params)),
         None => transport(remote, endpoint, params),
@@ -41,6 +42,21 @@ pub(super) async fn request(
         );
     }
     Ok(envelope["result"].take())
+}
+
+/// The user's own Stop and prompt answers ask gxserver to finish them itself if they wait for an
+/// approval, and to say so in plain words (server/src/server/approval_finish.rs).
+fn finish_when_approved(endpoint: &str, params: &Value) -> Value {
+    let mut params = params.clone();
+    if matches!(
+        endpoint,
+        "/api/interruptSessionChat" | "/api/answerSessionChatPrompt"
+    ) {
+        if let Some(object) = params.as_object_mut() {
+            object.insert("finishWhenApproved".to_string(), Value::Bool(true));
+        }
+    }
+    params
 }
 
 /// CDXC:SessionChat 2026-10-31 WHY:

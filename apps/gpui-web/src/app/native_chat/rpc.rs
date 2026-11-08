@@ -12,7 +12,17 @@ pub(super) async fn request(
 ) -> Result<Value, Value> {
     let (sender, receiver) = oneshot::channel();
     let path = endpoint.to_string();
-    let params = params.clone();
+    let mut params = params.clone();
+    // The user's own Stop and prompt answers ask gxserver to finish them itself if they wait for
+    // an approval, and to say so in plain words (server/src/server/approval_finish.rs).
+    if matches!(
+        endpoint,
+        "/api/interruptSessionChat" | "/api/answerSessionChatPrompt"
+    ) {
+        if let Some(object) = params.as_object_mut() {
+            object.insert("finishWhenApproved".to_string(), Value::Bool(true));
+        }
+    }
     wasm_bindgen_futures::spawn_local(async move {
         // A target is a Cloud Box's gxserver on this computer's loopback (`gx_store/cloud_boxes.rs`).
         let endpoint = match remote {

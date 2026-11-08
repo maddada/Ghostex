@@ -349,6 +349,57 @@ fn open_owner_session(transport: &Transport) -> Result<String, String> {
 CDXC:Security 2026-11-08 WHY:
 When another owner key is already enrolled on a computer (a second computer connecting to it), enrolling this app's owner key there asks for that owner's approval. The owner session is retried every minute, and each request lapsed after ten minutes, so the Mac's log gained a new "Let M7-DESKTOP (Ghostex app) (windows) act as the owner of Ghostex on this computer" request every ten minutes all day (30 on 8 Nov). The app now asks once: it waits on that request, sends its key again with the approval once it is approved, and stops asking there until it restarts when it is denied or lapses.
 */
+/// gxserver's routes for the user's own actions on a session (Stop, answering its prompt, typing
+/// into it): the owner's devices do them without asking, anyone else asks each time.
+const STEER_ENDPOINTS: &[&str] = &[
+    "/api/interruptSessionChat",
+    "/api/answerSessionChatPrompt",
+    "/api/sendSessionText",
+    "/api/sendSessionEnter",
+    "/api/sendSessionMessage",
+];
+
+/// The code of the answer [`steer_needs_owner`] gives instead of sending the call.
+pub(crate) const OWNER_APPROVAL_NEEDED_ERROR: &str = "ownerApprovalNeeded";
+
+/*
+CDXC:Security 2026-11-08 WHY:
+User, after Escape in the chat of a session on their connected Windows PC showed a red "Waiting for your approval … Stop what session G506f is doing … repeat this call with approvalId": "wtf is this line". The owner's own Stop, answers and typing on a connected computer's sessions pass without asking once this app holds an owner session there; this Mac had none, because Windows has its own owner and the request to let this Mac act as the owner there was never approved, so each action went as that computer's token file (agent level) and asked on its own. Now such an action first makes sure of the owner session; while it waits on that one approval, the action is not sent (no request per action) and the chat says once, in plain words, what to approve and where.
+*/
+/// For a Stop, prompt answer or typing on the computer `target` reaches: `None` when it may go
+/// (an owner session there is open, or can be opened now), or the plain refusal to show when this
+/// app is not yet approved as the owner there.
+pub(crate) fn steer_needs_owner(
+    target: &GpuiRemoteGxserverRequestTarget,
+    endpoint: &str,
+) -> Option<String> {
+    if !STEER_ENDPOINTS.contains(&endpoint) || IN_SECURITY_FLOW.with(Cell::get) {
+        return None;
+    }
+    let transport = Transport::Remote(target.clone());
+    let key = transport.key();
+    if with_session(&key, |session| session.token.is_some()) {
+        return None;
+    }
+    // Never block the window: the background opener (`cached_token`) tries meanwhile.
+    if std::thread::current().name() != Some("main") {
+        if let Ok(token) = require_owner_session(&transport) {
+            with_session(&key, |session| session.token = Some(token));
+            return None;
+        }
+    }
+    let waiting = with_session(&key, |session| {
+        session.waiting_approval.is_some() || session.gave_up
+    });
+    waiting.then(|| {
+        format!(
+            "Ghostex on {} isn't approved as you on the computer this session runs on yet, so it can't stop, answer or type there for you. Approve \"Let {} (Ghostex app) act as the owner\" once on that computer (Ghostex shows it as a card) or on your phone in that computer's Approvals; after that it works without asking.",
+            this_computer_name(),
+            this_computer_name(),
+        )
+    })
+}
+
 /// `/api/enrollOwnerKey` on `transport`, waiting on the approval it asked for there instead of
 /// asking again.
 fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, String> {

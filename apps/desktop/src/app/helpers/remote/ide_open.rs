@@ -20,6 +20,16 @@ pub(crate) fn gpui_remote_gxserver_post_typed_operation(
     params: &serde_json::Value,
     timeout: Duration,
 ) -> Result<(u16, String), String> {
+    // The user's own Stop, answer or typing there waits for this app to be approved as the owner
+    // there, instead of asking on its own (CDXC:Security 2026-11-08 in app/owner_security/mod.rs).
+    if let Some(message) = crate::app::owner_security::steer_needs_owner(target, path) {
+        let body = serde_json::json!({
+            "ok": false,
+            "error": crate::app::owner_security::OWNER_APPROVAL_NEEDED_ERROR,
+            "message": message,
+        });
+        return Ok((403, body.to_string()));
+    }
     // A remote gxserver still starting is waited out like the local one (typed_operations.rs).
     let answer =
         gpui_wait_out_gxserver_starting(std::time::Instant::now() + timeout, |remaining| {
