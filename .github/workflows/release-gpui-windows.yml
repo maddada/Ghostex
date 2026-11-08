@@ -66,6 +66,11 @@ on:
         required: false
         default: ''
         type: string
+      collab_optional:
+        description: A build-only release ships without the Collab component when it is not published
+        required: false
+        default: false
+        type: boolean
     secrets:
       COMPONENTS_GITHUB_TOKEN:
         required: false
@@ -133,6 +138,10 @@ jobs:
       OUTPUT_DIR: build/release-gpui/${{ inputs.version }}/windows-${{ inputs.arch }}
       KACHE_STORE_SET: windows-${{ inputs.arch }}-1
       CARGO_INCREMENTAL: '0'
+      # Record the Collab component (release-gpui-collab.yml) before sealing the on-demand manifest
+      # (tooling/collab/seal-component.sh, called from build-windows-app.ps1).
+      GHOSTEX_COLLAB_SEAL: '1'
+      GHOSTEX_COLLAB_OPTIONAL: ${{ inputs.collab_optional && '1' || '0' }}
       # CDXC:Release 2026-10-19 DECISION: "Turn signing off for now": releases ship Windows unsigned until SignPath imports the production certificate (supersedes the 2026-10-17 choice of test-signing every release, which added about 10 minutes per Windows job for a certificate Windows does not trust). The switch is the repository variable SIGNPATH_SIGNING_POLICY_SLUG: `bun run release:actions` (--windows-signing auto) signs only when it is release-signing and the SIGNPATH_API_TOKEN secret exists, so `gh variable set SIGNPATH_SIGNING_POLICY_SLUG --body release-signing` turns signing back on with the production policy, and `--windows-signing required` still test-signs a single dispatch. The SignPath steps below stay in place for a signed build; without the token the build is packaged unsigned with a notice instead of failing. Setup steps: docs/code-signing.md.
       SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID || 'ba647e4a-b517-4fc1-b133-5817d7de0c68' }}
       SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG || 'Ghostex' }}

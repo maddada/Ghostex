@@ -454,6 +454,16 @@ if ($OnDemandComponents -or ($WslCodeServerArchive -and (Test-Path $WslCodeServe
     )
     $ResourcesDir = Join-Path $AppDir "resources"
     New-Item -ItemType Directory -Force -Path $ResourcesDir | Out-Null
+    # Collab, the sharing extension gxserver downloads when the owner installs it
+    # (server/src/collab_shim/install.rs); release builds only (GHOSTEX_COLLAB_SEAL=1).
+    if ($env:GHOSTEX_COLLAB_SEAL -eq "1") {
+        if (!(Test-Path $ComponentManifest)) {
+            New-Item -ItemType Directory -Force -Path $ComponentRoot | Out-Null
+            [IO.File]::WriteAllText($ComponentManifest, '{"components":{}}' + "`n", [Text.UTF8Encoding]::new($false))
+        }
+        & $GitBash (Join-Path $RepoRoot "tooling/collab/seal-component.sh") "windows-$ReleaseArch" $ComponentManifest
+        if ($LASTEXITCODE -ne 0) { throw "Could not record the Collab component" }
+    }
     & node (Join-Path $RepoRoot "tooling/release-gpui/on-demand-manifest.mjs") seal `
         --build-manifest $OnDemandBuildManifest `
         --component-manifest $ComponentManifest `

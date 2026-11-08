@@ -11,6 +11,10 @@
 //! GHOSTEX_COLLAB_E2E_RELAY=<target>/debug/ghostex-share-relay \
 //!   cargo test --lib collab_component_e2e -- --ignored
 //! ```
+//! To install the way a release does, add `GHOSTEX_COLLAB_E2E_MANIFEST` (a sealed
+//! on-demand-resources.json naming a `tooling/collab/build-component.sh` archive),
+//! `GHOSTEX_COLLAB_E2E_ASSETS` (the archive's folder) and `GHOSTEX_COLLAB_E2E_PAGES` (the relay's
+//! pinned guest pages folder, since a release build checks it).
 
 use super::*;
 use crate::collab_shim::{self, registry, sidecar};
@@ -55,6 +59,33 @@ async fn wait_for(what: &str, check: impl Fn() -> bool) {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
     panic!("timed out waiting for {what}");
+}
+
+/// Serves `folder`'s files at `/<tag>/<file>` (what a components release download URL looks like).
+async fn serve_assets(folder: std::path::PathBuf) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let port = listener.local_addr().expect("address").port();
+    let app = axum::Router::new().fallback(move |uri: axum::http::Uri| {
+        let folder = folder.clone();
+        async move {
+            let name = uri
+                .path()
+                .rsplit('/')
+                .next()
+                .unwrap_or_default()
+                .to_string();
+            match std::fs::read(folder.join(&name)) {
+                Ok(bytes) if !name.contains("..") => (StatusCode::OK, bytes),
+                _ => (StatusCode::NOT_FOUND, Vec::new()),
+            }
+        }
+    });
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    format!("http://127.0.0.1:{port}")
 }
 
 fn free_port() -> u16 {
@@ -131,20 +162,47 @@ async fn collab_component_e2e() {
     // A local share relay; the component checks no guest page in a debug build with this set.
     let relay_port = free_port();
     let relay_url = format!("http://127.0.0.1:{relay_port}");
+    let mut relay_args = vec!["--listen".to_string(), format!("127.0.0.1:{relay_port}")];
+    // The pinned guest pages, for a release-built component, which checks the relay serves them.
+    if let Ok(pages) = std::env::var("GHOSTEX_COLLAB_E2E_PAGES") {
+        relay_args.extend(["--pages".to_string(), pages]);
+    }
     let mut relay = std::process::Command::new(&relay_binary)
-        .args(["--listen", &format!("127.0.0.1:{relay_port}")])
+        .args(&relay_args)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
         .expect("start the relay");
+    // It checks its pinned pages before it listens.
+    for _ in 0..300 {
+        if tokio::net::TcpStream::connect(("127.0.0.1", relay_port))
+            .await
+            .is_ok()
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
     std::env::set_var(
         "GHOSTEX_COMPONENT_STORE_DIR",
         temp.path().join("components"),
     );
-    std::env::set_var("GHOSTEX_COLLAB_DEV_BINARY", &binary);
+    // With a sealed manifest and its archive folder, install the way a release does: download the
+    // archive from a local "components repository" and check it; else the development binary.
+    if let (Ok(manifest), Ok(assets)) = (
+        std::env::var("GHOSTEX_COLLAB_E2E_MANIFEST"),
+        std::env::var("GHOSTEX_COLLAB_E2E_ASSETS"),
+    ) {
+        let base = serve_assets(std::path::PathBuf::from(assets)).await;
+        std::env::set_var("GHOSTEX_ON_DEMAND_MANIFEST", manifest);
+        std::env::set_var("GHOSTEX_ON_DEMAND_BASE_URL", base);
+        std::env::remove_var("GHOSTEX_COLLAB_DEV_BINARY");
+    } else {
+        std::env::set_var("GHOSTEX_COLLAB_DEV_BINARY", &binary);
+        std::env::remove_var("GHOSTEX_ON_DEMAND_MANIFEST");
+    }
     std::env::set_var("GHOSTEX_COLLAB_UNPINNED_GUEST_PAGE", "1");
     std::env::set_var("GHOSTEX_COLLAB_RELAY_URL", &relay_url);
-    std::env::remove_var("GHOSTEX_ON_DEMAND_MANIFEST");
 
     crate::collab_shim::http::approvals::start(state.clone());
     sidecar::start_supervisor(state.clone());
@@ -264,6 +322,8 @@ async fn collab_component_e2e() {
     let _ = relay.kill();
     let _ = relay.wait();
     for key in [
+        "GHOSTEX_ON_DEMAND_MANIFEST",
+        "GHOSTEX_ON_DEMAND_BASE_URL",
         "GHOSTEX_COMPONENT_STORE_DIR",
         "GHOSTEX_COLLAB_DEV_BINARY",
         "GHOSTEX_COLLAB_UNPINNED_GUEST_PAGE",
