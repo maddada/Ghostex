@@ -153,6 +153,10 @@ impl GhostexGpuiApp {
             }
             Effect::MachineLive { machine } => {
                 self.gx_store_refresh_notification_feed(machine.clone(), cx);
+                self.owner_security_show_pending_requests(
+                    machine.remote_id().map(str::to_string),
+                    cx,
+                );
                 if machine.is_local() {
                     self.navigation_history_refresh(cx);
                     self.gx_store_refresh_cloud_boxes(cx);

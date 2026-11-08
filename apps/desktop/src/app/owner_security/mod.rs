@@ -325,6 +325,7 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
         let key =
             ghostex_owner_keys::load_or_create_owner_key().map_err(|error| error.to_string())?;
         let public_key = key.public_key_b64();
+        remember_own_owner_key(&public_key);
         let mut params = json!({ "key": key_json(&public_key, &public_key, "Ghostex app") });
         if !may_ask {
             params["askOwner"] = json!(false);
@@ -357,6 +358,70 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
 CDXC:Security 2026-11-08 WHY:
 When another owner key is already enrolled on a computer (a second computer connecting to it), enrolling this app's owner key there asks for that owner's approval. The owner session is retried every minute, and each request lapsed after ten minutes, so the Mac's log gained a new "Let M7-DESKTOP (Ghostex app) (windows) act as the owner of Ghostex on this computer" request every ten minutes all day (30 on 8 Nov). The app now asks once: it waits on that request, sends its key again with the approval once it is approved, and stops asking there until it restarts when it is denied or lapses.
 */
+/// The key id gxserver gives this app's owner key (hex of the first 16 bytes of SHA-256 over the
+/// public key), learned the first time the app sends it anywhere.
+static OWN_OWNER_KEY_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+fn remember_own_owner_key(public_key_b64: &str) {
+    use base64::Engine as _;
+    if OWN_OWNER_KEY_ID.get().is_some() {
+        return;
+    }
+    if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(public_key_b64) {
+        let digest = ring::digest::digest(&ring::digest::SHA256, &bytes);
+        let _ = OWN_OWNER_KEY_ID.set(hex::encode(&digest.as_ref()[..16]));
+    }
+}
+
+/// Whether `request` asks a connected computer to let this very app act as the owner there: only
+/// that computer's own owner can answer it, so this app never shows it as a card.
+pub(crate) fn asks_for_this_app(request: &ApprovalRequest) -> bool {
+    request.action == ghostex_gx_protocol::approval::SensitiveAction::AddApproverKey
+        && request.target.is_some()
+        && request.target.as_deref() == OWN_OWNER_KEY_ID.get().map(String::as_str)
+}
+
+/*
+CDXC:Security 2026-11-09 WHY:
+Discord report (11.2.0): "I click approve, and then get this little error popup that tells me its Not approved. It tells me to do it on the phone or other computers. Nothing comes up on those computers and I dont see a way to do it there?" The request a computer waits on showed as a card only from its `approvalRequestsChanged` event, sent once when the request is made: an app that was restarting, updating or reconnecting at that moment never showed it, and nothing listed it later, so the request waited a day with no way to answer it. Each computer's waiting requests are now read when its stream goes live and shown as cards, where this app may answer them (this computer, or one where it already acts as the owner).
+*/
+/// The requests waiting for the owner on `transport`'s gxserver. Empty on a connected computer
+/// where this app doesn't act as the owner yet: listing needs that, and it is never asked for
+/// from here.
+pub(crate) fn pending_requests(transport: &Transport) -> Vec<ApprovalRequest> {
+    use ghostex_gx_protocol::approval::ApprovalStatus;
+    in_security_flow(|| {
+        match transport {
+            Transport::Local => {
+                require_owner_session(transport)?;
+            }
+            Transport::Remote(_) => {
+                if !with_session(&transport.key(), |session| session.token.is_some()) {
+                    return Ok(Vec::new());
+                }
+            }
+        }
+        let answer = rpc(transport, "/api/listApprovalRequests", json!({}))
+            .map_err(|(_, message)| message)?;
+        Ok::<_, String>(
+            answer
+                .get("requests")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|request| {
+                    serde_json::from_value::<ApprovalRequest>(request.clone()).ok()
+                })
+                .filter(|request| request.status == ApprovalStatus::Pending)
+                .collect(),
+        )
+    })
+    .unwrap_or_else(|error| {
+        log::info!("waiting approval requests not read: {error}");
+        Vec::new()
+    })
+}
+
 /// gxserver's routes for the user's own actions on a session (Stop, answering its prompt, typing
 /// into it): the owner's devices do them without asking, anyone else asks each time.
 const STEER_ENDPOINTS: &[&str] = &[
@@ -408,10 +473,22 @@ pub(crate) fn steer_needs_owner(
     })
 }
 
+/// [`enroll_owner_key`]'s answer while that computer's own owner hasn't let this app act as the
+/// owner there; the approval card replaces it with words naming both computers.
+pub(crate) const OWNER_WAITING_ERROR: &str = "Another owner key is enrolled on that computer's Ghostex. Approve this app there or on your phone.";
+
+/// What Approve on `computer`'s card says while that computer's owner hasn't let this app in.
+pub(crate) fn owner_waiting_message(computer: &str) -> String {
+    let me = this_computer_name();
+    format!(
+        "{computer} has its own owner, so Ghostex here can't answer its requests yet. In Ghostex on {computer}, or on a phone paired with {computer}, approve \"Let {me} (Ghostex app) act as the owner\" (it shows there as a card once Ghostex on {computer} is open), or answer this request there instead."
+    )
+}
+
 /// `/api/enrollOwnerKey` on `transport`, waiting on the approval it asked for there instead of
 /// asking again.
 fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, String> {
-    const WAITING: &str = "Another owner key is enrolled on that computer's Ghostex. Approve this app there or on your phone.";
+    const WAITING: &str = OWNER_WAITING_ERROR;
     const STOPPED: &str = "This app wasn't approved as an owner on that computer; it uses that computer's token file until Ghostex restarts.";
     let key = transport.key();
     let (waiting, gave_up) = with_session(&key, |session| {

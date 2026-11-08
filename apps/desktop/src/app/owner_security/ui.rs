@@ -36,10 +36,44 @@ impl GhostexGpuiApp {
         }
         // The app's own clicks are approved right where they happen (`approve_own_call`); its
         // background work shows its own card (`owner_security_show_waiting_request`).
-        if request.requested_by.kind == "owner" {
+        if request.requested_by.kind == "owner" || super::asks_for_this_app(&request) {
             return;
         }
         self.owner_security_show_card(machine_id, request, cx);
+    }
+
+    /// A computer's stream went live (`machine_id: None` for this one): its requests still
+    /// waiting show as cards, including any whose event this app missed (CDXC:Security
+    /// 2026-11-09 at `owner_security::pending_requests`).
+    pub(crate) fn owner_security_show_pending_requests(
+        &mut self,
+        machine_id: Option<String>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let transport = match machine_id.as_deref() {
+            None => Transport::Local,
+            Some(machine) => match self.gpui_remote_gxserver_request_target(machine) {
+                Some(target) => Transport::Remote(target),
+                None => return,
+            },
+        };
+        let listed = cx
+            .background_executor()
+            .spawn(async move { super::pending_requests(&transport) });
+        cx.spawn(async move |this, cx| {
+            let requests = listed.await;
+            let _ = this.update(cx, |this, cx| {
+                for request in requests {
+                    this.owner_security_on_approval_change(
+                        machine_id.clone(),
+                        "requested",
+                        Some(request),
+                        cx,
+                    );
+                }
+            });
+        })
+        .detach();
     }
 
     /// The card for a request the app's own background work waits on (a connected computer's
@@ -134,6 +168,10 @@ impl GhostexGpuiApp {
         };
         let request = request.clone();
         let card = card_id(machine_id, &request.id);
+        let computer = machine_id.map(|machine| {
+            crate::app::helpers::gpui_remote_machine_name_from_settings(machine)
+                .unwrap_or_else(|| machine.to_string())
+        });
         let lets_computer_in = matches!(
             request.action,
             ghostex_gx_protocol::approval::SensitiveAction::ComputerGrant
@@ -167,6 +205,13 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 } else if let Err(Some(error)) = outcome {
+                    // Another owner there: name both computers and the card that lets this app in.
+                    let error = match computer.as_deref() {
+                        Some(computer) if error == super::OWNER_WAITING_ERROR => {
+                            super::owner_waiting_message(computer)
+                        }
+                        _ => error,
+                    };
                     this.dispatch_gpui_workspace_action_toast(
                         "warning",
                         if deny {
