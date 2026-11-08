@@ -29,11 +29,27 @@ pub(crate) fn ago(at_ms: i64, now_ms: i64) -> String {
 }
 
 fn status(row: &Value) -> SecurityNoticeRowStatus {
-    if row["status"] == "paired" {
-        SecurityNoticeRowStatus::Paired
-    } else {
-        SecurityNoticeRowStatus::Waiting
+    match row["status"].as_str() {
+        Some("paired") => SecurityNoticeRowStatus::Paired,
+        // Pairing v2: waiting on the owner's approval, with its words.
+        Some("pending") if row["approvalId"].as_str().is_some_and(|id| !id.is_empty()) => {
+            SecurityNoticeRowStatus::Pending
+        }
+        _ => SecurityNoticeRowStatus::Waiting,
     }
+}
+
+fn words(row: &Value) -> Vec<String> {
+    row["words"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|word| word.as_str().map(str::to_string))
+        .collect()
+}
+
+fn approval_id(row: &Value) -> Option<String> {
+    row["approvalId"].as_str().map(str::to_string)
 }
 
 /// The notice's rows from `/api/securityUpgradeNotice`. `last_connected` answers a computer's
@@ -65,6 +81,8 @@ pub(crate) fn notice_rows(
                     None => kind,
                 },
                 status: status(row),
+                words: words(row),
+                approval_id: approval_id(row),
             }
         })
         .collect();
@@ -86,6 +104,8 @@ pub(crate) fn notice_rows(
                 id,
                 name: text(row, "name"),
                 status: status(row),
+                words: Vec::new(),
+                approval_id: None,
             })
         })
         .collect();
@@ -158,6 +178,24 @@ mod tests {
             "Easy Connect \u{b7} connected 2 hours ago"
         );
         assert_eq!(computers[1].detail, "Easy Connect");
+    }
+
+    #[test]
+    fn a_phone_waiting_for_approval_carries_its_words() {
+        let view = json!({
+            "takenAtMs": NOW,
+            "phones": [
+                { "id": "a", "name": "Pixel 8", "kind": "Phone", "status": "pending",
+                  "words": ["harp", "cotton", "saddle"], "approvalId": "apr_1" },
+                { "id": "b", "name": "iPhone", "kind": "Phone", "status": "pending" },
+            ],
+        });
+        let (phones, _) = notice_rows(&view, &|_| None, NOW);
+        assert_eq!(phones[0].status, SecurityNoticeRowStatus::Pending);
+        assert_eq!(phones[0].words, vec!["harp", "cotton", "saddle"]);
+        assert_eq!(phones[0].approval_id.as_deref(), Some("apr_1"));
+        // Without its request there is nothing to approve: it reads as still waiting.
+        assert_eq!(phones[1].status, SecurityNoticeRowStatus::Waiting);
     }
 
     #[test]

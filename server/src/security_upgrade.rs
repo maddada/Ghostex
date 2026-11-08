@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::paths::GxserverPaths;
+use ghostex_gx_protocol::pairing::PendingDevice;
 
 pub(crate) const SECURITY_UPGRADE_NOTICE_ENDPOINT: &str = "/api/securityUpgradeNotice";
 const NOTICE_FILE: &str = "upgrade-11.0.1.json";
@@ -112,6 +113,9 @@ pub(crate) enum RowStatus {
     /// Removed from this computer (a phone in Paired devices, a computer in Settings > Remote, or
     /// a computer turned off): nothing left to pair, so it leaves the notice.
     Removed,
+    /// It scanned the new code and waits for the owner's approval, with three words to compare
+    /// (pairing v2): the notice shows them and Approve.
+    Pending,
 }
 
 impl RowStatus {
@@ -120,6 +124,7 @@ impl RowStatus {
             Self::Waiting => "waiting",
             Self::Paired => "paired",
             Self::Removed => "removed",
+            Self::Pending => "pending",
         }
     }
 }
@@ -243,17 +248,43 @@ pub(crate) fn easy_connect_computers(settings: Option<&Value>) -> Vec<NoticeComp
         .collect()
 }
 
+/// [`phone_statuses`], with the phones waiting for approval right now (pairing v2): a row that
+/// still waits becomes `Pending` when a waiting phone has its name and platform (one waiting phone
+/// per row, oldest first), and carries that phone's entry (its words and approval request).
+pub(crate) fn phone_statuses_with_pending(
+    phones: &[NoticePhone],
+    current: &[CurrentPhone],
+    pending: &[PendingDevice],
+    taken_at_ms: i64,
+) -> Vec<(RowStatus, Option<PendingDevice>)> {
+    let mut waiting: Vec<&PendingDevice> = pending.iter().collect();
+    phone_statuses(phones, current, taken_at_ms)
+        .into_iter()
+        .zip(phones)
+        .map(|(status, phone)| {
+            if status != RowStatus::Waiting {
+                return (status, None);
+            }
+            match waiting
+                .iter()
+                .position(|device| device.name == phone.name && device.platform == phone.platform)
+            {
+                Some(at) => (RowStatus::Pending, Some(waiting.remove(at).clone())),
+                None => (status, None),
+            }
+        })
+        .collect()
+}
+
 /// SEAM (pairing v2, GitHub #495): whether each phone of the notice was paired again.
 ///
 /// Today: a phone is paired again when a pairing made after the update has the same name and
 /// platform (each new pairing ticks off one old row, newest first), and removed when its old row
 /// is gone with no such pairing.
 ///
-/// What pairing v2 (branch `ghostex/d18d40af`) plugs in here: its re-paired phone is a new
-/// `paired` row while the old one stays `legacy` until removed, which the rule above already
-/// reads; a phone that scanned the code and waits on the owner's approval (its `pending` entry in
-/// `/api/pairedDevices`, with the three words) should become a fourth status, `pending`, with
-/// those words, so the notice can show them and the Approve button beside its row.
+/// Pairing v2: a re-paired phone is a new `paired` row while the old one stays `legacy` until
+/// removed, which the rule above reads; a phone waiting on the owner's approval becomes `pending`
+/// with its three words in [`phone_statuses_with_pending`].
 pub(crate) fn phone_statuses(
     phones: &[NoticePhone],
     current: &[CurrentPhone],
@@ -362,6 +393,17 @@ pub(crate) fn view(
     settings: Option<&Value>,
     now_ms: i64,
 ) -> Value {
+    view_with_pending(notice, current, &[], settings, now_ms)
+}
+
+/// [`view`] with the phones waiting for approval: a `pending` row adds `words` and `approvalId`.
+pub(crate) fn view_with_pending(
+    notice: &UpgradeNotice,
+    current: &[CurrentPhone],
+    pending: &[PendingDevice],
+    settings: Option<&Value>,
+    now_ms: i64,
+) -> Value {
     // A record from before the rows were kept has names only: one waiting row per name.
     let legacy_names = notice.phone_rows.is_empty()
         && notice.computer_rows.is_empty()
@@ -387,21 +429,28 @@ pub(crate) fn view(
             .filter(|phone| recently_used(phone, notice.taken_at_ms))
             .cloned()
             .collect();
-        for (phone, status) in
-            recent
-                .iter()
-                .zip(phone_statuses(&recent, current, notice.taken_at_ms))
-        {
+        for (phone, (status, waiting)) in recent.iter().zip(phone_statuses_with_pending(
+            &recent,
+            current,
+            pending,
+            notice.taken_at_ms,
+        )) {
             if status == RowStatus::Removed {
                 continue;
             }
-            phones.push(json!({
+            let mut row = json!({
                 "id": phone.id,
                 "name": phone.name,
                 "kind": phone_kind(&phone.platform),
                 "lastUsedAt": phone.last_used_at,
                 "status": status.wire(),
-            }));
+            });
+            if let Some(waiting) = waiting {
+                row["words"] = json!(waiting.words);
+                row["approvalId"] = json!(waiting.approval_id);
+                row["pendingId"] = json!(waiting.id);
+            }
+            phones.push(row);
         }
         for (computer, status) in notice
             .computer_rows
@@ -421,7 +470,7 @@ pub(crate) fn view(
     let waiting = phones
         .iter()
         .chain(computers.iter())
-        .filter(|row| row["status"] == "waiting")
+        .filter(|row| row["status"] == "waiting" || row["status"] == "pending")
         .count();
     let due = !notice.seen && notice.remind_at_ms.is_none_or(|at| now_ms >= at);
     json!({
@@ -448,13 +497,14 @@ pub(crate) fn remind_later(notice: &mut UpgradeNotice, now_ms: i64) {
 #[inline(never)]
 pub(crate) fn handle_http(
     paths: &GxserverPaths,
+    pending: &[PendingDevice],
     endpoint_path: String,
     request_id: String,
     body: &Value,
 ) -> crate::server::RoutedResponse {
     use axum::http::StatusCode;
     let params = crate::domain::read_domain_rpc_params(body).unwrap_or_default();
-    match handle_endpoint(paths, &params) {
+    match handle_endpoint_with_pending(paths, pending, &params) {
         Ok(result) => crate::server::routed_json(
             Some(endpoint_path),
             StatusCode::OK,
@@ -473,6 +523,15 @@ pub(crate) fn handle_endpoint(
     paths: &GxserverPaths,
     params: &serde_json::Map<String, Value>,
 ) -> Result<Value> {
+    handle_endpoint_with_pending(paths, &[], params)
+}
+
+/// [`handle_endpoint`] with the phones waiting for approval (`remote_access::waiting_devices`).
+pub(crate) fn handle_endpoint_with_pending(
+    paths: &GxserverPaths,
+    pending: &[PendingDevice],
+    params: &serde_json::Map<String, Value>,
+) -> Result<Value> {
     let now_ms = chrono::Utc::now().timestamp_millis();
     let mut notice = read(paths);
     match params.get("op").and_then(Value::as_str) {
@@ -486,9 +545,10 @@ pub(crate) fn handle_endpoint(
         }
         _ => {}
     }
-    Ok(view(
+    Ok(view_with_pending(
         &notice,
         &current_phones(paths),
+        pending,
         crate::shared_settings_file::read_shared_settings(paths).as_ref(),
         now_ms,
     ))
@@ -652,6 +712,45 @@ mod tests {
         assert_eq!(
             view(&notice, &current, None, TAKEN + 10 * DAY_MS)["waiting"],
             1
+        );
+    }
+
+    #[test]
+    fn a_phone_waiting_for_approval_shows_its_words() {
+        let phones = vec![phone("old", "Pixel 8", "android", TAKEN - DAY_MS)];
+        let current = vec![now_phone("old", "Pixel 8", "android", TAKEN - 90 * DAY_MS)];
+        let pending = vec![PendingDevice {
+            id: "pd_1".into(),
+            name: "Pixel 8".into(),
+            platform: "android".into(),
+            words: vec!["harp".into(), "cotton".into(), "saddle".into()],
+            approval_id: "apr_1".into(),
+            requested_at_ms: 0,
+            expires_at_ms: 0,
+        }];
+        let notice = UpgradeNotice {
+            phone_rows: phones,
+            taken_at_ms: TAKEN,
+            ..UpgradeNotice::default()
+        };
+        let shown = view_with_pending(&notice, &current, &pending, None, TAKEN);
+        assert_eq!(shown["phones"][0]["status"], "pending");
+        assert_eq!(
+            shown["phones"][0]["words"],
+            json!(["harp", "cotton", "saddle"])
+        );
+        assert_eq!(shown["phones"][0]["approvalId"], "apr_1");
+        // Still counted: it isn't paired until the owner approves.
+        assert_eq!(shown["waiting"], 1);
+        // Another phone's name doesn't match it.
+        let other = vec![PendingDevice {
+            name: "iPhone".into(),
+            platform: "ios".into(),
+            ..pending[0].clone()
+        }];
+        assert_eq!(
+            view_with_pending(&notice, &current, &other, None, TAKEN)["phones"][0]["status"],
+            "waiting"
         );
     }
 

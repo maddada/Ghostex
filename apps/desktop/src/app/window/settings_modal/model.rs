@@ -458,6 +458,10 @@ pub(crate) enum SettingsModalCommand {
         timeout: std::time::Duration,
         reply: GxserverRpcReply,
     },
+    /// Approves approval request `id` of this computer's gxserver for the owner: the system
+    /// prompt (Touch ID / Windows Hello / polkit), then the signed approval (the app's
+    /// `owner_security`, GitHub #495). Settings > Remote's Approve on a waiting phone or computer.
+    ApproveRequest { id: String, reply: GxserverRpcReply },
     /// [`Self::GxserverRpc`] sent to a connected remote machine's gxserver through its tunnel
     /// (`remote_conn/settings_rpc.rs`): Settings > Agents and Integrations with that machine picked.
     RemoteGxserverRpc {

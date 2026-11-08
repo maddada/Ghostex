@@ -105,12 +105,11 @@ pub(crate) async fn handle_remote_access_http(
         User (GitHub #495, Q1721): "No API returns a pairing secret; only the desktop Show QR sheet
         makes one." The review found this route handing the one-time secret (and so a pairing) to
         any caller with the main token, every agent included. Now only the desktop app's owner
-        session gets a code, and only while its Show QR sheet is open (`openTunnel`, which the
-        sheet sends); the code lives five minutes and pairs nothing by itself (the phone waits as
+        session gets a code, and only while its Show QR sheet (or the 11.0.1 notice's QR) is open
+        (`openTunnel`, which both send); the code lives five minutes and pairs nothing by itself (the phone waits as
         Pending for a signed approval). Every other caller, and the desktop with the sheet closed,
         gets the Easy Connect details without a code (empty `payload`, a `text` code with no `secret`, which a computer connects with and a phone can't pair with),
-        and closing the sheet drops the live code. The Tailscale half carries no secret and is
-        unchanged.
+        and the live code lapses by itself. The Tailscale half carries no secret and is unchanged.
         */
         "/api/remotePairingCode" => {
             let open_tunnel = params
@@ -118,7 +117,6 @@ pub(crate) async fn handle_remote_access_http(
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
             let show_code = open_tunnel && may_show_pairing_code(&caller);
-            let owner = may_show_pairing_code(&caller);
             tokio::task::spawn_blocking(move || {
                 if show_code {
                     // The Show QR dialog is open: a new phone must get through the allow-list to pair.
@@ -132,14 +130,14 @@ pub(crate) async fn handle_remote_access_http(
                     (pairing_qr_address(&status), public_pairing_address(&status))
                 {
                     let db = open_gxserver_database(&paths)?;
+                    // A closed sheet doesn't drop the live code: the 11.0.1 notice shows the same
+                    // code while Settings > Remote polls without `openTunnel`, and the code lapses by
+                    // itself within five minutes.
                     let secret = if show_code {
                         let secret = pairing_runtime.ensure_secret(&db)?;
                         log_new_pairing_code(&secret.secret_hash, actor);
                         Some(secret.secret)
                     } else {
-                        if owner {
-                            pairing_runtime.cancel_secret(&db)?;
-                        }
                         None
                     };
                     let code = EasyConnectCode {
@@ -184,7 +182,7 @@ pub(crate) async fn handle_remote_access_http(
                 let db = open_gxserver_database(&paths)?;
                 Ok(json!({
                     "devices": list_paired_devices_json(&db)?,
-                    "pending": pairing_runtime.list_waiting(crate::security::now_ms()),
+                    "pending": waiting_devices(&pairing_runtime, &security),
                 }))
             })
             .await
@@ -222,7 +220,7 @@ pub(crate) async fn handle_remote_access_http(
                     }
                     return Ok(json!({
                         "devices": list_paired_devices_json(&db)?,
-                        "pending": pairing_runtime.list_waiting(now),
+                        "pending": waiting_devices(&pairing_runtime, &security),
                     }));
                 }
                 let Some(device) = remove_paired_device(
@@ -246,7 +244,7 @@ pub(crate) async fn handle_remote_access_http(
                 );
                 Ok(json!({
                     "devices": list_paired_devices_json(&db)?,
-                    "pending": pairing_runtime.list_waiting(now),
+                    "pending": waiting_devices(&pairing_runtime, &security),
                 }))
             })
             .await
@@ -443,6 +441,27 @@ pub(crate) async fn handle_remote_access_http(
         ),
         Err(error) => error.into_response(endpoint_path, request_id),
     }
+}
+
+/// The devices waiting for approval whose request still waits: one denied on an approval card (or
+/// lapsed) leaves the list at once, before the device itself hears it.
+pub(crate) fn waiting_devices(
+    pairing_runtime: &RemotePairingRuntime,
+    security: &crate::security::SecurityState,
+) -> Vec<ghostex_gx_protocol::pairing::PendingDevice> {
+    let now = crate::security::now_ms();
+    pairing_runtime
+        .list_waiting(now)
+        .into_iter()
+        .filter(|device| {
+            security
+                .approvals
+                .read(&device.approval_id, &Principal::Anonymous, now)
+                .is_some_and(|request| {
+                    request.status == ghostex_gx_protocol::approval::ApprovalStatus::Pending
+                })
+        })
+        .collect()
 }
 
 /// How a refused or failed pairing step reads in the security log.

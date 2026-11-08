@@ -15,6 +15,8 @@ fn row(id: &str, name: &str, detail: &str, paired: bool) -> SecurityNoticeRow {
         } else {
             SecurityNoticeRowStatus::Waiting
         },
+        words: Vec::new(),
+        approval_id: None,
     }
 }
 
@@ -68,6 +70,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             SecurityUpgradeModalCommand::OpenRemoteSettings => eprintln!("open remote settings"),
             SecurityUpgradeModalCommand::Later => eprintln!("later"),
             SecurityUpgradeModalCommand::Done => eprintln!("done"),
+            SecurityUpgradeModalCommand::ApprovePending(id) => eprintln!("approve {id}"),
         }
         cx.quit();
     });

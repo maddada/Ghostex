@@ -716,13 +716,9 @@ fn finish_pairing(
         )?;
     }
     if let Some(approver_key) = approver_key {
-        // Phase 1 of #495 keeps approver keys in memory; Phase 2 persists them, and loads this
-        // one back from the device row's `approverKeyId` with the key itself.
-        if let Ok(key) = context.security.approver_keys.insert(approver_key) {
-            context
-                .security
-                .publish(SecurityEvent::ApproverKeyAdded { key });
-        }
+        // The same approval that let the phone in enrolls its Face ID / fingerprint key, saved
+        // with the other approver keys (`SecurityState::add_approver_key`).
+        let _ = context.security.add_approver_key(approver_key, now_ms());
     }
     let caller = Principal::Device {
         device_id: device_id.clone(),

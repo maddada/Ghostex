@@ -892,6 +892,7 @@ pub(super) fn qr_preview_dialog(
     let waiting = (!tailscale)
         .then(|| tab.pending_devices.first().cloned())
         .flatten();
+    let approving = tab.approving_device.is_some();
     let qr_size = QR_PREVIEW_SIZE
         .min(window.viewport_size().height.as_f32() - QR_PREVIEW_CHROME_HEIGHT)
         .max(QR_PLACEHOLDER_SIZE)
@@ -1025,8 +1026,25 @@ pub(super) fn qr_preview_dialog(
                         .text_size(px(13.0))
                         .line_height(px(18.57))
                         .text_color(hsla(colors.muted))
-                        .child("Then approve the request on this computer or a paired phone. If the words differ, deny it under Paired devices."),
+                        .child("If they match, approve it. If the words differ, deny it under Paired devices."),
                 )
+                .child({
+                    let approval_id = device.approval_id.clone();
+                    settings_button_sized(
+                        &t.p,
+                        "remote-qr-approve-pending",
+                        if approving { "Approving…" } else { "Approve" },
+                        None,
+                        ButtonVariant::Default,
+                        ButtonSize::Default,
+                        approving,
+                        None,
+                        move |tab: &mut RemoteTab, _window, cx| {
+                            tab.approve_pending_device(approval_id.clone(), cx)
+                        },
+                        cx,
+                    )
+                })
         }))
         .into_any_element();
     Some(dialog_overlay(

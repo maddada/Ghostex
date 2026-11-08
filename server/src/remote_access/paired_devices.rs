@@ -105,13 +105,18 @@ pub fn forget_approver_key(
     key_ids.extend(device.approver_key_id.clone());
     key_ids.sort();
     key_ids.dedup();
+    let mut removed = false;
     for key_id in key_ids {
         if let Some(key) = security.approver_keys.remove(&key_id) {
+            removed = true;
             security.publish(SecurityEvent::ApproverKeyRemoved {
                 key,
                 by: by.clone(),
             });
         }
+    }
+    if removed {
+        let _ = security.save();
     }
 }
 

@@ -308,15 +308,6 @@ impl RemotePairingRuntime {
         *self.live_secret.lock().expect("remote pairing secret lock") = None;
     }
 
-    /// Drops the live code and its stored hash: the Show QR sheet closed.
-    pub fn cancel_secret(&self, db: &Connection) -> Result<()> {
-        let mut live = self.live_secret.lock().expect("remote pairing secret lock");
-        if let Some(secret) = live.take() {
-            RemotePairingRepository::new(db).consume_secret(&secret.secret_hash)?;
-        }
-        Ok(())
-    }
-
     fn pending_map(&self) -> std::sync::MutexGuard<'_, HashMap<String, PendingPairing>> {
         self.pending
             .lock()

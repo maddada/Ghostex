@@ -229,7 +229,7 @@ pub(super) fn paired_devices_list(
 
 /*
 CDXC:RemotePairing 2026-11-08 DECISION:
-User (GitHub #495, Q1721): a phone that scanned the QR is Pending until the owner compares three words shown on both screens and approves with Touch ID, Windows Hello or the system password. The row shows the words; approving happens on the approval request (the desktop's approval card, GitHub #495 Phase 2), because a plain button here could be clicked by an agent driving the GUI. Deny needs no approval: it only closes a door.
+User (GitHub #495, Q1721): a phone that scanned the QR is Pending until the owner compares three words shown on both screens and approves with Touch ID, Windows Hello or the system password. The row shows the words; Approve here (or on the approval card) runs Touch ID, Windows Hello or the system password and signs the approval (`owner_security`), so an agent driving the GUI can't click it through. Deny needs no approval: it only closes a door.
 */
 fn pending_device_row(
     tab: &RemoteTab,
@@ -273,16 +273,41 @@ fn pending_device_row(
         .child(detail(
             t,
             if is_phone_platform(&device.platform) {
-                "Approve the request only if the phone shows the same three words. Deny it if you didn't just scan the code."
+                "Approve only if the phone shows the same three words. Deny it if you didn't just scan the code."
             } else {
-                "A computer asks to connect through Easy Connect. Approve the request only if it shows the same three words. Deny it if you didn't just paste this computer's code there."
+                "A computer asks to connect through Easy Connect. Approve only if it shows the same three words. Deny it if you didn't just paste this computer's code there."
             },
             true,
         ))
         .into_any_element();
     let id: SharedString = device.id.clone().into();
     let deny_id = device.id.clone();
-    let value = compact_button(
+    let approving = tab.approving_device.as_deref() == Some(device.approval_id.as_str());
+    let approve_id = device.approval_id.clone();
+    let approve = compact_button(
+        &t.p,
+        SharedString::from(format!("remote-pending-{id}-approve")),
+        "Approve",
+        approving.then(|| {
+            spinner(
+                SharedString::from(format!("remote-pending-{id}-approve-spinner")),
+                14.0,
+                t.muted,
+                900,
+            )
+        }),
+        Look::Filled,
+        24.0,
+        14.0,
+        None,
+        !rpc || tab.approving_device.is_some() || removing,
+        None,
+        move |tab: &mut RemoteTab, _window, cx| {
+            tab.approve_pending_device(approve_id.clone(), cx);
+        },
+        cx,
+    );
+    let deny = compact_button(
         &t.p,
         SharedString::from(format!("remote-pending-{id}-deny")),
         "Deny",
@@ -305,6 +330,13 @@ fn pending_device_row(
         },
         cx,
     );
+    let value = h_flex()
+        .flex_shrink_0()
+        .items_center()
+        .gap(px(6.0))
+        .child(approve)
+        .child(deny)
+        .into_any_element();
     remote_row(main, Some(value))
 }
 

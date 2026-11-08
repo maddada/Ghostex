@@ -289,6 +289,8 @@ pub(crate) struct PendingDevice {
     pub(super) platform: String,
     /// The three words the phone must show too.
     pub(super) words: Vec<String>,
+    /// Its `pairingApproveDevice` approval request.
+    pub(super) approval_id: String,
 }
 
 /// The `pending` half of `/api/pairedDevices` (and of `/api/removePairedDevice`'s answer); empty
@@ -312,6 +314,7 @@ pub(super) fn read_pending_devices(value: &Value) -> Vec<PendingDevice> {
                         name: text(device, "name").unwrap_or_default(),
                         platform: text(device, "platform").unwrap_or_default(),
                         words,
+                        approval_id: text(device, "approvalId").unwrap_or_default(),
                     })
                 })
                 .collect()

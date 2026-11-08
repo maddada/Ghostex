@@ -43,6 +43,10 @@ pub(super) async fn route_control_http(
         crate::security_upgrade::SECURITY_UPGRADE_NOTICE_ENDPOINT => {
             crate::security_upgrade::handle_http(
                 &state.paths,
+                &crate::remote_access::waiting_devices(
+                    &state.remote_pairing_runtime,
+                    &state.security,
+                ),
                 endpoint.path,
                 request_id,
                 &body_json,

@@ -322,6 +322,22 @@ pub(crate) fn approve_request(
     })
 }
 
+/// [`approve_request`] for request `id` of this computer's gxserver (a phone or computer waiting
+/// to pair, from Settings > Remote or the 11.0.1 notice): reads it, then prompts and signs.
+pub(crate) fn approve_local_request_id(id: &str) -> Result<(), String> {
+    let transport = Transport::Local;
+    let request = in_security_flow(|| {
+        require_owner_session(&transport)?;
+        let answer = rpc(&transport, "/api/readApprovalRequest", json!({ "id": id }))
+            .map_err(|(_, message)| message)?;
+        serde_json::from_value::<ApprovalRequest>(
+            answer.get("request").cloned().unwrap_or_default(),
+        )
+        .map_err(|_| "This request is no longer waiting.".to_string())
+    })?;
+    approve_request(&transport, &request)
+}
+
 /// Denies a request; no prompt, saying no only closes a door.
 pub(crate) fn deny_request(transport: &Transport, id: &str) -> Result<(), String> {
     in_security_flow(|| {

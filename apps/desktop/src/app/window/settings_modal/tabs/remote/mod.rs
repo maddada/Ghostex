@@ -45,8 +45,8 @@ use super::super::page::{PageBlock, settings_page};
 use super::super::rail::{rail_pages, render_no_matches};
 use super::super::search::should_show_section;
 use super::super::store::{
-    SettingsStore, SettingsStoreEvent, SmoothScroll, post_store_message, store_copy_to_clipboard,
-    store_gxserver_rpc,
+    SettingsStore, SettingsStoreEvent, SmoothScroll, post_store_message, store_approve_request,
+    store_copy_to_clipboard, store_gxserver_rpc,
 };
 use gpui::{
     AnyView, App, AppContext as _, Bounds, Context, Entity, FocusHandle, IntoElement,
@@ -184,6 +184,8 @@ pub(crate) struct RemoteTab {
     pub(super) paired_devices: Option<Vec<PairedDevice>>,
     /// Phones waiting for approval, with their words (pairing v2).
     pub(super) pending_devices: Vec<PendingDevice>,
+    /// The approval request being approved for a waiting phone or computer (its system prompt is up).
+    pub(super) approving_device: Option<String>,
     /// A `/api/computerPairingStatus` ask is out (machines.rs).
     pub(super) computer_pairing_in_flight: bool,
     pub(super) request_error: Option<String>,
@@ -360,6 +362,7 @@ impl RemoteTab {
             paired_devices: None,
             pending_devices: Vec::new(),
             computer_pairing_in_flight: false,
+            approving_device: None,
             request_error: None,
             enabling_ssh: false,
             install_pending: false,
@@ -602,8 +605,35 @@ impl RemoteTab {
         );
     }
 
+    /// Approve on a waiting phone or computer: Touch ID / Windows Hello / the system password,
+    /// then the signed approval (`owner_security`, GitHub #495); the device finishes pairing on
+    /// its next ask.
+    pub(super) fn approve_pending_device(&mut self, approval_id: String, cx: &mut Context<Self>) {
+        if self.approving_device.is_some() || approval_id.is_empty() {
+            return;
+        }
+        self.approving_device = Some(approval_id.clone());
+        cx.notify();
+        let weak = cx.weak_entity();
+        store_approve_request(
+            &self.store,
+            approval_id,
+            move |outcome, cx| {
+                let _ = weak.update(cx, |this, cx| {
+                    this.approving_device = None;
+                    if let Err(error) = outcome {
+                        this.request_error = Some(error);
+                    }
+                    this.refresh_pending_devices(cx);
+                    cx.notify();
+                });
+            },
+            cx,
+        );
+    }
+
     /// The phones waiting for approval, while the Show QR sheet is open.
-    fn refresh_pending_devices(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn refresh_pending_devices(&mut self, cx: &mut Context<Self>) {
         self.rpc(
             "/api/pairedDevices",
             json!({}),

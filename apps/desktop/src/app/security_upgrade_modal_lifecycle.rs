@@ -2,11 +2,12 @@
 //! open the app reads the rows' status and the pairing code every 3 seconds, so a phone ticks off
 //! as it pairs again and the code stays fresh.
 //!
-//! SEAM (pairing v2, GitHub #495): the code is `/api/remotePairingCode` with `openTunnel: true`,
-//! the call the Show QR sheet in Settings > Remote makes. Pairing v2 answers it with a code only to
-//! the owner's desktop session; until the desktop holds one, the notice says no code can be made
-//! and offers Settings > Remote. A phone waiting on the owner's approval with its three words is
-//! the `pending` status pairing v2 adds in server/src/security_upgrade.rs (`phone_statuses`).
+//! Pairing v2 (GitHub #495): the code is `/api/remotePairingCode` with `openTunnel: true`, the call
+//! the Show QR sheet in Settings > Remote makes, which answers with a code only to the owner's
+//! desktop session; until the desktop holds one, the notice says no code can be made and offers
+//! Settings > Remote. A phone that scanned it and waits on the owner's approval is a `pending` row
+//! with its three words (server/src/security_upgrade.rs, `phone_statuses_with_pending`); Approve
+//! there runs the system prompt and signs (`owner_security::approve_local_request_id`).
 use crate::app::gx_store::security_notice::{SECURITY_NOTICE_ENDPOINT, notice_rows};
 use crate::app::gx_store::{gx_rpc, remote_last_connected_ms};
 use crate::app::window::*;
@@ -127,6 +128,27 @@ impl GhostexGpuiApp {
         command: SecurityUpgradeModalCommand,
         cx: &mut gpui::Context<Self>,
     ) {
+        if let SecurityUpgradeModalCommand::ApprovePending(approval_id) = &command {
+            // The system prompt, then the signed approval; never on the main thread.
+            let approval_id = approval_id.clone();
+            let approved = cx.background_executor().spawn(async move {
+                crate::app::owner_security::approve_local_request_id(&approval_id)
+            });
+            cx.spawn(async move |this, cx| {
+                if let Err(error) = approved.await {
+                    let _ = this.update(cx, |app, cx| {
+                        app.dispatch_gpui_workspace_action_toast(
+                            "warning",
+                            "Not approved",
+                            &error,
+                            cx,
+                        )
+                    });
+                }
+            })
+            .detach();
+            return;
+        }
         self.release_native_app_modal_window(GpuiAppModalKind::SecurityUpgrade, cx);
         let answer = |op: &'static str| {
             cx.spawn(async move |_, _| {
@@ -143,6 +165,7 @@ impl GhostexGpuiApp {
             SecurityUpgradeModalCommand::OpenRemoteSettings => {
                 self.open_gpui_settings_tab("remote", None, cx);
             }
+            SecurityUpgradeModalCommand::ApprovePending(_) => {}
         }
     }
 
