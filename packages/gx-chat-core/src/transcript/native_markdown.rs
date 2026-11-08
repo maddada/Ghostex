@@ -1104,6 +1104,105 @@ fn literal_windows_prose_paths(markdown: &str) -> String {
     out
 }
 
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// The GPUI Markdown view reads `$…$` as inline maths, so a Codex message holding two skill pills
+/// (`use [$release-notes](…/SKILL.md) and [$review-pr](…/SKILL.md)`) drew everything between the two
+/// `$` as one formula, link syntax and all. A `$` that opens a skill link's label, or a bare
+/// skill-like `$name` (a hyphen or colon in the name, as skill and plugin names have), is escaped
+/// here so it can never start maths; code, `$5` and real formulas such as `$x^2$` are untouched.
+/// SEE-ALSO: composer/skill_invocation.rs (the `[$name](…)` link Codex receives).
+fn literal_skill_dollars(markdown: &str) -> String {
+    let Ok(tree) = markdown::to_mdast(markdown, &ParseOptions::gfm()) else {
+        return markdown.to_string();
+    };
+    let bytes = markdown.as_bytes();
+    let mut dollars: Vec<usize> = Vec::new();
+    collect_skill_dollars(&tree, bytes, &mut dollars);
+    if dollars.is_empty() {
+        return markdown.to_string();
+    }
+    dollars.sort_unstable();
+    dollars.dedup();
+    let mut out = String::with_capacity(markdown.len() + dollars.len());
+    let mut copied = 0;
+    for at in dollars {
+        out.push_str(&markdown[copied..at]);
+        out.push('\\');
+        copied = at;
+    }
+    out.push_str(&markdown[copied..]);
+    out
+}
+
+/// The source offsets of the `$` that open a skill link's label or a bare skill-like `$name`.
+fn collect_skill_dollars(node: &Node, bytes: &[u8], dollars: &mut Vec<usize>) {
+    match node {
+        Node::Link(link) => {
+            if let Some(Node::Text(text)) = link.children.first() {
+                if let Some(position) = &text.position {
+                    let at = position.start.offset;
+                    if bytes.get(at) == Some(&b'$') && skill_name_end(bytes, at + 1).is_some() {
+                        dollars.push(at);
+                    }
+                }
+            }
+        }
+        Node::Text(text) => {
+            if let Some(position) = &text.position {
+                let (start, end) = (position.start.offset, position.end.offset);
+                for at in start..end.min(bytes.len()) {
+                    let starts_word = at == 0
+                        || bytes[at - 1].is_ascii_whitespace()
+                        || matches!(bytes[at - 1], b'(' | b'"' | b'\'');
+                    if bytes[at] != b'$' || !starts_word {
+                        continue;
+                    }
+                    let Some(name_end) = skill_name_end(bytes, at + 1) else {
+                        continue;
+                    };
+                    let skill_like = bytes[at + 1..name_end]
+                        .iter()
+                        .any(|byte| matches!(byte, b'-' | b':'));
+                    let ends_token = bytes.get(name_end).is_none_or(|byte| {
+                        byte.is_ascii_whitespace()
+                            || matches!(
+                                byte,
+                                b',' | b';' | b'.' | b'!' | b'?' | b')' | b'"' | b'\''
+                            )
+                    });
+                    if skill_like && ends_token {
+                        dollars.push(at);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    if let Some(children) = node.children() {
+        for child in children {
+            collect_skill_dollars(child, bytes, dollars);
+        }
+    }
+}
+
+/// The end of a skill name starting at `start`: a letter, then letters, digits, `-`, `_`, `.` or
+/// `:`, with no trailing `.` or `:`.
+fn skill_name_end(bytes: &[u8], start: usize) -> Option<usize> {
+    if !bytes.get(start).is_some_and(u8::is_ascii_alphabetic) {
+        return None;
+    }
+    let mut end = start;
+    while bytes.get(end).is_some_and(|byte| {
+        byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':')
+    }) {
+        end += 1;
+    }
+    while end > start + 1 && matches!(bytes[end - 1], b'.' | b':') {
+        end -= 1;
+    }
+    Some(end)
+}
+
 /// The source ranges of the prose text nodes: never code, a link destination or raw HTML.
 fn collect_text_ranges(node: &Node, ranges: &mut Vec<(usize, usize)>) {
     if let Node::Text(text) = node {
@@ -1189,6 +1288,11 @@ pub fn native_markdown_with_mentions(
         markdown
     };
     let escaped = crate::transcript::raw_html::escape_raw_html(markdown);
+    let escaped = if escaped.contains('$') {
+        literal_skill_dollars(&escaped)
+    } else {
+        escaped
+    };
     let markdown = escaped.as_str();
     let windows_links_wanted = markdown.contains("](")
         && (markdown.contains(":\\") || markdown.contains(":/") || markdown.contains("\\\\"));
