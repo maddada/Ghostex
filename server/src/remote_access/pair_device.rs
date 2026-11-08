@@ -813,3 +813,17 @@ fn record_pair_device_attempt() -> Result<(), PairDeviceError> {
     attempts.push(now);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The phone's `pairingWords.test.ts` checks the same vector.
+    #[test]
+    fn match_words_match_the_phone() {
+        assert_eq!(
+            match_words("ZGVmZ2hpamtsbW5vcHFycw", "BAAA"),
+            vec!["harp", "cotton", "saddle"]
+        );
+    }
+}

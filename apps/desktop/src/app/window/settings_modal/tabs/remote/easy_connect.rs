@@ -789,11 +789,10 @@ fn computer_panel(
         .into_any_element()
 }
 
-/// "Only paired devices can connect" is on: the allow-list holds at least one key.
-pub(super) fn paired_only(tab: &RemoteTab) -> bool {
-    tab.easy_connect
-        .as_ref()
-        .is_some_and(|status| !status.allowed_client_keys.is_empty())
+/// "Only paired devices can connect": always, since an empty allow-list is closed
+/// (CDXC:RemotePairing 2026-11-08 in server/src/tailcat/supervisor.rs).
+pub(super) fn paired_only(_tab: &RemoteTab) -> bool {
+    true
 }
 
 /// `.settings-remote-off-block`: the faded QR placeholder and the Turn on button.

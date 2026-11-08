@@ -259,9 +259,9 @@ pub fn touch_paired_device_seen(
     repository.touch_device_seen(device_id)
 }
 
-/// Adds `client_key` to the tailcat allow-list only while that list is
-/// already non-empty: an empty list means "allow any client" and turning it
-/// into a one-entry list would lock every other client out.
+/// Adds a newly paired phone's `client_key` to the tailcat allow-list. Since an empty list means
+/// closed (CDXC:RemotePairing 2026-11-08 in tailcat/supervisor.rs) the key always goes on, and a
+/// `none` placeholder makes way for it. Returns whether the list changed.
 pub fn add_tailcat_client_key_when_allow_listed(
     paths: &GxserverPaths,
     db: &Connection,
@@ -269,11 +269,9 @@ pub fn add_tailcat_client_key_when_allow_listed(
     client_key: &str,
 ) -> Result<bool> {
     let allowed = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
-    if allowed.is_empty() || allowed.iter().any(|key| key == client_key) {
+    let Some(allowed_client_keys) = allow_list_with_client_key(allowed, client_key) else {
         return Ok(false);
-    }
-    let mut allowed_client_keys = allowed;
-    allowed_client_keys.push(client_key.to_string());
+    };
     apply_tailcat_state_update(
         paths,
         db,
@@ -285,8 +283,20 @@ pub fn add_tailcat_client_key_when_allow_listed(
     Ok(true)
 }
 
-/// tailcat's `--allow` entry that admits no client (`tailcat serve --allow=none`).
-const TAILCAT_ALLOW_NONE: &str = "none";
+/// The allow-list with `client_key` added (and `none` dropped), or `None` when it is listed already.
+fn allow_list_with_client_key(allowed: Vec<String>, client_key: &str) -> Option<Vec<String>> {
+    if allowed.iter().any(|key| key == client_key) {
+        return None;
+    }
+    let mut keys: Vec<String> = allowed
+        .into_iter()
+        .filter(|key| key != TAILCAT_ALLOW_NONE)
+        .collect();
+    keys.push(client_key.to_string());
+    Some(keys)
+}
+
+use crate::tailcat::TAILCAT_ALLOW_NONE;
 
 /*
 CDXC:RemotePairing 2026-11-05 WHY:
@@ -308,10 +318,9 @@ fn allow_list_without_client_key(allowed: Vec<String>, client_key: &str) -> Opti
         .into_iter()
         .filter(|key| key != client_key)
         .collect();
-    // "Only paired devices can connect" is a non-empty list, and an empty one admits anyone with
-    // the code, so removing the last listed phone used to turn it off silently (security review
-    // 2026-11-05). The list keeps tailcat's `none` instead: no client is allowed until the next
-    // phone pairs (the pairing window lifts the list) and is added beside it.
+    // An empty list is closed since 2026-11-08 (tailcat/supervisor.rs); `none` keeps saying so
+    // plainly to an older gxserver that still read an empty list as open (security review
+    // 2026-11-05). The next phone that pairs replaces it.
     if allowed_client_keys.is_empty() {
         allowed_client_keys.push(TAILCAT_ALLOW_NONE.to_string());
     }
@@ -424,6 +433,35 @@ mod tests {
             allow_list_without_client_key(keys(&["key-a"]), "key-a"),
             Some(keys(&[TAILCAT_ALLOW_NONE]))
         );
+    }
+
+    #[test]
+    fn a_paired_phone_always_goes_on_the_allow_list_even_an_empty_one() {
+        assert_eq!(
+            allow_list_with_client_key(Vec::new(), "key-a"),
+            Some(keys(&["key-a"]))
+        );
+        assert_eq!(
+            allow_list_with_client_key(keys(&[TAILCAT_ALLOW_NONE]), "key-a"),
+            Some(keys(&["key-a"]))
+        );
+        assert_eq!(allow_list_with_client_key(keys(&["key-a"]), "key-a"), None);
+    }
+
+    #[test]
+    fn an_empty_allow_list_is_served_closed_except_in_the_pairing_window() {
+        use crate::tailcat::served_allow_list;
+        assert_eq!(served_allow_list(&[], false), keys(&[TAILCAT_ALLOW_NONE]));
+        assert_eq!(
+            served_allow_list(&keys(&[""]), false),
+            keys(&[TAILCAT_ALLOW_NONE])
+        );
+        assert_eq!(
+            served_allow_list(&keys(&["key-a"]), false),
+            keys(&["key-a"])
+        );
+        assert!(served_allow_list(&keys(&["key-a"]), true).is_empty());
+        assert!(served_allow_list(&[], true).is_empty());
     }
 
     #[test]

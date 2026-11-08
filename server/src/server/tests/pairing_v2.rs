@@ -635,8 +635,15 @@ async fn no_api_hands_out_a_pairing_code_except_to_the_owner_with_the_sheet_open
     };
     let entry = easy_connect_pairing_entry(code.clone(), code.address.clone());
     assert_eq!(entry["payload"], "");
-    assert_eq!(entry["text"], "");
     assert!(entry["code"].get("secret").is_none());
+    // The bare code another computer connects with stays, without a secret.
+    let text = entry["text"].as_str().unwrap();
+    let body = text.strip_prefix("ghostex-ec1:").unwrap();
+    let decoded: Value = serde_json::from_slice(
+        &base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, body).unwrap(),
+    )
+    .unwrap();
+    assert!(decoded.get("secret").is_none());
     let shown = easy_connect_pairing_entry(
         EasyConnectCode {
             secret: Some("ZGVmZ2hpamtsbW5vcHFycw".into()),

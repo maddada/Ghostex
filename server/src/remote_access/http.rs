@@ -108,7 +108,7 @@ pub(crate) async fn handle_remote_access_http(
         session gets a code, and only while its Show QR sheet is open (`openTunnel`, which the
         sheet sends); the code lives five minutes and pairs nothing by itself (the phone waits as
         Pending for a signed approval). Every other caller, and the desktop with the sheet closed,
-        gets the Easy Connect details without a code (empty `payload` and `text`, no `secret`),
+        gets the Easy Connect details without a code (empty `payload`, a `text` code with no `secret`, which a computer connects with and a phone can't pair with),
         and closing the sheet drops the live code. The Tailscale half carries no secret and is
         unchanged.
         */
@@ -434,22 +434,21 @@ fn log_new_pairing_code(secret_hash: &str, actor: crate::audit::Actor) {
     );
 }
 
-/// The Easy Connect half of `/api/remotePairingCode`: `payload` (the QR link) and `text` (Copy as
-/// text) only when `code` carries a secret, empty otherwise, so no code leaves without one.
+/// The Easy Connect half of `/api/remotePairingCode`: `payload` (the QR link) only when `code`
+/// carries a secret (the Show QR sheet), empty otherwise; `text` (Copy as text, and the code another
+/// computer connects with, which needs no secret) carries the secret only in that same case.
 pub(crate) fn easy_connect_pairing_entry(code: EasyConnectCode, qr_address: String) -> Value {
-    let (payload, text) = if code.secret.is_some() {
+    let payload = if code.secret.is_some() {
         // The QR names our relay when it answers; Copy as text keeps the public address.
         let qr_code = EasyConnectCode {
             address: qr_address,
             ..code.clone()
         };
-        (
-            easy_connect_pairing_link(&qr_code),
-            encode_easy_connect_code(&code),
-        )
+        easy_connect_pairing_link(&qr_code)
     } else {
-        (String::new(), String::new())
+        String::new()
     };
+    let text = encode_easy_connect_code(&code);
     json!({ "payload": payload, "text": text, "code": code })
 }
 
