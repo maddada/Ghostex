@@ -273,6 +273,8 @@ pub(super) async fn route_projects_http(
                         repository.remove_project(&project_id)
                     })?;
                 crate::session_chat_queue::forget_session_chat_queue(db, &project_id, None)?;
+                // Approvals letting its agents reach other projects, or others reach it, go too.
+                state.security.forget_project_reach_of(&project_id);
                 crate::session_chat_queue_attachments::sweep(&state.paths, db);
                 schedule_presentation_project_delta(
                     &state,

@@ -96,8 +96,8 @@ pub struct SecurityState {
     /// Connected computers the owner approved (server id → when, ms); see
     /// [`SecurityState::computer_approved`].
     approved_computers: Arc<std::sync::Mutex<std::collections::BTreeMap<String, u64>>>,
-    /// Projects the owner let a caller reach (caller key, project id), in memory only: see
-    /// [`SecurityState::project_reach_approved`].
+    /// Projects the owner let another project's agents reach (caller's project, project reached),
+    /// saved in security.json: see [`SecurityState::project_reach_approved`].
     approved_project_reach: Arc<std::sync::Mutex<std::collections::BTreeSet<(String, String)>>>,
     /// `gxserver/auth/security.json`; `None` in tests that need no disk.
     persist_path: Option<Arc<PathBuf>>,
@@ -142,7 +142,7 @@ impl SecurityState {
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = saved
             .approved_project_reach
             .into_iter()
-            .map(|reach| (reach.caller, reach.target))
+            .map(|reach| (pair_caller(reach.caller), reach.target))
             .collect();
         state.persist_path = Some(Arc::new(path));
         Ok(state)
@@ -244,12 +244,7 @@ impl SecurityState {
     /// Revokes a session's token when the session ends.
     pub fn revoke_session_token(&self, project_id: &str, session_id: &str) {
         let removed = self.session_tokens.revoke_session(project_id, session_id);
-        let forgot =
-            self.forget_project_reach(|caller| caller == format!("{project_id}:{session_id}"));
         if removed.is_empty() {
-            if forgot {
-                let _ = self.save();
-            }
             return;
         }
         let _ = self.save();
@@ -282,11 +277,13 @@ impl SecurityState {
 
     /*
     CDXC:Security 2026-11-08 DECISION:
-    User (#495 follow-up, Q1863 "ask once per project"): an agent's first message to, or new session in, a project other than its own asks the owner; the approval is remembered for that agent session and that project.
+    User (#495 follow-up, Q1863 "ask once per project"): an agent's first message to, or new session in, a project other than its own asks the owner.
     CDXC:Security 2026-11-08 DECISION:
-    User, on the in-memory first version: "make these approvals not save in memory pls so u dont ask me to approve again later". They are saved in security.json with the other security state and loaded at start, so a gxserver restart asks nothing again. An entry goes when its session is deleted (`revoke_session_token`) or closed (stopped; the security sweep, `forget_reach_of_closed_sessions`), so the list can't grow forever; a sleeping session keeps its approvals.
+    User, on the in-memory first version: "make these approvals not save in memory pls so u dont ask me to approve again later". They are saved in security.json with the other security state and loaded at start, so a gxserver restart asks nothing again.
+    CDXC:Security 2026-11-08 DECISION:
+    User, after 11.1.2 asked once per agent session: one approval lets every agent in a project reach the other project (ask once per project pair). The approval is kept under the caller's project (its root, when it is a worktree registered as its own project) and the project reached, and goes when either project is removed (`/api/removeProject`, or the security sweep, `tidy_project_reach`), not when an agent closes. Entries saved per agent session by 11.1.2 (`<project>:<session>`) carry over as their project pair.
     */
-    /// Whether the owner already let `caller_key` (a session's `<project>:<session>`, or
+    /// Whether the owner already let agents of project `caller_key` (the caller's root project, or
     /// `localAgent`) reach project `project_id`.
     pub fn project_reach_approved(&self, caller_key: &str, project_id: &str) -> bool {
         self.approved_project_reach
@@ -295,7 +292,7 @@ impl SecurityState {
             .contains(&(caller_key.to_string(), project_id.to_string()))
     }
 
-    /// Remembers that the owner let `caller_key` reach project `project_id`.
+    /// Remembers that the owner let agents of `caller_key` reach project `project_id`.
     pub fn approve_project_reach(&self, caller_key: &str, project_id: &str) {
         self.approved_project_reach
             .lock()
@@ -304,15 +301,20 @@ impl SecurityState {
         let _ = self.save();
     }
 
-    /// Drops the remembered reach approvals whose caller `gone` names; whether any went.
-    fn forget_project_reach(&self, gone: impl Fn(&str) -> bool) -> bool {
-        let mut approved = self
-            .approved_project_reach
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let before = approved.len();
-        approved.retain(|(caller, _)| !gone(caller));
-        approved.len() != before
+    /// Drops every remembered reach from or to project `project_id` (it was removed).
+    pub fn forget_project_reach_of(&self, project_id: &str) {
+        let forgot = {
+            let mut approved = self
+                .approved_project_reach
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let before = approved.len();
+            approved.retain(|(caller, target)| caller != project_id && target != project_id);
+            approved.len() != before
+        };
+        if forgot {
+            let _ = self.save();
+        }
     }
 
     /// Adds an approver key: the first one directly (it is the owner's call, checked by the
@@ -379,20 +381,47 @@ pub fn revoke_tokens_of_deleted_sessions(
     }
 }
 
-/// Drops the remembered reach approvals of sessions that are no longer open (`open` holds every
-/// session's `(project id, session id)` that exists and isn't stopped): a closed session's
-/// approvals go with it, so the saved list can't grow forever.
-pub fn forget_reach_of_closed_sessions(
+/// Tidies the remembered reach approvals against the projects that exist (`roots`: every
+/// project's id → its root project, itself unless it is a worktree registered as its own
+/// project): a pair whose caller project or project reached is gone goes, and a caller saved
+/// under a worktree project moves to its root. A folder reached (`folder:<path>`) stays while its
+/// caller project does.
+pub fn tidy_project_reach(
     state: &SecurityState,
-    open: &std::collections::HashSet<(String, String)>,
+    roots: &std::collections::HashMap<String, String>,
 ) {
-    let forgot = state.forget_project_reach(|caller| {
-        caller.split_once(':').is_none_or(|(project, session)| {
-            !open.contains(&(project.to_string(), session.to_string()))
-        })
-    });
-    if forgot {
+    let changed = {
+        let mut approved = state
+            .approved_project_reach
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let tidied: std::collections::BTreeSet<(String, String)> = approved
+            .iter()
+            .filter_map(|(caller, target)| {
+                let root = if caller == "localAgent" {
+                    caller.clone()
+                } else {
+                    roots.get(caller)?.clone()
+                };
+                (target.starts_with("folder:") || roots.contains_key(target))
+                    .then(|| (root, target.clone()))
+            })
+            .collect();
+        let changed = tidied != *approved;
+        *approved = tidied;
+        changed
+    };
+    if changed {
         let _ = state.save();
+    }
+}
+
+/// The caller project of a saved reach: 11.1.2 saved `<project>:<session>`, which carries over as
+/// its project.
+fn pair_caller(saved: String) -> String {
+    match saved.split_once(':') {
+        Some((project, _)) => project.to_string(),
+        None => saved,
     }
 }
 

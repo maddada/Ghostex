@@ -535,12 +535,13 @@ pub(crate) fn start_security_events(state: std::sync::Arc<AppState>) {
                     if ticks % 20 == 0 {
                         let paths = state.paths.clone();
                         let security = state.security.clone();
+                        let server_id = state.metadata.server_id.clone();
                         let _ = tokio::task::spawn_blocking(move || {
                             if let Some(live) = live_sessions(&paths) {
                                 security::revoke_tokens_of_deleted_sessions(&security, &live);
                             }
-                            if let Some(open) = open_sessions(&paths) {
-                                security::forget_reach_of_closed_sessions(&security, &open);
+                            if let Some(roots) = project_roots(&paths, &server_id) {
+                                security::tidy_project_reach(&security, &roots);
                             }
                         })
                         .await;
@@ -574,24 +575,35 @@ pub(crate) fn start_security_events(state: std::sync::Arc<AppState>) {
     });
 }
 
-/// Every session's `(project id, session id)`, or `None` when the database can't be read (then
-/// no token is revoked).
-/// Every session that exists and isn't closed (stopped); a sleeping one counts as open.
-fn open_sessions(
+/// Every project's id → its root project (the project a worktree registered as its own project
+/// belongs to, else itself), or `None` when the database can't be read (then nothing is tidied).
+fn project_roots(
     paths: &crate::paths::GxserverPaths,
-) -> Option<std::collections::HashSet<(String, String)>> {
+    server_id: &str,
+) -> Option<std::collections::HashMap<String, String>> {
     let db = crate::storage::open_gxserver_database(paths).ok()?;
-    let mut statement = db
-        .prepare("SELECT projectId, sessionId FROM sessions WHERE lifecycleState != 'stopped'")
-        .ok()?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .ok()?;
-    rows.collect::<Result<_, _>>().ok()
+    let repository = crate::domain::DomainRepository::new(&db, server_id);
+    let projects = repository.list_projects().ok()?;
+    Some(
+        projects
+            .iter()
+            .filter_map(|project| {
+                let id = project.get("projectId")?.as_str()?.to_string();
+                let root = project
+                    .pointer("/worktree/parentProjectId")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|parent| !parent.is_empty())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| id.clone());
+                Some((id, root))
+            })
+            .collect(),
+    )
 }
 
+/// Every session's `(project id, session id)`, or `None` when the database can't be read (then
+/// no token is revoked).
 fn live_sessions(
     paths: &crate::paths::GxserverPaths,
 ) -> Option<std::collections::HashSet<(String, String)>> {

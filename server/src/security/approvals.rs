@@ -284,9 +284,9 @@ impl ApprovalStore {
         self.lock().get(id).map(|stored| stored.requester.clone())
     }
 
-    /// Gives every other pending request from the same asker (or, for a shared one, any shared
-    /// one) for the same action and target, whatever its parameters, the owner's answer to `id`,
-    /// and returns them, so their cards close with it. For actions whose approval covers the
+    /// Gives every other pending request for the same action and target from the same asker
+    /// (whatever its parameters) or, for a shared one, every shared one with the same parameters,
+    /// the owner's answer to `id`, and returns them, so their cards close with it. For actions whose approval covers the
     /// target as a whole (`ReachOtherProject`); a no-op while `id` is still pending.
     pub fn settle_same_target(&self, id: &str, now_ms: u64) -> Vec<ApprovalRequest> {
         let mut requests = self.lock();
@@ -302,6 +302,7 @@ impl ApprovalStore {
         let shared = decided.shared;
         let action = decided.request.action.clone();
         let target = decided.request.target.clone();
+        let digest = decided.request.params_digest.clone();
         let decided_by = decided.request.decided_by.clone();
         let expires_at_ms = decided.request.expires_at_ms;
         let mut settled = Vec::new();
@@ -309,7 +310,8 @@ impl ApprovalStore {
             let request = &mut stored.request;
             if other_id == id
                 || request.status != ApprovalStatus::Pending
-                || !(stored.requester == requester || (shared && stored.shared))
+                || !(stored.requester == requester
+                    || (shared && stored.shared && request.params_digest == digest))
                 || request.action != action
                 || request.target != target
             {

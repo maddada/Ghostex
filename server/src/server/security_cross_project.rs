@@ -1,7 +1,7 @@
 //! Other projects' sessions (GitHub #495 follow-up, Q1863 "ask once per project"): an agent's
 //! first message to, or new session in, a project other than its own asks the owner, and the
-//! approval is remembered for that agent session and that project
-//! (`SecurityState::project_reach_approved`). A create call that starts an agent with approvals
+//! approval lets every agent of the caller's project reach that project from then on (ask once
+//! per project pair, `SecurityState::project_reach_approved`), until either project is removed. A create call that starts an agent with approvals
 //! off when the owner's own setting doesn't asks every time, in any project.
 //!
 //! | Route | Asks when |
@@ -43,16 +43,13 @@ pub(crate) fn is_cross_project_route(endpoint_path: &str) -> bool {
     MESSAGE_ROUTES.contains(&endpoint_path) || CREATE_ROUTES.contains(&endpoint_path)
 }
 
-/// The key a caller's remembered approvals are kept under; `None` for callers this never asks
-/// (the owner's devices, and callers with no project of their own to compare against that keep
-/// their own allow-lists: connected computers, guests, extensions).
-pub(crate) fn caller_key(caller: &Principal) -> Option<String> {
+/// The key a caller's remembered approvals are kept under: its project's root (so an agent in a
+/// worktree registered as its own project shares its project's approvals); `None` for callers
+/// this never asks (the owner's devices, and callers with no project of their own to compare
+/// against that keep their own allow-lists: connected computers, guests, extensions).
+fn caller_key(repository: &DomainRepository, caller: &Principal) -> Option<String> {
     match caller {
-        Principal::Session {
-            project_id,
-            session_id,
-            ..
-        } => Some(format!("{project_id}:{session_id}")),
+        Principal::Session { project_id, .. } => Some(project_root(repository, project_id)),
         Principal::LocalAgent => Some("localAgent".to_string()),
         _ => None,
     }
@@ -71,9 +68,9 @@ pub(crate) fn cross_project_action(
     endpoint_path: &str,
     params: &Map<String, Value>,
 ) -> Option<ActionRequest> {
-    let key = caller_key(caller)?;
     let db = crate::storage::open_gxserver_database(&state.paths).ok()?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let key = caller_key(&repository, caller)?;
     let create = CREATE_ROUTES.contains(&endpoint_path);
     let reach = if create {
         create_reach(&repository, params)?
@@ -124,37 +121,46 @@ pub(crate) fn cross_project_action(
     if state.security.project_reach_approved(&key, &target) {
         return None;
     }
-    let summary = if create {
-        format!("Start a session in {place}")
-    } else {
-        format!("Message a session in {place}")
-    };
+    let from = project_label(&repository, &key);
     Some(
-        ActionRequest::new(SensitiveAction::ReachOtherProject, summary)
-            .params(reach_params(&target))
-            .target(target)
-            .detail(format!(
-                "Approved once, this agent can message and start sessions in {place} until it is closed."
-            )),
+        ActionRequest::new(
+            SensitiveAction::ReachOtherProject,
+            format!("Let agents in {from} message and start sessions in {place}"),
+        )
+        .params(reach_params(&key, &target))
+        .target(target)
+        .detail(format!(
+            "Approved once, every agent in {from} can do this from now on, until either project is removed."
+        ))
+        .shared(),
     )
 }
 
 /*
 CDXC:Security 2026-11-08 WHY:
-A user on 11.1.1: "I came back to 3 popups for approval of agents talking to each other. I approved the first, and the rest did not disappear." A reach request carried the whole call, message text included, so one agent sending three messages to another project made three cards, and an approval was only remembered when the agent came back with it, so the other cards stayed until they lapsed. The request now names only the project reached (`reach_params`): one card per agent and project, which a retry with any message can spend. Approving or denying it answers the agent's other waiting requests for that project at once (`settle_reach_decision`), and an approval is remembered the moment it is given.
+A user on 11.1.1 (one card per agent and project since 11.1.2): "I came back to 3 popups for approval of agents talking to each other. I approved the first, and the rest did not disappear." A reach request carried the whole call, message text included, so one agent sending three messages to another project made three cards, and an approval was only remembered when the agent came back with it, so the other cards stayed until they lapsed. The request now names only the project reached (`reach_params`): one card per agent and project, which a retry with any message can spend. Approving or denying it answers the agent's other waiting requests for that project at once (`settle_reach_decision`), and an approval is remembered the moment it is given.
 CDXC:Security 2026-11-08 DECISION:
-To ask once per project pair instead (any agent in project A reaching project B), key the memory on the caller's project in `caller_key`, put that project into `reach_params` and make the request `.shared()`: one waiting card per pair, spendable by any agent of A (the digest still binds it to A).
+User, after 11.1.2: one approval lets every agent in a project reach the other project (ask once per project pair). The memory is keyed on the caller's root project (`caller_key`), the request names both projects (`reach_params`) and is `.shared()`: one waiting card per pair, whichever of A's agents asks, spendable by any of them, and never by an agent of another project (the digest binds it to A).
 */
-/// What a reach request is about: only the project reached, never the message, so every call
-/// from one agent to one project is the same request.
-fn reach_params(target: &str) -> Value {
-    json!({ "reach": target })
+/// What a reach request is about: the caller's project and the project reached, never the
+/// message or the agent, so every call from any agent of one project to another is the same
+/// request.
+fn reach_params(from: &str, target: &str) -> Value {
+    json!({ "from": from, "reach": target })
+}
+
+/// How the card names the caller's project.
+fn project_label(repository: &DomainRepository, project_id: &str) -> String {
+    match repository.get_project(project_id).ok().flatten() {
+        Some(project) => project_name(&project, project_id),
+        None => project_id.to_string(),
+    }
 }
 
 /// The owner just approved or denied `request` (`/api/approveApprovalRequest`,
-/// `/api/denyApprovalRequest`): for a reach, the agent's other waiting requests for that project
-/// get the same answer (returned, so their cards close), and an approval is remembered now, so
-/// the agent's next call passes whatever it sends.
+/// `/api/denyApprovalRequest`): for a reach, other waiting requests for that project pair get the
+/// same answer (returned, so their cards close), and an approval is remembered now, so every
+/// agent of the caller's project passes whatever it sends.
 pub(crate) fn settle_reach_decision(
     state: &AppState,
     request: &ghostex_gx_protocol::approval::ApprovalRequest,
@@ -183,7 +189,8 @@ pub(crate) fn settle_reach_decision(
     settled
 }
 
-/// After the owner approved `request` for `caller`, remember the project it reached.
+/// After the owner approved `request` for `caller`, remember that its project may reach the
+/// project it reached.
 pub(crate) fn remember_approved(
     state: &AppState,
     caller: &Principal,
@@ -200,7 +207,14 @@ pub(crate) fn remember_approved(
     if !matches!(caller, Principal::Session { .. }) {
         return;
     }
-    let (Some(key), Some(target)) = (caller_key(caller), approval.target.as_deref()) else {
+    let Some(target) = approval.target.as_deref() else {
+        return;
+    };
+    let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Some(key) = caller_key(&repository, caller) else {
         return;
     };
     state.security.approve_project_reach(&key, target);
