@@ -16,6 +16,7 @@ pub mod composition;
 pub mod computer;
 pub mod constants;
 pub mod document;
+pub mod error_card;
 pub mod events;
 pub mod fold;
 pub mod frame_publish;

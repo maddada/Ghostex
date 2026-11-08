@@ -56,6 +56,9 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         None => Tri::Absent,
     };
     into.operation_error_code = state.core.operation_error_code.clone();
+    into.operation_error_card = state.core.operation_error.as_deref().map(|message| {
+        crate::session::error_card::error_card(message, state.core.operation_error_code.as_deref())
+    });
     into.operation_error_resend = (state.core.operation_error_code.as_deref()
         == Some("unreachable"))
     .then_some(state.composer.failed_send.as_ref())

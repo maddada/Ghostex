@@ -135,7 +135,11 @@ impl Render for NativeChatView {
             self.render_search_bar(&p, window, cx)
         };
         let state = self.snapshot.clone();
-        let error = self.error.clone();
+        // The chat's own failure (it could not load or start) is the same card as the chat box's.
+        let error_card = self.error.clone().map(|error| {
+            let card = ghostex_gx_chat_core::session::error_card::error_card(&error, None);
+            self.error_card("chat-load-error", &card, Vec::new(), &p, cx)
+        });
         self.transcript_inset = if maximized {
             0.0
         } else {
@@ -261,13 +265,8 @@ impl Render for NativeChatView {
                 chat.invoke(serde_json::json!({"type":"attachPaths","paths":paths}), cx);
                 cx.stop_propagation();
             }))
-            .when_some(error, |this, error| {
-                this.child(
-                    div()
-                        .p(px(16.0 * s))
-                        .text_color(gpui::rgb(0xef9999))
-                        .child(error),
-                )
+            .when_some(error_card, |this, card| {
+                this.child(div().p(px(16.0 * s)).child(card))
             })
             // Only React's one manual case: a transcript with no rows yet. A filled
             // one pages itself near the top and keeps its anchor (pagination.rs).

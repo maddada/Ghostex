@@ -365,29 +365,32 @@ impl NativeChatView {
         if let Some(card) = self.render_composer_not_ready(p, cx) {
             waiting.push(super::suggestions::stack_member(card, &stack_top).into_any_element());
         } else if let Some(error) = self.snapshot["operationError"].as_str() {
-            // An answer only the terminal can take (gxserver's `ANSWER_IN_TERMINAL`) offers the way there.
-            let open_terminal =
-                (self.snapshot["operationErrorCode"] == "answerInTerminal").then(|| {
-                    div().flex().mt(px(6.0 * p.scale)).child(self.chat_button(
-                        "answer-in-terminal".into(),
-                        "Open terminal".into(),
-                        json!({"type":"switchToTerminal"}),
-                        p,
-                        cx,
-                    ))
-                });
-            let retry = (self.snapshot["operationErrorCode"] == "unreachable").then(|| {
-                div()
-                    .flex()
-                    .mt(px(6.0 * p.scale))
-                    .child(self.unreachable_retry(p, cx))
-            });
+            // An answer only the terminal can take (gxserver's `ANSWER_IN_TERMINAL`) offers the way
+            // there; a call Ghostex didn't answer offers Retry. Both sit in the opened card.
+            let mut actions = Vec::new();
+            if self.snapshot["operationErrorCode"] == "answerInTerminal" {
+                actions.push(self.chat_button(
+                    "answer-in-terminal".into(),
+                    "Open terminal".into(),
+                    json!({"type":"switchToTerminal"}),
+                    p,
+                    cx,
+                ));
+            }
+            if self.snapshot["operationErrorCode"] == "unreachable" {
+                actions.push(self.unreachable_retry(p, cx));
+            }
+            let card = match &self.snapshot["operationErrorCard"] {
+                card if card.is_object() => card.clone(),
+                _ => ghostex_gx_chat_core::session::error_card::error_card(
+                    error,
+                    self.snapshot["operationErrorCode"].as_str(),
+                ),
+            };
             waiting.push(
                 div()
-                    .text_color(gpui::rgb(0xef9999))
-                    .child(error.to_string())
-                    .children(open_terminal)
-                    .children(retry)
+                    .w_full()
+                    .child(self.error_card("chat-operation-error", &card, actions, p, cx))
                     .child(super::suggestions::stack_marker(&stack_top))
                     .into_any_element(),
             );

@@ -187,6 +187,10 @@ pub struct Document {
     /// Absent when Retry only reconnects.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_error_resend: Option<String>,
+    /// How the refusal is drawn: `{tone, title, chip, detail}` (`session::error_card`). Absent with
+    /// no refusal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_error_card: Option<Value>,
 
     // ---- options, model picker, accounts ----------------------------------
     /// The pill labels the composer shows. Family e.
