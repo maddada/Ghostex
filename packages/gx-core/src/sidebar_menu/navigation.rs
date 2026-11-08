@@ -86,7 +86,7 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
         sort.push(
             intent(
                 "Manual (drag to rearrange)",
-                "pin",
+                "pin-outline",
                 PINNED_ORDER_MANUAL_ACTION,
             )
             .with_checked(!recent),

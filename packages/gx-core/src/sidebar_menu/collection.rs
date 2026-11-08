@@ -107,13 +107,13 @@ pub fn collection_menu(input: &CollectionMenuInput<'_>) -> Vec<MenuItem> {
     }
     menu.extend(batch(
         "Pin Sessions",
-        "pinned",
+        "pin-outline",
         &filtered(input.sessions, |session| !session.row.is_pinned),
         |session_id| message::set_session_pinned(session_id, true),
     ));
     menu.extend(batch(
         "Unpin Sessions",
-        "pinned-off",
+        "pin-filled",
         &filtered(input.sessions, |session| session.row.is_pinned),
         |session_id| message::set_session_pinned(session_id, false),
     ));

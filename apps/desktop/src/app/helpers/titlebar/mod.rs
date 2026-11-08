@@ -7,6 +7,7 @@
 
 pub(crate) mod chrome_colors;
 pub(crate) mod chrome_tints;
+pub(crate) mod extension_menu_row;
 pub(crate) mod mode_switcher;
 pub(crate) mod popup_rows;
 pub(crate) mod progress_indicators;
@@ -18,6 +19,7 @@ pub(crate) mod urls_and_sessions;
 
 pub(crate) use chrome_colors::*;
 pub(crate) use chrome_tints::*;
+pub(crate) use extension_menu_row::*;
 pub(crate) use mode_switcher::*;
 pub(crate) use popup_rows::*;
 pub(crate) use progress_indicators::*;

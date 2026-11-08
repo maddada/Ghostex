@@ -3,10 +3,8 @@
 //! Ported row for row from the sidebar page's session menu (frozen in the deleted
 //! `tooling/gx-core/sidebar-page-frozen/session-menu.ts`; see git history).
 //!
-//! CDXC:ContextMenus 2026-09-19 DECISION:
-//! The user asked for a different pin icon in the sidebar context menu. Pin uses the upright
-//! pushpin that pairs with Unpin's crossed-out pushpin (the React menu's IconPinned); the card
-//! hover button keeps the diagonal pin. Every sidebar menu label is Title Case ("Close Inactive",
+//! CDXC:ContextMenus 2026-09-19 DECISION (2026-11-08 update):
+//! User, 2026-11-08: "this pin is fugly please fix. we should use the other look for the pin we have in the app already (filled / unfilled)". Every pin in the app is now the one Tabler pin pair: Pin shows the outline (`pin-outline`) and Unpin the filled pin (`pin-filled`), in this menu, its hover button and the bulk menus. This supersedes the 2026-09-19 upright pushpin and crossed-out pushpin. Every sidebar menu label is Title Case ("Close Inactive",
 //! "Pin Selected"), except disabled status sentences.
 
 use crate::sidebar_view::ordering::session_is_snoozed;
@@ -289,7 +287,11 @@ fn action_rows(
         pin: caps.can_pin_session.then(|| {
             MenuItem::row(
                 if row.is_pinned { "Unpin" } else { "Pin" },
-                if row.is_pinned { "pinned-off" } else { "pin" },
+                if row.is_pinned {
+                    "pin-filled"
+                } else {
+                    "pin-outline"
+                },
                 MenuCommand::command(message::set_session_pinned(id, !row.is_pinned)),
             )
         }),
@@ -588,7 +590,7 @@ fn full_menu(
         }
         menu.push(if action == HoverAction::Pin && !row.is_pinned {
             MenuItem {
-                icon: Some("pinned".to_string()),
+                icon: Some("pin-outline".to_string()),
                 ..item.clone()
             }
         } else {

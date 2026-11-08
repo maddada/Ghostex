@@ -71,6 +71,8 @@ mod delayed_send_modal;
 mod delete_worktree_demo;
 #[path = "../app/window/delete_worktree_modal.rs"]
 mod delete_worktree_modal;
+#[path = "native_modal_demo/extension_menu.rs"]
+mod extension_menu_demo;
 #[path = "native_modal_demo/missing_project_folder.rs"]
 mod missing_project_folder_demo;
 #[path = "../app/window/missing_project_folder_modal.rs"]
@@ -626,6 +628,7 @@ fn main() {
                 "close-buttons" => close_buttons_demo::open(&demo, cx),
                 "session-note" => session_note_demo::open(&demo, cx),
                 "chief-row" => chief_row_demo::open(&demo, cx),
+                "extension-menu" => extension_menu_demo::open(&demo, cx),
                 "voice-panel" => voice_panel_demo::open(&demo, cx),
                 "permission-guide" => permission_guide_demo::open(&demo, cx),
                 "install-hooks" => agent_hooks_required_demo::open(&demo, cx),

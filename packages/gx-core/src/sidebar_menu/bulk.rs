@@ -65,13 +65,13 @@ pub fn bulk_menu(input: &BulkMenuInput<'_>) -> Option<Vec<MenuItem>> {
     }
     menu.extend(rows(
         "Pin Selected",
-        "pinned",
+        "pin-outline",
         &keep(input.selected, |row| !row.is_pinned),
         |session_id| message::set_session_pinned(session_id, true),
     ));
     menu.extend(rows(
         "Unpin Selected",
-        "pinned-off",
+        "pin-filled",
         &keep(input.selected, |row| row.is_pinned),
         |session_id| message::set_session_pinned(session_id, false),
     ));
