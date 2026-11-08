@@ -227,6 +227,21 @@ impl<'a> RemotePairingRepository<'a> {
             .with_context(|| "read remote paired device rows")
     }
 
+    /// Every device's name, newest first, reading only columns every schema since pairing has, so
+    /// it works on a database its migrations haven't reached yet (the 11.0.1 notice reads it
+    /// before migration 0062 runs, `security_upgrade.rs`).
+    pub fn list_device_names(&self) -> Result<Vec<String>> {
+        let mut statement = self
+            .db
+            .prepare("SELECT name FROM remote_paired_devices ORDER BY pairedAt DESC, id ASC")
+            .with_context(|| "prepare paired device names")?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .with_context(|| "list paired device names")?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .with_context(|| "read paired device names")
+    }
+
     pub fn find_device(&self, id: &str) -> Result<Option<RemotePairedDeviceRecord>> {
         self.db
             .query_row(

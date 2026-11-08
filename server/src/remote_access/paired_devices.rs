@@ -498,6 +498,13 @@ mod tests {
             [],
         )
         .unwrap();
+        // The 11.0.1 notice reads names before 0062 runs; they must read on the old schema.
+        assert_eq!(
+            RemotePairingRepository::new(&db)
+                .list_device_names()
+                .unwrap(),
+            vec!["iPhone".to_string()]
+        );
         db.execute_batch(include_str!(
             "../storage/migrations/0062_pairing_v2_device_keys.sql"
         ))
