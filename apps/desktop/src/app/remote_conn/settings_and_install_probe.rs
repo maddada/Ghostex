@@ -2,6 +2,35 @@ use crate::app::helpers::*;
 use crate::app::hotkeys::*;
 use crate::*;
 
+/*
+CDXC:RemoteMachines 2026-11-08 WHY:
+Windows repro of GitHub #508: Add machine saved the machine, the reconnect ladder connected it at
+once (a newly enabled machine connects, reconnect_ladder.rs), and that connect ran without the
+password typed in the same dialog, whose save lands a moment later. It failed `authFailed` in 0.3 s
+("The machine rejected the saved SSH username, password or key"), which is never retried, so the
+user saw a refused login for a password they had just typed. A password save now marks the machine
+while it runs: a connect that started without it is started again once it lands, and one that fails
+`authFailed` meanwhile waits for it instead of reporting the refusal.
+*/
+thread_local! {
+    /// Machines whose SSH password save is running (the app's main thread only).
+    static PASSWORD_SAVES_RUNNING: std::cell::RefCell<std::collections::HashSet<String>> =
+        std::cell::RefCell::new(std::collections::HashSet::new());
+    /// Machines whose connect failed `authFailed` while their password was being saved.
+    static CONNECT_AFTER_PASSWORD: std::cell::RefCell<std::collections::HashSet<String>> =
+        std::cell::RefCell::new(std::collections::HashSet::new());
+}
+
+/// A connect of `machine_id` failed `authFailed`: `true` (and it waits) when the machine's password
+/// is being saved right now, so the refusal is for a login made without it.
+pub(crate) fn wait_for_password_being_saved(machine_id: &str) -> bool {
+    let running = PASSWORD_SAVES_RUNNING.with_borrow(|running| running.contains(machine_id));
+    if running {
+        CONNECT_AFTER_PASSWORD.with_borrow_mut(|waiting| waiting.insert(machine_id.to_string()));
+    }
+    running
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn handle_gpui_app_modal_update_settings_message(
         &mut self,
@@ -257,6 +286,7 @@ impl GhostexGpuiApp {
         }
 
         let has_password = !password.is_empty();
+        PASSWORD_SAVES_RUNNING.with_borrow_mut(|running| running.insert(remote_machine_id.clone()));
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let keychain_result = background
@@ -291,6 +321,24 @@ impl GhostexGpuiApp {
         keychain_result: GpuiRemoteSshPasswordKeychainResult,
         cx: &mut gpui::Context<Self>,
     ) {
+        PASSWORD_SAVES_RUNNING.with_borrow_mut(|running| running.remove(&remote_machine_id));
+        let connect_waited =
+            CONNECT_AFTER_PASSWORD.with_borrow_mut(|waiting| waiting.remove(&remote_machine_id));
+        if connect_waited
+            && (!has_password
+                || !matches!(
+                    keychain_result,
+                    GpuiRemoteSshPasswordKeychainResult::Success
+                ))
+        {
+            // No password landed: the refused login it waited on is reported after all.
+            self.dispatch_gpui_remote_machine_status_with_message(
+                remote_machine_id.as_str(),
+                GpuiRemoteGxserverConnectState::AuthFailed.wire_status_state(),
+                None,
+                cx,
+            );
+        }
         match keychain_result {
             GpuiRemoteSshPasswordKeychainResult::Success => {}
             GpuiRemoteSshPasswordKeychainResult::Unsupported => {
@@ -357,12 +405,14 @@ impl GhostexGpuiApp {
             cx,
         );
         // A refused login is never retried automatically (`reconnect_ladder.rs`), so the new
-        // password is what tries again.
+        // password is what tries again; a connect still signing in started without it, so it
+        // starts again with it (the newer connect makes the older one's answer ignored).
         if has_password
-            && self
-                .remote_machine_connect_states
-                .get(remote_machine_id.as_str())
-                .is_some_and(|state| state == "authFailed")
+            && (connect_waited
+                || self
+                    .remote_machine_connect_states
+                    .get(remote_machine_id.as_str())
+                    .is_some_and(|state| state == "authFailed" || state == "connecting"))
         {
             self.remote_reconnect_from_sidebar(&remote_machine_id, cx);
         }

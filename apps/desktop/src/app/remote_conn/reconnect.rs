@@ -156,10 +156,28 @@ impl GhostexGpuiApp {
         })
         .detach();
         let background = cx.background_executor().clone();
+        let pairing_machine_id = remote_machine_id.clone();
         cx.spawn(async move |this, cx| {
             let result = background
                 .spawn(async move {
-                    gpui_connect_remote_gxserver(config, install_approved, Some(progress_tx))
+                    let easy_connect = config.uses_easy_connect();
+                    let mut result =
+                        gpui_connect_remote_gxserver(config, install_approved, Some(progress_tx));
+                    if easy_connect
+                        && matches!(
+                            result.state,
+                            GpuiRemoteGxserverConnectState::SshFailed
+                                | GpuiRemoteGxserverConnectState::TunnelFailed
+                        )
+                        && waits_to_pair_again(&pairing_machine_id)
+                    {
+                        result.state = GpuiRemoteGxserverConnectState::PairingRequired;
+                        result.message = format!(
+                            "Since Ghostex 11.1, {name}'s Easy Connect lets in only computers paired with it, so this one is turned away. On {name}, open Settings > Remote and copy its Easy Connect code, then paste it into this machine's Easy Connect code here (Settings > Remote, Edit) and Save, or use Pair in the pair-again notice.",
+                            name = saved_machine_name(&pairing_machine_id)
+                        );
+                    }
+                    result
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -295,6 +313,13 @@ impl GhostexGpuiApp {
                 );
                 self.open_gpui_remote_gxserver_install_modal(remote_machine_id, cx);
             }
+            // A login refused while the machine's password was being saved was made without it:
+            // the save starts the connect again once the password lands
+            // (`finish_gpui_remote_machine_password_save`).
+            GpuiRemoteGxserverConnectState::AuthFailed
+                if crate::app::remote_conn::settings_and_install_probe::wait_for_password_being_saved(
+                    &remote_machine_id,
+                ) => {}
             _ => {
                 self.dispatch_gpui_remote_machine_status_with_message(
                     remote_machine_id.as_str(),
@@ -313,6 +338,35 @@ impl GhostexGpuiApp {
             }
         }
     }
+}
+
+/*
+CDXC:RemotePairing 2026-11-08 WHY:
+GitHub #508: since 11.1 an empty Easy Connect allow-list is closed (server/src/tailcat/supervisor.rs
+`served_allow_list`), so a computer that reached another through Easy Connect before the update is
+turned away ("ignoring meow") until it pairs again. Its dial then failed like an unreachable host,
+`sshFailed`, which the reconnect ladder retries every minute for ever: the other computer's log
+showed the refused/direct pair about every 80 s for an hour, and the user was told nothing they
+could act on. A failed dial of a machine the pair-again notice still lists as waiting now says to
+pair again and stops retrying (`pairingRequired`); a machine on the other computer's list by hand
+connects as before and never gets here.
+*/
+/// Whether the pair-again notice (this computer's gxserver) still lists Easy Connect machine
+/// `machine_id` as waiting to pair again. Blocking: called on a background thread.
+fn waits_to_pair_again(machine_id: &str) -> bool {
+    let Ok(view) = gpui_gxserver_rpc_result(
+        crate::app::gx_store::security_notice::SECURITY_NOTICE_ENDPOINT,
+        &serde_json::json!({ "op": "read" }),
+        std::time::Duration::from_secs(5),
+    ) else {
+        return false;
+    };
+    view["computers"].as_array().is_some_and(|rows| {
+        rows.iter().any(|row| {
+            row["id"].as_str() == Some(machine_id)
+                && matches!(row["status"].as_str(), Some("waiting" | "pending"))
+        })
+    })
 }
 
 /// The name the remote computer was saved under in Settings, or "the other computer".

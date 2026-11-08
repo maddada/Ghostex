@@ -43,6 +43,10 @@ pub fn machine_state_copy(state: &str) -> (&'static str, Option<&'static str>) {
             "Cannot sign in to machine",
             Some("The machine rejected the saved SSH username, password or key."),
         ),
+        "pairingRequired" => (
+            "Pair this computer again",
+            Some("That computer's Easy Connect lets in only computers paired with it since Ghostex 11.1."),
+        ),
         "sshFailed" => ("Cannot reach machine", Some("SSH connection failed.")),
         "tunnelFailed" => ("Cannot reach machine", Some("SSH tunnel failed.")),
         "keychainFailed" => (

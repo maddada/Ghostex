@@ -224,6 +224,9 @@ pub(crate) enum GpuiRemoteGxserverConnectState {
     /// cannot fix that, and every retry is another failed login the machine may lock the account
     /// over, so the reconnect ladder stops here until the user reconnects or saves a new password.
     AuthFailed,
+    /// An Easy Connect machine this computer must pair with again since 11.1 (an empty allow-list
+    /// is closed): the dial cannot get through until it does, so the ladder stops here too.
+    PairingRequired,
     SshFailed,
     TokenUnavailable,
     KeychainFailed,
@@ -241,6 +244,7 @@ impl GpuiRemoteGxserverConnectState {
             Self::Connected => "success",
             Self::InstallApprovalRequired
             | Self::Invalid
+            | Self::PairingRequired
             | Self::Unsupported
             | Self::UnsupportedRemotePlatform => "warning",
             Self::InstallFailed
@@ -263,6 +267,7 @@ impl GpuiRemoteGxserverConnectState {
             Self::InstallFailed => "Remote install failed",
             Self::Invalid => "Remote connect failed",
             Self::AuthFailed => "Remote sign-in failed",
+            Self::PairingRequired => "Pair this computer again",
             Self::SshFailed => "Remote SSH failed",
             Self::TokenUnavailable => "Remote token unavailable",
             Self::KeychainFailed => "Remote token not saved",
@@ -283,6 +288,7 @@ impl GpuiRemoteGxserverConnectState {
             Self::InstallFailed => "installFailed",
             Self::Invalid => "invalid",
             Self::AuthFailed => "authFailed",
+            Self::PairingRequired => "pairingRequired",
             Self::SshFailed => "sshFailed",
             Self::TokenUnavailable => "tokenUnavailable",
             Self::KeychainFailed => "keychainFailed",
@@ -303,6 +309,7 @@ impl GpuiRemoteGxserverConnectState {
             Self::InstallFailed => "installFailed",
             Self::Invalid => "invalid",
             Self::AuthFailed => "authFailed",
+            Self::PairingRequired => "pairingRequired",
             Self::SshFailed => "sshFailed",
             Self::TokenUnavailable => "tokenUnavailable",
             Self::KeychainFailed => "keychainFailed",
@@ -335,6 +342,7 @@ pub(crate) fn gpui_remote_gxserver_connect_state_from_wire_status(
             Some(GpuiRemoteGxserverConnectState::PresentationStreamFailed)
         }
         "authFailed" => Some(GpuiRemoteGxserverConnectState::AuthFailed),
+        "pairingRequired" => Some(GpuiRemoteGxserverConnectState::PairingRequired),
         "sshFailed" => Some(GpuiRemoteGxserverConnectState::SshFailed),
         "tokenUnavailable" => Some(GpuiRemoteGxserverConnectState::TokenUnavailable),
         "tunnelFailed" => Some(GpuiRemoteGxserverConnectState::TunnelFailed),
@@ -355,6 +363,7 @@ pub(crate) fn gpui_remote_gxserver_status_state_is_broken(state: &str) -> bool {
     matches!(
         state,
         "authFailed"
+            | "pairingRequired"
             | "disconnected"
             | "failed"
             | "keychainFailed"

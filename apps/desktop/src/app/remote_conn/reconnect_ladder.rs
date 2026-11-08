@@ -60,6 +60,7 @@ fn is_stop_state(state: &str) -> bool {
     matches!(
         state,
         "authFailed"
+            | "pairingRequired"
             | "installApprovalRequired"
             | "installFailed"
             | "invalid"
