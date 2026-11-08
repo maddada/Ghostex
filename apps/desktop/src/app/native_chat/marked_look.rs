@@ -25,11 +25,16 @@ const IN_PROGRESS_DARK: u32 = 0xc68a06;
 const IN_PROGRESS_LIGHT: u32 = 0xc68a06;
 
 /// CDXC:MarkedHandovers 2026-11-08 DECISION:
-/// User: "please make Needs you pinkish color in the handover section headings, and make blocked red". "Needs you" takes the sidebar's pink question dot (`QUESTION_COLOR` #f472b6 in native_sidebar/status.rs) and "Blocked" its red dot (`FAILED_COLOR` #ef4444), on the dark chat; the light chat keeps a darker shade of each so the text stays readable on white (pink #be185d, red #dc2626). It replaces the orange #fb923c / #c2410c "Needs you" of 2026-10-12. "Kicked off" stays pink as before, so the two share a hue.
+/// User: "please make Needs you pinkish color in the handover section headings, and make blocked red". "Needs you" takes the sidebar's pink question dot (`QUESTION_COLOR` #f472b6 in native_sidebar/status.rs) and "Blocked" its red dot (`FAILED_COLOR` #ef4444), on the dark chat; the light chat keeps a darker shade of each so the text stays readable on white (pink #be185d, red #dc2626). It replaces the orange #fb923c / #c2410c "Needs you" of 2026-10-12. "Kicked off" had the same pink and moved to sky blue the same day (below).
 const NEED_DARK: u32 = 0xf472b6;
 const NEED_LIGHT: u32 = 0xbe185d;
 const BLOCKED_DARK: u32 = 0xef4444;
 const BLOCKED_LIGHT: u32 = 0xdc2626;
+
+/// CDXC:MarkedHandovers 2026-11-08 DECISION:
+/// User: "give 'Kicked off' its own hue so it no longer matches Needs you's pink", one no other heading uses and clear of Read this's amber, Suggestions' purple and Shipped's indigo (for example a sky blue). "Kicked off" is sky blue (#38bdf8 dark, #0369a1 light): In progress is amber now, so no heading is blue, and it sits about 26 degrees from Untested's teal and 40 from Shipped's indigo.
+const KICKED_DARK: u32 = 0x38bdf8;
+const KICKED_LIGHT: u32 = 0x0369a1;
 
 /// How the chat draws marked sections (`markedHandoversStyle`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,7 +188,7 @@ pub(crate) fn kind_color(kind: &str, light: bool) -> Hsla {
         "need" => (NEED_DARK, NEED_LIGHT),
         "done" => (0x4ade80, 0x15803d),
         "read" => (0xfbbf24, 0xb45309),
-        "kicked" => (0xf472b6, 0xbe185d),
+        "kicked" => (KICKED_DARK, KICKED_LIGHT),
         "progress" => (IN_PROGRESS_DARK, IN_PROGRESS_LIGHT),
         "untested" => (0x2dd4bf, 0x0f766e),
         "shipped" => (0x818cf8, 0x4f46e5),
