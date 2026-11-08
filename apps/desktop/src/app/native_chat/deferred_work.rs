@@ -23,6 +23,18 @@ impl NativeChatView {
         let TranscriptItem::CompletedWork { id, deferred, .. } = item else {
             return None;
         };
+        self.deferred_work_notice_for(id, deferred.as_ref(), p, cx)
+    }
+
+    /// The notice for turn `id`'s section `deferred` while it is read or after the read failed;
+    /// a Reduced line shows one per section it reads (quiet_work.rs).
+    pub(super) fn deferred_work_notice_for(
+        &self,
+        id: &str,
+        deferred: Option<&serde_json::Value>,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
         let state = &self.snapshot["deferredWork"][id];
         if !state.is_object() {
             return None;

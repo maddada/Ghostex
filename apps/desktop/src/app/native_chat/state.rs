@@ -73,6 +73,9 @@ pub(crate) struct NativeChatView {
     pub(super) coordinator_intro_dont_show: bool,
     /// What the working card measured at its last paint (`working_card.rs`).
     pub(super) working_card: super::working_card::WorkingCardCells,
+    /// The transcript list holds the status row after its last row (Status line in the chat,
+    /// status_tail.rs).
+    pub(super) status_tail: bool,
     /// The chat box's pill strip (pills_strip.rs).
     pub(super) pills_strip: super::pills_strip::PillsStripCells,
     pub(super) save_markdown_window: super::save_markdown::SaveMarkdownWindowState,
@@ -91,6 +94,15 @@ pub(crate) struct NativeChatView {
     pub(super) in_work_fold: bool,
     /// True while any row of a completed turn renders: its writes belong to that turn's "N files changed" fold.
     pub(super) hide_file_changes: bool,
+    /// True while an opened quiet line's steps render (Agent work Reduced or Quiet,
+    /// quiet_work.rs): each call draws as a quiet step instead of a tool row.
+    pub(super) quiet_steps: bool,
+    /// The message under the pointer while Message spacing is Compact, whose footer row shows its
+    /// buttons (message_spacing.rs).
+    pub(super) hovered_message: Option<String>,
+    /// Agent work Quiet: the work button and opened steps of the reply row being drawn, which
+    /// that reply's hover row takes (hidden_work.rs).
+    pub(super) hidden_work: Option<super::hidden_work::HiddenWork>,
     /// Every disclosure that is opening, closing or folding, and the state each was last drawn in.
     /// A cell because rows drawn through `&self` report their state too.
     pub(super) disclosure_motion: std::cell::RefCell<super::disclosure_motion::DisclosureMotions>,
@@ -434,6 +446,7 @@ impl NativeChatView {
             pill_bounds: Default::default(),
             coordinator_intro_dont_show: false,
             working_card: Default::default(),
+            status_tail: false,
             pills_strip: Default::default(),
             context_editor_window: Default::default(),
             save_markdown_window: Default::default(),
@@ -446,6 +459,9 @@ impl NativeChatView {
             visual: Default::default(),
             in_work_fold: false,
             hide_file_changes: false,
+            quiet_steps: false,
+            hovered_message: None,
+            hidden_work: None,
             disclosure_motion: Default::default(),
             transcript_focus_follow: Default::default(),
             reply_arrival: Default::default(),
@@ -931,6 +947,7 @@ impl NativeChatView {
                 .iter()
                 .any(|key| self.snapshot["sessionDetails"][key] != snapshot["sessionDetails"][key]);
             let before = std::mem::replace(&mut self.snapshot, Arc::new(snapshot));
+            self.remeasure_on_look_change(&before);
             self.adopt_board_focus(&before, cx);
             if ring_moved {
                 cx.emit(NativeChatEvent::SessionDetailsRing);

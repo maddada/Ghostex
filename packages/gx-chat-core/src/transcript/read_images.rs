@@ -182,7 +182,7 @@ pub fn message_read_images(rows: &[Value]) -> Vec<Value> {
     images
 }
 
-fn push_once(images: &mut Vec<Value>, image: Value) {
+pub(crate) fn push_once(images: &mut Vec<Value>, image: Value) {
     let path = image.get("path");
     if !images.iter().any(|seen| seen.get("path") == path) {
         images.push(image);
@@ -485,6 +485,17 @@ pub fn bubble_read_images(items: &mut [TranscriptItem], seen: &SeenPictures) {
                 if !read_images.is_empty() {
                     stats.insert(0, images_stat(read_images.len()));
                 }
+            }
+            // Built from the turns above once they are bubbled (`grouped_work.rs`), which carries
+            // their strips over.
+            TranscriptItem::GroupedWork { work, turns, .. } => {
+                work.iter_mut()
+                    .chain(turns.iter_mut().flat_map(|turn| {
+                        turn.artifacts
+                            .iter_mut()
+                            .chain(turn.final_message.iter_mut())
+                    }))
+                    .for_each(|message| mark_seen(message, seen));
             }
             TranscriptItem::Unknown(_) => {}
         }

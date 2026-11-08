@@ -654,6 +654,28 @@ pub(crate) async fn handle_read_session_chat_http(
         )
         .unwrap_or(0.0)),
     );
+    // The chat look rides every read too, so the phone draws the computer's look; an unset key is
+    // sent as its default, so switching back to Default reaches the phone
+    // (CDXC:SessionChat 2026-11-07 in packages/gx-chat-core/src/transcript/chat_look.rs).
+    let look_option = |key: &str| {
+        Some(
+            crate::session_chat_catch_up::chat_setting_string(&state.paths, key)
+                .unwrap_or_else(|| "default".to_string()),
+        )
+    };
+    result.insert(
+        "chatLook".to_string(),
+        json!(ghostex_gx_protocol::ChatLookSettings {
+            message_layout: look_option("chatMessageLayout"),
+            user_style: look_option("chatUserMessageStyle"),
+            agent_work: look_option("chatAgentWorkStyle"),
+            status_in_transcript: Some(crate::session_chat_catch_up::chat_setting_enabled(
+                &state.paths,
+                "chatStatusInTranscript"
+            )),
+            spacing: look_option("chatMessageSpacing"),
+        }),
+    );
     if let Some(session_agent_id) = session_agent_id.as_deref() {
         result.insert("sessionAgentId".to_string(), json!(session_agent_id));
     }

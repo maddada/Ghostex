@@ -8,6 +8,7 @@
 use super::{
     appearance::ChatAppearance,
     cursor::ChatCursor as _,
+    quiet_work,
     state::NativeChatView,
     transcript::text,
     working_spark::{css_ease_in_out, spark},
@@ -16,8 +17,9 @@ use crate::app::helpers::ThrottledAnimationExt;
 use crate::assets::chat_working::VISUAL;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, FontFeatures, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, canvas, div, px, relative, svg,
+    AnyElement, Bounds, Context, FontFeatures, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, StatefulInteractiveElement as _, Styled as _, canvas, div, px,
+    relative, svg,
 };
 use serde_json::Value;
 use std::{cell::Cell, rc::Rc, time::Duration};
@@ -35,11 +37,33 @@ pub(super) const WORKING_CARD_GAP: f32 = 9.0;
 /// The line's height (unscaled), the pills' 22px it was sized for, so the bar keeps its height.
 const LINE_HEIGHT: f32 = 22.0;
 
+/// Where the working line is drawn: the capsule above the chat box, or the transcript's last row
+/// in the quiet style's type (Status line in the chat, status_tail.rs).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum WorkingLineLook {
+    Capsule,
+    Quiet,
+}
+
+/// Where an element was last painted, with the clip it was painted in.
+pub(super) type PaintedSlot = Rc<Cell<Option<(Bounds<Pixels>, Bounds<Pixels>)>>>;
+
 /// What the card measured at its last paint.
 #[derive(Default)]
 pub(super) struct WorkingCardCells {
     /// The label did not fit its line, so hovering it shows the whole text.
     label_truncated: Rc<Cell<bool>>,
+    /// The status row's empty lead slot as last painted, with the clip it was painted in
+    /// (status_tail.rs draws the animated lead there).
+    pub(super) tail_lead: PaintedSlot,
+    /// The status row's line as last painted, which clips the lead.
+    pub(super) tail_line: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// Set when the status row painted this frame, so the lead measures where its slot and line
+    /// sit in the row again (status_tail.rs).
+    pub(super) tail_fresh: Rc<Cell<bool>>,
+    /// The slot and the line, offset from the status row's origin, with the clip the slot was
+    /// painted in, as last measured.
+    pub(super) tail_in_row: Rc<Cell<Option<super::status_tail::TailInRow>>>,
 }
 
 impl NativeChatView {
@@ -66,7 +90,7 @@ impl NativeChatView {
         }
         let card = self.snapshot["workingCard"].clone();
         let left_bottom = super::scroll_bottom::transcript_left_bottom(&self.list);
-        let header = self.working_card_header(&card, p, cx);
+        let header = self.working_card_header(&card, WorkingLineLook::Capsule, p, cx);
         let card = div()
             .id("chat-working-card")
             .relative()
@@ -107,16 +131,8 @@ impl NativeChatView {
         let pill = self.scroll_bottom_icon_pill(p, cx)?;
         let s = p.scale;
         // The column the transcript's rows use (transcript.rs), the pill at its right end.
-        let column = div()
-            .w_full()
-            .max_w(px(768.0 * s))
-            .px(px(16.0 * s))
-            .when_some(p.transcript_width, |this, width| {
-                this.max_w(relative(1.0)).w(relative(width))
-            })
-            .when_some(self.held_text_width, |this, width| {
-                this.flex_shrink_0().w(px(width)).max_w(px(width))
-            })
+        let column = self
+            .with_transcript_width(div().w_full().max_w(px(768.0 * s)).px(px(16.0 * s)), p)
             .child(
                 div()
                     .flex()
@@ -125,14 +141,15 @@ impl NativeChatView {
                     .block_mouse_except_scroll()
                     .child(pill),
             );
+        let row = div()
+            .absolute()
+            .bottom(px(super::transcript_layout::LAYOUT.end_padding * s))
+            .left_0()
+            .right_0()
+            .flex()
+            .justify_center();
         Some(
-            div()
-                .absolute()
-                .bottom(px(super::transcript_layout::LAYOUT.end_padding * s))
-                .left_0()
-                .right_0()
-                .flex()
-                .justify_center()
+            self.transcript_list_gutters(row, p)
                 .child(column)
                 .into_any_element(),
         )
@@ -140,9 +157,10 @@ impl NativeChatView {
 
     /// The card's line: the lead glyph and the label, cut with an ellipsis at its end, then a live
     /// activity's numbers.
-    fn working_card_header(
+    pub(super) fn working_card_header(
         &self,
         card: &Value,
+        look: WorkingLineLook,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -150,26 +168,28 @@ impl NativeChatView {
         let reduced_motion = crate::app::helpers::gpui_macos_reduce_motion_enabled();
         let kind = card["labelKind"].as_str().unwrap_or_default();
         let activity = &card["activity"];
-        let lead = match kind {
-            "" => None,
-            "activity" => Some(activity_lead(activity, p, reduced_motion)),
-            "worked" => Some(
+        let lead = match look {
+            WorkingLineLook::Capsule => working_line_lead(card, look, p, reduced_motion),
+            // The row keeps the lead's place empty; the lead itself is drawn over it outside the
+            // cached transcript (status_tail.rs).
+            WorkingLineLook::Quiet => working_line_lead(card, look, p, true).map(|_| {
+                let slot = self.working_card.tail_lead.clone();
                 div()
+                    .relative()
                     .size(px(VISUAL.spark_box * s))
                     .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .justify_center()
                     .child(
-                        svg()
-                            .path("titlebar/check.svg")
-                            .size(px(VISUAL.spark_size * s))
-                            .text_color(p.muted),
+                        canvas(
+                            move |bounds, window, _| {
+                                slot.set(Some((bounds, window.content_mask().bounds)))
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .inset_0(),
                     )
-                    .into_any_element(),
-            ),
-            _ if card["working"] == true => Some(spark(p, reduced_motion)),
-            _ => None,
+                    .into_any_element()
+            }),
         };
         let chat = cx.entity_id();
         // A tool's label in runs, its file paths shortened (the core's `labelParts`).
@@ -179,7 +199,7 @@ impl NativeChatView {
             .cloned();
         let label = card["label"]
             .as_str()
-            .map(|label| self.working_card_label(label.to_owned(), kind, chat, parts, p));
+            .map(|label| self.working_card_label(label.to_owned(), kind, chat, parts, look, p));
         let mut trailing = Vec::new();
         if kind == "activity" {
             if let Some(hint) = activity["hint"].as_str() {
@@ -206,26 +226,41 @@ impl NativeChatView {
                         .into_any_element(),
                 );
             }
-            trailing.extend(activity_trailing(activity, p, reduced_motion));
+            // In the transcript the progress track stays still: an animation there would draw
+            // the rows again on every frame (status_tail.rs).
+            trailing.extend(activity_trailing(
+                activity,
+                p,
+                reduced_motion || look == WorkingLineLook::Quiet,
+            ));
         }
+        let gap = match look {
+            WorkingLineLook::Capsule => VISUAL.gap,
+            WorkingLineLook::Quiet => quiet_work::ICON_GAP,
+        };
         div()
             .id("chat-working-card-header")
             .w_full()
             .min_w_0()
-            .min_h(px((LINE_HEIGHT + 2.0 * HEADER_PAD_Y) * s))
-            .pl(px(12.0 * s))
-            .pr(px(12.0 * s))
-            .pt(px(HEADER_PAD_Y * s))
-            .pb(px(HEADER_PAD_Y * s))
+            .when(look == WorkingLineLook::Capsule, |line| {
+                line.min_h(px((LINE_HEIGHT + 2.0 * HEADER_PAD_Y) * s))
+                    .pl(px(12.0 * s))
+                    .pr(px(12.0 * s))
+                    .pt(px(HEADER_PAD_Y * s))
+                    .pb(px(HEADER_PAD_Y * s))
+            })
+            .when(look == WorkingLineLook::Quiet, |line| {
+                line.line_height(px(quiet_work::LINE_HEIGHT * s))
+            })
             .flex()
             .items_center()
-            .gap(px(VISUAL.gap * s))
+            .gap(px(gap * s))
             .children(lead)
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(VISUAL.gap * s))
+                    .gap(px(gap * s))
                     .flex_1()
                     .min_w_0()
                     .children(label)
@@ -235,13 +270,15 @@ impl NativeChatView {
     }
 
     /// The label on one line, cut with an ellipsis at its end; when it is cut, hovering it shows the
-    /// whole text in the app's tooltip.
+    /// whole text in the app's tooltip. In the quiet look a tool's label takes the muted colour and
+    /// its folders the quiet style's dim one, and the word is dim like a quiet line.
     fn working_card_label(
         &self,
         label: String,
         kind: &str,
         chat: gpui::EntityId,
         parts: Option<Vec<Value>>,
+        look: WorkingLineLook,
         p: &ChatAppearance,
     ) -> AnyElement {
         let s = p.scale;
@@ -249,9 +286,16 @@ impl NativeChatView {
         let cut = truncated.get();
         let measured = label.clone();
         let full = label.clone();
-        let (size, color) = match kind {
-            "tool" | "activity" => (13.0, p.foreground),
-            _ => (VISUAL.font_size, p.muted),
+        let named = matches!(kind, "tool" | "activity");
+        let (size, color, dim) = match look {
+            WorkingLineLook::Capsule if named => (13.0, p.foreground, p.muted),
+            WorkingLineLook::Capsule => (VISUAL.font_size, p.muted, p.muted),
+            WorkingLineLook::Quiet if named => (quiet_work::TEXT_SIZE, p.muted, p.quiet_dim()),
+            WorkingLineLook::Quiet => (quiet_work::TEXT_SIZE, p.quiet_dim(), p.quiet_dim()),
+        };
+        let line_height = match look {
+            WorkingLineLook::Capsule => relative(1.5),
+            WorkingLineLook::Quiet => px(quiet_work::LINE_HEIGHT * s).into(),
         };
         div()
             .id("chat-working-card-label")
@@ -259,7 +303,7 @@ impl NativeChatView {
             .min_w_0()
             .flex_shrink(1.0)
             .text_size(px(size * s))
-            .line_height(relative(1.5))
+            .line_height(line_height)
             .text_color(color)
             .truncate()
             .when(cut, |this| {
@@ -278,7 +322,7 @@ impl NativeChatView {
                             dimmed.push((
                                 text.len()..text.len() + run.len(),
                                 gpui::HighlightStyle {
-                                    color: Some(p.muted),
+                                    color: Some(dim),
                                     ..Default::default()
                                 },
                             ));
@@ -375,6 +419,42 @@ impl NativeChatView {
                 )
             })
             .collect()
+    }
+}
+
+/// The line's lead glyph: a live activity's, the worked check, or the spark while the agent works.
+///
+/// CDXC:SessionChat 2026-11-08 WHY:
+/// The spark's glow shows only in the capsule, whose own fill and border bound it. In the status row (Status line in the chat) there is nothing around the spark: clipped to the 20px line, the 96px glow read as a pale square behind it, and unclipped it would wash over the text around it. The phone's spark has no glow either (apps/mobile/app/src/chat/native/cards/WorkingStrip.tsx).
+pub(super) fn working_line_lead(
+    card: &Value,
+    look: WorkingLineLook,
+    p: &ChatAppearance,
+    reduced_motion: bool,
+) -> Option<AnyElement> {
+    let s = p.scale;
+    match card["labelKind"].as_str().unwrap_or_default() {
+        "" => None,
+        "activity" => Some(activity_lead(&card["activity"], p, reduced_motion)),
+        "worked" => Some(
+            div()
+                .size(px(VISUAL.spark_box * s))
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    svg()
+                        .path("titlebar/check.svg")
+                        .size(px(VISUAL.spark_size * s))
+                        .text_color(p.muted),
+                )
+                .into_any_element(),
+        ),
+        _ if card["working"] == true => {
+            Some(spark(p, reduced_motion, look == WorkingLineLook::Capsule))
+        }
+        _ => None,
     }
 }
 

@@ -122,6 +122,11 @@ pub struct TranscriptProjection {
     pub summary_turns: Vec<SummaryModeTurn>,
     /// Rows that keep their place in the turns but draw nothing (`hide_redone_forms`).
     pub hidden_rows: Vec<String>,
+    /// The ids of the rows of the response still running, from its start
+    /// (`active_response_start_index`, the boundary `completed_work_render_items` keeps open);
+    /// empty when the agent is not working. Agent work Quiet leaves their calls out
+    /// (`grouped_work::hide_work`).
+    pub live_ids: Vec<String>,
 }
 
 /// The one pass every renderer starts from.
@@ -188,7 +193,16 @@ fn project_normalized(
 ) -> TranscriptProjection {
     let rendered = fold_chat_transcript(&normalized);
     let final_ids = final_assistant_message_ids(&rendered, working);
+    let live_ids = if working {
+        rendered[crate::transcript::turns::active_response_start_index(&rendered)..]
+            .iter()
+            .map(|message| message.id.clone())
+            .collect()
+    } else {
+        Vec::new()
+    };
     TranscriptProjection {
+        live_ids,
         items: completed_work_render_items(&rendered, working, interacted_message_ids, &normalized),
         summary_turns: summary_mode_turns(&rendered, &final_ids, working),
         final_ids,

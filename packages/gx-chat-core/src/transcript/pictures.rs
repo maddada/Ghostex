@@ -72,6 +72,21 @@ pub fn transcript_pictures<'a>(items: impl IntoIterator<Item = &'a TranscriptIte
                     add(message);
                 }
             }
+            TranscriptItem::GroupedWork {
+                work,
+                turns,
+                read_images,
+                ..
+            } => {
+                work.iter().for_each(|message| add(message));
+                add(&read_images_row(read_images));
+                for turn in turns {
+                    turn.artifacts.iter().for_each(|message| add(message));
+                    if let Some(message) = &turn.final_message {
+                        add(message);
+                    }
+                }
+            }
             TranscriptItem::Unknown(_) => {}
         }
     }
@@ -279,6 +294,7 @@ mod tests {
                 final_message: Some(message("f", vec![], "done")),
                 // The folded work's pictures and one only the server's held-back rows name.
                 read_images: vec![file("/read-1.png"), file("/read-2.png"), file("/held.png")],
+                tally: Default::default(),
             },
         ];
         assert_eq!(

@@ -654,6 +654,15 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatSendOnPick", J::Bool(false)),
     ("chatAnswersWaitForIdle", J::Bool(false)),
     ("chatPageOpenTarget", J::Str("popup")),
+    // CDXC:SessionChat 2026-11-07 SEE-ALSO: the chat look settings (Message layout, Your messages, Agent work, Status line in the chat) are opt-in, all Default; the user decisions are in packages/gx-chat-core/src/transcript/chat_look.rs.
+    ("chatMessageLayout", J::Str("default")),
+    ("chatUserMessageStyle", J::Str("default")),
+    ("chatAgentWorkStyle", J::Str("default")),
+    ("chatStatusInTranscript", J::Bool(false)),
+    // CDXC:SessionChat 2026-11-07 SEE-ALSO: Chat box matches transcript width is opt-in, off; the user decision is on the chat box in apps/desktop/src/app/native_chat/composer.rs.
+    ("chatComposerMatchesTranscriptWidth", J::Bool(false)),
+    // CDXC:SessionChat 2026-11-07 SEE-ALSO: Message spacing's user decision is in packages/gx-chat-core/src/transcript/chat_look.rs.
+    ("chatMessageSpacing", J::Str("default")),
     // CDXC:Coordinators 2026-11-05 DECISION: the Board pill opens the side list until the user picks Columns (extras/coordinator_board.rs in gx-chat-core).
     ("coordinatorBoardView", J::Str("list")),
     // CDXC:AgentGuide 2026-11-02 DECISION: User (Q1066): the short Ghostex note goes to every agent session Ghostex starts, "on by default (with a setting to turn it off)".

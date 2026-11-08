@@ -9,6 +9,7 @@
 //! The phone draws the same card in `apps/mobile/app/src/chat/native/transcript/FileChanges.tsx`.
 
 use super::cards::SINGLE_LINE_CARD;
+use super::quiet_work::{QuietEdit, file_names};
 use super::{
     appearance::{ChatAppearance, ChatFilledButton as _},
     state::NativeChatView,
@@ -182,17 +183,36 @@ impl NativeChatView {
         let simple_key = format!("files:{id}");
         // A write waiting on an approval opens the group (gx-chat-core `approval_wait.rs`).
         let awaiting = files.iter().any(|file| file["awaitingApproval"] == true);
-        let simple_expanded = self.is_expanded(&simple_key, awaiting);
-        if p.simple {
+        // Agent work Reduced or Quiet: the edits are one live edit line in every view, open in
+        // Detailed (quiet_work.rs).
+        let quiet = p.quiet_style();
+        let simple_expanded = self.is_expanded(&simple_key, awaiting || (quiet && p.work_open));
+        if p.simple || quiet {
             let motion = self.disclosure_frame(&simple_key, simple_expanded, cx);
-            rows.push(self.disclosure(
-                simple_key.clone(),
-                text(message, "simpleFileLabel"),
-                simple_expanded,
-                None,
-                p,
-                cx,
-            ));
+            rows.push(if quiet {
+                let summary = &message["fileCard"];
+                self.quiet_edit_line(
+                    QuietEdit {
+                        key: simple_key.clone(),
+                        label: text(message, "simpleFileLabel"),
+                        added: summary["added"].as_u64().unwrap_or(0),
+                        removed: summary["removed"].as_u64().unwrap_or(0),
+                        names: file_names(summary["paths"].as_array().into_iter().flatten()),
+                        expanded: simple_expanded,
+                    },
+                    p,
+                    cx,
+                )
+            } else {
+                self.disclosure(
+                    simple_key.clone(),
+                    text(message, "simpleFileLabel"),
+                    simple_expanded,
+                    None,
+                    p,
+                    cx,
+                )
+            });
             if !simple_expanded && motion.is_none() {
                 return rows;
             }
@@ -286,7 +306,7 @@ impl NativeChatView {
     }
 
     /// One card: the header, then a row per file.
-    fn file_change_card(
+    pub(super) fn file_change_card(
         &mut self,
         id: &str,
         summary: &Value,

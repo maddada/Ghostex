@@ -115,5 +115,6 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         .collect();
     into.marked_heading_strength = state.core.marked_heading_strength;
     into.chat_text_strength = state.core.chat_text_strength;
+    into.chat_look = state.transcript_view.chat_look.published();
     let _ = rows::rows;
 }

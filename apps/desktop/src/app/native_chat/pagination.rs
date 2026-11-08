@@ -150,6 +150,26 @@ pub(super) fn row_ids(item: &TranscriptItem) -> Vec<String> {
             .chain(work.iter().chain(artifacts).map(|message| id(message)))
             .flatten()
             .collect(),
+        TranscriptItem::GroupedWork {
+            id: own,
+            work,
+            turns,
+            ..
+        } => std::iter::once(Some(own.clone()))
+            .chain(turns.iter().map(|turn| Some(turn.id.clone())))
+            .chain(
+                turns
+                    .iter()
+                    .flat_map(|turn| turn.final_message.iter())
+                    .map(|message| id(message)),
+            )
+            .chain(
+                work.iter()
+                    .chain(turns.iter().flat_map(|turn| turn.artifacts.iter()))
+                    .map(|message| id(message)),
+            )
+            .flatten()
+            .collect(),
         TranscriptItem::Unknown(value) => id(value).into_iter().collect(),
     }
 }

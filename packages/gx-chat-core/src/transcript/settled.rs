@@ -30,7 +30,9 @@
 //!  * The scans that read the list in arrival order (forms, answers, askers) are kept per row and
 //!    merged in that order.
 //!  * The call an approval waits on is searched for in the rows after the prefix, then in the
-//!    chunks' drawn rows; one found in a chunk has the list built again.
+//!    chunks' drawn rows; one found in a chunk has the list built again. Under Agent work Quiet a
+//!    running turn's rows join no active chunk while an approval is up, since a chunk has hidden
+//!    their calls for good.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -49,8 +51,8 @@ use crate::transcript::open_questions::{
 };
 use crate::transcript::page_answers::{page_answers_in, PageAnswers};
 use crate::transcript::presentation::{
-    build_items, drop_hidden_rows, item_index, line_breaks, Builder, Projection, ProjectionCache,
-    ProjectionScope,
+    build_items, drop_hidden_rows, hide_running_work, item_index, line_breaks, Builder, Projection,
+    ProjectionCache, ProjectionScope,
 };
 use crate::transcript::question_forms::{form_entries, mark_resent, redone_forms, QuestionForm};
 use crate::transcript::sent_message::{
@@ -72,6 +74,9 @@ struct SettledKey {
     working_directory: Option<String>,
     session_directory_revision: u64,
     tool_cards: bool,
+    /// Agent work is Reduced or Quiet: the chunks' finished turns are folded into `grouped-work` rows.
+    grouped_work: bool,
+    hidden_work: bool,
     /// A picture an agent read turned out to be one the user showed (`read_images.rs`).
     picture_digests_revision: u64,
 }
@@ -428,9 +433,17 @@ fn projection_ids(projection: &TranscriptProjection) -> impl Iterator<Item = &st
 fn deferred_keys(items: &[TranscriptItem]) -> Vec<&str> {
     let mut keys: Vec<&str> = Vec::new();
     for item in items {
-        if let TranscriptItem::CompletedWork { id, deferred, .. } = item {
-            let owner = deferred.as_ref().and_then(|work| work["startId"].as_str());
-            for key in std::iter::once(id.as_str()).chain(owner) {
+        let folds: Vec<(&str, Option<&serde_json::Value>)> = match item {
+            TranscriptItem::CompletedWork { id, deferred, .. } => vec![(id, deferred.as_ref())],
+            TranscriptItem::GroupedWork { turns, .. } => turns
+                .iter()
+                .map(|turn| (turn.id.as_str(), turn.deferred.as_ref()))
+                .collect(),
+            _ => Vec::new(),
+        };
+        for (id, deferred) in folds {
+            let owner = deferred.and_then(|work| work["startId"].as_str());
+            for key in std::iter::once(id).chain(owner) {
                 if !keys.contains(&key) {
                     keys.push(key);
                 }
@@ -466,7 +479,9 @@ impl SettledPrefix {
             agent_path: view.agent_path.clone(),
             working_directory: view.working_directory.clone(),
             session_directory_revision: view.session_directory_revision,
-            tool_cards: view.tool_cards,
+            tool_cards: view.effective_tool_cards(),
+            grouped_work: view.grouped_work(),
+            hidden_work: view.hidden_work(),
             picture_digests_revision: view.picture_digests_revision,
         }
     }
@@ -582,6 +597,9 @@ impl SettledPrefix {
         let (last_queued, off_cache) = (builder.last_queued, builder.off_cache);
         drop(builder);
         drop_hidden_rows(&mut items, &projection.hidden_rows);
+        // Before the hide, as the rows after the prefix are read (`build_after`).
+        let learned = learn_names(&items);
+        hide_running_work(&mut items, scope, projection);
         let turns: Vec<_> = projection
             .summary_turns
             .iter()
@@ -626,7 +644,7 @@ impl SettledPrefix {
             off_cache,
             final_ids: projection.final_ids.clone(),
             minimap: minimap_rows(&turns, &item_index(&items, first_item)),
-            learned: learn_names(&items),
+            learned,
             lookups: RecipientLookups::default(),
             tagged: used
                 .iter()
@@ -1203,7 +1221,9 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         agent_message_deliveries: state.session.agent_message_deliveries.as_ref(),
         backfilled: &view.backfilled,
         question_forms: std::cell::OnceCell::from(scans.marked_forms()),
-        tool_cards: view.tool_cards,
+        tool_cards: view.effective_tool_cards(),
+        grouped_work: view.grouped_work(),
+        hidden_work: view.hidden_work(),
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),
     }

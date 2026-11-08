@@ -101,6 +101,21 @@ impl NativeChatView {
         self.minimap.markers.len() >= SPEC.minimum_turns
     }
 
+    /// The width of the rail's column and of the gutter mirroring it on the left, when the rail
+    /// shows beside the rows (`minimap_row`): the transcript list is the pane less both, which is
+    /// what a Transcript width percentage is taken of (transcript.rs `transcript_list_gutters`).
+    pub(super) fn minimap_gutter(&self, p: &ChatAppearance) -> Option<Pixels> {
+        if self.list.item_count() == 0 || !self.minimap_visible() {
+            return None;
+        }
+        let pane = self.bounds.get().size.width;
+        let content = p
+            .transcript_width
+            .map_or(px(TRANSCRIPT_MAX_WIDTH * p.scale), |ratio| pane * ratio);
+        let width = px(SPEC.column_width * SPEC.scale * p.scale);
+        ((pane - content) / 2.0 >= width).then_some(width)
+    }
+
     /// The turns whose prompt row is on screen, which the rail draws in the
     /// foreground tone. Following the tail answers from the follow state, because
     /// the list anchors past its last row then and has no bounds to ask.
@@ -274,20 +289,12 @@ impl NativeChatView {
     /// that may only eat the empty margin beside the centered rows. On a pane too narrow to have
     /// that margin the rail is dropped rather than made to wrap the text earlier than React did.
     pub(super) fn minimap_row(&self, transcript: AnyElement, cx: &Context<Self>) -> AnyElement {
-        if !self.minimap_visible() {
-            return transcript;
-        }
         let p = ChatAppearance::current(&self.snapshot).on_window_glass(
             crate::app::helpers::window_glass_active_for(self.main_window),
         );
-        let pane = self.bounds.get().size.width;
-        let content = p
-            .transcript_width
-            .map_or(px(TRANSCRIPT_MAX_WIDTH * p.scale), |ratio| pane * ratio);
-        let width = px(SPEC.column_width * SPEC.scale * p.scale);
-        if (pane - content) / 2.0 < width {
+        let Some(width) = self.minimap_gutter(&p) else {
             return transcript;
-        }
+        };
         div()
             .flex()
             .flex_row()

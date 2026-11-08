@@ -320,6 +320,10 @@ pub struct Document {
     /// 0 to 100 percent (`transcript/text_strength.rs`); absent at 0%, the default. Family b.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chat_text_strength: Option<u8>,
+    /// The chat look settings (`transcript/chat_look.rs`), absent while all five are Default;
+    /// `messageLayout` is the effective layout and `spacing` shows only at Compact. Family b.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat_look: Option<crate::transcript::chat_look::ChatLook>,
 
     // ---- modes and loading -----------------------------------------------
     pub summary_mode: bool,

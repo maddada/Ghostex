@@ -73,6 +73,12 @@ enum Spot {
     Artifact(usize),
     /// A finished turn's folded work, at this index.
     FoldedWork(usize),
+    /// A grouped line's turn's reply (Agent work Reduced or Quiet).
+    GroupedFinal(usize),
+    /// A grouped line's turn's row drawn outside the line: the turn, the row's index.
+    GroupedArtifact(usize, usize),
+    /// A grouped line's folded work, at this index.
+    GroupedFolded(usize),
 }
 
 /// The waiting call's rows inside one message. A write is drawn as file rows (one per file it
@@ -169,6 +175,8 @@ fn newest_open_call(source: &ghostex_gx_protocol::ChatMessage) -> Search {
 /// The rows the list draws, newest first, each with where it sits.
 ///
 /// CDXC:SessionChat 2026-11-08 FIX: Claude in manual mode reads as idle while it waits on a permission, so the turn holding the waiting call is drawn as a finished turn ("Worked for 24s") and its call stayed shut: with Tool call cards on its card stayed one line, and without them its tool row stayed closed, so the reader could not see what the approval asked. A finished turn's rows are searched too, its reply first (the newest row, which holds the call the agent stopped on), then its folded work and the rows drawn outside the fold; a waiting call in the folded work is lifted out of the fold ([`mark_waiting_call`]).
+///
+/// CDXC:SessionChat 2026-11-08 WHY: Agent work Reduced and Quiet merge those finished turns into a `grouped-work` row before this search runs, so it reads that row the same way: a waiting call stays in full view under those looks too, lifted out of the line into the newest turn's tail. A reply is searched only while it still draws calls: Quiet moved them into the work, in a row with the reply's id, and that row is the one to lift.
 fn rows_newest_first(items: &[TranscriptItem]) -> Vec<(usize, Spot, &Value)> {
     let mut rows = Vec::new();
     for (item_index, item) in items.iter().enumerate().rev() {
@@ -193,6 +201,30 @@ fn rows_newest_first(items: &[TranscriptItem]) -> Vec<(usize, Spot, &Value)> {
                 }
                 for (index, message) in artifacts.iter().enumerate().rev() {
                     rows.push((item_index, Spot::Artifact(index), &**message));
+                }
+            }
+            TranscriptItem::GroupedWork { work, turns, .. } => {
+                let newest = turns.len().saturating_sub(1);
+                let reply = |turn: usize| {
+                    turns[turn].final_message.as_ref().filter(|reply| {
+                        ["tools", "files"]
+                            .iter()
+                            .any(|key| reply[*key].as_array().is_some_and(|rows| !rows.is_empty()))
+                    })
+                };
+                if let Some(message) = (!turns.is_empty()).then(|| reply(newest)).flatten() {
+                    rows.push((item_index, Spot::GroupedFinal(newest), &**message));
+                }
+                for (index, message) in work.iter().enumerate().rev() {
+                    rows.push((item_index, Spot::GroupedFolded(index), &**message));
+                }
+                for (turn, tail) in turns.iter().enumerate().rev() {
+                    if let Some(message) = reply(turn).filter(|_| turn != newest) {
+                        rows.push((item_index, Spot::GroupedFinal(turn), &**message));
+                    }
+                    for (index, message) in tail.artifacts.iter().enumerate().rev() {
+                        rows.push((item_index, Spot::GroupedArtifact(turn, index), &**message));
+                    }
                 }
             }
             TranscriptItem::Unknown(_) => {}
@@ -333,6 +365,25 @@ fn mark_waiting_call(items: &mut [TranscriptItem], target: Target) {
             artifacts
                 .last_mut()
                 .expect("the row just lifted out of the fold")
+        }
+        (TranscriptItem::GroupedWork { turns, .. }, Spot::GroupedFinal(turn)) => {
+            match turns[turn].final_message.as_mut() {
+                Some(message) => message,
+                None => return,
+            }
+        }
+        (TranscriptItem::GroupedWork { turns, .. }, Spot::GroupedArtifact(turn, index)) => {
+            &mut turns[turn].artifacts[index]
+        }
+        // The line stays shut; the waiting row is drawn after it with its newest turn's tail.
+        (TranscriptItem::GroupedWork { work, turns, .. }, Spot::GroupedFolded(index)) => {
+            let Some(tail) = turns.last_mut() else {
+                return;
+            };
+            tail.artifacts.push(work.remove(index));
+            tail.artifacts
+                .last_mut()
+                .expect("the row just lifted out of the line")
         }
         _ => return,
     };

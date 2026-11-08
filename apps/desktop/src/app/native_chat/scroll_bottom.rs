@@ -223,6 +223,7 @@ impl NativeChatView {
 
     pub(super) fn jump_to_bottom(&mut self, cx: &mut Context<Self>) {
         self.release_answer_hold();
+        self.clear_message_hover();
         self.list.set_follow_mode(gpui::FollowMode::Tail);
         self.invoke(serde_json::json!({"type":"composerExpand"}), cx);
         cx.notify();

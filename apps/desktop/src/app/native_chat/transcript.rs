@@ -12,7 +12,7 @@ use gpui::{
 use serde_json::Value;
 
 /// The space between the parts of one message row (its text, tools, cards and actions).
-const MESSAGE_PART_GAP: f32 = 8.0;
+pub(super) const MESSAGE_PART_GAP: f32 = 8.0;
 
 pub(crate) fn text(value: &Value, key: &str) -> String {
     value[key].as_str().unwrap_or_default().to_string()
@@ -65,8 +65,66 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        // Status line in the chat: the row after the last one is the working line (status_tail.rs).
+        if index >= self.items.len() {
+            return self.status_tail_row(index, cx);
+        }
         let items = self.items.clone();
         self.transcript_item_row(&items, index, true, window, cx)
+    }
+
+    /// The column every transcript row sits in: the transcript's width (768px, or the Transcript
+    /// width percentage), held while a panel slides (render.rs), ending with the row gap.
+    pub(super) fn transcript_row_column(&self, p: &ChatAppearance) -> gpui::Div {
+        let s = p.scale;
+        let column = div()
+            .w_full()
+            .max_w(px(768.0 * s))
+            .px(px(16.0 * s))
+            .pb(px(p.row_gap() * s));
+        self.with_transcript_width(column, p)
+    }
+
+    /// The transcript column's width on `column`: the Transcript width percentage, and while a
+    /// panel slides the text width the rows hold (render.rs). The rows, the lone ↓ pill
+    /// (working_card.rs) and, with Chat box matches transcript width, the chat box (composer.rs)
+    /// all take it, so they line up; the two outside the list sit in `transcript_list_gutters`.
+    pub(super) fn with_transcript_width(&self, column: gpui::Div, p: &ChatAppearance) -> gpui::Div {
+        column
+            .when_some(p.transcript_width, |this, width| {
+                this.max_w(relative(1.0)).w(relative(width))
+            })
+            .when_some(self.held_text_width, |this, width| {
+                this.flex_shrink_0().w(px(width)).max_w(px(width))
+            })
+    }
+
+    /// The transcript list's own width: the pane less the minimap's column and its mirror
+    /// (minimap.rs). The rows' Transcript width percentage is a share of it.
+    fn transcript_list_width(&self, p: &ChatAppearance) -> f32 {
+        let gutter = self.minimap_gutter(p).map_or(0.0, |gutter| gutter.as_f32());
+        self.bounds.get().size.width.as_f32() - 2.0 * gutter
+    }
+
+    /// The width the rows' column takes when nothing holds it (render.rs): the Transcript width
+    /// percentage of the list, or the list capped at 768px.
+    pub(super) fn transcript_text_width(&self, p: &ChatAppearance) -> f32 {
+        let list = self.transcript_list_width(p);
+        match p.transcript_width {
+            Some(ratio) => list * ratio,
+            None => list.min(768.0 * p.scale),
+        }
+    }
+
+    /// Insets a container drawn outside the transcript list (the chat box's row, the lone ↓ pill's
+    /// row) by the minimap's gutters, so a Transcript width percentage inside it is taken of the
+    /// list's width and its column lines up with the rows.
+    ///
+    /// CDXC:SessionChat 2026-11-07 WHY:
+    /// The percentage resolves against the parent, and the list sits between the minimap's column and its mirror while these rows span the whole pane, so at 90% the chat box came out about 47px wider than the rows on each side. The capped 768px column needs no inset: the rail only shows when the pane has room for it beside 768px.
+    pub(super) fn transcript_list_gutters(&self, row: gpui::Div, p: &ChatAppearance) -> gpui::Div {
+        let gutter = p.transcript_width.and_then(|_| self.minimap_gutter(p));
+        row.when_some(gutter, |this, gutter| this.px(gutter))
     }
 
     /// One row of a projected transcript. The subagent viewer renders its own item list
@@ -81,7 +139,13 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         self.in_subagent = !main;
-        self.detail_rows.start_row(main, index, items.len());
+        // The main list's length, which holds the status row too while it shows (status_tail.rs).
+        let rows = if main {
+            self.transcript_list_rows()
+        } else {
+            items.len()
+        };
+        self.detail_rows.start_row(main, index, rows);
         let item = &items[index];
         let mut p = ChatAppearance::current(&self.snapshot).on_window_glass(
             crate::app::helpers::window_glass_active_for(self.main_window),
@@ -201,6 +265,7 @@ impl NativeChatView {
                 row.into_any_element()
             }
             TranscriptItem::CompletedWork { .. } => self.completed_work_row(item, &p, window, cx),
+            TranscriptItem::GroupedWork { .. } => self.grouped_work_row(item, &p, window, cx),
             TranscriptItem::Message { message } => {
                 self.message_item_row(message, items.get(index + 1), &p, window, cx)
             }
@@ -230,21 +295,7 @@ impl NativeChatView {
                 };
                 this.pt(px(32.0 * s + header))
             })
-            .child(
-                div()
-                    .w_full()
-                    .max_w(px(768.0 * s))
-                    .px(px(16.0 * s))
-                    .pb(px(super::transcript_layout::LAYOUT.row_gap * s))
-                    .when_some(p.transcript_width, |this, width| {
-                        this.max_w(relative(1.0)).w(relative(width))
-                    })
-                    // While a panel slides the row keeps its text width (render.rs).
-                    .when_some(self.held_text_width, |this, width| {
-                        this.flex_shrink_0().w(px(width)).max_w(px(width))
-                    })
-                    .child(content),
-            )
+            .child(self.transcript_row_column(&p).child(content))
             .into_any_element()
     }
 
@@ -414,7 +465,7 @@ impl NativeChatView {
         let id = text(message, "id");
         let body = text(message, "text");
         let s = p.scale;
-        let reply_focus = self.reply_focus(message, window, cx);
+        let reply_focus = self.reply_focus(message, p.compact(), window, cx);
         let reply_focused = reply_focus.as_ref().is_some_and(|(_, focused)| *focused);
         // The whole text as the label: an assistive client or an e2e run reads a message in one node instead of walking its markdown blocks (native_sidebar and the terminal do the same).
         let a11y_label = format!("{} message: {}", text(message, "role"), a11y_excerpt(&body));
@@ -429,8 +480,19 @@ impl NativeChatView {
             .w_full()
             .gap(px(MESSAGE_PART_GAP * s))
             .when_some(reply_focus, |row, (focus, _)| {
-                row.track_focus(&focus).tab_stop(false)
+                // Message spacing Compact: the reply or prompt is a tab stop, since its footer's
+                // buttons exist only while they show (message_spacing.rs).
+                if p.compact() {
+                    super::message_spacing::focusable_reply(row.track_focus(&focus), p)
+                } else {
+                    row.track_focus(&focus).tab_stop(false)
+                }
             });
+        // Message spacing Compact: the footer's buttons are built only while the pointer is on the
+        // message (message_spacing.rs).
+        if p.compact() && (self.has_reply_actions(message) || Self::has_user_bar(message)) {
+            row = self.track_message_hover(row, &id, cx);
+        }
         if message["role"] == "user" && message["interAgentMessage"].is_object() {
             return row
                 .child(self.inter_agent_message_card(&id, message, p, cx))
@@ -454,6 +516,9 @@ impl NativeChatView {
                 .into_any_element();
         }
         if message["role"] == "user" && message["suppressed"].is_null() {
+            if p.left_aligned() {
+                return self.left_user_message(row, message, body, reply_focused, p, cx);
+            }
             // The prompt renders as markdown like the React bubble, which also makes it a selectable TextView; a plain string child cannot be selected.
             let mut bubble_appearance = p.clone();
             bubble_appearance.prose = p.strengthened(p.primary);
@@ -488,7 +553,7 @@ impl NativeChatView {
             let failed_delivery = self.render_startup_delivery(message, false, p, cx);
             // The prompt's own pictures sit above the bubble, where their author put them.
             let thumbnails = self.user_image_thumbnails(message, p, cx);
-            let actions = self.user_actions(message, p, cx);
+            let actions = self.user_actions(message, reply_focused, p, cx);
             // A send that did not go out says why under its own bubble, at the bubble's side and
             // within its width (`delivery_note`, startup_delivery.rs).
             return row
@@ -627,6 +692,13 @@ impl NativeChatView {
                 let motion = self.disclosure_frame(&key, expanded, cx);
                 let flush = self.is_flush_reply(message);
                 let reply = p.reply_lane();
+                let prose = div().min_w_0().flex_1().child(self.markdown(
+                    format!("body:{id}"),
+                    body.clone(),
+                    &message["markdownReferences"],
+                    reply.as_ref().unwrap_or(p),
+                    cx,
+                ));
                 let heading = div()
                     .flex()
                     .items_start()
@@ -638,13 +710,7 @@ impl NativeChatView {
                             self.reply_marker(p)
                         })
                     })
-                    .child(div().min_w_0().flex_1().child(self.markdown(
-                        format!("body:{id}"),
-                        body.clone(),
-                        &message["markdownReferences"],
-                        reply.as_ref().unwrap_or(p),
-                        cx,
-                    )));
+                    .child(prose);
                 // The whole heading is the trigger, not just the chevron: React's
                 // `.ghostex-chat-agent-tools-heading` carried the toggle and the hover fill, and a
                 // one-line commentary with a chevron beside it is read as a line to click. The
@@ -703,27 +769,65 @@ impl NativeChatView {
         // Whether the part last added is a one-line card: two cards in a row are a row gap apart
         // (`SINGLE_LINE_CARD.gap_above`), whichever kinds they are.
         let mut card_above = false;
-        if !tool_card {
-            for card in self.file_change_cards(message, p, cx) {
-                row = row.child(card);
-                card_above = true;
+        if p.quiet_style() && !tools_rendered && !tool_card {
+            // Agent work Reduced or Quiet: the edit line comes right after the work line,
+            // with no gap between them (quiet_work.rs). The quiet style's lines are never cards.
+            let mut tools = self.tool_rows(message, p, cx);
+            let after_line = !tools.is_empty();
+            // Message spacing Compact: the first line sits closer to the text above it
+            // (message_spacing.rs); an opened line's steps keep their rail's spacing.
+            let lift = if body.is_empty() || self.quiet_steps {
+                0.0
+            } else {
+                p.quiet_line_lift()
+            };
+            let lifted =
+                |element: AnyElement| div().mt(px(-lift * s)).child(element).into_any_element();
+            if lift > 0.0 && after_line {
+                let first = tools.remove(0);
+                tools.insert(0, lifted(first));
             }
-        }
-        if !tools_rendered {
-            let tools = self.tool_rows(message, p, cx);
-            if !tools.is_empty() {
-                // With Settings > Chat > Tool call cards on, the calls are one card (`tool_card.rs`);
-                // otherwise they are plain rows.
-                card_above = tool_card;
+            row = row.children(tools);
+            for (index, card) in self
+                .file_change_cards(message, p, cx)
+                .into_iter()
+                .enumerate()
+            {
+                row = row.child(if index == 0 && after_line {
+                    div()
+                        .mt(px(-MESSAGE_PART_GAP * s))
+                        .child(card)
+                        .into_any_element()
+                } else if index == 0 && lift > 0.0 {
+                    lifted(card)
+                } else {
+                    card
+                });
             }
-            for tool in tools {
-                row = row.child(tool);
+        } else {
+            if !tool_card {
+                for card in self.file_change_cards(message, p, cx) {
+                    row = row.child(card);
+                    card_above = true;
+                }
+            }
+            if !tools_rendered {
+                let tools = self.tool_rows(message, p, cx);
+                if !tools.is_empty() {
+                    // With Settings > Chat > Tool call cards on, the calls are one card
+                    // (`tool_card.rs`); otherwise they are plain rows.
+                    card_above = tool_card;
+                }
+                for tool in tools {
+                    row = row.child(tool);
+                }
             }
         }
         // The rows' own 8px part gap is already there; a card under a card adds the rest.
         let card_gap = |card_above: bool| {
             px(
-                (SINGLE_LINE_CARD.gap_above(card_above, true, MESSAGE_PART_GAP) - MESSAGE_PART_GAP)
+                (SINGLE_LINE_CARD.gap_above(card_above, true, MESSAGE_PART_GAP, p)
+                    - MESSAGE_PART_GAP)
                     * s,
             )
         };
@@ -758,7 +862,13 @@ impl NativeChatView {
             row = row.child(div().mt(card_gap(card_above)).child(cards));
         }
         if self.has_reply_actions(message) {
-            row = row.child(self.reply_actions(message, reply_focused, p, cx));
+            // Agent work Quiet: the reply that carries the work button opens its steps right
+            // under its hover row (hidden_work.rs).
+            let work = self.take_hidden_work(&id);
+            row = row.children(self.reply_actions(message, reply_focused, work.as_ref(), p, cx));
+            if let Some(steps) = work.and_then(|work| work.steps) {
+                row = row.child(steps);
+            }
         }
         row.into_any_element()
     }
@@ -766,7 +876,7 @@ impl NativeChatView {
     /// A prompt's text in its bubble. A long one shows only its first lines (the core's
     /// `collapsedText`, `long_prompt.rs`) with Show more under them until the reader expands it,
     /// so the rest is never laid out unless it is read.
-    fn prompt_body(
+    pub(super) fn prompt_body(
         &self,
         id: &str,
         message: &Value,

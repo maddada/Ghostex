@@ -34,7 +34,7 @@ impl NativeChatView {
             .flex_col()
             .min_w_0()
             .w_full()
-            .gap(px(super::cards::SINGLE_LINE_CARD.stack_gap() * p.scale));
+            .gap(px(super::cards::SINGLE_LINE_CARD.stack_gap(p) * p.scale));
         for (index, exchange) in exchanges.iter().enumerate() {
             column = column.child(self.question_exchange_card(
                 &format!("{key}:{index}"),

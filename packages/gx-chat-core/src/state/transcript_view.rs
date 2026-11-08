@@ -178,6 +178,12 @@ pub struct TranscriptViewState {
     pub tool_cards: bool,
     /// The Default to Detailed view setting, which a chat with no level of its own follows.
     pub detailed_default: bool,
+    /// The chat look settings (`transcript/chat_look.rs`), all Default unless the user picked one.
+    /// A change throws the cached projections away.
+    pub chat_look: crate::transcript::chat_look::ChatLook,
+    /// The host has sent its own chat look ([`crate::ChatSettings::chat_look`]), so a chat read's
+    /// `chatLook` no longer applies (`transcript/chat_look.rs`).
+    pub chat_look_from_host: bool,
 }
 
 /// One message's full projection, with the source it was built from.
@@ -296,6 +302,8 @@ impl Default for TranscriptViewState {
             session_directory_revision: 0,
             tool_cards: false,
             detailed_default: false,
+            chat_look: Default::default(),
+            chat_look_from_host: false,
         }
     }
 }
@@ -310,6 +318,30 @@ impl TranscriptViewState {
         self.items = Default::default();
         self.projection_inputs = None;
         self.settled = None;
+    }
+
+    /// Whether the projection draws tool call cards: the Tool call cards setting, unless Agent work
+    /// is Reduced or Quiet, which replace them (`transcript/chat_look.rs`).
+    pub fn effective_tool_cards(&self) -> bool {
+        self.tool_cards
+            && self.chat_look.agent_work == crate::transcript::chat_look::AgentWork::Default
+    }
+
+    /// Whether Agent work is Reduced or Quiet, which fold each message's finished turns into one
+    /// row (`transcript/grouped_work.rs`); Quiet also moves the replies' calls into it, and the
+    /// renderers draw it as the reply's work button.
+    pub fn grouped_work(&self) -> bool {
+        use crate::transcript::chat_look::AgentWork;
+        matches!(
+            self.chat_look.agent_work,
+            AgentWork::Reduced | AgentWork::Quiet
+        )
+    }
+
+    /// Whether Agent work is Quiet, which keeps the work out of the chat: the work draws in each reply's hover row, never before it
+    /// (`transcript/grouped_work.rs` `hide_work`).
+    pub fn hidden_work(&self) -> bool {
+        self.chat_look.agent_work == crate::transcript::chat_look::AgentWork::Quiet
     }
 
     /// Whether any row is still drawn as a plain-text placeholder, which is what keeps the 0 ms

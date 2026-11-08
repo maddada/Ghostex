@@ -37,6 +37,7 @@ impl NativeChatView {
             return;
         }
         self.pane_hidden = true;
+        self.clear_message_hover();
         self.close_own_menu(cx);
         self.close_reply_popover(cx);
         self.close_draft_project_picker(cx);

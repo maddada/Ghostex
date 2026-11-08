@@ -185,13 +185,23 @@ fn transcript_skeleton(p: &ChatAppearance) -> AnyElement {
         .gap(px(g.row_gap * s))
         .children(g.rows.iter().map(|row| {
             if row.role == "user" {
-                div().w_full().flex().justify_end().child(
-                    div()
-                        .w(gpui::relative(row.widths.first().copied().unwrap_or(0.4)))
-                        .h(px(g.bubble_height * s))
-                        .rounded(px(g.bubble_radius * s))
-                        .bg(tint),
-                )
+                div()
+                    .w_full()
+                    .flex()
+                    .map(|row| {
+                        if p.left_aligned() {
+                            row.justify_start()
+                        } else {
+                            row.justify_end()
+                        }
+                    })
+                    .child(
+                        div()
+                            .w(gpui::relative(row.widths.first().copied().unwrap_or(0.4)))
+                            .h(px(g.bubble_height * s))
+                            .rounded(px(g.bubble_radius * s))
+                            .bg(tint),
+                    )
             } else {
                 div()
                     .w_full()

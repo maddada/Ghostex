@@ -22,10 +22,7 @@ impl NativeChatView {
     /// same way.
     fn hold_text_width_while_sliding(&mut self, p: &ChatAppearance) {
         let pane = self.bounds.get().size.width.as_f32();
-        let natural = match p.transcript_width {
-            Some(ratio) => pane * ratio,
-            None => pane.min(768.0 * p.scale),
-        };
+        let natural = self.transcript_text_width(p);
         if crate::terminal_element::grid_resize_held()
             || self.session_details.motion.frame().animating
             || self.board.motion.frame().animating
@@ -149,6 +146,8 @@ impl Render for NativeChatView {
         crate::app::helpers::indicator_animation::render_indicator_frames_animation_only(
             cx.entity_id(),
         );
+        // Status line in the chat: the working line joins or leaves the rows before they are drawn.
+        self.sync_status_tail(&p, window);
         let transcript = self.render_transcript_host(window, cx);
         let rows = self.list.item_count();
         let body = if covered {
@@ -156,6 +155,7 @@ impl Render for NativeChatView {
         } else {
             let content = transcript;
             let lone_scroll_bottom = self.render_lone_scroll_bottom(&p, cx);
+            let status_tail_lead = self.render_status_tail_lead(&p);
             Some(
                 div()
                     .id("chat-transcript")
@@ -169,6 +169,8 @@ impl Render for NativeChatView {
                     .min_h_0()
                     .w_full()
                     .child(content)
+                    // After the rows, so it draws where the status row painted this frame.
+                    .children(status_tail_lead)
                     .children(lone_scroll_bottom)
                     .into_any_element(),
             )

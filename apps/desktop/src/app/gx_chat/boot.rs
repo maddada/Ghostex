@@ -141,6 +141,32 @@ pub(super) fn chat_settings() -> ChatSettings {
         detailed_default: object
             .get("sessionChatDetailedView")
             .and_then(Value::as_bool),
+        // An empty object is a web page whose settings have not arrived yet, which says nothing
+        // and leaves the look to gxserver's `chatLook` on the chat read; otherwise an unset key is
+        // its default, so switching a setting back to Default reaches an open chat.
+        chat_look: (!object.is_empty()).then(|| {
+            let option = |key: &str| {
+                Some(
+                    object
+                        .get(key)
+                        .and_then(Value::as_str)
+                        .unwrap_or("default")
+                        .to_string(),
+                )
+            };
+            ghostex_gx_chat_core::protocol::ChatLookSettings {
+                message_layout: option("chatMessageLayout"),
+                user_style: option("chatUserMessageStyle"),
+                agent_work: option("chatAgentWorkStyle"),
+                status_in_transcript: Some(
+                    object
+                        .get("chatStatusInTranscript")
+                        .and_then(Value::as_bool)
+                        == Some(true),
+                ),
+                spacing: option("chatMessageSpacing"),
+            }
+        }),
     }
 }
 

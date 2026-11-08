@@ -27,5 +27,5 @@ pub use crate::document::question::{
 };
 pub use crate::document::queue::{Queue, QueueCapabilities, QueuedPrompt};
 pub use crate::document::snapshot::{Document, SharedForms, SharedValue};
-pub use crate::document::transcript::{ProjectedMessage, TranscriptItem};
+pub use crate::document::transcript::{GroupedTurn, ProjectedMessage, TranscriptItem, WorkTally};
 pub use crate::document::view::{EmptyState, LoadingNotice, NewSessionWelcome, ViewState};

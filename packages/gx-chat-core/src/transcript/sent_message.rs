@@ -972,6 +972,14 @@ fn messages_mut(item: &mut TranscriptItem) -> Vec<&mut ProjectedMessage> {
             .chain(artifacts.iter_mut())
             .chain(final_message.iter_mut())
             .collect(),
+        TranscriptItem::GroupedWork { work, turns, .. } => work
+            .iter_mut()
+            .chain(turns.iter_mut().flat_map(|turn| {
+                turn.artifacts
+                    .iter_mut()
+                    .chain(turn.final_message.iter_mut())
+            }))
+            .collect(),
         TranscriptItem::Unknown(_) => Vec::new(),
     }
 }
@@ -1056,8 +1064,16 @@ impl<'a> RecipientDirectory<'a> {
                 resolve_message(directory, &self.hosts, deliveries, message);
             }
             // A finished turn's hoisted cards are copies of its work rows' own.
-            if let TranscriptItem::CompletedWork { sent_messages, .. } = item {
-                complete(directory, &self.hosts, deliveries, sent_messages);
+            match item {
+                TranscriptItem::CompletedWork { sent_messages, .. } => {
+                    complete(directory, &self.hosts, deliveries, sent_messages);
+                }
+                TranscriptItem::GroupedWork { turns, .. } => {
+                    for turn in turns {
+                        complete(directory, &self.hosts, deliveries, &mut turn.sent_messages);
+                    }
+                }
+                _ => {}
             }
         }
         directory
@@ -1182,6 +1198,14 @@ fn messages_of(item: &TranscriptItem) -> Vec<&ProjectedMessage> {
             .iter()
             .chain(artifacts.iter())
             .chain(final_message.iter())
+            .collect(),
+        TranscriptItem::GroupedWork { work, turns, .. } => work
+            .iter()
+            .chain(
+                turns
+                    .iter()
+                    .flat_map(|turn| turn.artifacts.iter().chain(turn.final_message.iter())),
+            )
             .collect(),
         TranscriptItem::Unknown(_) => Vec::new(),
     }
