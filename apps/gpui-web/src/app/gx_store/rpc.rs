@@ -52,6 +52,10 @@ pub(crate) async fn gx_rpc(
                             .to_string(),
                         path: owned_path,
                         unanswered: false,
+                        approval: error
+                            .get("approval")
+                            .filter(|value| value.is_object())
+                            .cloned(),
                     }),
                 }
             }

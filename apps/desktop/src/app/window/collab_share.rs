@@ -6,6 +6,9 @@
 //!
 //! CDXC:Collab 2026-11-07 DECISION:
 //! User (Q1615): "Where Share lives: a button in the chat header", with its popover holding the link, code, expiry, mode, viewers and Stop sharing.
+//!
+//! CDXC:Collab 2026-11-08 DECISION:
+//! User (#495): turning Collab on, sharing, Send mode and approving a guest's message need the owner's signed approval. gxserver answers those calls `approvalRequired`; the popover says so ("Approve on this computer or your phone") and waits for the request to be approved, then repeats the call. No read returns a link or a code: they come only with an approved Create link (or Show), and the app keeps them in memory for this run, never on disk.
 //! SEE-ALSO: apps/desktop/src/app/render/workarea_header/share_button.rs (the button), apps/desktop/src/app/window/settings_modal/tabs/collab.rs (Settings > Collab).
 
 use super::native_modal_kit::{ModalPalette, ModalSegmentedItem, modal_segmented_control};
@@ -17,7 +20,7 @@ use ghostex_gx_core::SessionKey;
 use serde_json::{Value, json};
 
 pub(crate) const COLLAB_SHARE_POPUP_WIDTH: f32 = 380.0;
-pub(crate) const COLLAB_SHARE_POPUP_HEIGHT: f32 = 392.0;
+pub(crate) const COLLAB_SHARE_POPUP_HEIGHT: f32 = 412.0;
 
 const MODES: [(&str, &str); 3] = [
     ("send", "Send"),
@@ -31,6 +34,47 @@ pub(crate) struct CollabSharePanel {
     error: Option<String>,
     busy: bool,
     copied: Option<(&'static str, std::time::Instant)>,
+    /// The change waiting for the owner's approval: what it does, in gxserver's words.
+    waiting: Option<String>,
+}
+
+thread_local! {
+    /// Links and codes the owner revealed with an approval, by share id, for this run only.
+    static REVEALED: std::cell::RefCell<std::collections::HashMap<String, (String, String)>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+fn revealed(share_id: &str) -> Option<(String, String)> {
+    REVEALED.with(|revealed| revealed.borrow().get(share_id).cloned())
+}
+
+/// Waits for approval request `id` to be decided: `Ok` once approved (gxserver then makes the
+/// change itself), `Err` with a sentence when it was denied or lapsed. Polls
+/// `/api/readApprovalRequest` (the requester may read its own request).
+pub(crate) async fn wait_for_approval(id: String) -> Result<(), String> {
+    // A pending request lapses after 10 minutes.
+    for _ in 0..(11 * 60) {
+        futures_timer_delay(Duration::from_secs(1)).await;
+        let Ok(answer) = gx_rpc(None, "/api/readApprovalRequest", json!({ "id": id })).await else {
+            continue;
+        };
+        match answer["request"]["status"].as_str().unwrap_or_default() {
+            "approved" | "consumed" => return Ok(()),
+            "denied" => return Err("You didn't approve it.".to_string()),
+            "expired" => return Err("The approval request ran out. Try again.".to_string()),
+            _ => {}
+        }
+    }
+    Err("The approval request ran out. Try again.".to_string())
+}
+
+async fn futures_timer_delay(duration: Duration) {
+    let (sender, receiver) = futures::channel::oneshot::channel::<()>();
+    std::thread::spawn(move || {
+        std::thread::sleep(duration);
+        let _ = sender.send(());
+    });
+    let _ = receiver.await;
 }
 
 fn share_of<'a>(state: &'a Value, key: &SessionKey) -> Option<&'a Value> {
@@ -41,21 +85,18 @@ fn share_of<'a>(state: &'a Value, key: &SessionKey) -> Option<&'a Value> {
 }
 
 fn ends_label(expires_at_ms: Option<i64>) -> String {
-    let Some(at) = expires_at_ms else {
-        return "The link works until you stop sharing".to_string();
-    };
+    let at = expires_at_ms.unwrap_or_default();
     let left = (at - chrono::Utc::now().timestamp_millis()).max(0) / 60_000;
     match left {
         0 => "The link ends in under a minute".to_string(),
         1..=59 => format!("The link ends in {left} min"),
-        60..=2879 => format!("The link ends in {} h", (left + 30) / 60),
-        _ => format!("The link ends in {} days", (left + 720) / 1440),
+        _ => format!("The link ends in {} h", (left + 30) / 60),
     }
 }
 
 fn spaced_code(code: &str) -> String {
-    if code.len() == 6 {
-        format!("{} {}", &code[..3], &code[3..])
+    if code.len() == 8 {
+        format!("{} {}", &code[..4], &code[4..])
     } else {
         code.to_string()
     }
@@ -98,26 +139,70 @@ impl CollabSharePanel {
             error: None,
             busy: false,
             copied: None,
+            waiting: None,
         }
     }
 
     fn call(&mut self, params: Value, cx: &mut gpui::Context<Self>) {
         let write = params["op"] != "read";
         if write {
+            if self.waiting.is_some() {
+                return;
+            }
             self.busy = true;
             cx.notify();
         }
         cx.spawn(async move |this, cx| {
-            let result = gx_rpc(None, "/api/collab", params).await;
+            let mut result = gx_rpc(None, "/api/collab", params.clone()).await;
+            // A sensitive change waits for the owner's signed approval (Touch ID on this Mac, or
+            // the phone); gxserver makes it once approved, and the repeated call answers with it.
+            if let Some(approval) = result
+                .as_ref()
+                .err()
+                .and_then(|error| error.approval_required())
+            {
+                let id = approval["id"].as_str().unwrap_or_default().to_string();
+                let summary = approval["summary"].as_str().unwrap_or_default().to_string();
+                let _ = this.update(cx, |panel, cx| {
+                    panel.waiting = Some(summary);
+                    panel.error = None;
+                    cx.notify();
+                });
+                result = match wait_for_approval(id.clone()).await {
+                    Ok(()) => {
+                        let mut again = params;
+                        again["approvalId"] = json!(id);
+                        gx_rpc(None, "/api/collab", again).await
+                    }
+                    Err(message) => Err(crate::app::gx_store::GxRpcError::transport(
+                        "/api/collab",
+                        message,
+                    )),
+                };
+            }
             let _ = this.update(cx, |panel, cx| {
+                panel.waiting = None;
                 if write {
                     panel.busy = false;
                 }
                 match result {
                     Ok(value) => {
                         panel.error = None;
-                        // `share` answers with the one share; read again for the whole picture.
-                        if value.get("share").is_some() {
+                        // `share` answers with the one share, its link and its code; read again
+                        // for the whole picture.
+                        if let Some(share) = value.get("share") {
+                            if let (Some(id), Some(link), Some(code)) = (
+                                share["shareId"].as_str(),
+                                share["link"].as_str(),
+                                share["code"].as_str(),
+                            ) {
+                                REVEALED.with(|revealed| {
+                                    revealed.borrow_mut().insert(
+                                        id.to_string(),
+                                        (link.to_string(), code.to_string()),
+                                    )
+                                });
+                            }
                             panel.call(json!({"op": "read"}), cx);
                         } else {
                             panel.state = Some(value);
@@ -203,11 +288,7 @@ impl CollabSharePanel {
             "view" => "They can watch, but not write.",
             _ => "You approve each message they send.",
         };
-        let code = if config["requireCode"] == true {
-            " They also type a six-digit code you give them."
-        } else {
-            ""
-        };
+        let code = " They also type the eight-digit code that comes with it.";
         v_flex()
             .gap(px(10.0))
             .p(px(14.0))
@@ -240,9 +321,8 @@ impl CollabSharePanel {
         connected: bool,
         cx: &mut gpui::Context<Self>,
     ) -> gpui::Div {
-        let link = share["link"].as_str().unwrap_or_default().to_string();
-        let code = share["code"].as_str().unwrap_or_default().to_string();
         let share_id = share["shareId"].as_str().unwrap_or_default().to_string();
+        let (link, code) = revealed(&share_id).unwrap_or_default();
         let mode = share["mode"].as_str().unwrap_or("approve");
         let selected = MODES.iter().position(|(id, _)| *id == mode).unwrap_or(1);
         let mut palette = ModalPalette::resolve(chrome_uses_light_appearance(), None);
@@ -263,12 +343,25 @@ impl CollabSharePanel {
         );
         let link_copy = link.clone();
         let code_copy = code.clone();
+        let mut body = v_flex().gap(px(4.0)).px(px(14.0)).pt(px(10.0));
+        if link.is_empty() {
+            body = body.child(Self::row(
+                "Link",
+                resource_detail_text().child("Hidden: showing it again needs your approval"),
+                Some(
+                    panel_button("collab-share-show-link".into(), "Show", true)
+                        .on_click(cx.listener(|panel, _, _, cx| {
+                            let mut params = panel.ids();
+                            params["op"] = json!("share");
+                            panel.call(params, cx);
+                        }))
+                        .into_any_element(),
+                ),
+            ));
+        }
         let mut body =
-            v_flex()
-                .gap(px(4.0))
-                .px(px(14.0))
-                .pt(px(10.0))
-                .child(Self::row(
+            body.when(!link.is_empty(), |body| {
+                body.child(Self::row(
                     "Link",
                     resource_detail_text()
                         .text_color(chrome_ink().opacity(0.86))
@@ -288,7 +381,8 @@ impl CollabSharePanel {
                         }))
                         .into_any_element(),
                     ),
-                ));
+                ))
+            });
         if !code.is_empty() {
             body =
                 body.child(Self::row(
@@ -457,16 +551,34 @@ impl Render for CollabSharePanel {
                         }),
                 )
                 .child(body)
-                .when_some(self.error.clone(), |panel, error| {
+                .when_some(self.waiting.clone(), |panel, summary| {
                     panel.child(
                         div()
                             .px(px(14.0))
                             .pb(px(10.0))
                             .text_size(px(12.0))
-                            .text_color(chrome_color(0xe28b88, 0xb43d39))
-                            .child(error),
+                            .text_color(chrome_color(0xd5ae6b, 0x8a5c16))
+                            .child(format!(
+                                "Approve on this computer or your phone: {summary}."
+                            )),
                     )
-                }),
+                })
+                .when_some(
+                    self.error.clone().or_else(|| {
+                        // The relay's guest page failed this release's check: sharing waits.
+                        state["guestPage"]["message"].as_str().map(str::to_string)
+                    }),
+                    |panel, error| {
+                        panel.child(
+                            div()
+                                .px(px(14.0))
+                                .pb(px(10.0))
+                                .text_size(px(12.0))
+                                .text_color(chrome_color(0xe28b88, 0xb43d39))
+                                .child(error),
+                        )
+                    },
+                ),
         )
     }
 }

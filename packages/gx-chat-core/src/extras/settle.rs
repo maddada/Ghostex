@@ -89,9 +89,15 @@ fn settle_with_ids(
                 crate::extras::autopilot::settle_toggle(state, *request_id, answer.clone())
             {
                 effects.extend(more);
-            } else if let Some(more) =
-                crate::extras::collab::settle(state, *request_id, answer.clone())
-            {
+            } else if let Some(more) = crate::extras::collab::settle(
+                state,
+                *request_id,
+                answer.clone(),
+                match outcome.as_ref() {
+                    RpcOutcome::Err { code, .. } => code.as_deref(),
+                    RpcOutcome::Ok { .. } => None,
+                },
+            ) {
                 effects.extend(more);
             } else if let Some(more) = crate::extras::coordinator_intro::settle_hide(
                 &mut state.extras.panels,

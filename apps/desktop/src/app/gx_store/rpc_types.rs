@@ -19,6 +19,9 @@ pub(crate) struct GxRpcError {
     /// No answer came back at all (nothing listening, no reply, no auth token yet), as opposed to
     /// an answer that refused or failed the request.
     pub(crate) unanswered: bool,
+    /// The approval request of an `approvalRequired` (or `approvalDenied`) refusal: the call
+    /// needs the owner's signed approval (GitHub #495, `ai/security-tokens-and-approvals.md`).
+    pub(crate) approval: Option<Value>,
 }
 
 impl GxRpcError {
@@ -28,6 +31,7 @@ impl GxRpcError {
             message: message.into(),
             path: path.to_string(),
             unanswered: false,
+            approval: None,
         }
     }
 
@@ -58,6 +62,10 @@ impl GxRpcError {
                     .to_string(),
                 path: path.to_string(),
                 unanswered: false,
+                approval: envelope
+                    .get("approval")
+                    .filter(|value| value.is_object())
+                    .cloned(),
             });
         }
         if status.is_some_and(|status| !(200..300).contains(&status)) || envelope["ok"] != true {
@@ -68,6 +76,15 @@ impl GxRpcError {
             ));
         }
         Ok(envelope["result"].take())
+    }
+}
+
+impl GxRpcError {
+    /// The pending approval request when gxserver answered `approvalRequired`.
+    pub(crate) fn approval_required(&self) -> Option<&Value> {
+        (self.code.as_deref() == Some("approvalRequired"))
+            .then_some(self.approval.as_ref())
+            .flatten()
     }
 }
 

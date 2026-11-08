@@ -5,6 +5,9 @@
 //!
 //! CDXC:Collab 2026-11-07 DECISION:
 //! User (Q1610): "we need a page in settings called "Collab" and we need to call this feature Ghostex Collab": the global switch (off by default), the defaults a new share starts with (24-hour expiry, a code the guest types, approve each message) and the list of active shares.
+//!
+//! CDXC:Collab 2026-11-08 DECISION:
+//! User (#495): turning Ghostex Collab on needs the owner's signed approval (Touch ID, Windows Hello or the system password), a link lasts an hour by default and a day at most, a code is always asked, and Send is never a default (it is turned on per chat, with approval). The switch waits here for the approval ("Approve on this computer or your phone").
 //! SEE-ALSO: server/src/collab/config.rs (the choices and their defaults), packages/settings-catalog/src/pages/collab.rs (its search rows), apps/desktop/src/app/window/collab_share.rs (a chat's Share popover).
 use super::super::catalog::SettingOption;
 use super::super::fields::{
@@ -42,6 +45,8 @@ pub(crate) struct CollabTab {
     log: Vec<Value>,
     /// The Your name field's typing, saved once it pauses.
     name_edit: u64,
+    /// Turning Collab on, waiting for the owner's approval: gxserver's words for it.
+    waiting: Option<String>,
     was_active: bool,
     _refresh: Option<Task<()>>,
 }
@@ -78,14 +83,11 @@ fn row_id(id: String) -> &'static str {
 }
 
 fn ends(expires_at_ms: Option<i64>) -> String {
-    let Some(at) = expires_at_ms else {
-        return "never ends".to_string();
-    };
+    let at = expires_at_ms.unwrap_or_default();
     let left = (at - chrono::Utc::now().timestamp_millis()).max(0) / 60_000;
     match left {
         0..=59 => format!("ends in {left} min"),
-        60..=2879 => format!("ends in {} h", (left + 30) / 60),
-        _ => format!("ends in {} days", (left + 720) / 1440),
+        _ => format!("ends in {} h", (left + 30) / 60),
     }
 }
 
@@ -118,6 +120,7 @@ impl CollabTab {
             saving: 0,
             log: Vec::new(),
             name_edit: 0,
+            waiting: None,
             was_active: true,
             _refresh: Some(refresh),
         }
@@ -204,8 +207,64 @@ impl CollabTab {
         );
     }
 
+    /// Turns Collab on: gxserver asks for the owner's approval, and turns it on once approved.
+    fn turn_on(&mut self, cx: &mut Context<Self>) {
+        if self.waiting.is_some() {
+            return;
+        }
+        let params = json!({ "op": "set", "patch": { "enabled": true } });
+        self.saving += 1;
+        cx.notify();
+        cx.spawn(async move |page, cx| {
+            let path = "/api/collab";
+            let mut result = crate::app::gx_store::gx_rpc(None, path, params.clone()).await;
+            if let Some(approval) = result
+                .as_ref()
+                .err()
+                .and_then(|error| error.approval_required())
+            {
+                let id = approval["id"].as_str().unwrap_or_default().to_string();
+                let summary = approval["summary"].as_str().unwrap_or_default().to_string();
+                let _ = page.update(cx, |page, cx| {
+                    page.waiting = Some(summary);
+                    page.error = None;
+                    cx.notify();
+                });
+                result = match crate::app::window::collab_share::wait_for_approval(id.clone()).await
+                {
+                    Ok(()) => {
+                        let mut again = params;
+                        again["approvalId"] = json!(id);
+                        crate::app::gx_store::gx_rpc(None, path, again).await
+                    }
+                    Err(message) => Err(crate::app::gx_store::GxRpcError::transport(path, message)),
+                };
+            }
+            let _ = page.update(cx, |page, cx| {
+                page.saving = page.saving.saturating_sub(1);
+                page.waiting = None;
+                match result {
+                    Ok(answer) => {
+                        page.view = Some(answer);
+                        page.error = None;
+                    }
+                    Err(error) => {
+                        page.error = Some(error.to_string());
+                        page.reload(cx);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     /// Changes some choices: on screen at once, then saved.
     fn set(&mut self, patch: Value, cx: &mut Context<Self>) {
+        if patch["enabled"] == true {
+            self.turn_on(cx);
+            return;
+        }
         if let (Some(config), Some(fields)) = (
             self.view
                 .as_mut()
@@ -236,10 +295,16 @@ impl CollabTab {
         cx: &mut Context<Self>,
     ) -> Option<Div> {
         let on = self.config()["enabled"] == true;
-        let description = if on {
-            "On. Share is in each chat's header: it makes a link that opens the chat in any browser. Turning this off ends every share at once."
+        let waiting = self
+            .waiting
+            .as_ref()
+            .map(|summary| format!("Approve on this computer or your phone: {summary}."));
+        let description = if let Some(waiting) = waiting.as_deref() {
+            waiting
+        } else if on {
+            "On. Share is in each chat's header: it makes a link that opens the chat in any browser. Each share needs your approval. Turning this off ends every share at once."
         } else {
-            "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Their messages wait for you unless you choose otherwise."
+            "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write messages you approve. Turning it on asks for Touch ID (or your system's equivalent)."
         };
         let mut rows = vec![toggle_field_with(
             p,
@@ -287,22 +352,17 @@ impl CollabTab {
     fn new_shares_section(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> Option<Div> {
         let config = self.config();
         let mode = config["mode"].as_str().unwrap_or("approve").to_string();
-        let expiry = config["expiry"].as_str().unwrap_or("day").to_string();
+        let expiry = config["expiry"].as_str().unwrap_or("hour").to_string();
         let rows = vec![
             segmented_field(
                 p,
                 "collabMode",
                 RowSpec::new("Guest messages").description(match mode.as_str() {
-                    "send" => "A guest's message goes straight to the agent, labelled with their name.",
                     "view" => "Guests watch; their chat box is off.",
-                    _ => "A guest's message waits for you as a card: Send, Edit or Decline.",
+                    _ => "A guest's message waits for you as a card: Send (with your approval), Edit or Decline. Send straight to the agent is turned on per chat, in its Share popover.",
                 }),
                 None,
-                &[
-                    option("Send", "send"),
-                    option("Ask me", "approve"),
-                    option("View only", "view"),
-                ],
+                &[option("Ask me", "approve"), option("View only", "view")],
                 Some(mode.as_str()),
                 None,
                 |page: &mut Self, value, _, cx| page.set(json!({ "mode": value }), cx),
@@ -311,29 +371,18 @@ impl CollabTab {
             segmented_field(
                 p,
                 "collabExpiry",
-                RowSpec::new("Link ends after")
-                    .description("Stop sharing ends a link at once, whatever this says."),
+                RowSpec::new("Link ends after").description(
+                    "A day at most. Stop sharing, or deleting the chat, ends a link at once. Guests always type the eight-digit code that comes with the link.",
+                ),
                 None,
                 &[
                     option("1 hour", "hour"),
+                    option("4 hours", "fourHours"),
                     option("24 hours", "day"),
-                    option("7 days", "week"),
-                    option("Never", "never"),
                 ],
                 Some(expiry.as_str()),
                 None,
                 |page: &mut Self, value, _, cx| page.set(json!({ "expiry": value }), cx),
-                cx,
-            ),
-            toggle_field_with(
-                p,
-                "collabRequireCode",
-                RowSpec::new("Ask for a code").description(
-                    "Guests also type the six-digit code shown in the Share popover, so a link alone is not enough.",
-                ),
-                config["requireCode"] != false,
-                None,
-                |page: &mut Self, checked, _, cx| page.set(json!({ "requireCode": checked }), cx),
                 cx,
             ),
         ];
@@ -354,6 +403,15 @@ impl CollabTab {
             .cloned()
             .unwrap_or_default();
         let mut rows = Vec::new();
+        // The relay's guest page failed this release's check (server/src/collab/page_pin.rs):
+        // sharing waits until it passes.
+        if let Some(message) = self
+            .view
+            .as_ref()
+            .and_then(|view| view["guestPage"]["message"].as_str())
+        {
+            rows.push(static_note(p, message.to_string(), true).into_any_element());
+        }
         if shares.is_empty() {
             rows.push(static_note(p, "No chat is shared right now.", false).into_any_element());
         }

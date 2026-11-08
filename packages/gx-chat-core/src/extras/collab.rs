@@ -427,10 +427,14 @@ pub fn resolve(state: &mut ChatState, action: &UserAction, request_id: u64) -> V
 
 /// gxserver's answer to [`resolve`]: Edit puts the guest's words into the chat box; a refusal
 /// says why. `None` when `request_id` is not one of these.
+///
+/// CDXC:Collab 2026-11-08 DECISION:
+/// User (#495): sending a guest's message needs the owner's signed approval. Send answers `approvalRequired`; the request shows on the computer and the phone, and gxserver sends the message itself once it is approved, so the card stays until then and the chat only says where to approve.
 pub fn settle(
     state: &mut ChatState,
     request_id: u64,
     answer: Result<&Value, String>,
+    code: Option<&str>,
 ) -> Option<Vec<Effect>> {
     if state.extras.panels.collab_typing_request == Some(request_id) {
         state.extras.panels.collab_typing_request = None;
@@ -453,6 +457,10 @@ pub fn settle(
             }],
             None => Vec::new(),
         },
+        Err(_) if code == Some("approvalRequired") => vec![Effect::Toast {
+            level: "info".to_string(),
+            message: "Approve sending it on this computer or your phone.".to_string(),
+        }],
         Err(message) => vec![Effect::Toast {
             level: "error".to_string(),
             message: if message.is_empty() {
@@ -498,6 +506,39 @@ pub fn typing(state: &mut ChatState, text_now: &str, context: &ChatContext) -> V
 #[cfg(test)]
 mod held_answers_tests {
     use super::*;
+
+    /// Send on a held message waits for the owner's approval: the chat says where, not "failed".
+    #[test]
+    fn an_approval_wait_is_not_an_error() {
+        let mut state = ChatState::default();
+        state
+            .extras
+            .panels
+            .collab_requests
+            .push((7, "held_1".to_string()));
+        let effects = settle(
+            &mut state,
+            7,
+            Err("Waiting for your approval".to_string()),
+            Some("approvalRequired"),
+        )
+        .expect("ours");
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::Toast { level, .. }] if level == "info"
+        ));
+        state
+            .extras
+            .panels
+            .collab_requests
+            .push((8, "held_2".to_string()));
+        let effects =
+            settle(&mut state, 8, Err("Nope".to_string()), Some("sendFailed")).expect("ours");
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::Toast { level, .. }] if level == "error"
+        ));
+    }
 
     const ANSWERS: &str = "<ghostex-page-answers page=\"0123456789abcdef0123456789abcdef\" title=\"Receipt layout\">\n{\n  \"Which layout?\": \"compact\"\n}\n</ghostex-page-answers>";
 

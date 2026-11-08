@@ -231,7 +231,7 @@ pub(crate) async fn rpc_envelope(
     };
     if envelope["ok"] != true {
         return Err(
-            json!({"code": envelope["error"], "message": envelope["message"], "endpoint": path}),
+            json!({"code": envelope["error"], "message": envelope["message"], "endpoint": path, "approval": envelope["approval"]}),
         );
     }
     Ok(envelope["result"].take())
