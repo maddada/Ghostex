@@ -28,6 +28,9 @@ const WAKE_GAP_MS: i64 = 60_000;
 const WAKE_STALE_MS: i64 = 20 * 60_000;
 /// `wake`'s answer while the supervisor is still on an earlier wake: no failure.
 const BUSY: &str = "busy";
+/// How long Autopilot waits before trying again after the 1st, 2nd, … failed start or wake; the
+/// last one repeats.
+const RETRY_AFTER_MS: &[i64] = &[10_000, 30_000, 60_000, 5 * 60_000, 15 * 60_000];
 
 /// One thing that needs judgment.
 #[derive(Clone, Debug)]
@@ -51,6 +54,11 @@ struct Judge {
     waking: bool,
     /// The last failure to start or wake it, logged once until it changes or a wake gets through.
     failure: Option<String>,
+    /// Failed starts or wakes in a row, and when the next try may go.
+    failures: usize,
+    retry_at_ms: i64,
+    /// The settings and accounts the failures happened under: a change tries again at once.
+    setup: String,
 }
 
 fn judge() -> &'static Mutex<Judge> {
@@ -225,7 +233,17 @@ pub(super) async fn maybe_wake(state: Arc<AppState>) {
         if crate::network_status::is_offline() {
             return;
         }
-        if judge.queue.is_empty() || judge.waking || now - judge.last_wake_ms < WAKE_GAP_MS {
+        let setup = setup_key(&config);
+        if judge.setup != setup {
+            judge.setup = setup;
+            judge.failures = 0;
+            judge.retry_at_ms = 0;
+        }
+        if judge.queue.is_empty()
+            || judge.waking
+            || now - judge.last_wake_ms < WAKE_GAP_MS
+            || now < judge.retry_at_ms
+        {
             return;
         }
         judge.waking = true;
@@ -241,6 +259,8 @@ pub(super) async fn maybe_wake(state: Arc<AppState>) {
             judge.last_wake_ms = now;
             judge.wakes = n;
             judge.failure = None;
+            judge.failures = 0;
+            judge.retry_at_ms = 0;
             for item in &items {
                 judge.handed.insert((item.key.clone(), item.why.clone()));
             }
@@ -249,9 +269,14 @@ pub(super) async fn maybe_wake(state: Arc<AppState>) {
         Err(error) => {
             // A start or a wake that failed (no account with room, a model it can't launch, a send
             // that didn't land) shows in both logs, once per failure, so it isn't silent.
-            if error != BUSY && judge.failure.as_deref() != Some(error.as_str()) {
-                judge.failure = Some(error.clone());
-                log_failure(&state, &items, &error, now);
+            if error != BUSY {
+                let delay = RETRY_AFTER_MS[judge.failures.min(RETRY_AFTER_MS.len() - 1)];
+                judge.failures += 1;
+                judge.retry_at_ms = now + delay;
+                if judge.failure.as_deref() != Some(error.as_str()) {
+                    judge.failure = Some(error.clone());
+                    log_failure(&state, &items, &error, delay, now);
+                }
             }
             let mut items = items;
             items.append(&mut judge.queue);
@@ -301,8 +326,27 @@ async fn wake(
     Ok(n)
 }
 
+/// What a failed start or wake depends on: the Autopilot settings and whether each agent has an
+/// account with room (a sign-in, a limit reset or a switch of model).
+fn setup_key(config: &AutopilotConfig) -> String {
+    format!(
+        "{}|{}|{}",
+        serde_json::to_string(config).unwrap_or_default(),
+        crate::accounts::autopilot::agent_has_room("claude"),
+        crate::accounts::autopilot::agent_has_room("codex"),
+    )
+}
+
+fn retry_words(ms: i64) -> String {
+    match ms / 1000 {
+        seconds if seconds < 60 => format!("{seconds} seconds"),
+        60 => "a minute".to_string(),
+        seconds => format!("{} minutes", seconds / 60),
+    }
+}
+
 /// Logs a supervisor that couldn't start or take a wake, to gxserver's log and Autopilot's.
-fn log_failure(state: &AppState, items: &[JudgmentItem], error: &str, now: i64) {
+fn log_failure(state: &AppState, items: &[JudgmentItem], error: &str, delay: i64, now: i64) {
     let _ = state.logger.log(GxserverLogInput {
         level: LogLevel::Warn,
         event: "autopilotSupervisorFailed".to_string(),
@@ -311,7 +355,7 @@ fn log_failure(state: &AppState, items: &[JudgmentItem], error: &str, now: i64) 
         client: None,
         duration_ms: None,
         error: Some(error.to_string()),
-        details: Some(json!({ "waiting": items.len() })),
+        details: Some(json!({ "waiting": items.len(), "retryInMs": delay })),
     });
     let titles = items
         .iter()
@@ -341,8 +385,9 @@ fn log_failure(state: &AppState, items: &[JudgmentItem], error: &str, now: i64) 
                 }
             ),
             did: format!(
-                "{}. It tries again on the next look.",
-                error.trim_end_matches('.')
+                "{}. It tries again in {}, then less often while it keeps failing.",
+                error.trim_end_matches('.'),
+                retry_words(delay)
             ),
             rule: "supervisor".to_string(),
             outcome: autopilot::Outcome::Failed,
