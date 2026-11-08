@@ -9322,7 +9322,7 @@
     {
       "key": "collabEnabled",
       "title": "Ghostex Collab",
-      "subtitle": "Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Off by default; while it is off nothing can be shared and every link stops working. Share is in each chat's header.",
+      "subtitle": "Collab is installed on this computer (Settings > Extensions installs it, with Touch ID or your system's equivalent; this page shows only once it is). Share is in each chat's header, and each share asks for your approval. Uninstall ends every share at once and removes Collab from this computer; it never asks.",
       "tab": "collab",
       "tabTitle": "Collab",
       "section": "switch",
@@ -9355,7 +9355,7 @@
     {
       "key": "collabExpiry",
       "title": "Link ends after",
-      "subtitle": "1 hour, 24 hours (the default), 7 days, or never. Stop sharing ends a link at once.",
+      "subtitle": "1 hour (the default), 4 hours, 24 hours, or Until I stop it (the link stays live until you stop sharing). Stop sharing, or deleting the chat, ends a link at once. The Share popover's chip changes it too.",
       "tab": "collab",
       "tabTitle": "Collab",
       "section": "newShares",
@@ -11350,6 +11350,18 @@
       "type": "boolean",
       "default": false,
       "agentWritable": true
+    },
+    {
+      "key": "chiefHidden",
+      "title": "Turn off Chief",
+      "subtitle": "Turn off Chief everywhere: its row under the Spaces bar, here and in the phone app. Its agent stops and loses its control over your other agents; its chat and memory are kept for when you turn it back on. On by default. Only you can change this, not an agent.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Built-in",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": false
     },
     {
       "key": "store",

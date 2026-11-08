@@ -359,12 +359,12 @@ How to use this file:
 
 ### Ghostex Collab
 
-- **Ghostex Collab** `collabEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Share a chat through a link that opens it in any browser, with no app or account: the person you send it to can follow the chat live and write in it. Off by default; while it is off nothing can be shared and every link stops working. Share is in each chat's header.
+- **Ghostex Collab** `collabEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Collab is installed on this computer (Settings > Extensions installs it, with Touch ID or your system's equivalent; this page shows only once it is). Share is in each chat's header, and each share asks for your approval. Uninstall ends every share at once and removes Collab from this computer; it never asks.
 - **Your name** `collabOwnerName` (Settings UI row without a settings key; use `ghostex settings open`): The name guests see for you ("Shared by …", "Waiting for …"). Empty uses this computer's user name.
 ### New shares start with
 
 - **Guest messages** `collabMode` (Settings UI row without a settings key; use `ghostex settings open`): What a guest's message does: Ask me (you approve each one with Send, Edit or Decline), Send (straight to the agent, labelled with their name) or View only. Ask me by default; change it for one chat in its Share popover.
-- **Link ends after** `collabExpiry` (Settings UI row without a settings key; use `ghostex settings open`): 1 hour, 24 hours (the default), 7 days, or never. Stop sharing ends a link at once.
+- **Link ends after** `collabExpiry` (Settings UI row without a settings key; use `ghostex settings open`): 1 hour (the default), 4 hours, 24 hours, or Until I stop it (the link stays live until you stop sharing). Stop sharing, or deleting the chat, ends a link at once. The Share popover's chip changes it too.
 - **Ask for a code** `collabRequireCode` (Settings UI row without a settings key; use `ghostex settings open`): Guests also type the six-digit code shown in the Share popover, so a link alone is not enough. On by default.
 ### Shared now
 
@@ -542,6 +542,7 @@ How to use this file:
 - **Turn off OS Integration** `osIntegrationHidden` (boolean, default false): Leave the OS Integration page out of Settings. On by default, and shown only while Enable Experimental Features is on.
 - **Turn off Debugging** `debuggingHidden` (boolean, default false): Leave the Debugging page out of Settings. On by default.
 - **Turn off the voice agent** `voiceAgentHidden` (boolean, default false): Turn off the voice agent everywhere: the headset at the top of the window and its arrow menu, voice calls about one session, the call rows on Settings > Voice and the voice agent hotkeys, on this computer and in the phone app connected to it. A call that is running ends. Dictate keeps working, and the xAI and OpenAI keys stay on Settings > Voice. On by default; your voice settings are kept.
+- **Turn off Chief** `chiefHidden` (boolean, default false) [not agent-writable]: Turn off Chief everywhere: its row under the Spaces bar, here and in the phone app. Its agent stops and loses its control over your other agents; its chat and memory are kept for when you turn it back on. On by default. Only you can change this, not an agent.
 ### Get more
 
 - **Get more extensions** `store` (Settings UI row without a settings key; use `ghostex settings open`): Browse audited extensions, install them, and manage what is already installed.
