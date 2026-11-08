@@ -70,6 +70,14 @@ keep their own endpoint allow-lists).
 | `OwnerSettings` | no | no | no | no |
 | `RequestSensitiveAction` (may ask) | yes | yes | yes | yes |
 | `DecideApprovals` (list, approve, deny, approver keys) | no | no | no | no |
+| `OwnerSecrets` (answer a secret request, have gxserver read a secret provider reference) | no | no | no | no |
+
+Secret requests are answered only by the owner: `/api/answerSecretRequest` and
+`/api/checkSecretReference` need `OwnerSecrets`; `/api/setVoiceAgentKey` needs it when the key
+is an `op://` reference, and `/api/cloudBoxes` `cloudKit` (the provider keys and box logins the
+phone keeps) always (`security_gates.rs`). The answer handler checks it again before it reads
+a reference. Agents, the token file (so also the GPUI web build), connected computers, guests and
+extensions are refused; there is no approval to ask for.
 
 `Principal::skips_approval(action)` is the one rule for which sensitive actions a caller skips:
 `AnswerOtherSessionPrompt` with `AnswerAnyPrompt`, `TypeIntoOtherSession` and

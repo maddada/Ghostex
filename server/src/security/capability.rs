@@ -88,6 +88,9 @@ pub enum Capability {
     RequestSensitiveAction,
     /// See the pending approval requests, deny them, and post signed approvals.
     DecideApprovals,
+    /// Answer a secret request and have gxserver read a secret provider reference (1Password)
+    /// for the caller. The owner's devices only: a secret is only ever given by the user.
+    OwnerSecrets,
 }
 
 impl Capability {
@@ -103,6 +106,7 @@ impl Capability {
         Self::SteerAnySession,
         Self::RequestSensitiveAction,
         Self::DecideApprovals,
+        Self::OwnerSecrets,
     ];
 }
 
@@ -140,7 +144,7 @@ impl Principal {
                 }
                 ManageOwnThreads => matches!(role, SessionRole::Coordinator | SessionRole::Head),
                 AnswerAnyPrompt | SteerAnySession => *role == SessionRole::Head,
-                ManageAnyThreads | OwnerSettings | DecideApprovals => false,
+                ManageAnyThreads | OwnerSettings | DecideApprovals | OwnerSecrets => false,
             },
             // The design's "CLI in your own terminal" column: thread management stays, the rest
             // is an agent's.
@@ -256,6 +260,11 @@ pub fn route_access(path: &str) -> RouteAccess {
         | super::OWNER_CHALLENGE_ENDPOINT
         | super::OWNER_SESSION_ENDPOINT => RouteAccess::Needs(Capability::RequestSensitiveAction),
         super::SECURITY_STATUS_ENDPOINT => RouteAccess::Needs(Capability::OwnSession),
+        // Answering a secret request may read a 1Password reference, and checking a reference
+        // reads it; `/api/setVoiceAgentKey` with a reference is refused in security_gates.rs.
+        "/api/answerSecretRequest" | "/api/checkSecretReference" => {
+            RouteAccess::Needs(Capability::OwnerSecrets)
+        }
         // `/api/registerConnectedComputer` and `/api/issueComputerGrant` ask in
         // server/security_gates.rs, once per computer for 30 days, not on every renewal, and
         // never with Agent access off.

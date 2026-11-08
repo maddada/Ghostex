@@ -870,7 +870,9 @@ Never print, echo, copy or commit the value. The user may answer with a 1Passwor
 
 providers: the 1Password accounts Ghostex reads saved keys and tokens from (Settings >
 Secrets). They need the 1Password CLI (op) signed in on this computer. check reads one
-reference (1Password may ask to unlock) and says only whether it worked."#
+reference (1Password may ask to unlock) and says only whether it worked; only the user can
+run it, from Settings > Secrets, so the CLI is refused. Only the user answers a secret
+request, from Ghostex on their computer or phone."#
         .to_string()
 }
 

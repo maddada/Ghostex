@@ -19,10 +19,11 @@ pub(super) async fn route_secrets_http(
         endpoint,
         request_id,
         body_json,
+        caller,
         ..
     } = request;
     Ok(if requests {
-        handle_secret_request_http(&state, endpoint.path, request_id, &body_json).await
+        handle_secret_request_http(&state, &caller, endpoint.path, request_id, &body_json).await
     } else {
         handle_secret_providers_http(&state, endpoint.path, request_id, &body_json).await
     })

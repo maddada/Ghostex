@@ -61,15 +61,18 @@ pub(crate) fn gate(
     if !peer {
         if let RouteAccess::Needs(capability) = security::route_access(endpoint_path) {
             if !caller.has(capability) {
-                return Some(forbidden(
-                    endpoint_path,
-                    request_id,
-                    "Only your own computer or phone can do this.",
-                ));
+                let message = match capability {
+                    security::Capability::OwnerSecrets => OWNER_SECRETS_MESSAGE,
+                    _ => "Only your own computer or phone can do this.",
+                };
+                return Some(forbidden(endpoint_path, request_id, message));
             }
         }
     }
     let params = read_domain_rpc_params(body).ok()?;
+    if owner_secret_refused(caller, endpoint_path, &params) {
+        return Some(forbidden(endpoint_path, request_id, OWNER_SECRETS_MESSAGE));
+    }
     if chief_turned_off_for(state, caller, endpoint_path, &params) {
         return Some(routed_json(
             Some(endpoint_path.to_string()),
@@ -215,6 +218,32 @@ fn record_head_steering(caller: &Principal, request: &ActionRequest) {
         crate::audit::Outcome::Allowed,
         None,
     );
+}
+
+/// Why a caller without `Capability::OwnerSecrets` is refused.
+const OWNER_SECRETS_MESSAGE: &str =
+    "Only you can give a secret or use your saved keys and 1Password, from Ghostex on your computer or phone.";
+
+/*
+CDXC:Secrets 2026-11-08 DECISION:
+Secret requests are answered only by the owner (GitHub #495 model): only the owner's devices hold `Capability::OwnerSecrets`, so only they answer a secret request, have gxserver read a secret provider reference, or get stored keys back. `/api/answerSecretRequest` and `/api/checkSecretReference` need it in `route_access`; here, `/api/setVoiceAgentKey` needs it when the key is an `op://` reference, and `/api/cloudBoxes` `cloudKit` (the provider keys and box logins a paired phone keeps) always. Agents, the token file, connected computers, guests and extensions are refused.
+SEE-ALSO: server/src/secret_requests/api.rs (`answer` checks the caller again before reading a reference), server/src/cloud_boxes/kit.rs.
+*/
+/// Whether this call would read a secret provider reference, or return stored keys, for a
+/// caller that may not.
+fn owner_secret_refused(
+    caller: &Principal,
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+) -> bool {
+    let owner_only = match endpoint_path {
+        "/api/setVoiceAgentKey" => {
+            text(params, "apiKey").is_some_and(|key| key.starts_with("op://"))
+        }
+        "/api/cloudBoxes" => text(params, "action") == Some("cloudKit"),
+        _ => false,
+    };
+    owner_only && !caller.has(security::Capability::OwnerSecrets)
 }
 
 fn forbidden(endpoint_path: &str, request_id: &str, message: &str) -> RoutedResponse {

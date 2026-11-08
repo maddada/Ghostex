@@ -14,6 +14,7 @@ use serde_json::{json, Map, Value};
 use super::store::{self, NewSecretRequest, SecretAnswer, SecretRequestError, SecretRequestStatus};
 use crate::domain::{read_domain_rpc_params, DomainStateError};
 use crate::protocol::rpc_success;
+use crate::security::{Capability, Principal};
 use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
 
 pub(crate) const SECRET_REQUEST_ENDPOINTS: &[&str] = &[
@@ -170,10 +171,22 @@ fn cancel(state: &Arc<AppState>, params: &Map<String, Value>) -> Result<Value, D
 
 /// The user's answer. The value is only ever moved: into the private file, or (for a 1Password
 /// reference) into 1Password's read and then the file. Errors never repeat it.
+///
+/// Only the owner's devices answer (`Capability::OwnerSecrets`); the route gate refuses everyone
+/// else already, and this check keeps a reference from ever being read for them.
 async fn answer(
     state: &Arc<AppState>,
+    caller: &Principal,
     params: Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
+    if !caller.has(Capability::OwnerSecrets) {
+        return Err(DomainStateError {
+            code: "forbidden",
+            message:
+                "Only you can answer a secret request, from Ghostex on your computer or phone."
+                    .to_string(),
+        });
+    }
     let project_id = required(&params, "projectId")?;
     let session_id = required(&params, "sessionId")?;
     let id = required(&params, "requestId")?;
@@ -221,6 +234,7 @@ async fn answer(
 
 pub(crate) async fn handle_secret_request_http(
     state: &Arc<AppState>,
+    caller: &Principal,
     endpoint_path: String,
     request_id: String,
     body: &Value,
@@ -233,7 +247,7 @@ pub(crate) async fn handle_secret_request_http(
         "/api/createSecretRequest" => create(state, &params),
         "/api/waitSecretRequest" => wait(state, params).await,
         "/api/cancelSecretRequest" => cancel(state, &params),
-        "/api/answerSecretRequest" => answer(state, params).await,
+        "/api/answerSecretRequest" => answer(state, caller, params).await,
         _ => Err(DomainStateError::not_found(
             "Unknown secret request endpoint.",
         )),
