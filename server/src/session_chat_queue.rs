@@ -1425,6 +1425,25 @@ pub(crate) fn hold_sending_prompt_for_restart(
 /// Turns the queued row `prompt_id` into a startup send, so it wakes its sleeping session and
 /// waits for the woken agent's input box (CDXC:SessionChat 2026-10-29 in session_chat_send_wake.rs).
 /// False when the row is not waiting (gone, being delivered, or already Not sent).
+/// Deletes a queued row the scheduler found no longer worth sending (a thread report that went
+/// stale while it waited, coordinators/stale_report.rs). False when the row is gone or going out.
+pub(crate) fn drop_queued_prompt(
+    paths: &GxserverPaths,
+    project_id: &str,
+    session_id: &str,
+    prompt_id: &str,
+) -> bool {
+    let dropped = open_gxserver_database(paths).is_ok_and(|db| {
+        read_prompt(&db, project_id, session_id, prompt_id)
+            .is_ok_and(|prompt| prompt.state == "queued")
+            && remove_prompt(&db, project_id, session_id, prompt_id).is_ok()
+    });
+    if dropped {
+        crate::session_chat_queue_attachments::remove(paths, prompt_id);
+    }
+    dropped
+}
+
 pub(crate) fn hold_queued_prompt_for_wake(
     paths: &GxserverPaths,
     project_id: &str,

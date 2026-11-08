@@ -81,6 +81,8 @@ struct SessionQueueGate {
     transcript: SessionChatTranscriptGate,
     /// The head row held for a missing input box, since when, and whether that was logged.
     input_box_hold: Option<InputBoxHold>,
+    /// The head row that is a thread report, and when it may be checked for staleness again.
+    stale_report_check: Option<(String, DateTime<Utc>)>,
     /// How long the head row has waited and why, for the words it shows and the watchdog.
     head_wait: Option<HeadWait>,
     /// A blocking notice seen for the head row: its title and when a fresh read was asked for.
@@ -152,12 +154,24 @@ enum Assessment {
     },
     /// A sleeping session's head row becomes a startup send and the session is woken.
     HoldAndWake(String),
+    /// The head row is a thread report that no longer holds (coordinators/stale_report.rs): it
+    /// is dropped.
+    DropStale {
+        prompt_id: String,
+        reason: String,
+    },
     Hold {
         prompt_id: String,
         startup_send: bool,
         reason: WaitReason,
     },
 }
+
+/// A queued thread report is checked for staleness once it has waited this long: the coordinator
+/// runtime checked it right before sending it.
+const STALE_REPORT_CHECK_AFTER_MS: i64 = 60_000;
+/// How often a waiting thread report is checked again (each check may read a transcript tail).
+const STALE_REPORT_CHECK_EVERY_MS: i64 = 30_000;
 
 /// How long a head row waits on a missing input box before the wait is logged with its screen.
 const INPUT_BOX_HOLD_LOG_AFTER_MS: i64 = 60_000;
@@ -471,6 +485,7 @@ impl SessionChatQueueRuntime {
         let mut to_wake: Vec<(String, String, String)> = Vec::new();
         let mut to_publish: Vec<(String, String)> = Vec::new();
         let mut to_notify: Vec<(String, String, StuckReport)> = Vec::new();
+        let mut stale: Vec<(String, String, String, String)> = Vec::new();
 
         for (project_id, session_id) in targets {
             let key = session_queue_key(&project_id, &session_id);
@@ -490,7 +505,9 @@ impl SessionChatQueueRuntime {
                 Assessment::HoldAndWake(prompt_id) => {
                     Some(Some((prompt_id.as_str(), WaitReason::Asleep)))
                 }
-                Assessment::Skip | Assessment::Fail { .. } => Some(None),
+                Assessment::Skip | Assessment::Fail { .. } | Assessment::DropStale { .. } => {
+                    Some(None)
+                }
                 // A delivery in flight or about to start may put the row back (a held send), so
                 // its wait clock, the ladder's clock and its words stand until the row is gone.
                 Assessment::Deliver(_) | Assessment::Delivering => None,
@@ -514,6 +531,9 @@ impl SessionChatQueueRuntime {
                 Assessment::Deliver(delivery) => ready.push(delivery),
                 Assessment::Fail { prompt_id, reason } => {
                     blocked.push((project_id, session_id, prompt_id, reason));
+                }
+                Assessment::DropStale { prompt_id, reason } => {
+                    stale.push((project_id, session_id, prompt_id, reason));
                 }
                 Assessment::HoldAndWake(prompt_id) => {
                     to_wake.push((project_id, session_id, prompt_id));
@@ -567,6 +587,24 @@ impl SessionChatQueueRuntime {
                 if let Some(prompt) = snapshot.queue.iter().find(|prompt| prompt.id == prompt_id) {
                     self.notify_sender(&project_id, &session_id, &prompt.text, &reason);
                 }
+            }
+            self.reset_gate(&session_queue_key(&project_id, &session_id));
+        }
+        for (project_id, session_id, prompt_id, reason) in stale {
+            if crate::session_chat_queue::drop_queued_prompt(
+                &self.paths,
+                &project_id,
+                &session_id,
+                &prompt_id,
+            ) {
+                crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
+                    "sessionChatQueueDroppedStaleReport",
+                    &project_id,
+                    &session_id,
+                    &reason,
+                    &[],
+                );
+                (self.publisher_factory)(&project_id, &session_id)();
             }
             self.reset_gate(&session_queue_key(&project_id, &session_id));
         }
@@ -701,6 +739,12 @@ impl SessionChatQueueRuntime {
             self.reset_gate(key);
             return Assessment::Skip;
         };
+        if let Some(reason) = self.stale_report(db, repository, key, head, now) {
+            return Assessment::DropStale {
+                prompt_id: head.id.clone(),
+                reason,
+            };
+        }
         // CDXC:SessionChat 2026-09-25 WHY:
         // A send held for a session that was asleep or still starting (session_chat_send_wake.rs) waits exactly like a new chat's first message: nobody may be viewing the session, so the scheduler refreshes the screen itself and delivers the moment the input box appears. Waiting for the cached reading made a woken session take 40 seconds.
         let draft = crate::agents::session_is_draft(&session);
@@ -1115,6 +1159,65 @@ impl SessionChatQueueRuntime {
             );
         }
         waited
+    }
+
+    /// Why the head row, a "not moving" or "idle" thread report that has waited past
+    /// [`STALE_REPORT_CHECK_AFTER_MS`], no longer holds for its thread, checked at most every
+    /// [`STALE_REPORT_CHECK_EVERY_MS`] (CDXC:Coordinators 2026-11-08 in
+    /// coordinators/stale_report.rs). Blocking: it may read the thread's transcript.
+    fn stale_report(
+        &self,
+        db: &rusqlite::Connection,
+        repository: &DomainRepository<'_>,
+        key: &str,
+        head: &crate::session_chat_queue::SessionChatQueuedPrompt,
+        now: DateTime<Utc>,
+    ) -> Option<String> {
+        let created = chrono::DateTime::parse_from_rfc3339(&head.created_at).ok()?;
+        if now.signed_duration_since(created).num_milliseconds() < STALE_REPORT_CHECK_AFTER_MS {
+            return None;
+        }
+        let due = self.gates.lock().ok().is_some_and(|mut gates| {
+            let check = &mut gates.entry(key.to_string()).or_default().stale_report_check;
+            let due = check
+                .as_ref()
+                .is_none_or(|(prompt_id, next)| prompt_id != &head.id || now >= *next);
+            if due {
+                *check = Some((
+                    head.id.clone(),
+                    now + chrono::Duration::milliseconds(STALE_REPORT_CHECK_EVERY_MS),
+                ));
+            }
+            due
+        });
+        if !due {
+            return None;
+        }
+        let report = crate::coordinators::parse_quiet_report(&head.text)?;
+        let (project_id, session_id) =
+            crate::coordinators::local_thread_of(&report.thread_ref, &self.server_id)?;
+        let thread = crate::coordinators::read_thread(db, &project_id, &session_id)
+            .ok()
+            .flatten();
+        let session = repository
+            .get_session(&project_id, &session_id)
+            .ok()
+            .flatten();
+        let why = crate::coordinators::quiet_report_stale_reason(
+            &report,
+            thread.as_ref(),
+            session.as_ref(),
+            &crate::presentation::now_iso(),
+        )?;
+        Some(format!(
+            "Dropped a queued {} report about thread {} that waited since {}: {why}.",
+            match report.kind {
+                crate::coordinators::QuietReportKind::Stalled => "\"not moving\"",
+                crate::coordinators::QuietReportKind::Idle => "\"idle\"",
+            },
+            report.thread_ref,
+            head.created_at,
+        ))
     }
 
     /// Whether the reload step is due for this held row now: not settled yet, and past the wait

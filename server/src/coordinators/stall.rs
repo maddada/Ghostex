@@ -545,8 +545,34 @@ pub fn stall_last_row(
     if transcript_activity_at(session, &mut path) > transcript_seen {
         return None;
     }
-    let agent = super::delivery::resolve_thread_transcript(session, &mut path);
-    let messages = agent
+    let messages = transcript_tail(session, &mut path);
+    if moved_after(&messages, quiet_since) {
+        return None;
+    }
+    Some(messages.iter().rev().find_map(describe_row))
+}
+
+/// BLOCKING. Whether the thread did anything after `since` (ms): its agent was launched, resumed
+/// or reloaded since, or its transcript has a row of its own (not Ghostex's nudge) newer than it.
+/// A late "not moving" or "idle" report names a quiet time that no longer holds then
+/// (stale_report.rs).
+pub(super) fn moved_since(session: &Value, since: i64) -> bool {
+    agent_launched_at(session).is_some_and(|launched| launched > since)
+        || moved_after(&transcript_tail(session, &mut None), since)
+}
+
+fn moved_after(messages: &[SessionChatMessage], since: i64) -> bool {
+    messages
+        .iter()
+        .filter(|message| !is_ghostex_nudge(message))
+        .filter_map(|message| message.timestamp)
+        .any(|at| at > since)
+}
+
+/// BLOCKING. The newest rows of the thread's transcript, empty when it cannot be read.
+fn transcript_tail(session: &Value, path: &mut Option<PathBuf>) -> Vec<SessionChatMessage> {
+    let agent = super::delivery::resolve_thread_transcript(session, path);
+    agent
         .zip(path.as_ref())
         .and_then(|(agent, path)| {
             crate::session_chat_tail::read_session_chat_tail_page(
@@ -561,16 +587,7 @@ pub fn stall_last_row(
             SessionChatTailPage::Page { messages, .. } => Some(messages),
             SessionChatTailPage::NotFound => None,
         })
-        .unwrap_or_default();
-    let moved = messages
-        .iter()
-        .filter(|message| !is_ghostex_nudge(message))
-        .filter_map(|message| message.timestamp)
-        .any(|at| at > quiet_since);
-    if moved {
-        return None;
-    }
-    Some(messages.iter().rev().find_map(describe_row))
+        .unwrap_or_default()
 }
 
 /// A message Ghostex typed into the thread itself (a stall or idle nudge).
