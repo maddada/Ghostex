@@ -7,16 +7,19 @@
 //! User (Q1734, Q1735, Q1740, Q1743, Q1747): "own row but under spaces bar please (stays static while switching space)", with the Ghostex flower; "ask which agent on first open"; the menu's Close is "Disable Extension", which turns the extension off (hides the row, stops the agent, keeps its chat and memory); with computers combined "this computer's row plus a count", whose "+N" unfolds the other computers' Chief rows the way a coordinator's threads fold.
 //! SEE-ALSO: packages/gx-core/src/sidebar_view/chief.rs (which rows), server/src/chief/ (the session and `/api/chief`).
 
+use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, InteractiveElement, IntoElement, MouseButton, ParentElement,
-    StatefulInteractiveElement, Styled, px,
+    StatefulInteractiveElement, Styled, div, px,
 };
-use gpui_component::{ElementExt as _, v_flex};
+use gpui_component::ElementExt as _;
 use serde_json::{Value, json};
 
 use super::actions::NativeSidebarAction;
 use super::appearance::SidebarAppearance;
-use super::chief_row_view::{ChiefRowColors, chief_main_row, chief_other_row, chief_others_chip};
+use super::chief_row_view::{
+    ChiefFold, ChiefRowColors, chief_block, chief_header_row, chief_other_row,
+};
 use super::model::{NativeSidebarChief, NativeSidebarSnapshot};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
@@ -89,7 +92,7 @@ impl GhostexGpuiApp {
         }
         let scale = appearance.scale;
         // The selected computer's Chief is the main row (this computer's with computers combined,
-        // the tab's own with Separate by machine); the others fold under "+N".
+        // the tab's own with Separate by machine); the others fold under it.
         let selected = snapshot.selected_machine_id.as_str();
         let local = snapshot
             .chiefs
@@ -101,38 +104,53 @@ impl GhostexGpuiApp {
             .filter(|chief| chief.machine_id != selected)
             .collect();
         let expanded = self.native_sidebar.chief_others_expanded && !others.is_empty();
+        let fold = match (others.is_empty(), expanded) {
+            (true, _) => ChiefFold::Single,
+            (false, false) => ChiefFold::Folded,
+            (false, true) => ChiefFold::Unfolded,
+        };
         let owner = self.native_sidebar.chief_row_bounds.clone();
         let menu_owner = owner.clone();
-        let (selected_fill, selected_outline) =
-            super::selectors::space_tile_selected_colors(appearance);
         let colors = ChiefRowColors {
-            foreground: appearance.foreground,
             muted: appearance.muted,
-            icon: appearance.chrome_icon,
-            label: appearance.chrome_label,
-            hover: appearance.hover,
-            selected_fill,
-            selected_outline,
+            hover: appearance.session_hover,
+            selected_fill: appearance.selected,
         };
-        let chip = (!others.is_empty()).then(|| {
-            chief_others_chip(scale, colors, others.len(), expanded)
-                .on_click(cx.listener(|app, _, _, cx| {
-                    cx.stop_propagation();
-                    app.native_sidebar.chief_others_expanded =
-                        !app.native_sidebar.chief_others_expanded;
-                    cx.notify();
-                }))
-                .into_any_element()
-        });
-        let main = chief_main_row(
+        let focused = local.is_some_and(|chief| chief.is_focused);
+        let main = chief_header_row(
             scale,
             colors,
-            local.is_some_and(|chief| chief.is_focused),
+            fold,
+            focused,
             local.is_none(),
-            chip,
+            focused.then(|| super::decorations::selected_outline(appearance)),
             local.and_then(|chief| chief_status(chief, scale)),
         )
         .on_prepaint(super::menus::record_menu_owner(&owner))
+        // The fold chevron is its own hit area: a click anywhere else on the row opens the chat.
+        .when(fold != ChiefFold::Single, |row| {
+            row.child(
+                div()
+                    .id("native-sidebar-chief-fold")
+                    .role(gpui::Role::Button)
+                    .aria_label(if expanded {
+                        "Fold the other computers' Chiefs"
+                    } else {
+                        "Show the other computers' Chiefs"
+                    })
+                    .absolute()
+                    .left_0()
+                    .top_0()
+                    .h_full()
+                    .w(px(20.0 * scale))
+                    .on_click(cx.listener(|app, _, _, cx| {
+                        cx.stop_propagation();
+                        app.native_sidebar.chief_others_expanded =
+                            !app.native_sidebar.chief_others_expanded;
+                        cx.notify();
+                    })),
+            )
+        })
         .on_click(cx.listener(|app, _, window, cx| {
             cx.stop_propagation();
             app.handle_native_sidebar_action(
@@ -172,6 +190,9 @@ impl GhostexGpuiApp {
                 colors,
                 &chief.machine_label,
                 chief.is_focused,
+                chief
+                    .is_focused
+                    .then(|| super::decorations::selected_outline(appearance)),
                 chief_status(chief, scale),
             )
             .on_click(cx.listener(move |app, _, window, cx| {
@@ -186,12 +207,7 @@ impl GhostexGpuiApp {
             }))
         });
         Some(
-            v_flex()
-                .w_full()
-                .flex_shrink_0()
-                .px(px(6.5 * scale))
-                .pb(px(10.0 * scale))
-                .gap(px(2.0 * scale))
+            chief_block(scale)
                 .child(main)
                 .children(other_rows)
                 .into_any_element(),
