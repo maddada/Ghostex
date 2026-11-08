@@ -736,8 +736,10 @@ fn computer_panel(
         .child("To add this computer on another computer, copy its Easy Connect code below.")
         .child(list);
     if paired_only(tab) {
+        // Pairing v2 (CDXC:RemotePairing 2026-11-08 in server/src/remote_access/computer_pairing.rs):
+        // the other computer pairs like a phone, with the code from this computer's Show QR window.
         meta = meta.child(
-            "Only paired devices can connect, so first run tailcat genkey --client --key=client-default on the other computer and add the key it prints under Advanced → Allowed client keys.",
+            "Only paired devices can connect, so click Show QR here, then Copy as text, and paste that code on the other computer. Both screens show three words; approve the other computer here if they match.",
         );
     }
     if let Some(code) = &code {

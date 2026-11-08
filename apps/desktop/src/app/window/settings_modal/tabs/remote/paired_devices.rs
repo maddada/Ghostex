@@ -272,7 +272,11 @@ fn pending_device_row(
         )
         .child(detail(
             t,
-            "Approve the request only if the phone shows the same three words. Deny it if you didn't just scan the code.",
+            if is_phone_platform(&device.platform) {
+                "Approve the request only if the phone shows the same three words. Deny it if you didn't just scan the code."
+            } else {
+                "A computer asks to connect through Easy Connect. Approve the request only if it shows the same three words. Deny it if you didn't just paste this computer's code there."
+            },
             true,
         ))
         .into_any_element();

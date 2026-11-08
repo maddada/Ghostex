@@ -105,7 +105,12 @@ pub struct PairDeviceParams {
     pub secret: String,
     pub device_name: String,
     pub platform: String,
+    /// The phone's SSH key; a computer sends none (it signs in with its own SSH login).
+    #[serde(default)]
     pub ssh_public_key: String,
+    /// `phone` (the default) or `computer`.
+    #[serde(default)]
+    pub kind: PairingDeviceKind,
     #[serde(default)]
     pub tailcat_client_key: Option<String>,
     /// Pairing v2: the phone's device key. A phone without one is too old to pair.
@@ -113,6 +118,19 @@ pub struct PairDeviceParams {
     pub device_key: Option<DeviceKey>,
     #[serde(default)]
     pub approver_key: Option<PairingApproverKey>,
+}
+
+/*
+CDXC:RemotePairing 2026-11-08 DECISION:
+User (GitHub #495): "Computers connecting through Easy Connect must not need their key added by hand under Advanced: give them the same flow as phones." A computer pairs like a phone (the Show QR sheet's code, its own device key, Pending with three matching words, the owner's signed approval), and what the approval grants is only what a connecting computer needs: its tailcat client key on the Easy Connect allow-list, so its tunnel gets through. It keeps signing in with its own SSH login (password or key) and reaches gxserver through the connected-computer grants, so no SSH key line is written and no device token is issued (a device token is a phone's, and a phone is one of the owner's devices). Revoking it takes the key off the allow-list.
+SEE-ALSO: server/src/remote_access/computer_pairing.rs (the connecting computer's side).
+*/
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PairingDeviceKind {
+    #[default]
+    Phone,
+    Computer,
 }
 
 /// What `/api/pairDevice` answers: the phone is Pending.
@@ -190,6 +208,12 @@ pub fn parse_pair_device_params(body: &Value) -> Result<PairDeviceParams, PairDe
             "tailcatClientKey must be a nodekey: public key.".to_string(),
         ));
     }
+    if params.kind == PairingDeviceKind::Computer && tailcat_client_key.is_none() {
+        return Err(PairDeviceError::BadRequest(
+            "A computer must send its tailcatClientKey: that key is what pairing lets in."
+                .to_string(),
+        ));
+    }
     let Some(device_key) = params.device_key else {
         return Err(PairDeviceError::NeedsAppUpdate);
     };
@@ -202,10 +226,19 @@ pub fn parse_pair_device_params(body: &Value) -> Result<PairDeviceParams, PairDe
         secret: params.secret.trim().to_string(),
         device_name,
         platform,
-        ssh_public_key: params.ssh_public_key,
+        // A computer's SSH login is its own; a key it sends is ignored.
+        ssh_public_key: match params.kind {
+            PairingDeviceKind::Phone => params.ssh_public_key,
+            PairingDeviceKind::Computer => String::new(),
+        },
+        kind: params.kind,
         tailcat_client_key,
         device_key: Some(device_key),
-        approver_key: params.approver_key,
+        // Approver keys are phones' (Face ID / fingerprint); a computer's desktop enrolls its own.
+        approver_key: match params.kind {
+            PairingDeviceKind::Phone => params.approver_key,
+            PairingDeviceKind::Computer => None,
+        },
     })
 }
 
@@ -274,29 +307,46 @@ fn approval_action(
     words: &[String],
     approver_key_id: Option<&str>,
 ) -> ActionRequest {
-    ActionRequest::new(
-        SensitiveAction::PairingApproveDevice,
-        // The name is the phone's own; say so, since gxserver didn't write it.
-        format!(
-            "Pair a new {} device that calls itself \"{}\" with this computer",
-            params.platform, params.device_name
+    // The name is the device's own; say so, since gxserver didn't write it.
+    let (summary, detail) = match params.kind {
+        PairingDeviceKind::Phone => (
+            format!(
+                "Pair a new {} device that calls itself \"{}\" with this computer",
+                params.platform, params.device_name
+            ),
+            format!(
+                "Approve only if the phone shows the same three words: {}. Approving lets it use this computer's Ghostex and sign in over SSH until you remove it.",
+                words.join(" · ")
+            ),
         ),
-    )
-    .target(pending_id)
-    .detail(format!(
-        "Approve only if the phone shows the same three words: {}. Approving lets it use this computer's Ghostex and sign in over SSH until you remove it.",
-        words.join(" · ")
-    ))
-    .params(json!({
-        "pendingId": pending_id,
-        "deviceName": params.device_name,
-        "platform": params.platform,
-        "deviceKeyId": key_id,
-        "sshKeyFingerprint": fingerprint,
-        "tailcatClientKey": params.tailcat_client_key,
-        "approverKeyId": approver_key_id,
-        "words": words,
-    }))
+        PairingDeviceKind::Computer => (
+            format!(
+                "Let a {} computer that calls itself \"{}\" connect through Easy Connect",
+                params.platform, params.device_name
+            ),
+            format!(
+                "Approve only if that computer shows the same three words: {}. Approving lets its Easy Connect tunnel reach this computer; it still needs this computer's SSH login to sign in.",
+                words.join(" · ")
+            ),
+        ),
+    };
+    ActionRequest::new(SensitiveAction::PairingApproveDevice, summary)
+        .target(pending_id)
+        .detail(detail)
+        .params(json!({
+            "pendingId": pending_id,
+            "kind": match params.kind {
+                PairingDeviceKind::Phone => "phone",
+                PairingDeviceKind::Computer => "computer",
+            },
+            "deviceName": params.device_name,
+            "platform": params.platform,
+            "deviceKeyId": key_id,
+            "sshKeyFingerprint": fingerprint,
+            "tailcatClientKey": params.tailcat_client_key,
+            "approverKeyId": approver_key_id,
+            "words": words,
+        }))
 }
 
 /// `/api/pairDevice`: consumes the QR's secret and makes the phone Pending.
@@ -307,8 +357,12 @@ pub fn begin_pairing(
     params: PairDeviceParams,
 ) -> Result<PairingStarted, PairDeviceError> {
     record_pair_device_attempt()?;
-    let ssh_key = parse_ssh_public_key(&params.ssh_public_key)
-        .map_err(|error| PairDeviceError::BadRequest(format!("{error:#}")))?;
+    let fingerprint = match params.kind {
+        PairingDeviceKind::Phone => parse_ssh_public_key(&params.ssh_public_key)
+            .map_err(|error| PairDeviceError::BadRequest(format!("{error:#}")))?
+            .fingerprint(),
+        PairingDeviceKind::Computer => String::new(),
+    };
     let device_key = params
         .device_key
         .clone()
@@ -353,7 +407,6 @@ pub fn begin_pairing(
     let pending_id = format!("pd_{}", uuid::Uuid::new_v4().simple());
     let words = match_words(&params.secret, &device_key.public_key);
     let key_id = approver_key_id(&device_key_bytes);
-    let fingerprint = ssh_key.fingerprint();
     let action = approval_action(
         &pending_id,
         &params,
@@ -385,6 +438,7 @@ pub fn begin_pairing(
         name: params.device_name.clone(),
         platform: params.platform.clone(),
         ssh_public_key: params.ssh_public_key.trim().to_string(),
+        kind: params.kind,
         tailcat_client_key: params.tailcat_client_key.clone(),
         device_key: StoredDeviceKey {
             algorithm: device_key.algorithm.clone(),
@@ -571,18 +625,28 @@ fn finish_pairing(
     context: &PairingContext<'_>,
     pending: &PendingPairing,
 ) -> Result<Value, PairDeviceError> {
-    let key = parse_ssh_public_key(&pending.ssh_public_key)
-        .map_err(|error| PairDeviceError::BadRequest(format!("{error:#}")))?;
+    let phone = pending.kind == PairingDeviceKind::Phone;
+    // A computer gets neither an SSH key line nor a token (CDXC:RemotePairing 2026-11-08 above).
+    let key = if phone {
+        Some(
+            parse_ssh_public_key(&pending.ssh_public_key)
+                .map_err(|error| PairDeviceError::BadRequest(format!("{error:#}")))?,
+        )
+    } else {
+        None
+    };
     let device_id = uuid::Uuid::new_v4().simple().to_string();
-    let device_api_token = mint_device_api_token();
+    let device_api_token = phone.then(mint_device_api_token);
     let token_expires_at = chrono::Utc::now() + DEVICE_API_TOKEN_TTL;
-    (context.append_key)(&key, &device_id, &pending.name).map_err(|error| {
-        if error.is::<AdministratorApprovalDeclined>() {
-            PairDeviceError::ApprovalDeclined
-        } else {
-            PairDeviceError::Internal(error)
-        }
-    })?;
+    if let Some(key) = &key {
+        (context.append_key)(key, &device_id, &pending.name).map_err(|error| {
+            if error.is::<AdministratorApprovalDeclined>() {
+                PairDeviceError::ApprovalDeclined
+            } else {
+                PairDeviceError::Internal(error)
+            }
+        })?;
+    }
     let approver_key = pending.approver_key.clone().map(|mut key| {
         key.device_id = device_id.clone();
         key.added_at_ms = now_ms();
@@ -592,21 +656,27 @@ fn finish_pairing(
         id: device_id.clone(),
         name: pending.name.clone(),
         platform: pending.platform.clone(),
-        ssh_key_fingerprint: key.fingerprint(),
+        ssh_key_fingerprint: key
+            .as_ref()
+            .map(|key| key.fingerprint())
+            .unwrap_or_default(),
         tailcat_client_key: pending.tailcat_client_key.clone(),
-        api_token_hash: Some(hash_device_api_token(&device_api_token)),
+        api_token_hash: device_api_token.as_deref().map(hash_device_api_token),
         paired_at: now_iso(),
         last_seen_at: None,
         status: PairedDeviceStatus::Paired,
         device_key: Some(pending.device_key.clone()),
-        api_token_expires_at: Some(
-            token_expires_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-        ),
+        api_token_expires_at: device_api_token
+            .as_ref()
+            .map(|_| token_expires_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
         approver_key_id: approver_key.as_ref().map(|key| key.key_id.clone()),
         legacy_key_line_removed: false,
     };
     let repository = RemotePairingRepository::new(context.db);
     if let Err(error) = repository.insert_device(&record) {
+        if key.is_none() {
+            return Err(error.into());
+        }
         // The key line grants access; never leave it behind without its row.
         return Err(match (context.remove_key)(&device_id) {
             Ok(_) => error.into(),
@@ -664,8 +734,15 @@ fn finish_pairing(
         true,
     );
     crate::audit::record(
-        crate::audit::Action::new("pairing.pair", "A phone paired with this computer")
-            .target(pending.name.clone()),
+        crate::audit::Action::new(
+            "pairing.pair",
+            if phone {
+                "A phone paired with this computer"
+            } else {
+                "A computer paired with this computer through Easy Connect"
+            },
+        )
+        .target(pending.name.clone()),
         crate::audit::Actor::PairedDevice {
             id: Some(device_id.clone()),
             name: pending.name.clone(),
@@ -678,13 +755,16 @@ fn finish_pairing(
     );
 
     let identity = read_remote_access_identity()?;
-    Ok(json!({
+    let mut answer = json!({
         "deviceId": device_id,
-        "deviceApiToken": device_api_token,
-        "deviceTokenExpiresAtMs": token_expires_at.timestamp_millis(),
         "user": identity.username,
         "computerName": identity.computer_name,
-    }))
+    });
+    if let Some(token) = device_api_token {
+        answer["deviceApiToken"] = json!(token);
+        answer["deviceTokenExpiresAtMs"] = json!(token_expires_at.timestamp_millis());
+    }
+    Ok(answer)
 }
 
 /// `/api/renewDeviceToken`: a paired phone signs with its device key and gets a fresh token; the

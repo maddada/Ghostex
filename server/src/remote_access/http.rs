@@ -357,6 +357,55 @@ pub(crate) async fn handle_remote_access_http(
             })
             .await
         }
+        // The connecting computer's side of pairing through Easy Connect (computer_pairing.rs).
+        "/api/pairComputer" => {
+            let code = match super::computer_pairing::parse_computer_pairing_code(&params) {
+                Ok(code) => code,
+                Err(error) => {
+                    return RemoteAccessHttpError::bad_request(format!("{error:#}"))
+                        .into_response(endpoint_path, request_id)
+                }
+            };
+            tokio::task::spawn_blocking(move || {
+                let name = code.name.clone();
+                let started = super::computer_pairing::start_computer_pairing(&paths, code);
+                crate::audit::record(
+                    crate::audit::Action::new(
+                        "pairing.computerRequest",
+                        "Asked another computer to let this one connect through Easy Connect",
+                    )
+                    .target(name),
+                    actor,
+                    match &started {
+                        Ok(_) => crate::audit::Outcome::Pending,
+                        Err(error) => crate::audit::Outcome::Failed(format!("{error:#}")),
+                    },
+                    None,
+                );
+                started.map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
+            })
+            .await
+        }
+        "/api/computerPairingStatus" | "/api/cancelComputerPairing" => {
+            let Some(pending_id) = params
+                .get("pendingId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+            else {
+                return RemoteAccessHttpError::bad_request("pendingId is required.")
+                    .into_response(endpoint_path, request_id);
+            };
+            let cancel = endpoint_path == "/api/cancelComputerPairing";
+            tokio::task::spawn_blocking(move || {
+                if cancel {
+                    super::computer_pairing::cancel_computer_pairing(&pending_id);
+                    return Ok(json!({ "status": "cancelled" }));
+                }
+                super::computer_pairing::computer_pairing_status(&pending_id)
+                    .map_err(|error| RemoteAccessHttpError::bad_request(format!("{error:#}")))
+            })
+            .await
+        }
         "/api/renewDeviceToken" => {
             let ask = match parse_signed_ask(&params) {
                 Ok(ask) => ask,

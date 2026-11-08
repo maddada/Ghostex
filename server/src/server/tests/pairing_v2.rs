@@ -678,3 +678,90 @@ async fn no_api_hands_out_a_pairing_code_except_to_the_owner_with_the_sheet_open
         "no code was minted"
     );
 }
+
+fn allow_list(state: &AppState) -> Vec<String> {
+    let db = open_gxserver_database(&state.paths).unwrap();
+    crate::tailcat::read_tailcat_status_payload(&state.paths, &db, &state.tailcat_runtime)
+        .allowed_client_keys
+}
+
+#[test]
+fn a_computer_pairs_like_a_phone_and_gets_only_its_tunnel_key_listed() {
+    let _serial = PAIRING_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+    reset_pair_device_attempts();
+    let (_temp, state) = temp_state();
+    let keys = KeyFile::default();
+    let laptop = TestApprover::new("laptop");
+    let secret = live_secret(&state);
+    let tailcat_key = format!("nodekey:{}", "cd".repeat(32));
+    let params = parse_pair_device_params(&json!({
+        "kind": "computer",
+        "secret": secret,
+        "deviceName": "Laptop",
+        "platform": "linux",
+        "tailcatClientKey": tailcat_key,
+        "deviceKey": { "algorithm": "ecdsaP256Sha256", "publicKey": laptop.key.public_key },
+    }))
+    .expect("a computer sends no SSH key");
+    let started = begin(&state, params).expect("pending");
+    assert_eq!(started.words, match_words(&secret, &laptop.key.public_key));
+    let request = state
+        .security
+        .approvals
+        .list_pending(now_ms())
+        .into_iter()
+        .next()
+        .unwrap();
+    assert!(request.summary.contains("computer"), "{}", request.summary);
+    assert!(
+        !allow_list(&state).contains(&tailcat_key),
+        "not before approval"
+    );
+
+    approve_as_owner(&state, &request.id);
+    let answer = with_context(&state, &keys, |context| {
+        pairing_status(
+            context,
+            signed_status(&laptop, &started.pending_id, now_ms()),
+        )
+    })
+    .unwrap();
+    assert_eq!(answer.status, PairingStatus::Approved);
+    let approved = answer.approved.unwrap();
+    assert!(
+        approved.get("deviceApiToken").is_none(),
+        "a computer gets no device token"
+    );
+    assert!(keys.lines().is_empty(), "and no SSH key line");
+    assert!(allow_list(&state).contains(&tailcat_key));
+
+    // Remove takes its key off the allow-list again (and looks for no SSH line).
+    let device_id = approved["deviceId"].as_str().unwrap().to_string();
+    let db = open_gxserver_database(&state.paths).unwrap();
+    remove_paired_device_using(
+        &state.paths,
+        &db,
+        &state.tailcat_runtime,
+        &state.device_api_tokens,
+        &device_id,
+        |_| panic!("a computer has no SSH line to remove"),
+    )
+    .unwrap()
+    .expect("removed");
+    assert!(!allow_list(&state).contains(&tailcat_key));
+}
+
+#[test]
+fn a_computer_without_its_tunnel_key_is_refused() {
+    let laptop = TestApprover::new("laptop");
+    assert!(matches!(
+        parse_pair_device_params(&json!({
+            "kind": "computer",
+            "secret": "s",
+            "deviceName": "Laptop",
+            "platform": "macos",
+            "deviceKey": { "algorithm": "ecdsaP256Sha256", "publicKey": laptop.key.public_key },
+        })),
+        Err(PairDeviceError::BadRequest(_))
+    ));
+}

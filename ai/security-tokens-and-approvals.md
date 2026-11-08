@@ -248,6 +248,11 @@ Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairi
 - `/api/pairedDevices` lists `pending` (with words) beside `devices` (`status`: `paired` or
   `legacy`). `/api/removePairedDevice` revokes a device (key line, token, push, allow-list entry,
   approver key) or denies a pending one; it never needs approval.
+- Computers pair the same way (`kind: "computer"` on `/api/pairDevice`, sent by the connecting
+  computer's gxserver from `/api/pairComputer`, `remote_access/computer_pairing.rs`): Pending, three
+  words, the signed approval; what it grants is only the computer's tailcat client key on the
+  allow-list (no SSH line, no token: a computer signs in with its own SSH login and reaches
+  gxserver through connected-computer grants). An empty Easy Connect allow-list is closed.
 - Rows from before 11.0.1 are `legacy`: no token, SSH line removed at start where no Windows
   administrator prompt is needed. `remote_access::has_active_easy_connect_devices(&db)` and
   `easy_connect_devices_to_pair_again(&db)` are for the one-time re-pair notice.

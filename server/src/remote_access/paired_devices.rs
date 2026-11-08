@@ -158,6 +158,16 @@ pub(crate) fn remove_paired_device_using(
     let Some(device) = repository.find_device(device_id)? else {
         return Ok(None);
     };
+    // A computer paired through Easy Connect has no SSH key line (its fingerprint is empty), and
+    // looking for one could show a Windows administrator prompt for nothing.
+    let has_key_line = !device.ssh_key_fingerprint.is_empty();
+    let remove_key = |id: &str| {
+        if has_key_line {
+            remove_key(id)
+        } else {
+            Ok(false)
+        }
+    };
     remove_key(&device.id).map_err(|error| {
         match error.downcast_ref::<AdministratorApprovalDeclined>() {
             Some(declined) => anyhow::anyhow!(
@@ -202,7 +212,12 @@ pub fn replace_earlier_pairings_of_same_phone(
         if device.id == new_device_id || device.tailcat_client_key.as_deref() != Some(client_key) {
             continue;
         }
-        if let Err(error) = remove_key_line(&device.id) {
+        let removed = if device.ssh_key_fingerprint.is_empty() {
+            Ok(false)
+        } else {
+            remove_key_line(&device.id)
+        };
+        if let Err(error) = removed {
             on_kept(&device, &error);
             continue;
         }

@@ -62,6 +62,9 @@ pub(super) async fn route_control_http(
         | "/api/pairDevice"
         | "/api/pairingStatus"
         | "/api/renewDeviceToken"
+        | "/api/pairComputer"
+        | "/api/computerPairingStatus"
+        | "/api/cancelComputerPairing"
         | "/api/pairedDeviceSeen"
         | "/api/easyConnectAddresses" => {
             handle_remote_access_http(&state, &caller, endpoint.path, request_id, &body_json).await

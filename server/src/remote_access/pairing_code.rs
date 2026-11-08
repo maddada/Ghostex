@@ -220,7 +220,9 @@ pub struct PendingPairing {
     pub id: String,
     pub name: String,
     pub platform: String,
+    /// Empty for a computer.
     pub ssh_public_key: String,
+    pub kind: super::pair_device::PairingDeviceKind,
     pub tailcat_client_key: Option<String>,
     pub device_key: StoredDeviceKey,
     pub approver_key: Option<ApproverKey>,

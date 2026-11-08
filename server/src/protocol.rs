@@ -1084,6 +1084,10 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/pairedDevices"
         | "/api/removePairedDevice"
         | "/api/pairedDeviceSeen"
+        // CDXC:RemotePairing 2026-11-08 WHY: this computer asks another to let it connect through Easy Connect (remote_access/computer_pairing.rs); it opens a tunnel from here, so only this computer's own clients may start it.
+        | "/api/pairComputer"
+        | "/api/computerPairingStatus"
+        | "/api/cancelComputerPairing"
         /*
         CDXC:RemotePairing 2026-11-06 WHY:
         A paired phone asks for this computer's Easy Connect addresses with its device token, through the tunnel, which lands on the local listener; the addresses dial this computer, so like the tailcat status they never reach the remote listener.

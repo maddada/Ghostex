@@ -184,6 +184,8 @@ pub(crate) struct RemoteTab {
     pub(super) paired_devices: Option<Vec<PairedDevice>>,
     /// Phones waiting for approval, with their words (pairing v2).
     pub(super) pending_devices: Vec<PendingDevice>,
+    /// A `/api/computerPairingStatus` ask is out (machines.rs).
+    pub(super) computer_pairing_in_flight: bool,
     pub(super) request_error: Option<String>,
     pub(super) enabling_ssh: bool,
     pub(super) install_pending: bool,
@@ -357,6 +359,7 @@ impl RemoteTab {
             pairing: None,
             paired_devices: None,
             pending_devices: Vec::new(),
+            computer_pairing_in_flight: false,
             request_error: None,
             enabling_ssh: false,
             install_pending: false,

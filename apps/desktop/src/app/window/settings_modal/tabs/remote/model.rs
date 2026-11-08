@@ -570,6 +570,31 @@ pub(super) struct EasyConnectCode {
     pub(super) name: String,
     pub(super) user: String,
     pub(super) ssh_port: u32,
+    /// The other computer's gxserver API port, which pairing reaches through the tunnel.
+    pub(super) port: u32,
+    /// The one-time pairing secret: only a code from the other computer's Show QR window has one.
+    pub(super) secret: Option<String>,
+}
+
+/// What pairing this computer with the one behind an Easy Connect code needs (`/api/pairComputer`),
+/// or `None` when the code has no one-time secret (CDXC:RemotePairing 2026-11-08 in
+/// server/src/remote_access/computer_pairing.rs).
+pub(super) fn computer_pairing_params(input: &str) -> Option<Value> {
+    match read_pairing_code(input)? {
+        PairingCode::EasyConnect(EasyConnectCode {
+            address,
+            name,
+            port,
+            secret: Some(secret),
+            ..
+        }) => Some(serde_json::json!({
+            "address": address,
+            "port": port,
+            "secret": secret,
+            "name": name,
+        })),
+        _ => None,
+    }
 }
 
 /// `ReadPairingCodeResult`.
@@ -611,13 +636,15 @@ fn read_easy_connect_code(value: &Value) -> Option<EasyConnectCode> {
     let address = non_empty(value, "address")?;
     let name = non_empty(value, "name")?;
     let user = non_empty(value, "user")?;
-    read_port(value.get("port"))?;
+    let port = read_port(value.get("port"))?;
     let ssh_port = read_port(value.get("sshPort"))?;
     Some(EasyConnectCode {
         address,
         name,
         user,
         ssh_port,
+        port,
+        secret: non_empty(value, "secret"),
     })
 }
 
@@ -646,7 +673,7 @@ fn read_easy_connect_compact_code(body: &str) -> Option<EasyConnectCode> {
     }
     let mut rest = bytes.as_slice();
     let address = read_field(&mut rest)?;
-    let _secret = read_field(&mut rest)?;
+    let secret = read_field(&mut rest)?;
     let port = read_u16(&mut rest)?;
     let ssh_port = read_u16(&mut rest)?;
     let user = String::from_utf8(read_field(&mut rest)?).ok()?;
@@ -662,6 +689,9 @@ fn read_easy_connect_compact_code(body: &str) -> Option<EasyConnectCode> {
         name,
         user,
         ssh_port: u32::from(ssh_port),
+        port: u32::from(port),
+        secret: (!secret.is_empty())
+            .then(|| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(secret)),
     })
 }
 
@@ -1037,7 +1067,31 @@ mod pairing_code_tests {
             name: "Studio".to_string(),
             user: "madda".to_string(),
             ssh_port: 22,
+            port: 58744,
+            secret: Some("s3cr3t".to_string()),
         })
+    }
+
+    #[test]
+    fn only_a_code_with_its_secret_can_pair_a_computer() {
+        assert_eq!(
+            computer_pairing_params(&easy_connect_code()),
+            Some(serde_json::json!({
+                "address": "tc1qexampleaddress",
+                "port": 58744,
+                "secret": "s3cr3t",
+                "name": "Studio",
+            }))
+        );
+        use base64::Engine as _;
+        let without = format!(
+            "ghostex-ec1:{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+                r#"{"v":1,"address":"tc1qexampleaddress","name":"Studio","user":"madda","port":58744,"sshPort":22}"#
+            )
+        );
+        assert_eq!(computer_pairing_params(&without), None);
+        assert_eq!(computer_pairing_params("tc1qexampleaddress"), None);
     }
 
     #[test]
@@ -1091,6 +1145,9 @@ mod pairing_code_tests {
             name: "Studio\u{2019}s Mac".to_string(),
             user: "madda".to_string(),
             ssh_port: 22,
+            port: 58744,
+            // The vector's secret bytes, as gxserver wrote them (base64url).
+            secret: Some("ZGVmZ2hpamtsbW5vcHFycw".to_string()),
         }));
         for payload in [
             COMPACT_VECTOR.to_string(),
