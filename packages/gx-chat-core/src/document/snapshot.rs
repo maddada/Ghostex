@@ -66,6 +66,10 @@ pub struct Document {
     /// (`session/cloud_box.rs`). The composer's placeholder already says so.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub cloud_box_asleep: bool,
+    /// The card above the chat box while the session's computer is offline, or a message to it
+    /// got no answer (`session/computer.rs`): "Windows PC is offline · last seen 2h ago" and Retry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub computer_notice: Option<crate::session::computer::ComputerNotice>,
     pub agent: Tri<String>,
     pub agent_session_id: Tri<String>,
     /// A draft session's agent choices. Family e.

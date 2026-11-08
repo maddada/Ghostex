@@ -451,6 +451,9 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
             "token": remote.token,
             "owner": true,
             "ttlMs": REGISTRATION_TTL_MS,
+            // A message held for this machine while it was offline names it by this id when the
+            // app had not learned its server id yet (server/src/connected_computers/held_sends.rs).
+            "machineId": job.machine_id,
         }),
     );
     if let Some(reverse_port) = reverse_port {

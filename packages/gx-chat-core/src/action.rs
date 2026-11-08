@@ -279,6 +279,8 @@ action_kinds! {
     SetVerbose => "setVerbose",
     SetDetailLevel => "setDetailLevel",
     Retry => "retry",
+    // Retry on the card of a session whose computer is offline (`session/computer.rs`).
+    ComputerRetry => "computerRetry",
     Refresh => "refresh",
     LoadEarlier => "loadEarlier",
     LoadWork => "loadWork",

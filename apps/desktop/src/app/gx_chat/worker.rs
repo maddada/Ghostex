@@ -44,6 +44,11 @@ pub(crate) fn set_endpoint(machine_id: &str, base_url: &str, auth_token: &str) {
     });
 }
 
+/// The published computers changed (`computers.rs`): run a turn so every chat hears it now.
+pub(super) fn nudge_computers() {
+    let _ = COMMANDS.get_or_init(spawn).send(HostCommand::Computers);
+}
+
 /// Read aloud's app-wide facts and the speaker's answers, for every chat (`read_aloud.rs`).
 pub(super) fn send_read_aloud(input: ReadAloudInput) {
     let _ = COMMANDS

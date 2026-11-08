@@ -103,7 +103,10 @@ impl ChatCore {
     pub fn handle(&mut self, mut event: Event, context: ChatContext) -> Vec<Effect> {
         self.context = context;
         if let Event::RpcSettled { outcome, .. } = &mut event {
-            crate::session::reads::humanize_unreachable(outcome);
+            crate::session::reads::humanize_unreachable(
+                outcome,
+                crate::session::computer::unreachable_message(&self.state),
+            );
         }
         // Index zero of the turn's clock reads is `now_ms` itself.
         self.state.core.clock_cursor = 1;

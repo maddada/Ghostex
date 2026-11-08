@@ -46,7 +46,8 @@ pub fn handle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
 /// waiting on is what ends that action's turn, and `action` in `native-host.ts` published there
 /// (`crate::dispatch::actions::dispatch`).
 pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Effect> {
-    let effects = settle_awaits(state, event);
+    let mut effects = settle_awaits(state, event);
+    effects.extend(crate::session::computer::settle(state, event, context));
     // `schedulePersistence()` is called from every place `store.ts` replaces `this.snapshot`, which
     // is every place the core bumps `authoritative_revision`. One check instead of six call sites,
     // and the same decision.

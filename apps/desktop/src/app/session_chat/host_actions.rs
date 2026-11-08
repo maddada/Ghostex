@@ -197,6 +197,23 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        // The offline-computer card (remote_conn/chat_computers.rs): a message to the chat's
+        // computer got no answer, or the card's Retry.
+        if matches!(action, "checkComputer" | "reconnectComputer") {
+            if let Some(machine_id) = message
+                .get("machineId")
+                .and_then(serde_json::Value::as_str)
+                .filter(|machine_id| *machine_id != crate::app::gx_chat::LOCAL_MACHINE_ID)
+                .map(str::to_string)
+            {
+                if action == "checkComputer" {
+                    self.check_session_chat_computer(machine_id, cx);
+                } else {
+                    self.retry_session_chat_computer(&machine_id, cx);
+                }
+            }
+            return;
+        }
         // A page card on screen whose page has no picture yet (visual_page_background_pictures.rs).
         if action == "pictureUnopenedPage" {
             self.picture_unopened_page(session_id, &message, cx);

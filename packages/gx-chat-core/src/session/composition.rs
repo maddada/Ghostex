@@ -290,8 +290,10 @@ fn compose_after(
             &rebuilt
         };
     let queue = state.session.queue_prompts.clone().unwrap_or_default();
-    let startup_pending =
+    let mut startup_pending =
         pending_with_startup_sends(&state.pending.sends, &queue, state.session.agent.as_deref());
+    // Messages this computer holds while the session's computer is offline.
+    startup_pending.extend(crate::session::computer::held_as_pending(state));
     // The list an echo is matched against copies the transcript; with nothing pending there is
     // nothing to match.
     let visible = if startup_pending.is_empty() {

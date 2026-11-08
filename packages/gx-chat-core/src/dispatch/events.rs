@@ -108,6 +108,9 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
         | Event::Measured(_)
         | Event::DraftChanged { .. } => Vec::new(),
         Event::ReadAloud(input) => crate::read_aloud::handle_event(state, input, context),
+        Event::ComputerChanged(computer) => {
+            crate::session::computer::changed(state, context, computer.clone())
+        }
         // `ChatCore::handle` follows a show with a tick, which runs what the held timers owe.
         Event::Visibility { shown } => {
             state.core.hidden = !shown;

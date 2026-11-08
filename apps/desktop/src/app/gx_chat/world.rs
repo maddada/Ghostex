@@ -123,6 +123,9 @@ pub(super) enum HostCommand {
     Inbound(Inbound),
     /// Read aloud: what only the app knows, and the speaker's answers (`read_aloud.rs`).
     ReadAloud(ReadAloudInput),
+    /// A session's computer changed (`computers.rs`); the turn's computer pass hands it on.
+    #[cfg_attr(target_family = "wasm", allow(dead_code))]
+    Computers,
 }
 
 /// How many renderer requests one chat with no view attached may hold before the chat is released.
@@ -176,6 +179,8 @@ pub(super) struct World {
     settings_checked_at: Option<Instant>,
     /// The session list revision each chat was last handed (`session_directory.rs`).
     directory_sent: std::collections::HashMap<String, u64>,
+    /// The computers revision each chat was last handed (`computers.rs`).
+    computer_sent: std::collections::HashMap<String, u64>,
     /// Read aloud's app-wide facts and the one speaker (`read_aloud.rs`).
     pub(super) read_aloud: ReadAloudHost,
 }
@@ -206,6 +211,7 @@ pub(super) fn turn(world: &mut World, command: Option<HostCommand>) {
     let pruned = std::panic::catch_unwind(AssertUnwindSafe(|| {
         step(world, command);
         directory_pass(world);
+        computer_pass(world);
         flush_broadcasts(world);
         read_aloud::flush(world);
         world.store.prune()
@@ -285,6 +291,7 @@ fn purge(world: &mut World, key: &str) {
     world.delivered.remove(key);
     world.held_requests.remove(key);
     world.directory_sent.remove(key);
+    world.computer_sent.remove(key);
     read_aloud::forget(world, key);
     // The chat is gone from the store, so its identity is read back from its key.
     if let Some(identity) = ChatIdentity::from_retention_key(key) {
@@ -307,7 +314,10 @@ fn step(world: &mut World, command: Option<HostCommand>) {
             | HostCommand::Pause { key, .. },
         ) => Some(key.clone()),
         Some(
-            HostCommand::Endpoint { .. } | HostCommand::Inbound(_) | HostCommand::ReadAloud(_),
+            HostCommand::Endpoint { .. }
+            | HostCommand::Inbound(_)
+            | HostCommand::ReadAloud(_)
+            | HostCommand::Computers,
         )
         | None => None,
     };
@@ -468,6 +478,7 @@ fn step(world: &mut World, command: Option<HostCommand>) {
         }) => world.transport.set_endpoint(&machine_id, endpoint),
         Some(HostCommand::Inbound(inbound)) => transport::receive(world, inbound),
         Some(HostCommand::ReadAloud(input)) => read_aloud::receive(world, input),
+        Some(HostCommand::Computers) => {}
         None => {
             settings_pass(world);
             let due: Vec<String> = world
@@ -612,6 +623,34 @@ fn directory_pass(world: &mut World) {
             sessions: (*sessions).clone(),
         };
         drive(world, &key, vec![event]);
+    }
+    world.driving = None;
+}
+
+/// Hands every chat whose copy is older the computer its session runs on (`computers.rs`). A chat
+/// on this computer is told so once, which is what keeps its "Couldn't reach Ghostex" words.
+fn computer_pass(world: &mut World) {
+    let (revision, computers) = super::computers::current();
+    let stale: Vec<String> = world
+        .store
+        .keys()
+        .into_iter()
+        .filter(|key| world.computer_sent.get(key) != Some(&revision))
+        .filter(|key| {
+            world
+                .store
+                .get(key)
+                .is_some_and(|retained| retained.core.state().core.controller_started)
+        })
+        .collect();
+    for key in stale {
+        world.computer_sent.insert(key.clone(), revision);
+        let Some(identity) = ChatIdentity::from_retention_key(&key) else {
+            continue;
+        };
+        let computer = super::computers::for_machine(&computers, identity.machine_id.as_deref());
+        world.driving = Some(key.clone());
+        drive(world, &key, vec![Event::ComputerChanged(Some(computer))]);
     }
     world.driving = None;
 }
