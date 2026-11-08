@@ -60,6 +60,12 @@ fn flower(size: f32, color: Hsla) -> impl IntoElement {
         .text_color(color)
 }
 
+/// CDXC:Chief 2026-11-08 DECISION:
+/// User: "please don't show the chief of staff thing at the top in the gbots or hermes bots' views". The row shows in the sessions sidebar only: never in Bots mode (GBots or Hermes), nor while the extension is off.
+pub(crate) fn chief_row_shown(enabled: bool, bots_mode: bool) -> bool {
+    enabled && !bots_mode
+}
+
 /// The block the rows sit in: the list column's and a project block's left and right padding
 /// (render.rs: the column's `pl 6 / pr 2`, each project block's `pl 18 / mr 5`, its `mb 10`), so
 /// the header lines up with the project headers under it.

@@ -3,7 +3,8 @@
 //! sidebar's own row code (`native_sidebar/chief_row_view.rs`) and the project header's geometry,
 //! so the two can be compared. States (`GHOSTEX_NATIVE_MODAL_DEMO_STATE`): `one` (default, one
 //! Chief), `working`, `asking`, `open` (its chat is open), `setup` (first open, no agent yet),
-//! `folded` (two more computers have one, folded), `unfolded` (the same, unfolded).
+//! `folded` (two more computers have one, folded), `unfolded` (the same, unfolded), `bots` (the
+//! sidebar in Bots mode, where the row is not drawn: `chief_row_shown`).
 use super::chief_row_view::*;
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -147,6 +148,8 @@ impl Render for ChiefRowPreview {
                     .child(title.to_string()),
             )
         };
+        let bots = state == "bots";
+        let shown = chief_row_shown(true, bots);
         v_flex()
             .w(px(300.0))
             .h(px(330.0))
@@ -167,10 +170,23 @@ impl Render for ChiefRowPreview {
                     .child(space(false, "W"))
                     .child(space(false, "…")),
             )
-            .child(
-                chief_block(1.0)
-                    .child(main)
-                    .when(fold == ChiefFold::Unfolded, |block| {
+            .when(bots, |column| {
+                column.child(
+                    div()
+                        .pl(px(24.0))
+                        .h(px(30.0))
+                        .flex()
+                        .items_center()
+                        .gap(px(10.0))
+                        .font_weight(gpui::FontWeight::LIGHT)
+                        .child(div().text_color(colors.muted).child("+"))
+                        .child("New bot"),
+                )
+            })
+            .when(shown, |column| {
+                column.child(chief_block(1.0).child(main).when(
+                    fold == ChiefFold::Unfolded,
+                    |block| {
                         block
                             .child(chief_other_row(
                                 "hetzner",
@@ -190,11 +206,15 @@ impl Render for ChiefRowPreview {
                                 None,
                                 None,
                             ))
-                    }),
-            )
-            .child(project_header)
-            .child(session("Main Coordinator"))
-            .child(session("Outdated dependencies audit"))
+                    },
+                ))
+            })
+            .when(!bots, |column| {
+                column
+                    .child(project_header)
+                    .child(session("Main Coordinator"))
+                    .child(session("Outdated dependencies audit"))
+            })
     }
 }
 

@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use super::actions::NativeSidebarAction;
 use super::appearance::SidebarAppearance;
 use super::chief_row_view::{
-    ChiefFold, ChiefRowColors, chief_block, chief_header_row, chief_other_row,
+    ChiefFold, ChiefRowColors, chief_block, chief_header_row, chief_other_row, chief_row_shown,
 };
 use super::model::{NativeSidebarChief, NativeSidebarSnapshot};
 use crate::GhostexGpuiApp;
@@ -87,7 +87,7 @@ impl GhostexGpuiApp {
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
-        if !snapshot.chief_enabled {
+        if !chief_row_shown(snapshot.chief_enabled, snapshot.bots_mode) {
             return None;
         }
         let scale = appearance.scale;
