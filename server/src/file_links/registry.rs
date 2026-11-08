@@ -118,6 +118,9 @@ pub(crate) fn file_link_path(file: &Path) -> Result<String, String> {
     if !ONE_FILE_EXTENSIONS.contains(&extension.as_str()) {
         return Err("This kind of file can't be opened from here.".to_string());
     }
+    if super::protected::is_protected(&file) {
+        return Err("Files in this folder can't be opened from here.".to_string());
+    }
     let name = file
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())

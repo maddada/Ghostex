@@ -3,6 +3,7 @@
 //! it is, Markdown as a rendered page, Excalidraw drawings as an editor page that saves back.
 
 mod pages;
+mod protected;
 mod registry;
 mod serve;
 
