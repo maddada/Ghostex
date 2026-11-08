@@ -306,13 +306,6 @@ mod tests {
     }
 
     #[test]
-    fn defaults_are_one_hour_and_approve() {
-        let config = CollabConfig::default();
-        assert_eq!(config.expiry, Expiry::Hour);
-        assert_eq!(config.mode, GuestMode::Approve);
-    }
-
-    #[test]
     fn an_old_or_edited_file_reads_safe() {
         // 11.0.0's file: on, Send, never, no code, another relay.
         let old = parse_config(

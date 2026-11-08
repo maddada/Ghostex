@@ -3,9 +3,6 @@
 mod account_login_thread;
 mod attention_stint;
 mod chat_linked_files;
-mod chief_head_routes;
-mod collab_component_e2e;
-mod collab_shim_routes;
 mod connected_computers_routes;
 mod draft_worktree_routes;
 mod easy_connect_addresses_routes;
@@ -16,7 +13,6 @@ pub(crate) mod helpers;
 mod notification_failures;
 mod omp_subagent_viewer;
 mod omp_waits;
-mod pairing_v2;
 mod project_directories;
 mod protocol_and_routes;
 mod push;

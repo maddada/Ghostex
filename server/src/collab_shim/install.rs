@@ -269,8 +269,3 @@ pub(crate) fn uninstall(state: &Arc<AppState>) -> Result<(), String> {
     };
     result
 }
-
-#[cfg(test)]
-pub(crate) fn test_reset_phase() {
-    *phase() = Phase::Idle;
-}

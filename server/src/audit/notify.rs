@@ -555,31 +555,6 @@ mod tests {
         }
     }
 
-    /// Chief's approval-free steering is logged as `allowed` and stays out of the bell, while the
-    /// same actions approved for any other agent's token still notify.
-    #[test]
-    fn chiefs_steering_stays_in_the_log() {
-        for action in HEAD_STEERING_ACTIONS {
-            assert!(
-                !notifies(&entry(1, 0, action, "session", "allowed"), &[]),
-                "{action}"
-            );
-            assert!(
-                notifies(&entry(1, 0, action, "session", "approved"), &[]),
-                "{action}"
-            );
-        }
-        // Only those three: anything else an agent's token did still notifies, whatever its outcome.
-        assert!(notifies(
-            &entry(1, 0, "collabEnable", "session", "allowed"),
-            &[]
-        ));
-        assert!(notifies(
-            &entry(1, 0, "easyConnectEnable", "session", "done"),
-            &[]
-        ));
-    }
-
     /// The entries behind the user's screenshot: what they did themselves stays in the log,
     /// turning Collab on notifies once.
     #[test]

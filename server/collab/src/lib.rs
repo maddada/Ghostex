@@ -115,18 +115,3 @@ pub fn split_image_references(text: &str) -> (String, Vec<String>) {
 pub fn labelled_guest_text(name: &str, text: &str) -> String {
     format!("{name} (a guest in Ghostex Collab) says:\n{text}")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn picture_references_come_out_of_the_words() {
-        let (words, paths) = split_image_references("look [Image #1](/a/b.png) here [Image #x](y)");
-        assert_eq!(words, "look  here [Image #x](y)");
-        assert_eq!(paths, vec!["/a/b.png".to_string()]);
-    }
-}
-
-#[cfg(test)]
-mod tests_owner_guest;

@@ -90,30 +90,3 @@ pub(crate) fn current(share_id: &str) -> Option<ShareScope> {
         .find(|entry| entry.scope.share_id == share_id)
         .map(|entry| entry.scope.clone())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_live_share_tokens_open_their_chat() {
-        let _lock = crate::collab_shim::test_lock();
-        let token = format!("gxshare_{}", "x".repeat(43));
-        set(vec![ShareScope {
-            share_id: "share_1".into(),
-            project_id: "p".into(),
-            session_id: "s".into(),
-            token: token.clone(),
-            viewer_ids: vec!["guest_1".into()],
-            images: vec![],
-        }]);
-        let scope = authorize_token(&token).expect("live");
-        assert_eq!(scope.session_id, "s");
-        assert!(scope.token.is_empty(), "the token itself is never kept");
-        assert!(authorize_token(&format!("gxshare_{}", "y".repeat(43))).is_none());
-        assert!(authorize_token("not-a-share").is_none());
-        assert!(for_chat("p", "s").is_some());
-        clear();
-        assert!(authorize_token(&token).is_none());
-    }
-}

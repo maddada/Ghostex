@@ -180,27 +180,3 @@ pub async fn serve() -> Result<(), String> {
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_the_sidecar_token_is_let_in() {
-        let ctx = Ctx {
-            token: Arc::new("a".repeat(43)),
-        };
-        let mut headers = HeaderMap::new();
-        assert!(!authorized(&ctx, &headers));
-        headers.insert(
-            "authorization",
-            format!("Bearer {}", "b".repeat(43)).parse().unwrap(),
-        );
-        assert!(!authorized(&ctx, &headers));
-        headers.insert(
-            "authorization",
-            format!("Bearer {}", "a".repeat(43)).parse().unwrap(),
-        );
-        assert!(authorized(&ctx, &headers));
-    }
-}

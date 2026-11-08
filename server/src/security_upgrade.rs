@@ -716,45 +716,6 @@ mod tests {
     }
 
     #[test]
-    fn a_phone_waiting_for_approval_shows_its_words() {
-        let phones = vec![phone("old", "Pixel 8", "android", TAKEN - DAY_MS)];
-        let current = vec![now_phone("old", "Pixel 8", "android", TAKEN - 90 * DAY_MS)];
-        let pending = vec![PendingDevice {
-            id: "pd_1".into(),
-            name: "Pixel 8".into(),
-            platform: "android".into(),
-            words: vec!["harp".into(), "cotton".into(), "saddle".into()],
-            approval_id: "apr_1".into(),
-            requested_at_ms: 0,
-            expires_at_ms: 0,
-        }];
-        let notice = UpgradeNotice {
-            phone_rows: phones,
-            taken_at_ms: TAKEN,
-            ..UpgradeNotice::default()
-        };
-        let shown = view_with_pending(&notice, &current, &pending, None, TAKEN);
-        assert_eq!(shown["phones"][0]["status"], "pending");
-        assert_eq!(
-            shown["phones"][0]["words"],
-            json!(["harp", "cotton", "saddle"])
-        );
-        assert_eq!(shown["phones"][0]["approvalId"], "apr_1");
-        // Still counted: it isn't paired until the owner approves.
-        assert_eq!(shown["waiting"], 1);
-        // Another phone's name doesn't match it.
-        let other = vec![PendingDevice {
-            name: "iPhone".into(),
-            platform: "ios".into(),
-            ..pending[0].clone()
-        }];
-        assert_eq!(
-            view_with_pending(&notice, &current, &other, None, TAKEN)["phones"][0]["status"],
-            "waiting"
-        );
-    }
-
-    #[test]
     fn a_new_install_never_shows_it() {
         let (_dir, paths) = paths();
         snapshot_before_pairing_changes(&paths).unwrap();

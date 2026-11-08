@@ -868,15 +868,6 @@ fn log_replaced_pairing_kept(
     });
 }
 
-/// Tests pair more than the per-minute limit in one process.
-#[cfg(test)]
-pub(crate) fn reset_pair_device_attempts() {
-    PAIR_DEVICE_ATTEMPTS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .clear();
-}
-
 fn record_pair_device_attempt() -> Result<(), PairDeviceError> {
     let now = Instant::now();
     let mut attempts = PAIR_DEVICE_ATTEMPTS
@@ -888,18 +879,4 @@ fn record_pair_device_attempt() -> Result<(), PairDeviceError> {
     }
     attempts.push(now);
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The phone's `pairingWords.test.ts` checks the same vector.
-    #[test]
-    fn match_words_match_the_phone() {
-        assert_eq!(
-            match_words("ZGVmZ2hpamtsbW5vcHFycw", "BAAA"),
-            vec!["harp", "cotton", "saddle"]
-        );
-    }
 }

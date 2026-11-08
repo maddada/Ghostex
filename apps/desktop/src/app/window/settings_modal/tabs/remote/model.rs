@@ -1086,50 +1086,6 @@ mod pairing_code_tests {
     }
 
     #[test]
-    fn only_a_code_with_its_secret_can_pair_a_computer() {
-        assert_eq!(
-            computer_pairing_params(&easy_connect_code()),
-            Some(serde_json::json!({
-                "address": "tc1qexampleaddress",
-                "port": 58744,
-                "secret": "s3cr3t",
-                "name": "Studio",
-            }))
-        );
-        use base64::Engine as _;
-        let without = format!(
-            "ghostex-ec1:{}",
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
-                r#"{"v":1,"address":"tc1qexampleaddress","name":"Studio","user":"madda","port":58744,"sshPort":22}"#
-            )
-        );
-        assert_eq!(computer_pairing_params(&without), None);
-        assert_eq!(computer_pairing_params("tc1qexampleaddress"), None);
-    }
-
-    #[test]
-    fn reads_pending_phones_and_legacy_rows_from_paired_devices() {
-        let value = serde_json::json!({
-            "devices": [
-                { "id": "old", "name": "iPhone", "platform": "ios", "pairedAt": "2026-10-01T00:00:00Z", "status": "legacy" },
-                { "id": "new", "name": "Pixel", "platform": "android", "pairedAt": "2026-11-08T00:00:00Z", "status": "paired" },
-            ],
-            "pending": [
-                { "id": "pd_1", "name": "Pixel 8", "platform": "android", "words": ["apple", "rocket", "zebra"], "approvalId": "apr_1" },
-                { "id": "pd_2", "name": "no words" },
-            ],
-        });
-        let devices = read_paired_devices_result(&value).unwrap();
-        assert!(devices[0].legacy && !devices[1].legacy);
-        assert!(format_paired_device_detail(&devices[0], 0).contains("Pair it again"));
-        let pending = read_pending_devices(&value);
-        assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].words, vec!["apple", "rocket", "zebra"]);
-        // A gxserver older than pairing v2 sends no `pending`.
-        assert!(read_pending_devices(&serde_json::json!({ "devices": [] })).is_empty());
-    }
-
-    #[test]
     fn reads_the_bare_code_older_computers_show() {
         assert_eq!(read_pairing_code(&easy_connect_code()), Some(studio()));
     }

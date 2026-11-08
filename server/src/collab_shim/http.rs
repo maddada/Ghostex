@@ -496,15 +496,6 @@ pub(crate) mod approvals {
         None
     }
 
-    #[cfg(test)]
-    pub(crate) fn done_answer(approval_id: &str) -> Option<OwnerResult> {
-        with_book(|book| {
-            book.done
-                .get(approval_id)
-                .map(|(_, answer, _)| answer.clone())
-        })
-    }
-
     /// Runs one approved call as the caller that asked; `false` when it wasn't awaited here.
     pub(crate) async fn finish(state: &Arc<AppState>, approval_id: &str) -> bool {
         let Some((caller, waiting)) = with_book(|book| {

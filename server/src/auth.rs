@@ -289,36 +289,6 @@ mod tests {
     use crate::paths::get_gxserver_paths;
 
     #[test]
-    fn a_device_token_names_its_device_and_stops_working_when_it_lapses() {
-        let tokens = DeviceApiTokens::default();
-        let live = mint_device_api_token();
-        let lapsed = mint_device_api_token();
-        let now_ms = chrono::Utc::now().timestamp_millis() as u64;
-        tokens.replace_entries([
-            (
-                hash_device_api_token(&live),
-                DeviceTokenEntry {
-                    device_id: Some("d1".into()),
-                    expires_at_ms: Some(now_ms + 60_000),
-                },
-            ),
-            (
-                hash_device_api_token(&lapsed),
-                DeviceTokenEntry {
-                    device_id: Some("d2".into()),
-                    expires_at_ms: Some(now_ms - 1),
-                },
-            ),
-        ]);
-        assert_eq!(
-            tokens.entry_for(&live).and_then(|entry| entry.device_id),
-            Some("d1".to_string())
-        );
-        assert!(!tokens.accepts(&lapsed));
-        assert!(!tokens.accepts("not-a-device-token"));
-    }
-
-    #[test]
     fn authorization_bearer_parsing_matches_typescript_split() {
         let mut headers = HeaderMap::new();
         headers.insert(

@@ -404,18 +404,3 @@ pub(crate) fn status_value() -> Value {
         "version": (sidecar.status == Status::Running).then(|| sidecar.version.clone()),
     })
 }
-
-/// For tests: pretend a component runs at `port` with these tokens.
-#[cfg(test)]
-pub(crate) fn test_set_running(port: Option<u16>, host_token: &str, sidecar_token: &str) {
-    let mut sidecar = sidecar();
-    sidecar.port = port;
-    sidecar.host_token = host_token.to_string();
-    sidecar.sidecar_token = sidecar_token.to_string();
-    sidecar.version = "test".to_string();
-    sidecar.status = if port.is_some() {
-        Status::Running
-    } else {
-        Status::NotInstalled
-    };
-}

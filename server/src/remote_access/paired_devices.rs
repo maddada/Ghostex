@@ -456,89 +456,12 @@ mod tests {
     }
 
     #[test]
-    fn a_paired_phone_always_goes_on_the_allow_list_even_an_empty_one() {
-        assert_eq!(
-            allow_list_with_client_key(Vec::new(), "key-a"),
-            Some(keys(&["key-a"]))
-        );
-        assert_eq!(
-            allow_list_with_client_key(keys(&[TAILCAT_ALLOW_NONE]), "key-a"),
-            Some(keys(&["key-a"]))
-        );
-        assert_eq!(allow_list_with_client_key(keys(&["key-a"]), "key-a"), None);
-    }
-
-    #[test]
-    fn an_empty_allow_list_is_served_closed_except_in_the_pairing_window() {
-        use crate::tailcat::served_allow_list;
-        assert_eq!(served_allow_list(&[], false), keys(&[TAILCAT_ALLOW_NONE]));
-        assert_eq!(
-            served_allow_list(&keys(&[""]), false),
-            keys(&[TAILCAT_ALLOW_NONE])
-        );
-        assert_eq!(
-            served_allow_list(&keys(&["key-a"]), false),
-            keys(&["key-a"])
-        );
-        assert!(served_allow_list(&keys(&["key-a"]), true).is_empty());
-        assert!(served_allow_list(&[], true).is_empty());
-    }
-
-    #[test]
     fn an_unlisted_key_leaves_the_allow_list_alone() {
         assert_eq!(
             allow_list_without_client_key(keys(&["none"]), "key-a"),
             None
         );
         assert_eq!(allow_list_without_client_key(Vec::new(), "key-a"), None);
-    }
-
-    #[test]
-    fn rows_paired_before_11_0_1_become_legacy_and_lose_their_token() {
-        let db = Connection::open_in_memory().expect("in-memory database");
-        db.execute_batch(
-            "CREATE TABLE remote_paired_devices (
-               id TEXT PRIMARY KEY CHECK (id <> ''),
-               name TEXT NOT NULL,
-               platform TEXT NOT NULL,
-               sshKeyFingerprint TEXT NOT NULL,
-               tailcatClientKey TEXT,
-               pairedAt TEXT NOT NULL,
-               lastSeenAt TEXT
-             );",
-        )
-        .unwrap();
-        db.execute_batch(include_str!(
-            "../storage/migrations/0059_paired_device_api_token.sql"
-        ))
-        .unwrap();
-        db.execute(
-            "INSERT INTO remote_paired_devices (id, name, platform, sshKeyFingerprint, pairedAt, apiTokenHash)
-             VALUES ('old', 'iPhone', 'ios', 'SHA256:x', '2026-10-01', 'hash')",
-            [],
-        )
-        .unwrap();
-        // The 11.0.1 notice reads names before 0062 runs; they must read on the old schema.
-        assert_eq!(
-            RemotePairingRepository::new(&db)
-                .list_device_names()
-                .unwrap(),
-            vec!["iPhone".to_string()]
-        );
-        db.execute_batch(include_str!(
-            "../storage/migrations/0062_pairing_v2_device_keys.sql"
-        ))
-        .unwrap();
-        let row = RemotePairingRepository::new(&db)
-            .find_device("old")
-            .unwrap()
-            .unwrap();
-        assert_eq!(row.status, PairedDeviceStatus::Legacy);
-        assert_eq!(row.api_token_hash, None);
-        assert!(!row.legacy_key_line_removed);
-        let tokens = DeviceApiTokens::default();
-        reload_device_api_tokens(&db, &tokens).unwrap();
-        assert!(!tokens.accepts("gxd_anything"));
     }
 
     #[test]

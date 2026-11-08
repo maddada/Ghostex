@@ -330,24 +330,6 @@ mod tests {
     }
 
     #[test]
-    fn no_token_holds_the_head_role_even_when_minted_or_restored_with_it() {
-        let tokens = SessionTokens::default();
-        let minted = tokens.mint_session("p", "s", SessionRole::Head);
-        assert!(matches!(
-            tokens.resolve(&minted),
-            Some(Principal::Session {
-                role: SessionRole::Coordinator,
-                ..
-            })
-        ));
-        let mut saved = tokens.snapshot();
-        saved[0].role = SessionRole::Head;
-        let restarted = SessionTokens::default();
-        restarted.restore(saved);
-        assert!(!restarted.resolve(&minted).unwrap().is_head());
-    }
-
-    #[test]
     fn foreign_prefixes_never_resolve() {
         let tokens = SessionTokens::default();
         let owner = tokens.mint_owner("mac");

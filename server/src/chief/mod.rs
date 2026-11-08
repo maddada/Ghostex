@@ -24,8 +24,6 @@ pub(crate) use endpoint::{handle_chief_http, CHIEF_ENDPOINT};
 pub(crate) use feature::{chief_off_message, chief_on, refuses_message};
 pub(crate) use head::settle_principal;
 pub(crate) use record::{chief_key, read_record};
-#[cfg(test)]
-pub(crate) use record::record_chief_for_tests;
 pub(crate) use sweep::start_chief_sweep;
 
 /// The playbook Chief follows, printed by `ghostex chief guide` (and `/api/chief` `guide`).

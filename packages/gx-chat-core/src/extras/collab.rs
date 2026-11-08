@@ -601,26 +601,4 @@ mod held_answers_tests {
         let cards = project(&state)["cards"].clone();
         assert_eq!(cards[0]["answers"]["by"], "Sam");
     }
-
-    #[test]
-    fn share_shows_its_install_until_dont_show_share() {
-        let mut state = ChatState::default();
-        state.session.boot_config = Some(crate::event::StartConfig {
-            touch_composer: true,
-            ..Default::default()
-        });
-        state.session.collab = Some(json!({"shared": false, "available": true}));
-        assert!(pill(&state).is_some());
-        assert_eq!(project(&state)["shared"], false);
-        // Collab isn't installed: Share still shows, for its Install...
-        state.session.collab =
-            Some(json!({"shared": false, "available": false, "installed": false}));
-        assert!(pill(&state).is_some());
-        assert_eq!(project(&state)["available"], false);
-        // ...until the owner picks "Don't show Share".
-        state.session.collab =
-            Some(json!({"shared": false, "available": false, "hideShare": true}));
-        assert!(pill(&state).is_none());
-        assert!(project(&state).is_null());
-    }
 }

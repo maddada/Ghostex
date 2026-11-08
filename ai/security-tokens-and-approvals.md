@@ -84,9 +84,7 @@ other session (CDXC:Chief). No token is stored with `SessionRole::Head`: Chief's
 record (`metadata.chiefSession`, written only when gxserver itself creates that session) and the
 `chiefHidden` setting (user-only, not agent-writable) is off. Turning Chief off, New Chat and
 Change Agent therefore take the role away on the next request. `/api/chief` `open`, `newChat` and
-`setAgent` accept only the owner's devices and the token file. Tests:
-`server/src/security/capability.rs` (every capability and every sensitive action, head against
-every other caller), `server/src/server/tests/chief_head_routes.rs` (the HTTP gate).
+`setAgent` accept only the owner's devices and the token file.
 
 `Principal::may_manage_thread_of(coordinator_session_id)` is the check for "coordinators manage
 their own threads"; the gate refuses a session that links threads to, edits or promotes a

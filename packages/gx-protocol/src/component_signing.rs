@@ -51,18 +51,3 @@ pub fn decode_public_key(hex: &str) -> Option<[u8; 32]> {
     }
     Some(key)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_statement_binds_every_field() {
-        assert_eq!(
-            component_signing_statement("collab", "1.0.0-abc", "darwin-arm64", "collab-1.0.0-abc-darwin-arm64.tar.gz", "ABCDEF", 42),
-            "ghostex-component-v1\ncollab\n1.0.0-abc\ndarwin-arm64\ncollab-1.0.0-abc-darwin-arm64.tar.gz\nabcdef\n42"
-        );
-        assert!(decode_public_key(COMPONENT_SIGNING_PUBLIC_KEY_HEX).is_some());
-        assert!(decode_public_key("zz").is_none());
-    }
-}

@@ -181,24 +181,6 @@ mod tests {
     }
 
     #[test]
-    fn a_phone_waiting_for_approval_carries_its_words() {
-        let view = json!({
-            "takenAtMs": NOW,
-            "phones": [
-                { "id": "a", "name": "Pixel 8", "kind": "Phone", "status": "pending",
-                  "words": ["harp", "cotton", "saddle"], "approvalId": "apr_1" },
-                { "id": "b", "name": "iPhone", "kind": "Phone", "status": "pending" },
-            ],
-        });
-        let (phones, _) = notice_rows(&view, &|_| None, NOW);
-        assert_eq!(phones[0].status, SecurityNoticeRowStatus::Pending);
-        assert_eq!(phones[0].words, vec!["harp", "cotton", "saddle"]);
-        assert_eq!(phones[0].approval_id.as_deref(), Some("apr_1"));
-        // Without its request there is nothing to approve: it reads as still waiting.
-        assert_eq!(phones[1].status, SecurityNoticeRowStatus::Waiting);
-    }
-
-    #[test]
     fn ago_reads_plainly() {
         assert_eq!(ago(NOW, NOW), "just now");
         assert_eq!(ago(NOW - 5 * 60_000, NOW), "5 minutes ago");

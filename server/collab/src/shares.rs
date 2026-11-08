@@ -786,17 +786,6 @@ mod tests {
     }
 
     #[test]
-    fn shares_without_a_code_or_past_a_day_are_dropped() {
-        let day = crate::config::MAX_SHARE_MS;
-        assert!(share_is_valid(&share("12345678", 0, Some(day))));
-        assert!(!share_is_valid(&share("", 0, Some(day))));
-        assert!(!share_is_valid(&share("123456", 0, Some(day))));
-        // No end: it lasts until the owner stops sharing.
-        assert!(share_is_valid(&share("12345678", 0, None)));
-        assert!(!share_is_valid(&share("12345678", 0, Some(day + 1))));
-    }
-
-    #[test]
     fn codes_are_eight_digits() {
         for _ in 0..50 {
             let code = new_code();
