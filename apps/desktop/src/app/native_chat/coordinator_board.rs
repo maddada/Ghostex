@@ -570,7 +570,7 @@ impl NativeChatView {
                 .absolute()
                 .top(px(-7.0 * s))
                 .right(px(-7.0 * s))
-                .size(px(crate::app::window::round_close_button::ROUND_CLOSE_BUTTON_SIZE * s))
+                .size(px(20.0 * s))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -619,16 +619,16 @@ impl NativeChatView {
                             })
                         })
                         .child(
-                            crate::app::window::round_close_button::round_close_x_icon(
-                                s,
-                                if armed {
+                            svg()
+                                .path("titlebar/x.svg")
+                                .size(px(11.0 * s))
+                                .text_color(if armed {
                                     red
                                 } else {
                                     crate::app::window::toast::gpui_app_toast_close_button_icon_color(
                                         p.light,
                                     )
-                                },
-                            ),
+                                }),
                         ),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {

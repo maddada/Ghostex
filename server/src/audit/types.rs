@@ -77,11 +77,9 @@ impl Actor {
                 format!("Session {session_id}"),
                 Some(session_id.clone()),
             ),
-            Self::Chief { session_id } => (
-                "session",
-                "Chief of Staff".to_string(),
-                Some(session_id.clone()),
-            ),
+            Self::Chief { session_id } => {
+                ("session", "Chief".to_string(), Some(session_id.clone()))
+            }
             Self::SharedToken { claimed_session } => (
                 "sharedToken",
                 match claimed_session {

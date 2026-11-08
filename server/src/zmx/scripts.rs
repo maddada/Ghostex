@@ -406,14 +406,6 @@ pub(crate) fn build_zmx_shell_provider_command(input: ZmxShellProviderCommandInp
     )
 }
 
-/// The start script's `zmx run` arguments. On macOS the session's launchd job swaps them for
-/// `ZMX_FOREGROUND_RUN_ARGUMENTS` (launch.rs), so the two must stay one edit apart.
-#[cfg(not(windows))]
-pub(crate) const ZMX_DETACHED_RUN_ARGUMENTS: &str = r#"run "$zmx_session" -d --initial-command"#;
-#[cfg(target_os = "macos")]
-pub(crate) const ZMX_FOREGROUND_RUN_ARGUMENTS: &str =
-    r#"run "$zmx_session" --foreground --initial-command"#;
-
 #[allow(clippy::too_many_arguments)]
 #[cfg(not(windows))]
 fn format_zmx_provider_run_script(
@@ -476,7 +468,7 @@ if [ -n "$zmx_gxserver_protocol_version" ]; then
   export GHOSTEX_GXSERVER_PROTOCOL_VERSION="$zmx_gxserver_protocol_version"
 fi
 {}cd "$zmx_cwd" || exit
-exec "$zmx_bin" {ZMX_DETACHED_RUN_ARGUMENTS} {} {} "{}"
+exec "$zmx_bin" run "$zmx_session" -d --initial-command {} {} "{}"
 "#,
         shell_quote(session_name),
         shell_quote(cwd),

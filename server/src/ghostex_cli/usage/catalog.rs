@@ -633,7 +633,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "chief --help",
-            "Chief of Staff, the Ghostex-wide coordinator under the Spaces bar: its status, its playbook, a new chat, its agent, and messaging another computer's Chief of Staff",
+            "Chief, the Ghostex-wide coordinator under the Spaces bar: its status, its playbook, a new chat, its agent, and messaging another computer's Chief",
         ),
         format_help_command(
             "coordinator --help",

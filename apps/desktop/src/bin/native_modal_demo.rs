@@ -30,6 +30,16 @@ mod fold_motion;
 mod host_name;
 #[path = "../hotkey_label.rs"]
 mod hotkey_label;
+// Settings > Interface's Linux-only Display scale row reads what the app found at launch (#503).
+#[cfg(target_os = "linux")]
+#[path = "../linux_x11_scale.rs"]
+mod linux_x11_scale;
+
+/// The preview never hides `WAYLAND_DISPLAY` the way the app does (main.rs), so it inherited none.
+#[cfg(target_os = "linux")]
+pub(crate) fn linux_inherited_wayland_display() -> Option<&'static str> {
+    None
+}
 #[path = "../app/window/native_modal_kit/mod.rs"]
 mod native_modal_kit;
 #[path = "../app/window/session_handoff_modal.rs"]
@@ -53,8 +63,6 @@ mod agents_hub_modal;
 mod chief_row_demo;
 #[path = "../app/native_sidebar/chief_row_view.rs"]
 mod chief_row_view;
-#[path = "native_modal_demo/close_buttons.rs"]
-mod close_buttons_demo;
 #[path = "native_modal_demo/coordinator_details.rs"]
 mod coordinator_details_demo;
 #[path = "../app/window/coordinator_details_modal.rs"]
@@ -109,8 +117,6 @@ mod rename_session_modal;
 mod rename_worktree_demo;
 #[path = "../app/window/rename_worktree_modal.rs"]
 mod rename_worktree_modal;
-#[path = "../app/window/round_close_button.rs"]
-mod round_close_button;
 #[path = "native_modal_demo/security_upgrade.rs"]
 mod security_upgrade_demo;
 #[path = "../app/window/security_upgrade_modal.rs"]
@@ -623,7 +629,6 @@ fn main() {
                 "rename-session" => rename_session_demo::open(&demo, cx),
                 "new-orchestrator" => new_coordinator_demo::open(&demo, cx),
                 "orchestrator-memory" => coordinator_details_demo::open(&demo, cx),
-                "close-buttons" => close_buttons_demo::open(&demo, cx),
                 "session-note" => session_note_demo::open(&demo, cx),
                 "chief-row" => chief_row_demo::open(&demo, cx),
                 "voice-panel" => voice_panel_demo::open(&demo, cx),

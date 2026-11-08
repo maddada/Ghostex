@@ -80,7 +80,6 @@ const LEGACY_STAMP_WIRE_GENERATION: u32 = 1;
 
 /// Line key `zmx version` prints the generation under.
 const ZMX_VERSION_WIRE_GENERATION_KEY: &str = "wire_generation";
-const ZMX_VERSION_FOREGROUND_KEY: &str = "foreground";
 
 /// `zmx version` is a local, non-blocking print; anything slower is a wedged
 /// shell, not a slow binary.
@@ -96,8 +95,6 @@ struct ZmxWireGenerationCacheEntry {
     length: u64,
     modified: Option<SystemTime>,
     wire_generation: u32,
-    /// `zmx version` lists `foreground`: it understands `run --foreground`.
-    foreground: bool,
 }
 
 static ZMX_WIRE_GENERATION_CACHE: Mutex<Option<ZmxWireGenerationCacheEntry>> = Mutex::new(None);
@@ -107,19 +104,6 @@ static ZMX_WIRE_GENERATION_CACHE: Mutex<Option<ZmxWireGenerationCacheEntry>> = M
 /// the `wire_generation` line, in which case no caller may conclude anything
 /// about a daemon's compatibility.
 pub(crate) fn current_zmx_wire_generation(zmx_executable_path: &str) -> Option<u32> {
-    current_zmx_version_info(zmx_executable_path).map(|(wire_generation, _)| wire_generation)
-}
-
-/// Whether the zmx binary at `zmx_executable_path` understands `run --foreground`
-/// (a `foreground` line in `zmx version`). An older zmx would run the flag as the
-/// session's command, so callers keep the forking `-d` start without it.
-#[cfg(target_os = "macos")]
-pub(crate) fn current_zmx_supports_foreground(zmx_executable_path: &str) -> bool {
-    current_zmx_version_info(zmx_executable_path).is_some_and(|(_, foreground)| foreground)
-}
-
-/// `(wire_generation, foreground)` from `zmx version`, cached until the file changes.
-fn current_zmx_version_info(zmx_executable_path: &str) -> Option<(u32, bool)> {
     let metadata = fs::metadata(zmx_executable_path).ok()?;
     let length = metadata.len();
     let modified = metadata.modified().ok();
@@ -129,29 +113,22 @@ fn current_zmx_version_info(zmx_executable_path: &str) -> Option<(u32, bool)> {
             && cached.length == length
             && cached.modified == modified
         {
-            return Some((cached.wire_generation, cached.foreground));
+            return Some(cached.wire_generation);
         }
     }
-    let version_output = read_zmx_version_output(zmx_executable_path)?;
-    let wire_generation = parse_zmx_wire_generation(&version_output)?;
-    let foreground = version_output.lines().any(|line| {
-        line.split_once('\t').is_some_and(|(key, value)| {
-            key.trim() == ZMX_VERSION_FOREGROUND_KEY && value.trim() == "1"
-        })
-    });
+    let wire_generation = read_zmx_wire_generation(zmx_executable_path)?;
     *cache = Some(ZmxWireGenerationCacheEntry {
         executable_path: zmx_executable_path.to_string(),
         length,
         modified,
         wire_generation,
-        foreground,
     });
-    Some((wire_generation, foreground))
+    Some(wire_generation)
 }
 
 /// Runs `zmx version` through the same profile-free shell spawn as the probe
 /// reads, using the native wmx invocation on Windows.
-fn read_zmx_version_output(zmx_executable_path: &str) -> Option<String> {
+fn read_zmx_wire_generation(zmx_executable_path: &str) -> Option<u32> {
     #[cfg(windows)]
     let script = super::scripts_windows::version_command(zmx_executable_path);
     #[cfg(not(windows))]
@@ -170,7 +147,7 @@ fn read_zmx_version_output(zmx_executable_path: &str) -> Option<String> {
     if result.exit_code != 0 {
         return None;
     }
-    Some(result.stdout)
+    parse_zmx_wire_generation(&result.stdout)
 }
 
 /// Extracts `wire_generation\t<n>` from `zmx version` output. Missing line or

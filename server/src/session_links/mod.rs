@@ -9,13 +9,11 @@
 //! packages/gx-core/src/sidebar_view/links.rs, apps/desktop/src/app/render/workarea_header/session_links.rs,
 //! apps/mobile/app/src/chat/native/SessionLinksStrip.tsx.
 
-mod linear_workspaces;
 mod presentation;
 mod reference;
 mod store;
 mod transcript_scan;
 
-pub(crate) use linear_workspaces::*;
 pub(crate) use presentation::*;
 pub(crate) use reference::*;
 pub(crate) use store::*;

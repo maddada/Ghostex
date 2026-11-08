@@ -557,9 +557,6 @@ fn parse_issue(identifier: &str, issue: &Value) -> LinearIssueInfo {
             .and_then(Value::as_str)
             .map(str::to_string)
     };
-    if let Some(url) = text("/url") {
-        crate::session_links::remember_linear_workspace(&url);
-    }
     LinearIssueInfo {
         identifier: text("/identifier").unwrap_or_else(|| identifier.to_string()),
         title: text("/title"),

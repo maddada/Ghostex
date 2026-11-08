@@ -213,9 +213,8 @@ impl Scanner {
         for link in urls_in(text, "https://github.com/").filter_map(|url| parse_github_url(&url)) {
             self.links.mention_github(link, writer);
         }
-        for url in urls_in(text, "https://linear.app/") {
-            super::remember_linear_workspace(&url);
-            if let Some(SessionLinkRef::Linear { identifier }) = parse_linear_url(&url) {
+        for link in urls_in(text, "https://linear.app/").filter_map(|url| parse_linear_url(&url)) {
+            if let SessionLinkRef::Linear { identifier } = link {
                 self.links.mention_linear(identifier, writer);
             }
         }

@@ -34,7 +34,7 @@ const CHIEF_GOAL: &str =
     "Answer the user about anything in Ghostex, and steer their agents and coordinators for them.";
 
 /// What follows the coordinator skill line in Chief's first message.
-pub(super) const CHIEF_FIRST_REQUEST: &str = "You are Chief of Staff, the Ghostex-wide coordinator on this computer: the user asks you about any session, agent, project or computer, or about Ghostex itself. Before your first reply, and again after any context compaction, run `ghostex chief guide` and follow it; where it differs from the coordinator guide, it wins. Then say in one short line that you're ready and wait for the user.";
+pub(super) const CHIEF_FIRST_REQUEST: &str = "You are Chief, the Ghostex-wide coordinator on this computer: the user asks you about any session, agent, project or computer, or about Ghostex itself. Before your first reply, and again after any context compaction, run `ghostex chief guide` and follow it; where it differs from the coordinator guide, it wins. Then say in one short line that you're ready and wait for the user.";
 
 /// The launchers Chief can run on: set up to start, and an agent family a coordinator runs on.
 pub(super) fn chief_agent_rows(projects: &[Value]) -> Vec<Value> {
@@ -90,7 +90,7 @@ pub(super) fn open_chief(
     let Some(agent_id) = agent_id.map(str::trim).filter(|id| !id.is_empty()) else {
         return Err(DomainStateError {
             code: "chiefNeedsAgent",
-            message: "Pick the agent Chief of Staff runs on first.".to_string(),
+            message: "Pick the agent Chief runs on first.".to_string(),
         });
     };
     let (record, started) = create_chief_session(state, &db, &repository, agent_id)?;
@@ -108,8 +108,7 @@ pub(super) fn replace_chief(
     let Some(old) = read_record(&db) else {
         return Err(DomainStateError {
             code: "chiefNeedsAgent",
-            message: "Chief of Staff has not been opened yet. Open it and pick its agent first."
-                .to_string(),
+            message: "Chief has not been opened yet. Open it and pick its agent first.".to_string(),
         });
     };
     let agent_id = agent_id
@@ -153,7 +152,7 @@ fn create_chief_session(
         .any(|row| row.get("agentId").and_then(Value::as_str) == Some(agent_id))
     {
         return Err(DomainStateError::bad_request(format!(
-            "Chief of Staff can't run on {agent_id}: pick one of {}.",
+            "Chief can't run on {agent_id}: pick one of {}.",
             crate::coordinators::coordinator_agent_families_text()
         )));
     }
@@ -269,7 +268,7 @@ pub(super) fn move_coordinator(
 ) -> Result<(), DomainStateError> {
     let sql = |error: rusqlite::Error| DomainStateError {
         code: "internalError",
-        message: format!("SQLite Chief of Staff error: {error}"),
+        message: format!("SQLite Chief error: {error}"),
     };
     if let Some(mut record) = read_coordinator(db, &old.0, &old.1)? {
         record.project_id = new.0.clone();

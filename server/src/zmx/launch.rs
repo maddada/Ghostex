@@ -104,12 +104,9 @@ pub(crate) fn run_zmx_start_command(
         return Ok(zmx_start_observed_success());
     }
     let job = MacosZmxLaunchdJob::new(session_name)?;
-    let foreground = script.contains(ZMX_DETACHED_RUN_ARGUMENTS)
-        && current_zmx_supports_foreground(zmx_executable_path);
     job.prepare(
         &script,
         macos_zmx_bundle_identifier(Path::new(zmx_executable_path)),
-        foreground,
     )?;
 
     let mut domain = MacosZmxLaunchdDomain::Gui;
@@ -333,38 +330,10 @@ impl MacosZmxLaunchdJob {
         &self,
         start_script: &str,
         associated_bundle: Option<&str>,
-        foreground: bool,
     ) -> ZmxEndpointResult<()> {
         let _ = fs::remove_file(&self.log_path);
         let environment_exports = macos_zmx_launchd_environment_exports();
-        /*
-        CDXC:Zmx 2026-11-08 WHY: macOS holds the first non-Apple program in this job responsible
-        for everything the session runs, and Local Network checks need that process alive (GitHub
-        #504). The forking start made it the `zmx run -d` starter, which exits ~10 ms later, so
-        every program in every session got EHOSTUNREACH even with Ghostex Sessions allowed. The
-        job's own zsh now execs `zmx run --foreground`, which becomes the daemon in place: the
-        responsible process is the daemon, alive as long as the session, and the job ends with
-        it, so no supervisor loop is needed. The plist still runs /bin/zsh (CDXC:Zmx 2026-08-07).
-        A zmx without `foreground` in `zmx version` keeps the forking start below.
-        */
-        let supervisor_script = if foreground {
-            format!(
-                "#!/bin/zsh\n/bin/rm -f {}\n{}{}\n",
-                shell_quote(&self.launch_script_path.to_string_lossy()),
-                environment_exports,
-                start_script.replace(ZMX_DETACHED_RUN_ARGUMENTS, ZMX_FOREGROUND_RUN_ARGUMENTS),
-            )
-        } else {
-            self.forking_supervisor_script(start_script, &environment_exports)
-        };
-        write_private_macos_launchd_file(&self.launch_script_path, &supervisor_script)?;
-        self.write_plist(associated_bundle)
-    }
-
-    /// The start for a zmx without `run --foreground`: a subshell starts the forking daemon and
-    /// the job's zsh stays alive until the session's socket goes away.
-    fn forking_supervisor_script(&self, start_script: &str, environment_exports: &str) -> String {
-        format!(
+        let supervisor_script = format!(
             r#"#!/bin/zsh
 /bin/rm -f {}
 {}
@@ -391,10 +360,9 @@ done
             environment_exports,
             start_script,
             shell_quote(&self.socket_path.to_string_lossy()),
-        )
-    }
+        );
+        write_private_macos_launchd_file(&self.launch_script_path, &supervisor_script)?;
 
-    fn write_plist(&self, associated_bundle: Option<&str>) -> ZmxEndpointResult<()> {
         let plist = format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
