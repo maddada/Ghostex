@@ -170,6 +170,15 @@ pub(crate) fn reconcile_domain_lifecycle_from_provider_probe(
     current_lifecycle_state: &str,
     provider_lifecycle_state: &str,
 ) -> String {
+    /*
+    CDXC:SessionSleep 2026-11-08 WHY:
+    A probe that finds the daemon missing does not write "sleeping" here. The probe is one
+    `zmx list --short`, which leaves out a daemon that missed its 1s probe while busy, and a row
+    durably written "sleeping" for a live session stayed that way until the next probe. The
+    running row with a missing daemon already reads as sleeping wherever it is shown
+    (`effective_lifecycle_state`, `to_cli_session`; GitHub #512) and opening it wakes it, so
+    durable state is changed only by the user's sleep or close and by the start that revives it.
+    */
     if provider_lifecycle_state == "exists" && current_lifecycle_state != "stopped" {
         "running".to_string()
     } else {

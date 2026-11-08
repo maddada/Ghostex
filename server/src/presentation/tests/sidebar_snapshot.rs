@@ -618,13 +618,19 @@ fn snapshot_projects_provider_actions_observation_and_tooltip_like_typescript() 
             .and_then(Value::as_str),
         Some("zmx")
     );
+    // A running row whose daemon is gone reads as sleeping (GitHub #512), and opening a sleeping
+    // session wakes it, so it is attachable.
+    assert_eq!(
+        missing.get("lifecycleState").and_then(Value::as_str),
+        Some("sleeping")
+    );
     assert_eq!(
         missing
             .get("actions")
             .and_then(Value::as_object)
             .and_then(|actions| actions.get("attach"))
             .and_then(Value::as_bool),
-        Some(false)
+        Some(true)
     );
     assert_eq!(
         missing.get("titleObservation"),
