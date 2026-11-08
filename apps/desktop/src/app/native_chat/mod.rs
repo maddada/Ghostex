@@ -152,6 +152,7 @@ mod clipboard;
 
 mod disclosure_anchor;
 mod disclosure_motion;
+mod disclosure_reveal;
 mod workflow_card;
 mod working_card;
 mod working_spark;

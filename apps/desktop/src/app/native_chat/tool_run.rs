@@ -172,30 +172,34 @@ impl NativeChatView {
                 ));
             }
             body.extend(self.tool_row_list(&id, &tools, &kept, p, cx));
-            return vec![disclosure_body(
+            // The whole group is measured, toggle to last call, so a reveal shows the last
+            // call's end and keeps the toggle on screen (disclosure_reveal.rs).
+            let group = disclosure_body(
                 p,
                 DisclosureRail::Marker,
                 ROW_GAP,
-                run_key,
+                run_key.clone(),
                 "Show fewer tool calls",
                 body,
                 cx,
-            )];
+            );
+            return vec![self.reveal_extent(&run_key, true, group)];
         }
         if run_expanded {
             let (above, below) = split(&visible, true);
             let mut body = self.tool_row_list(&id, &tools, &above, p, cx);
             body.push(self.tool_fold_toggle(run_key.clone(), label, true, p, cx));
             body.extend(self.tool_row_list(&id, &tools, &below, p, cx));
-            return vec![disclosure_body(
+            let group = disclosure_body(
                 p,
                 DisclosureRail::Marker,
                 ROW_GAP,
-                run_key,
+                run_key.clone(),
                 "Show fewer tool calls",
                 body,
                 cx,
-            )];
+            );
+            return vec![self.reveal_extent(&run_key, true, group)];
         }
         let kept: Vec<usize> = visible
             .into_iter()

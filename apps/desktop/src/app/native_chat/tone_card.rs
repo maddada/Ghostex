@@ -211,12 +211,16 @@ impl NativeChatView {
                     key,
                     frame: Some(frame),
                     ..
-                }) => motion_clip(
-                    self.disclosure_height(key),
-                    frame,
-                    self.disclosure_floor(key).get(),
-                    0.0,
-                    column,
+                }) => self.reveal_extent(
+                    key,
+                    false,
+                    motion_clip(
+                        self.disclosure_height(key),
+                        frame,
+                        self.disclosure_floor(key).get(),
+                        0.0,
+                        column,
+                    ),
                 ),
                 Some(ToneBodyMotion {
                     key, shut: true, ..

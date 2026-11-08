@@ -487,7 +487,11 @@ impl NativeChatView {
                 Some(AskBodyMotion {
                     key,
                     frame: Some(frame),
-                }) => motion_clip(self.disclosure_height(key), frame, 0.0, 0.0, padded),
+                }) => self.reveal_extent(
+                    key,
+                    false,
+                    motion_clip(self.disclosure_height(key), frame, 0.0, 0.0, padded),
+                ),
                 _ => padded,
             }
         });

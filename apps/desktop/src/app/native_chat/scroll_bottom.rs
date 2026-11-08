@@ -59,6 +59,11 @@ pub(super) fn font_size() -> f32 {
     SPEC.font_size
 }
 
+/// How close to the transcript's end, unscaled, still counts as the bottom.
+pub(super) fn edge_threshold() -> f32 {
+    SPEC.edge_threshold
+}
+
 /// How long a jump's highlight stays on the question it landed on.
 pub(super) fn question_flash_ms() -> u64 {
     SPEC.question_flash_ms
