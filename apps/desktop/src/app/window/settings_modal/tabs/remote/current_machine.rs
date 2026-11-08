@@ -16,8 +16,8 @@
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::settings_icon;
 use super::RemoteTab;
-use super::easy_connect::{path_card, path_head};
-use super::paired_devices::{remote_row, rows_frame};
+use super::easy_connect::path_head;
+use super::paired_devices::remote_row;
 use super::style::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -104,14 +104,28 @@ pub(super) fn current_machine_card(
         "Current machine",
         Vec::new(),
     );
-    let body = rows_frame(t, vec![name_row, short_row, ssh_row]);
-    path_card(
-        t,
-        "remote-current-machine-card",
-        head,
-        div().into_any_element(),
-        Some(body),
-    )
+    // The rows sit straight in the card under hairlines, like the other Settings section cards
+    // (Colours, Transparency), not in a second bordered box inside it.
+    let divider = t.edge(0.70);
+    v_flex()
+        .id("remote-current-machine-card")
+        .w_full()
+        .min_w_0()
+        .overflow_hidden()
+        .rounded(px(MODAL_RADIUS_CONTROL))
+        .border_1()
+        .border_color(hsla(t.edge(0.76)))
+        .bg(hsla(t.card(0.18)))
+        .child(h_flex().w_full().items_center().pr(px(12.0)).child(head))
+        .children([name_row, short_row, ssh_row].into_iter().map(|row| {
+            div()
+                .w_full()
+                .min_w_0()
+                .border_t_1()
+                .border_color(hsla(divider))
+                .child(row)
+        }))
+        .into_any_element()
 }
 
 /// This computer's short name (`localMachineShortName`); empty uses the one made from the name,
@@ -266,15 +280,8 @@ fn ssh_row(
         .id("remote-current-machine-ssh")
         .w_full()
         .min_w_0()
-        .border_1()
-        .border_color(if highlighted {
-            hsla(t.p.focus_border)
-        } else {
-            gpui::transparent_black()
-        })
         .when(highlighted, |this| {
-            this.rounded(px(MODAL_RADIUS_CONTROL))
-                .bg(hsla(css_fade(t.foreground, 0.05)))
+            this.bg(hsla(css_fade(t.foreground, 0.08)))
         })
         .child(content)
         .into_any_element()
