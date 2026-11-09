@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **A phone that signs in over Tailscale, your network or SSH works right away:** reading, replying, Stop and typing go through from the first sign-in; only approving requests and answering secret requests from that phone wait for the one-time "Approve this phone?" on the computer. The phone shows that as one small line you can hide instead of a card (with the phone app update); older phone apps keep showing their card, and replying already works there too.
 - **Computers you control over Easy Connect stay connected to each other:** a computer you already paired now gets connection keys of its own for each computer it reaches, by itself, with nothing to approve and no need to pair again, so the app's connection, Ghostex's own connection and a connection to a second computer no longer get in each other's way. Computers and phones on older Ghostex versions keep connecting as before.
 - **Connecting a computer you added yourself no longer asks for Touch ID:** connecting a computer in Settings > Remote lets the agents on both computers reach each other right away. Only an agent asking on its own still needs your approval, once per computer.
 - **Easy Connect and another computer's owner approval are asked once, then remembered:** turning on Easy Connect asks the first time only (if your Easy Connect was already set up, it counts as approved), and its ports, relay and allowed devices change without asking. A computer that has its own Ghostex app asks once, as soon as you connect it, to let this computer answer its approval cards too.

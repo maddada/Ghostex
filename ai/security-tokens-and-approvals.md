@@ -98,8 +98,14 @@ gets a `PresenceGrant` with `by_policy: true` and a stand-in approval (id `allow
 | `collabEnableSendMode`, `collabChangeShare`, `collabShareChat` showing an existing share's link again | the owner's devices | agents; a new share always asks |
 | `pairingApproveDevice`, `addApproverKey`, `settingsWeakenSecurity` (narrowed, see Settings below), `installExtensionComponent`, `collabApproveGuestMessage` | nobody | as before |
 
-Q2100 ("never ask for a phone that signs in over SSH") is not applied: any agent holding the token
-file could then pair itself as an owner device that approves. Q2099 is the desktop's: it asks a
+Q2100 settled as the user's option C (Q2109, Q2110): a phone that signs in over SSH works at once
+with everything the token file allows (`LocalAgent`: reading, replying, Stop, typing, starting
+sessions), and only its owner powers (approving and denying requests, enrolling its approver key,
+answering secret requests, installing extensions, secret providers and the rest of
+`DecideApprovals`, `OwnerSecrets`, `OwnerSetup`) wait for the one-time `pairingApproveDevice`
+with the three words. `ghostex server endpoint` says `sshPhoneWorksUnpaired`, and a phone that
+sees it shows the waiting request as one small line it can hide instead of a card. Pairing gives a
+token-file holder nothing until the owner approves, so an agent posing as a phone gains nothing. Q2099 is the desktop's: it asks a
 connected computer that has its own owner once, at connect (`owner_security::cached_token`).
 
 ### Settings only: `OwnerSetup` (11.1.1, #495 follow-up)

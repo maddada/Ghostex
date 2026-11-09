@@ -337,7 +337,7 @@ fn approval_action(
                 params.device_name
             ),
             format!(
-                "Approve only if the phone shows the same three words: {}. It already signs in with its own SSH login; approving lets its answers, Stop and typing go through without asking each time, until you remove it in Settings › Remote.",
+                "Approve only if the phone shows the same three words: {}. It already works here through its own SSH login (reading, replying, Stop and typing); approving also lets it approve requests with Face ID and answer secret requests, until you remove it in Settings › Remote.",
                 words.join(" · ")
             ),
         ),
