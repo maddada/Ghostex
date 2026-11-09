@@ -186,6 +186,7 @@ impl NativeChatView {
                 };
                 let expanded = self.is_expanded(&key, *latest_reply || *work_open);
                 let motion = self.disclosure_frame(&key, expanded, cx);
+                self.in_summary_turn = true;
                 let mut row = div()
                     .flex()
                     .flex_col()
@@ -260,6 +261,15 @@ impl NativeChatView {
                             8.0 * s,
                             body.into_any_element(),
                         ));
+                    }
+                }
+                self.in_summary_turn = false;
+                // The turn's work item cards, under the whole turn and outside its folds
+                // (work_cards.rs).
+                if main {
+                    let cards = self.work_cards_of_turn(id);
+                    if let Some(stack) = self.work_card_stack(&cards, &p, cx) {
+                        row = row.child(stack);
                     }
                 }
                 row.into_any_element()
@@ -455,9 +465,27 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let row = self.message_row_drawn(message, p, window, cx);
-        match message["id"].as_str() {
+        let row = match message["id"].as_str() {
             Some(id) if message["role"] == "assistant" => self.reply_arrival_row(id, row, window),
             _ => row,
+        };
+        // A coordinator's work item cards sit under the reply of the turn that changed them
+        // (work_cards.rs); a summary-mode turn draws them under the whole turn instead.
+        if self.in_summary_turn || self.in_subagent || message["role"] != "assistant" {
+            return row;
+        }
+        let cards = self.work_cards_under(&text(message, "id"));
+        match self.work_card_stack(&cards, p, cx) {
+            Some(stack) => div()
+                .flex()
+                .flex_col()
+                .w_full()
+                .min_w_0()
+                .gap(px(8.0 * p.scale))
+                .child(row)
+                .child(stack)
+                .into_any_element(),
+            None => row,
         }
     }
 

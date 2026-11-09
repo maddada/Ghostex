@@ -26,6 +26,7 @@ pub struct AssembleCache {
     )>,
     board: Option<crate::extras::coordinator_board::KeptBoard>,
     question_list: Option<crate::questions::open_questions::KeptList>,
+    work: Option<crate::extras::work_cards::KeptWork>,
 }
 
 /// [`assemble`], reusing what `cache` kept: the same document, built once per change of inputs.
@@ -39,8 +40,15 @@ pub fn assemble_with(
     transcript::document(state, context, &mut document);
     questions::document(state, context, &mut document);
     document.question_forms = crate::questions::forms::project_kept(state, &mut cache.forms);
-    document.open_questions =
-        crate::questions::open_questions::project_with(state, context, &mut cache.question_list);
+    let (work_cards, open_asks) =
+        crate::extras::work_cards::project_kept(state, context, &mut cache.work);
+    document.open_questions = crate::questions::open_questions::project_with(
+        state,
+        context,
+        &mut cache.question_list,
+        &open_asks,
+    );
+    document.work_cards = ghostex_gx_protocol::Tri::Value(work_cards);
     composer::document(state, context, &mut document);
     menus::document(state, context, &mut document);
     let board = crate::extras::coordinator_board::project_kept(state, context, &mut cache.board);

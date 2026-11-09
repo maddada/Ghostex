@@ -719,18 +719,26 @@ pub type KeptList = (ListInputs, std::sync::Arc<Vec<QuestionListSection>>);
 
 /// The document's `openQuestions`.
 pub fn project(state: &ChatState, context: &ChatContext) -> OpenQuestions {
-    project_with(state, context, &mut None)
+    let asks = crate::extras::work_cards::open_asks(state, context);
+    project_with(state, context, &mut None, &asks)
 }
 
 /// [`project`], listing the rows again only when what they are built from changed.
+///
+/// A coordinator's open work item asks (`extras::work_cards`) count as unanswered questions too:
+/// the pill shows while one waits, and its newest one is `newest` when it is newer than every form
+/// and page (the user's 2026-11-10 decision there).
 pub fn project_with(
     state: &ChatState,
     context: &ChatContext,
     kept: &mut Option<KeptList>,
+    asks: &[crate::extras::work_cards::OpenAsk],
 ) -> OpenQuestions {
     let open = unanswered(state);
-    // The loaded rows' unanswered questions, plus the ones older than what the chat has loaded.
-    let count = (open.len() + indexed_waiting(state, &indexed_entries(state)).len()) as u32;
+    // The loaded rows' unanswered questions, plus the ones older than what the chat has loaded,
+    // plus the coordinator's open asks.
+    let count =
+        (open.len() + indexed_waiting(state, &indexed_entries(state)).len() + asks.len()) as u32;
     let filter = state.questions.open_questions.filter.as_str();
     /*
     CDXC:SessionChat 2026-11-04 WHY:
@@ -821,7 +829,17 @@ pub fn project_with(
             1 => "1 unanswered question: go to it".to_string(),
             _ => format!("{count} unanswered questions: go to the previous one"),
         },
-        newest: open.last().map(|asker| asker.id.clone()),
+        newest: {
+            let form = open.last();
+            let ask = asks.last();
+            match (form, ask) {
+                (Some(form), Some(ask)) if form.at.is_some_and(|at| at > ask.at) => {
+                    Some(form.id.clone())
+                }
+                (_, Some(ask)) => Some(ask.key.clone()),
+                (form, None) => form.map(|asker| asker.id.clone()),
+            }
+        },
         jump: state.questions.open_questions.jump.clone(),
         total,
         summary,
@@ -845,6 +863,38 @@ pub fn project_with(
 /// Starting again from the newest whenever the reader sat at the bottom was tried and dropped: the newest question usually sits at the bottom, so the second click landed on it again instead of stepping back.
 pub fn previous(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
     let open: Vec<Asker> = unanswered(state).into_iter().cloned().collect();
+    // A coordinator's open work item asks are stops too, in time order among the forms and pages:
+    // each lands on its card under its reply (`extras::work_cards`).
+    let asks = crate::extras::work_cards::open_asks(state, context);
+    if !asks.is_empty() {
+        // Every stop, oldest first: (time, the row's message, the card or form to flash).
+        let mut stops: Vec<(i64, String, String, Option<Asker>)> = open
+            .iter()
+            .map(|asker| {
+                (
+                    asker.at.unwrap_or(i64::MIN),
+                    asker.message_id.clone(),
+                    asker.id.clone(),
+                    Some(asker.clone()),
+                )
+            })
+            .chain(
+                asks.iter()
+                    .map(|ask| (ask.at, ask.anchor.clone(), ask.key.clone(), None)),
+            )
+            .collect();
+        stops.sort_by_key(|stop| stop.0);
+        let last = state.questions.open_questions.last.as_deref();
+        let at = stops.iter().position(|stop| Some(stop.2.as_str()) == last);
+        let (_, message_id, target, asker) = stops[step(stops.len(), at)].clone();
+        if jump_to_row(state, context, &message_id, &target, None) {
+            return Vec::new();
+        }
+        if let Some(asker) = asker {
+            return crate::questions::resource_modal::go_to(state, context, &asker.id);
+        }
+        return Vec::new();
+    }
     if open.is_empty() {
         // The only questions waiting are older than the loaded rows (the pill counts them): "Go to
         // chat" brings the newest of them in and scrolls to it, as the Resources modal's button does.

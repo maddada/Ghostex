@@ -1334,7 +1334,8 @@ pub fn show_item(state: &mut ChatState, item: u64) -> Vec<crate::effect::Effect>
     Vec::new()
 }
 
-/// `coordinatorBoardAnswer {key, item, label, text}`: one of a card's answers. It is recorded with
+/// `coordinatorBoardAnswer {key, item, label, text, ask?}`: one of a card's answers (a board card's,
+/// or a work item ask card's, which names its `ask` tag; "Done" on a task). It is recorded with
 /// gxserver first (op `answer`, which refuses a second answer from any client), and only then sent
 /// to the coordinator as a message ("B4: Yes"), without touching the chat box. A card already
 /// answered here takes no second click.
@@ -1363,16 +1364,22 @@ pub fn answer(
         request_id,
         (key.to_string(), label.to_string(), text.to_string()),
     );
+    let mut body = json!({
+        "projectId": state.identity.project_id,
+        "sessionId": state.identity.session_id,
+        "op": "answer",
+        "item": item,
+        "answer": label,
+    });
+    // A work item card's ask names its question tag (`extras::work_cards`).
+    let ask = field("ask");
+    if !ask.is_empty() {
+        body["ask"] = json!(ask);
+    }
     Some(crate::effect::Effect::SendRpc {
         request_id,
         method: crate::wire::ChatRpcMethod::CoordinatorBoard,
-        params: Box::new(json!({
-            "projectId": state.identity.project_id,
-            "sessionId": state.identity.session_id,
-            "op": "answer",
-            "item": item,
-            "answer": label,
-        })),
+        params: Box::new(body),
     })
 }
 

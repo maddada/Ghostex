@@ -1106,10 +1106,23 @@ pub fn handle_work_request(
             if let Some(line) = param_text(params, "text") {
                 item.now = line;
             }
+            // Named as the user reads them: another item by its title, an ask by its words.
+            let others = list_work_items(db, key)?;
             let words = item
                 .waits
                 .iter()
-                .map(|wait| wait.on.clone())
+                .map(|wait| {
+                    let named = item_number_of(&wait.on)
+                        .filter(|_| wait.on.starts_with('W'))
+                        .and_then(|number| others.iter().find(|other| other.number == number))
+                        .map(|other| other.title.clone())
+                        .or_else(|| {
+                            others.iter().flat_map(|other| other.asks.iter()).find_map(|ask| {
+                                (!ask.tag.is_empty() && ask.tag == wait.on).then(|| ask.text.clone())
+                            })
+                        });
+                    named.unwrap_or_else(|| wait.on.clone())
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
             item.record("wait", format!("Waits on {words}"), &now);
@@ -1152,6 +1165,26 @@ pub fn handle_work_request(
         "answer" => {
             let given = param_text(params, "answer").ok_or_else(|| bad("Say the answer."))?;
             let wanted = param_text(params, "ask").and_then(|tag| question_tag(&tag));
+            // A task's Mark done on its card ("Done"): the ask is done, recorded once.
+            let task = item.asks.iter().position(|ask| {
+                wanted.as_ref().is_some_and(|tag| ask.tag == *tag)
+                    && ask.answers.is_empty()
+                    && given == "Done"
+            });
+            if let Some(index) = task {
+                let ask = &mut item.asks[index];
+                if !ask.is_open() {
+                    return Err(bad(format!("{name} was already answered: {}.", ask.answered)));
+                }
+                ask.answered = given.clone();
+                ask.settled_at = Some(now.clone());
+                let words = format!("{} done", ask.tag);
+                item.record("answer", words, &now);
+                finish_if_only_asking(&mut item, &now);
+                write_work_item(db, key, &item)?;
+                prune(db, key)?;
+                return Ok((answer(&item, threads, db, key), true));
+            }
             let ask = item
                 .asks
                 .iter_mut()

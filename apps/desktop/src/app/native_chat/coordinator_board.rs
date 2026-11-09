@@ -125,7 +125,7 @@ fn fit_chips(tags: &[Value], room: f32) -> (Vec<(Value, f32)>, usize) {
 
 /// Each group's icon and colour: the sidebar's question pink, approval red and working amber, so a
 /// row reads as its sidebar dot does.
-fn group_look(group: &str) -> (&'static str, Option<u32>) {
+pub(super) fn group_look(group: &str) -> (&'static str, Option<u32>) {
     match group {
         "needs" => (
             "titlebar/circle-dot.svg",

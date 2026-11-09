@@ -111,6 +111,9 @@ pub(crate) struct NativeChatView {
     pub(super) disclosure_motion: std::cell::RefCell<super::disclosure_motion::DisclosureMotions>,
     /// True while a row of the subagent viewer's transcript renders, where a rewind would act on the wrong conversation.
     pub(super) in_subagent: bool,
+    /// True while a summary-mode turn's rows render: its work item cards are drawn under the whole
+    /// turn (work_cards.rs), not under the reply inside its fold.
+    pub(super) in_summary_turn: bool,
     pub(super) context_editor_window: super::context_editor::ContextEditorWindowState,
     pub(crate) maximized_window: Option<gpui::WindowHandle<gpui_component::Root>>,
     /// Whether this session's composer is maximized, which outlives the window while the pane is off screen.
@@ -472,6 +475,7 @@ impl NativeChatView {
             answer_hold: Default::default(),
             transcript_focus_field_top: Default::default(),
             in_subagent: false,
+            in_summary_turn: false,
             maximized_window: None,
             maximized_wanted: false,
             maximized_opening: false,

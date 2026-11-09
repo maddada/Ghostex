@@ -783,6 +783,7 @@ pub fn handle_board_request(
                     "op": "answer",
                     "item": name,
                     "answer": params.get("answer"),
+                    "ask": params.get("ask"),
                 }))?;
                 return Ok((
                     json!({ "item": format!("B{number}"), "answered": params.get("answer"), "work": answered }),

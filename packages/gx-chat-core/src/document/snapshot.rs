@@ -284,6 +284,10 @@ pub struct Document {
     /// A thread's "Approved from <coordinator>" lines (`extras::relayed_approvals::audit_lines`),
     /// an array, empty when none. Family f.
     pub relayed_answer_lines: Tri<Value>,
+    /// A coordinator's work item cards (`extras::work_cards::project`), an array, empty when none:
+    /// drawn under the reply each sits under (`anchorId`), the item's newest card in full and its
+    /// earlier ones folded to one line. Family f.
+    pub work_cards: Tri<Value>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,
