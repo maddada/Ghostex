@@ -354,14 +354,71 @@ impl<'a> RemotePairingRepository<'a> {
         Ok(key)
     }
 
+    /// A paired device's key for `purpose` (`remote_paired_device_purpose_keys`, migration 0073).
+    pub fn device_purpose_key(&self, device_id: &str, purpose: &str) -> Result<Option<String>> {
+        self.db
+            .query_row(
+                "SELECT clientKey FROM remote_paired_device_purpose_keys WHERE deviceId = ?1 AND purpose = ?2",
+                params![device_id, purpose],
+                |row| row.get(0),
+            )
+            .optional()
+            .with_context(|| "read paired device purpose key")
+    }
+
+    /// Sets a paired device's key for `purpose`, replacing the one it had.
+    pub fn set_device_purpose_key(
+        &self,
+        device_id: &str,
+        purpose: &str,
+        client_key: &str,
+    ) -> Result<()> {
+        self.db
+            .execute(
+                "INSERT INTO remote_paired_device_purpose_keys (deviceId, purpose, clientKey, updatedAt)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(deviceId, purpose) DO UPDATE SET clientKey = excluded.clientKey,
+                   updatedAt = excluded.updatedAt",
+                params![device_id, purpose, client_key, now_iso()],
+            )
+            .with_context(|| "save paired device purpose key")?;
+        Ok(())
+    }
+
+    /// Every purpose key of a device, as `(purpose, key)`.
+    pub fn device_purpose_keys(&self, device_id: &str) -> Result<Vec<(String, String)>> {
+        let mut statement = self
+            .db
+            .prepare("SELECT purpose, clientKey FROM remote_paired_device_purpose_keys WHERE deviceId = ?1")
+            .with_context(|| "prepare paired device purpose keys")?;
+        let rows = statement
+            .query_map(params![device_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .with_context(|| "list paired device purpose keys")?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .with_context(|| "read paired device purpose keys")
+    }
+
+    /// Drops every purpose key of a device and returns them.
+    pub fn remove_device_purpose_keys(&self, device_id: &str) -> Result<Vec<(String, String)>> {
+        let keys = self.device_purpose_keys(device_id)?;
+        self.db
+            .execute(
+                "DELETE FROM remote_paired_device_purpose_keys WHERE deviceId = ?1",
+                params![device_id],
+            )
+            .with_context(|| "remove paired device purpose keys")?;
+        Ok(keys)
+    }
+
     /// Whether any remaining device's link key is `client_key`.
     pub fn link_key_in_use(&self, client_key: &str) -> Result<bool> {
         let count: i64 = self
             .db
             .query_row(
-                "SELECT COUNT(*) FROM remote_paired_device_link_keys l
-                 JOIN remote_paired_devices d ON d.id = l.deviceId
-                 WHERE l.clientKey = ?1",
+                "SELECT (SELECT COUNT(*) FROM remote_paired_device_link_keys l
+                   JOIN remote_paired_devices d ON d.id = l.deviceId WHERE l.clientKey = ?1)
+                 + (SELECT COUNT(*) FROM remote_paired_device_purpose_keys p
+                   JOIN remote_paired_devices d ON d.id = p.deviceId WHERE p.clientKey = ?1)",
                 params![client_key],
                 |row| row.get(0),
             )

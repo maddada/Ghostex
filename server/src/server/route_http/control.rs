@@ -76,7 +76,9 @@ pub(super) async fn route_control_http(
         | "/api/cancelComputerPairing"
         | "/api/pairedDeviceSeen"
         | "/api/easyConnectAddresses"
-        | crate::remote_access::EASY_CONNECT_CLIENT_KEY_ENDPOINT => {
+        | crate::remote_access::EASY_CONNECT_CLIENT_KEY_ENDPOINT
+        | crate::remote_access::COMPUTER_EASY_CONNECT_KEYS_ENDPOINT
+        | crate::remote_access::computer_link_keys::EASY_CONNECT_LINK_KEY_ENDPOINT => {
             handle_remote_access_http(&state, &caller, endpoint.path, request_id, &body_json).await
         }
         path if super::COLLAB_ENDPOINTS.contains(&path) => {

@@ -56,6 +56,8 @@ struct OutgoingPairing {
     computer_name: String,
     /// The other computer's Easy Connect address, recorded once it approves.
     address: String,
+    /// The other computer's gxserver port, recorded with it.
+    gxserver_port: u16,
 }
 
 fn outgoing() -> &'static Mutex<HashMap<String, OutgoingPairing>> {
@@ -284,6 +286,8 @@ pub fn start_computer_pairing(paths: &GxserverPaths, code: ComputerPairingCode) 
         base_url: format!("http://127.0.0.1:{local_port}"),
         local_port,
         remote_port: code.port,
+        // Pairing registers `client-default`, so it dials with that key.
+        client_key: None,
     };
     let tunnel = start_tailcat_tunnel(&binary, &plan).map_err(|error| anyhow!("{error}"))?;
     let identity = super::probe_cache::cached_remote_access_identity()?;
@@ -341,6 +345,7 @@ pub fn start_computer_pairing(paths: &GxserverPaths, code: ComputerPairingCode) 
                 last_timestamp_ms: 0,
                 computer_name: computer_name.clone(),
                 address: code.address.clone(),
+                gxserver_port: code.port,
             },
         );
     Ok(json!({ "pendingId": pending_id, "words": words, "computerName": computer_name }))
@@ -350,7 +355,7 @@ pub fn start_computer_pairing(paths: &GxserverPaths, code: ComputerPairingCode) 
 /// `{ status: "pending" | "approved" | "denied" | "expired", computerName }`. The tunnel closes
 /// once it is over.
 pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Result<Value> {
-    let (local_port, key_pkcs8, timestamp_ms, computer_name, address) = {
+    let (local_port, key_pkcs8, timestamp_ms, computer_name, address, gxserver_port) = {
         let mut map = outgoing()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -365,6 +370,7 @@ pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Resul
             timestamp_ms,
             pairing.computer_name.clone(),
             pairing.address.clone(),
+            pairing.gxserver_port,
         )
     };
     let signature = device_sign(
@@ -386,7 +392,7 @@ pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Resul
         Err(_) => "failed".to_string(),
     };
     if status == "approved" {
-        record_paired_computer(paths, &address, &computer_name);
+        record_paired_computer(paths, &address, &computer_name, gxserver_port);
     }
     if status != "pending" {
         cancel_computer_pairing(pending_id);
@@ -410,6 +416,9 @@ pub struct PairedComputer {
     pub address: String,
     pub computer_name: String,
     pub paired_at_ms: i64,
+    /// Its gxserver port behind Easy Connect; absent on pairings recorded before 2026-11-10.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gxserver_port: Option<u16>,
 }
 
 /*
@@ -434,7 +443,12 @@ pub fn read_paired_computers(paths: &GxserverPaths) -> Vec<PairedComputer> {
 }
 
 /// Records that the computer at `address` approved this one, replacing an older record for it.
-fn record_paired_computer(paths: &GxserverPaths, address: &str, computer_name: &str) {
+fn record_paired_computer(
+    paths: &GxserverPaths,
+    address: &str,
+    computer_name: &str,
+    gxserver_port: u16,
+) {
     let mut paired: Vec<PairedComputer> = read_paired_computers(paths)
         .into_iter()
         .filter(|entry| entry.address != address)
@@ -443,6 +457,7 @@ fn record_paired_computer(paths: &GxserverPaths, address: &str, computer_name: &
         address: address.to_string(),
         computer_name: computer_name.to_string(),
         paired_at_ms: chrono::Utc::now().timestamp_millis(),
+        gxserver_port: Some(gxserver_port),
     });
     let path = paired_computers_path(paths);
     if let Some(parent) = path.parent() {

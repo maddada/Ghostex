@@ -1027,6 +1027,87 @@ pub fn renew_device_token(
     }))
 }
 
+/// `/api/registerComputerEasyConnectKeys`: the parameters a paired computer signs.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedComputerKeysParams {
+    /// The computer's pairing device key (base64 P-256 point), which names its row here.
+    pub device_key: String,
+    pub timestamp_ms: u64,
+    pub signature: String,
+    /// `purpose` → `nodekey:…` (`app`, `server`).
+    pub keys: std::collections::BTreeMap<String, String>,
+}
+
+/*
+CDXC:RemotePairing 2026-11-10 DECISION:
+User (Q2106, with the conditions "it must not break older iPhone versions and must not require
+re-pairing"): a computer that is already paired gets Easy Connect keys of its own on this computer,
+on its own, with nothing to approve or click. It holds no device token (a computer never gets one),
+so it signs the request with the pairing device key this computer already stored for it; the row
+is found by that key, the timestamp must be fresh and newer than its last, and only then do the
+keys go on the allow-list beside its pairing key, which stays valid. Phones keep their own route
+(`/api/registerEasyConnectClientKey`, device token), and an older computer never asks.
+SEE-ALSO: server/src/remote_access/computer_link_keys.rs (the asking side),
+server/src/remote_access/paired_devices.rs (`register_device_purpose_keys`).
+*/
+/// Verifies a paired computer's signed request and registers its keys. Answers `{ changed }`.
+pub fn register_computer_keys_signed(
+    paths: &GxserverPaths,
+    db: &Connection,
+    tailcat_runtime: &TailcatRuntime,
+    pairing_runtime: &RemotePairingRuntime,
+    ask: SignedComputerKeysParams,
+) -> Result<Value, PairDeviceError> {
+    let now = now_ms();
+    let refused = || {
+        PairDeviceError::BadSignature(
+            "This computer doesn't know that device key, or the clocks are more than five minutes apart.".to_string(),
+        )
+    };
+    let device = RemotePairingRepository::new(db)
+        .list_devices()?
+        .into_iter()
+        .find(|device| {
+            device.status == PairedDeviceStatus::Paired
+                && device
+                    .device_key
+                    .as_ref()
+                    .is_some_and(|key| key.public_key == ask.device_key)
+        })
+        .ok_or_else(refused)?;
+    let keys: Vec<(String, String)> = ask
+        .keys
+        .iter()
+        .map(|(purpose, key)| (purpose.clone(), key.trim().to_string()))
+        .collect();
+    let payload = ghostex_gx_protocol::pairing::easy_connect_client_keys_payload(
+        &ask.device_key,
+        ask.timestamp_ms,
+        &keys,
+    );
+    // As with a token renewal, the signature is checked before the timestamp is remembered.
+    if !timestamp_is_fresh(ask.timestamp_ms, now)
+        || !verify_device_signature(&ask.device_key, &payload, &ask.signature)
+        || !pairing_runtime
+            .accept_renewal_timestamp(&format!("easyConnectKeys:{}", device.id), ask.timestamp_ms)
+    {
+        return Err(refused());
+    }
+    match super::paired_devices::register_device_purpose_keys(
+        paths,
+        db,
+        tailcat_runtime,
+        &device.id,
+        &keys,
+    )? {
+        Ok(changed) => Ok(json!({ "changed": changed })),
+        Err(_) => Err(PairDeviceError::BadRequest(
+            "keys must name app or server, each with a nodekey: public key.".to_string(),
+        )),
+    }
+}
+
 fn log_authorized_key_rollback_failure(
     logger: &GxserverLogger,
     device_id: &str,

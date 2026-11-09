@@ -79,6 +79,7 @@ pub(crate) fn attach(
                 remote_port: u16::try_from(info.gxserver_port).map_err(|_| {
                     CliError::Other("The box's gxserver port is invalid.".to_string())
                 })?,
+                client_key: None,
             };
             tunnel = Some(start_tailcat_tunnel(&binary, &plan)?);
             plan.base_url

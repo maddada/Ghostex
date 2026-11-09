@@ -196,11 +196,15 @@ pub(crate) fn remove_paired_device_using(
     drop(push_registrations);
     reload_device_api_tokens(db, device_tokens)?;
     let link_key = repository.remove_device_link_key(&device.id)?;
+    let purpose_keys = repository.remove_device_purpose_keys(&device.id)?;
     if let Some(client_key) = device.tailcat_client_key.as_deref() {
         remove_tailcat_client_key(paths, db, tailcat_runtime, client_key)?;
     }
     if let Some(link_key) = link_key.as_deref() {
         remove_tailcat_client_key(paths, db, tailcat_runtime, link_key)?;
+    }
+    for (_, purpose_key) in purpose_keys {
+        remove_tailcat_client_key(paths, db, tailcat_runtime, &purpose_key)?;
     }
     Ok(Some(device))
 }
@@ -248,6 +252,15 @@ pub fn replace_earlier_pairings_of_same_phone(
         if let Some(link_key) = repository.remove_device_link_key(&device.id)? {
             if repository.device_link_key(new_device_id)?.is_none() {
                 repository.set_device_link_key(new_device_id, &link_key)?;
+            }
+        }
+        // A computer paired again keeps dialing with the keys it registered per purpose, too.
+        for (purpose, key) in repository.remove_device_purpose_keys(&device.id)? {
+            if repository
+                .device_purpose_key(new_device_id, &purpose)?
+                .is_none()
+            {
+                repository.set_device_purpose_key(new_device_id, &purpose, &key)?;
             }
         }
         if let Some(removed) = repository.remove_device(&device.id)? {
@@ -322,6 +335,9 @@ pub fn add_tailcat_client_key_when_allow_listed(
 /// Where a paired device registers its own Easy Connect key for this computer.
 pub const EASY_CONNECT_CLIENT_KEY_ENDPOINT: &str = "/api/registerEasyConnectClientKey";
 
+/// Where a paired computer registers its keys per purpose, signed with its pairing device key.
+pub const COMPUTER_EASY_CONNECT_KEYS_ENDPOINT: &str = "/api/registerComputerEasyConnectKeys";
+
 /// Why a link key was refused.
 #[derive(Debug, PartialEq, Eq)]
 pub enum LinkKeyError {
@@ -377,6 +393,113 @@ pub fn register_device_link_key(
     }
     Ok(Ok(true))
 }
+
+/// The purposes a paired computer registers a key of its own for: its desktop app's forward and its
+/// gxserver's tunnels (CDXC:RemotePairing 2026-11-10 in `computer_link_keys.rs`).
+pub const COMPUTER_KEY_PURPOSES: [&str; 2] = ["app", "server"];
+
+/// Registers `keys` (`(purpose, key)`) for `device_id`, replacing the keys it had for those
+/// purposes, with one allow-list change (one helper restart) for all of them. Returns whether
+/// anything changed.
+pub fn register_device_purpose_keys(
+    paths: &GxserverPaths,
+    db: &Connection,
+    tailcat_runtime: &TailcatRuntime,
+    device_id: &str,
+    keys: &[(String, String)],
+) -> Result<std::result::Result<bool, LinkKeyError>> {
+    if keys.is_empty()
+        || keys.iter().any(|(purpose, key)| {
+            !COMPUTER_KEY_PURPOSES.contains(&purpose.as_str())
+                || !super::pair_device::is_tailcat_client_public_key(key)
+        })
+    {
+        return Ok(Err(LinkKeyError::BadKey));
+    }
+    let repository = RemotePairingRepository::new(db);
+    let Some(device) = repository.find_device(device_id)? else {
+        return Ok(Err(LinkKeyError::NotPaired));
+    };
+    if device.status != PairedDeviceStatus::Paired {
+        return Ok(Err(LinkKeyError::NotPaired));
+    }
+    let mut added = Vec::new();
+    let mut replaced = Vec::new();
+    for (purpose, key) in keys {
+        let previous = repository.device_purpose_key(device_id, purpose)?;
+        repository.set_device_purpose_key(device_id, purpose, key)?;
+        added.push(key.clone());
+        if let Some(previous) = previous.filter(|previous| previous != key) {
+            replaced.push(previous);
+        }
+    }
+    let current = read_tailcat_status_payload(paths, db, tailcat_runtime).allowed_client_keys;
+    if purpose_keys_allow_list(db, current.clone(), &added, &replaced)? == current {
+        return Ok(Ok(false));
+    }
+    /*
+    CDXC:RemotePairing 2026-11-10 WHY: the computer asks through its Easy Connect tunnel, and a new
+    allow-list restarts the helper that tunnel runs on, so applied at once it cut off this request's
+    own answer and the asking computer waited out its timeout before asking again. It is applied
+    a moment after the answer leaves, against the list as it stands then.
+    */
+    let paths = paths.clone();
+    let tailcat_runtime = tailcat_runtime.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(PURPOSE_KEYS_APPLY_AFTER);
+        let applied = crate::storage::open_gxserver_database(&paths).and_then(|db| {
+            let current =
+                read_tailcat_status_payload(&paths, &db, &tailcat_runtime).allowed_client_keys;
+            let next = purpose_keys_allow_list(&db, current.clone(), &added, &replaced)?;
+            if next == current {
+                return Ok(());
+            }
+            apply_tailcat_state_update(
+                &paths,
+                &db,
+                &tailcat_runtime,
+                TailcatStateUpdate::SetAllowedClientKeys {
+                    allowed_client_keys: next,
+                },
+            )
+            .map(|_| ())
+        });
+        if let Err(error) = applied {
+            eprintln!("[gxserver] could not add a paired computer's Easy Connect keys: {error:#}");
+        }
+    });
+    Ok(Ok(true))
+}
+
+/// `allowed` with `added` keys still registered put on and `replaced` keys no one uses any more
+/// taken off.
+fn purpose_keys_allow_list(
+    db: &Connection,
+    mut allowed: Vec<String>,
+    added: &[String],
+    replaced: &[String],
+) -> Result<Vec<String>> {
+    for key in added {
+        if !tailcat_client_key_in_use(db, key)? {
+            continue;
+        }
+        if let Some(next) = allow_list_with_client_key(allowed.clone(), key) {
+            allowed = next;
+        }
+    }
+    for key in replaced {
+        if tailcat_client_key_in_use(db, key)? {
+            continue;
+        }
+        if let Some(next) = allow_list_without_client_key(allowed.clone(), key) {
+            allowed = next;
+        }
+    }
+    Ok(allowed)
+}
+
+/// How long after answering a paired computer its new keys go on the allow-list.
+const PURPOSE_KEYS_APPLY_AFTER: std::time::Duration = std::time::Duration::from_millis(1500);
 
 /// The allow-list with `client_key` added (and `none` dropped), or `None` when it is listed already.
 fn allow_list_with_client_key(allowed: Vec<String>, client_key: &str) -> Option<Vec<String>> {
@@ -482,6 +605,10 @@ mod tests {
             "../storage/migrations/0072_paired_device_link_keys.sql"
         ))
         .expect("link keys table");
+        db.execute_batch(include_str!(
+            "../storage/migrations/0073_paired_device_purpose_keys.sql"
+        ))
+        .expect("purpose keys table");
         db
     }
 

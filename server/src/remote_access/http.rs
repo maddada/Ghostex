@@ -280,6 +280,49 @@ pub(crate) async fn handle_remote_access_http(
             })
             .await
         }
+        // The desktop app's key for a computer it reaches over Easy Connect (computer_link_keys.rs).
+        super::computer_link_keys::EASY_CONNECT_LINK_KEY_ENDPOINT => {
+            tokio::task::spawn_blocking(move || {
+                Ok(super::computer_link_keys::easy_connect_link_key_answer(
+                    &paths, &params,
+                )?)
+            })
+            .await
+        }
+        // A paired computer registers keys of its own, signed with its pairing device key
+        // (CDXC:RemotePairing 2026-11-10 in pair_device.rs). No token: the signature names it.
+        COMPUTER_EASY_CONNECT_KEYS_ENDPOINT => {
+            let ask: SignedComputerKeysParams = match serde_json::from_value(params.clone()) {
+                Ok(ask) => ask,
+                Err(error) => {
+                    return RemoteAccessHttpError::bad_request(format!("Bad request: {error}"))
+                        .into_response(endpoint_path, request_id)
+                }
+            };
+            tokio::task::spawn_blocking(move || {
+                let db = open_gxserver_database(&paths)?;
+                let answer = register_computer_keys_signed(
+                    &paths,
+                    &db,
+                    &tailcat_runtime,
+                    &pairing_runtime,
+                    ask,
+                )?;
+                if answer.get("changed") == Some(&Value::Bool(true)) {
+                    crate::audit::record(
+                        crate::audit::Action::new(
+                            "pairing.linkKey",
+                            "A paired computer gave Easy Connect keys of its own for this computer",
+                        ),
+                        actor,
+                        crate::audit::Outcome::Done,
+                        None,
+                    );
+                }
+                Ok(answer)
+            })
+            .await
+        }
         // A paired phone or computer names a key of its own for this computer (CDXC:RemotePairing
         // 2026-11-10 in paired_devices.rs). Only for its own row: the device token says which.
         EASY_CONNECT_CLIENT_KEY_ENDPOINT => {

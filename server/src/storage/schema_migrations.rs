@@ -1340,4 +1340,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0072_paired_device_link_keys",
         sql: include_str!("migrations/0072_paired_device_link_keys.sql"),
     },
+    Migration {
+        id: "0073_paired_device_purpose_keys",
+        sql: include_str!("migrations/0073_paired_device_purpose_keys.sql"),
+    },
 ];

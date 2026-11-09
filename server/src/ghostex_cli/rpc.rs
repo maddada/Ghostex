@@ -1469,7 +1469,18 @@ fn start_gxserver_tailcat_tunnel(
     let Some(binary_path) = crate::tailcat::resolve_client_tailcat_binary() else {
         return Err(tailcat_missing_error(target));
     };
-    let tunnel = start_tailcat_tunnel(&binary_path, plan)?;
+    // gxserver's own key for this computer once it registered one there, `client-default` until then
+    // (CDXC:RemotePairing 2026-11-10 in remote_access/computer_link_keys.rs).
+    let mut plan = plan.clone();
+    if plan.client_key.is_none() {
+        plan.client_key = crate::remote_access::computer_link_keys::computer_link_key(
+            &crate::paths::get_gxserver_paths(None),
+            &plan.address_blob,
+            crate::remote_access::computer_link_keys::LINK_KEY_PURPOSE_SERVER,
+            Some(plan.remote_port),
+        );
+    }
+    let tunnel = start_tailcat_tunnel(&binary_path, &plan)?;
     /*
     Unlike an ssh -L forward (whose local socket answers in milliseconds once
     sshd is up), every probe here dials the remote through a fresh tailcat

@@ -490,12 +490,40 @@ fn supervise_tailcat_client(
 /// One run of `tailcat forward --bind=127.0.0.1 <address> 0:<port>`: its loopback port is
 /// published once it prints it, and the run ends when it exits, the forwarder stops, or a
 /// connection asks for a restart.
+/// How long the forwarder waits for gxserver to name its key for a machine: the first ask registers
+/// the keys there, which takes a tunnel's rendezvous and an answer, for each port it tries.
+const LINK_KEY_TIMEOUT: Duration = Duration::from_secs(40);
+
+/// This computer's own Easy Connect key for the machine at `address`, or `None` for `client-default`.
+///
+/// CDXC:RemotePairing 2026-11-10 WHY: the forwarder and gxserver's own tunnels to one machine,
+/// and the forwarders to two machines on one relay, stalled each other while all dialed with
+/// `client-default` (GitHub #526). gxserver, which holds the pairing device key, registers keys of
+/// this computer's own with each machine (server/src/remote_access/computer_link_keys.rs) and names
+/// the app's here; a machine whose Ghostex can't take them, or a gxserver that doesn't answer,
+/// leaves the forwarder on `client-default` as before.
+fn easy_connect_link_key(address: &str) -> Option<PathBuf> {
+    let params = serde_json::json!({ "address": address, "purpose": "app" });
+    let (status, body) =
+        gxserver_post_typed_operation("/api/easyConnectLinkKey", &params, LINK_KEY_TIMEOUT).ok()?;
+    if status != 200 {
+        return None;
+    }
+    let answer: serde_json::Value = serde_json::from_str(&body).ok()?;
+    let path = PathBuf::from(answer.pointer("/result/keyPath")?.as_str()?);
+    path.is_file().then_some(path)
+}
+
 fn run_tailcat_client_once(
     spec: &EasyConnectConnectionSpec,
     shutdown: &Arc<AtomicBool>,
     client: &SharedTailcatClient,
 ) {
-    let child = gpui_background_command(&spec.binary_path)
+    let mut command = gpui_background_command(&spec.binary_path);
+    if let Some(key) = easy_connect_link_key(&spec.address_blob) {
+        command.arg(format!("--key={}", key.display()));
+    }
+    let child = command
         .arg("forward")
         .arg(format!("--bind={GPUI_EASY_CONNECT_FORWARD_HOST}"))
         .arg(&spec.address_blob)

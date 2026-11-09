@@ -25,6 +25,8 @@ pub const PAIRING_WORDS_DOMAIN: &str = "ghostex-pairing-words-v1";
 pub const PAIRING_STATUS_DOMAIN: &str = "ghostex-pairing-status-v1";
 /// First line of the payload a paired phone signs to renew its device token.
 pub const DEVICE_TOKEN_RENEW_DOMAIN: &str = "ghostex-device-token-v1";
+/// First line of [`easy_connect_client_keys_payload`].
+pub const EASY_CONNECT_CLIENT_KEYS_DOMAIN: &str = "ghostex-easy-connect-client-keys-v1";
 
 /// How many words both screens show.
 pub const PAIRING_WORD_COUNT: usize = 3;
@@ -63,6 +65,27 @@ pub fn pairing_status_payload(pending_id: &str, timestamp_ms: u64) -> Vec<u8> {
 /// `ghostex-device-token-v1\n<deviceId>\n<timestampMs>`.
 pub fn device_token_renew_payload(device_id: &str, timestamp_ms: u64) -> Vec<u8> {
     format!("{DEVICE_TOKEN_RENEW_DOMAIN}\n{device_id}\n{timestamp_ms}").into_bytes()
+}
+
+/// The payload a paired computer signs with its pairing device key to register Easy Connect client
+/// keys of its own on the computer it paired with: `ghostex-easy-connect-client-keys-v1\n<device
+/// public key>\n<timestampMs>` and then one `<purpose>=<client key>` line per key, sorted by purpose.
+pub fn easy_connect_client_keys_payload(
+    device_public_key: &str,
+    timestamp_ms: u64,
+    keys: &[(String, String)],
+) -> Vec<u8> {
+    let mut sorted: Vec<&(String, String)> = keys.iter().collect();
+    sorted.sort();
+    let mut payload =
+        format!("{EASY_CONNECT_CLIENT_KEYS_DOMAIN}\n{device_public_key}\n{timestamp_ms}");
+    for (purpose, key) in sorted {
+        payload.push('\n');
+        payload.push_str(purpose);
+        payload.push('=');
+        payload.push_str(key);
+    }
+    payload.into_bytes()
 }
 
 /// The device key a phone sends with `/api/pairDevice`.

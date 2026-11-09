@@ -186,4 +186,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0070_gbots_computer",
     "0071_gbots_voice",
     "0072_paired_device_link_keys",
+    "0073_paired_device_purpose_keys",
 ];

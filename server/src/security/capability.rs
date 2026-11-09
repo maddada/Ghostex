@@ -219,6 +219,8 @@ pub fn route_access(path: &str) -> RouteAccess {
         "/api/health" | "/api/pairDevice" | "/api/pairingStatus" | "/api/renewDeviceToken" => {
             RouteAccess::Public
         }
+        // A paired computer has no token here; its request is signed with its pairing device key.
+        crate::remote_access::COMPUTER_EASY_CONNECT_KEYS_ENDPOINT => RouteAccess::Public,
         // The Collab component's calls: its handler takes only the host token gxserver gave it.
         "/api/collabHost" => RouteAccess::Public,
         // Only asks: the phone becomes Pending until the owner approves it with matching words.

@@ -1107,6 +1107,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/easyConnectAddresses"
         // CDXC:RemotePairing 2026-11-10 WHY: a paired device registers its own Easy Connect key through the tunnel, which lands on the local listener; it edits the allow-list, so like the pairing routes it never answers on the remote listener.
         | crate::remote_access::EASY_CONNECT_CLIENT_KEY_ENDPOINT
+        // CDXC:RemotePairing 2026-11-10 WHY: the desktop app asks its own gxserver for the key it dials a paired computer with; the answer is a key file on this computer, so only the local listener serves it.
+        | crate::remote_access::computer_link_keys::EASY_CONNECT_LINK_KEY_ENDPOINT
         | "/api/queryLogs" => full_local(path),
         /*
         CDXC:Feedback 2026-10-04 WHY:
@@ -1174,7 +1176,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         against the key it paired with, timestamps fresh and only ever newer) and the answer
         carries a token only for that key. FullLocal like `/api/pairDevice`.
         */
-        "/api/pairDevice" | "/api/pairingStatus" | "/api/renewDeviceToken" => descriptor(
+        // CDXC:RemotePairing 2026-11-10 WHY: a paired computer registers Easy Connect keys of its own the same way, signed with its pairing device key, since a computer never holds a device token (remote_access/pair_device.rs `register_computer_keys_signed`).
+        "/api/pairDevice"
+        | "/api/pairingStatus"
+        | "/api/renewDeviceToken"
+        | crate::remote_access::COMPUTER_EASY_CONNECT_KEYS_ENDPOINT => descriptor(
             path,
             ApiPermission::FullLocal,
             false,

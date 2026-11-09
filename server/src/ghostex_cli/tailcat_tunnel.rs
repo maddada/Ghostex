@@ -36,6 +36,9 @@ pub struct TailcatForwardPlan {
     pub base_url: String,
     pub local_port: u16,
     pub remote_port: u16,
+    /// A key of this computer's own for that computer (`computer_link_keys.rs`); `None` dials with
+    /// tailcat's `client-default`, the key it paired with.
+    pub client_key: Option<PathBuf>,
 }
 
 pub fn create_cli_tailcat_forward_plan(
@@ -64,6 +67,7 @@ pub fn create_cli_tailcat_forward_plan(
         base_url: format!("http://{GXSERVER_LOCAL_API_HOST}:{local_port}"),
         local_port,
         remote_port,
+        client_key: None,
     })
 }
 
@@ -169,6 +173,7 @@ pub fn start_tailcat_tunnel(
         address_blob: plan.address_blob.clone(),
         binary_path: binary_path.to_path_buf(),
         remote_port: plan.remote_port,
+        client_key: plan.client_key.clone(),
     };
     {
         let shutdown = Arc::clone(&shutdown);
@@ -189,6 +194,7 @@ struct TailcatConnectionSpec {
     address_blob: String,
     binary_path: PathBuf,
     remote_port: u16,
+    client_key: Option<PathBuf>,
 }
 
 /// Runs the tunnel's `tailcat forward` until the tunnel stops, starting it again (after a
@@ -220,7 +226,11 @@ fn run_tailcat_client_once(
     shutdown: &Arc<AtomicBool>,
     client: &SharedTailcatClient,
 ) {
-    let child = crate::platform::process::background_command(&spec.binary_path)
+    let mut command = crate::platform::process::background_command(&spec.binary_path);
+    if let Some(key) = &spec.client_key {
+        command.arg(format!("--key={}", key.display()));
+    }
+    let child = command
         .arg("forward")
         .arg(format!("--bind={GXSERVER_LOCAL_API_HOST}"))
         .arg(&spec.address_blob)
