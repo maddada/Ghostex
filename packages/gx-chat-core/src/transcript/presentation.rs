@@ -1267,7 +1267,7 @@ fn hidden_live<'p>(
 
 /// The rows for `projection`: its summary turns in the Summary view, else its render items.
 ///
-/// CDXC:SessionChat 2026-11-09 DECISION: Sebastian confirmed that Agent work Reduced and Quiet win over the Summary view's open running work (the 2026-10-13 decision on `summary_mode_turns`): under Reduced and Quiet the running turn's "Active work" starts shut and its newest row's calls start shut, and under Quiet its rows are hidden while the agent runs, as outside the Summary view (`grouped_work::hide_work`); what needs the user still shows at once (`grouped_work::keep_in_view_while_shut`). Default keeps the 2026-10-13 behaviour.
+/// CDXC:SessionChat 2026-11-09 WHY: the contributor of the chat look (sebastianarena) chose that Agent work Reduced and Quiet win over the Summary view's open running work (the 2026-10-13 decision on `summary_mode_turns`): under Reduced and Quiet the running turn's "Active work" starts shut and its newest row's calls start shut, and under Quiet its rows are hidden while the agent runs, as outside the Summary view (`grouped_work::hide_work`); what needs the user still shows at once (`grouped_work::keep_in_view_while_shut`). Default keeps the 2026-10-13 behaviour.
 fn turn_items(
     builder: &mut Builder,
     projection: &TranscriptProjection,

@@ -347,7 +347,7 @@ pub fn hide_work(
 /// running response's rows (`live`) and a subagent's report do not. A call waiting on an approval
 /// still draws ([`only_what_waits`]), and a row left with nothing to draw goes.
 ///
-/// CDXC:SessionChat 2026-11-09 DECISION: Sebastian decided that under Quiet the tool calls are hidden for these agents too, while hiding their words stays cautious; before, nothing of the running response was hidden for them and its calls drew in the chat.
+/// CDXC:SessionChat 2026-11-09 WHY: the contributor of the chat look (sebastianarena) chose that under Quiet the tool calls are hidden for these agents too, while hiding their words stays cautious; before, nothing of the running response was hidden for them and its calls drew in the chat.
 pub fn hide_live_calls(items: &mut Vec<TranscriptItem>, live: &std::collections::HashSet<&str>) {
     let keep = |message: &mut crate::document::ProjectedMessage| -> bool {
         if !live.contains(message["id"].as_str().unwrap_or_default()) {

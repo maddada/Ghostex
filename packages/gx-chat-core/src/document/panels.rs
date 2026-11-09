@@ -56,7 +56,7 @@ pub struct WorkingCard {
     /// capsule above the chat box: the setting is on and the transcript has a row to end with.
     /// An empty chat keeps the capsule, so the status still shows (`transcript/chat_look.rs`).
     ///
-    /// CDXC:SessionChat 2026-11-09 DECISION: Sebastian decided that with Status line in the chat on, the working status must still show while the agent works on an empty chat, where the line had no row to end; the capsule above the chat box shows until the transcript has one.
+    /// CDXC:SessionChat 2026-11-09 WHY: the contributor of the chat look (sebastianarena) chose that with Status line in the chat on, the working status must still show while the agent works on an empty chat, where the line had no row to end; the capsule above the chat box shows until the transcript has one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub in_transcript: bool,
 }

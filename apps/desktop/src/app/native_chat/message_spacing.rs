@@ -36,7 +36,7 @@ impl ChatAppearance {
     /// status row), shrunk at Compact by the row gap's own ratio (16px to 8px): `default` at
     /// Default.
     ///
-    /// CDXC:SessionChat 2026-11-09 DECISION: Sebastian: Compact halves the gaps inside a turn like the row gap. So at Compact the gap between a finished turn's parts (10px to 5px), a summary turn's gap (8px to 4px) and the space under thinking, side question and status rows (13px to 6.5px) are halved, on the desktop and the phone (`innerGapOf` in apps/mobile/app/src/chat/native/transcript/messageSpacing.ts).
+    /// CDXC:SessionChat 2026-11-09 WHY: the contributor of the chat look (sebastianarena) chose that Compact halves the gaps inside a turn like the row gap. So at Compact the gap between a finished turn's parts (10px to 5px), a summary turn's gap (8px to 4px) and the space under thinking, side question and status rows (13px to 6.5px) are halved, on the desktop and the phone (`innerGapOf` in apps/mobile/app/src/chat/native/transcript/messageSpacing.ts).
     pub(super) fn inner_gap(&self, default: f32) -> f32 {
         if self.compact() {
             default * COMPACT_ROW_GAP / super::transcript_layout::LAYOUT.row_gap
