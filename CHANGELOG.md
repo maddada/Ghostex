@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Computers you control over Easy Connect stay connected to each other:** a computer you already paired now gets connection keys of its own for each computer it reaches, by itself, with nothing to approve and no need to pair again, so the app's connection, Ghostex's own connection and a connection to a second computer no longer get in each other's way. Computers and phones on older Ghostex versions keep connecting as before.
 - **Connecting a computer you added yourself no longer asks for Touch ID:** connecting a computer in Settings > Remote lets the agents on both computers reach each other right away. Only an agent asking on its own still needs your approval, once per computer.
 - **Easy Connect and another computer's owner approval are asked once, then remembered:** turning on Easy Connect asks the first time only (if your Easy Connect was already set up, it counts as approved), and its ports, relay and allowed devices change without asking. A computer that has its own Ghostex app asks once, as soon as you connect it, to let this computer answer its approval cards too.
 - **Fewer settings ask for Touch ID:** only Accounts, Secrets, Connectors and Remote's ways in (SSH access, Easy Connect, pairing, Tailscale) ask before saving. Sync settings and the rest of the Remote page save right away, so turning on Sync on a computer without the app works.
