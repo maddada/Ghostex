@@ -460,10 +460,31 @@ while any other exit `0` means only that a job changed state.
   `gh pr list --repo Homebrew/homebrew-cask --search ghostex --state all --limit 3`.
   If no PR appears within a few hours, open it ourselves: `HOMEBREW_GITHUB_API_TOKEN=... node tooling/release-gpui/publish-homebrew-cask.mjs --version X.Y.Z --publish --official`
   (`tooling/release-gpui/homebrew-cask-setup.md`).
-- **AUR (`ghostex-bin`)**: never touch it. Another person updates it
-  automatically, and the Linux stage's AUR step skips itself because
-  `AUR_SSH_PRIVATE_KEY` is not set. Don't run `bun run release:aur`, don't add
-  the secret, and don't report on it.
+- **AUR (`ghostex-bin`)**: automatic (user decision Q2160, 10 Nov 2026). The
+  Linux x64 stage's publish job pushes the package as a co-maintainer a minute
+  or two after it uploads the Linux assets (stable releases only, and only
+  when this release is the latest). It never fails or holds the release: the
+  AUR steps continue on error and stop after 5 minutes. Don't push the AUR by
+  hand during a release. After the release, check it:
+  - `curl -s "https://aur.archlinux.org/rpc/v5/info?arg[]=ghostex-bin" | jq -r '.results[0].Version'`
+    should print `X.Y.Z-1`;
+  - the Linux stage run's summary says "AUR ghostex-bin: Pushed ghostex-bin
+    X.Y.Z to the AUR." (or "already at X.Y.Z" when Alp, the package's creator
+    and other maintainer, pushed it first; that is fine).
+  If the summary says "was NOT updated" (with a warning annotation "AUR
+  ghostex-bin not updated"), report it in one line and read the reason:
+  - "The AUR refused the ... push" (permission denied, not allowed to push):
+    the key is not on an AUR account that co-maintains `ghostex-bin` (no
+    secret, a replaced key, or co-maintainer access removed). Tell the user;
+    don't retry, and don't create accounts or keys. The fix is the one-time
+    setup in `tooling/packaging/aur/ghostex-bin/README.md`.
+  - A timeout or "Could not clone" (the AUR down or slow): tell the user in
+    one line and leave it. Don't re-run the publish job for it (that re-runs
+    the whole Linux publish); the next release pushes its version, and Alp may
+    push this one meanwhile. The private key lives only in the repository
+    secret, so there is no local key to push with by hand.
+  - "AUR_SSH_PRIVATE_KEY is not configured" in the gate step: the secret was
+    never added or was removed; tell the user.
 - **Component tags** (code-server, CEF) go to the components repo with
   `GHOSTEX_COMPONENTS_GITHUB_TOKEN`. They are automatic.
 - **Signed agent skills (not automatic; every release, once the release is live)**:
