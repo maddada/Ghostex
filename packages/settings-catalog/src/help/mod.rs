@@ -634,6 +634,9 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:SessionChat 2026-11-09 DECISION:
 /// Tool call lines (Extensions > Experimental) is held the same way until the release that ships it; its help waits in the held help patch.
+///
+/// CDXC:Security 2026-11-09 DECISION:
+/// Security logs (Extensions > Experimental) is held the same way; its help, and the help that names Settings > Security, wait in the held help patch.
 pub const HELD_FROM_HELP_FILES: &[&str] = &[
     "sidebarMergeRepositoryCopies",
     "grokWeb",
@@ -641,6 +644,7 @@ pub const HELD_FROM_HELP_FILES: &[&str] = &[
     "grokWebStartPage",
     "grokWebLogins",
     "chatToolCallLines",
+    "securityLogsEnabled",
 ];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`].

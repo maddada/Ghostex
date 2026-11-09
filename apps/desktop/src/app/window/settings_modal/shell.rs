@@ -50,6 +50,8 @@ pub(crate) struct GpuiSettingsModalWindow {
     focus_handle: FocusHandle,
     /// The debounced save of the pages' open forms (settings_modal/restore.rs).
     open_forms_save: Option<Task<()>>,
+    /// Whether Security logs was on at the last store change, to catch it being turned off.
+    security_logs_was_on: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -87,6 +89,7 @@ impl GpuiSettingsModalWindow {
                 }
             },
         );
+        let security_logs_was_on = store.read(cx).security_logs_on();
         let store_subscription =
             cx.observe_in(&store, window, |shell: &mut Self, store, window, cx| {
                 let active = store.read(cx).active_tab();
@@ -101,6 +104,19 @@ impl GpuiSettingsModalWindow {
                         store.set_active_tab(SettingsTabId::Chat, cx)
                     });
                 }
+                // CDXC:Security 2026-11-09: Security logs turned off while Security is the open page
+                // sends the user to Extensions, where the switch is; a page opened by a link while it
+                // was already off stays.
+                let security_logs_on = store.read(cx).security_logs_on();
+                if active == SettingsTabId::Security
+                    && shell.security_logs_was_on
+                    && !security_logs_on
+                {
+                    store.update(cx, |store, cx| {
+                        store.set_active_tab(SettingsTabId::Extensions, cx)
+                    });
+                }
+                shell.security_logs_was_on = security_logs_on;
                 // A page that searches for the user (Theme's Related settings links) shows its query.
                 let query = store.read(cx).search_query().to_string();
                 if shell.search_input.read(cx).value().as_ref() != query.as_str() {
@@ -125,6 +141,7 @@ impl GpuiSettingsModalWindow {
             search_input,
             focus_handle: cx.focus_handle(),
             open_forms_save: None,
+            security_logs_was_on,
             _subscriptions: vec![search_subscription, store_subscription],
         };
         // However the window goes away, the forms it had open are kept for the next open.

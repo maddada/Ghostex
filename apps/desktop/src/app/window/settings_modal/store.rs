@@ -811,6 +811,12 @@ impl SettingsStore {
         self.built_in_extension_on(ghostex_settings_catalog::built_in_extensions::CONNECTORS)
     }
 
+    /// CDXC:Security 2026-11-09 DECISION:
+    /// User: "please hide security from the sidebar of settings, show it only if experimental -> security logs is enabled". The Security page is listed in the rail and the search only while Settings > Extensions > Experimental > Security logs is on. A link that names the page (the bell's "open the log", `ghostex settings open securityLog`) still opens it while it is off, so a security alert is never a dead end: the page then shows in the rail as the open page until another one is picked. Not a built-in extension's `settingsPages`, which would bounce those links.
+    pub(crate) fn security_logs_on(&self) -> bool {
+        self.bool("securityLogsEnabled")
+    }
+
     /// A page a whole-feature built-in extension owns (Actions, Open In) leaves the rail and the
     /// search while that extension is off (`built_in_extensions::page_shown_with`).
     pub(crate) fn built_in_extension_allows_page(&self, tab: SettingsTabId) -> bool {
@@ -886,6 +892,9 @@ impl SettingsStore {
                 .and_then(Value::as_str)
                 .and_then(SettingsTabId::from_id)
         });
+        // A plain open does not return to the hidden Security page (only a link that names it opens it).
+        let remembered =
+            remembered.filter(|tab| *tab != SettingsTabId::Security || self.security_logs_on());
         self.resolve_tab(remembered.unwrap_or(requested))
     }
 
@@ -918,6 +927,7 @@ impl SettingsStore {
             let tab = self.page_history[index];
             let hidden = (tab == SettingsTabId::OsIntegration && !self.os_integration_visible())
                 || (tab == SettingsTabId::Connectors && !self.connectors_visible())
+                || (tab == SettingsTabId::Security && !self.security_logs_on())
                 || !self.built_in_extension_allows_page(tab);
             if tab != self.active_tab && !hidden {
                 self.page_history_index = index;

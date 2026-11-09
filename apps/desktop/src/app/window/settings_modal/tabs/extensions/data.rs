@@ -204,6 +204,7 @@ pub(crate) fn official_icon(id: &str) -> &'static str {
         "terminalShaders" => "modals/settings/sparkles.svg",
         "fasterRendering" => "titlebar/rocket.svg",
         "toolCallLines" => "titlebar/list-details.svg",
+        "securityLogs" => "modals/settings/shield-check.svg",
         _ => "modals/settings/world.svg",
     }
 }

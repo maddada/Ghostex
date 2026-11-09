@@ -589,6 +589,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "securityLogsEnabled",
+        tab: EXTENSIONS,
+        group: None,
+        section: "official",
+        section_title: "Experimental",
+        title: "Security logs",
+        subtitle: "Shows the Security page in Settings: the log of every sensitive action on this computer. The log is kept and its alerts arrive whether this is on or off. Experimental, off by default.",
+        options: &[],
+        user_only: false,
+    },
+    Supplemental {
         key: "terminalShadersEnabled",
         tab: EXTENSIONS,
         group: None,

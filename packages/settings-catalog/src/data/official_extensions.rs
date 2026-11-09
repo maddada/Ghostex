@@ -499,6 +499,17 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("appWide", J::Bool(true)),
         ("title", J::Str("Tool call lines")),
     ]),
+    // CDXC:Security 2026-11-09 DECISION: User: "please hide security from the sidebar of settings, show it only if experimental -> security logs is enabled". Off by default. It only lists the page in Settings' rail and search: the log is written either way, the bell and phone alerts, `ghostex security log` and approvals are unchanged, and a link that names the page (a bell alert, `ghostex settings open securityLog`) still opens it. The page is deliberately not this entry's `settingsPages`, which would also refuse those links.
+    J::Obj(&[
+        ("description", J::Str("Shows the Security page in Settings: the log of every sensitive action on this computer.")),
+        ("category", J::Str("experimental")),
+        ("id", J::Str("securityLogs")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("securityLogsEnabled")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Security logs")),
+    ]),
 ]);
 
 pub const GHOSTEX_OFFICIAL_EXTENSION_CATEGORIES: J = J::Arr(&[

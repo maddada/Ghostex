@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Settings > Security shows only while Extensions > Experimental > Security logs is on (off by default):** the page leaves the rail and the search, while the log keeps being written, its alerts and `ghostex security log` work as before, and a link to the page (the bell's "open the log") still opens it
 - **Grok, a new built-in extension (off by default):** a Grok button beside Claude's opens grok.com inside Ghostex, with several Grok logins kept apart (each signed in on its own) and a start page you can set in Settings > Files & Links.
 - **File and folder paths in Ghostex's own screens open in Files when clicked** (Settings pages and their descriptions, dialogs, chat folders): `~` expands to your home folder, a right-click offers Copy path and Reveal in Finder, and a folder outside the project opens in your file manager.
 - **Settings > Updates has the machine picker and Update all machines:** pick a machine at the top to see and update only its agents and tools, or update every connected machine at once with a line per machine saying how it went. Not installed pills install on a click and spin while they do, and Settings never shows a long build id, hash or path whole: point at it to see it.
