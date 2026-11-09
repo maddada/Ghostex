@@ -59,6 +59,10 @@ pub fn run(args: &[String]) -> Res<i32> {
                 bail!("No test server named {name} ({}).", folder.display());
             }
             fs::remove_dir_all(&folder)?;
+            let zmx_dir = Server::new(name, 0).zmx_dir();
+            if zmx_dir.is_dir() {
+                fs::remove_dir_all(&zmx_dir)?;
+            }
             println!("Removed {}.", folder.display());
             Ok(0)
         }
@@ -124,8 +128,14 @@ impl Server {
         self.folder.join("gxserver.log")
     }
     /// Its own zmx socket folder (ZMX_DIR), never the default one the real server uses (CDXC:Build 2026-11-06 at `ensure_isolated`).
+    ///
+    /// CDXC:Build 2026-11-09 WHY: a socket path is capped at 103 bytes, and on a computer whose home sits on another volume (`/Volumes/<disk>/<user>`) `<home>/zmx` was already too long for any `--name`, so no test server could start. The folder is in /tmp, named after the user id and the server (/tmp is shared by every account, and another account's 0700 folder of the same name would refuse this one), and removed with the server.
     fn zmx_dir(&self) -> PathBuf {
-        self.home().join("zmx")
+        #[cfg(unix)]
+        let uid = unsafe { libc::getuid() }.to_string();
+        #[cfg(not(unix))]
+        let uid = std::env::var("USERNAME").unwrap_or_default();
+        PathBuf::from(format!("/tmp/gxts-{uid}-{}", self.name))
     }
     fn identity_file(&self) -> PathBuf {
         self.home().join("state/gxserver/identity.json")
@@ -257,7 +267,7 @@ fn validate_name(name: &str) -> Res {
     {
         bail!("A test server name uses letters, digits, '.', '_' and '-' only (got `{name}`).");
     }
-    // The zmx socket path (<home>/zmx/<session>) must fit macOS's 104-byte socket address.
+    // The zmx socket path (/tmp/gxts-<uid>-<name>/<session>) must fit macOS's 104-byte socket address.
     if name.len() > MAX_NAME_LENGTH {
         bail!("A test server name has at most {MAX_NAME_LENGTH} characters (got `{name}`).");
     }
@@ -410,7 +420,7 @@ fn start(args: &[String]) -> Res<i32> {
 }
 
 /// CDXC:Build 2026-11-06 DECISION:
-/// User: test servers shared the real zmx socket folder, and one that drew the real server's id (S90; ids are `S` + digit + letter-or-digit, 360 in all) ended every real session as "unowned" each time it started (05:58, 06:09 and 06:17 on 2026-11-06). Each test server therefore gets its own ZMX_DIR inside its home and a server id no other gxserver here uses, and this refuses to launch one whose zmx folder is a default (shared) one or whose id is taken. gxserver also no longer ends unowned daemons from a shared folder (`zmx_socket_directory_is_shared`, server/src/zmx/screen_capture.rs).
+/// User: test servers shared the real zmx socket folder, and one that drew the real server's id (S90; ids are `S` + digit + letter-or-digit, 360 in all) ended every real session as "unowned" each time it started (05:58, 06:09 and 06:17 on 2026-11-06). Each test server therefore gets its own ZMX_DIR and a server id no other gxserver here uses, and this refuses to launch one whose zmx folder is a default (shared) one or whose id is taken. gxserver also no longer ends unowned daemons from a shared folder (`zmx_socket_directory_is_shared`, server/src/zmx/screen_capture.rs).
 fn ensure_isolated(server: &Server) -> Res {
     let zmx_dir = server.zmx_dir();
     #[cfg(unix)]
@@ -422,12 +432,6 @@ fn ensure_isolated(server: &Server) -> Res {
             .create(&zmx_dir)?;
     }
     let canonical = fs::canonicalize(&zmx_dir)?;
-    if !canonical.starts_with(fs::canonicalize(server.home())?) {
-        bail!(
-            "Refusing to start: the zmx folder {} is outside the test server's home.",
-            canonical.display()
-        );
-    }
     for shared in default_zmx_dirs() {
         if fs::canonicalize(&shared).is_ok_and(|shared| shared == canonical) {
             bail!(
