@@ -564,8 +564,12 @@ pub(super) fn hidden_qr(
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
     let copy = copy_text_button(tab, t, copy_id, card, cx);
+    // CDXC:SettingsOverflow 2026-11-09: at least the tile's width, and as wide as the Copy button
+    // under it ("Copy Easy Connect code" is wider than the tile); a fixed width let the button run
+    // over the steps beside it.
     v_flex()
-        .w(px(QR_PLACEHOLDER_SIZE))
+        .flex_shrink_0()
+        .min_w(px(QR_PLACEHOLDER_SIZE))
         .items_center()
         .gap(px(8.0))
         .child(qr_placeholder(t, id, card, cx))

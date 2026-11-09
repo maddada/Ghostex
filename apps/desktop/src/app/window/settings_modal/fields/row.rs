@@ -636,6 +636,7 @@ pub(crate) fn settings_section_heading(
         .px(px(2.0))
         .child(
             v_flex()
+                .flex_1()
                 .min_w_0()
                 .gap(px(4.0))
                 .child(

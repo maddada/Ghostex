@@ -93,8 +93,21 @@ pub(crate) fn path_link(
 
 /// `text` with each path in it as a link (the rest as plain text), as one wrapping line of
 /// inline items. `id` makes the link ids unique on the page. Text with no path is one plain
-/// run, so a caller can use this for every description.
+/// text block, so a caller can use this for every description.
+///
+/// CDXC:PathLinks 2026-11-09 WHY: User: "are u serious with this?? what is this man??" (Settings >
+/// Secrets' 1Password description ran past the page's right edge, cut off by the window). A flex
+/// item never shrinks below its min-content width, and GPUI measures a text's min-content as its
+/// whole unwrapped line, so a plain run inside the wrapping flex row stayed one line however
+/// narrow the page. Text with no path is a plain block (no flex row at all), and every run of a
+/// linked text is `min_w_0` so it wraps inside the column instead of pushing past it.
 pub(crate) fn linkified_text(id: &str, text: &str) -> AnyElement {
+    if !text.split(' ').any(|word| {
+        let path = split_trailing_punctuation(word).0.trim_matches('`');
+        looks_like_path(path)
+    }) {
+        return div().w_full().child(text.to_string()).into_any_element();
+    }
     let mut runs: Vec<AnyElement> = Vec::new();
     let mut plain = String::new();
     let mut links = 0usize;
@@ -109,7 +122,12 @@ pub(crate) fn linkified_text(id: &str, text: &str) -> AnyElement {
             continue;
         }
         if !plain.is_empty() {
-            runs.push(div().child(std::mem::take(&mut plain)).into_any_element());
+            runs.push(
+                div()
+                    .min_w_0()
+                    .child(std::mem::take(&mut plain))
+                    .into_any_element(),
+            );
         }
         links += 1;
         runs.push(
@@ -118,14 +136,16 @@ pub(crate) fn linkified_text(id: &str, text: &str) -> AnyElement {
                 path.to_string(),
                 div().child(path.to_string()),
             )
+            .min_w_0()
             .into_any_element(),
         );
         plain.push_str(tail);
     }
     if !plain.is_empty() {
-        runs.push(div().child(plain).into_any_element());
+        runs.push(div().min_w_0().child(plain).into_any_element());
     }
     div()
+        .w_full()
         .flex()
         .flex_wrap()
         .items_baseline()
