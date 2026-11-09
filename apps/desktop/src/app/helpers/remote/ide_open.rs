@@ -31,10 +31,21 @@ pub(crate) fn gpui_remote_gxserver_post_typed_operation(
         return Ok((403, body.to_string()));
     }
     // A remote gxserver still starting is waited out like the local one (typed_operations.rs).
-    let answer =
+    let mut answer =
         gpui_wait_out_gxserver_starting(std::time::Instant::now() + timeout, |remaining| {
             gpui_remote_gxserver_post_typed_operation_once(target, path, params, remaining)
         });
+    /*
+    CDXC:RemoteMachines 2026-11-09 WHY:
+    GitHub #520: a command from this computer to a connected one "doesn't arrive", and that
+    computer's log had a 401 right after this computer reached it. An owner session there ends
+    when its gxserver restarts; the 401 dropped it here (`forget_owner_token`) but still answered
+    the call with the 401, so that command was lost. The same call now goes once more, with that
+    computer's token file, as every call does until an owner session opens there again.
+    */
+    if matches!(answer, Ok((401, _))) {
+        answer = gpui_remote_gxserver_post_typed_operation_once(target, path, params, timeout);
+    }
     // The app's own sensitive click on that computer: the system prompt now, then the same call
     // with its approval (CDXC:Security 2026-11-08 in app/owner_security/mod.rs).
     if let Ok((status, body)) = &answer {

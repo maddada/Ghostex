@@ -179,7 +179,7 @@ pub(crate) fn route_security_http(
         Err((code, message)) => routed_json(
             Some(endpoint_path.to_string()),
             match code {
-                "forbidden" => StatusCode::FORBIDDEN,
+                "forbidden" | OWNER_APPROVAL_NEEDED => StatusCode::FORBIDDEN,
                 "notFound" => StatusCode::NOT_FOUND,
                 "notImplemented" => StatusCode::NOT_IMPLEMENTED,
                 _ => StatusCode::BAD_REQUEST,
