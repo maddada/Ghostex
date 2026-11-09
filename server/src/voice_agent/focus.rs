@@ -61,6 +61,8 @@ pub(super) struct FocusScope {
     pub(super) threads: HashSet<String>,
     /// The session was closed during the call.
     pub(super) closed: bool,
+    /// The GBot a call with a GBot is with (`gbot_call/`); the session is its chat.
+    pub(super) gbot: Option<crate::gbots::CallBot>,
 }
 
 impl FocusScope {
@@ -79,6 +81,7 @@ impl FocusScope {
             is_orchestrator: false,
             threads: HashSet::new(),
             closed: false,
+            gbot: None,
         };
         scope.refresh(sessions);
         Some(scope)
@@ -122,9 +125,9 @@ impl FocusScope {
         changed
     }
 
-    /// The `focus` object of the contract.
+    /// The `focus` object of the contract; a call with a GBot adds `gbot`.
     pub(super) fn to_client(&self) -> Value {
-        json!({
+        let mut view = json!({
             "projectId": self.project_id,
             "sessionId": self.session_id,
             "title": self.title,
@@ -133,7 +136,11 @@ impl FocusScope {
             "orchestrator": self.orchestrator,
             "isOrchestrator": self.is_orchestrator,
             "closed": self.closed,
-        })
+        });
+        if let Some(bot) = &self.gbot {
+            view["gbot"] = bot.to_client();
+        }
+        view
     }
 
     /// The sessions a tool may name in this call: the focused one, and an orchestrator's threads.
@@ -189,6 +196,9 @@ const FOCUS_PREFIX: &str = "[Ghostex focus]";
 /// The briefing the model gets when a call starts about a session or moves to one. `facts` is
 /// what `tools::briefing` read (state, messages, open questions, draft, threads).
 pub(super) fn briefing_message(scope: &FocusScope, facts: &Value, moved: bool) -> String {
+    if let Some(bot) = &scope.gbot {
+        return super::gbot_call::briefing_message(bot, facts);
+    }
     let opening = if moved {
         format!(
             "The user moved this call to one session: \"{}\". From now on it is only about that session.",
@@ -269,6 +279,15 @@ pub(super) fn speakable_reply(markdown: &str) -> String {
     let head: String = text.chars().take(half).collect();
     let tail: String = text.chars().skip(count - half).collect();
     format!("{head} … {tail}")
+}
+
+/// [`turn_finished_message`] for the call's scope: a call with a GBot says the reply as the GBot
+/// (`gbot_call/`).
+pub(super) fn finished_message(scope: &FocusScope, reply: Option<&str>) -> String {
+    match &scope.gbot {
+        Some(bot) => super::gbot_call::reply_message(bot, reply),
+        None => turn_finished_message(&scope.title, reply),
+    }
 }
 
 /// What the model hears when the focused session finished its turn: that it finished and, when

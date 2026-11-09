@@ -107,6 +107,39 @@ pub(crate) struct GbotSettingsRecord {
     pub(crate) is_lead: bool,
     /// Why SOUL.md no longer matches the saved instructions (gxserver's sentence).
     pub(crate) soul_drift_message: Option<String>,
+    /// The voice it answers calls in; empty for the Voice agent's own (voice.rs).
+    pub(crate) voice: String,
+    /// What the voice picker offers (`show`'s `voiceChoices`; not saved).
+    pub(crate) voice_choices: GbotVoiceChoices,
+}
+
+/// The voices a GBot may answer calls in: the Voice agent provider's, and the one it uses when
+/// none is picked.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct GbotVoiceChoices {
+    pub(crate) provider_label: String,
+    pub(crate) default_voice: String,
+    pub(crate) voices: Vec<String>,
+}
+
+impl GbotVoiceChoices {
+    fn from_show(choices: Option<&Value>) -> Self {
+        let Some(choices) = choices else {
+            return Self::default();
+        };
+        let provider = choices["provider"].as_str().unwrap_or("xai");
+        Self {
+            provider_label: choices["providerLabel"].as_str().unwrap_or("xAI").to_string(),
+            default_voice: choices["defaultVoice"].as_str().unwrap_or_default().to_string(),
+            voices: choices["voiceOptions"][provider]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect(),
+        }
+    }
 }
 
 impl GbotSettingsRecord {
@@ -144,6 +177,8 @@ impl GbotSettingsRecord {
             department_name: optional("departmentName"),
             is_lead: bot.get("isLead").and_then(Value::as_bool) == Some(true),
             soul_drift_message: optional("soulDriftMessage"),
+            voice: optional("voice").unwrap_or_default(),
+            voice_choices: GbotVoiceChoices::from_show(bot.get("voiceChoices")),
         })
     }
 
@@ -164,6 +199,8 @@ impl GbotSettingsRecord {
         text("color", &self.color, &before.color);
         text("agentId", &self.agent_id, &before.agent_id);
         text("approval", &self.approval, &before.approval);
+        // Saved with `voiceSet`, not `edit` (gbot_settings_modal_lifecycle.rs).
+        text("voice", &self.voice, &before.voice);
         if self.model.trim() != before.model.trim() {
             let model = self.model.trim();
             changes.insert(

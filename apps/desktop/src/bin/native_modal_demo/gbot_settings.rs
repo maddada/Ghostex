@@ -6,7 +6,8 @@
 //! connected computer Studio, with a Cloud Box listed), `bot-api` (the Bot API tab, off; its switch
 //! turns it on with a demo key), `bot-api-key` (just turned on: the key shown once in the command),
 //! `bot-api-on` (on, used, the key no longer shown), `failed` (Save answers with gxserver's refusal
-//! after a second).
+//! after a second), `voice` (Profile tall, with its Voice row: Researcher in the xAI voice Rex),
+//! `voice-menu` (the same with the voice list open).
 use super::gbot_settings_modal::*;
 use gpui::{App, AppContext as _};
 use serde_json::json;
@@ -28,6 +29,16 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "departmentId": (demo.state == "department").then_some("d_research"),
         "departmentName": (demo.state == "department").then_some("Research"),
         "isLead": demo.state == "department",
+        "voice": "rex",
+        "voiceChoices": {
+            "provider": "xai",
+            "providerLabel": "xAI",
+            "defaultVoice": "eve",
+            "voiceOptions": {
+                "xai": ["eve", "ara", "rex", "sal", "leo", "altair", "atlas", "aurora"],
+                "openai": ["marin", "cedar"],
+            },
+        },
         "soulDriftMessage": (demo.state == "instructions").then_some(
             "SOUL.md was edited outside Ghostex, so Researcher still follows the instructions saved in Ghostex. Save new instructions with `ghostex gbots edit Researcher --soul-file <file>`."
         ),
@@ -145,15 +156,29 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     // The memory states open tall, so one snapshot shows the whole tab.
     let height = if demo.state.starts_with("memory") || demo.state == "department" {
         1480.0
+    } else if demo.state.starts_with("voice") {
+        // Profile tall enough that Runs on and its Voice row show, with the voice list open.
+        1320.0
     } else {
         GBOT_SETTINGS_MODAL_INITIAL_HEIGHT
     };
-    let _ = super::open_modal_window(
+    let open_voices = demo.state == "voice-menu";
+    let (window, view) = super::open_modal_window(
         GBOT_SETTINGS_MODAL_WIDTH,
         height,
         move |window, cx| cx.new(|cx| GpuiGbotSettingsModalWindow::new(config, host, window, cx)),
         cx,
     );
+    // `voice-menu`: the Voice row's list open (after the first frame placed its trigger).
+    if open_voices {
+        cx.spawn(async move |cx| {
+            cx.background_executor().timer(Duration::from_millis(600)).await;
+            let _ = window.update(cx, |_, _, cx| {
+                view.update(cx, |view, cx| view.toggle_voice_select(cx));
+            });
+        })
+        .detach();
+    }
 }
 
 /// A `computer` answer for the demo: Researcher on the connected computer Studio, with computer

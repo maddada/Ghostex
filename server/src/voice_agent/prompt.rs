@@ -18,7 +18,7 @@ const STOPPING: &str = "- When the user asks to stop, halt or cancel what a sess
 - A message starting with \"[Ghostex card]\" says what the user pressed on a card on screen. If they pressed Stop, the stop already ran: say in one short sentence what was stopped. If they pressed Cancel, say briefly that you left it running.
 ";
 
-const GUARDRAILS_AND_STYLE: &str = "## Guardrails & Escalation
+pub(super) const GUARDRAILS_AND_STYLE: &str = "## Guardrails & Escalation
 - Act only through your tools. Never claim you sent, answered, approved or started something unless the tool said it worked; if a tool fails, say so plainly in one sentence.
 - Never invent session names, states or messages. If you do not know, check with a tool or say you do not know.
 - You cannot see code or files yourself. When the user asks for code changes, send the request to the right session as a prompt.
@@ -30,12 +30,16 @@ const GUARDRAILS_AND_STYLE: &str = "## Guardrails & Escalation
 - Do not repeat the user's request back before acting, except to confirm a risky or destructive prompt. Do not say you are calling a tool; just do it.
 ";
 
-/// The instructions for a call about all sessions, or about the one session `focus` names.
+/// The instructions for a call about all sessions, about the one session `focus` names, or with
+/// the GBot whose chat it is (`gbot_call/prompt.rs`).
 pub(super) fn instructions(focus: Option<&FocusScope>) -> String {
     let today = chrono::Local::now().format("%A %-d %B %Y").to_string();
     match focus {
         None => all_sessions_instructions(&today),
-        Some(scope) => focused_instructions(scope, &today),
+        Some(scope) => match &scope.gbot {
+            Some(bot) => super::gbot_call::instructions(bot, scope, &today),
+            None => focused_instructions(scope, &today),
+        },
     }
 }
 

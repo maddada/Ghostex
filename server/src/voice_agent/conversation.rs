@@ -95,6 +95,8 @@ pub(super) enum Input {
     End,
     /// The voice agent was turned off on Settings > Extensions (`feature.rs`): the call ends.
     TurnedOff,
+    /// GBots were turned off during a call with a GBot (`gbot_call/watch.rs`): the call ends.
+    GbotsOff(String),
     /// The user picked another voice for the current provider.
     Voice(String),
     /// How fast the attached client plays the agent's audio (1.0 is as the provider sent it).
@@ -598,6 +600,7 @@ impl Conversation {
                     "You ended the conversation.".to_string(),
                 ));
             }
+            Input::GbotsOff(message) => return Err(Ended::Reason("gbotsOff", message)),
             Input::TurnedOff => {
                 return Err(Ended::Reason(
                     super::feature::TURNED_OFF,
@@ -637,6 +640,18 @@ impl Conversation {
             }
             Input::AnnounceReady(announcement) => self.announcements.push(announcement),
             Input::Sessions(sessions) => self.follow_focus(&sessions),
+            // A call with a GBot stays with it (gbot_call/): no widening, no moving.
+            Input::Focus(_) if self.focus.as_ref().is_some_and(|scope| scope.gbot.is_some()) => {
+                self.to_client(json!({
+                    "type": "error",
+                    "code": "badRequest",
+                    "message": super::gbot_call::STAYS_MESSAGE,
+                    "fatal": false,
+                }));
+                self.to_client(
+                    json!({"type": "focus", "focus": focus::client_view(self.focus.as_ref())}),
+                );
+            }
             Input::Focus(None) if self.focus.is_some() => {
                 let previous = self.focus.as_ref().map(|scope| scope.title.clone());
                 self.last_talk = Instant::now();
@@ -1238,7 +1253,7 @@ impl Conversation {
         tokio::spawn(async move {
             let reply = tools::finished_reply(&state, &scope).await;
             announcement.model_text =
-                Some(focus::turn_finished_message(&scope.title, reply.as_deref()));
+                Some(focus::finished_message(&scope, reply.as_deref()));
             let _ = tx.send(Input::AnnounceReady(announcement));
         });
     }

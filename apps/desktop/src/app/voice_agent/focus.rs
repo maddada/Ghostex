@@ -31,6 +31,9 @@ pub(crate) struct VoiceCallTarget {
     /// The connected computer's name, for a session of another computer.
     pub(crate) machine_name: Option<String>,
     pub(crate) agent_icon: Option<String>,
+    /// The GBot whose chat the session is, `(botId, name)`: the header arrow offers a call with it
+    /// instead of a call about the session (`gbot_call.rs`).
+    pub(crate) gbot: Option<(String, String)>,
 }
 
 /// The computer a call runs on (this one until a call about another computer's session starts).
@@ -63,6 +66,8 @@ pub(crate) struct VoiceFocus {
     pub(crate) closed: bool,
     /// The agent's icon key, from this app's sidebar (gxserver doesn't send it).
     pub(crate) agent_icon: Option<String>,
+    /// A call with a GBot: the GBot whose chat the session is (`gbot_call.rs`).
+    pub(crate) gbot: Option<super::gbot_call::CallGbot>,
 }
 
 /// What `ready` says about the call's scope.
@@ -97,6 +102,7 @@ pub(crate) fn parse_focus(value: &Value, machine: &MachineId) -> Option<VoiceFoc
         orchestrator: text("orchestrator"),
         closed: value["closed"].as_bool().unwrap_or(false),
         agent_icon: None,
+        gbot: value.get("gbot").and_then(super::gbot_call::CallGbot::parse),
     })
 }
 
@@ -303,6 +309,9 @@ impl GhostexGpuiApp {
                 machine_name
             },
             agent_icon: row.and_then(|(_, session)| session.agent_icon.clone()),
+            gbot: row
+                .and_then(|(group, _)| group.gbot())
+                .map(|look| (look.bot_id, look.name)),
             key,
         })
     }
@@ -544,6 +553,7 @@ mod tests {
             project: "Ghostex".to_string(),
             machine_name: None,
             agent_icon: None,
+            gbot: None,
         }
     }
 

@@ -170,15 +170,33 @@ pub(super) fn gbots_command(op: &str, extra: Value) -> Value {
 /// A bot row's menu (the sessions sidebar's menu builder draws it).
 fn gbot_menu(look: &GbotLook, machine_id: &str) -> Value {
     let target = json!({ "botId": look.bot_id, "name": look.name, "machineId": machine_id });
-    json!([
-        { "label": "New Chat", "icon": "plus", "disabled": look.paused, "command": gbots_command("newChat", target.clone()) },
-        { "label": "GBot Settings…", "icon": "settings", "command": gbots_command("settings", target.clone()) },
-        { "label": "Memory…", "icon": "brain", "command": gbots_command("memory", target.clone()) },
-        { "label": "Department…", "icon": "users", "command": gbots_command("department", target.clone()) },
-        { "label": "Computer…", "icon": "device-laptop", "command": gbots_command("computer", target.clone()) },
-        { "separator": true },
-        { "label": "Remove GBot…", "icon": "trash", "command": gbots_command("remove", target) },
-    ])
+    let mut items = vec![
+        json!({ "label": "New Chat", "icon": "plus", "disabled": look.paused, "command": gbots_command("newChat", target.clone()) }),
+    ];
+    items.extend(call_item(look, &target));
+    items.extend([
+        json!({ "label": "GBot Settings…", "icon": "settings", "command": gbots_command("settings", target.clone()) }),
+        json!({ "label": "Memory…", "icon": "brain", "command": gbots_command("memory", target.clone()) }),
+        json!({ "label": "Department…", "icon": "users", "command": gbots_command("department", target.clone()) }),
+        json!({ "label": "Computer…", "icon": "device-laptop", "command": gbots_command("computer", target.clone()) }),
+        json!({ "separator": true }),
+        json!({ "label": "Remove GBot…", "icon": "trash", "command": gbots_command("remove", target) }),
+    ]);
+    Value::Array(items)
+}
+
+/// Call (a call with the GBot through the Voice agent, voice_agent/gbot_call.rs): shown only while
+/// the Voice agent is on (GBots are, or this row would not be drawn), so never on the web build,
+/// which has no voice panel; greyed for a GBot whose chats run on another computer, which a call
+/// can't reach.
+fn call_item(look: &GbotLook, target: &Value) -> Option<Value> {
+    #[cfg(not(target_arch = "wasm32"))]
+    let on = crate::app::voice_agent::gbot_call::gbot_calls_on();
+    #[cfg(target_arch = "wasm32")]
+    let on = false;
+    on.then(|| {
+        json!({ "label": "Call", "icon": "headset", "disabled": look.computer.is_some(), "command": gbots_command("call", target.clone()) })
+    })
 }
 
 /// The GBots heading's menu.
@@ -665,6 +683,8 @@ impl GhostexGpuiApp {
                 cx,
             ),
             "newChat" => self.start_native_sidebar_gbot_chat(&machine, bot_id, cx),
+            #[cfg(not(target_arch = "wasm32"))]
+            "call" => self.call_gbot(&machine, bot_id, text("name"), window, cx),
             "remove" => {
                 let name = text("name");
                 let answer = window.prompt(

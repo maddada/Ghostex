@@ -180,4 +180,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0068_gbots_day_watch",
     "0069_gbots_bot_keys",
     "0070_gbots_computer",
+    "0071_gbots_voice",
 ];

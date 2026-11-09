@@ -30,7 +30,8 @@ const USAGE: &str = "Usage:
   --continue (a turn that hands the remembered last conversation to the agent, as Continue does),
   --mode pushToTalk|regular (the call mode for this call; push-to-talk sends each --wav as a held
   Talk and no audio in between), --wait <seconds> (a quiet turn: nothing is said or sent),
-  --focus <projectId:sessionId> (a call about one session), --refocus <projectId:sessionId>|all
+  --focus <projectId:sessionId> (a call about one session), --gbot <GBot> (a call with a GBot,
+  about --focus when that is one of its chats, else your standing chat with it), --refocus <projectId:sessionId>|all
   (a turn that moves the call to a session or to all sessions), --client-remote (as the desktop
   app of another computer: sessions are shown by the client).
   Push-to-talk also prints [usage] with the seconds the provider has billed so far.
@@ -56,6 +57,8 @@ struct Options {
     push_to_talk: Option<bool>,
     /// `--focus <projectId:sessionId>`: a call about one session.
     focus: Option<String>,
+    /// `--gbot <bot>`: a call with a GBot.
+    gbot: Option<String>,
     client_remote: bool,
 }
 
@@ -85,6 +88,7 @@ fn parse(args: &[String]) -> CliResult<Options> {
         rate: None,
         push_to_talk: None,
         focus: None,
+        gbot: None,
         client_remote: false,
     };
     let mut index = 0;
@@ -100,6 +104,7 @@ fn parse(args: &[String]) -> CliResult<Options> {
             "--wav" => options.turns.push(Turn::Wav(value(index, flag)?)),
             "--voice" => options.turns.push(Turn::Voice(value(index, flag)?)),
             "--focus" => options.focus = Some(value(index, flag)?),
+            "--gbot" => options.gbot = Some(value(index, flag)?),
             "--refocus" => {
                 let target = value(index, flag)?;
                 options
@@ -220,6 +225,16 @@ fn connect(mode: &str, options: &Options) -> CliResult<WebSocket<TcpStream>> {
     }
     if let Some(focus) = &options.focus {
         url.push_str(&format!("&focus={focus}"));
+    }
+    if let Some(gbot) = &options.gbot {
+        let gbot: String = gbot
+            .bytes()
+            .map(|byte| match byte {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => (byte as char).to_string(),
+                other => format!("%{other:02X}"),
+            })
+            .collect();
+        url.push_str(&format!("&gbot={gbot}"));
     }
     if options.client_remote {
         url.push_str("&clientRemote=1");

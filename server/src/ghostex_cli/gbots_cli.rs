@@ -55,7 +55,7 @@ const HELP_TAIL: &str = "
 
 fn help() -> String {
     format!(
-        "{HELP_HEAD}{}{}{}{}{}{}{}{}{HELP_TAIL}",
+        "{HELP_HEAD}{}{}{}{}{}{}{}{}{}{HELP_TAIL}",
         super::gbots_department_cli::DEPARTMENT_HELP,
         super::gbots_memory_cli::MEMORY_HELP,
         super::gbots_routine_cli::ROUTINE_HELP,
@@ -63,7 +63,8 @@ fn help() -> String {
         super::gbots_problem_cli::PROBLEM_HELP,
         super::gbots_team_cli::TEAM_HELP,
         super::gbots_api_cli::API_HELP,
-        super::gbots_computer_cli::COMPUTER_HELP
+        super::gbots_computer_cli::COMPUTER_HELP,
+        super::gbots_voice_cli::VOICE_HELP
     )
 }
 
@@ -148,6 +149,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "problem" | "problems" => return super::gbots_problem_cli::run_problem(rest, &flags),
         "api" => return super::gbots_api_cli::run_api(rest, &flags),
         "computer" => return super::gbots_computer_cli::run_computer(rest, &flags),
+        "voice" => return super::gbots_voice_cli::run_voice(rest, &flags),
         "flag" => return super::gbots_problem_cli::run_flag(rest, &flags),
         "day-watch" => return super::gbots_day_watch_cli::run_day_watch(rest, &flags),
         "department" | "departments" => {

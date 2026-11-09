@@ -6,6 +6,8 @@
 //! - `endpoint.rs`: this computer's gxserver, which Dictate and the all-sessions call talk to.
 //! - `focus.rs`: a call about one session, on that session's computer; `panel_focus_strip.rs` its
 //!   strip in the panel, `sidebar_badge.rs` the headset on its sidebar row.
+//! - `gbot_call.rs`: a call with a GBot (its row's Call, the header arrow on one of its chats),
+//!   spoken in the GBot's voice; gxserver's side is `server/src/voice_agent/gbot_call/`.
 //! - `audio.rs`: the microphone and speaker, one front over a `VoiceAudioBackend`
 //!   (`audio_backend.rs`): `audio_mac.rs` (AVAudioEngine with voice-processing I/O) on macOS,
 //!   `audio_cpal.rs` on Windows and Linux with `aec.rs` (echo cancellation) and `stretch.rs` (speed);
@@ -35,6 +37,7 @@ pub(crate) mod dictate_hotkey;
 pub(crate) mod dictation;
 pub(crate) mod endpoint;
 pub(crate) mod focus;
+pub(crate) mod gbot_call;
 pub(crate) mod header_button;
 pub(crate) mod hex_install;
 pub(crate) mod hold_to_talk;

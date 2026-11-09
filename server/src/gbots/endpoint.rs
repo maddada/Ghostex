@@ -25,6 +25,7 @@
 //! | `dayWatch`; `dayWatchOn` (`briefTime?`, `timezone?`), `dayWatchOff` | day_watch/ops.rs | anyone here; you, Chief of Staff |
 //! | `api`; `apiOn` (`label?`), `apiNewKey` (`label?`), `apiOff` | `bot` (api/ops.rs) | anyone here; you alone, and on and New key ask your approval |
 //! | `computer`; `computerSet` (`computer`: `this`, a connected computer or a Cloud Box; `folder?`, `computerUse?`) | `bot` (computer/ops.rs) | anyone here; you alone from Ghostex on your computer, except giving it this computer back |
+//! | `voice`; `voiceSet` (`voice`, or "" for the Voice agent's own) | `bot` (call.rs) | anyone here; you, Chief of Staff |
 //! | `teamExport`, `teamPreview`, `teamImport`, `presets`, `preset`, `presetSave`, `presetRemove`, `presetExport` | team_file/mod.rs | team_file/mod.rs; importing is yours alone |
 //!
 //! `create` also takes `preset` (a preset's id or name): what it leaves out comes from the preset.
@@ -415,6 +416,8 @@ fn run(
             &mut |fields, created_by| create(state, &db, &repository, asker, fields, created_by),
             &mut |bot_id| remove(state, &db, &repository, asker, bot_id),
         ),
+        // Its voice for calls (call.rs).
+        op if super::call::handles(op) => super::call::run(state, &db, asker.may_manage(), op, params),
         // The GBot API: is it on, turn it on or off, a new key (api/ops.rs).
         op if super::api::handles(op) => super::api::run(state, &db, caller, asker.is_user(), op, params),
         // Where its chats run (computer/).
@@ -466,6 +469,8 @@ fn list(
                         .unwrap_or(0)
             );
             summary["computerInfo"] = super::computer::computer_status(state, db, &bot.bot_id);
+    summary["voice"] = json!(super::call::read_voice(db, &bot.bot_id));
+    summary["voiceChoices"] = crate::voice_agent::gbot_voice_choices(&state.paths);
             summary
         })
         .collect::<Vec<_>>();
@@ -506,6 +511,8 @@ fn show(
     }
     summary["chats"] = chats(state, repository, &bot)?["chats"].take();
     summary["computerInfo"] = super::computer::computer_status(state, db, &bot.bot_id);
+    summary["voice"] = json!(super::call::read_voice(db, &bot.bot_id));
+    summary["voiceChoices"] = crate::voice_agent::gbot_voice_choices(&state.paths);
     summary["remoteChats"] = json!(super::computer::list_remote_chats(db, Some(&bot.bot_id))?
         .iter()
         .map(super::computer::remote_chat_summary)

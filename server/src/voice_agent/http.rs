@@ -67,6 +67,8 @@ pub(crate) async fn handle_read_voice_agent_http(
         "conversations": registry::summary(),
         // Calls about one session (`focus` on `/api/voice`) are understood here.
         "focusedCalls": true,
+        // Calls with a GBot (`gbot=` or `focus=gbot:<botId>`, `gbot_call/`) are understood here.
+        "gbotCalls": true,
         "idleHangupMs": super::conversation::IDLE_HANGUP.as_millis() as u64,
         "speed": keys::selected_speed(paths),
         "callMode": if keys::push_to_talk_calls(paths) { "pushToTalk" } else { "regular" },

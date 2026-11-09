@@ -38,6 +38,7 @@ mod gbots_memory_cli;
 mod gbots_problem_cli;
 mod gbots_routine_cli;
 mod gbots_team_cli;
+mod gbots_voice_cli;
 pub mod guide;
 mod help_ask;
 mod hookless_activity;

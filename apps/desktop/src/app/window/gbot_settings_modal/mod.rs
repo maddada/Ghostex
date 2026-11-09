@@ -15,6 +15,7 @@ mod parts;
 mod profile;
 mod rail;
 mod routines;
+mod voice;
 mod window;
 
 // The modal demo binary answers memory commands without naming the reply type.

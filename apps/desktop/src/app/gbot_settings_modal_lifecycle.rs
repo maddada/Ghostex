@@ -116,14 +116,27 @@ impl GhostexGpuiApp {
                 reply,
             } => {
                 let mut params = changes;
+                // The voice is its own op (server/src/gbots/call.rs); the rest is one `edit`.
+                let voice = params.remove("voice");
                 params.insert("op".to_string(), json!("edit"));
-                params.insert("bot".to_string(), json!(bot_id));
+                params.insert("bot".to_string(), json!(bot_id.clone()));
+                let edits = params.len() > 2;
                 let remote = remote.clone();
                 cx.spawn(async move |this, cx| {
-                    let saved = gx_rpc(remote, "/api/gbots", Value::Object(params))
-                        .await
-                        .map(|_| ())
-                        .map_err(|error| error.message);
+                    let mut saved = Ok(());
+                    if let Some(voice) = voice {
+                        let set = json!({ "op": "voiceSet", "bot": bot_id, "voice": voice });
+                        saved = gx_rpc(remote.clone(), "/api/gbots", set)
+                            .await
+                            .map(|_| ())
+                            .map_err(|error| error.message);
+                    }
+                    if saved.is_ok() && edits {
+                        saved = gx_rpc(remote, "/api/gbots", Value::Object(params))
+                            .await
+                            .map(|_| ())
+                            .map_err(|error| error.message);
+                    }
                     let _ = this.update(cx, |app, cx| {
                         let succeeded = saved.is_ok();
                         let failure = saved.as_ref().err().cloned();

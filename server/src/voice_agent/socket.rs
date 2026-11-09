@@ -91,9 +91,20 @@ pub(crate) async fn handle_voice(
         "regular" => Some(false),
         _ => None,
     });
-    let focus = query_value(&uri, "focus")
+    let mut focus = query_value(&uri, "focus")
         .map(|focus| focus.trim().to_string())
         .filter(|focus| !focus.is_empty());
+    // `gbot=<botId or name>`: a call with a GBot (`gbot_call/`), about `focus` when that is one of
+    // its chats, else your standing chat with it.
+    let mut gbot = query_value(&uri, "gbot")
+        .map(|gbot| gbot.trim().to_string())
+        .filter(|gbot| !gbot.is_empty());
+    // The phone's native voice module passes only `focus`, so a call with a GBot also comes as
+    // `focus=gbot:<botId>` or `focus=gbot:<botId>:<projectId>:<sessionId>` (`gbot_call/`).
+    if let Some((bot, chat)) = focus.as_deref().and_then(super::gbot_call::parse_focus_query) {
+        gbot = Some(bot);
+        focus = chat;
+    }
     let client_remote = query_value(&uri, "clientRemote").as_deref() == Some("1");
     let language = query_value(&uri, "language")
         .map(|language| language.trim().to_string())
@@ -122,6 +133,7 @@ pub(crate) async fn handle_voice(
                     provider,
                     push_to_talk,
                     focus,
+                    gbot,
                     client_remote,
                 };
                 run_conversation_socket(state, socket, conversation_id, start, caller_token).await
@@ -163,6 +175,8 @@ struct Start {
     push_to_talk: Option<bool>,
     /// `focus=<projectId>:<sessionId>`: a call about one session (`focus.rs`).
     focus: Option<String>,
+    /// `gbot=<botId>`: a call with that GBot (`gbot_call/`).
+    gbot: Option<String>,
     /// `clientRemote=1`: the client is not on this computer.
     client_remote: bool,
 }
@@ -319,12 +333,22 @@ async fn start_conversation(
         provider,
         push_to_talk,
         focus,
+        gbot,
         client_remote,
     } = start;
+    let start_focus = focus.clone().filter(|_| gbot.is_some());
+    if let Some(bot) = gbot.as_deref() {
+        if let Some(refusal) = super::gbot_call::refusal_before_key(state, bot).await {
+            fail(socket, refusal.code, &refusal.message).await;
+            return None;
+        }
+    }
     let provider = provider.unwrap_or_else(|| keys::selected_provider(&state.paths));
     let push_to_talk = push_to_talk.unwrap_or_else(|| keys::push_to_talk_calls(&state.paths));
-    // A call about a session that is not open fails before anything is billed.
-    let focus = match focus {
+    // A call about a session that is not open fails before anything is billed. A call with a
+    // GBot finds (or opens) its chat once the key is known to be there (below).
+    let mut focus = match focus {
+        _ if gbot.is_some() => None,
         None => None,
         Some(reference) => {
             let sessions = super::sessions::list_sessions_async(state)
@@ -363,6 +387,25 @@ async fn start_conversation(
             return None;
         }
     };
+    // A call with a GBot opens (or wakes) its chat now, before anything is billed (`gbot_call/`).
+    if let Some(bot) = gbot {
+        let (reference, bot) = match super::gbot_call::start(state, &bot, start_focus).await {
+            Ok(started) => started,
+            Err(refusal) => {
+                fail(socket, refusal.code, &refusal.message).await;
+                return None;
+            }
+        };
+        let sessions = super::sessions::list_sessions_async(state)
+            .await
+            .unwrap_or_default();
+        let Some(mut scope) = FocusScope::from_sessions(&sessions, &reference) else {
+            fail(socket, "focusNotFound", FOCUS_NOT_FOUND).await;
+            return None;
+        };
+        scope.gbot = Some(bot);
+        focus = Some(scope);
+    }
     let _ = socket
         .send(Message::Text(
             json!({"type": "state", "state": "connecting"})
@@ -401,7 +444,12 @@ async fn start_conversation(
             return None;
         }
     };
-    let voice = keys::selected_voice(&state.paths, provider);
+    // A GBot answers in its own voice when the provider has it (`gbot_call/`).
+    let voice = focus
+        .as_ref()
+        .and_then(|scope| scope.gbot.as_ref())
+        .and_then(|bot| super::gbot_call::voice_for(bot, provider))
+        .unwrap_or_else(|| keys::selected_voice(&state.paths, provider));
     let keyterms = keyterms(state).await;
     let update = provider.session_update(
         &voice,
@@ -483,6 +531,9 @@ async fn start_conversation(
     let (tx, rx) = mpsc::unbounded_channel();
     registry::insert(&id, tx.clone(), provider);
     announcements::ensure_running(state);
+    if let Some(scope) = focus.as_ref().filter(|scope| scope.gbot.is_some()) {
+        super::gbot_call::watch(state, scope, tx.clone());
+    }
     let conversation = Conversation::new(
         id,
         state.clone(),

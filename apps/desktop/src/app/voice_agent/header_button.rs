@@ -159,6 +159,7 @@ impl GhostexGpuiApp {
                     remote_machine: target.key.machine.remote_id().map(str::to_string),
                     project_id: target.key.project_id.clone(),
                     session_id: target.key.session_id.clone(),
+                    gbot: false,
                 }),
                 _ => Box::new(VoiceCallAllSessions),
             };
@@ -170,6 +171,24 @@ impl GhostexGpuiApp {
             } else {
                 menu.menu_with_check(row.label, row.checked, action)
             };
+        }
+        // On a GBot's chat: a call with that GBot (gbot_call.rs), ticked while it is the open call.
+        if let Some(target) = target.as_ref()
+            && let Some(label) = super::gbot_call::gbot_call_menu_label(target)
+        {
+            let checked = self.voice_agent.focus.as_ref().is_some_and(|focus| {
+                focus.gbot.is_some() && focus.key == target.key
+            });
+            menu = menu.separator().menu_with_check(
+                label,
+                checked,
+                Box::new(VoiceCallAboutSession {
+                    remote_machine: target.key.machine.remote_id().map(str::to_string),
+                    project_id: target.key.project_id.clone(),
+                    session_id: target.key.session_id.clone(),
+                    gbot: true,
+                }),
+            );
         }
         let app = cx.entity();
         cx.defer(move |cx| {

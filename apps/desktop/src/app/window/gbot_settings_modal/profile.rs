@@ -1,5 +1,5 @@
 //! The Profile tab: name, role and description, the look (icon and colour), the agent and model
-//! it runs on, its approval level and its department.
+//! it runs on, its approval level, the voice it answers calls in (voice.rs) and its department.
 use super::super::native_modal_kit::*;
 use super::model::*;
 use super::parts::{page_header, row, section, wide_row};
@@ -66,6 +66,7 @@ impl GpuiGbotSettingsModalWindow {
                     modal_text_input(&kit, &self.model_input, self.saving, window, cx),
                 ),
                 self.render_approval(cx),
+                self.render_voice_row(cx),
                 row(&p, "Department", self.render_department_link(cx)),
             ],
         );

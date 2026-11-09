@@ -1,7 +1,8 @@
 //! The voice panel's focus strip: under the panel's top bar while a call is about one session, the
 //! agent's icon, the session's title (click it to show the session), "<project> · thread of
 //! <orchestrator>" in muted text, the computer the call runs on when it isn't this one, and All
-//! sessions, which widens the call. A child of `panel.rs`, whose snapshot and controls it uses.
+//! sessions, which widens the call; a call with a GBot shows the GBot instead and keeps no All
+//! sessions (`gbot_call.rs`). A child of `panel.rs`, whose snapshot and controls it uses.
 //!
 //! CDXC:VoiceMode 2026-10-23 DECISION: User, asked "How does the call panel show which session the call is about?", picked "A. A strip under the top bar with the name, project and orchestrator, plus All sessions (and a small headset on that session's sidebar row)". A session closed during the call says Closed and keeps All sessions; the call goes on (the sidebar's headset is `sidebar_badge.rs`).
 
@@ -69,7 +70,26 @@ impl VoicePanelWindow {
             focus.orchestrator.as_deref(),
             snapshot.machine_name.as_deref(),
         );
-        let icon = match focus
+        // A call with a GBot: its icon in its colour, "Call with <name>" and the chat under it,
+        // and no All sessions (the call stays with the GBot, gbot_call.rs).
+        let gbot = focus.gbot.as_ref();
+        let subtitle = match gbot {
+            Some(_) => focus_subtitle(&focus.title, None, snapshot.machine_name.as_deref()),
+            None => subtitle,
+        };
+        let shown_title = gbot.map_or_else(|| focus.title.clone(), |gbot| gbot.strip_title());
+        let icon = match gbot {
+            Some(gbot) => gpui::svg()
+                .path(SharedString::from(format!("titlebar/{}.svg", gbot.icon)))
+                .size(px(14.0))
+                .flex_shrink_0()
+                .text_color(
+                    gpui::Rgba::try_from(gbot.color_hex.as_str())
+                        .map(gpui::Hsla::from)
+                        .unwrap_or(colors.muted),
+                )
+                .into_any_element(),
+            None => match focus
             .agent_icon
             .as_deref()
             .and_then(|icon| workspace_tab_agent_icon_path(icon).map(|path| (icon, path)))
@@ -81,6 +101,7 @@ impl VoicePanelWindow {
                 .text_color(rgb(workspace_tab_agent_icon_accent_color(icon)))
                 .into_any_element(),
             None => titlebar_svg_icon(ICON_SESSION, 14.0, colors.muted).into_any_element(),
+        },
         };
         let title_color = if focus.closed {
             colors.muted
@@ -119,7 +140,7 @@ impl VoicePanelWindow {
                     let _ = panel.update(cx, |this, cx| this.run(PanelAction::ShowFocus, cx));
                 }
             })
-            .child(focus.title.clone());
+            .child(shown_title);
         Some(
             h_flex()
                 .flex_shrink_0()
@@ -162,15 +183,17 @@ impl VoicePanelWindow {
                             )
                         }),
                 )
-                .child(self.button(
-                    "voice-panel-all-sessions",
-                    ICON_WIDEN,
-                    Some("All sessions"),
-                    PanelAction::AllSessions,
-                    colors,
-                    false,
-                    cx,
-                ))
+                .when(gbot.is_none(), |this| {
+                    this.child(self.button(
+                        "voice-panel-all-sessions",
+                        ICON_WIDEN,
+                        Some("All sessions"),
+                        PanelAction::AllSessions,
+                        colors,
+                        false,
+                        cx,
+                    ))
+                })
                 .into_any_element(),
         )
     }

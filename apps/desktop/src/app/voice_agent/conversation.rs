@@ -223,6 +223,10 @@ pub(crate) struct VoiceAgent {
     pub(crate) requested: Option<VoiceCallTarget>,
     /// "Hang up and call" (`focus.rs`): the call to start once the open one is over.
     pub(crate) call_after_hang_up: Option<VoiceCallTarget>,
+    /// A call with a GBot (`gbot_call.rs`): the one this call was started as, which Start again
+    /// repeats, and the one to start once the open call is over.
+    pub(crate) requested_gbot: Option<super::gbot_call::GbotCallRequest>,
+    pub(crate) gbot_after_hang_up: Option<super::gbot_call::GbotCallRequest>,
     /// Where the header's Voice button last painted, for its arrow's menu.
     pub(crate) menu_anchor: std::rc::Rc<std::cell::Cell<Option<gpui::Bounds<Pixels>>>>,
     link: Option<VoiceLink>,
@@ -312,18 +316,33 @@ impl GhostexGpuiApp {
         about: Option<VoiceCallTarget>,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.start_voice_call(about, None, cx);
+    }
+
+    /// [`Self::start_voice_agent_call`], or a call with the GBot `gbot` (`gbot=<botId>`, about
+    /// `about` when that is one of its chats, else your standing chat with it; `gbot_call.rs`).
+    pub(crate) fn start_voice_call(
+        &mut self,
+        about: Option<VoiceCallTarget>,
+        gbot: Option<super::gbot_call::GbotCallRequest>,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if !voice_agent_on() || self.voice_agent.active() {
             return;
         }
         let machine = about
             .as_ref()
-            .map_or(ghostex_gx_core::MachineId::Local, |about| {
-                about.key.machine.clone()
-            });
+            .map(|about| about.key.machine.clone())
+            .or_else(|| gbot.as_ref().map(|gbot| gbot.machine.clone()))
+            .unwrap_or(ghostex_gx_core::MachineId::Local);
         let endpoint = self.voice_agent_endpoint(&machine);
         let agent = &mut self.voice_agent;
         agent.machine = CallMachine(machine);
-        agent.machine_name = about.as_ref().and_then(|about| about.machine_name.clone());
+        agent.machine_name = about
+            .as_ref()
+            .and_then(|about| about.machine_name.clone())
+            .or_else(|| gbot.as_ref().and_then(|gbot| gbot.machine_name.clone()));
+        agent.requested_gbot = gbot.clone();
         agent.focus = None;
         agent.focus_supported = false;
         agent.requested = about.clone();
@@ -376,6 +395,9 @@ impl GhostexGpuiApp {
         let mut query = vec![("mode", "conversation"), ("client", "desktop")];
         if let Some(focus) = focus.as_deref() {
             query.push(("focus", focus));
+        }
+        if let Some(gbot) = gbot.as_ref() {
+            query.push(("gbot", gbot.bot_id.as_str()));
         }
         if !self.voice_agent.machine.is_local() {
             query.push(("clientRemote", "1"));
@@ -849,6 +871,10 @@ impl GhostexGpuiApp {
         self.voice_agent.problem = None;
         self.voice_agent.focus = None;
         // Every way a hang-up ends comes here (`ended`, the socket closing, `HANG_UP_GRACE`).
+        if let Some(next) = self.voice_agent.gbot_after_hang_up.take() {
+            self.start_voice_call(None, Some(next), cx);
+            return;
+        }
         if let Some(next) = self.voice_agent.call_after_hang_up.take() {
             self.start_voice_agent_call(Some(next), cx);
             return;
@@ -898,6 +924,10 @@ impl GhostexGpuiApp {
     /// settings hook applies.
     pub(crate) fn pick_voice_agent_voice(&mut self, voice: String, cx: &mut gpui::Context<Self>) {
         self.voice_agent.voice_picker_open = false;
+        // In a call with a GBot the pick is that GBot's voice, not the Voice agent's (`gbot_call.rs`).
+        if self.pick_gbot_call_voice(&voice, cx) {
+            return;
+        }
         let key = voice_setting_key(self.voice_agent.provider.as_deref().unwrap_or_default());
         self.save_voice_agent_setting(key, json!(voice), cx);
         self.sync_voice_agent_panel(cx);
@@ -930,6 +960,7 @@ impl GhostexGpuiApp {
         let on = voice_agent_on_in(settings);
         if !on {
             self.voice_agent.call_after_hang_up = None;
+            self.voice_agent.gbot_after_hang_up = None;
         }
         match turned_off_step(on, self.voice_agent.phase) {
             TurnedOffStep::Nothing => {}
@@ -961,7 +992,9 @@ impl GhostexGpuiApp {
             }
             changed = true;
         }
+        // A call with a GBot speaks in the GBot's voice, whatever the Voice agent's is.
         if agent.phase == VoicePhase::Live
+            && agent.focus.as_ref().is_none_or(|focus| focus.gbot.is_none())
             && let Some(provider) = agent.provider.as_deref()
             && let Some(voice) = settings
                 .get(voice_setting_key(provider))

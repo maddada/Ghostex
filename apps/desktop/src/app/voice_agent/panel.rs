@@ -818,8 +818,9 @@ impl VoicePanelWindow {
                 PanelAction::Close => app.close_voice_agent_panel(cx),
                 PanelAction::StartAgain => {
                     let about = app.voice_agent.requested.clone();
+                    let gbot = app.voice_agent.requested_gbot.clone();
                     app.close_voice_agent_panel(cx);
-                    app.start_voice_agent_call(about, cx);
+                    app.start_voice_call(about, gbot, cx);
                 }
                 PanelAction::AllSessions => app.voice_call_all_sessions(cx),
                 PanelAction::Confirm { id, session } => {

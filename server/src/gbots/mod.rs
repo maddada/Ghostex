@@ -31,6 +31,8 @@
 //!   (`ghostex gbots team …`), and the presets New GBot starts from (`ghostex gbots preset …`).
 //! - [`api`]: the GBot API, an app or script messaging a GBot with its key (`/hooks/gbots/…`,
 //!   `ghostex gbots api …`).
+//! - [`call`]: calls with a GBot through the Voice agent: its voice, the chat a call talks to,
+//!   the call's line in its daily log.
 //! - [`computer`]: where a GBot's chats run (this computer, a connected computer or a Cloud Box)
 //!   and computer use there.
 //! - [`retire`]: the one-time removal of the previous GBots; [`trash`]: folders to the Trash.
@@ -43,6 +45,7 @@ mod apps_access;
 mod assign;
 mod assignments;
 mod brief;
+mod call;
 mod card;
 mod changes;
 mod computer;
@@ -74,6 +77,10 @@ pub(crate) use api::{
 pub(crate) use apps_access::{project_reads_apps_only, read_only_refusal};
 pub(crate) use assign::{
     report_heading as assignment_report_heading, settle_report as settle_assignment_report,
+};
+pub(crate) use call::{
+    call_chat as gbot_call_chat, call_refusal as gbot_call_refusal, log_call as log_gbot_call,
+    CallBot, CallRefusal,
 };
 pub(crate) use computer::{
     cloud_box_chat_approval as gbots_cloud_box_chat_approval, handle_gbots_remote_http,

@@ -219,6 +219,9 @@ pub(super) fn definitions(focus: Option<&FocusScope>) -> Value {
     let Some(scope) = focus else {
         return all;
     };
+    if let Some(bot) = &scope.gbot {
+        return super::gbot_call::definitions(bot, &all);
+    }
     let title = &scope.title;
     let session_help = if scope.is_orchestrator {
         format!("Leave it out for \"{title}\". Name one of its threads (its title or ref from the briefing) only to read it or answer its questions.")
@@ -297,6 +300,7 @@ pub(super) fn label(name: &str, args: &Value, focus_title: Option<&str>) -> Stri
         ("get_active_session", _) => "Checking what's on screen".to_string(),
         ("recall_last_conversation", _) => "Remembering your last conversation".to_string(),
         ("widen_call", _) => "Opening the call to all sessions".to_string(),
+        ("talk_to_bot", _) => "Passing it to the chat".to_string(),
         (name, _) => name.replace('_', " "),
     }
 }
@@ -470,7 +474,18 @@ async fn run_tool(
     let scope = memory.scope();
     // A focused call is offered only its own tools; one the model still names is refused.
     if let Some(scope) = &scope {
-        if !FOCUSED_TOOLS.contains(&name) {
+        // A call with a GBot has its own tools (gbot_call/tools.rs).
+        if let Some(bot) = &scope.gbot {
+            if !super::gbot_call::TOOLS.contains(&name) {
+                return failure(super::gbot_call::refusal(bot));
+            }
+            if name == "talk_to_bot" {
+                return match super::gbot_call::talk(state, memory, bot, args).await {
+                    Ok(output) => success(output),
+                    Err(message) => failure(message),
+                };
+            }
+        } else if !FOCUSED_TOOLS.contains(&name) {
             return failure(focus::refusal(&scope.title));
         }
     } else if name == "widen_call" {
@@ -684,7 +699,7 @@ fn spoken_text(message: &Value) -> String {
     }
 }
 
-async fn read_chat(
+pub(super) async fn read_chat(
     state: &Arc<AppState>,
     session: &SessionInfo,
     limit: usize,
@@ -761,7 +776,7 @@ async fn read_session(
     }))
 }
 
-async fn send_prompt(
+pub(super) async fn send_prompt(
     state: &Arc<AppState>,
     memory: &ToolMemory,
     args: &Value,

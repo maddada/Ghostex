@@ -182,6 +182,8 @@ pub(crate) struct GpuiGbotSettingsModalWindow {
     pub(super) model_input: Entity<InputState>,
     pub(super) soul_input: Entity<TextareaState>,
     pub(super) agent_select: ModalSelect,
+    /// Profile's Voice picker (voice.rs).
+    pub(super) voice_select: ModalSelect,
     pub(super) page_scroll: ScrollHandle,
     /// A save is on its way to gxserver.
     pub(super) saving: bool,
@@ -349,6 +351,7 @@ impl GpuiGbotSettingsModalWindow {
             model_input,
             soul_input,
             agent_select: ModalSelect::new(),
+            voice_select: ModalSelect::new(),
             page_scroll: ScrollHandle::new(),
             saving: false,
             error: None,
@@ -391,6 +394,7 @@ impl GpuiGbotSettingsModalWindow {
         }
         self.tab = tab;
         self.agent_select.close();
+        self.voice_select.close();
         self.page_scroll.set_offset(gpui::point(px(0.0), px(0.0)));
         if tab == GbotSettingsTab::Memory {
             self.ensure_memory(window, cx);
@@ -441,6 +445,7 @@ impl GpuiGbotSettingsModalWindow {
         self.saving = true;
         self.error = None;
         self.agent_select.close();
+        self.voice_select.close();
         cx.notify();
         (self.host)(
             GbotSettingsModalCommand::Save {
@@ -470,6 +475,7 @@ impl GpuiGbotSettingsModalWindow {
 
     pub(super) fn toggle_agent_select(&mut self, cx: &mut Context<Self>) {
         let selected = self.agent_index();
+        self.voice_select.close();
         self.agent_select.toggle(selected);
         cx.notify();
     }
@@ -507,8 +513,9 @@ impl GpuiGbotSettingsModalWindow {
 
     fn on_escape_action(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
-        if self.agent_select.open {
+        if self.agent_select.open || self.voice_select.open {
             self.agent_select.close();
+            self.voice_select.close();
             cx.notify();
             return;
         }
@@ -529,6 +536,22 @@ impl GpuiGbotSettingsModalWindow {
             }
             ModalSelectKey::Choose(index) => {
                 self.choose_agent(index, cx);
+                cx.stop_propagation();
+                return;
+            }
+            ModalSelectKey::Ignored => {}
+        }
+        match self
+            .voice_select
+            .handle_key(key, self.voice_labels().len())
+        {
+            ModalSelectKey::Consumed => {
+                cx.notify();
+                cx.stop_propagation();
+                return;
+            }
+            ModalSelectKey::Choose(index) => {
+                self.choose_voice(index, cx);
                 cx.stop_propagation();
                 return;
             }
@@ -599,7 +622,9 @@ impl Render for GpuiGbotSettingsModalWindow {
             GbotSettingsTab::BotApi => self.render_bot_api(cx),
         };
         let footer = self.render_footer(cx);
-        let menu = self.render_agent_menu(window, cx);
+        let menu = self
+            .render_agent_menu(window, cx)
+            .or_else(|| self.render_voice_menu(window, cx));
         div()
             .id("ghostex-gpui-gbot-settings-modal")
             .size_full()

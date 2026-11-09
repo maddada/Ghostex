@@ -1090,7 +1090,11 @@ impl Render for GhostexGpuiApp {
                         session_id: action.session_id.clone(),
                     };
                     if let Some(target) = this.voice_call_target_for(key) {
-                        this.voice_call_about(target, window, cx);
+                        if action.gbot {
+                            this.call_gbot_about(target, window, cx);
+                        } else {
+                            this.voice_call_about(target, window, cx);
+                        }
                     }
                 }),
             )

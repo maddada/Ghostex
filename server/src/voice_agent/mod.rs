@@ -20,6 +20,7 @@ mod feature_tests;
 mod focus;
 #[cfg(test)]
 mod focus_tests;
+mod gbot_call;
 mod http;
 mod keys;
 mod loopback;
@@ -53,6 +54,7 @@ pub(crate) use http::{
     handle_forget_voice_agent_memory_http, handle_read_voice_agent_http,
     handle_set_voice_agent_key_http,
 };
+pub(crate) use gbot_call::voice_choices as gbot_voice_choices;
 pub(crate) use memory::recover_after_restart as recover_voice_agent_memory;
 pub(crate) use recordings_http::handle_dictation_recordings_http;
 pub(crate) use settings_http::handle_set_voice_agent_settings_http;

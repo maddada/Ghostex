@@ -283,6 +283,9 @@ pub(crate) struct VoiceCallAboutSession {
     pub(crate) remote_machine: Option<String>,
     pub(crate) project_id: String,
     pub(crate) session_id: String,
+    /// The arrow's "Call <GBot>" on a GBot's chat: a call with that GBot about the chat
+    /// (voice_agent/gbot_call.rs).
+    pub(crate) gbot: bool,
 }
 
 /// A row of the voice panel's speed menu: `voiceAgentSpeed` in hundredths (120 is 1.2×).
