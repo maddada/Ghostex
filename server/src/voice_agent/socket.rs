@@ -101,11 +101,22 @@ pub(crate) async fn handle_voice(
         .filter(|gbot| !gbot.is_empty());
     // The phone's native voice module passes only `focus`, so a call with a GBot also comes as
     // `focus=gbot:<botId>` or `focus=gbot:<botId>:<projectId>:<sessionId>` (`gbot_call/`).
-    if let Some((bot, chat)) = focus.as_deref().and_then(super::gbot_call::parse_focus_query) {
+    if let Some((bot, chat)) = focus
+        .as_deref()
+        .and_then(super::gbot_call::parse_focus_query)
+    {
         gbot = Some(bot);
         focus = chat;
     }
     let client_remote = query_value(&uri, "clientRemote").as_deref() == Some("1");
+    // `client=phone` (the phone's native voice module), for the log; anything else is the desktop or the CLI.
+    let client = query_value(&uri, "client")
+        .filter(|client| {
+            !client.is_empty()
+                && client.len() <= 16
+                && client.chars().all(|c| c.is_ascii_alphanumeric())
+        })
+        .unwrap_or_else(|| "desktop".to_string());
     let language = query_value(&uri, "language")
         .map(|language| language.trim().to_string())
         .filter(|language| {
@@ -136,7 +147,8 @@ pub(crate) async fn handle_voice(
                     gbot,
                     client_remote,
                 };
-                run_conversation_socket(state, socket, conversation_id, start, caller_token).await
+                run_conversation_socket(state, socket, conversation_id, start, caller_token, client)
+                    .await
             }
             _ => {
                 fail(
@@ -149,6 +161,9 @@ pub(crate) async fn handle_voice(
         }
     })
 }
+
+/// Shown on the voice screen when a call Ghostex's restart ended is started again for the device that came back.
+const RESTARTED_NOTICE: &str = "Ghostex restarted on this computer, so this is a new call. It doesn't know what was just said.";
 
 /// Sends a fatal error and closes the socket.
 pub(super) async fn fail(socket: &mut WebSocket, code: &str, message: &str) {
@@ -187,19 +202,53 @@ async fn run_conversation_socket(
     conversation_id: Option<String>,
     start: Start,
     caller_token: String,
+    client: String,
 ) {
     let (tx, resumed) = match conversation_id {
         Some(id) => match registry::sender(&id) {
             Some(tx) => (tx, true),
-            None => {
-                fail(
-                    &mut socket,
-                    "notFound",
-                    "That voice conversation has ended. Start a new one.",
-                )
-                .await;
-                return;
-            }
+            None => match super::interrupted::take(&state.paths, &id) {
+                // Ghostex restarted during this call: a new one with its settings takes its place.
+                Some(call) => {
+                    let start = Start {
+                        provider: Provider::from_id(&call.provider),
+                        push_to_talk: Some(call.push_to_talk),
+                        focus: call.focus,
+                        gbot: None,
+                        client_remote: call.client_remote,
+                    };
+                    super::warn(
+                        &state,
+                        "voiceAgent.restartedAfterServerRestart",
+                        json!({"client": client, "provider": call.provider}),
+                    );
+                    let Some(tx) = start_conversation(&state, &mut socket, start).await else {
+                        return;
+                    };
+                    let _ = socket
+                        .send(Message::Text(
+                            json!({"type": "announcement", "text": RESTARTED_NOTICE})
+                                .to_string()
+                                .into(),
+                        ))
+                        .await;
+                    (tx, false)
+                }
+                None => {
+                    super::warn(
+                        &state,
+                        "voiceAgent.reattachRefused",
+                        json!({"client": client, "reason": "notFound"}),
+                    );
+                    fail(
+                        &mut socket,
+                        "notFound",
+                        "That voice conversation has ended. Start a new one.",
+                    )
+                    .await;
+                    return;
+                }
+            },
         },
         None => match start_conversation(&state, &mut socket, start).await {
             Some(tx) => (tx, false),
@@ -207,6 +256,7 @@ async fn run_conversation_socket(
         },
     };
     let _ = tx.send(Input::Caller(caller_token));
+    let _ = tx.send(Input::Client(client));
     let attach_id = NEXT_ATTACH.fetch_add(1, Ordering::Relaxed);
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<ClientFrame>();
     if tx
@@ -366,6 +416,11 @@ async fn start_conversation(
     let key = match keys::read_key_async(&state.paths, provider).await {
         Ok(Some(key)) => key,
         Ok(None) => {
+            super::warn(
+                state,
+                "voiceAgent.noKey",
+                json!({"provider": provider.id(), "clientRemote": client_remote}),
+            );
             fail(socket, "noKey", &no_key_message(provider, client_remote)).await;
             return None;
         }
@@ -416,6 +471,11 @@ async fn start_conversation(
     let mut upstream = match provider::connect_realtime(provider, &key).await {
         Ok(upstream) => upstream,
         Err(ConnectError::BadKey) => {
+            super::warn(
+                state,
+                "voiceAgent.badKey",
+                json!({"provider": provider.id()}),
+            );
             fail(socket, "badKey", &bad_key_message(provider, client_remote)).await;
             return None;
         }

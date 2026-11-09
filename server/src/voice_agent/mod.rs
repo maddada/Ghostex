@@ -22,6 +22,7 @@ mod focus;
 mod focus_tests;
 mod gbot_call;
 mod http;
+mod interrupted;
 mod keys;
 mod loopback;
 mod memory;
@@ -50,11 +51,11 @@ mod transcribe;
 mod transcribe_tests;
 mod when;
 
+pub(crate) use gbot_call::voice_choices as gbot_voice_choices;
 pub(crate) use http::{
     handle_forget_voice_agent_memory_http, handle_read_voice_agent_http,
     handle_set_voice_agent_key_http,
 };
-pub(crate) use gbot_call::voice_choices as gbot_voice_choices;
 pub(crate) use memory::recover_after_restart as recover_voice_agent_memory;
 pub(crate) use recordings_http::handle_dictation_recordings_http;
 pub(crate) use settings_http::handle_set_voice_agent_settings_http;
@@ -113,6 +114,20 @@ fn log_warn_error(
 
 /// A warning in gxserver's log (warnings are written whatever the diagnostic switches say). Never
 /// pass a key, audio or transcript text here.
+/// An `info` line (shown while the voice area's diagnostic logs are on).
+fn info(state: &crate::server::AppState, event: &str, details: serde_json::Value) {
+    let _ = state.logger.log(crate::logging::GxserverLogInput {
+        level: crate::logging::LogLevel::Info,
+        event: event.to_string(),
+        server_id: Some(state.metadata.server_id.clone()),
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: None,
+        details: Some(details),
+    });
+}
+
 fn warn(state: &crate::server::AppState, event: &str, details: serde_json::Value) {
     let _ = state.logger.log(crate::logging::GxserverLogInput {
         level: crate::logging::LogLevel::Warn,

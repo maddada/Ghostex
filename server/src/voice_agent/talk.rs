@@ -78,6 +78,11 @@ impl Talk {
         self.held
     }
 
+    /// The attached client's Mute is on.
+    pub(super) fn muted(&self) -> bool {
+        self.muted
+    }
+
     pub(super) fn press(&mut self) -> Press {
         if self.held {
             return Press::Ignored;

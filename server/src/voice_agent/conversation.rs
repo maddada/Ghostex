@@ -66,6 +66,8 @@ pub(super) enum ClientFrame {
 pub(super) enum Input {
     /// The token the client about to attach opened its socket with (`loopback::ToolCaller`).
     Caller(String),
+    /// The kind of client about to attach (`client=` on `/api/voice`: `phone`, `desktop`, `cli`), for the log.
+    Client(String),
     Attach {
         attach_id: u64,
         out: mpsc::UnboundedSender<ClientFrame>,
@@ -250,6 +252,26 @@ pub(super) struct Conversation {
     scope_changes: u64,
     /// The confirm card on screen, if any (`control.rs`).
     confirm: Option<OpenConfirm>,
+    /// What the log says about the call (`client_trouble` and `finish`).
+    diagnostics: CallDiagnostics,
+}
+
+/// How long an attached client that should be streaming its microphone may send nothing before
+/// the log says so.
+const CLIENT_AUDIO_GAP: Duration = Duration::from_secs(4);
+
+/// What the log says about a call: which client, how often it reattached, and whether its microphone audio stopped arriving.
+///
+/// CDXC:VoiceMode 2026-11-10 WHY: The user's iPhone said "The microphone stopped" over and over and its calls failed, yet neither computer's log had a line about any of it: only provider failures were logged. A call now logs how it ended when that was not the user or the idle hang-up, a reattach to a call that is gone, and an attached client whose microphone audio stops arriving while the call should be hearing it, so the next report shows when, on which computer and from which side it broke.
+struct CallDiagnostics {
+    client: String,
+    client_remote: bool,
+    started: Instant,
+    attaches: u32,
+    /// When the attached client's last microphone frame came, once one came since it attached.
+    audio_at: Option<Instant>,
+    /// The gap the log already reported, until audio comes again.
+    gap_reported: bool,
 }
 
 enum Ended {
@@ -322,6 +344,14 @@ impl Conversation {
             briefing_pending: focus.is_some(),
             focus,
             scope_changes: 0,
+            diagnostics: CallDiagnostics {
+                client: "unknown".to_string(),
+                client_remote,
+                started: now,
+                attaches: 0,
+                audio_at: None,
+                gap_reported: false,
+            },
         }
     }
 
@@ -358,11 +388,35 @@ impl Conversation {
 
     async fn finish(&mut self, reason: &'static str, message: &str) {
         registry::remove(&self.id);
-        if matches!(reason, "providerClosed" | "error") {
-            super::warn(
-                &self.state,
-                "voiceAgent.ended",
-                json!({"provider": self.provider.id(), "reason": reason, "message": message}),
+        let details = json!({
+            "provider": self.provider.id(),
+            "reason": reason,
+            "message": message,
+            "client": self.diagnostics.client,
+            "attaches": self.diagnostics.attaches,
+            "seconds": self.diagnostics.started.elapsed().as_secs(),
+        });
+        if matches!(reason, "user" | "idle") {
+            super::info(&self.state, "voiceAgent.ended", details);
+        } else {
+            super::warn(&self.state, "voiceAgent.ended", details);
+        }
+        if reason == "serverShutdown"
+            && self.focus.as_ref().is_none_or(|scope| scope.gbot.is_none())
+        {
+            super::interrupted::remember(
+                &self.state.paths,
+                &self.id,
+                super::interrupted::Interrupted {
+                    provider: self.provider.id().to_string(),
+                    push_to_talk: self.push_to_talk,
+                    focus: self
+                        .focus
+                        .as_ref()
+                        .map(|scope| format!("{}:{}", scope.project_id, scope.session_id)),
+                    client_remote: self.diagnostics.client_remote,
+                    ended_at_ms: 0,
+                },
             );
         }
         self.to_client(json!({"type": "ended", "reason": reason, "message": message}));
@@ -442,6 +496,7 @@ impl Conversation {
     async fn on_input(&mut self, input: Input) -> Result<(), Ended> {
         match input {
             Input::Caller(token) => self.memory.set_caller_token(token),
+            Input::Client(client) => self.diagnostics.client = client,
             Input::Attach {
                 attach_id,
                 out,
@@ -480,6 +535,9 @@ impl Conversation {
                 self.client = Some((attach_id, out));
                 self.detached_since = None;
                 self.talk.attached();
+                self.diagnostics.attaches += 1;
+                self.diagnostics.audio_at = None;
+                self.diagnostics.gap_reported = false;
                 if std::mem::take(&mut self.briefing_pending) {
                     self.read_briefing();
                 }
@@ -500,6 +558,7 @@ impl Conversation {
                 }
             }
             Input::Audio(bytes) => {
+                self.client_audio_arrived();
                 // Push-to-talk listens only while Talk is held, and nobody while muted.
                 if bytes.len() >= 2 && self.talk.passes_audio((bytes.len() / BYTES_PER_MS) as u64) {
                     if self.talk.held() {
@@ -556,10 +615,19 @@ impl Conversation {
                 }
             }
             Input::Voice(voice) => self.change_voice(voice).await?,
-            Input::TalkStart => self.talk_start().await?,
+            Input::TalkStart => {
+                // A hold streams the microphone from now on, whatever came before it.
+                self.diagnostics.audio_at = Some(Instant::now());
+                self.diagnostics.gap_reported = false;
+                self.talk_start().await?
+            }
             Input::TalkEnd => self.talk_end().await?,
             Input::TalkCancel => self.talk_cancel().await?,
             Input::Mute(muted) => {
+                // Unmuting starts the wait for the microphone again (a muted client may send nothing).
+                if !muted && self.diagnostics.audio_at.is_some() {
+                    self.diagnostics.audio_at = Some(Instant::now());
+                }
                 if self.talk.set_muted(muted) == Cancel::Cleared {
                     self.drop_held_turn().await?;
                 }
@@ -851,8 +919,55 @@ impl Conversation {
         }));
     }
 
+    /// A microphone frame came: a gap the log reported is over.
+    fn client_audio_arrived(&mut self) {
+        let now = Instant::now();
+        if std::mem::take(&mut self.diagnostics.gap_reported) {
+            let gap = self
+                .diagnostics
+                .audio_at
+                .map_or(0, |at| now.duration_since(at).as_millis() as u64);
+            super::info(
+                &self.state,
+                "voiceAgent.clientAudioBack",
+                json!({"client": self.diagnostics.client, "gapMs": gap}),
+            );
+        }
+        self.diagnostics.audio_at = Some(now);
+    }
+
+    /// Logs once when an attached client that should be streaming its microphone (a Regular call
+    /// unmuted, or a hold) has sent nothing for [`CLIENT_AUDIO_GAP`] after it had started to.
+    fn watch_client_audio(&mut self, now: Instant) {
+        let expecting = self.client.is_some()
+            && if self.push_to_talk {
+                self.talk.held()
+            } else {
+                !self.talk.muted() || self.talk.held()
+            };
+        let Some(at) = self.diagnostics.audio_at.filter(|_| expecting) else {
+            return;
+        };
+        if self.diagnostics.gap_reported || now.duration_since(at) < CLIENT_AUDIO_GAP {
+            return;
+        }
+        self.diagnostics.gap_reported = true;
+        super::warn(
+            &self.state,
+            "voiceAgent.clientAudioStopped",
+            json!({
+                "client": self.diagnostics.client,
+                "provider": self.provider.id(),
+                "silentMs": now.duration_since(at).as_millis() as u64,
+                "attaches": self.diagnostics.attaches,
+                "pushToTalk": self.push_to_talk,
+            }),
+        );
+    }
+
     async fn on_tick(&mut self) -> Result<(), Ended> {
         let now = Instant::now();
+        self.watch_client_audio(now);
         if self.talk.wants_silence(now) {
             // A muted Regular call's hold ended: the provider hears the quiet it needs to end the turn.
             let silence = vec![0u8; TICK.as_millis() as usize * BYTES_PER_MS];
