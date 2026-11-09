@@ -116,8 +116,15 @@ pub(in crate::server) async fn route_http(
     // checks itself, so the key never passes the token gate below as any other caller.
     if path.starts_with(crate::gbots::BOT_API_ROUTE_PREFIX) {
         let query = parts.uri.query().map(str::to_string);
-        return crate::gbots::serve_bot_api(state.clone(), method, path, query, parts.headers, body)
-            .await;
+        return crate::gbots::serve_bot_api(
+            state.clone(),
+            method,
+            path,
+            query,
+            parts.headers,
+            body,
+        )
+        .await;
     }
 
     if path.starts_with(crate::connected_computers::RELAY_ROUTE_PREFIX) {

@@ -522,7 +522,9 @@ fn gbots_day_watch_action(
         caller,
         Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent
     ) || (caller.is_head() && !crate::gbots::chief_adds_on_its_own(&state.paths));
-    if !user || !crate::gbots::gbots_on(&state.paths) || !crate::gbots::day_watch_adds_bot(state, params)
+    if !user
+        || !crate::gbots::gbots_on(&state.paths)
+        || !crate::gbots::day_watch_adds_bot(state, params)
     {
         return None;
     }

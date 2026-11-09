@@ -401,10 +401,12 @@ fn run_gbot_api_op(
         let mut params = op.unwrap_or_else(|| json!({ "op": "api", "bot": bot_id }));
         // A one-time nonce for this call and its approved repeat, so gxserver shows the key only
         // to this call (server/src/server/security_gates.rs `gbots_api_key_action`).
-        params["keyNonce"] = json!(crate::app::gx_chat::random_bytes()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>());
+        params["keyNonce"] = json!(
+            crate::app::gx_chat::random_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        );
         #[allow(unused_mut)]
         let mut answer = gx_rpc(remote.clone(), "/api/gbots", params.clone()).await;
         #[cfg(not(target_arch = "wasm32"))]

@@ -79,12 +79,13 @@ pub(crate) use computer::{
     cloud_box_chat_approval as gbots_cloud_box_chat_approval, handle_gbots_remote_http,
     widening_approval as gbots_computer_widening_approval, GBOTS_REMOTE_ENDPOINT,
 };
-pub(crate) use day_watch::{adds_bot as day_watch_adds_bot, brief_turn_alerts as day_brief_turn_alerts};
+pub(crate) use day_watch::{
+    adds_bot as day_watch_adds_bot, brief_turn_alerts as day_brief_turn_alerts,
+};
 pub(crate) use endpoint::{handle_gbots_http, GBOTS_ENDPOINT};
 pub(crate) use feature::{chief_adds_on_its_own, gbots_off_message, gbots_on, gbots_shown};
 pub(crate) use folder::gbots_dir as gbots_folder;
 pub(crate) use markers::keep_gbot_marks;
-pub(crate) use skill::install_for_visiting_chat as install_gbots_skill_for_visiting_chat;
 pub(crate) use memory::{
     coordinator_remember as gbot_coordinator_remember, observe_activity as observe_gbot_activity,
 };
@@ -101,5 +102,6 @@ pub(crate) use routine_runs::{
     routine_folder, routine_gate, routine_run_settled, start_routine_run, RoutineGate,
     SettledRoutineRun,
 };
+pub(crate) use skill::install_for_visiting_chat as install_gbots_skill_for_visiting_chat;
 pub(crate) use sweep::start_gbots_sweep;
 pub(crate) use team_file::import_approval_summary as team_import_approval_summary;

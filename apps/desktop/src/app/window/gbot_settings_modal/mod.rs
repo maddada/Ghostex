@@ -19,9 +19,9 @@ mod window;
 
 // The modal demo binary answers memory commands without naming the reply type.
 #[allow(unused_imports)]
-pub(crate) use computer::GbotComputerReply;
-#[allow(unused_imports)]
 pub(crate) use bot_api::GbotApiReply;
+#[allow(unused_imports)]
+pub(crate) use computer::GbotComputerReply;
 #[allow(unused_imports)]
 pub(crate) use department::GbotDepartmentReply;
 #[allow(unused_imports)]
