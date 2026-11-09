@@ -137,6 +137,8 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    /// The web build's New thread picker commands: the desktop's own handling
+    /// (new_thread_picker_lifecycle.rs) minus what a page cannot open.
     fn handle_web_new_thread_picker_command(
         &mut self,
         command: NewThreadPickerCommand,
