@@ -7,7 +7,9 @@ use serde_json::{Value, json};
 
 use super::gx_rpc;
 use crate::GhostexGpuiApp;
-use crate::app::window::{NoticeDevice, SecurityNoticeRow, SecurityNoticeRowStatus};
+use crate::app::window::{
+    NoticeDevice, SecurityNoticeRow, SecurityNoticeRowStatus, leftover_reason,
+};
 
 pub(crate) const SECURITY_NOTICE_ENDPOINT: &str = "/api/securityUpgradeNotice";
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
@@ -31,6 +33,8 @@ pub(crate) fn ago(at_ms: i64, now_ms: i64) -> String {
 fn status(row: &Value) -> SecurityNoticeRowStatus {
     match row["status"].as_str() {
         Some("paired") => SecurityNoticeRowStatus::Paired,
+        // An old pairing nobody needs to pair again: not counted, offers Forget.
+        Some("leftover") => SecurityNoticeRowStatus::Leftover,
         // Pairing v2: waiting on the owner's approval, with its words.
         Some("pending") if row["approvalId"].as_str().is_some_and(|id| !id.is_empty()) => {
             SecurityNoticeRowStatus::Pending
@@ -76,17 +80,23 @@ pub(crate) fn notice_rows(
                 .as_str()
                 .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
                 .map(|at| format!("used {}", ago(at.timestamp_millis(), now_ms)));
+            let kind_name = if kind.is_empty() {
+                "Phone"
+            } else {
+                kind.as_str()
+            };
+            let status = status(row);
             SecurityNoticeRow {
                 id: text(row, "id"),
                 name: text(row, "name"),
-                kind_label: format!(
-                    "{} \u{b7} Easy Connect",
-                    if kind.is_empty() {
-                        "Phone"
-                    } else {
-                        kind.as_str()
-                    }
-                ),
+                kind_label: if status == SecurityNoticeRowStatus::Leftover {
+                    format!(
+                        "{kind_name} \u{b7} {}",
+                        leftover_reason(row["leftover"].as_str().unwrap_or_default())
+                    )
+                } else {
+                    format!("{kind_name} \u{b7} Easy Connect")
+                },
                 device: NoticeDevice::EasyConnectPhone,
                 pending_id: pending_id(row),
                 detail: match used {
@@ -94,7 +104,7 @@ pub(crate) fn notice_rows(
                     Some(used) => used,
                     None => kind,
                 },
-                status: status(row),
+                status,
                 words: words(row),
                 approval_id: approval_id(row),
             }

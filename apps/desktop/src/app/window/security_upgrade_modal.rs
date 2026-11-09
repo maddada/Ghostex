@@ -58,6 +58,9 @@ pub(crate) enum SecurityNoticeRowStatus {
     Pending,
     /// Nothing to do: a computer reached over SSH, shown only to say so.
     Info,
+    /// An old pairing nobody needs to pair again (never used, an older pairing of the same phone,
+    /// or a phone that signs in over SSH now): not counted, and the row offers Forget.
+    Leftover,
 }
 
 /// What a row is, which decides its page.
@@ -88,6 +91,16 @@ pub(crate) struct SecurityNoticeRow {
     /// A `Pending` phone's three words, and its approval request.
     pub(crate) words: Vec<String>,
     pub(crate) approval_id: Option<String>,
+}
+
+/// Why a `Leftover` row needs nothing (`leftover` of `/api/securityUpgradeNotice`).
+pub(crate) fn leftover_reason(reason: &str) -> &'static str {
+    match reason {
+        "neverUsed" => "Never connected after it was paired",
+        "duplicate" => "An older pairing of the same phone",
+        "ssh" => "Signs in over Tailscale or SSH now",
+        _ => "Nothing to pair",
+    }
 }
 
 /// The phone pairing code the notice shows (the Show QR sheet's code).
@@ -155,9 +168,25 @@ impl SecurityUpgradeModalState {
         self.rows().iter().all(|row| {
             matches!(
                 row.status,
-                SecurityNoticeRowStatus::Paired | SecurityNoticeRowStatus::Info
+                SecurityNoticeRowStatus::Paired
+                    | SecurityNoticeRowStatus::Info
+                    | SecurityNoticeRowStatus::Leftover
             ) || self.computer_pairing(&row.id) == Some(&NoticeComputerPairing::Paired)
         })
+    }
+
+    /// Something was paired again here (not only rows that needed nothing).
+    fn any_paired(&self) -> bool {
+        self.rows().iter().any(|row| {
+            row.status == SecurityNoticeRowStatus::Paired
+                || self.computer_pairing(&row.id) == Some(&NoticeComputerPairing::Paired)
+        })
+    }
+
+    /// Drops a forgotten row until the next read leaves it out too.
+    fn forget(&mut self, id: &str) {
+        self.phones.retain(|row| row.id != id);
+        self.computers.retain(|row| row.id != id);
     }
 }
 
@@ -180,6 +209,8 @@ pub(crate) enum SecurityUpgradeModalCommand {
     ShowCode,
     /// The phone's page closed: stop asking for the code.
     HideCode,
+    /// Forget a `Leftover` row's old pairing record (its row id), after the row's confirm.
+    Forget(String),
     /// Remind me later (also Escape and the corner close).
     Later,
     Done,
@@ -194,6 +225,8 @@ pub(crate) struct GpuiSecurityUpgradeModalWindow {
     qr: Option<(String, Option<QrGrid>)>,
     /// The device whose page is open (its row id), or the list.
     page: Option<String>,
+    /// The `Leftover` row asking "Forget …?" (its row id).
+    confirming_forget: Option<String>,
     code_input: Entity<InputState>,
     code_text: String,
     copied: bool,
@@ -229,6 +262,7 @@ impl GpuiSecurityUpgradeModalWindow {
             state: state.clone(),
             qr: None,
             page: None,
+            confirming_forget: None,
             code_input,
             code_text: String::new(),
             copied: false,
@@ -251,6 +285,20 @@ impl GpuiSecurityUpgradeModalWindow {
             self.state = state;
             cx.notify();
         }
+    }
+
+    /// A leftover row's "Forget it?" (its Forget button; the preview asks it directly).
+    pub(crate) fn ask_forget(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.confirming_forget = Some(id.to_string());
+        cx.notify();
+    }
+
+    /// Forget's confirm: the old record goes, and the row with it.
+    fn forget(&mut self, id: String, cx: &mut Context<Self>) {
+        self.confirming_forget = None;
+        self.state.forget(&id);
+        (self.host)(SecurityUpgradeModalCommand::Forget(id), cx);
+        cx.notify();
     }
 
     /// Opens `id`'s page (the preview opens on one too).
@@ -345,10 +393,15 @@ impl GpuiSecurityUpgradeModalWindow {
 
     fn render_list_header(&self) -> AnyElement {
         let p = self.palette;
-        let (title, line) = if self.state.all_paired() {
+        let (title, line) = if self.state.all_paired() && self.state.any_paired() {
             (
                 "All paired",
                 "Every phone and computer has its own key now. Thanks for pairing them.",
+            )
+        } else if self.state.all_paired() {
+            (
+                "Nothing left to pair",
+                "None of these needs pairing again. Forget the old pairings you no longer use.",
             )
         } else {
             (
@@ -430,6 +483,8 @@ impl GpuiSecurityUpgradeModalWindow {
         };
         let id = row.id.clone();
         let hover = p.raised;
+        // A leftover has no page: its row only offers Forget.
+        let leftover = row.status == SecurityNoticeRowStatus::Leftover;
         h_flex()
             .id(SharedString::from(format!(
                 "security-upgrade-row-{}",
@@ -440,12 +495,14 @@ impl GpuiSecurityUpgradeModalWindow {
             .gap(px(10.0))
             .px(px(12.0))
             .py(px(10.0))
-            .cursor_pointer()
-            .hover(move |this| this.bg(hsla(hover)))
             .when(!first, |this| {
                 this.border_t_1().border_color(hsla(p.hairline))
             })
-            .on_click(cx.listener(move |this, _, _window, cx| this.open_page(&id, cx)))
+            .when(!leftover, |this| {
+                this.cursor_pointer()
+                    .hover(move |this| this.bg(hsla(hover)))
+                    .on_click(cx.listener(move |this, _, _window, cx| this.open_page(&id, cx)))
+            })
             .child(modal_icon(icon, 16.0, p.muted))
             .child(
                 v_flex()
@@ -460,8 +517,58 @@ impl GpuiSecurityUpgradeModalWindow {
                             .truncate(),
                     ),
             )
-            .child(self.status_label(row))
-            .child(modal_icon(ICON_CHEVRON, 14.0, p.muted))
+            .when(leftover, |this| this.child(self.render_forget(row, cx)))
+            .when(!leftover, |this| {
+                this.child(self.status_label(row))
+                    .child(modal_icon(ICON_CHEVRON, 14.0, p.muted))
+            })
+            .into_any_element()
+    }
+
+    /*
+    CDXC:Security 2026-11-09 DECISION:
+    User (9 Nov): "please why do i see 9 devices here??? i don't have 9 devices connected even, there's something wrong". An old pairing nobody can or needs to pair again (never used, an older pairing of the same phone, a phone that signs in over SSH now) is a `Leftover` row: not counted in Settings > Remote's line, and its row offers Forget, which asks "Forget …?" in the row (as Paired devices' Remove does) and then drops that old record from the notice only.
+    */
+    fn render_forget(&self, row: &SecurityNoticeRow, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        let id = row.id.clone();
+        if self.confirming_forget.as_deref() == Some(row.id.as_str()) {
+            return h_flex()
+                .flex_shrink_0()
+                .items_center()
+                .gap(px(6.0))
+                .child(self.text(12.0, 17.0, p.muted, "Forget it?"))
+                .child(small_button(
+                    &p,
+                    SharedString::from(format!("security-upgrade-forget-yes-{id}")),
+                    "Forget",
+                    move |this: &mut Self, _window, cx| this.forget(id.clone(), cx),
+                    cx,
+                ))
+                .child(small_button(
+                    &p,
+                    SharedString::from(format!("security-upgrade-forget-no-{}", row.id)),
+                    "Cancel",
+                    |this: &mut Self, _window, cx| {
+                        this.confirming_forget = None;
+                        cx.notify();
+                    },
+                    cx,
+                ))
+                .into_any_element();
+        }
+        h_flex()
+            .flex_shrink_0()
+            .items_center()
+            .gap(px(8.0))
+            .child(self.text(12.0, 17.0, p.muted, "Not needed"))
+            .child(small_button(
+                &p,
+                SharedString::from(format!("security-upgrade-forget-{id}")),
+                "Forget",
+                move |this: &mut Self, _window, cx| this.ask_forget(&id, cx),
+                cx,
+            ))
             .into_any_element()
     }
 

@@ -10,7 +10,8 @@
 //!
 //! `/api/securityUpgradeNotice`: `op: "read"` (the default) answers the rows with their status
 //! now, whether the notice is due, and how many still wait; `op: "later"` hides it for a day (twice
-//! at most, then for good); `op: "done"` hides it for good. Settings > Remote keeps a "Pair again"
+//! at most, then for good); `op: "done"` hides it for good; `op: "forget"` with a row's `id`
+//! leaves that row out from then on. Settings > Remote keeps a "Pair again"
 //! line while any row still waits.
 //!
 //! CDXC:Security 2026-11-08 DECISION:
@@ -86,6 +87,9 @@ pub(crate) struct UpgradeNotice {
     pub(crate) remind_at_ms: Option<i64>,
     #[serde(default = "default_reminders")]
     pub(crate) reminders_left: u8,
+    /// Rows the owner chose Forget on (`op: "forget"`): left out from then on.
+    #[serde(default)]
+    pub(crate) forgotten: Vec<String>,
 }
 
 impl Default for UpgradeNotice {
@@ -99,6 +103,7 @@ impl Default for UpgradeNotice {
             taken_at_ms: 0,
             remind_at_ms: None,
             reminders_left: REMINDERS,
+            forgotten: Vec::new(),
         }
     }
 }
@@ -136,6 +141,18 @@ pub(crate) struct CurrentPhone {
     pub(crate) name: String,
     pub(crate) platform: String,
     pub(crate) paired_at: String,
+    /// `legacy` (the pairing from before 11.0.1) or `paired` (its own key).
+    pub(crate) status: String,
+    /// When it last reached this computer; `None` if it never did since it was paired.
+    pub(crate) last_seen_at: Option<String>,
+    /// Paired over its own SSH login (`/api/pairOverSsh`): it signs in over Tailscale or SSH.
+    pub(crate) over_ssh: bool,
+}
+
+impl CurrentPhone {
+    fn same_device(&self, phone: &NoticePhone) -> bool {
+        self.name == phone.name && self.platform == phone.platform
+    }
 }
 
 fn notice_path(paths: &GxserverPaths) -> PathBuf {
@@ -200,13 +217,17 @@ fn current_phones(paths: &GxserverPaths) -> Vec<CurrentPhone> {
     let Ok(db) = crate::storage::open_gxserver_database(paths) else {
         return Vec::new();
     };
-    // A phone paired over its SSH login is the SSH row's, never an Easy Connect row's re-pairing. A
-    // table from before pairing v2 has no columns to tell, and no such phone either.
+    // A table from before pairing v2 has no columns to tell a phone paired over SSH, and no such
+    // phone either: every row there is a legacy pairing.
     let Ok(mut statement) = db
         .prepare(&format!(
-            "SELECT id, name, platform, pairedAt FROM remote_paired_devices WHERE NOT ({PAIRED_OVER_SSH})"
+            "SELECT id, name, platform, pairedAt, status, lastSeenAt, ({PAIRED_OVER_SSH}) FROM remote_paired_devices"
         ))
-        .or_else(|_| db.prepare("SELECT id, name, platform, pairedAt FROM remote_paired_devices"))
+        .or_else(|_| {
+            db.prepare(
+                "SELECT id, name, platform, pairedAt, 'legacy', lastSeenAt, 0 FROM remote_paired_devices",
+            )
+        })
     else {
         return Vec::new();
     };
@@ -217,6 +238,9 @@ fn current_phones(paths: &GxserverPaths) -> Vec<CurrentPhone> {
                 name: row.get(1)?,
                 platform: row.get(2)?,
                 paired_at: row.get(3)?,
+                status: row.get(4)?,
+                last_seen_at: row.get(5)?,
+                over_ssh: row.get::<_, i64>(6)? != 0,
             })
         })
         .map(|rows| rows.filter_map(Result::ok).collect())
@@ -381,8 +405,10 @@ pub(crate) fn phone_statuses(
     taken_at_ms: i64,
 ) -> Vec<RowStatus> {
     let taken_at = chrono::DateTime::from_timestamp_millis(taken_at_ms);
+    // A phone paired over its SSH login is the SSH row's, never an Easy Connect row's re-pairing.
     let mut newer: Vec<&CurrentPhone> = current
         .iter()
+        .filter(|phone| !phone.over_ssh)
         .filter(|phone| !phones.iter().any(|old| old.id == phone.id))
         .filter(|phone| {
             match (
@@ -404,10 +430,13 @@ pub(crate) fn phone_statuses(
             {
                 newer.remove(at);
                 RowStatus::Paired
-            } else if current.iter().any(|now| now.id == phone.id) {
-                RowStatus::Waiting
             } else {
-                RowStatus::Removed
+                match current.iter().find(|now| now.id == phone.id) {
+                    // The same row now holds its own key.
+                    Some(now) if now.status == "paired" => RowStatus::Paired,
+                    Some(_) => RowStatus::Waiting,
+                    None => RowStatus::Removed,
+                }
             }
         })
         .collect()
@@ -537,78 +566,74 @@ pub(crate) fn view_with_pairings(
     now_ms: i64,
 ) -> Value {
     let ssh_pending = pending.iter().find(|device| device.over_ssh);
+    let ssh_pending_devices: Vec<&PendingDevice> =
+        pending.iter().filter(|device| device.over_ssh).collect();
     let pending: Vec<PendingDevice> = pending
         .iter()
         .filter(|device| !device.over_ssh)
         .cloned()
         .collect();
     let pending = pending.as_slice();
-    // A record from before the rows were kept has names only: one waiting row per name.
+    // A record from before the rows were kept has names only: each name stands for an old
+    // pairing still on file with that name (one pairing per name), or for nothing.
     let legacy_names = notice.phone_rows.is_empty()
         && notice.computer_rows.is_empty()
         && !(notice.phones.is_empty() && notice.computers.is_empty());
+    let (phone_rows, computer_rows) = if legacy_names {
+        rows_from_names(notice, current, settings)
+    } else {
+        (notice.phone_rows.clone(), notice.computer_rows.clone())
+    };
+    let forgotten = |id: &str| notice.forgotten.iter().any(|gone| gone == id);
     let mut phones = Vec::new();
     let mut computers = Vec::new();
-    if legacy_names {
-        phones.extend(
-            notice.phones.iter().map(
-                |name| json!({ "id": name, "name": name, "kind": "Phone", "status": "waiting" }),
-            ),
-        );
-        computers.extend(
-            notice
-                .computers
-                .iter()
-                .map(|name| json!({ "id": name, "name": name, "status": "waiting" })),
-        );
-    } else {
-        let recent: Vec<NoticePhone> = notice
-            .phone_rows
-            .iter()
-            .filter(|phone| recently_used(phone, notice.taken_at_ms))
-            .cloned()
-            .collect();
-        for (phone, (status, waiting)) in recent.iter().zip(phone_statuses_with_pending(
-            &recent,
-            current,
-            pending,
-            notice.taken_at_ms,
-        )) {
-            if status == RowStatus::Removed {
-                continue;
-            }
-            let mut row = json!({
-                "id": phone.id,
-                "name": phone.name,
-                "kind": phone_kind(&phone.platform),
-                "lastUsedAt": phone.last_used_at,
-                "status": status.wire(),
-            });
-            if let Some(waiting) = waiting {
-                row["words"] = json!(waiting.words);
-                row["approvalId"] = json!(waiting.approval_id);
-                row["pendingId"] = json!(waiting.id);
-            }
-            phones.push(row);
+    let recent: Vec<NoticePhone> = phone_rows
+        .iter()
+        .filter(|phone| !forgotten(&phone.id))
+        .filter(|phone| recently_used(phone, notice.taken_at_ms))
+        .cloned()
+        .collect();
+    let statuses = phone_statuses_with_pending(&recent, current, pending, notice.taken_at_ms);
+    let leftovers = phone_leftovers(&recent, &statuses, current, &ssh_pending_devices);
+    for ((phone, (status, waiting)), leftover) in recent.iter().zip(statuses).zip(leftovers) {
+        if status == RowStatus::Removed {
+            continue;
         }
-        for (computer, status) in notice
-            .computer_rows
-            .iter()
-            .zip(computer_statuses_with_pairings(
-                &notice.computer_rows,
-                settings,
-                paired_addresses,
-            ))
-        {
-            if status == RowStatus::Removed {
-                continue;
-            }
-            computers.push(json!({
-                "id": computer.id,
-                "name": computer.name,
-                "status": status.wire(),
-            }));
+        let mut row = json!({
+            "id": phone.id,
+            "name": phone.name,
+            "kind": phone_kind(&phone.platform),
+            "lastUsedAt": phone.last_used_at,
+            "status": status.wire(),
+        });
+        if let Some(reason) = leftover {
+            row["status"] = json!("leftover");
+            row["leftover"] = json!(reason);
         }
+        if let Some(waiting) = waiting {
+            row["words"] = json!(waiting.words);
+            row["approvalId"] = json!(waiting.approval_id);
+            row["pendingId"] = json!(waiting.id);
+        }
+        phones.push(row);
+    }
+    let computer_rows: Vec<NoticeComputer> = computer_rows
+        .into_iter()
+        .filter(|computer| !forgotten(&computer.id))
+        .collect();
+    for (computer, status) in computer_rows.iter().zip(computer_statuses_with_pairings(
+        &computer_rows,
+        settings,
+        paired_addresses,
+    )) {
+        if status == RowStatus::Removed {
+            continue;
+        }
+        computers.push(json!({
+            "id": computer.id,
+            "name": computer.name,
+            "status": status.wire(),
+        }));
     }
     /*
     CDXC:Security 2026-11-09 DECISION:
@@ -637,16 +662,25 @@ pub(crate) fn view_with_pairings(
         Vec::new()
     };
     let ssh_computers = ssh_computers(settings);
-    let waiting = phones
-        .iter()
-        .chain(computers.iter())
-        .chain(ssh_phones.iter())
-        .filter(|row| row["status"] == "waiting" || row["status"] == "pending")
-        .count();
+    /*
+    CDXC:Security 2026-11-09 FIX:
+    User (9 Nov): "please why do i see 9 devices here??? i don't have 9 devices connected even, there's something wrong". `waiting` is what Settings > Remote's "N phones and computers still use the old pairing and can't connect" line counts, so it counts only rows that still wait to be paired again: not a device waiting for Approve (`pending`, counted apart; it already asked with the new pairing), not a leftover (never used, an older pairing of the same phone, a phone that signs in over SSH now), and not a name from a names-only record whose pairing is gone. The notice still opens by itself for a pending device.
+    */
+    let count = |status: &str| {
+        phones
+            .iter()
+            .chain(computers.iter())
+            .chain(ssh_phones.iter())
+            .filter(|row| row["status"] == status)
+            .count()
+    };
+    let (waiting, pending_count) = (count("waiting"), count("pending"));
     let due = !notice.seen && notice.remind_at_ms.is_none_or(|at| now_ms >= at);
     json!({
-        "show": due && waiting > 0,
+        "show": due && waiting + pending_count > 0,
         "waiting": waiting,
+        "pending": pending_count,
+        "leftovers": count("leftover"),
         "phones": phones,
         "computers": computers,
         "sshPhones": ssh_phones,
@@ -654,6 +688,115 @@ pub(crate) fn view_with_pairings(
         "remindersLeft": notice.reminders_left,
         "takenAtMs": notice.taken_at_ms,
     })
+}
+
+/// The rows of a names-only record (the first 11.0.1 build kept only names): each phone name
+/// takes one old pairing still on file with that name, paired before the list was taken and not
+/// yet holding its own key; each computer name takes the Easy Connect computer saved with that
+/// name. A name with nothing left (the phone was removed, the computer is gone) has no row.
+fn rows_from_names(
+    notice: &UpgradeNotice,
+    current: &[CurrentPhone],
+    settings: Option<&Value>,
+) -> (Vec<NoticePhone>, Vec<NoticeComputer>) {
+    let taken_at = chrono::DateTime::from_timestamp_millis(notice.taken_at_ms);
+    let mut old: Vec<&CurrentPhone> = current
+        .iter()
+        .filter(|phone| phone.status != "paired" && !phone.over_ssh)
+        .filter(|phone| {
+            match (
+                chrono::DateTime::parse_from_rfc3339(&phone.paired_at),
+                taken_at,
+            ) {
+                (Ok(paired), Some(taken)) => paired.with_timezone(&chrono::Utc) < taken,
+                _ => true,
+            }
+        })
+        .collect();
+    let phones = notice
+        .phones
+        .iter()
+        .filter_map(|name| {
+            let at = old.iter().position(|phone| &phone.name == name)?;
+            let phone = old.remove(at);
+            Some(NoticePhone {
+                id: phone.id.clone(),
+                name: phone.name.clone(),
+                platform: phone.platform.clone(),
+                last_used_at: Some(
+                    phone
+                        .last_seen_at
+                        .clone()
+                        .unwrap_or_else(|| phone.paired_at.clone()),
+                ),
+            })
+        })
+        .collect();
+    let mut saved = easy_connect_computers(settings);
+    let computers = notice
+        .computers
+        .iter()
+        .filter_map(|name| {
+            let at = saved.iter().position(|computer| &computer.name == name)?;
+            Some(saved.remove(at))
+        })
+        .collect();
+    (phones, computers)
+}
+
+/// Why each still-waiting phone row needs nothing after all, or `None` for a row that counts:
+/// `ssh` (the same phone signs in over Tailscale or SSH now: paired over its SSH login, or asking
+/// to), `neverUsed` (its pairing never reached this computer), `duplicate` (an older pairing of a
+/// phone with a newer one in the list, or one already paired again or asking to).
+fn phone_leftovers(
+    phones: &[NoticePhone],
+    statuses: &[(RowStatus, Option<PendingDevice>)],
+    current: &[CurrentPhone],
+    ssh_pending: &[&PendingDevice],
+) -> Vec<Option<&'static str>> {
+    let used = |phone: &NoticePhone| phone.last_used_at.clone().unwrap_or_default();
+    phones
+        .iter()
+        .zip(statuses)
+        .enumerate()
+        .map(|(index, (phone, (status, _)))| {
+            if *status != RowStatus::Waiting {
+                return None;
+            }
+            let over_ssh = current
+                .iter()
+                .any(|now| now.over_ssh && now.same_device(phone))
+                || ssh_pending
+                    .iter()
+                    .any(|device| device.name == phone.name && device.platform == phone.platform);
+            if over_ssh {
+                return Some("ssh");
+            }
+            let row = current.iter().find(|now| now.id == phone.id);
+            if row.is_some_and(|row| row.last_seen_at.is_none()) {
+                return Some("neverUsed");
+            }
+            let newer_or_done = phones.iter().zip(statuses).enumerate().any(
+                |(other, (same, (other_status, _)))| {
+                    other != index
+                        && same.name == phone.name
+                        && same.platform == phone.platform
+                        && match other_status {
+                            RowStatus::Paired | RowStatus::Pending => true,
+                            RowStatus::Waiting => {
+                                let seen = current
+                                    .iter()
+                                    .find(|now| now.id == same.id)
+                                    .is_some_and(|now| now.last_seen_at.is_some());
+                                seen && (used(same), other) > (used(phone), index)
+                            }
+                            RowStatus::Removed => false,
+                        }
+                },
+            );
+            newer_or_done.then_some("duplicate")
+        })
+        .collect()
 }
 
 /// Remind me later: back tomorrow while reminders are left, then not again.
@@ -691,7 +834,7 @@ pub(crate) fn handle_http(
     }
 }
 
-/// `op`: `read` (default), `later` or `done` (`dismiss` reads as `done`). Answers the view.
+/// `op`: `read` (default), `later`, `done` (`dismiss` reads as `done`) or `forget` (with `id`). Answers the view.
 pub(crate) fn handle_endpoint(
     paths: &GxserverPaths,
     params: &serde_json::Map<String, Value>,
@@ -715,6 +858,19 @@ pub(crate) fn handle_endpoint_with_pending(
         Some("done" | "dismiss") => {
             notice.seen = true;
             write(&notice_path(paths), &notice)?;
+        }
+        // Forget on a row that needs nothing: that old record leaves the notice, nothing else.
+        Some("forget") => {
+            let id = params
+                .get("id")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+                .context("forget needs the row's id")?;
+            if !notice.forgotten.iter().any(|gone| gone == id) {
+                notice.forgotten.push(id.to_string());
+                write(&notice_path(paths), &notice)?;
+            }
         }
         _ => {}
     }

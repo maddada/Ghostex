@@ -283,8 +283,10 @@ pub(super) fn rpc(path: &str, params: &Value) -> Result<Value, String> {
                 Ok(result)
             }
             "/api/pairedDevices" => Ok(json!({ "devices": fixture.devices })),
-            // Three pairings from before 11.0.1 still wait (tabs/remote/pair_again.rs).
-            "/api/securityUpgradeNotice" => Ok(json!({ "waiting": 3, "show": false })),
+            // Three pairings from before 11.0.1 still wait (tabs/remote/pair_again.rs), or a real
+            // gxserver's answer saved to GHOSTEX_NATIVE_MODAL_DEMO_NOTICE.
+            "/api/securityUpgradeNotice" => Ok(crate::security_upgrade_demo::saved_notice()
+                .unwrap_or_else(|| json!({ "waiting": 3, "show": false }))),
             "/api/removePairedDevice" => {
                 let id = params
                     .get("deviceId")

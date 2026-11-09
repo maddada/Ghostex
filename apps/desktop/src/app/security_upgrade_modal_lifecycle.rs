@@ -215,6 +215,19 @@ impl GhostexGpuiApp {
                 .detach();
                 return;
             }
+            // The row already left the notice; the next read leaves it out too.
+            SecurityUpgradeModalCommand::Forget(id) => {
+                cx.spawn(async move |_, _| {
+                    let _ = gx_rpc(
+                        None,
+                        SECURITY_NOTICE_ENDPOINT,
+                        json!({ "op": "forget", "id": id }),
+                    )
+                    .await;
+                })
+                .detach();
+                return;
+            }
             SecurityUpgradeModalCommand::PairComputer { machine_id, code } => {
                 self.pair_security_notice_computer(machine_id, code, cx);
                 return;
