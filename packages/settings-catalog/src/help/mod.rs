@@ -641,7 +641,15 @@ pub const HELD_FROM_HELP_FILES: &[&str] = &[];
 /// The coordinator, for the user: Settings > Chat > Playbook overrides became the Coordinator
 /// playbook row (out of Advanced, with View playbook and Edit overrides); its Help waits in the held
 /// help patch like any other, so installed copies keep reading the row they have.
-pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[];
+///
+/// CDXC:SessionChat 2026-11-10 DECISION:
+/// The coordinator, for the user (#535, merged as it came): Transcript width's new subtitle (a share of the window and only a maximum) waits in the held help patch with the rest of that change's Help.
+pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[(
+    "sessionChatTranscriptWidthPercent",
+    "Transcript width",
+    "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.",
+    true,
+)];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`],
 /// and with [`HELD_ROW_WORDING`]'s rows as they read before.

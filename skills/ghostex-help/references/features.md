@@ -3046,8 +3046,7 @@ between them is temporarily hidden in this dialog.
 Related settings: `hideAccountEmails`, `preferredAgentInterface`, `sessionChatTheme`,
 `sessionChatFontFamily`, `sessionChatCustomTranscriptWidthEnabled`,
 `sessionChatTranscriptWidthPercent` (Settings > Chat shows them as one Transcript width
-slider that reads Auto until dragged; a percentage is the widest the transcript gets, taken of
-the window, so a side panel you open takes the empty space beside it first), `sessionChatDetailedView`,
+slider that reads Auto until dragged), `sessionChatDetailedView`,
 `sessionChatFileEditPreviews`, `sessionChatMutedThinking`, `chatToolCallCards`,
 `sessionChatKeepComposerExpanded`, `sessionChatConfirmEscapeInterrupt`,
 `terminalViewWidthMode` (`match-chat` makes the terminal body the same width
