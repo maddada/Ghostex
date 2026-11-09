@@ -183,6 +183,11 @@ pub fn fetch_live_gxserver_session_list_for(
         snapshot.and_then(|snapshot| snapshot.get("projects")),
         "gitRemoteOriginUrl",
     );
+    // CDXC:RemoteMachines 2026-11-09 WHY: the phone's Project list merges one computer's copies of a repository at the same folder inside it, as gx-core sidebar_view/merged.rs does (#461 keys a subfolder apart), so the repository root the same probe keeps is folded in too.
+    let project_git_roots = presentation_project_field_map(
+        snapshot.and_then(|snapshot| snapshot.get("projects")),
+        "gitRepositoryRootPath",
+    );
     // CDXC:WorkMode 2026-10-24 WHY: whether Issues Workflow is on for a project, its Linear and GitHub parts and its primary tracker are worked out from what gxserver's background passes keep in memory (its Linear key, `gh auth status`), which this separate process does not have, so they are folded in from the snapshot; the phone picks its Link to rows from them.
     let project_work_fields: Vec<(&str, HashMap<String, &Value>)> =
         ["workMode", "workLinear", "workGithubOff", "workTracker"]
@@ -218,6 +223,12 @@ pub fn fetch_live_gxserver_session_list_for(
                             .and_then(|project_id| project_git_remotes.get(project_id))
                         {
                             map.insert("gitRemoteOriginUrl".to_string(), (*origin).clone());
+                        }
+                        if let Some(root) = project_id
+                            .as_ref()
+                            .and_then(|project_id| project_git_roots.get(project_id))
+                        {
+                            map.insert("gitRepositoryRootPath".to_string(), (*root).clone());
                         }
                         for (field, values) in &project_work_fields {
                             if let Some(value) = project_id

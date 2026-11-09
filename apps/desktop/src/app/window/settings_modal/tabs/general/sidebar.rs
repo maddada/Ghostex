@@ -125,6 +125,19 @@ fn sidebar_section(
         false,
         cx,
     ));
+    // CDXC:RemoteMachines 2026-11-09 DECISION in gx-core sidebar_view/merged.rs (on by default);
+    // Separate by machine already keeps every copy apart.
+    if !g.values.bool("sidebarSeparateByMachine") {
+        rows.extend(page.toggle(
+            g,
+            s,
+            "sidebarMergeRepositoryCopies",
+            "Merge copies of the same repository",
+            "Show two folders on this computer that are copies of the same repository (the same git remote, opened at the same folder inside it) as one project, with the sessions of both. Turn off to give each folder its own project with only its own sessions. Copies on different computers are one project either way. The phone follows this.",
+            false,
+            cx,
+        ));
+    }
     // The Unified sidebar's own Working section switch, under the switch that selects it (CDXC:Sidebar
     // 2026-10-30 in gx-core unified_sidebar/build.rs `unified_shelf`).
     if g.values.string("sidebarView") == "unified" {

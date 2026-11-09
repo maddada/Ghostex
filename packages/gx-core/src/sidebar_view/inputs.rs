@@ -269,6 +269,10 @@ pub const GROUP_WORKING_SESSIONS_SETTING_KEY: &str = "groupWorkingSessions";
 /// `worktree_fold.rs`).
 pub const WORKTREE_SESSIONS_IN_PROJECT_SETTING_KEY: &str = "worktreeSessionsInProject";
 
+/// The setting behind Merge copies of the same repository (CDXC:RemoteMachines 2026-11-09 in
+/// `merged.rs`).
+pub const MERGE_REPOSITORY_COPIES_SETTING_KEY: &str = "sidebarMergeRepositoryCopies";
+
 /// The setting behind Settings > Sidebar & Sessions > Advanced's Pinned order.
 pub const PINNED_SESSION_ORDER_SETTING_KEY: &str = "pinnedSessionOrder";
 
@@ -358,6 +362,10 @@ pub struct SidebarSettings {
     /// machine's list at a time, as before. Off by default: one list for every machine
     /// (`sidebar_view/merged.rs`).
     pub separate_by_machine: bool,
+    /// Settings › Sidebar's Merge copies of the same repository (`sidebarMergeRepositoryCopies`,
+    /// on by default): two folders on one computer that are copies of one repository are one
+    /// entry of the one list. Off, each is its own (`merged.rs`).
+    pub merge_repository_copies: bool,
     /// Settings › Sidebar & Sessions › Advanced's Worktree sessions show in their project
     /// (`worktreeSessionsInProject`, on by default): the Project sidebar lists a worktree
     /// project's sessions under its parent project (`worktree_fold.rs`).
@@ -397,6 +405,7 @@ impl Default for SidebarSettings {
             hide_projects_without_sessions: false,
             chief_show_on_all_spaces: false,
             separate_by_machine: false,
+            merge_repository_copies: true,
             worktree_sessions_in_project: true,
             pinned_session_order: PinnedSessionOrder::Manual,
         }
@@ -495,6 +504,10 @@ impl SidebarSettings {
                 defaults.chief_show_on_all_spaces,
             ),
             separate_by_machine: boolean("sidebarSeparateByMachine", defaults.separate_by_machine),
+            merge_repository_copies: boolean(
+                MERGE_REPOSITORY_COPIES_SETTING_KEY,
+                defaults.merge_repository_copies,
+            ),
             worktree_sessions_in_project: boolean(
                 WORKTREE_SESSIONS_IN_PROJECT_SETTING_KEY,
                 defaults.worktree_sessions_in_project,

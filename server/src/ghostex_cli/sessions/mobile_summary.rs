@@ -236,6 +236,21 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
     {
         map.insert("worktreeSessionsInProject".to_string(), json!(false));
     }
+    // CDXC:RemoteMachines 2026-11-09 SEE-ALSO: packages/gx-core/src/sidebar_view/merged.rs; the phone's Project list merges one computer's copies of a repository as the computer's list does (apps/mobile/app/src/contract/grouping.ts). The list merges only while Separate by machine is off, so both are sent: Merge copies of the same repository only when off (the default is on), Separate by machine only when on (the default is off).
+    if settings
+        .get("sidebarMergeRepositoryCopies")
+        .and_then(Value::as_bool)
+        == Some(false)
+    {
+        map.insert("sidebarMergeRepositoryCopies".to_string(), json!(false));
+    }
+    if settings
+        .get("sidebarSeparateByMachine")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        map.insert("sidebarSeparateByMachine".to_string(), json!(true));
+    }
     if let Some(projects) = &projects {
         map.insert(
             "projects".to_string(),
@@ -256,6 +271,12 @@ pub(super) fn to_mobile_session_list(result: &Value, settings: &Map<String, Valu
                             &mut project_map,
                             "gitRemoteOriginUrl",
                             project.get("gitRemoteOriginUrl"),
+                        );
+                        // Which folder of that repository it is, so one computer's copies merge only at the same folder (packages/gx-core/src/sidebar_view/merged.rs).
+                        insert_present(
+                            &mut project_map,
+                            "gitRepositoryRootPath",
+                            project.get("gitRepositoryRootPath"),
                         );
                         /*
                          * CDXC:Icons 2026-08-21:

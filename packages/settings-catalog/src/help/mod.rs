@@ -624,7 +624,10 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:Dictate 2026-11-08 DECISION:
 /// The coordinator, for the user: the Dictation page's new rows (the key under the engine, the old speech models) are held the same way until the release that ships Hex as the only offline engine; the hand-written paragraphs wait in the held help patch.
-pub const HELD_FROM_HELP_FILES: &[&str] = &[];
+///
+/// CDXC:RemoteMachines 2026-11-09 DECISION:
+/// The coordinator, for the user (#518): Merge copies of the same repository is held the same way until the release that ships it; the hand-written paragraph waits in the held help patch.
+pub const HELD_FROM_HELP_FILES: &[&str] = &["sidebarMergeRepositoryCopies"];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`].
 pub fn published_catalog() -> Catalog {
