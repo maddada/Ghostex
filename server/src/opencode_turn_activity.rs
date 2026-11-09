@@ -1,5 +1,7 @@
 //! CDXC:SessionStatus 2026-11-04 WHY:
 //! OpenCode's working and idle reach Ghostex only from its TUI plugin (server/src/agent_hooks/install/opencode_tui.js), which polls the conversation the TUI shows. OpenCode 2 runs the conversation in its background service, so a turn ends whether or not the TUI is still on it: once the TUI moves to another conversation, closes, or its `Stop` post fails, the last `SessionBusy` stands, and the sidebar, the chat's Stop square and its "Cogitating…" card stay working after the reply and every subagent finished (GitHub #403, Windows, OpenCode with subagents). The service is the record: this observer watches OpenCode sessions that still show working and sends the plugin's own `Stop` once the service says the lead conversation went idle after that working began, with no running shell, no question or approval open and no child conversation running, on two passes in a row so a turn that just began is never cut short.
+//! CDXC:SessionStatus 2026-11-10 WHY:
+//! The same gap runs the other way: the plugin reports `SessionBusy` only while the TUI shows that conversation and its notifier runs (on Windows it spawns gxserver for each report), so a long turn the TUI is not showing, or a report that failed, left the session idle while OpenCode's service ran it, and the chat showed Send with no working word until something made the plugin report again (GitHub #529, Windows, OpenCode). The observer now also sends the plugin's own `SessionBusy` when the service says the lead conversation runs, with no question or approval open, on two passes in a row while Ghostex shows it not working; the `Stop` above settles that stint once the service goes idle, so a turn the service ended never stays working (#403).
 //! SEE-ALSO: server/src/zcode_turn_activity.rs (the same observer shape), server/src/session_chat_opencode/mirror.rs (the cached conversation read and its active check), server/src/session_chat_opencode/status.rs (`fleet`, the children's working state).
 
 use std::collections::{HashMap, HashSet};
@@ -36,6 +38,8 @@ pub(crate) enum Seen {
     Ended(i64),
     /// `Stop` was sent for the turn that ended at this idle stamp.
     Reported(i64),
+    /// The service said the lead runs while Ghostex showed it not working; the next pass confirms it.
+    Running,
 }
 
 /// The idle stamp of the run that ended the working stint begun at `working_since`, when the
@@ -59,6 +63,16 @@ pub(crate) fn next_step(previous: Option<Seen>, ended: Option<i64>) -> (bool, Op
         (Some(Seen::Reported(at)), Some(ended)) if at == ended => (false, previous),
         (Some(Seen::Ended(at)), Some(ended)) if at == ended => (true, Some(Seen::Reported(ended))),
         (_, Some(ended)) => (false, Some(Seen::Ended(ended))),
+    }
+}
+
+/// Whether to send `SessionBusy` now, for a session Ghostex shows not working, and what to remember
+/// for the next pass: the service must say the lead runs, waiting on nobody, twice in a row.
+pub(crate) fn busy_step(previous: Option<Seen>, lead: &LeadState) -> (bool, Option<Seen>) {
+    match (previous, lead.active && !lead.waiting_on_user) {
+        (_, false) => (false, None),
+        (Some(Seen::Running), true) => (true, None),
+        (_, true) => (false, Some(Seen::Running)),
     }
 }
 
@@ -122,9 +136,6 @@ fn refresh(state: &AppState, seen: &mut HashMap<String, Seen>) {
         ) else {
             continue;
         };
-        let Some(working_since) = crate::zcode_turn_activity::working_since_ms(session) else {
-            continue;
-        };
         let key = session_observer_key(&project_id, &session_id);
         watched.insert(key.clone());
         // The conversation read is cached and refetched only when OpenCode reports a change.
@@ -132,6 +143,25 @@ fn refresh(state: &AppState, seen: &mut HashMap<String, Seen>) {
             continue;
         };
         let lead = lead_state(&snapshot);
+        let Some(working_since) = crate::zcode_turn_activity::working_since_ms(session) else {
+            let (send, next) = busy_step(seen.get(&key).copied(), &lead);
+            match next {
+                Some(next) => seen.insert(key.clone(), next),
+                None => seen.remove(&key),
+            };
+            if send {
+                report(
+                    state,
+                    &db,
+                    &repository,
+                    &project_id,
+                    &session_id,
+                    &conversation,
+                    "SessionBusy",
+                );
+            }
+            continue;
+        };
         // Children are asked only once the lead itself is done; an unreadable roster proves nothing.
         let ended = match ended_turn(working_since, &lead, false) {
             Some(_) => match crate::session_chat_opencode::fleet(&conversation, &snapshot.messages)
@@ -150,36 +180,56 @@ fn refresh(state: &AppState, seen: &mut HashMap<String, Seen>) {
             Some(next) => seen.insert(key.clone(), next),
             None => seen.remove(&key),
         };
-        if !send {
-            continue;
-        }
-        let mut params = Map::new();
-        params.insert("projectId".to_string(), json!(project_id));
-        params.insert("sessionId".to_string(), json!(session_id));
-        params.insert("agentName".to_string(), json!("opencode"));
-        params.insert("agentSessionId".to_string(), json!(conversation));
-        params.insert("eventName".to_string(), json!("Stop"));
-        let Ok(output) = dispatch_agent_endpoint(
-            &repository,
-            &db,
-            &state.paths.home_dir,
-            "/api/ingestAgentHookEvent",
-            &params,
-            None,
-        ) else {
-            continue;
-        };
-        if let Some((project_id, session_id)) = output.presentation_session {
-            let _ = crate::server::schedule_presentation_session_delta(
+        if send {
+            report(
                 state,
                 &db,
                 &repository,
                 &project_id,
                 &session_id,
+                &conversation,
+                "Stop",
             );
         }
     }
     seen.retain(|key, _| watched.contains(key));
+}
+
+/// Sends `event` as the OpenCode plugin would for this session's conversation.
+fn report(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    conversation: &str,
+    event: &str,
+) {
+    let mut params = Map::new();
+    params.insert("projectId".to_string(), json!(project_id));
+    params.insert("sessionId".to_string(), json!(session_id));
+    params.insert("agentName".to_string(), json!("opencode"));
+    params.insert("agentSessionId".to_string(), json!(conversation));
+    params.insert("eventName".to_string(), json!(event));
+    let Ok(output) = dispatch_agent_endpoint(
+        repository,
+        db,
+        &state.paths.home_dir,
+        "/api/ingestAgentHookEvent",
+        &params,
+        None,
+    ) else {
+        return;
+    };
+    if let Some((project_id, session_id)) = output.presentation_session {
+        let _ = crate::server::schedule_presentation_session_delta(
+            state,
+            db,
+            repository,
+            &project_id,
+            &session_id,
+        );
+    }
 }
 
 #[cfg(test)]
