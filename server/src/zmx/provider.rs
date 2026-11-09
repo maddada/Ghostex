@@ -319,13 +319,18 @@ pub(crate) fn start_session_provider_with_observed_state(
             } else {
                 startup_text
             };
+        // A thread another computer's coordinator started here keeps that coordinator on the
+        // session (GitHub #523, coordinators/launch_env.rs).
+        let remote_coordinator =
+            crate::coordinators::remote_coordinator_of_session(&probed_session);
         let coordinator_environment = crate::coordinators::coordinator_launch_environment(
             repository.db,
             &lifecycle.project_id,
             &lifecycle.session_id,
             params
                 .get(crate::coordinators::COORDINATOR_THREAD_OF_PARAM)
-                .and_then(Value::as_str),
+                .and_then(Value::as_str)
+                .or(remote_coordinator.as_deref()),
             |project_id, session_id| {
                 repository
                     .get_session(project_id, session_id)

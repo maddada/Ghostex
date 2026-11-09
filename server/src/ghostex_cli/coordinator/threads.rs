@@ -236,7 +236,8 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
             create[crate::coordinators::COORDINATOR_THREAD_OF_PARAM] = json!(coordinator_ref);
         }
         // There it is kept on the session instead, so the worktree it gets is trusted like a local
-        // thread's (CDXC:Coordinators 2026-11-08 at `coordinator_thread_folder_trusted`).
+        // thread's (CDXC:Coordinators 2026-11-08 at `coordinator_thread_folder_trusted`) and its
+        // agent starts with the thread markers (2026-11-09, GitHub #523).
         if remote_server_id.is_some() && !coordinator_ref.is_empty() {
             create[crate::coordinators::REMOTE_COORDINATOR_THREAD_OF_PARAM] =
                 json!(coordinator_ref);
@@ -249,6 +250,14 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
             agents::text(&created, "projectId").to_string(),
         )
     } else {
+        // A plain thread on another computer names its coordinator the same way, in the session's
+        // runtime settings, which `createAgentSession` stores as given (GitHub #523).
+        let coordinator_ref = agents::text(&coordinator_row, "globalRef");
+        if remote_server_id.is_some() && !coordinator_ref.is_empty() {
+            create["runtimeSettings"] = json!({
+                crate::coordinators::REMOTE_COORDINATOR_THREAD_KEY: coordinator_ref,
+            });
+        }
         let created = call_gxserver_rpc("/api/createAgentSession", &create, &flags)?;
         (
             agents::text(&created["session"], "sessionId").to_string(),

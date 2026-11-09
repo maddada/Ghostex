@@ -13,9 +13,16 @@
 //! launch, a wake, a restart), never stored on the session, so an unlinked thread loses them at its
 //! next start and a resolved thread that is reopened gets them again. gxserver strips both from what
 //! its own sessions inherit (zmx/env.rs), so a gxserver started from a thread passes neither on.
-//! Local only: a thread on another computer (`start-thread --computer`) gets neither, since that
-//! computer has no record of the link to read at each start, and carrying it there would need new
-//! remote API (the user ruled that out).
+//! CDXC:Coordinators 2026-11-09 FIX: GitHub #523: a thread a coordinator started on another
+//! computer (`start-thread --computer`) got neither variable, so the same launch wrapper could not
+//! tell it from that computer's own sessions. That computer keeps no record of the link, but
+//! `start-thread --computer` already names the coordinator on the create
+//! (`REMOTE_COORDINATOR_THREAD_OF_PARAM`, now for a plain session as well as a worktree one) and the
+//! session keeps it (`REMOTE_COORDINATOR_THREAD_KEY`), so each start there reads it from the session
+//! and exports `GHOSTEX_COORDINATOR_ROLE=thread` plus `GHOSTEX_COORDINATOR_SESSION=<the
+//! coordinator's global ref on the computer that started it>`, the same value a local thread gets
+//! (it names the coordinator, not a session on that computer). No new remote API: both fields ride
+//! on the existing create calls, and a gxserver that predates this simply never sets them.
 //! SEE-ALSO: server/src/zmx/provider.rs (`start_session_provider`, the one place an agent's terminal
 //! starts), server/src/zmx/scripts.rs and scripts_windows.rs (the exports),
 //! server/src/ghostex_cli/coordinator/threads.rs (`start_thread`, which names the coordinator for a
@@ -36,13 +43,27 @@ pub const COORDINATOR_SESSION_ENV: &str = "GHOSTEX_COORDINATOR_SESSION";
 pub const COORDINATOR_THREAD_OF_PARAM: &str = "coordinatorThreadOf";
 
 /// The `createWorktreeSession` param naming the coordinator (its global ref) on another computer
-/// that started this worktree thread. Unlike `COORDINATOR_THREAD_OF_PARAM` it sets no coordinator
-/// markers (that computer keeps no record of the link, issue #463); it is kept on the session as
-/// `REMOTE_COORDINATOR_THREAD_KEY` so its folder-trust question is answered like a local
-/// thread's (`coordinator_thread_folder_trusted`).
+/// that started this thread (a worktree thread through this param, a plain one through the same key
+/// in the create's `runtimeSettings`). Unlike `COORDINATOR_THREAD_OF_PARAM` it is not for one start
+/// only (that computer keeps no record of the link, issue #463): it is kept on the session as
+/// `REMOTE_COORDINATOR_THREAD_KEY`, which gives every start of its agent the thread markers
+/// (`remote_coordinator_of_session`, #523) and its folder-trust question the answer a local
+/// thread's gets (`coordinator_thread_folder_trusted`).
 pub const REMOTE_COORDINATOR_THREAD_OF_PARAM: &str = "remoteCoordinatorThreadOf";
 /// The session's runtime setting holding `REMOTE_COORDINATOR_THREAD_OF_PARAM`.
 pub const REMOTE_COORDINATOR_THREAD_KEY: &str = "remoteCoordinatorThreadOf";
+
+/// The coordinator (its global ref on the computer that started it) a thread on THIS computer was
+/// started by from another computer, as the session keeps it (`REMOTE_COORDINATOR_THREAD_KEY`).
+/// `None` for every other session, and for a thread started by a gxserver that predates the key.
+pub fn remote_coordinator_of_session(session: &serde_json::Value) -> Option<String> {
+    session
+        .pointer(&format!("/runtimeSettings/{REMOTE_COORDINATOR_THREAD_KEY}"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|reference| !reference.is_empty())
+        .map(str::to_string)
+}
 
 /// The coordinator variables for the agent of session `project_id`/`session_id`, from the
 /// coordinator records as they are now. `resolve_global_ref` answers a coordinator session's global
