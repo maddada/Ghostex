@@ -27,7 +27,10 @@ use super::tool_runs::ToolRuns;
 use super::tools::{self, ToolOutcome};
 use crate::server::AppState;
 
+mod announcement;
 mod card;
+
+pub(super) use announcement::Announcement;
 
 /// CDXC:VoiceMode 2026-10-20 DECISION:
 /// User: the voice agent "hangs up by itself after 5 minutes with nobody talking" because realtime is billed while connected. Talking is user speech the provider detected, typed text, or the agent's audio answering the user; the timer keeps running while no client is attached.
@@ -58,20 +61,6 @@ pub(super) enum ClientFrame {
     Json(Value),
     Audio(Bytes),
     Close,
-}
-
-/// A session changed state while the conversation was open.
-#[derive(Clone, Debug)]
-pub(super) struct Announcement {
-    pub(super) text: String,
-    pub(super) kind: &'static str,
-    pub(super) project_id: String,
-    pub(super) session_id: String,
-    /// The connected computer the session runs on, when it is not this one.
-    pub(super) server_id: Option<String>,
-    /// What the model is told instead of `text`, when it needs more (a focused call's finished
-    /// turn carries the reply).
-    pub(super) model_text: Option<String>,
 }
 
 pub(super) enum Input {
@@ -620,17 +609,15 @@ impl Conversation {
                             scope.project_id == announcement.project_id
                                 && scope.session_id == announcement.session_id
                         });
-                    let mut frame = json!({
-                        "type": "announcement",
-                        "text": announcement.text,
-                        "kind": announcement.kind,
-                        "projectId": announcement.project_id,
-                        "sessionId": announcement.session_id,
-                    });
-                    if let Some(server_id) = &announcement.server_id {
-                        frame["serverId"] = json!(server_id);
+                    // A call with a GBot shows its chat's finished turn once it knows the turn
+                    // answered the call (gbot_call/reply.rs), at `AnnounceReady`.
+                    let gbot_call = self
+                        .focus
+                        .as_ref()
+                        .is_some_and(|scope| scope.gbot.is_some());
+                    if !(finished_focus && gbot_call) {
+                        self.to_client(announcement.client_frame());
                     }
-                    self.to_client(frame);
                     if finished_focus {
                         self.read_finished_reply(announcement);
                     } else {
@@ -638,10 +625,24 @@ impl Conversation {
                     }
                 }
             }
-            Input::AnnounceReady(announcement) => self.announcements.push(announcement),
+            Input::AnnounceReady(announcement) => {
+                if self
+                    .focus
+                    .as_ref()
+                    .is_some_and(|scope| scope.gbot.is_some())
+                {
+                    self.to_client(announcement.client_frame());
+                }
+                self.announcements.push(announcement);
+            }
             Input::Sessions(sessions) => self.follow_focus(&sessions),
             // A call with a GBot stays with it (gbot_call/): no widening, no moving.
-            Input::Focus(_) if self.focus.as_ref().is_some_and(|scope| scope.gbot.is_some()) => {
+            Input::Focus(_)
+                if self
+                    .focus
+                    .as_ref()
+                    .is_some_and(|scope| scope.gbot.is_some()) =>
+            {
                 self.to_client(json!({
                     "type": "error",
                     "code": "badRequest",
@@ -1244,16 +1245,24 @@ impl Conversation {
 
     /// The focused session finished its turn: reads its reply, which the model retells, and
     /// queues the announcement with it (`Input::AnnounceReady`). A chat that can't be read still
-    /// announces the finished turn.
+    /// announces the finished turn. In a call with a GBot, a turn that didn't answer the call is
+    /// dropped (gbot_call/reply.rs).
     fn read_finished_reply(&self, mut announcement: Announcement) {
         let Some(scope) = self.focus.clone() else {
             return;
         };
         let (state, tx) = (self.state.clone(), self.tx.clone());
         tokio::spawn(async move {
+            if let Some(bot) = scope.gbot.clone() {
+                let ready =
+                    super::gbot_call::finished_announcement(&state, &scope, &bot, announcement);
+                if let Some(announcement) = ready.await {
+                    let _ = tx.send(Input::AnnounceReady(announcement));
+                }
+                return;
+            }
             let reply = tools::finished_reply(&state, &scope).await;
-            announcement.model_text =
-                Some(focus::finished_message(&scope, reply.as_deref()));
+            announcement.model_text = Some(focus::finished_message(&scope, reply.as_deref()));
             let _ = tx.send(Input::AnnounceReady(announcement));
         });
     }

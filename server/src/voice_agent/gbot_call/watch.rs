@@ -5,6 +5,8 @@
 //! CDXC:GBots 2026-11-09 WHY:
 //! "It says what it is doing while it works": a turn of a GBot's chat can run for minutes, and a call that goes quiet that long sounds dead. Every few seconds the chat's newest work (its latest tool call and its latest note to itself, read from the transcript like `read_session` reads it) becomes a "Working:" update when it changed, at most every 20 seconds and only after the turn has run for 8, so a quick answer is never talked over. Updates wait for a quiet moment like every announcement (`conversation.rs`).
 //! CDXC:GBots 2026-11-09 WHY:
+//! The first live call sent a raw `<system-reminder>Command exited with code 1: rg --files /Users/…` line to the voice provider as the chat's "latest note". An update carries only words safe to say: the kind of tool running (`tool_words`) and the first sentence of the agent's own newest note, cleaned of markdown and dropped when it holds code, a path, a link or a command; with neither, "still working". System, harness and tool-output rows never reach it.
+//! CDXC:GBots 2026-11-09 WHY:
 //! A Ghostex approval (`security/approvals.rs`, the Touch ID kind) that the GBot's chat asked for is not one of the chat's own prompts, so the announcement watcher never hears of it. This watcher reads the pending requests whose `requestedBy` is the call's chat and tells the model once per request, as something only the user's computer or phone can approve.
 
 use std::collections::HashSet;
@@ -19,6 +21,7 @@ use super::super::focus::FocusScope;
 use super::super::sessions::{self, VoiceState};
 use super::super::tools::read_chat;
 use crate::gbots::CallBot;
+use crate::ghostex_cli::session_chat_transcript::effective_role;
 use crate::server::AppState;
 
 const POLL: Duration = Duration::from_secs(4);
@@ -29,7 +32,9 @@ const UPDATE_EVERY: Duration = Duration::from_secs(20);
 /// Transcript rows read for the chat's newest work.
 const ROWS: usize = 40;
 /// Characters kept of the chat's newest note.
-const NOTE_CHARS: usize = 240;
+const NOTE_CHARS: usize = 100;
+/// What an update says when the chat's work has nothing safe to say.
+const STILL_WORKING: &str = "still working";
 
 /// Starts the watcher of the call `tx` feeds; it stops when the call ends.
 pub(in crate::voice_agent) fn watch(
@@ -69,11 +74,11 @@ pub(in crate::voice_agent) fn watch(
                 let _ = tx.send(Input::Announce(vec![line]));
             }
         }
-        let minutes = started.elapsed().as_secs().div_ceil(60);
+        let seconds = started.elapsed().as_secs();
         let messages = super::tools::take_sent(&scope.reference());
         let (paths, bot_id, title) = (state.paths.clone(), bot.bot_id.clone(), scope.title.clone());
         let _ = tokio::task::spawn_blocking(move || {
-            crate::gbots::log_gbot_call(&paths, &bot_id, &title, minutes, messages);
+            crate::gbots::log_gbot_call(&paths, &bot_id, &title, seconds, messages);
         })
         .await;
     });
@@ -162,8 +167,10 @@ impl Work {
         if !due {
             return None;
         }
-        let chat = read_chat(state, session, ROWS).await.ok()?;
-        let doing = current_work(&chat)?;
+        let doing = match read_chat(state, session, ROWS).await {
+            Ok(chat) => current_work(&chat),
+            Err(_) => STILL_WORKING.to_string(),
+        };
         if doing == self.last_said {
             return None;
         }
@@ -172,25 +179,29 @@ impl Work {
         Some(announcement(
             scope,
             "gbotWorking",
-            format!("{} is {}", bot.name, doing.trim_end_matches('.')),
-            format!("Working: your chat is {doing} Tell the user in a few words, as yourself, unless you just said the same."),
+            format!("{} is {doing}.", bot.name),
+            format!("Working: your chat is {doing}. Tell the user in a few words, as yourself, unless you just said the same."),
         ))
     }
 }
 
-/// What the chat's current turn is doing: its newest tool call in plain words and its newest
-/// note, from the messages after the user's last one.
-fn current_work(chat: &Value) -> Option<String> {
-    let messages = chat.get("messages")?.as_array()?;
+/// What the chat's current turn is doing, in words safe to send to the voice provider: its newest
+/// tool call in plain words and the first sentence of its newest note of its own, from the
+/// messages after the user's last one; "still working" when it has neither.
+pub(super) fn current_work(chat: &Value) -> String {
+    let messages = chat
+        .get("messages")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
     let start = messages
         .iter()
-        .rposition(|message| {
-            crate::ghostex_cli::session_chat_transcript::effective_role(message) == "user"
-        })
+        .rposition(|message| effective_role(message) == "user")
         .map_or(0, |index| index + 1);
     let mut tool: Option<String> = None;
     let mut note: Option<String> = None;
     for message in &messages[start..] {
+        let own = effective_role(message) == "assistant";
         for block in message
             .get("blocks")
             .and_then(Value::as_array)
@@ -201,12 +212,13 @@ fn current_work(chat: &Value) -> Option<String> {
                 Some("tool-call") => {
                     tool = block.get("name").and_then(Value::as_str).map(tool_words);
                 }
-                Some("text") => {
-                    if let Some(text) = block.get("text").and_then(Value::as_str) {
-                        let text = text.trim();
-                        if !text.is_empty() {
-                            note = Some(short(text));
-                        }
+                Some("text") if own => {
+                    if let Some(said) = block
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .and_then(spoken_note)
+                    {
+                        note = Some(said);
                     }
                 }
                 _ => {}
@@ -214,20 +226,60 @@ fn current_work(chat: &Value) -> Option<String> {
         }
     }
     match (tool, note) {
-        (None, None) => None,
-        (Some(tool), None) => Some(format!("{tool}.")),
-        (None, Some(note)) => Some(format!("working; its latest note: \"{note}\"")),
-        (Some(tool), Some(note)) => Some(format!("{tool}; its latest note: \"{note}\"")),
+        (None, None) => STILL_WORKING.to_string(),
+        (Some(tool), None) => tool,
+        (None, Some(note)) => format!("working; its latest note: \"{note}\""),
+        (Some(tool), Some(note)) => format!("{tool}; its latest note: \"{note}\""),
     }
 }
 
-fn short(text: &str) -> String {
-    let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    if line.chars().count() <= NOTE_CHARS {
-        return line;
+/// The first sentence of an agent's note as plain words, or `None` when it isn't safe to say:
+/// a tag or system line, code, a path, a file name, a link or a command.
+pub(super) fn spoken_note(text: &str) -> Option<String> {
+    let first_line = text
+        .trim()
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())?;
+    if first_line.starts_with('<') || first_line.starts_with("```") || text.contains('`') {
+        return None;
     }
-    let cut: String = line.chars().take(NOTE_CHARS).collect();
-    format!("{}…", cut.trim_end())
+    let plain = first_line
+        .trim_start_matches(['#', '>', '-', '*', ' '])
+        .replace("**", "")
+        .replace("__", "");
+    let sentence_end = plain
+        .char_indices()
+        .find(|(index, c)| {
+            matches!(c, '.' | '!' | '?')
+                && plain[index + c.len_utf8()..]
+                    .chars()
+                    .next()
+                    .is_none_or(char::is_whitespace)
+        })
+        .map_or(plain.len(), |(index, _)| index);
+    let sentence = plain[..sentence_end]
+        .trim()
+        .trim_end_matches(['*', '_'])
+        .trim();
+    let looks_like_code = sentence
+        .contains(['/', '\\', '~', '$', '{', '}', '<', '>', '=', '|', '[', ']'])
+        || sentence.contains("::")
+        || sentence.contains("http")
+        || sentence.split_whitespace().any(|word| {
+            let inner = word.trim_matches(|c: char| !c.is_alphanumeric());
+            word.starts_with("--") || word.contains("()") || inner.contains(['_', '.'])
+        });
+    if looks_like_code || !sentence.chars().any(char::is_alphabetic) {
+        return None;
+    }
+    let words = sentence.split_whitespace().collect::<Vec<_>>().join(" ");
+    if words.chars().count() <= NOTE_CHARS {
+        return Some(words);
+    }
+    let cut: String = words.chars().take(NOTE_CHARS).collect();
+    let cut = cut.rsplit_once(' ').map_or(cut.as_str(), |(head, _)| head);
+    Some(format!("{}…", cut.trim_end_matches([',', ';', ' '])))
 }
 
 /// A tool call's name as words a person says ("running a command"); never the name itself when it

@@ -1,11 +1,14 @@
 //! Calls with a GBot: a Voice agent call about one of the GBot's chats (`focus.rs`), spoken as
 //! that GBot in its own voice. The start (`/api/voice?gbot=<botId>`) opens or wakes the chat
 //! (server/src/gbots/call.rs); the persona prompt is `prompt.rs`; `talk_to_bot` and the call's
-//! tools are `tools.rs`; what the GBot says while it works, the Ghostex approvals it waits on and
+//! tools are `tools.rs`; a finished turn of its chat is `reply.rs`; what the GBot says while it works, the Ghostex approvals it waits on and
 //! the call's line in its daily log are `watch.rs`. Client contract: "Calls with a GBot" in
 //! docs/2026-10-20/voice-mode/voice-agent-client-contract.md.
 
 mod prompt;
+mod reply;
+#[cfg(test)]
+mod tests;
 mod tools;
 mod watch;
 
@@ -20,6 +23,7 @@ use crate::paths::GxserverPaths;
 use crate::server::AppState;
 
 pub(super) use prompt::{briefing_message, instructions, reply_message};
+pub(super) use reply::finished_announcement;
 pub(super) use tools::{definitions, refusal, talk, TOOLS};
 pub(super) use watch::watch;
 
@@ -61,7 +65,10 @@ pub(super) async fn refusal_before_key(state: &Arc<AppState>, bot: &str) -> Opti
 pub(super) fn parse_focus_query(focus: &str) -> Option<(String, Option<String>)> {
     let rest = focus.trim().strip_prefix("gbot:")?;
     let (bot, chat) = match rest.split_once(':') {
-        Some((bot, chat)) => (bot, Some(chat.to_string()).filter(|chat| chat.contains(':'))),
+        Some((bot, chat)) => (
+            bot,
+            Some(chat.to_string()).filter(|chat| chat.contains(':')),
+        ),
         None => (rest, None),
     };
     let bot = bot.trim();

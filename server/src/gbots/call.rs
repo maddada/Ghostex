@@ -303,17 +303,14 @@ pub(crate) fn log_call(
     paths: &GxserverPaths,
     bot_id: &str,
     chat_title: &str,
-    minutes: u64,
+    seconds: u64,
     messages: u64,
 ) {
     let folder = super::folder::bot_folder(paths, bot_id);
     if !folder.exists() {
         return;
     }
-    let length = match minutes {
-        0 | 1 => "a minute".to_string(),
-        minutes => format!("{minutes} minutes"),
-    };
+    let length = call_length(seconds);
     let said = match messages {
         0 => "nothing sent to the chat".to_string(),
         1 => "1 message in the chat".to_string(),
@@ -324,4 +321,29 @@ pub(crate) fn log_call(
         chat_title,
         &format!("Call with you, {length}, {said}."),
     );
+}
+
+/// How long a call was, in the log's words: whole minutes, never rounded up (a 99-second call is
+/// "a minute").
+fn call_length(seconds: u64) -> String {
+    match seconds / 60 {
+        0 => "under a minute".to_string(),
+        1 => "a minute".to_string(),
+        minutes => format!("{minutes} minutes"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::call_length;
+
+    #[test]
+    fn a_call_s_length_is_never_rounded_up() {
+        assert_eq!(call_length(30), "under a minute");
+        assert_eq!(call_length(60), "a minute");
+        assert_eq!(call_length(99), "a minute");
+        assert_eq!(call_length(150), "2 minutes");
+        assert_eq!(call_length(179), "2 minutes");
+        assert_eq!(call_length(600), "10 minutes");
+    }
 }
