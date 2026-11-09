@@ -11,9 +11,10 @@ use super::RemoteTab;
 use super::model::BadgeTone;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, ClickEvent, Context, ElementId, Entity, FontWeight,
-    InteractiveElement as _, IntoElement, ParentElement as _, Rgba, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Transformation, Window, div, px, radians, rgb,
+    Animation, AnimationExt as _, AnyElement, ClickEvent, Context, Div, ElementId, Entity,
+    FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Rgba, SharedString,
+    Stateful, StatefulInteractiveElement as _, Styled as _, Transformation, Window, div, px,
+    radians, rgb,
 };
 use gpui_component::input::{Input, InputState};
 use gpui_component::{Sizable as _, Size as ComponentSize, h_flex};
@@ -634,20 +635,30 @@ pub(super) fn info_hint(
     text: impl Into<SharedString>,
 ) -> AnyElement {
     click_shield(
-        div()
-            .id(id)
-            .flex_shrink_0()
-            .flex()
-            .items_center()
+        info_icon(t, id, text)
             .opacity(0.0)
-            .group_hover(group, |this| this.opacity(1.0))
-            .tooltip(wrapped_tooltip_text(text))
-            .child(settings_icon(
-                "modals/settings/info-circle.svg",
-                14.0,
-                t.muted,
-            )),
+            .group_hover(group, |this| this.opacity(1.0)),
     )
+}
+
+/// The (i) itself, always shown: the 14px info-circle with the explanation as Settings' wrapping
+/// tooltip. The Relay picker puts one inside each option; there the caller shields its clicks.
+pub(super) fn info_icon(
+    t: &RemoteTokens,
+    id: impl Into<ElementId>,
+    text: impl Into<SharedString>,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .tooltip(wrapped_tooltip_text(text))
+        .child(settings_icon(
+            "modals/settings/info-circle.svg",
+            14.0,
+            t.muted,
+        ))
 }
 
 /// A dialog field's label, with its (i) right after it when it has an explanation.

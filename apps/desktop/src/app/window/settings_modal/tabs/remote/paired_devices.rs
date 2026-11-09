@@ -45,7 +45,14 @@ pub(super) fn remote_row(main: AnyElement, value: Option<AnyElement>) -> AnyElem
         .gap(px(12.0))
         .items_center()
         .justify_between()
-        .child(div().min_w_0().child(main))
+        // A row with no value on its right takes the whole width, so a control in it (the Relay
+        // picker) stretches across the card instead of sizing to its text.
+        .child(
+            div()
+                .min_w_0()
+                .when(value.is_none(), |this| this.flex_1())
+                .child(main),
+        )
         .children(value)
         .into_any_element()
 }

@@ -19,6 +19,13 @@ use serde_json::json;
 
 const MODES: [&str; 3] = ["ghostex", "public", "custom"];
 
+/// What each option's (i) says, in the order of [`MODES`].
+const RELAY_INFO: [&str; 3] = [
+    "Phones try Ghostex's own relay (relay-eu.ghostex.dev, in the EU) first and Tailscale's public relays second. Nothing to set up, so it is the right pick for most people. If Ghostex's relay is not answering, phones use the public relays.",
+    "Phones use only Tailscale's public relays. Ghostex's relay is not involved, so pick this to keep connections off a server Ghostex runs. Phones paired earlier keep working.",
+    "Phones try a relay you run yourself first, then Tailscale's public relays. You need a Tailscale relay (derper) reachable at a hostname such as relay.example.com; enter that hostname in the field that appears below.",
+];
+
 #[derive(Default)]
 pub(crate) struct RelayState {
     /// Custom was picked and no hostname is saved yet, so only the field shows until one is entered.
@@ -171,10 +178,24 @@ pub(super) fn relay_section(
             label: "Custom",
         },
     ];
-    let control = modal_segmented_control(
+    // CDXC:RemotePairing 2026-11-09 DECISION:
+    // User, of the Relay picker: "also need an i icon i can hover next to each one's name to explain the different options". Each option carries an (i) right after its label, inside the segment: three segments fit a row at the Settings width, so no second row is needed. Pressing the (i) is shielded, so it explains without changing the selection.
+    let extras = RELAY_INFO
+        .iter()
+        .enumerate()
+        .map(|(index, text)| {
+            Some(click_shield(info_icon(
+                t,
+                ("remote-relay-info", index),
+                *text,
+            )))
+        })
+        .collect();
+    let control = modal_segmented_control_with_extras(
         &t.p.modal,
         "remote-easy-connect-relay",
         &items,
+        extras,
         selected,
         |tab: &mut RemoteTab, index, _window, cx| select_mode(tab, index, cx),
         cx,

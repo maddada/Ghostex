@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **New installs show no status line under the chat box:** nothing is pinned there for any agent until you star items in Context details; everyone who already used Ghostex keeps the line they had, on the computer and the phone, and Reset to recommended still pins the suggested setup.
+- **Settings > Remote's Relay picker fits its labels, and each option has an (i):** "Public relays only" no longer spills past its highlight, the picker spans the card, and hovering the (i) after Ghostex relay, Public relays only or Custom explains what the option does.
 - **Files moves lines with Option+Up and Option+Down:** in a Markdown, code or text file, Option+Up / Option+Down (Alt+Up / Alt+Down on Windows and Linux) move the current line, or every line the selection touches, up or down by one line, like VS Code; one undo step each.
 
 ## 11.2.1 - 2026-11-09

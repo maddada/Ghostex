@@ -30,6 +30,25 @@ pub(crate) fn modal_segmented_control<V: 'static>(
     on_select: impl Fn(&mut V, usize, &mut Window, &mut Context<V>) + Clone + 'static,
     cx: &mut Context<V>,
 ) -> AnyElement {
+    modal_segmented_control_with_extras(p, id, items, Vec::new(), selected, on_select, cx)
+}
+
+/// [`modal_segmented_control`] with an extra element after a segment's label (the Relay picker's
+/// (i)): `extras[index]` for segment `index`, none where it is missing or `None`. The extra sits
+/// inside the segment, so it must stop its own clicks if pressing it must not select the segment.
+///
+/// CDXC:AppModal 2026-11-09 DECISION:
+/// User, of the Relay picker's "Public relays only" segment: "no side padding, text touches the pill's edges". A segment was `min-width: 0`, so a label wider than its equal share overflowed the segment and the raised highlight; the segment now never narrows below its label plus its padding (equal widths still, whenever every label fits its share).
+pub(crate) fn modal_segmented_control_with_extras<V: 'static>(
+    p: &ModalPalette,
+    id: &'static str,
+    items: &[ModalSegmentedItem],
+    extras: Vec<Option<AnyElement>>,
+    selected: usize,
+    on_select: impl Fn(&mut V, usize, &mut Window, &mut Context<V>) + Clone + 'static,
+    cx: &mut Context<V>,
+) -> AnyElement {
+    let mut extras = extras.into_iter();
     let RaisedRailColors {
         track,
         track_border,
@@ -42,6 +61,7 @@ pub(crate) fn modal_segmented_control<V: 'static>(
     let segments = items.iter().enumerate().map(|(index, item)| {
         let pressed = index == selected;
         let on_select = on_select.clone();
+        let extra = extras.next().flatten();
         h_flex()
             .id((id, index))
             .role(gpui::Role::RadioButton)
@@ -49,12 +69,11 @@ pub(crate) fn modal_segmented_control<V: 'static>(
             .aria_toggled(a11y_toggled(pressed))
             .flex_1()
             .flex_basis(px(0.0))
-            .min_w_0()
             .h_full()
             .items_center()
             .justify_center()
             .gap(px(6.0))
-            .px(px(10.0))
+            .px(px(12.0))
             .rounded(px(5.0))
             .text_size(px(13.0))
             .line_height(px(20.0))
@@ -89,6 +108,7 @@ pub(crate) fn modal_segmented_control<V: 'static>(
                 modal_icon(icon, 16.0, if pressed { active_text } else { text }).flex_shrink_0()
             }))
             .child(item.label)
+            .children(extra)
     });
     h_flex()
         .id(id)

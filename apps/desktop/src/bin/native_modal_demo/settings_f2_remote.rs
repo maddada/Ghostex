@@ -71,6 +71,23 @@ fn iso_now_minus_hours(hours: i64) -> String {
     )
 }
 
+/// `GHOSTEX_NATIVE_MODAL_DEMO_RELAY=ghostex|public|custom`: the Easy Connect Relay choice the
+/// preview shows (none set: the page's fallback, public relays only).
+fn demo_relay() -> Value {
+    match std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_RELAY").as_deref() {
+        Ok("ghostex") => {
+            json!({ "mode": "ghostex", "customHost": "", "host": "relay-eu.ghostex.dev", "running": true, "token": ADDRESS, "reachable": true, "lastError": null })
+        }
+        Ok("custom") => {
+            json!({ "mode": "custom", "customHost": "relay.example.com", "host": "relay.example.com", "running": true, "token": ADDRESS, "reachable": true, "lastError": null })
+        }
+        Ok("public") => {
+            json!({ "mode": "public", "customHost": "", "host": null, "running": false, "token": null, "reachable": null, "lastError": null })
+        }
+        _ => Value::Null,
+    }
+}
+
 fn fixture_for(state: &str) -> RemoteFixture {
     let easy_connect_enabled = state != "remote-ec-off";
     let ssh_enabled = !matches!(
@@ -88,6 +105,7 @@ fn fixture_for(state: &str) -> RemoteFixture {
             "ports": [22, 58744],
             "running": easy_connect_enabled,
             "token": if easy_connect_enabled { json!(ADDRESS) } else { Value::Null },
+            "relay": demo_relay(),
         }),
         access: json!({
             "computerName": "Mohamad's Laptop",
