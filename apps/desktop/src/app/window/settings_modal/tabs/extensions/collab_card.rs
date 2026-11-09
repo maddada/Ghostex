@@ -22,7 +22,9 @@ use gpui::{
 use serde_json::{Value, json};
 
 use super::super::super::super::native_modal_kit::hsla;
-use super::super::super::fields::{SizedButtonSize, SizedButtonVariant, settings_sized_button};
+use super::super::super::fields::{
+    SizedButtonSize, SizedButtonVariant, is_long_value, settings_sized_button, short_version,
+};
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::{refresh_collab_component, store_gxserver_rpc};
 use super::ExtensionsTab;
@@ -109,7 +111,11 @@ impl ExtensionsTab {
                 ),
                 _ if installed => match component["status"].as_str() {
                     Some("running") => match &update {
-                        Some(version) => format!("Running. Update {version} is ready."),
+                        // A build id is never shown; the card's info tooltip has it.
+                        Some(version) => match short_version(version) {
+                            Some(version) => format!("Running. Update {version} is ready."),
+                            None => "Running. An update is ready.".to_string(),
+                        },
                         None => "Running. Share is in each chat's header.".to_string(),
                     },
                     Some("failed") => format!(
@@ -201,10 +207,13 @@ impl ExtensionsTab {
             .text_color(hsla(p.muted))
             .child(status)
             .into_any_element();
-        let meta = match component["version"].as_str() {
+        let mut meta = match component["version"].as_str() {
             Some(version) if installed => format!("Extension \u{b7} {version}"),
             _ => "Extension \u{b7} Downloaded when installed".to_string(),
         };
+        if let Some(update) = update.as_deref().filter(|update| is_long_value(update)) {
+            meta.push_str(&format!(" \u{b7} Update {update}"));
+        }
         let card = grid_card(
             p,
             GridCardSpec {

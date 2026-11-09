@@ -3,9 +3,9 @@
 //! callback address an app's own OAuth client needs.
 use super::super::super::fields::toggle_from_row;
 use super::super::super::fields::{
-    ButtonVariant, FieldStates, ListItemStatus, ROW_PADDING_X, ROW_PADDING_Y, settings_button,
-    settings_icon_button, settings_list_item, settings_section, settings_text_input,
-    switch_control,
+    ButtonVariant, FieldStates, ListItemStatus, ROW_PADDING_X, ROW_PADDING_Y, full_value_tooltip,
+    settings_button, settings_icon_button, settings_list_item, settings_section,
+    settings_text_input, switch_control,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::store_copy_to_clipboard;
@@ -13,8 +13,8 @@ use super::ConnectorsTab;
 use super::data::{busy_key, flag, list, text};
 use super::widgets::{detail, note_row};
 use gpui::{
-    AnyElement, Context, Div, IntoElement, ParentElement as _, SharedString, Styled as _, Window,
-    div, px,
+    AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
+    SharedString, Styled as _, Window, div, px,
 };
 use gpui_component::h_flex;
 use serde_json::Value;
@@ -360,7 +360,18 @@ impl ConnectorsTab {
                     None,
                     None,
                     "Sign-in callback address",
-                    Some(detail(callback)),
+                    // Cut at its end in the row; whole on hover, and Copy copies it.
+                    Some(
+                        full_value_tooltip(
+                            div()
+                                .id(SharedString::from(format!(
+                                    "connectors-{id}-executor-callback"
+                                )))
+                                .child(callback.clone()),
+                            callback,
+                        )
+                        .into_any_element(),
+                    ),
                     Some(settings_button(
                         p,
                         format!("connectors-{id}-executor-callback-copy"),

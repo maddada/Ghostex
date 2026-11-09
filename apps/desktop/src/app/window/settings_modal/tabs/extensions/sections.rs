@@ -4,10 +4,10 @@
 //! tabs/extensions/custom-view-cards.tsx (deleted 2026-10-01), sortable by drag).
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
-    ButtonVariant, ReorderOptions, SizedButtonSize, SizedButtonVariant, icon, reorder_handle,
-    reorder_options, reorder_order, reorder_row, settings_button, settings_list_item,
-    settings_section, settings_sized_button, settings_square_button, small_switch_control,
-    tooltip_text,
+    ButtonVariant, ReorderOptions, SizedButtonSize, SizedButtonVariant, icon, is_long_value,
+    reorder_handle, reorder_options, reorder_order, reorder_row, settings_button,
+    settings_list_item, settings_section, settings_sized_button, settings_square_button,
+    short_version, small_switch_control, tooltip_text,
 };
 use super::super::super::model::SettingsTabId;
 use super::super::super::palette::SettingsPalette;
@@ -298,6 +298,16 @@ impl ExtensionsTab {
                     .as_ref()
                     .map(runtime_meta)
                     .filter(|meta| !meta.is_empty());
+                // The whole build id of a runtime whose version is one, in the info tooltip.
+                let meta = match runtime
+                    .as_ref()
+                    .and_then(|runtime| runtime["version"].as_str())
+                    .filter(|version| is_long_value(version))
+                {
+                    Some(version) if meta.is_empty() => format!("Version {version}"),
+                    Some(version) => format!("{meta} · Version {version}"),
+                    None => meta,
+                };
                 let blocked_reason =
                     blocked.map(|blocked| format!("Turn on {} first", blocked.title));
                 let card = grid_card(
@@ -1105,10 +1115,9 @@ fn runtime_meta(runtime: &Value) -> String {
     {
         parts.push(label.to_string());
     }
-    if let Some(version) = runtime["version"]
-        .as_str()
-        .filter(|version| !version.is_empty())
-    {
+    // A build id (the VS Code view's code-server) shows as its version number or not at all; the
+    // card's info tooltip has it whole (long_value.rs).
+    if let Some(version) = runtime["version"].as_str().and_then(short_version) {
         parts.push(format!("v{version}"));
     }
     if let Some(error) = runtime["errorMessage"]

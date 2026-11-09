@@ -5,8 +5,8 @@
 //! CDXC:Projects 2026-06-14-17:29 SEE-ALSO: one selector with a searchable dropdown of project paths replaces the always-visible project list (packages/core-ui/settings-modal/tabs/projects.tsx (deleted 2026-10-01), `.projects-settings-selector-*` in styles/modals.css (deleted 2026-11-06)).
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
-    SearchableList, SearchableListKey, SearchablePopoverSpec, filter_by_score, icon,
-    searchable_popover, searchable_row, settings_icon,
+    SearchableList, SearchableListKey, SearchablePopoverSpec, filter_by_score, full_value_tooltip,
+    icon, searchable_popover, searchable_row, settings_icon, short_path,
 };
 use super::super::super::palette::SettingsPalette;
 use super::{ProjectItem, ProjectsTab};
@@ -70,8 +70,10 @@ fn project_copy(
                 .text_color(hsla(p.foreground))
                 .child(name.to_string()),
         )
-        .child(
+        // A long path shows its last two folders; the whole path is on hover (long_value.rs).
+        .child(full_value_tooltip(
             div()
+                .id(SharedString::from(format!("project-path-{path}")))
                 .min_w_0()
                 .overflow_hidden()
                 .whitespace_nowrap()
@@ -79,8 +81,9 @@ fn project_copy(
                 .text_size(px(13.0))
                 .line_height(px(17.55))
                 .text_color(hsla(p.muted))
-                .child(path.to_string()),
-        )
+                .child(short_path(path)),
+            path.to_string(),
+        ))
         .into_any_element()
 }
 

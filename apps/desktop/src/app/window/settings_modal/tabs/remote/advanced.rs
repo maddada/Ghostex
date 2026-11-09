@@ -5,7 +5,9 @@
 //! CDXC:RemotePairing 2026-09-03:
 //! One collapsible for the controls a regular user never needs: the ports Easy Connect serves, the raw allowed client key list (Paired devices above is its friendly face), the bare pairing address for pasting by hand, the binary, the local gxserver endpoint, and the raw sidecar status for bug reports.
 use super::super::super::super::native_modal_kit::*;
-use super::super::super::fields::{FieldStates, icon, settings_textarea};
+use super::super::super::fields::{
+    FieldStates, full_value_tooltip, icon, settings_textarea, short_id, short_path, short_version,
+};
 use super::RemoteTab;
 use super::easy_connect::{path_card, path_head};
 use super::model::*;
@@ -351,9 +353,11 @@ fn advanced_rows(
     }
     let token = status.as_ref().and_then(|status| status.token.clone());
     let pairing_value = match token {
+        // Shown cut to its start; the whole address is on hover and copies (long_value.rs).
         Some(token) => row_value(t, true)
-            .child(
+            .child(full_value_tooltip(
                 div()
+                    .id("remote-pairing-address")
                     .max_w(px(220.0))
                     .min_w_0()
                     .overflow_hidden()
@@ -366,8 +370,9 @@ fn advanced_rows(
                     .border_color(hsla(t.edge(0.72)))
                     .bg(hsla(css_fade(t.background, 0.44)))
                     .text_color(hsla(css_mix(t.foreground, 0.88, t.muted)))
-                    .child(token.clone()),
-            )
+                    .child(short_id(&token)),
+                token.clone(),
+            ))
             .child(copy_icon_button(
                 tab,
                 t,
@@ -394,22 +399,36 @@ fn advanced_rows(
         ),
         Some(pairing_value),
     ));
+    // Its path cut to the last two folders and its version number; both whole on hover.
     let binary = status
         .as_ref()
         .filter(|status| status.binary_found)
         .and_then(|status| {
-            status
-                .binary_path
-                .clone()
-                .map(|path| match &status.binary_version {
+            status.binary_path.clone().map(|path| {
+                let full = match &status.binary_version {
                     Some(version) => format!("{path} ({version})"),
-                    None => path,
-                })
-        })
-        .unwrap_or_else(|| "Not found".to_string());
+                    None => path.clone(),
+                };
+                let version = status.binary_version.as_deref().and_then(short_version);
+                let short = match version {
+                    Some(version) => format!("{} ({version})", short_path(&path)),
+                    None => short_path(&path),
+                };
+                (short, full)
+            })
+        });
+    let binary_value = match binary {
+        Some((short, full)) => row_value(t, true)
+            .child(full_value_tooltip(
+                div().id("remote-easy-connect-binary").child(short),
+                full,
+            ))
+            .into_any_element(),
+        None => row_value(t, true).child("Not found").into_any_element(),
+    };
     rows.push(remote_row(
         row_main(t, "Easy Connect binary", None),
-        Some(row_value(t, true).child(binary).into_any_element()),
+        Some(binary_value),
     ));
     rows.push(remote_row(
         row_main(t, "gxserver", Some("Local API the app and phones talk to.")),

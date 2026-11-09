@@ -10,8 +10,8 @@
 //! The dialog owns the draft while open and writes Settings.remoteMachines only on Save. Passwords keep their one-shot keychain path: the save icon posts immediately, and Save flushes a password still sitting in the field (CDXC:RemoteMachines 2026-06-09: the settings JSON never retains the secret).
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
-    ButtonSize, ButtonVariant, icon, settings_button_sized, settings_icon, settings_icon_button,
-    tooltip_text,
+    ButtonSize, ButtonVariant, full_value_tooltip, icon, is_long_value, settings_button_sized,
+    settings_icon, settings_icon_button, short_version, tooltip_text,
 };
 use super::super::super::model::SettingsTabId;
 use super::easy_connect::{path_card, path_head};
@@ -1446,10 +1446,17 @@ pub(super) fn machine_dialog(
             .map(|install| {
                 install
                     .version
-                    .as_ref()
+                    .as_deref()
+                    .and_then(short_version)
                     .map(|version| format!("gxserver {version}"))
                     .unwrap_or_else(|| "gxserver installed".to_string())
             });
+        // A build string shows as its version number; the whole one is on hover (long_value.rs).
+        let version_full = install
+            .as_ref()
+            .filter(|install| install.installed)
+            .and_then(|install| install.version.clone())
+            .filter(|version| is_long_value(version));
         body = body.child(
             h_flex()
                 .w_full()
@@ -1458,7 +1465,8 @@ pub(super) fn machine_dialog(
                 .gap(px(8.0))
                 .justify_end()
                 .children(version_text.map(|text| {
-                    div()
+                    let line = div()
+                        .id("remote-machine-gxserver-version")
                         .mr_auto()
                         .min_w_0()
                         .overflow_hidden()
@@ -1467,7 +1475,12 @@ pub(super) fn machine_dialog(
                         .text_size(px(13.0))
                         .line_height(px(18.2))
                         .text_color(hsla(colors.muted))
-                        .child(text)
+                        .child(text);
+                    match version_full {
+                        Some(full) => full_value_tooltip(line, format!("gxserver {full}"))
+                            .into_any_element(),
+                        None => line.into_any_element(),
+                    }
                 }))
                 .child(settings_button_sized(
                     &p,

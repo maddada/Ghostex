@@ -7,7 +7,7 @@
 use super::super::fields::notice::{greyed_out, is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, FieldStates, ListItemStatus, RowSpec, SettingsPage, setting_row,
-    settings_button, settings_list_item, settings_section, static_note, switch_control,
+    settings_button, settings_list_item, settings_section, short_id, static_note, switch_control,
     toggle_field,
 };
 use super::super::model::SettingsTabId;
@@ -238,7 +238,8 @@ impl SyncTab {
                 p,
                 Some(dot),
                 None,
-                text(&computer, "name"),
+                // A computer without a name falls back to its server id: never shown whole.
+                short_id(&text(&computer, "name")),
                 Some(div().child(detail).into_any_element()),
                 control,
             ));

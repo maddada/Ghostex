@@ -7,7 +7,8 @@
 //! User (#495 follow-up, Q1892): "yes" to an Install from folder… button in Settings > Extensions, owner only: it opens a folder picker, shows the extension's name and the permissions it asks for, and installs with the consent the owner ticks. Installing is the owner's devices' alone (server/src/server/security_owner_only.rs), so this is the only way a folder extension gets in; agents and the CLI are refused.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
-    SizedButtonSize, SizedButtonVariant, checkbox_control, settings_icon, settings_sized_button,
+    SizedButtonSize, SizedButtonVariant, checkbox_control, full_value_tooltip, settings_icon,
+    settings_sized_button, short_path, short_version,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::store_gxserver_rpc;
@@ -260,13 +261,23 @@ impl ExtensionsTab {
                 .into_any_element()
         };
         let mut items: Vec<AnyElement> = Vec::new();
+        // The folder as its last two parts; the whole path is on hover (long_value.rs).
         items.push(
-            div()
-                .text_size(px(13.0))
-                .line_height(px(20.0))
-                .text_color(hsla(m.muted))
-                .child(format!("{} v{} · {path}", entry.name(), entry.version()))
-                .into_any_element(),
+            full_value_tooltip(
+                div()
+                    .id("extension-folder-install-path")
+                    .text_size(px(13.0))
+                    .line_height(px(20.0))
+                    .text_color(hsla(m.muted))
+                    .child(format!(
+                        "{} v{} · {}",
+                        entry.name(),
+                        short_version(&entry.version()).unwrap_or_default(),
+                        short_path(&path)
+                    )),
+                path.to_string(),
+            )
+            .into_any_element(),
         );
         let permissions = entry.permissions();
         if permissions.is_empty() {

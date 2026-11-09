@@ -9,14 +9,16 @@
 //! `uninstallPlugin` and `cancelPluginChange` handlers (delayed_send/app_modal_sidebar_command/
 //! settings_tools.rs).
 use super::super::super::fields::{
-    ListItemStatus, SizedButtonSize, SizedButtonVariant, settings_icon, settings_list_item,
-    settings_sized_button, settings_square_button,
+    ListItemStatus, SizedButtonSize, SizedButtonVariant, full_value_tooltip, is_long_value,
+    settings_icon, settings_list_item, settings_sized_button, settings_square_button,
+    short_version,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::post_store_message;
 use super::{ICON_DEVICE_DESKTOP, ICON_REFRESH, ICON_TRASH, IntegrationsTab};
 use gpui::{
-    AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div, px,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    Styled as _, div, px,
 };
 use gpui_component::h_flex;
 use serde_json::{Value, json};
@@ -34,10 +36,8 @@ fn detail(runtime: &Value) -> String {
     {
         parts.push(label.to_string());
     }
-    if let Some(version) = runtime["version"]
-        .as_str()
-        .filter(|version| !version.is_empty())
-    {
+    // A build string shows as its version number; the whole one is on hover (long_value.rs).
+    if let Some(version) = runtime["version"].as_str().and_then(short_version) {
         parts.push(format!("v{version}"));
     }
     match runtime["pendingChange"].as_str() {
@@ -210,7 +210,19 @@ impl IntegrationsTab {
             Some(list_status),
             Some(settings_icon(ICON_DEVICE_DESKTOP, 17.0, p.muted).into_any_element()),
             TITLE,
-            Some(div().child(detail(runtime)).into_any_element()),
+            Some(
+                match runtime["version"]
+                    .as_str()
+                    .filter(|version| is_long_value(version))
+                {
+                    Some(version) => full_value_tooltip(
+                        div().id("cef-runtime-detail").child(detail(runtime)),
+                        format!("Version {version}"),
+                    )
+                    .into_any_element(),
+                    None => div().child(detail(runtime)).into_any_element(),
+                },
+            ),
             Some(
                 h_flex()
                     .items_center()
