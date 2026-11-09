@@ -474,6 +474,7 @@ pub fn begin_pairing(
         ssh_public_key: params.ssh_public_key.trim().to_string(),
         kind: params.kind,
         over_ssh: false,
+        nonce: String::new(),
         tailcat_client_key: params.tailcat_client_key.clone(),
         device_key: StoredDeviceKey {
             algorithm: device_key.algorithm.clone(),
@@ -520,6 +521,8 @@ SEE-ALSO: apps/mobile/app/src/machines/sshPairing.ts (the phone's side).
 pub struct SshPairingStarted {
     pub started: PairingStarted,
     pub nonce: String,
+    /// The phone's request still waiting from an earlier ask, handed back instead of a new one.
+    pub reused: bool,
 }
 
 /// `/api/pairOverSsh`: a phone signed in over SSH, holding the token file, asks to pair. The body
@@ -547,6 +550,38 @@ pub fn begin_ssh_pairing(
     security: &SecurityState,
     params: PairDeviceParams,
 ) -> Result<SshPairingStarted, PairDeviceError> {
+    /*
+    CDXC:RemotePairing 2026-11-09 WHY:
+    User (Android phone over Tailscale, 11.2.1): "I'm seeing these approvals on every launch even
+    tho I'm connecting through tailscale." The phone asks on every sign-in until it is paired, and
+    each ask made a new approval request with new words, so a phone that reconnected while the
+    owner hadn't approved yet left a stack of requests on the computer and soon heard "Too many
+    pairing attempts". The same phone (the same device key) asking again while its request still
+    waits now gets that request back, with the same nonce and words, and counts as no new attempt.
+    */
+    if let Some(device_key) = params.device_key.as_ref() {
+        let now = now_ms();
+        if let Some(pending) = pairing_runtime.waiting_over_ssh(&device_key.public_key, now) {
+            let still_waiting = security
+                .approvals
+                .read(&pending.approval_id, &Principal::Anonymous, now)
+                .is_some_and(|request| request.status == ApprovalStatus::Pending);
+            if still_waiting && !pending.nonce.is_empty() {
+                let identity = read_remote_access_identity()?;
+                return Ok(SshPairingStarted {
+                    started: PairingStarted {
+                        pending_id: pending.id,
+                        words: pending.words,
+                        expires_at_ms: pending.expires_at_ms,
+                        user: identity.username,
+                        computer_name: identity.computer_name,
+                    },
+                    nonce: pending.nonce,
+                    reused: true,
+                });
+            }
+        }
+    }
     record_pair_device_attempt()?;
     let device_key = params
         .device_key
@@ -612,6 +647,7 @@ pub fn begin_ssh_pairing(
         ssh_public_key: String::new(),
         kind: PairingDeviceKind::Phone,
         over_ssh: true,
+        nonce: nonce.clone(),
         tailcat_client_key: None,
         device_key: StoredDeviceKey {
             algorithm: device_key.algorithm.clone(),
@@ -637,6 +673,7 @@ pub fn begin_ssh_pairing(
             computer_name: identity.computer_name,
         },
         nonce,
+        reused: false,
     })
 }
 

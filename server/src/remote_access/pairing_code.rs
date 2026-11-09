@@ -226,6 +226,9 @@ pub struct PendingPairing {
     /// A phone that asked over its own SSH login (`/api/pairOverSsh`): no SSH key line and no
     /// Easy Connect allow-list entry, only its device token.
     pub over_ssh: bool,
+    /// The nonce an over-SSH phone's words come from (empty for a QR's phone, whose words come
+    /// from the code), so the same phone asking again gets the same request back.
+    pub nonce: String,
     pub tailcat_client_key: Option<String>,
     pub device_key: StoredDeviceKey,
     pub approver_key: Option<ApproverKey>,
@@ -340,6 +343,20 @@ impl RemotePairingRuntime {
             .collect();
         waiting.sort_by_key(|pending| pending.requested_at_ms);
         waiting
+    }
+
+    /// The live over-SSH request still waiting for the phone with this device key, if any.
+    pub fn waiting_over_ssh(&self, device_public_key: &str, now_ms: u64) -> Option<PendingPairing> {
+        let mut map = self.pending_map();
+        map.retain(|_, pending| pending.is_live(now_ms));
+        map.values()
+            .filter(|pending| {
+                pending.over_ssh
+                    && pending.state == PendingState::Waiting
+                    && pending.device_key.public_key == device_public_key
+            })
+            .max_by_key(|pending| pending.requested_at_ms)
+            .cloned()
     }
 
     pub fn note_ask(&self, id: &str, timestamp_ms: u64) {

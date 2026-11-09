@@ -345,23 +345,26 @@ pub(crate) async fn handle_remote_access_http(
             tokio::task::spawn_blocking(move || {
                 let device_name = params.device_name.clone();
                 let started = begin_ssh_pairing(&pairing_runtime, &security, params);
-                crate::audit::record(
-                    crate::audit::Action::new(
-                        "pairing.request",
-                        "A phone that signs in over SSH asked to pair with this computer",
-                    )
-                    .target(device_name.clone()),
-                    crate::audit::Actor::PairedDevice {
-                        id: None,
-                        name: device_name,
-                    },
-                    match &started {
-                        Ok(_) => crate::audit::Outcome::Pending,
-                        Err(error) => pair_device_error_outcome(error),
-                    },
-                    None,
-                );
-                let SshPairingStarted { started, nonce } = started?;
+                // The same request handed back again is no new ask: the log keeps the first one.
+                if !matches!(&started, Ok(started) if started.reused) {
+                    crate::audit::record(
+                        crate::audit::Action::new(
+                            "pairing.request",
+                            "A phone that signs in over SSH asked to pair with this computer",
+                        )
+                        .target(device_name.clone()),
+                        crate::audit::Actor::PairedDevice {
+                            id: None,
+                            name: device_name,
+                        },
+                        match &started {
+                            Ok(_) => crate::audit::Outcome::Pending,
+                            Err(error) => pair_device_error_outcome(error),
+                        },
+                        None,
+                    );
+                }
+                let SshPairingStarted { started, nonce, .. } = started?;
                 Ok(json!({
                     "status": PairingStatus::Pending,
                     "pendingId": started.pending_id,
@@ -395,8 +398,19 @@ pub(crate) async fn handle_remote_access_http(
                     append_key: &append_authorized_key,
                     remove_key: &remove_authorized_key,
                 };
+                /*
+                CDXC:RemotePairing 2026-11-09 WHY:
+                A phone pairing over its own SSH login (Tailscale, the local network) never comes
+                through Easy Connect, yet each of its asks held the allow-list lifted, so every
+                launch of an unpaired Tailscale phone opened Easy Connect to any key for as long as
+                it waited and restarted the helpers, dropping paired phones' links twice. Only a
+                phone or computer pairing through Easy Connect lifts it now.
+                */
+                let over_ssh = pairing_runtime
+                    .pending(&ask.id, crate::security::now_ms())
+                    .is_some_and(|pending| pending.over_ssh);
                 let answer = pairing_status(&context, ask)?;
-                if answer.status == PairingStatus::Pending {
+                if answer.status == PairingStatus::Pending && !over_ssh {
                     hold_tailcat_pairing_window_open(&paths, &tailcat_runtime);
                 }
                 let mut result = json!({ "status": answer.status });
