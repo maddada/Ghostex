@@ -1,8 +1,5 @@
 #import <AppKit/AppKit.h>
 
-extern void *CGSMainConnectionID(void);
-extern int32_t CGSSetWindowBackgroundBlurRadius(void *, NSInteger, int64_t);
-
 // CDXC:FocusRouting 2026-10-10 WHY:
 // Changing a window's style mask makes AppKit swap its frame view, which takes first responder and
 // key status away from the GPUI view (GPUI's simple-fullscreen code restores both for the same
@@ -23,9 +20,13 @@ static void GhostexGpuiMakeWindowBorderless(NSWindow *window) {
   }
 }
 
-// CDXC:SessionChat 2026-09-18 WHY:
-// The system blur material is much stronger than the chat dialog's eight-point CSS backdrop blur.
-// Use the same WindowServer blur API as GPUI, with the chat radius and without a material tint.
+// CDXC:AppModal 2026-11-09 WHY:
+// Makes a chat pane dialog's window (Save to Markdown, Rewind) a borderless, shadowless, clear
+// window. It used to add a WindowServer background blur (CGSSetWindowBackgroundBlurRadius, 24)
+// across the whole pane on top of GPUI's own blur; with both, the chat behind Save to Markdown
+// showed as solid black. Under glass the card alone is blurred, by GPUI
+// (native_chat/child_window.rs `pane_dialog_blur_region`); off glass the dialog is a solid card
+// over a light dim and needs no blur.
 void GhostexGpuiPrepareChatDialogWindow(void *nativeView) {
   NSView *view = (__bridge NSView *)nativeView;
   NSWindow *window = view.window;
@@ -35,7 +36,6 @@ void GhostexGpuiPrepareChatDialogWindow(void *nativeView) {
   window.backgroundColor = NSColor.clearColor;
   window.hasShadow = NO;
   [window invalidateShadow];
-  CGSSetWindowBackgroundBlurRadius(CGSMainConnectionID(), window.windowNumber, 24);
 }
 
 // CDXC:AppModal 2026-09-21 DECISION:

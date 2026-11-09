@@ -245,7 +245,12 @@ impl Render for SaveMarkdownWindow {
             .flex_col()
             .p(px(24.0))
             .gap(px(24.0))
+            .relative()
             .rounded(px(14.0))
+            .children(super::super::child_window::pane_dialog_blur_region(
+                glass,
+                px(14.0),
+            ))
             .bg(if glass {
                 p.menu_surface()
             } else if p.light {
@@ -297,7 +302,7 @@ impl Render for SaveMarkdownWindow {
             .justify_center()
             .p(px(16.0))
             .bg(super::super::child_window::pane_dialog_scrim(
-                glass, p.light, 0.65,
+                glass, p.light,
             ))
             .capture_any_mouse_down(|_, window, _| {
                 super::super::focus::reclaim_keyboard_focus(window);

@@ -399,13 +399,47 @@ pub(crate) fn move_child_window(
 }
 
 /// CDXC:Theming 2026-09-27 DECISION:
-/// User: "yes pls make all those that could be glass glass". Under window glass the chat's pane-sized dialogs (Save as Markdown, Rewind and its "could not be rewound" message, the image preview) are frosted: their window blurs the chat behind it instead of laying a dark scrim over it, and a dialog card takes the chat's frosted menu surface. Glass off, they keep the solid card and the dark scrim.
+/// User: "yes pls make all those that could be glass glass". Under window glass the chat's pane-sized dialogs (Save as Markdown, Rewind and its "could not be rewound" message, the image preview) are frosted: their window blurs the chat behind it instead of laying a dark scrim over it, and a dialog card takes the chat's frosted menu surface. Glass off, they keep the solid card over a dim (light since 2026-11-09, see `pane_dialog_scrim`).
 pub(super) fn pane_dialog_window_background(glass: bool) -> gpui::WindowBackgroundAppearance {
     if glass {
         gpui::WindowBackgroundAppearance::Blurred
     } else {
         gpui::WindowBackgroundAppearance::Transparent
     }
+}
+
+/// What a pane dialog's card carries under glass: an invisible canvas that limits the window's blur
+/// to the card, so the rest of the window is clear and the chat shows through it under the dim.
+///
+/// CDXC:AppModal 2026-11-09 WHY:
+/// A pane dialog's window covers the whole chat pane. Blurred over all of it, macOS put GPUI's blur view across the pane, and that view paints a black base under the live blur (gpui_macos `blurred_view_update_layer`, for window snapshots); the dialog also gave the same window a WindowServer background blur (`GhostexGpuiPrepareChatDialogWindow`, now removed). The chat behind Save to Markdown showed as solid black and the frosted card as a near-black slab. The blur is now confined to the card, as the toasts' is, which masks the black base to the card too; the rest of the window draws only the light dim (`pane_dialog_scrim`). Only on macOS: Windows confines a window's blur by clipping the window itself, which would cut away the dim and the click outside the card that closes the dialog.
+pub(super) fn pane_dialog_blur_region(glass: bool, radius: Pixels) -> Option<gpui::AnyElement> {
+    use gpui::{IntoElement as _, Styled as _};
+    if !glass || !cfg!(target_os = "macos") {
+        return None;
+    }
+    thread_local! {
+        static APPLIED: std::cell::RefCell<std::collections::HashMap<gpui::WindowId, Bounds<Pixels>>> =
+            Default::default();
+    }
+    Some(
+        gpui::canvas(
+            move |bounds, window, _| {
+                let id = window.window_handle().window_id();
+                let changed =
+                    APPLIED.with(|applied| applied.borrow_mut().insert(id, bounds) != Some(bounds));
+                if changed {
+                    window.set_background_blur_region(vec![(bounds, radius)]);
+                }
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .into_any_element(),
+    )
 }
 
 /// Gives a pane dialog's blurred window the frosted menus' blur (see `pane_dialog_window_background`).
@@ -415,15 +449,16 @@ pub(super) fn prepare_pane_dialog_window(window: &gpui::Window, glass: bool) {
     }
 }
 
-/// The dim a pane dialog lays over the chat: `opaque` over the solid chat, a light one over the
-/// frosted pane (the blur already sets the dialog apart).
-pub(super) fn pane_dialog_scrim(glass: bool, light: bool, opaque: f32) -> gpui::Hsla {
-    if !glass {
-        return gpui::black().opacity(opaque);
-    }
-    if light {
-        gpui::black().opacity(0.04)
-    } else {
-        gpui::black().opacity(0.18)
-    }
+/// The dim a pane dialog lays over the chat: a light one, so the conversation stays in view behind
+/// the dialog in both appearances, with glass on or off.
+///
+/// CDXC:AppModal 2026-11-09 DECISION:
+/// User, of Save to Markdown opened from a chat reply with the whole chat behind it gone black: "why does everything turn black in chat transcript when this modal is shown??? please fix all similar cases this doesn't make sense". A dialog over the chat (Save to Markdown, Rewind and its "could not be rewound" message) dims the chat lightly and never blacks it out: off glass the dim is 30% black in dark mode and 16% in light mode (was 65% and 45%), and under glass it stays the faint dim over the window's blur. Supersedes "Glass off, they keep ... the dark scrim" in the 2026-09-27 decision above.
+pub(super) fn pane_dialog_scrim(glass: bool, light: bool) -> gpui::Hsla {
+    gpui::black().opacity(match (glass, light) {
+        (false, false) => 0.3,
+        (false, true) => 0.16,
+        (true, false) => 0.18,
+        (true, true) => 0.04,
+    })
 }

@@ -217,7 +217,12 @@ impl Render for RewindWindow {
             .w(px(448.0))
             .max_w(gpui::relative(0.92))
             .p(px(24.0))
+            .relative()
             .rounded(px(12.0))
+            .children(super::child_window::pane_dialog_blur_region(
+                glass,
+                px(12.0),
+            ))
             .border_1()
             .border_color(if glass {
                 p.composer_border
@@ -309,7 +314,7 @@ impl Render for RewindWindow {
             .flex()
             .items_center()
             .justify_center()
-            .bg(super::child_window::pane_dialog_scrim(glass, p.light, 0.45))
+            .bg(super::child_window::pane_dialog_scrim(glass, p.light))
             .text_size(px(14.0))
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 let command = match event.keystroke.key.as_str() {

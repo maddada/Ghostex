@@ -436,9 +436,11 @@ impl GpuiAgentsHubModalWindow {
             .justify_center()
             .items_start()
             .p(px(20.0))
+            // A light dim, so the hub stays in view behind the sheet (CDXC:AppModal 2026-11-09 on
+            // `pane_dialog_scrim` in native_chat/child_window.rs: never black out what's behind).
             .bg(hsla(modal_rgba(
                 0x000000,
-                if hp.light { 0.5 } else { 0.72 },
+                if hp.light { 0.16 } else { 0.3 },
             )))
             .child(sheet_box)
             .into_any_element()
