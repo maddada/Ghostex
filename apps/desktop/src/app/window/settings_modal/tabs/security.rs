@@ -7,8 +7,8 @@
 //! SEE-ALSO: server/src/audit/ (the log and its check), packages/settings-catalog/src/pages/security.rs (its search rows), apps/desktop/src/app/gx_store/notifications/commands.rs (a security row in the bell opens this page).
 use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
-    ButtonVariant, FieldStates, ListItemStatus, SettingsPage, settings_button, settings_list_item,
-    settings_section, static_note,
+    ButtonVariant, FieldStates, ListItemStatus, SettingsPage, card_inset, settings_button,
+    settings_list_item, settings_section, static_note,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -201,14 +201,12 @@ impl SecurityTab {
         }];
         let entries = view["entries"].as_array().cloned().unwrap_or_default();
         if entries.is_empty() {
-            rows.push(
-                static_note(
-                    p,
-                    "Nothing yet. Pairing a phone, Easy Connect changes, sharing a chat and the other sensitive actions show here.",
-                    false,
-                )
-                .into_any_element(),
-            );
+            // In the row inset, as Secrets' notes are, not flush against the card's edges.
+            rows.push(card_inset(static_note(
+                p,
+                "Nothing yet. Pairing a phone, Easy Connect changes, sharing a chat and the other sensitive actions show here.",
+                false,
+            )));
         }
         for entry in &entries {
             let (_, status) = outcome_words(entry["outcome"].as_str().unwrap_or_default());
