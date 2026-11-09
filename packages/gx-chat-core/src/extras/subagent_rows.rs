@@ -151,11 +151,18 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
             &mut cache,
         )
     };
+    // Under Agent work Quiet no child reply carries the work button: the renderers draw a reply's
+    // hover row only for the main transcript's final replies (`finalIds`), so the button stands
+    // on its own row on the desktop and the phone alike.
+    let mut items = projection.items;
+    for item in &mut items {
+        if let TranscriptItem::GroupedWork { work_carrier, .. } = item {
+            *work_carrier = None;
+        }
+    }
     let view = &mut state.extras.subagent.view;
     view.projected = cache;
-    view.items = std::sync::Arc::new(crate::transcript::items::TranscriptItems::from_items(
-        projection.items,
-    ));
+    view.items = std::sync::Arc::new(crate::transcript::items::TranscriptItems::from_items(items));
     view.final_ids = projection.final_ids;
     view.answered_pages = projection.answered_pages;
     view.question_forms = projection.question_forms;

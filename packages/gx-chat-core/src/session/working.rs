@@ -241,7 +241,7 @@ pub fn quiet_holds_turn_open(state: &crate::state::ChatState) -> bool {
         && !newest_turn_ended(state)
         && !agent_exited(state)
         && (waits_on_user(state)
-            || asks_a_question(state)
+            || (!state.session.interrupted && asks_a_question(state))
             || matches!(state.transcript_view.quiet_card, QuietCard::Left(_)))
 }
 

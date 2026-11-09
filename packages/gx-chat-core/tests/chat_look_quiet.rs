@@ -213,6 +213,23 @@ fn no_tool_call_row_draws_before_a_question_card() {
 }
 
 #[test]
+fn stop_releases_the_question_hold() {
+    let mut rows = turn();
+    rows.push(ask("q1", T0 + 5_000));
+    let mut state = quiet_chat(rows);
+    items(&mut state, T0 + 5_100);
+    // Stop lands after the question call, before its card.
+    working(&mut state, false, T0);
+    state.session.interrupted = true;
+    let stopped = items(&mut state, T0 + 5_200);
+    assert_ne!(
+        kinds(&stopped),
+        ["message"],
+        "the interrupted turn is in view: {stopped:#?}"
+    );
+}
+
+#[test]
 fn a_question_s_sentence_and_its_card_show_once_when_the_answer_starts_a_new_run() {
     let mut rows = turn();
     rows.push(words("s1", T0 + 4_500, "Which color do you want?"));
@@ -314,13 +331,16 @@ fn subagent_chat(agent_work: Option<&str>) -> Vec<String> {
         ..Default::default()
     };
     ghostex_gx_chat_core::extras::subagent_rows::refresh(&mut state, &context);
-    let items = ghostex_gx_chat_core::extras::subagent_rows::rows(&state, &context);
-    kinds(
-        &items
-            .iter()
-            .map(|item: &TranscriptItem| serde_json::to_value(item).unwrap())
-            .collect::<Vec<_>>(),
-    )
+    let items: Vec<Value> = ghostex_gx_chat_core::extras::subagent_rows::rows(&state, &context)
+        .iter()
+        .map(|item: &TranscriptItem| serde_json::to_value(item).unwrap())
+        .collect();
+    // No child reply carries the work button: it stands on its own row everywhere.
+    assert!(
+        items.iter().all(|item| item["workCarrier"].is_null()),
+        "{items:#?}"
+    );
+    kinds(&items)
 }
 
 #[test]
