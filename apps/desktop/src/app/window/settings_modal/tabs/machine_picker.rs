@@ -1,8 +1,10 @@
 //! The machine picker at the top of Settings > Agents, Integrations, Dictation and Updates: this
-//! computer first, then every saved remote machine with its connection state (Dictation lists only
-//! the connected ones, `render_connected_machine_picker`). Picking a connected machine
-//! makes those pages read and install through that machine's gxserver
-//! (`store_machine_gxserver_rpc`); a machine that is not connected shows why and can't be picked.
+//! computer first, then the saved remote machines connected right now, with "Only connected shown"
+//! under the list. Picking one makes those pages read and install through that machine's gxserver
+//! (`store_machine_gxserver_rpc`); a picked machine that disconnects goes back to this computer.
+//!
+//! CDXC:RemoteMachines 2026-11-10 DECISION:
+//! User (Q2108, then Q2112 "Yes, connected only everywhere"): "for machine picker, please don't show disconneted machines. just show text at the bottom saying 'Only connected shown'". Every page's picker lists only connected machines, and a picked machine that is no longer connected falls back to this computer. Supersedes the 2026-10-26 picker that listed every saved machine with why it couldn't be picked. A connected machine that can't do a page's work (an older Ghostex, no agent there) is still listed, and the page says why.
 //!
 //! CDXC:RemoteMachines 2026-10-26 DECISION:
 //! User: "we need to show a dropdown at the top on agents page showing all the machines in settings and allowing us to update different remote machines. also same for integrations page (all should go through gxserver on that remote machine basically)". One pick serves both pages and lasts until Settings closes; the picker shows only once a remote machine is saved.
@@ -10,7 +12,6 @@
 use super::super::catalog::SettingOption;
 use super::super::fields::{
     RowSpec, SettingsPage, setting_row, settings_section, settings_select_with_footer,
-    settings_select_with_unavailable,
 };
 use super::super::palette::SettingsPalette;
 use super::super::store::{SettingsStore, post_store_message};
@@ -102,7 +103,7 @@ fn store_choices(store: &SettingsStore) -> Vec<MachineChoice> {
 }
 
 /// The machine the page shows, as a choice: `None` for this computer, or for a picked machine that
-/// is no longer saved (the pick is dropped).
+/// is no longer saved or no longer connected (the pick is dropped).
 pub(crate) fn picked_machine_choice(
     store: &Entity<SettingsStore>,
     cx: &mut gpui::App,
@@ -111,8 +112,19 @@ pub(crate) fn picked_machine_choice(
     let choice = store_choices(store.read(cx))
         .into_iter()
         .find(|choice| choice.machine_id.as_deref() == Some(picked.as_str()));
-    if choice.is_none() {
+    // Only once the states are known: before they arrive every machine reads as not connected.
+    let known = store
+        .read(cx)
+        .host_payload("remoteMachineConnectStates")
+        .is_some();
+    let gone = choice.is_none()
+        || (known
+            && choice
+                .as_ref()
+                .is_some_and(|choice| choice.unavailable.is_some()));
+    if gone {
         store.update(cx, |store, cx| store.set_picked_machine(None, cx));
+        return None;
     }
     choice
 }
@@ -166,37 +178,6 @@ pub(crate) fn render_machine_picker_described<V: SettingsPage>(
     render_machine_picker_with(page, p, store, describe, None, Vec::new(), window, cx)
 }
 
-/// [`render_machine_picker_described`] listing only this computer and the machines connected
-/// right now, with "Only connected shown" at the bottom of its list. A picked machine that is no
-/// longer connected goes back to this computer.
-///
-/// CDXC:RemoteMachines 2026-11-10 DECISION:
-/// User (Q2108): "for machine picker, please don't show disconneted machines. just show text at the bottom saying 'Only connected shown'". Settings › Dictation only; Agents, Integrations and Updates keep every saved machine with why it can't be picked.
-pub(crate) fn render_connected_machine_picker<V: SettingsPage>(
-    page: &mut V,
-    p: &SettingsPalette,
-    store: &Entity<SettingsStore>,
-    describe: impl Fn(Option<&str>) -> String,
-    window: &mut Window,
-    cx: &mut Context<V>,
-) -> Option<AnyElement> {
-    let known = store
-        .read(cx)
-        .host_payload("remoteMachineConnectStates")
-        .is_some();
-    let picked = store.read(cx).picked_machine().map(str::to_string);
-    // Only once the states are known: before they arrive every machine reads as not connected.
-    if known
-        && let Some(picked) = picked
-        && store_choices(store.read(cx)).iter().any(|choice| {
-            choice.machine_id.as_deref() == Some(picked.as_str()) && choice.unavailable.is_some()
-        })
-    {
-        store.update(cx, |store, cx| store.set_picked_machine(None, cx));
-    }
-    picker_card(page, p, store, describe, None, Vec::new(), true, window, cx)
-}
-
 /// [`render_machine_picker_described`] with `actions` beside the "Machine" heading and `rows`
 /// under the picker in its card (Settings > Updates: Update all machines and how each went).
 #[allow(clippy::too_many_arguments)]
@@ -210,7 +191,7 @@ pub(crate) fn render_machine_picker_with<V: SettingsPage>(
     window: &mut Window,
     cx: &mut Context<V>,
 ) -> Option<AnyElement> {
-    picker_card(page, p, store, describe, actions, rows, false, window, cx)
+    picker_card(page, p, store, describe, actions, rows, window, cx)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -221,7 +202,6 @@ fn picker_card<V: SettingsPage>(
     describe: impl Fn(Option<&str>) -> String,
     actions: Option<AnyElement>,
     rows: Vec<AnyElement>,
-    connected_only: bool,
     window: &mut Window,
     cx: &mut Context<V>,
 ) -> Option<AnyElement> {
@@ -229,14 +209,16 @@ fn picker_card<V: SettingsPage>(
     if choices.len() < 2 {
         return None;
     }
-    let choices: Vec<MachineChoice> = if connected_only {
-        choices
-            .into_iter()
-            .filter(|choice| choice.unavailable.is_none())
-            .collect()
-    } else {
-        choices
-    };
+    let picked = store.read(cx).picked_machine().map(str::to_string);
+    // Until the states arrive every machine reads as not connected: the pick stays named meanwhile.
+    let known = store
+        .read(cx)
+        .host_payload("remoteMachineConnectStates")
+        .is_some();
+    let choices: Vec<MachineChoice> = choices
+        .into_iter()
+        .filter(|choice| choice.unavailable.is_none() || (!known && choice.machine_id == picked))
+        .collect();
     // An `open_select` deep link naming the picker opens it (the preview binary's open state).
     let open_now = store.update(cx, |store, _| {
         let request = store.request_mut();
@@ -250,26 +232,16 @@ fn picker_card<V: SettingsPage>(
     if open_now {
         page.field_states().pending_open_select = Some(PICKER_ID.into());
     }
-    let picked = store.read(cx).picked_machine().map(str::to_string);
     let value = picked.clone().unwrap_or_else(|| THIS_COMPUTER.to_string());
     let options: Vec<SettingOption> = choices
         .iter()
         .map(|choice| SettingOption {
-            label: match &choice.unavailable {
-                Some(reason) => format!("{} · {reason}", choice.name),
-                None => choice.name.clone(),
-            },
+            label: choice.name.clone(),
             value: choice
                 .machine_id
                 .clone()
                 .unwrap_or_else(|| THIS_COMPUTER.to_string()),
         })
-        .collect();
-    // The machine shown stays pickable even once it drops, so the select can still name it.
-    let unavailable: Vec<String> = choices
-        .iter()
-        .filter(|choice| choice.unavailable.is_some() && choice.machine_id != picked)
-        .filter_map(|choice| choice.machine_id.clone())
         .collect();
     let store_for_change = store.clone();
     let on_change =
@@ -277,35 +249,18 @@ fn picker_card<V: SettingsPage>(
             let machine = (value != THIS_COMPUTER).then_some(value);
             store_for_change.update(cx, |store, cx| store.set_picked_machine(machine, cx));
         };
-    let select = if connected_only {
-        settings_select_with_footer(
-            page,
-            p,
-            PICKER_ID,
-            &options,
-            "Only connected shown".into(),
-            &value,
-            Some(PICKER_WIDTH),
-            on_change,
-            window,
-            cx,
-        )
-    } else {
-        settings_select_with_unavailable(
-            page,
-            p,
-            PICKER_ID,
-            &options,
-            &unavailable,
-            &value,
-            Some(PICKER_WIDTH),
-            false,
-            None,
-            on_change,
-            window,
-            cx,
-        )
-    };
+    let select = settings_select_with_footer(
+        page,
+        p,
+        PICKER_ID,
+        &options,
+        "Only connected shown".into(),
+        &value,
+        Some(PICKER_WIDTH),
+        on_change,
+        window,
+        cx,
+    );
     let shown = choices
         .iter()
         .find(|choice| choice.machine_id == picked)

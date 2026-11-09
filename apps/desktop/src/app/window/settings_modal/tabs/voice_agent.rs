@@ -635,7 +635,7 @@ impl VoiceAgentTab {
         // CDXC:VoiceMode 2026-11-05 DECISION: User (Q1275): Dictate's settings belong to each
         // computer, so the page carries the machine picker Agents and Integrations use; a remote
         // machine shows its Dictate, while the keys stay this computer's.
-        if let Some(picker) = super::machine_picker::render_connected_machine_picker(
+        if let Some(picker) = super::machine_picker::render_machine_picker_described(
             self,
             p,
             &self.store.clone(),
