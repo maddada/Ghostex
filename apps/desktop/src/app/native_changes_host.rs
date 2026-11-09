@@ -284,7 +284,7 @@ impl GhostexGpuiApp {
                 cx,
             ),
             ChangesRequest::WorkingTreeChanged { project_key } => {
-                self.git_refresh_scoped(&project_key, cx);
+                self.git_refresh_scoped(&project_key, true, cx);
             }
             ChangesRequest::HideTestFiles(hide) => {
                 let mut settings = shared_settings::shared_sidebar_settings_snapshot()

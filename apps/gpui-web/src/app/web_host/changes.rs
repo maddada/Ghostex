@@ -158,7 +158,7 @@ impl GhostexGpuiApp {
                 cx,
             ),
             ChangesRequest::WorkingTreeChanged { project_key } => {
-                self.git_refresh_scoped(&project_key, cx)
+                self.git_refresh_scoped(&project_key, true, cx)
             }
         }
     }

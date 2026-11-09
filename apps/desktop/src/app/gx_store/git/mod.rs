@@ -53,6 +53,10 @@ pub(crate) struct GitHost {
     /// Git state describes, and the one the last switch-driven refresh ran for.
     pub(super) active_scope: Option<String>,
     pub(super) last_refresh_scope: Option<String>,
+    /// A remote project whose automatic read could not run (its computer was not connected yet) or
+    /// failed. The poll reads it again, silently, once the computer's stream is live
+    /// (`CDXC:Git 2026-11-09`).
+    pub(super) retry_remote_scope: Option<String>,
     /// The active project's state, as read. Preferences are laid over it when it is drawn.
     pub(super) state: GitState,
     /// Local Git states by project id, and GitHub answers by project id (`CDXC:Git 2026-07-29`).
@@ -83,6 +87,7 @@ impl Default for GitHost {
         Self {
             active_scope: None,
             last_refresh_scope: None,
+            retry_remote_scope: None,
             state: GitState::default(),
             state_memo: GitTtlMemo::new(GIT_STATE_MEMO_TTL_MS),
             git_hub_memo: GitTtlMemo::new(GIT_HUB_MEMO_TTL_MS),

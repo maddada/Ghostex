@@ -170,6 +170,15 @@ impl GhostexGpuiApp {
             _ => return,
         };
         self.git_refresh_diff_stats(scope.remote.clone(), &probe.key, cx);
+        // A remote project whose automatic Git read could not run or failed (its computer was
+        // still connecting or asleep) is read again, silently, now that its stream is live
+        // (`CDXC:Git 2026-11-09`).
+        if scope.is_remote() {
+            let scoped_id = probe.key.to_workspace_project_id();
+            if self.gx_store.git.retry_remote_scope.as_deref() == Some(scoped_id.as_str()) {
+                self.git_refresh_scoped(&scoped_id, true, cx);
+            }
+        }
         if !scope.is_remote() && self.git_scope_is_active(&scope) {
             self.git_refresh_state(
                 scope,

@@ -81,17 +81,29 @@ pub fn remote_git_unavailable_toast(
     (title, description)
 }
 
-/// The toast when a remote project's Git state is asked for while its computer is not connected.
-pub fn remote_git_disconnected_toast(machine_name: Option<&str>) -> (String, String) {
+/// The plain message when the user asks for a remote project's Git state (or acts on it) while its
+/// computer is not connected: `(title, description)`.
+///
+/// CDXC:Git 2026-11-09 WHY:
+/// "Git unavailable on Windows: Windows is not connected" showed on every app start, because the
+/// automatic read for the restored remote project ran before the saved computer had connected (or
+/// while it was asleep) and its miss was shown as a notice. Automatic reads now stay silent; only
+/// the user's own Git action shows this, in plain words, and while the computer is still being
+/// connected it says so instead of claiming it is not connected.
+pub fn remote_git_disconnected_toast(
+    machine_name: Option<&str>,
+    connecting: bool,
+) -> (String, String) {
     let name = machine_name.map(str::trim).filter(|name| !name.is_empty());
-    let title = match name {
-        Some(name) => format!("Git unavailable on {name}"),
-        None => "Git unavailable on remote computer".to_string(),
+    let title = match (connecting, name) {
+        (true, Some(name)) => format!("Connecting to {name}\u{2026}"),
+        (true, None) => "Connecting to the remote computer\u{2026}".to_string(),
+        (false, Some(name)) => format!("{name} isn't connected right now"),
+        (false, None) => "The remote computer isn't connected right now".to_string(),
     };
-    let subject = name.unwrap_or("The remote computer");
     (
         title,
-        format!("{subject} is not connected. Reconnect it to see its Git state."),
+        "Ghostex will show its Git state once it connects.".to_string(),
     )
 }
 
@@ -182,13 +194,17 @@ mod tests {
     }
 
     #[test]
-    fn a_disconnected_computer_is_named() {
+    fn a_disconnected_computer_is_named_plainly_and_a_connecting_one_says_so() {
         assert_eq!(
-            remote_git_disconnected_toast(Some("Studio")),
+            remote_git_disconnected_toast(Some("Studio"), false),
             (
-                "Git unavailable on Studio".to_string(),
-                "Studio is not connected. Reconnect it to see its Git state.".to_string()
+                "Studio isn't connected right now".to_string(),
+                "Ghostex will show its Git state once it connects.".to_string()
             )
+        );
+        assert_eq!(
+            remote_git_disconnected_toast(Some("Studio"), true).0,
+            "Connecting to Studio\u{2026}"
         );
     }
 }

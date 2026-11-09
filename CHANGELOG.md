@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **No more "Git unavailable on Windows" notice at every start:** Ghostex no longer shows a notice when a saved computer isn't connected yet (or is asleep) while it reads that project's Git in the background; the Git button just stays quiet and fills in once the computer connects. Clicking Commit or opening the Git menu for a project on a computer that isn't connected now says so plainly ("Windows isn't connected right now", or "Connecting to Windows…" while it connects) in the standard notice look.
 - **Settings' tab strips and pickers keep their labels off the edges at narrow widths:** Remote's Easy Connect / Tailscale / Remote machines / Advanced strip and its Connect a phone / Connect a computer picker give every label side padding and shorten it with an ellipsis, instead of letting it touch or cross its segment edge, when the window is narrow.
 - **New installs show no status line under the chat box:** nothing is pinned there for any agent until you star items in Context details; everyone who already used Ghostex keeps the line they had, on the computer and the phone, and Reset to recommended still pins the suggested setup.
 - **Settings > Remote's Relay picker fits its labels, and each option has an (i):** "Public relays only" no longer spills past its highlight, the picker spans the card, and hovering the (i) after Ghostex relay, Public relays only or Custom explains what the option does.

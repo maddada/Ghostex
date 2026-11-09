@@ -12,6 +12,7 @@ use ghostex_gx_core::git_menu::{
 use serde_json::Value;
 
 use super::review::GitReviewConfirm;
+use super::scope::ScopeMiss;
 use super::toasts::ToastOptions;
 use crate::GhostexGpuiApp;
 use crate::app::native_changes::{ChangesScope, ChangesTarget, CommitAction};
@@ -99,6 +100,12 @@ impl GhostexGpuiApp {
     ) {
         let scope = match self.git_scope_for_project(project_key) {
             Ok(scope) => scope,
+            Err(ScopeMiss::RemoteUnavailable) => {
+                let machine_id =
+                    ghostex_gx_core::ProjectKey::parse_workspace_project_id(project_key)
+                        .and_then(|key| key.machine.remote_id().map(str::to_string));
+                return self.git_remote_disconnected_notice(machine_id.as_deref(), cx);
+            }
             Err(_) => {
                 return self.git_toast(
                     GitToastLevel::Warning,

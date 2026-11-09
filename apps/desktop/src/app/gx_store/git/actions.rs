@@ -163,11 +163,16 @@ impl GhostexGpuiApp {
         };
         let scope = match resolved {
             Ok(scope) => scope,
-            Err(ScopeMiss::RemoteUnavailable) => {
-                return self.git_remote_actions_unavailable(cx);
+            Err(ScopeMiss::RemoteUnavailable) | Err(ScopeMiss::Unknown) if names_remote => {
+                let key = match &target {
+                    GitActionTarget::Group(id) => ghostex_gx_core::group_project(id),
+                    GitActionTarget::Project(id) => ProjectKey::parse_workspace_project_id(id),
+                };
+                let machine_id = key.and_then(|key| key.machine.remote_id().map(str::to_string));
+                return self.git_remote_disconnected_notice(machine_id.as_deref(), cx);
             }
-            Err(ScopeMiss::Unknown) if names_remote => {
-                return self.git_remote_actions_unavailable(cx);
+            Err(ScopeMiss::RemoteUnavailable) => {
+                return self.git_remote_disconnected_notice(None, cx);
             }
             Err(ScopeMiss::Unknown) => {
                 return self.git_toast(
@@ -207,15 +212,6 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
-    }
-
-    fn git_remote_actions_unavailable(&mut self, cx: &mut gpui::Context<Self>) {
-        self.git_toast(
-            GitToastLevel::Warning,
-            "Remote Git unavailable",
-            ToastOptions::described("Reconnect the remote machine before using Git actions."),
-            cx,
-        );
     }
 
     /// `focusProjectId`: the store's focus moves to the project and, on this computer, the Agents

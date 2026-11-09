@@ -36,6 +36,10 @@ pub(crate) struct GitReadOptions {
     /// Draw the menu busy while the read runs.
     pub(crate) publish_busy: bool,
     pub(crate) toast_on_failure: bool,
+    /// An automatic read (startup, a project switch, a file change, the poll): a failure never
+    /// shows a notice, the Git state just stays in its quiet "not connected" look and the read is
+    /// tried again when the computer connects (`CDXC:Git 2026-11-09`).
+    pub(crate) background: bool,
 }
 
 impl GhostexGpuiApp {
@@ -62,7 +66,7 @@ impl GhostexGpuiApp {
             // A remote selection is refreshed by the machine-scoped project, or the first Commit
             // menu displays the previous computer's Git state until reopened.
             self.gx_store.git.last_refresh_scope = Some(active.clone());
-            self.git_refresh_scoped(&active, cx);
+            self.git_refresh_scoped(&active, true, cx);
             return;
         }
         let scope = match self.git_scope_for_project(&active) {
@@ -93,12 +97,27 @@ impl GhostexGpuiApp {
     }
 
     /// The menu opened, or a scoped refresh was asked for (`refreshTitlebarGitMenuState`,
-    /// `refreshGitStateForMessage`). The read is forced, drawn busy, and a failure is a toast.
+    /// `refreshGitStateForMessage`). The read is forced and drawn busy. `background` marks an
+    /// automatic refresh (startup, a project switch, a file change): it never shows a notice, and
+    /// a computer that is not connected yet leaves the quiet "not connected" state until the poll
+    /// finds it live. A refresh the user asked for (the menu opening) says so plainly instead.
     ///
     /// CDXC:Git 2026-06-24-21:26:
     /// A refresh names its owner (a local project or a remote one). Scoped remote rows must never
     /// refresh the active local project by accident.
-    pub(crate) fn git_refresh_scoped(&mut self, scoped_id: &str, cx: &mut gpui::Context<Self>) {
+    ///
+    /// CDXC:Git 2026-11-09 WHY:
+    /// "Git unavailable on Windows: Windows is not connected" appeared on every start because the
+    /// restored remote project's automatic refresh ran before the saved computer had connected.
+    pub(crate) fn git_refresh_scoped(
+        &mut self,
+        scoped_id: &str,
+        background: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.gx_store.git.retry_remote_scope.as_deref() == Some(scoped_id) {
+            self.gx_store.git.retry_remote_scope = None;
+        }
         match self.git_scope_for_project(scoped_id) {
             Ok(scope) if scope.is_remote() => {
                 if self.git_scope_is_active(&scope) {
@@ -108,8 +127,15 @@ impl GhostexGpuiApp {
                     };
                     self.git_publish_menu_state(cx);
                 }
-                self.git_refresh_state(scope, GitReadOptions::default(), cx)
-                    .detach();
+                self.git_refresh_state(
+                    scope,
+                    GitReadOptions {
+                        background,
+                        ..GitReadOptions::default()
+                    },
+                    cx,
+                )
+                .detach();
             }
             Ok(scope) => {
                 self.git_refresh_state(
@@ -117,7 +143,8 @@ impl GhostexGpuiApp {
                     GitReadOptions {
                         force: true,
                         publish_busy: true,
-                        toast_on_failure: true,
+                        toast_on_failure: !background,
+                        background,
                         ..GitReadOptions::default()
                     },
                     cx,
@@ -127,15 +154,19 @@ impl GhostexGpuiApp {
             Err(ScopeMiss::RemoteUnavailable) => {
                 let machine_id = ghostex_gx_core::ProjectKey::parse_workspace_project_id(scoped_id)
                     .and_then(|key| key.machine.remote_id().map(str::to_string));
-                let name = machine_id.as_deref().and_then(remote_machine_saved_name);
-                let (title, description) = remote_git_disconnected_toast(name.as_deref());
-                self.git_toast(
-                    GitToastLevel::Warning,
-                    &title,
-                    remote_git_toast_options(machine_id.as_deref(), description),
-                    cx,
-                );
+                if background {
+                    // The Git button and badge fall back to their quiet "not connected" state; the
+                    // poll reads again once the computer's stream is live.
+                    self.gx_store.git.retry_remote_scope = Some(scoped_id.to_string());
+                    if self.git_active_scoped_project_id().as_deref() == Some(scoped_id) {
+                        self.gx_store.git.state = GitState::default();
+                        self.git_publish_menu_state(cx);
+                    }
+                    return;
+                }
+                self.git_remote_disconnected_notice(machine_id.as_deref(), cx);
             }
+            Err(ScopeMiss::Unknown) if background => {}
             Err(ScopeMiss::Unknown) => self.git_toast(
                 GitToastLevel::Warning,
                 "Git unavailable",
@@ -145,13 +176,41 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// What the user sees when they ask for a remote project's Git while its computer is not live:
+    /// one plain notice in the standard look, saying "connecting" while the connection is being
+    /// made and "isn't connected right now" otherwise.
+    pub(crate) fn git_remote_disconnected_notice(
+        &mut self,
+        machine_id: Option<&str>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let name = machine_id.and_then(remote_machine_saved_name);
+        let connecting = machine_id.is_some_and(|machine_id| {
+            let machine = ghostex_gx_core::MachineId::Remote(machine_id.to_string());
+            self.gx_store
+                .core
+                .presentation()
+                .machine(&machine)
+                .is_some_and(|entry| {
+                    entry.connection().phase == ghostex_gx_core::ConnectionPhase::Connecting
+                })
+        });
+        let (title, description) = remote_git_disconnected_toast(name.as_deref(), connecting);
+        self.git_toast(
+            GitToastLevel::Info,
+            &title,
+            remote_git_toast_options(machine_id, description),
+            cx,
+        );
+    }
+
     /// The titlebar's `refresh` selector: the menu is opening.
     pub(crate) fn git_refresh_titlebar_menu(&mut self, cx: &mut gpui::Context<Self>) {
         let Some(active) = self.git_active_scoped_project_id() else {
             return;
         };
         match self.git_scope_for_project(&active) {
-            Ok(scope) if scope.is_remote() => self.git_refresh_scoped(&active, cx),
+            Ok(scope) if scope.is_remote() => self.git_refresh_scoped(&active, false, cx),
             Ok(scope) => self
                 .git_refresh_state(
                     scope,
@@ -162,7 +221,7 @@ impl GhostexGpuiApp {
                     cx,
                 )
                 .detach(),
-            Err(ScopeMiss::RemoteUnavailable) => self.git_refresh_scoped(&active, cx),
+            Err(ScopeMiss::RemoteUnavailable) => self.git_refresh_scoped(&active, false, cx),
             Err(ScopeMiss::Unknown) => {}
         }
     }
@@ -254,7 +313,11 @@ impl GhostexGpuiApp {
             Err(error) if scope.is_remote() => {
                 let name = scope.machine_name();
                 let failure = remote_git_read_failure(&error);
-                if let RemoteGitReadStep::Toast { title, description } =
+                if options.background {
+                    // An automatic read that still fails after its quiet retries shows nothing; the
+                    // poll tries again.
+                    self.gx_store.git.retry_remote_scope = Some(scope.scoped_id());
+                } else if let RemoteGitReadStep::Toast { title, description } =
                     plan_remote_git_read_failure(attempt, name.as_deref(), &failure)
                 {
                     self.git_toast(
