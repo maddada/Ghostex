@@ -9,6 +9,7 @@
 //! applied back to the modal the way the app rehydrates it.
 //! `dictation`, `dictation-retired`, `dictation-openai` and `voice-agent` are Settings › Dictation and
 //! Voice Agent (settings_voice.rs).
+//! `page-<id>` opens the rail page with that id (`page-connectors`, `page-tools`).
 //! `GHOSTEX_NATIVE_MODAL_DEMO_GLASS=1` previews the frosted palette.
 //! `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS_WIDTH=<points>` opens the dialog narrower or wider than its
 //! base 900 (before the app's enlargement), to check a page at another window width.
@@ -292,6 +293,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             json!({ "initialSection": "chat" })
         }
         "terminal" | "pick-color" => json!({ "initialSection": "terminal" }),
+        // `page-<id>`: that rail page (`page-connectors`, `page-tools`), for pages with no state of their own.
+        state if state.starts_with("page-") => json!({ "initialTab": &state["page-".len()..] }),
         "tags" => {
             json!({ "initialSection": "sidebarTags", "initialSidebarTagsAction": "createTag" })
         }
@@ -356,9 +359,13 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     let width = super::env("GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS_WIDTH")
         .parse::<f32>()
         .unwrap_or(SETTINGS_MODAL_WIDTH);
+    // `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS_HEIGHT=<points>`: taller, so a whole page fits one capture.
+    let height = super::env("GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS_HEIGHT")
+        .parse::<f32>()
+        .unwrap_or(SETTINGS_MODAL_HEIGHT);
     let (window, view) = super::open_settings_dialog_window(
         width,
-        SETTINGS_MODAL_HEIGHT,
+        height,
         move |window, cx| cx.new(|cx| GpuiSettingsModalWindow::new(config, host, window, cx)),
         cx,
     );
