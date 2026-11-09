@@ -116,8 +116,8 @@ impl NativeChatView {
                 .rounded_full()
                 .border(px(s))
                 .border_color(p.foreground.opacity(0.1))
-                .text_size(px(11.5 * s))
-                .line_height(px(16.0 * s))
+                .text_size(px(13.0 * s))
+                .line_height(px(19.0 * s))
                 .whitespace_nowrap()
                 .text_color(p.foreground)
                 .chat_cursor_pointer()
@@ -126,7 +126,7 @@ impl NativeChatView {
                 .child(
                     svg()
                         .path("titlebar/file-text.svg")
-                        .size(px(12.0 * s))
+                        .size(px(14.0 * s))
                         .flex_shrink_0()
                         .text_color(p.card_muted),
                 )

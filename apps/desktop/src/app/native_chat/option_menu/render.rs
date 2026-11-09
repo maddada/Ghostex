@@ -60,7 +60,7 @@ impl ChatOptionMenuPanel {
                         .first()
                         .is_some_and(|row| row["context"]["details"].is_array())
                     {
-                        320.0
+                        380.0
                     } else if children.iter().any(|row| row["dot"].is_string()) {
                         // The branches list: a title, its time and a lifecycle dot per row.
                         288.0

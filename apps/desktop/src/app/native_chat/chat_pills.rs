@@ -22,9 +22,9 @@ use serde_json::{Value, json};
 use std::{cell::Cell, rc::Rc};
 
 /// A menu's header line, the gap between its sections and its footer line ("N more"), unscaled.
-pub(super) const MENU_HEADER_HEIGHT: f32 = 24.0;
+pub(super) const MENU_HEADER_HEIGHT: f32 = 28.0;
 pub(super) const MENU_SECTION_GAP: f32 = 4.0;
-pub(super) const MENU_FOOTER_HEIGHT: f32 = 22.0;
+pub(super) const MENU_FOOTER_HEIGHT: f32 = 26.0;
 
 /// The amber of the ? pill's corner dot and a running pill's (`corner_dot`).
 pub(super) const ATTENTION_COLOR: u32 = 0xf5a524;
@@ -103,7 +103,7 @@ pub(super) fn inline_dots(dots: &[(gpui::Hsla, String)], p: &ChatAppearance) -> 
                 .gap(px(3.0 * s))
                 .child(
                     div()
-                        .size(px(6.0 * s))
+                        .size(px(7.0 * s))
                         .rounded_full()
                         .flex_shrink_0()
                         .bg(*color),
@@ -175,7 +175,7 @@ fn icon(id: &str) -> &'static str {
 
 fn menu_width(id: &str) -> f32 {
     match id {
-        "tasks" => 360.0,
+        "tasks" => 420.0,
         super::coordinator_board::BOARD_MENU => super::coordinator_board::BOARD_WIDTH,
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_MENU_WIDTH,
         super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_WIDTH,
@@ -184,7 +184,7 @@ fn menu_width(id: &str) -> f32 {
         }
         super::relayed_approval::APPROVALS_MENU => super::relayed_approval::APPROVALS_MENU_WIDTH,
         super::coordinator_intro::INTRO_MENU => super::coordinator_intro::INTRO_MENU_WIDTH,
-        _ => 440.0,
+        _ => 520.0,
     }
 }
 
@@ -234,7 +234,13 @@ pub(super) fn pill_menu_header(
                 .text_color(p.muted)
                 .flex_shrink_0(),
         )
-        .child(div().flex_shrink_0().text_color(p.foreground).child(title))
+        .child(
+            div()
+                .flex_shrink_0()
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(p.foreground)
+                .child(title),
+        )
         .child(
             div()
                 .flex_1()
@@ -278,7 +284,7 @@ pub(super) fn pill_menu_column(
 fn pill_glyph(icon: &'static str, color: gpui::Hsla, s: f32) -> AnyElement {
     svg()
         .path(icon)
-        .size(px(14.0 * s))
+        .size(px(16.0 * s))
         .text_color(color)
         .into_any_element()
 }
@@ -300,13 +306,13 @@ fn icon_pill(
         .items_center()
         .justify_center()
         .flex_shrink_0()
-        .w(px(28.0 * s))
+        .w(px(32.0 * s))
         .py(px(2.0 * s))
         .rounded_full()
         .border(px(s))
         .chat_cursor_pointer()
         .focus_visible(|style| style.border_color(p.ring))
-        .child(div().h(px(16.0 * s)).flex().items_center().child(content))
+        .child(div().h(px(19.0 * s)).flex().items_center().child(content))
 }
 
 impl NativeChatView {
@@ -349,15 +355,15 @@ impl NativeChatView {
                 .rounded_full()
                 .border(px(s))
                 .border_color(p.foreground.opacity(0.1))
-                .text_size(px(11.5 * s))
-                .line_height(px(16.0 * s))
+                .text_size(px(13.0 * s))
+                .line_height(px(19.0 * s))
                 .whitespace_nowrap()
                 .chat_cursor_pointer()
                 .focus_visible(|style| style.border_color(p.ring))
                 .hover(|style| style.bg(p.foreground.opacity(0.06)))
                 .child(
                     div()
-                        .h(px(16.0 * s))
+                        .h(px(19.0 * s))
                         .flex()
                         .items_center()
                         .child(pill_glyph("titlebar/question-mark.svg", p.card_muted, s)),
@@ -469,8 +475,8 @@ impl NativeChatView {
             .rounded_full()
             .border(px(s))
             .border_color(p.foreground.opacity(0.1))
-            .text_size(px(11.5 * s))
-            .line_height(px(16.0 * s))
+            .text_size(px(13.0 * s))
+            .line_height(px(19.0 * s))
             .whitespace_nowrap()
             .text_color(p.card_muted)
             .chat_cursor_pointer()
@@ -484,7 +490,7 @@ impl NativeChatView {
             .child(
                 svg()
                     .path(icon(&id))
-                    .size(px(12.0 * s))
+                    .size(px(14.0 * s))
                     .flex_shrink_0()
                     .text_color(p.card_muted),
             )
@@ -492,7 +498,7 @@ impl NativeChatView {
             .when(switch == Some(true), |pill| {
                 pill.child(
                     div()
-                        .size(px(6.0 * s))
+                        .size(px(7.0 * s))
                         .rounded_full()
                         .flex_shrink_0()
                         .bg(rgb(AUTOPILOT_ON_COLOR)),

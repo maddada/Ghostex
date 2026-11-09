@@ -17,7 +17,7 @@ use std::time::Duration;
 
 /// One task row and the list's cap, in unscaled pixels: fixed heights, so the floating menu knows
 /// its size before it opens (`tasks_menu_height`).
-const ROW_HEIGHT: f32 = 22.0;
+const ROW_HEIGHT: f32 = 26.0;
 const ROW_GAP: f32 = 2.0;
 const LIST_MAX: f32 = 220.0;
 
@@ -92,7 +92,7 @@ impl NativeChatView {
                 .flex()
                 .items_center()
                 .chat_cursor_pointer()
-                .text_size(px(12.0 * s))
+                .text_size(px(13.0 * s))
                 .text_color(p.card_muted)
                 .hover(|style| style.text_color(p.foreground))
                 .child(fold)
@@ -171,7 +171,7 @@ impl NativeChatView {
             .min_w_0()
             .flex_shrink_0()
             .h(px(ROW_HEIGHT * s))
-            .text_size(px(12.0 * s))
+            .text_size(px(13.0 * s))
             .tooltip(move |window, cx| {
                 gpui_component::tooltip::Tooltip::new(title.clone()).build(window, cx)
             })
@@ -201,7 +201,7 @@ impl NativeChatView {
                 this.child(
                     div()
                         .flex_shrink_0()
-                        .text_size(px(11.0 * s))
+                        .text_size(px(13.0 * s))
                         .text_color(p.card_muted)
                         .child(blocked),
                 )

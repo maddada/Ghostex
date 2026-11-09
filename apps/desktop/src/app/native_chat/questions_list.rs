@@ -24,12 +24,12 @@ use std::collections::HashSet;
 /// The list's id among the pill menus, and its trigger's.
 pub(super) const QUESTIONS_MENU: &str = "resources";
 pub(super) const QUESTIONS_TRIGGER: &str = "chat-pill-resources";
-pub(super) const QUESTIONS_MENU_WIDTH: f32 = 440.0;
+pub(super) const QUESTIONS_MENU_WIDTH: f32 = 520.0;
 
 /// One section header, one row and the list's cap, unscaled: fixed, so the menu knows its height
 /// before it opens.
-const SECTION_HEIGHT: f32 = 22.0;
-const ROW_HEIGHT: f32 = 26.0;
+const SECTION_HEIGHT: f32 = 26.0;
+const ROW_HEIGHT: f32 = 30.0;
 const LIST_MAX: f32 = 380.0;
 
 /// How often an open list redraws so its ages stay current.
@@ -109,7 +109,7 @@ fn remove_action(status: &str, kind: &str, id: &str) -> Option<(&'static str, Va
 }
 
 /// A row's hover button is this wide, with this gap between two of them.
-const BUTTON_SIZE: f32 = 20.0;
+const BUTTON_SIZE: f32 = 22.0;
 const BUTTON_GAP: f32 = 2.0;
 
 /// The list's folding, per chat.
@@ -292,10 +292,10 @@ impl NativeChatView {
             .flex()
             .items_center()
             .gap(px(4.0 * s))
-            .h(px(20.0 * s))
+            .h(px(24.0 * s))
             .px(px(6.0 * s))
             .rounded(px(5.0 * s))
-            .text_size(px(12.0 * s))
+            .text_size(px(13.0 * s))
             .text_color(p.card_muted)
             .chat_cursor_pointer()
             .hover(|style| {
@@ -307,7 +307,7 @@ impl NativeChatView {
             .child(
                 svg()
                     .path("titlebar/chevron-down.svg")
-                    .size(px(11.0 * s))
+                    .size(px(13.0 * s))
                     .text_color(p.card_muted),
             )
             .child(
@@ -423,7 +423,7 @@ impl NativeChatView {
                     .flex()
                     .items_center()
                     .px(px(4.0 * s))
-                    .text_size(px(12.0 * s))
+                    .text_size(px(13.0 * s))
                     .text_color(p.card_muted)
                     .child("Nothing of this kind in this chat yet."),
             );
@@ -492,7 +492,7 @@ impl NativeChatView {
             .justify_center()
             .gap(px(6.0 * s))
             .rounded(px(5.0 * s))
-            .text_size(px(12.0 * s))
+            .text_size(px(13.0 * s))
             .text_color(p.card_muted)
             .chat_cursor_pointer()
             .hover(|style| {
@@ -540,7 +540,7 @@ impl NativeChatView {
             .items_center()
             .gap(px(5.0 * s))
             .px(px(4.0 * s))
-            .text_size(px(11.0 * s))
+            .text_size(px(13.0 * s))
             .text_color(p.card_muted)
             .chat_cursor_pointer()
             .hover(|style| style.text_color(p.foreground))
@@ -551,7 +551,7 @@ impl NativeChatView {
                     } else {
                         "titlebar/chevron-down.svg"
                     })
-                    .size(px(11.0 * s))
+                    .size(px(13.0 * s))
                     .flex_shrink_0()
                     .text_color(p.card_muted),
             )
@@ -642,7 +642,7 @@ impl NativeChatView {
                 this.child(
                     div()
                         .flex_shrink_0()
-                        .text_size(px(11.0 * s))
+                        .text_size(px(13.0 * s))
                         .text_color(p.card_muted)
                         .when(hide_for_buttons, |this| {
                             this.group_hover(group.clone(), |style| style.opacity(0.0))
@@ -654,7 +654,7 @@ impl NativeChatView {
                 this.child(
                     div()
                         .flex_shrink_0()
-                        .text_size(px(11.0 * s))
+                        .text_size(px(13.0 * s))
                         .text_color(p.muted)
                         .font_features(FontFeatures(vec![("tnum".into(), 1)].into()))
                         .when(hide_for_buttons, |this| {
@@ -728,7 +728,7 @@ impl NativeChatView {
             .pl(px(if headed { 20.0 } else { 6.0 } * s))
             .pr(px(4.0 * s))
             .rounded(px(5.0 * s))
-            .text_size(px(12.0 * s))
+            .text_size(px(13.0 * s))
             .chat_cursor_pointer()
             .hover(|style| style.bg(p.foreground.opacity(0.06)))
             .tooltip(move |window, cx| {
@@ -756,7 +756,7 @@ impl NativeChatView {
                         .flex_shrink_0()
                         .max_w(px(140.0 * s))
                         .truncate()
-                        .text_size(px(11.0 * s))
+                        .text_size(px(13.0 * s))
                         .text_color(p.card_muted)
                         .child(thread),
                 )

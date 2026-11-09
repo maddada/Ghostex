@@ -17,7 +17,7 @@ use std::time::Duration;
 
 /// One task row, the "+N more" line and the gap between them, in unscaled pixels: fixed heights,
 /// so the floating menu knows its size before it opens (`background_menu_height`).
-const ROW_HEIGHT: f32 = 22.0;
+const ROW_HEIGHT: f32 = 26.0;
 const ROW_GAP: f32 = 4.0;
 
 /// The Background pill's menu: the header line, one row per named task and "+N more".

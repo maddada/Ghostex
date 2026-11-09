@@ -16,17 +16,17 @@ pub(super) fn height(
     let scale = appearance.scale;
     let system = gpui::WindowTextSystem::new(cx.text_system().clone());
     let font = gpui::font(appearance.font.clone());
-    let mut height = 12.0 + 16.0 + 8.0 + 16.5 + 8.0 + 4.0 + 24.0;
+    let mut height = 12.0 + 19.0 + 8.0 + 19.0 + 8.0 + 4.0 + 28.0;
     if context["usedPercentage"].is_number() {
         height += 14.0;
     }
     if let Some(groups) = context["details"].as_array() {
-        height += 8.0 + 4.0 + 1.0 + 8.0 + 24.0;
+        height += 8.0 + 4.0 + 1.0 + 8.0 + 28.0;
         if groups.is_empty() {
-            height += 20.5;
+            height += 23.5;
         }
         for group in groups {
-            height += 24.0;
+            height += 28.0;
             for item in group["items"].as_array().into_iter().flatten() {
                 let label = item["label"].as_str().unwrap_or_default();
                 let value = item["value"].as_str().unwrap_or_default();
@@ -38,7 +38,7 @@ pub(super) fn height(
                 let label_width = system
                     .shape_line(
                         label.to_owned().into(),
-                        px(11.0 * scale),
+                        px(13.0 * scale),
                         &[run(label)],
                         None,
                     )
@@ -47,16 +47,16 @@ pub(super) fn height(
                     / scale;
                 let lines = system.shape_text(
                     value.to_owned().into(),
-                    px(11.0 * scale),
+                    px(13.0 * scale),
                     &[run(value)],
                     Some(px((width - 26.0 - label_width - 10.0).max(1.0) * scale)),
                     None,
                 )?;
                 height += lines
                     .iter()
-                    .map(|line| line.size(px(16.0 * scale)).height.as_f32() / scale)
+                    .map(|line| line.size(px(19.0 * scale)).height.as_f32() / scale)
                     .sum::<f32>()
-                    .max(16.0);
+                    .max(19.0);
             }
         }
     }
@@ -77,8 +77,8 @@ impl ChatOptionMenuPanel {
             .flex()
             .flex_col()
             .gap(px(8.0 * scale))
-            .text_size(px(11.0 * scale))
-            .line_height(px(16.5 * scale))
+            .text_size(px(13.0 * scale))
+            .line_height(px(19.0 * scale))
             .text_color(muted)
             .child(
                 div()
@@ -86,10 +86,10 @@ impl ChatOptionMenuPanel {
                     .items_center()
                     .justify_between()
                     .gap(px(12.0 * scale))
-                    .h(px(16.0 * scale))
+                    .h(px(19.0 * scale))
                     .child(
                         div()
-                            .text_size(px(12.0 * scale))
+                            .text_size(px(13.0 * scale))
                             .font_weight(gpui::FontWeight::MEDIUM)
                             .child("Context window"),
                     )
@@ -118,7 +118,7 @@ impl ChatOptionMenuPanel {
         content = content
             .child(
                 div()
-                    .h(px(16.5 * scale))
+                    .h(px(19.0 * scale))
                     .child("Compacts automatically as the window fills."),
             )
             .child(
@@ -127,8 +127,8 @@ impl ChatOptionMenuPanel {
                     .role(gpui::Role::Button)
                     .aria_label("Compact context")
                     .mt(px(4.0 * scale))
-                    .h(px(24.0 * scale))
-                    .text_size(px(12.0 * scale))
+                    .h(px(28.0 * scale))
+                    .text_size(px(13.0 * scale))
                     .w_full()
                     .flex()
                     .items_center()
@@ -166,7 +166,7 @@ impl ChatOptionMenuPanel {
                         .flex()
                         .items_center()
                         .justify_between()
-                        .h(px(24.0 * scale))
+                        .h(px(28.0 * scale))
                         .child(
                             div()
                                 .font_weight(gpui::FontWeight::MEDIUM)
@@ -178,7 +178,7 @@ impl ChatOptionMenuPanel {
                                 .when(self.selected == Some(1), |item| item.bg(hover))
                                 .role(gpui::Role::Button)
                                 .aria_label("Choose which details to show")
-                                .size(px(24.0 * scale))
+                                .size(px(28.0 * scale))
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -186,7 +186,7 @@ impl ChatOptionMenuPanel {
                                 .child(
                                     svg()
                                         .path("titlebar/pencil.svg")
-                                        .size(px(12.0 * scale))
+                                        .size(px(14.0 * scale))
                                         .text_color(muted),
                                 )
                                 .on_click(cx.listener(|this, _, _, cx| {
@@ -197,16 +197,16 @@ impl ChatOptionMenuPanel {
                         ),
                 );
             if groups.is_empty() {
-                details = details.child(div().h(px(20.0 * scale)).child("Nothing selected."));
+                details = details.child(div().h(px(23.5 * scale)).child("Nothing selected."));
             }
             for group in groups {
                 details = details.child(
                     div()
                         .pt(px(8.0 * scale))
                         .pb(px(2.0 * scale))
-                        .h(px(24.0 * scale))
-                        .text_size(px(9.5 * scale))
-                        .line_height(px(14.0 * scale))
+                        .h(px(28.0 * scale))
+                        .text_size(px(11.0 * scale))
+                        .line_height(px(16.0 * scale))
                         .text_color(muted.opacity(0.7))
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .child(group["label"].as_str().unwrap_or_default().to_uppercase()),
@@ -214,8 +214,8 @@ impl ChatOptionMenuPanel {
                 for item in group["items"].as_array().into_iter().flatten() {
                     details = details.child(
                         div()
-                            .min_h(px(16.0 * scale))
-                            .line_height(px(16.0 * scale))
+                            .min_h(px(19.0 * scale))
+                            .line_height(px(19.0 * scale))
                             .flex()
                             .justify_between()
                             .gap(px(10.0 * scale))

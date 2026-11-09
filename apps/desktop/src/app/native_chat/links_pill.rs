@@ -97,8 +97,8 @@ impl NativeChatView {
             .border(px(s))
             .when(pill.suggested, |pill| pill.border_dashed())
             .border_color(color.opacity(0.45))
-            .text_size(px(11.5 * s))
-            .line_height(px(16.0 * s))
+            .text_size(px(13.0 * s))
+            .line_height(px(19.0 * s))
             .whitespace_nowrap()
             .text_color(color)
             .chat_cursor_pointer()
@@ -106,7 +106,7 @@ impl NativeChatView {
             .child(
                 svg()
                     .path("titlebar/link.svg")
-                    .size(px(12.0 * s))
+                    .size(px(14.0 * s))
                     .flex_shrink_0()
                     .text_color(color),
             )

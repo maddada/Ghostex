@@ -26,7 +26,7 @@ const APPROVAL_COLOR: u32 = crate::app::native_sidebar::status::APPROVAL_COLOR;
 
 /// One thread row, the "N more" line and the list's cap, in unscaled pixels: fixed heights, so the
 /// floating menu knows its size before it opens (`threads_menu_height`).
-const ROW_HEIGHT: f32 = 24.0;
+const ROW_HEIGHT: f32 = 28.0;
 const ROW_GAP: f32 = 2.0;
 const LIST_MAX: f32 = 360.0;
 
@@ -101,7 +101,7 @@ impl NativeChatView {
                     .flex()
                     .items_center()
                     .px(px(4.0 * s))
-                    .text_size(px(12.0 * s))
+                    .text_size(px(13.0 * s))
                     .text_color(p.card_muted)
                     .child(empty),
             );
@@ -122,7 +122,7 @@ impl NativeChatView {
                 .items_center()
                 .px(px(4.0 * s))
                 .chat_cursor_pointer()
-                .text_size(px(12.0 * s))
+                .text_size(px(13.0 * s))
                 .text_color(p.card_muted)
                 .hover(|style| style.text_color(p.foreground))
                 .child(more)
@@ -202,7 +202,7 @@ impl NativeChatView {
             .h(px(ROW_HEIGHT * s))
             .px(px(4.0 * s))
             .rounded(px(5.0 * s))
-            .text_size(px(12.0 * s))
+            .text_size(px(13.0 * s))
             .chat_cursor_pointer()
             .hover(|style| style.bg(p.foreground.opacity(0.06)))
             .tooltip(move |window, cx| {
@@ -220,7 +220,7 @@ impl NativeChatView {
             .child(
                 div()
                     .flex_shrink_0()
-                    .max_w(px(260.0 * s))
+                    .max_w(px(300.0 * s))
                     .truncate()
                     .text_color(p.foreground)
                     .child(title),
@@ -232,7 +232,7 @@ impl NativeChatView {
                         .px(px(5.0 * s))
                         .rounded(px(4.0 * s))
                         .bg(gpui::Hsla::from(rgb(APPROVAL_COLOR)).opacity(0.16))
-                        .text_size(px(11.0 * s))
+                        .text_size(px(13.0 * s))
                         .text_color(rgb(APPROVAL_COLOR))
                         .child(
                             ghostex_gx_chat_core::extras::coordinator_threads::NEEDS_APPROVAL_LABEL,
@@ -254,19 +254,19 @@ impl NativeChatView {
                         .flex()
                         .items_center()
                         .gap(px(3.0 * s))
-                        .max_w(px(120.0 * s))
+                        .max_w(px(140.0 * s))
                         .child(
                             gpui::svg()
                                 .path("titlebar/device-desktop.svg")
                                 .flex_shrink_0()
-                                .size(px(11.0 * s))
+                                .size(px(13.0 * s))
                                 .text_color(p.muted),
                         )
                         .child(
                             div()
                                 .min_w_0()
                                 .truncate()
-                                .text_size(px(11.0 * s))
+                                .text_size(px(13.0 * s))
                                 .text_color(p.muted)
                                 .child(computer),
                         ),
@@ -276,9 +276,9 @@ impl NativeChatView {
                 this.child(
                     div()
                         .flex_shrink_0()
-                        .max_w(px(160.0 * s))
+                        .max_w(px(180.0 * s))
                         .truncate()
-                        .text_size(px(11.0 * s))
+                        .text_size(px(13.0 * s))
                         .text_color(p.muted)
                         .child(branch),
                 )

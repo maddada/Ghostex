@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 const WORKING_COLOR: u32 = 0xc68a06;
 
 /// Fixed heights (unscaled), so the floating menu knows its size before it opens.
-const ROW_HEIGHT: f32 = 26.0;
+const ROW_HEIGHT: f32 = 28.0;
 const ROW_GAP: f32 = 2.0;
 const LIST_MAX: f32 = 360.0;
 const BAR_HEIGHT: f32 = 30.0;
@@ -153,7 +153,7 @@ impl NativeChatView {
             .h(px(ROW_HEIGHT * s))
             .px(px(4.0 * s))
             .rounded(px(5.0 * s))
-            .text_size(px(12.0 * s))
+            .text_size(px(13.0 * s))
             .chat_cursor_pointer()
             .hover(|style| style.bg(p.foreground.opacity(0.06)))
             .child(
@@ -238,7 +238,7 @@ impl NativeChatView {
                 .px(px(12.0 * s))
                 .border_b(px(s))
                 .border_color(p.foreground.opacity(0.08))
-                .text_size(px(12.0 * s))
+                .text_size(px(13.0 * s))
                 .child(
                     svg()
                         .path("titlebar/messages.svg")

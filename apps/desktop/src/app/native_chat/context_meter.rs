@@ -244,9 +244,9 @@ impl NativeChatView {
                     return;
                 }
                 let width = if chat.snapshot["contextMeter"]["details"].is_array() {
-                    320.0
+                    380.0
                 } else {
-                    256.0
+                    300.0
                 };
                 // "Statusline Config": its menu lines up with the ring's left edge.
                 chat.menu_side = Some(super::option_menu::MenuSide::Left);

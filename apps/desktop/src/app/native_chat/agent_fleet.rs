@@ -14,7 +14,7 @@ use std::time::Duration;
 
 /// One subagent row and the list's cap, in unscaled pixels: fixed heights, so the floating menu
 /// knows its size before it opens (`fleet_menu_height`).
-const ROW_HEIGHT: f32 = 22.0;
+const ROW_HEIGHT: f32 = 26.0;
 const ROW_GAP: f32 = 2.0;
 const LIST_MAX: f32 = 180.0;
 
@@ -64,7 +64,7 @@ impl NativeChatView {
                     .h(px(ROW_HEIGHT * s))
                     .flex()
                     .items_center()
-                    .text_size(px(12.0 * s))
+                    .text_size(px(13.0 * s))
                     .text_color(p.card_muted)
                     .child("Subagent status unavailable"),
             );
@@ -164,7 +164,7 @@ impl NativeChatView {
             .gap(px(4.0 * s))
             .flex_1()
             .min_w_0()
-            .text_size(px(12.0 * s));
+            .text_size(px(13.0 * s));
         // CDXC:SessionChat 2026-09-10 DECISION: User: put the ‣ separator at the start of the status cell so it aligns across subagent rows regardless of model label width.
         if row["marker"] == true {
             work = work.child(div().flex_shrink_0().text_color(p.prose).child("‣"));
@@ -210,7 +210,7 @@ impl NativeChatView {
                     .py(px(3.0 * s))
                     .rounded_full()
                     .bg(p.foreground.opacity(0.08))
-                    .text_size(px(10.0 * s))
+                    .text_size(px(13.0 * s))
                     .text_color(p.card_muted)
                     .font_features(FontFeatures(vec![("tnum".into(), 1)].into()))
                     .tooltip(move |window, cx| {
@@ -234,7 +234,7 @@ impl NativeChatView {
                     .flex_shrink_0()
                     .w(name_column)
                     .min_w_0()
-                    .text_size(px(12.0 * s))
+                    .text_size(px(13.0 * s))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(p.foreground)
                     .child(match open {
@@ -256,9 +256,9 @@ impl NativeChatView {
             .child(work)
             // Counter, separator and clock are three tracks, not one cell: that is what
             // right-aligns every counter on the same edge no matter how long the one above it was.
-            .child(hint(text(row, "tokens"), 11.0))
-            .child(hint(text(row, "separator"), 11.0))
-            .child(hint(text(row, "elapsedLabel"), 11.0))
+            .child(hint(text(row, "tokens"), 13.0))
+            .child(hint(text(row, "separator"), 13.0))
+            .child(hint(text(row, "elapsedLabel"), 13.0))
             .into_any_element()
     }
 }

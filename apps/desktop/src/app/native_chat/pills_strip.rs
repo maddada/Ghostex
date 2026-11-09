@@ -38,8 +38,8 @@ fn view_chip_icon(id: &str) -> &'static str {
     }
 }
 
-/// The strip's height (unscaled): a pill's 22px with 5px above and below, and its 1px hairline.
-const STRIP_HEIGHT: f32 = 22.0 + 2.0 * 5.0;
+/// The strip's height (unscaled): a pill's 25px with 5px above and below, and its 1px hairline.
+const STRIP_HEIGHT: f32 = 25.0 + 2.0 * 5.0;
 
 /// The width of the fade at an edge that hides pills (unscaled).
 pub(super) const PILLS_FADE: f32 = 24.0;
@@ -186,8 +186,8 @@ impl NativeChatView {
                     .border(px(s))
                     .border_color(gpui::transparent_black())
                     .bg(p.foreground.opacity(0.04))
-                    .text_size(px(11.5 * s))
-                    .line_height(px(16.0 * s))
+                    .text_size(px(13.0 * s))
+                    .line_height(px(19.0 * s))
                     .whitespace_nowrap()
                     .text_color(p.card_muted.opacity(0.85))
                     .chat_cursor_pointer()
@@ -197,14 +197,14 @@ impl NativeChatView {
                         // while the chip is hovered, so no room is kept for the X.
                         div()
                             .relative()
-                            .size(px(12.0 * s))
+                            .size(px(14.0 * s))
                             .flex_shrink_0()
                             .child(
                                 svg()
                                     .path(view_chip_icon(&id))
                                     .absolute()
                                     .inset_0()
-                                    .size(px(12.0 * s))
+                                    .size(px(14.0 * s))
                                     .text_color(p.card_muted.opacity(0.85))
                                     .group_hover(group.clone(), |style| style.opacity(0.0)),
                             )
@@ -213,7 +213,7 @@ impl NativeChatView {
                                     .path("titlebar/x.svg")
                                     .absolute()
                                     .inset_0()
-                                    .size(px(12.0 * s))
+                                    .size(px(14.0 * s))
                                     .text_color(p.foreground)
                                     .opacity(0.0)
                                     .group_hover(group, |style| style.opacity(0.75)),
