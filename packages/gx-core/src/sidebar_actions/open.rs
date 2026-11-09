@@ -245,9 +245,9 @@ fn plan_edit_space(view: &SidebarView, space_id: Option<&str>) -> SidebarActionP
 }
 
 /// The New Coordinator dialog's open message for the project a sidebar group id names, on its
-/// machine. The New thread picker opens it straight from its pick, because a copy of a project
-/// merged into another's entry (another computer's, or a second clone here) has no drawn group for
-/// `projectAction` to find.
+/// machine. The New thread picker opens it straight from its pick, which may be neither a drawn
+/// project nor the copy a merged entry's actions go to (another computer's, or a second clone
+/// here), so the picker resolves the project itself rather than through `projectAction`.
 pub fn new_coordinator_modal_payload(group_id: &str, project_name: &str) -> Value {
     json!({
         "type": "open",

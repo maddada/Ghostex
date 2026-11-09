@@ -556,8 +556,8 @@ impl GhostexGpuiApp {
                     .take()
                     .or_else(|| self.gx_store_active_group_id());
                 self.release_gpui_new_thread_picker_window(cx);
-                // Opened straight from the pick: a `projectAction` needs the project's drawn
-                // group, which a merged copy (another computer's, or a second clone) has none of.
+                // Opened straight from the pick, which may be neither a drawn project nor the copy
+                // a merged entry acts on, so it resolves the project itself.
                 if let Some(group_id) = group_id {
                     self.gx_store_open_new_coordinator(&group_id, cx);
                 }

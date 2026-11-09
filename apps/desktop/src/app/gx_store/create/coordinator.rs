@@ -145,20 +145,28 @@ impl GhostexGpuiApp {
     }
 
     /// Opens the New Coordinator dialog for the project a group id names, read from the machine
-    /// that has it rather than from the drawn list, which has no group for a merged copy (gx-core
-    /// `new_coordinator_modal_payload`). The New thread picker's Coordinator, on the desktop and
-    /// the web build.
+    /// that has it rather than from the drawn list (gx-core `new_coordinator_modal_payload`). The
+    /// New thread picker's Coordinator, on the desktop and the web build. A project that is gone
+    /// since the picker opened (closed or removed, here or by another client) opens no dialog,
+    /// whose Create would target it: a notice says so instead.
     pub(crate) fn gx_store_open_new_coordinator(
         &mut self,
         group_id: &str,
         cx: &mut gpui::Context<Self>,
     ) {
-        let project_name = ProjectKey::parse_sidebar_group_id(group_id)
-            .and_then(|project| {
-                let loaded = self.gx_store.core.presentation().loaded(&project.machine)?;
-                Some(loaded.project(&project.project_id)?.title.clone())
-            })
-            .unwrap_or_default();
+        let project_name = ProjectKey::parse_sidebar_group_id(group_id).and_then(|project| {
+            let loaded = self.gx_store.core.presentation().loaded(&project.machine)?;
+            Some(loaded.project(&project.project_id)?.title.clone())
+        });
+        let Some(project_name) = project_name else {
+            self.gx_store_create_toast(
+                "warning",
+                "Project no longer open",
+                Some("It was closed or removed. Choose another project and try again."),
+                cx,
+            );
+            return;
+        };
         self.open_app_modal_from_bridge(new_coordinator_modal_payload(group_id, &project_name), cx);
     }
 
