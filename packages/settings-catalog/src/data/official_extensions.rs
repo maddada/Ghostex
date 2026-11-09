@@ -490,7 +490,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // keep the new behavior under a toggle please". Off by default; the tool rows stay the look
     // (gx-chat-core `transcript/tool_card.rs`).
     J::Obj(&[
-        ("description", J::Str("Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows.")),
+        ("description", J::Str("Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows. Settings > Chat > Agent work set to Reduced or Quiet replaces these lines.")),
         ("category", J::Str("experimental")),
         ("id", J::Str("toolCallLines")),
         ("placement", J::Str("feature")),
