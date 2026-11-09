@@ -195,6 +195,7 @@ pub fn held_as_pending(state: &ChatState) -> Vec<PendingSend> {
             sent_while_working: false,
             shell_command: false,
             left_queue_at_ms: None,
+            awaiting_attachments: false,
         })
         .collect()
 }

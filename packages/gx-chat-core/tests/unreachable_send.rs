@@ -34,6 +34,7 @@ fn send(core: &mut ChatCore, text: &str, random_id: u128, answer: RpcOutcome) ->
         None,
         Vec::new(),
         false,
+        None,
     );
     for _ in 0..20 {
         let mut next = Vec::new();

@@ -218,27 +218,52 @@ impl NativeChatView {
 /// answer field or a form note already counts its own.
 #[derive(Debug, Default)]
 pub(super) struct PasteTiles {
-    /// Pastes whose files are still being saved or imported.
-    saving: u64,
+    /// The id the next paste is named by, for the chat core (`attachmentsStarted`).
+    next: u64,
+    /// Pastes whose files are still being saved or imported, by id.
+    saving: Vec<u64>,
+    /// Pastes a send took while they were still on their way: their files go with that message
+    /// (packages/gx-chat-core/src/composer/attaching.rs), so the chat box shows no tile for them.
+    claimed: Vec<u64>,
     /// Saved pastes whose references the chat box has not received yet.
     inserting: u64,
 }
 
 impl PasteTiles {
-    pub(super) fn started(&mut self) {
-        self.saving += 1;
+    /// A paste began; answers the id the chat core knows it by.
+    pub(super) fn started(&mut self) -> u64 {
+        self.next += 1;
+        self.saving.push(self.next);
+        self.next
     }
 
-    /// A paste's files are saved; with `references`, its tile stays until they reach the chat box.
-    /// A drop's import (which this view did not count) changes nothing.
-    pub(super) fn finished(&mut self, references: bool) {
-        if self.saving == 0 {
-            return;
+    /// A send left the chat box: every paste still on its way goes with it, as the chat core
+    /// counts it. Answers whether any did.
+    pub(super) fn claim_all(&mut self) -> bool {
+        let any = !self.saving.is_empty();
+        self.claimed.append(&mut self.saving);
+        any
+    }
+
+    /// Paste `id`'s files are saved; with `references`, its tile stays until they reach the chat
+    /// box. Answers whether a send took it, so its references go to that message instead. A
+    /// drop's import (which this view did not count) changes nothing.
+    pub(super) fn finished(&mut self, id: Option<u64>, references: bool) -> bool {
+        let Some(id) = id else {
+            return false;
+        };
+        if let Some(at) = self.claimed.iter().position(|claimed| *claimed == id) {
+            self.claimed.remove(at);
+            return true;
         }
-        self.saving -= 1;
+        let Some(at) = self.saving.iter().position(|saving| *saving == id) else {
+            return false;
+        };
+        self.saving.remove(at);
         if references {
             self.inserting += 1;
         }
+        false
     }
 
     /// The chat box received text from the core: a waiting paste's references are in it.
@@ -246,9 +271,14 @@ impl PasteTiles {
         self.inserting = self.inserting.saturating_sub(1);
     }
 
+    /// Pastes still on their way into the chat box itself.
+    pub(super) fn in_flight(&self) -> usize {
+        self.saving.len()
+    }
+
     /// How many uploading tiles to show, given what the host counts.
     pub(super) fn shown(&self, host_pending: u64) -> u64 {
-        host_pending.max(self.saving + self.inserting)
+        host_pending.max(self.saving.len() as u64 + self.inserting)
     }
 }
 
@@ -259,9 +289,9 @@ mod tests {
     #[test]
     fn a_paste_shows_its_tile_before_the_host_counts_it_until_its_references_arrive() {
         let mut tiles = PasteTiles::default();
-        tiles.started();
+        let id = tiles.started();
         assert_eq!(tiles.shown(0), 1);
-        tiles.finished(true);
+        tiles.finished(Some(id), true);
         // Saved, the host has not answered yet: the tile stays.
         assert_eq!(tiles.shown(0), 1);
         tiles.inserted();
@@ -273,11 +303,11 @@ mod tests {
     #[test]
     fn a_failed_paste_or_a_drop_leaves_no_tile_behind() {
         let mut tiles = PasteTiles::default();
-        tiles.started();
-        tiles.finished(false);
+        let id = tiles.started();
+        tiles.finished(Some(id), false);
         assert_eq!(tiles.shown(0), 0);
         // A drop's import finishing, and text the chat box gets for other reasons, count nothing.
-        tiles.finished(true);
+        tiles.finished(None, true);
         tiles.inserted();
         assert_eq!(tiles.shown(0), 0);
     }

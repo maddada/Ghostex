@@ -43,6 +43,9 @@ use crate::wire::ChatRpcMethod;
 /// One step of a submission, in the order the TypeScript runs it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SendPhase {
+    /// The pictures still on their way into the chat box when Enter was pressed land first, and
+    /// their references join the text (`crate::composer::attaching`).
+    AwaitAttachments,
     /// `composer('write', {text, version, submitted: true})`: the submitted revision is durable
     /// before anything is delivered.
     WriteDraft,
@@ -74,6 +77,7 @@ pub fn begin(
     version: Option<crate::composer::queue::DraftVersion>,
     image_paths: Vec<String>,
     interrupt: bool,
+    caret: Option<usize>,
 ) -> Vec<Effect> {
     // A block that clears on its own does not refuse: the delivery phase waits for it instead.
     if let Some(refused) = crate::composer::document::send_refused(state) {
@@ -84,9 +88,15 @@ pub fn begin(
     // A message that only answers one-click questions goes as the answers their pills send (the
     // SessionChat 2026-11-06 DECISION on `typed_answers`): this send carries the first, and each
     // other goes as its own answers message, as a click on its pill would send it.
+    // Pictures still on their way into the chat box when Enter was pressed go with this message.
+    let attaching_waits = state
+        .composer
+        .attachment_slots
+        .iter()
+        .any(|slot| slot.hold.is_none());
     let mut answers = match mode {
         SubmissionMode::Compact => None,
-        _ if !image_paths.is_empty() => None,
+        _ if !image_paths.is_empty() || attaching_waits => None,
         _ => crate::questions::inline_answers::typed_answers(state, text),
     }
     .unwrap_or_default();
@@ -159,6 +169,7 @@ pub fn begin(
     state.composer.draft_attachment_count = 0;
     // The send pushes its own final revision, so a push still waiting for a pause would only race it.
     crate::composer::draft_sync::cancel_pending_push(state);
+    let attaching = crate::composer::attaching::claim(state, context, text, caret);
     let mut phases = vec![SendPhase::WriteDraft, SendPhase::FlushDraft];
     for step in &steps {
         phases.push(match step {
@@ -174,6 +185,9 @@ pub fn begin(
         });
     }
     phases.push(SendPhase::MarkSubmitted);
+    if attaching.is_some() {
+        phases.insert(0, SendPhase::AwaitAttachments);
+    }
     let interrupt = interrupt && !side_chat && interrupts_turn(state, mode);
     if interrupt {
         raise_interrupted_toast(state, context);
@@ -197,6 +211,7 @@ pub fn begin(
         interrupt,
         draft_unsaved: false,
         typed,
+        attaching,
     };
     draw_at_enter(state, context, &mut submission);
     let mut effects = start_or_wait(state, context, submission);
@@ -250,6 +265,15 @@ fn draw_at_enter(state: &mut ChatState, context: &ChatContext, submission: &mut 
         let drawn = draw_agent_send(state, context, &body, &images);
         submission.pending_id = drawn.pending_id;
         submission.marker = drawn.marker;
+        // The bubble shows at once, even for pictures alone with no words yet; it is no transcript
+        // row's echo until its pictures are in (composer/attaching.rs).
+        let attaching = submission.attaching.is_some() && submission.mode == SubmissionMode::Send;
+        if attaching && submission.pending_id.is_none() && body.trim().is_empty() {
+            submission.pending_id = Some(sends::begin_send(state, context, "", &[]));
+        }
+        if let (Some(pending_id), true) = (submission.pending_id.as_deref(), attaching) {
+            sends::update_attaching_send(state, pending_id, &submission.text, false);
+        }
     }
     submission.drawn = true;
     state.core.request_publish();
@@ -289,6 +313,7 @@ fn start_next(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
             break;
         }
         undo_drawn(state, next.pending_id.as_deref(), next.marker.as_ref());
+        crate::composer::attaching::release(state, next.attaching.as_ref());
         if next.handoff {
             effects.push(Effect::HostAction {
                 action: "draftHandoffToTerminalFailed".to_string(),
@@ -401,7 +426,10 @@ fn run_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
     if submission.cancelled
         && matches!(
             phase,
-            SendPhase::SendCompact | SendPhase::SendText | SendPhase::QueueText
+            SendPhase::AwaitAttachments
+                | SendPhase::SendCompact
+                | SendPhase::SendText
+                | SendPhase::QueueText
         )
     {
         undo_optimistic(state);
@@ -416,6 +444,21 @@ fn run_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
     ) {
         crate::session::computer::arm_check(state, context);
     }
+    if phase == SendPhase::AwaitAttachments {
+        // Still waiting for a picture: its landing (or failure) runs the head again.
+        if state
+            .composer
+            .submitting
+            .as_ref()
+            .is_some_and(|submission| submission.attaching.is_some())
+        {
+            return Vec::new();
+        }
+        if let Some(submission) = state.composer.submitting.as_mut() {
+            submission.phases.remove(0);
+        }
+        return run_head(state, context);
+    }
     let Some(submission) = state.composer.submitting.as_ref() else {
         return Vec::new();
     };
@@ -428,6 +471,8 @@ fn run_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
         _ => text.clone(),
     };
     match phase {
+        // Answered above.
+        SendPhase::AwaitAttachments => Vec::new(),
         SendPhase::WriteDraft => {
             // A send that waited behind another can start after the user has typed the next
             // message under a new identity; the stored draft is that message now, not this one.
@@ -1101,6 +1146,7 @@ fn fail(state: &mut ChatState, message: &str, code: Option<String>) -> Vec<Effec
     let Some(submission) = state.composer.submitting.take() else {
         return Vec::new();
     };
+    crate::composer::attaching::release(state, submission.attaching.as_ref());
     state.core.fail(message.to_string(), code);
     let mut effects = Vec::new();
     // The sends waiting behind this one go back to the composer with it, in the order they were
@@ -1114,6 +1160,7 @@ fn fail(state: &mut ChatState, message: &str, code: Option<String>) -> Vec<Effec
             waiting.pending_id.as_deref(),
             waiting.marker.as_ref(),
         );
+        crate::composer::attaching::release(state, waiting.attaching.as_ref());
         if waiting.handoff {
             // A handoff never left the field, so its text is still there.
             handoffs += 1;
@@ -1139,6 +1186,73 @@ fn undo_optimistic(state: &mut ChatState) {
         None => return,
     };
     undo_drawn(state, pending_id.as_deref(), marker.as_ref());
+}
+
+/// The last picture a send waited for landed, or the send was taken back: the head runs on.
+pub(crate) fn resume_after_attachments(
+    state: &mut ChatState,
+    context: &ChatContext,
+) -> Vec<Effect> {
+    let head_waits = state
+        .composer
+        .submitting
+        .as_ref()
+        .is_some_and(|submission| submission.phases.first() == Some(&SendPhase::AwaitAttachments));
+    if state.composer.submitting.is_none() {
+        return start_next(state, context);
+    }
+    if head_waits {
+        return run_head(state, context);
+    }
+    Vec::new()
+}
+
+/// A picture the send `hold_id` waited for could not be saved: that send, and every send typed
+/// after it, goes back to the chat box with the error, as a refused send does.
+pub(crate) fn fail_attaching(
+    state: &mut ChatState,
+    context: &ChatContext,
+    hold_id: u64,
+    message: &str,
+) -> Vec<Effect> {
+    let holds = |submission: &Submission| {
+        submission
+            .attaching
+            .as_ref()
+            .is_some_and(|hold| hold.id == hold_id)
+    };
+    if state.composer.submitting.as_ref().is_some_and(holds) {
+        undo_optimistic(state);
+        let mut effects = fail(state, message, None);
+        effects.extend(start_next(state, context));
+        return effects;
+    }
+    let Some(at) = state.composer.waiting.iter().position(holds) else {
+        return Vec::new();
+    };
+    let returned: Vec<Submission> = state.composer.waiting.split_off(at);
+    state.core.fail(message.to_string(), None);
+    let mut text = String::new();
+    let mut mode = SubmissionMode::Send;
+    for (index, submission) in returned.iter().enumerate() {
+        undo_drawn(
+            state,
+            submission.pending_id.as_deref(),
+            submission.marker.as_ref(),
+        );
+        crate::composer::attaching::release(state, submission.attaching.as_ref());
+        if index == 0 {
+            mode = submission.mode;
+        }
+        if !submission.handoff && !submission.typed_text().is_empty() {
+            text = if text.is_empty() {
+                submission.typed_text().to_string()
+            } else {
+                format!("{text}\n{}", submission.typed_text())
+            };
+        }
+    }
+    vec![submission_failed(mode, &text)]
 }
 
 fn undo_drawn(state: &mut ChatState, pending_id: Option<&str>, marker: Option<&(String, i64)>) {
@@ -1181,6 +1295,7 @@ pub fn handoff(
         interrupt: false,
         draft_unsaved: false,
         typed: None,
+        attaching: None,
     };
     // The head phase writes the unsubmitted record a handoff parks from.
     start_or_wait(state, context, submission)
@@ -1352,7 +1467,8 @@ pub fn interrupt(state: &mut ChatState, context: &ChatContext, confirm: bool) ->
     let mut parked = false;
     if let Some(submission) = state.composer.submitting.as_mut() {
         submission.cancelled = true;
-        parked = submission.awaiting_gate;
+        // A send still waiting for its pictures has nothing in flight to notice the cancel either.
+        parked = submission.awaiting_gate || submission.attaching.is_some();
     }
     for waiting in &mut state.composer.waiting {
         waiting.cancelled = true;
@@ -1459,7 +1575,7 @@ pub fn settle_key_send(
 }
 
 /// The composer's text goes back when a submission did not leave.
-fn submission_failed(mode: SubmissionMode, text: &str) -> Effect {
+pub(crate) fn submission_failed(mode: SubmissionMode, text: &str) -> Effect {
     Effect::HostAction {
         action: "submissionFailed".to_string(),
         params: Box::new(json!({ "method": mode_name(mode), "text": text })),

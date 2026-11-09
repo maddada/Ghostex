@@ -87,17 +87,23 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::Stash => stash(state, action),
         ActionKind::RestoreReturned => restore_returned(state, action),
         ActionKind::ApplyReturned => apply_returned(action),
-        ActionKind::RestoreSubmission => vec![Effect::SetComposerText {
-            content: restore_undelivered_text(text_param(action), string_param(action, "current")),
-            caret: None,
-            from_history: false,
-        }],
+        ActionKind::RestoreSubmission => {
+            let content =
+                restore_undelivered_text(text_param(action), string_param(action, "current"));
+            state.composer.restored_text = Some(content.clone());
+            vec![Effect::SetComposerText {
+                content,
+                caret: None,
+                from_history: false,
+            }]
+        }
         ActionKind::AttachmentsStarted => {
             state.composer.pending_attachments += 1;
+            crate::composer::attaching::started(state, action);
             Vec::new()
         }
         ActionKind::AttachPaths => attach_paths(state, action),
-        ActionKind::AttachmentsFinished => attachments_finished(state, action),
+        ActionKind::AttachmentsFinished => attachments_finished(state, context, action),
         ActionKind::InsertAttachments => insert_attachments(action),
         ActionKind::InsertSkill => crate::composer::ghostex_skills::insert_skill(state, action),
         ActionKind::ToggleSideChat => {
@@ -151,7 +157,9 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             None,
         ),
         ActionKind::RemoveQueue => remove_queue(state, action),
-        ActionKind::TakeBackQueued => crate::composer::queue_take_back::begin(state, action),
+        ActionKind::TakeBackQueued => {
+            crate::composer::queue_take_back::begin(state, context, action)
+        }
         ActionKind::SendQueue => queue_rpc(
             state,
             ChatRpcMethod::SendSessionChatQueuedPrompt,
@@ -255,6 +263,10 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 draft_version(action),
                 image_paths,
                 action.param("interrupt").and_then(Value::as_bool) == Some(true),
+                action
+                    .param("caret")
+                    .and_then(Value::as_u64)
+                    .map(|caret| caret as usize),
             );
             // The first message has left the box: the worktree tray goes now, not when the agent
             // gets it (CDXC:Worktrees 2026-11-02 in menus/draft_worktree.rs). A send refused on
@@ -737,6 +749,7 @@ fn attach_paths(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     state.core.request_publish();
     let request_id = state.core.allocate_request_id();
     state.composer.attachment_imports.push(request_id);
+    crate::composer::attaching::import_started(state, request_id);
     vec![Effect::SendRpc {
         request_id,
         method: ChatRpcMethod::ImportNativeAttachments,
@@ -744,8 +757,29 @@ fn attach_paths(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     }]
 }
 
-fn attachments_finished(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
+fn attachments_finished(
+    state: &mut ChatState,
+    context: &ChatContext,
+    action: &UserAction,
+) -> Vec<Effect> {
     state.composer.pending_attachments = state.composer.pending_attachments.saturating_sub(1);
+    // A send made while this was on its way takes it (composer/attaching.rs).
+    if let Some(slot) = crate::composer::attaching::take_slot(state, action) {
+        let paths: Vec<String> = action
+            .param("paths")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect();
+        let error = action.param("error").and_then(Value::as_str);
+        if let Some(effects) =
+            crate::composer::attaching::landed(state, context, &slot, &paths, error)
+        {
+            return effects;
+        }
+    }
     if let Some(error) = action.param("error").and_then(Value::as_str) {
         state.core.fail(error, None);
     }

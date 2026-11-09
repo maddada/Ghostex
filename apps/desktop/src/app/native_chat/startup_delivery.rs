@@ -256,12 +256,20 @@ impl NativeChatView {
             && delivery["state"] != "failed"
             && delivery["state"] != "unconfirmed";
         let queued = message["queued"] == true && delivery.is_null();
-        if !waiting && !queued {
+        // CDXC:Clipboard 2026-11-09 DECISION: a message sent while its picture is still being
+        // saved gets the same spinner, and the same Back to composer arrow as a message the agent
+        // has not taken yet, once the wait has lasted a moment (the chat core's
+        // `attachingMessages`, packages/gx-chat-core/src/composer/attaching.rs). A quick save
+        // shows neither.
+        let attaching = self.attaching_status(&id);
+        if !waiting && !queued && !attaching {
             return None;
         }
         // A held message waits for its computer, not for the agent: a clock, not a spinner.
         let held = delivery["state"] == "held";
-        let label = if held {
+        let label = if attaching {
+            "Attaching the picture"
+        } else if held {
             "Waiting for the computer"
         } else if waiting {
             "Waiting for agent"
@@ -294,7 +302,7 @@ impl NativeChatView {
                 1,
             ));
         }
-        if waiting {
+        if waiting || attaching {
             let glyph = svg()
                 .path("titlebar/loader2.svg")
                 .size(px(12.0 * s))
@@ -314,12 +322,20 @@ impl NativeChatView {
                     )
                     .into_any_element()
             };
-            return Some((
-                slot.role(gpui::Role::Status)
-                    .child(glyph)
-                    .into_any_element(),
-                1,
-            ));
+            let spinner = slot.role(gpui::Role::Status).child(glyph);
+            if attaching && !self.in_subagent {
+                return Some((
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(2.0 * s))
+                        .child(self.take_back_indicator(message, p, cx))
+                        .child(spinner)
+                        .into_any_element(),
+                    2,
+                ));
+            }
+            return Some((spinner.into_any_element(), 1));
         }
         let take_back = (!self.in_subagent
             && self.snapshot["queueTakeBackIds"]

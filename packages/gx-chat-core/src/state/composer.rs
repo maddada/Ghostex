@@ -59,6 +59,14 @@ pub struct ComposerState {
     /// The `importNativeAttachments` reads in flight, so their answers reach this family and the
     /// `finally` that counts them back down runs exactly once each.
     pub attachment_imports: Vec<u64>,
+    /// Every picture or file on its way into the chat box, oldest first, and the send waiting for
+    /// it, if one is (`crate::composer::attaching`).
+    pub attachment_slots: Vec<crate::composer::attaching::AttachmentSlot>,
+    /// The last id given to an attachment the host named none for, or to a send that waits.
+    pub attachment_counter: u64,
+    /// The text a refused send put back in the chat box, until the box's own edit and save of it
+    /// have come back: those two keep the error that says why (`dispatch/actions.rs`).
+    pub restored_text: Option<String>,
     /// The `setSessionChatDraft` writes `saveDraft` started, so their answers reach
     /// `setSyncedDraft`. The send chain tracks its own through `Submission`.
     pub draft_pushes: Vec<u64>,
@@ -204,6 +212,9 @@ pub struct Submission {
     /// a message of typed answers goes as (`questions::inline_answers::typed_answers`). A send that
     /// did not leave gives these back to the chat box.
     pub typed: Option<String>,
+    /// The pictures this send waits for, which were still on their way into the chat box when
+    /// Enter was pressed (`crate::composer::attaching`).
+    pub attaching: Option<crate::composer::attaching::AttachingHold>,
 }
 
 impl Submission {

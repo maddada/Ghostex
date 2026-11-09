@@ -1041,6 +1041,51 @@ impl NativeChatView {
         Some(row.into_any_element())
     }
 
+    /// Your message's text with a loading tile after it for each of its pictures still being saved
+    /// (composer_attach.rs), where the picture shows once it is in: a reference at the caret reads
+    /// as a thumbnail beside the words.
+    pub(super) fn with_loading_pictures(
+        &self,
+        id: &str,
+        prompt: AnyElement,
+        has_text: bool,
+        p: &ChatAppearance,
+    ) -> AnyElement {
+        let loading = self.attaching_pictures(id);
+        if loading == 0 {
+            return prompt;
+        }
+        div()
+            .flex()
+            .items_center()
+            .gap(px(10.0 * p.scale))
+            .min_w_0()
+            .when(has_text, |row| row.child(div().min_w_0().child(prompt)))
+            .children((0..loading).map(|index| loading_tile(id, index, p)))
+            .into_any_element()
+    }
+
+    /// How many of message `id`'s pictures are still on their way (the chat core's
+    /// `attachingMessages`, packages/gx-chat-core/src/composer/attaching.rs).
+    pub(super) fn attaching_pictures(&self, id: &str) -> usize {
+        self.attaching_message(id)
+            .and_then(|entry| entry["pictures"].as_u64())
+            .unwrap_or(0) as usize
+    }
+
+    /// Message `id` waits for its pictures, and has waited long enough to say so.
+    pub(super) fn attaching_status(&self, id: &str) -> bool {
+        self.attaching_message(id)
+            .is_some_and(|entry| entry["status"] == true)
+    }
+
+    fn attaching_message(&self, id: &str) -> Option<&Value> {
+        self.snapshot["attachingMessages"]
+            .as_array()?
+            .iter()
+            .find(|entry| entry["id"] == id)
+    }
+
     pub(super) fn image_tile(
         &mut self,
         message_id: &str,
@@ -1558,5 +1603,47 @@ fn missing_chip(named: &str, p: &ChatAppearance) -> AnyElement {
                 .font_weight(gpui::FontWeight::MEDIUM)
                 .child(named.to_owned()),
         )
+        .into_any_element()
+}
+
+/// A picture of your message still being saved: the chat box's uploading tile, at the size the
+/// picture will take.
+fn loading_tile(message_id: &str, index: usize, p: &ChatAppearance) -> AnyElement {
+    let s = p.scale;
+    let glyph = gpui::svg()
+        .path("titlebar/loader2.svg")
+        .size(px(16.0 * s))
+        .text_color(p.muted);
+    let glyph = if crate::app::helpers::gpui_macos_reduce_motion_enabled() {
+        glyph.into_any_element()
+    } else {
+        glyph
+            .with_throttled_animation(
+                gpui::SharedString::from(format!("chat-image-loading:{message_id}:{index}")),
+                std::time::Duration::from_millis(900),
+                |svg, delta| {
+                    svg.with_transformation(gpui::Transformation::rotate(gpui::radians(
+                        delta * std::f32::consts::TAU,
+                    )))
+                },
+            )
+            .into_any_element()
+    };
+    div()
+        .id(gpui::SharedString::from(format!(
+            "chat-image-loading:{message_id}:{index}"
+        )))
+        .role(gpui::Role::Status)
+        .aria_label("Attaching the picture")
+        .flex_shrink_0()
+        .size(px(VISUAL.thumbnail_size * s))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(VISUAL.thumbnail_radius * s))
+        .border(px(VISUAL.border_width * s))
+        .border_dashed()
+        .border_color(p.input_border)
+        .child(glyph)
         .into_any_element()
 }

@@ -36,6 +36,7 @@ fn delivered_params(draft_push: RpcOutcome) -> Value {
         Some(version),
         Vec::new(),
         false,
+        None,
     );
     for _ in 0..20 {
         let mut next = Vec::new();

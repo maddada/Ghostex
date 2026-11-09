@@ -72,12 +72,15 @@ impl NativeChatView {
         if !self.composer_ready {
             return;
         }
-        // A picture still on its way: the message waits for it (composer_attach.rs).
+        // A paste whose clipboard is still being read: the message waits for its tile
+        // (composer_attach.rs).
         let requested = if interrupt { "interrupt" } else { mode };
         if self.hold_send_for_attachments(requested, cx) {
             return;
         }
-        if self.draft.trim().is_empty() {
+        // A picture still being saved goes with the message, even one with no words.
+        let pictures = self.attachments_on_their_way();
+        if self.draft.trim().is_empty() && !pictures {
             return;
         }
         if mode != "send" && self.snapshot["queue"]["capabilities"]["canQueue"] != true {
@@ -106,8 +109,20 @@ impl NativeChatView {
         };
         self.close_maximized(cx);
         self.pending_send = true;
-        let submission = json!({"type":mode,"text":self.draft,"interrupt":interrupt,
+        let mut submission = json!({"type":mode,"text":self.draft,"interrupt":interrupt,
             "draftVersion":{"draftId":self.draft_id,"revision":self.draft_revision.max(1)}});
+        // The pictures still on their way go where the caret is, as a paste that lands writes
+        // them (packages/gx-chat-core/src/composer/attaching.rs).
+        if pictures {
+            let caret = self
+                .input
+                .as_ref()
+                .map(|input| input.read(cx).selected_range().end)
+                .unwrap_or(self.draft.len())
+                .min(self.draft.len());
+            submission["caret"] = json!(self.draft[..caret].encode_utf16().count());
+            self.paste_tiles.claim_all();
+        }
         self.draft.clear();
         self.draft_id = next_id;
         self.draft_revision = 1;

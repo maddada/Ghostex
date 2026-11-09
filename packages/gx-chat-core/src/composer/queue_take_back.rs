@@ -17,7 +17,7 @@ use crate::composer::transcript_menu::append_draft_text;
 use crate::effect::Effect;
 use crate::session::constants::PENDING_ID_PREFIX;
 use crate::session::sends;
-use crate::state::ChatState;
+use crate::state::{ChatContext, ChatState};
 use crate::wire::{ChatRpcMethod, RpcOutcome};
 
 /// The key the composer takes a queued message back with, as tooltips name it.
@@ -62,16 +62,20 @@ fn is_takeable(message: &ChatMessage) -> bool {
 /// Every message Back to composer is offered on, oldest first; the last is the one the hotkey
 /// takes back. Empty when the agent's queue cannot give messages back.
 pub fn takeable_ids(state: &ChatState) -> Vec<String> {
+    // A message still waiting for its pictures never left, whatever the agent (attaching.rs).
+    let attaching = crate::composer::attaching::takeable_ids(state);
     if !agent_supports_take_back(state.session.agent.as_deref()) {
-        return Vec::new();
+        return attaching;
     }
-    state
+    let mut ids: Vec<String> = state
         .messages
         .composed
         .iter()
-        .filter(|message| is_takeable(message))
+        .filter(|message| is_takeable(message) && !attaching.contains(&message.id))
         .map(|message| message.id.clone())
-        .collect()
+        .collect();
+    ids.extend(attaching);
+    ids
 }
 
 /// The message as gxserver matches it against the agent's queue: its pictures as the `[Image #N](path)`
@@ -95,16 +99,39 @@ fn message_text(message: &ChatMessage) -> String {
 }
 
 /// `takeBackQueued`: the named message, or the newest one the agent holds.
-pub fn begin(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
+pub fn begin(state: &mut ChatState, context: &ChatContext, action: &UserAction) -> Vec<Effect> {
+    let ids = takeable_ids(state);
+    let wanted = action.param("messageId").and_then(Value::as_str);
+    // A message still waiting for its pictures comes straight back (attaching.rs).
+    if let Some(effects) = wanted
+        .or_else(|| ids.last().map(String::as_str))
+        .map(str::to_string)
+        .and_then(|id| crate::composer::attaching::take_back(state, context, &id))
+    {
+        return effects;
+    }
     if state.composer.queue_take_back.is_some() {
         return Vec::new();
     }
-    let ids = takeable_ids(state);
-    let wanted = action.param("messageId").and_then(Value::as_str);
     let Some(id) = (match wanted {
         Some(wanted) => ids.iter().find(|id| id.as_str() == wanted),
         None => ids.last(),
     }) else {
+        // Its pictures landed and it left for the agent between the click and now.
+        if wanted.is_some_and(|wanted| {
+            wanted.starts_with(PENDING_ID_PREFIX)
+                && state
+                    .messages
+                    .composed
+                    .iter()
+                    .any(|message| message.id == wanted)
+        }) {
+            state.core.fail(
+                "The agent already took this message, so it stays sent.",
+                None,
+            );
+            state.core.request_publish();
+        }
         return Vec::new();
     };
     let Some(message) = state

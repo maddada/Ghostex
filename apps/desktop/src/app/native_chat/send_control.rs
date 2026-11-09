@@ -70,7 +70,8 @@ impl NativeChatView {
     }
 
     pub(super) fn render_send_control(&self, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
-        let has_draft = !self.draft.trim().is_empty();
+        // A picture still being saved can be sent on its own: it goes the moment it is in.
+        let has_draft = !self.draft.trim().is_empty() || self.attachments_on_their_way();
         // A Ghostex Collab guest never stops the owner's agent (gxserver refuses it too).
         let stop = (self.snapshot["working"] == true || self.stop_cooldown_task.is_some())
             && !has_draft
@@ -78,12 +79,7 @@ impl NativeChatView {
         let disabled = if stop {
             self.stop_cooldown_task.is_some()
         } else {
-            !has_draft
-                || !self.composer_ready
-                || self
-                    .paste_tiles
-                    .shown(self.snapshot["pendingAttachments"].as_u64().unwrap_or(0))
-                    > 0
+            !has_draft || !self.composer_ready
         };
         let blocked = !stop && self.snapshot["sendBlockedReason"].is_string();
         // As React's Send label did: the gesture hints appear only while the draft can queue.

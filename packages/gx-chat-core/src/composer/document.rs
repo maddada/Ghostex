@@ -44,6 +44,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         .map(|take_back| take_back.message_id.clone());
     into.queue_take_back_hotkey =
         crate::composer::queue_take_back::TAKE_BACK_HOTKEY_LABEL.to_string();
+    into.attaching_messages = crate::composer::attaching::attaching_messages(state, context);
     into.draft = Draft {
         can_sync: into.queue.capabilities.can_sync_draft,
         client_id: state.identity.client_id.clone(),
@@ -71,13 +72,21 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.composer_command =
         composer_native_command(state.session.agent.as_deref(), &composer.text).map(str::to_string);
 
+    // A picture a send already took is that message's now, not the chat box's (attaching.rs).
+    let box_pending = composer.pending_attachments.saturating_sub(
+        composer
+            .attachment_slots
+            .iter()
+            .filter(|slot| slot.hold.is_some())
+            .count() as u32,
+    );
     let collapse_eligible = can_collapse_composer(&CollapseGate {
         maximized: false,
         note_open: composer.note.open,
         suggestions_open: popup.is_some(),
         has_error: state.core.operation_error.is_some(),
         attachment_count: composer.draft_attachment_count,
-        pending_attachments: composer.pending_attachments,
+        pending_attachments: box_pending,
         queued_prompts: into.queue.prompts.len(),
     });
     into.composer_collapse_eligible = collapse_eligible;
@@ -136,7 +145,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     }
 
     into.history_active = composer.history.is_active();
-    into.pending_attachments = composer.pending_attachments;
+    into.pending_attachments = box_pending;
     into.incoming_draft = composer.incoming_draft.clone();
     into.saved_draft_pill = crate::extras::chat_pills::saved_draft_pill(
         composer.incoming_draft.as_ref(),

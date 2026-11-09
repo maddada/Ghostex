@@ -2,6 +2,8 @@
 //!
 //! CDXC:Clipboard 2026-11-08 DECISION: User: "i just pasted an image after some text i wrote then hit enter while the image was still not added in the chat composer and ghostex sent just the chat. this is wrong we should wait for the image to come in or error if we couldn't attach it for any reason we shouldn't just send the text by itself!!!" Enter (and every other send from the chat box: Ctrl+Enter, queue, compact, the Send menu) while a paste or drop is still being saved holds the send: the text stays in the box, the uploading tile says the message goes once the picture is in, and the send leaves with text and references together the moment the last one lands. A paste that fails cancels the held send and its error shows; the text stays in the box. The Send button was already off while a tile spun; Enter went around it.
 //!
+//! CDXC:Clipboard 2026-11-09 DECISION: That hold became an optimistic send (option A of the paste-send page; the user's words are in packages/gx-chat-core/src/composer/attaching.rs). Enter while a paste or drop is still being saved sends at once: each paste is named to the chat core (`attachmentsStarted` with its id), the send takes every one still on its way (`PasteTiles::claim_all`, the core's `attaching::claim` by the same rule), the chat box empties and drops their tiles, and each lands in that message (`attachmentsFinished` with its paths) instead of the box. Only a paste whose clipboard is still being read when Enter is pressed, which has no tile and no id yet, still holds the send here, for those few milliseconds, with nothing drawn.
+//!
 //! CDXC:Clipboard 2026-11-08 WHY: User: "pasting an image like the one i pasted in this message is taking a while now". The pixel work was never the cost (a 1938x642 screenshot is 377 KB; prepare, base64 and gxserver's save take a few ms, all off the UI thread). The tile waited on the chat host thread four more times after the save: `attachmentsFinished`, the view's `attachmentReferences` answer, `insertAttachments`, then `loadImage`, which read the whole picture back from gxserver as base64 and decoded it again, each trip queued behind whatever that one thread was settling (a long transcript under load). The view now writes the references itself with the core's own rule (`insert_path_references` in packages/gx-chat-core/src/composer/references.rs), keeps the bytes it just saved as the tile's picture (`seed_chat_image`), and tells the core only that the upload ended (`attachmentsFinished` with no paths). Drops and the file picker go through the same path, so the held send counts them too.
 
 use super::state::NativeChatView;
@@ -21,26 +23,28 @@ struct Attached {
 }
 
 impl NativeChatView {
-    /// Pastes and drops on their way into the chat box: the view's own count and the core's.
-    pub(super) fn attachments_in_flight(&self) -> u64 {
-        // A paste whose clipboard is still being read: the desktop's `Paste` action stamped it
-        // (`note_paste_started`), the page's paste event in the web build (paste_watch.rs). A
-        // read that never answers stops counting after a while.
-        let reading = [
+    /// A paste whose clipboard is still being read: the desktop's `Paste` action stamped it
+    /// (`note_paste_started`), the page's paste event in the web build (paste_watch.rs). A read
+    /// that never answers stops counting after a while.
+    fn paste_reading(&self) -> bool {
+        [
             self.paste_started,
             super::paste_watch::image_paste_on_its_way(),
         ]
         .into_iter()
         .flatten()
-        .any(|since| since.elapsed() < PASTE_READ_LIMIT);
-        self.paste_tiles
-            .shown(self.snapshot["pendingAttachments"].as_u64().unwrap_or(0))
-            + u64::from(reading)
+        .any(|since| since.elapsed() < PASTE_READ_LIMIT)
+    }
+
+    /// Pictures or files on their way into the chat box, which a send from it takes along.
+    pub(super) fn attachments_on_their_way(&self) -> bool {
+        self.paste_tiles.in_flight() > 0
+            || self.snapshot["pendingAttachments"].as_u64().unwrap_or(0) > 0
     }
 
     /// Saves pasted pictures, or copies pasted, dropped or picked files, onto the session's
-    /// machine and writes their references into the chat box. The uploading tile shows on this
-    /// frame.
+    /// machine and writes their references into the chat box, or into the message a send took
+    /// them with. The uploading tile shows on this frame.
     pub(super) fn attach_to_composer(
         &mut self,
         images: Vec<gpui::Image>,
@@ -50,10 +54,11 @@ impl NativeChatView {
         if images.is_empty() && external_paths.is_empty() {
             return;
         }
-        self.paste_tiles.started();
+        let paste = self.paste_tiles.started();
         cx.notify();
-        // The core's own count (the collapse gate, the phone's spinner) follows in its own turn.
-        self.invoke(json!({"type":"attachmentsStarted"}), cx);
+        // The core's own count (the collapse gate, the phone's spinner) follows in its own turn,
+        // and a send made before this lands takes it by this id.
+        self.invoke(json!({"type":"attachmentsStarted","id":paste}), cx);
         let config = self.config.clone();
         let started = web_time::Instant::now();
         let task = cx.background_executor().spawn(async move {
@@ -136,7 +141,7 @@ impl NativeChatView {
         cx.spawn(async move |chat, cx| {
             let attached = task.await;
             let _ = chat.update(cx, |chat, cx| {
-                chat.finish_composer_attach(attached, started, cx)
+                chat.finish_composer_attach(attached, paste, started, cx)
             });
         })
         .detach();
@@ -145,6 +150,7 @@ impl NativeChatView {
     fn finish_composer_attach(
         &mut self,
         attached: Attached,
+        paste: u64,
         started: web_time::Instant,
         cx: &mut Context<Self>,
     ) {
@@ -153,11 +159,12 @@ impl NativeChatView {
             pictures,
             error,
         } = attached;
-        self.paste_tiles.finished(false);
+        // A send took this paste while it was on its way: its references go to that message.
+        let sent = self.paste_tiles.finished(Some(paste), false);
         for (path, picture) in pictures {
             self.seed_chat_image(&path, picture, cx);
         }
-        if !paths.is_empty() {
+        if !paths.is_empty() && !sent {
             let selection = self
                 .input
                 .as_ref()
@@ -184,25 +191,25 @@ impl NativeChatView {
                 "elapsedMs": started.elapsed().as_millis() as u64,
                 "references": paths.len(),
                 "failed": error.is_some(),
-                "heldSend": self.held_send.is_some(),
+                "sent": sent,
             }),
         );
-        // A paste that brought nothing back leaves the held send in the box, with its error.
-        if paths.is_empty() || error.is_some() {
-            self.held_send = None;
-        }
-        // The core counts the upload down and shows the error; the references are already in.
+        // The core counts the upload down and shows the error. The chat box's references are
+        // already in; a sent message's go with this answer, and a send whose picture failed
+        // comes back to the box with the error card (attaching.rs).
+        let paths = if sent { paths } else { Vec::new() };
         self.invoke(
-            json!({"type":"attachmentsFinished","paths":[],"error":error}),
+            json!({"type":"attachmentsFinished","id":paste,"paths":paths,"error":error}),
             cx,
         );
         cx.notify();
     }
 
-    /// A send from the chat box while a picture is still on its way: kept until it lands.
-    /// Returns whether the send was held.
+    /// A send from the chat box while a paste's clipboard is still being read: kept, with nothing
+    /// drawn, until the read hands over the picture (whose tile a send then takes along) or brings
+    /// none. Returns whether the send was held.
     pub(super) fn hold_send_for_attachments(&mut self, mode: &str, cx: &mut Context<Self>) -> bool {
-        if self.attachments_in_flight() == 0 {
+        if !self.paste_reading() {
             return false;
         }
         self.held_send = Some(mode.to_owned());
@@ -210,14 +217,14 @@ impl NativeChatView {
         true
     }
 
-    /// Sends the held message once nothing is on its way any more (called from the paint, which
-    /// runs after every reference and count change).
+    /// Sends the held message once the clipboard read is over (called from the paint, which runs
+    /// after every reference and count change).
     pub(super) fn release_held_send(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         super::paste_watch::watch();
         if self.held_send.is_none() {
             return;
         }
-        if self.attachments_in_flight() > 0 {
+        if self.paste_reading() {
             // A clipboard read ends without telling the view when it brings nothing (or times
             // out), so a held send looks again shortly.
             if self.held_send_recheck.is_none() {

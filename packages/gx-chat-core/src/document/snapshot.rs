@@ -121,6 +121,11 @@ pub struct Document {
     pub queue_take_back_busy: Option<String>,
     /// The key Back to composer's tooltip names.
     pub queue_take_back_hotkey: String,
+    /// Your messages still waiting for pictures on their way into the chat box: loading tiles in
+    /// the bubble, and after a moment the spinner and Back to composer beside it
+    /// (`composer/attaching.rs`). Family d.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attaching_messages: Vec<crate::composer::attaching::AttachingMessage>,
     pub draft: Draft,
     pub composer_placeholder: String,
     /// Why sending is blocked, or `null` when it is not.

@@ -47,7 +47,12 @@ impl NativeChatView {
             .when(message["slashCommand"] == true, |prompt| {
                 prompt.font_family(super::fonts::CHAT_MONO)
             })
-            .child(self.prompt_body(id, message, body, &text_look, p, cx));
+            .child(self.with_loading_pictures(
+                id,
+                self.prompt_body(id, message, body.clone(), &text_look, p, cx),
+                !body.trim().is_empty(),
+                p,
+            ));
         let frame = match style {
             UserStyle::Default => {
                 // The bubble's indicator hangs off its right edge, level with its last line, at the

@@ -63,6 +63,7 @@ pub fn begin_send(
         sent_while_working: working && !steers_into_running_turn(state),
         shell_command: false,
         left_queue_at_ms: None,
+        awaiting_attachments: false,
     };
     let entry = assign_occurrence(&state.pending.sends, entry);
     state.pending.sends.push(entry);
@@ -117,6 +118,32 @@ pub fn adopt_queued_prompt_id(state: &mut ChatState, pending_id: &str, queued_pr
 pub fn drop_send(state: &mut ChatState, pending_id: &str) {
     state.pending.sends.retain(|entry| entry.id != pending_id);
     // `setPending((current) => current.filter(...))`: a new array whether or not a row went.
+    state.messages.new_composition_identity();
+}
+
+/// The echo of a send waiting for its pictures (`crate::composer::attaching`): its text as it
+/// stands, and once `done` (its last picture is in and it is about to leave), an echo like any
+/// other, whose occurrence is counted now, as if Enter had been pressed with the pictures in.
+pub fn update_attaching_send(state: &mut ChatState, pending_id: &str, text: &str, done: bool) {
+    let working = is_working(state) && !steers_into_running_turn(state);
+    let Some(at) = state
+        .pending
+        .sends
+        .iter()
+        .position(|entry| entry.id == pending_id)
+    else {
+        return;
+    };
+    let mut entry = state.pending.sends.remove(at);
+    entry.text = text.to_string();
+    entry.awaiting_attachments = !done;
+    entry.matching_occurrence = None;
+    entry.matching_after_timestamp = None;
+    if done {
+        entry.sent_while_working = working;
+        entry = assign_occurrence(&state.pending.sends, entry);
+    }
+    state.pending.sends.insert(at, entry);
     state.messages.new_composition_identity();
 }
 

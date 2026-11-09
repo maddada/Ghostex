@@ -143,6 +143,7 @@ pub fn pending_with_startup_sends(
                 sent_while_working: false,
                 shell_command: false,
                 left_queue_at_ms: None,
+                awaiting_attachments: false,
             }),
         }
     }

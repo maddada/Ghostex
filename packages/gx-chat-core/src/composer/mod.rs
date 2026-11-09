@@ -5,6 +5,7 @@
 //! for family d in `docs/2026-09-21/rust-chat/FAMILIES.md`.
 
 pub mod actions;
+pub mod attaching;
 pub mod catch_up;
 pub mod document;
 pub mod draft_sync;

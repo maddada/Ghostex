@@ -554,7 +554,12 @@ impl NativeChatView {
                 .when(message["slashCommand"] == true, |bubble| {
                     bubble.font_family(super::fonts::CHAT_MONO)
                 })
-                .child(self.prompt_body(&id, message, body.clone(), &bubble_appearance, p, cx))
+                .child(self.with_loading_pictures(
+                    &id,
+                    self.prompt_body(&id, message, body.clone(), &bubble_appearance, p, cx),
+                    !body.trim().is_empty(),
+                    p,
+                ))
                 .children(indicator);
             let failed_delivery = self.render_startup_delivery(message, false, p, cx);
             // The prompt's own pictures sit above the bubble, where their author put them.

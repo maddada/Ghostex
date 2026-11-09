@@ -319,6 +319,31 @@ fn filter_pending_sends(
     messages: &[ChatMessage],
     mode: Mode,
 ) -> Vec<PendingSend> {
+    // A send still waiting for its pictures has not left, so no transcript row can be it: it stays,
+    // and the others are matched as if it were not there (`crate::composer::attaching`).
+    if pending.iter().any(|entry| entry.awaiting_attachments) {
+        let open: Vec<PendingSend> = pending
+            .iter()
+            .filter(|entry| !entry.awaiting_attachments)
+            .cloned()
+            .collect();
+        let kept = filter_sent_pending_sends(&open, messages, mode);
+        return pending
+            .iter()
+            .filter(|entry| {
+                entry.awaiting_attachments || kept.iter().any(|kept| kept.id == entry.id)
+            })
+            .cloned()
+            .collect();
+    }
+    filter_sent_pending_sends(pending, messages, mode)
+}
+
+fn filter_sent_pending_sends(
+    pending: &[PendingSend],
+    messages: &[ChatMessage],
+    mode: Mode,
+) -> Vec<PendingSend> {
     // CDXC:SessionChat 2026-10-10 WHY: matching an echo normalizes the text of every user message in the transcript, and this runs on every event the core handles (a live update, the composer's width while a panel slides). With nothing pending the answer is always nothing, so a very long thread no longer pays for its whole history on each event.
     if pending.is_empty() {
         return Vec::new();

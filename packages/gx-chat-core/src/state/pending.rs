@@ -61,6 +61,9 @@ pub struct PendingSend {
     /// When the queue was first seen without this send's row
     /// (`session/startup_sends.rs::settle_rows_gone_from_queue`).
     pub left_queue_at_ms: Option<i64>,
+    /// The send has not left yet: it waits for pictures still on their way into the chat box, so
+    /// no transcript row can be it (`crate::composer::attaching`).
+    pub awaiting_attachments: bool,
 }
 
 /// A command Ghostex typed into the agent, shown as its own row until the transcript covers it.

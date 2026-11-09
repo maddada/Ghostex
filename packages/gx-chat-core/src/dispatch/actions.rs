@@ -277,7 +277,7 @@ fn dispatch_action(
     state.core.cleared_error = state.core.operation_error.is_some();
     state.core.skip_closing_publish = false;
     state.core.effects_not_awaited = false;
-    if clears_error(&action.kind) {
+    if clears_error(&action.kind) && !echoes_restored_text(state, action) {
         state.core.clear_error();
     }
     let effects = match owner(&action.kind) {
@@ -308,6 +308,33 @@ fn dispatch_action(
         state.core.request_publish();
     }
     effects
+}
+
+/// CDXC:SessionChat 2026-11-09 WHY:
+/// A refused send (and a message whose picture could not be saved, composer/attaching.rs) puts its
+/// text back in the chat box and says why in the chat box's error card. The box answers the text it
+/// was given with its own `editDraft` and `saveDraft`, and those cleared the card before it was
+/// ever drawn: the text came back with no reason. Only the box echoing the text it was handed keeps
+/// the card; the user's next keystroke clears it as before.
+fn echoes_restored_text(state: &mut ChatState, action: &UserAction) -> bool {
+    let Some(restored) = state.composer.restored_text.as_deref() else {
+        return false;
+    };
+    match action.kind {
+        ActionKind::EditDraft => {
+            action.param("text").and_then(serde_json::Value::as_str) == Some(restored)
+        }
+        ActionKind::SaveDraft => {
+            let echoes =
+                action.param("content").and_then(serde_json::Value::as_str) == Some(restored);
+            state.composer.restored_text = None;
+            echoes
+        }
+        _ => {
+            state.composer.restored_text = None;
+            false
+        }
+    }
 }
 
 /// Whether this action clears the refusal the composer is showing.

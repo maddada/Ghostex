@@ -1162,7 +1162,7 @@ impl NativeChatView {
                 // A pasted file's import answered: an answer goes on to the chat box as references
                 // (`attachmentReferences`, then the core's `insertAttachments`), a refusal does not.
                 if import_attachments {
-                    this.paste_tiles.finished(error.is_null());
+                    this.paste_tiles.finished(None, error.is_null());
                     cx.notify();
                 }
                 crate::support_logs::append_for_scenario(

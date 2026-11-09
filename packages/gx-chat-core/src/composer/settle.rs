@@ -105,6 +105,7 @@ fn settle_draft_push(
 /// TypeScript's `catch` around the whole arm does.
 fn settle_attachment_import(
     state: &mut ChatState,
+    context: &ChatContext,
     request_id: u64,
     outcome: &RpcOutcome,
 ) -> Option<Vec<Effect>> {
@@ -115,6 +116,27 @@ fn settle_attachment_import(
         .position(|pending| *pending == request_id)?;
     state.composer.attachment_imports.remove(at);
     state.composer.pending_attachments = state.composer.pending_attachments.saturating_sub(1);
+    // A send made while these were on their way takes them (composer/attaching.rs).
+    if let Some(slot) = crate::composer::attaching::take_import_slot(state, request_id) {
+        let (paths, error): (Vec<String>, Option<&str>) = match outcome {
+            RpcOutcome::Ok { result } => (
+                result
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(str::to_string)
+                    .collect(),
+                None,
+            ),
+            RpcOutcome::Err { message, .. } => (Vec::new(), Some(message.as_str())),
+        };
+        if let Some(effects) =
+            crate::composer::attaching::landed(state, context, &slot, &paths, error)
+        {
+            return Some(effects);
+        }
+    }
     let RpcOutcome::Ok { result } = outcome else {
         return Some(Vec::new());
     };
@@ -228,6 +250,7 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
     {
         state.core.request_publish();
     }
+    crate::composer::attaching::settle(state, context);
     match event {
         Event::ComposerBootRead(read) => adopt_boot_read(state, read),
         Event::RpcSettled {
@@ -252,7 +275,7 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
                 .or_else(|| settle_note_read(state, *request_id, outcome))
                 .or_else(|| crate::composer::catch_up::settle(state, *request_id, outcome))
                 .or_else(|| crate::composer::files_links::settle(state, *request_id, outcome))
-                .or_else(|| settle_attachment_import(state, *request_id, outcome))
+                .or_else(|| settle_attachment_import(state, context, *request_id, outcome))
                 .or_else(|| settle_draft_push(state, *request_id, outcome));
             match claimed {
                 Some(round) => effects.extend(round),
