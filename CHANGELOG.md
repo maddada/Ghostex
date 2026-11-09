@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **`ghostex agents reload` works again on macOS** (#522): a reload, or any wake right after a sleep, no longer fails with "the session could not be started again" or "macOS refused to start it from this login". Ghostex now waits for macOS to finish ending the terminal's previous run before starting it again, and a reload that still fails says why.
 - **A Claude chat on a Claude Swap account reopens again** (#521): Ghostex now finds the conversation in that account's own history. A chat whose conversation really is gone says so and offers Start fresh, which starts a new conversation in the same session instead of leaving the input box stuck.
 - **The machine dialog (Settings > Remote) shows less at first:** each field's explanation is now an (i) that appears next to its label when you point at the field, with the text in a tooltip, errors still show under the field, and Agent access moved into Advanced as its first row.
 - **Settings > Security shows only while Extensions > Experimental > Security logs is on (off by default):** the page leaves the rail and the search, while the log keeps being written, its alerts and `ghostex security log` work as before, and a link to the page (the bell's "open the log") still opens it
