@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "releasedIn": "11.2.1",
+  "githubRepo": "maddada/Ghostex",
+  "components": {
+    "collab": {
+      "name": "collab",
+      "componentVersion": "1.0.0-94ac7ff47f26",
+      "downloadTag": "collab-1.0.0-94ac7ff47f26",
+      "githubRepo": "maddada/ghostex-components",
+      "platforms": {
+        "darwin-arm64": {
+          "assetName": "collab-1.0.0-94ac7ff47f26-darwin-arm64.tar.gz",
+          "sha256SidecarName": "collab-1.0.0-94ac7ff47f26-darwin-arm64.tar.gz.sha256",
+          "sha256": "2e646ca52c35600aef122a67a22f2c2e3ce31cfa39b632ddb67eac44a3158276",
+          "sizeBytes": 2394735,
+          "signature": "AEfebcEaOF4/snml4HUq6kcydav/EU0A1MUGlBlorbcNiHy2L3HGwHt3FWxEICPvfoUV7aCdNIQ1oLmTAm3WCA=="
+        }
+      }
+    }
+  }
+}

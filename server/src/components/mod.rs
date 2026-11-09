@@ -71,22 +71,18 @@ pub(crate) fn platform_dir() -> String {
     format!("{os}-{arch}")
 }
 
-/// The app's sealed `on-demand-resources.json`: `GHOSTEX_ON_DEMAND_MANIFEST`, else the first one
-/// beside or above gxserver's own executable (macOS keeps it in `Contents/Resources/Web/`, above
-/// `Web/gxserver/GhostexServer.app`; Linux and Windows beside the app under `resources/`).
-pub(crate) fn manifest_path() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("GHOSTEX_ON_DEMAND_MANIFEST") {
-        let path = PathBuf::from(path);
-        return path.is_file().then_some(path);
-    }
+/// The first of `names` beside or above gxserver's own executable (macOS keeps the app's files in
+/// `Contents/Resources/Web/`, above `Web/gxserver/GhostexServer.app`; Linux and Windows beside the
+/// app under `resources/`).
+fn find_above_executable(name: &str) -> Option<PathBuf> {
     let executable = std::env::current_exe().ok()?;
     let executable = std::fs::canonicalize(&executable).unwrap_or(executable);
     executable.ancestors().skip(1).take(7).find_map(|dir| {
         [
-            "on-demand-resources.json",
-            "Web/on-demand-resources.json",
-            "resources/on-demand-resources.json",
-            "resources/Web/on-demand-resources.json",
+            name.to_string(),
+            format!("Web/{name}"),
+            format!("resources/{name}"),
+            format!("resources/Web/{name}"),
         ]
         .iter()
         .map(|candidate| dir.join(candidate))
@@ -94,12 +90,38 @@ pub(crate) fn manifest_path() -> Option<PathBuf> {
     })
 }
 
-/// The sealed component `name` for this platform, or `None` when the app has none (a
-/// development build, or an app released before it).
-pub(crate) fn sealed(name: &str) -> Option<SealedComponent> {
-    let manifest: Value =
-        serde_json::from_str(&std::fs::read_to_string(manifest_path()?).ok()?).ok()?;
+/// The app's sealed `on-demand-resources.json`: `GHOSTEX_ON_DEMAND_MANIFEST`, else the first one
+/// beside or above gxserver's own executable.
+pub(crate) fn manifest_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("GHOSTEX_ON_DEMAND_MANIFEST") {
+        let path = PathBuf::from(path);
+        return path.is_file().then_some(path);
+    }
+    find_above_executable("on-demand-resources.json")
+}
+
+/// CDXC:Collab 2026-11-09 DECISION:
+/// User, on a local build's Collab card ("This build of Ghostex has no Collab component."): "can't
+/// install this?". A local build (`cargo xtask rebuild`) seals no `on-demand-resources.json` (one
+/// would turn the desktop's bundled code-server into a download), so it carries the components
+/// the latest release sealed instead: `released-components.json`, copied from
+/// tooling/collab/released-components.json by apps/desktop/scripts/build-macos-app.sh. Its entries
+/// are the release's own (download tag, size, SHA-256 and Ghostex's signature), so the download is
+/// checked exactly as a release build checks it. A release build never carries the file and reads
+/// its sealed manifest first.
+fn released_manifest_path() -> Option<PathBuf> {
+    find_above_executable("released-components.json")
+}
+
+fn sealed_from(path: Option<PathBuf>, name: &str) -> Option<SealedComponent> {
+    let manifest: Value = serde_json::from_str(&std::fs::read_to_string(path?).ok()?).ok()?;
     sealed_in(&manifest, name, &platform_dir())
+}
+
+/// The sealed component `name` for this platform: the app's sealed manifest, else (a local build)
+/// the released component it carries, or `None` when it has neither (an app released before it).
+pub(crate) fn sealed(name: &str) -> Option<SealedComponent> {
+    sealed_from(manifest_path(), name).or_else(|| sealed_from(released_manifest_path(), name))
 }
 
 pub(crate) fn sealed_in(manifest: &Value, name: &str, platform: &str) -> Option<SealedComponent> {

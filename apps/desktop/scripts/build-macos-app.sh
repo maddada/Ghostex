@@ -906,6 +906,18 @@ stage_on_demand_remote_gxserver_manifest() {
 	rm -rf "$WEB_DIR/gxserver-linux-x64" "$WEB_DIR/gxserver-linux-arm64" "$WEB_DIR/gxserver-linux-amd64" "$WEB_DIR/gxserver-linux-aarch64"
 }
 
+# CDXC:Collab 2026-11-09 DECISION:
+# User, on a local build's Collab card ("This build of Ghostex has no Collab component."): "can't install this?". A local build seals no on-demand-resources.json, so it carries the Collab component the latest release sealed (tooling/collab/released-components.json: its download tag, size, SHA-256 and Ghostex's signature). gxserver reads it when it has no sealed manifest (server/src/components/mod.rs `sealed`) and installs the released component with the same checks a release build makes. A release build never carries it.
+stage_released_collab_component() {
+	local pin="$REPO_ROOT/tooling/collab/released-components.json" released local_version
+	stage_file_if_changed "$pin" "$WEB_DIR/released-components.json" 0644
+	released="$(sed -n 's/^[[:space:]]*"componentVersion":[[:space:]]*"\([^"]*\)".*/\1/p' "$pin" | head -n 1)"
+	local_version="$(node "$REPO_ROOT/tooling/collab/component-identity.mjs" 2>/dev/null || true)"
+	if [[ -n "$local_version" && "$local_version" != "$released" ]]; then
+		echo "Note: Collab's source changed since the released Collab $released; this build installs the released one (Collab $local_version ships with the next release)."
+	fi
+}
+
 resolve_gpui_marketing_version() {
 	if [[ -n "$GHOSTEX_GPUI_MARKETING_VERSION" ]]; then
 		printf '%s\n' "$GHOSTEX_GPUI_MARKETING_VERSION"
@@ -1465,9 +1477,11 @@ else
 fi
 if [[ "$GHOSTEX_ON_DEMAND_ASSETS" == "1" ]]; then
 	stage_on_demand_remote_gxserver_manifest
+	rm -f "$WEB_DIR/released-components.json"
 else
 	rm -f "$WEB_DIR/on-demand-resources.json"
 	stage_remote_gxserver_linux_packages_if_available
+	stage_released_collab_component
 fi
 
 cat >"$APP_PATH/Contents/Info.plist" <<EOF_PLIST
