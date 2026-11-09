@@ -45,6 +45,18 @@ impl GhostexGpuiApp {
         let group_id = group.group_id.clone();
         let drag_id = session_id.clone();
         let drag_group_id = group_id.clone();
+        // Every local row drags: a drop on an Agents pane splits it (session_pane_placement.rs),
+        // and the reorder drop line still shows only when the sort mode allows a reorder.
+        // Another machine's session in a merged project (`machineName`) has no place in this
+        // computer's groups to move to, except a pinned one among the Pinned rows it is drawn with
+        // (CDXC:Sidebar 2026-11-07 WHY in gx-core sidebar_drag/pinned_order.rs).
+        let reorders = !session.is_browser()
+            && !group.is_stale
+            && group.remote_machine_context.is_none()
+            && (session.details.get("machineName").is_none() || session.is_pinned);
+        // CDXC:RemoteMachines 2026-11-09 DECISION:
+        // User: "i can't drag sessions from the sidebar onto the main work area to split it if they are remote machine projects pls fix". A session of another machine's project (its own group, as the Separate-by-machine tabs draw it, or a merged project's row) drags onto the Agents panes like a local one, pinned or not, coordinator or plain session; the sidebar still takes no drop of a row that `reorders` refuses, so it moves nowhere in this computer's list.
+        let can_drag = !session.is_browser() && !group.is_stale;
         let dragged = SidebarDrag {
             kind: "session",
             preview: super::drag::SidebarDragPreview::Row(super::row_drag::RowDragPreview {
@@ -59,16 +71,8 @@ impl GhostexGpuiApp {
             title: session.title().to_owned(),
             scale: appearance.scale,
             refused: Default::default(),
+            panes_only: !reorders,
         };
-        // Every local row drags: a drop on an Agents pane splits it (session_pane_placement.rs),
-        // and the reorder drop line still shows only when the sort mode allows a reorder.
-        // Another machine's session in a merged project (`machineName`) has no place in this
-        // computer's groups to move to, except a pinned one among the Pinned rows it is drawn with
-        // (CDXC:Sidebar 2026-11-07 WHY in gx-core sidebar_drag/pinned_order.rs).
-        let can_drag = !session.is_browser()
-            && !group.is_stale
-            && group.remote_machine_context.is_none()
-            && (session.details.get("machineName").is_none() || session.is_pinned);
         let selected = session
             .details
             .get("isMultiSelected")

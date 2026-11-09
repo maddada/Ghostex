@@ -4,6 +4,7 @@
 use gpui::{CursorStyle, DragMoveEvent, Window};
 
 use crate::GhostexGpuiApp;
+use crate::app::helpers::{GpuiRemoteAttachSessionKey, gpui_remote_scoped_project_id};
 use crate::app::model::{
     GpuiLocalWorkspaceSessionKey, TerminalSessionId, WorkspaceDropFeedback, WorkspaceDropTarget,
     WorkspaceDropZone, WorkspacePaneId, workspace_pane_body_drop_zone,
@@ -52,9 +53,11 @@ impl GhostexGpuiApp {
 
     /// What a sidebar row drag can do on an Agents pane; the hover feedback and the drop both ask
     /// this, so a pane never shows a zone the release then ignores. `None` for a row that is not a
-    /// session (no feedback at all); `Some(Err(reason))` for a session no pane here can take, which
-    /// the pane says while the pointer is over it; `Some(Ok(None))` for a session of the active
-    /// project that has no tab in any pane yet, which only the middle of a pane takes.
+    /// session (no feedback at all); `Some(Err(reason))` for a session no pane here can take (one of
+    /// another project than the panes show), which
+    /// the pane says while the pointer is over it; `Some(Ok(None))` for a session of the shown
+    /// project (local, or on another computer) that has no tab in any pane yet, which only the
+    /// middle of a pane takes.
     fn sidebar_drag_pane_session(
         &self,
         drag: &SidebarDrag,
@@ -72,24 +75,40 @@ impl GhostexGpuiApp {
             return None;
         }
         let key = ghostex_gx_core::SessionKey::parse_sidebar_session_id(&drag.id)?;
-        if !key.machine.is_local() {
-            return Some(Err("Can't split here: this session is on another computer"));
-        }
-        if self.agents_workspace_project_id.as_deref() != Some(&key.project_id) {
-            return Some(Err("Can't split here: this session is in another project"));
-        }
-        Some(Ok(self
-            .local_workspace_session_mappings
-            .get(&GpuiLocalWorkspaceSessionKey {
-                project_id: key.project_id,
-                session_id: key.session_id,
-            })
-            .copied()
-            .and_then(|shell_session_id| {
-                self.agents_workspace
-                    .pane_id_for_session(shell_session_id)
-                    .map(|pane_id| (shell_session_id, pane_id))
-            })))
+        // CDXC:RemoteMachines 2026-11-09 DECISION:
+        // User: "i can't drag sessions from the sidebar onto the main work area to split it if they are remote machine projects pls fix". A session on another computer drops like a local one: the panes show one project at a time, and a remote project's panes are its machine-scoped workspace (`gpui_remote_scoped_project_id`), whose tabs are mapped in `remote_attach_sessions`. A session of that project splits or replaces a pane exactly as a local session of the active local project does; one of any other project (local or on another computer) is refused as before. Supersedes the 2026-10-08 refusal of every session on another computer.
+        let shell_session_id = match &key.machine {
+            ghostex_gx_core::MachineId::Local => {
+                if self.agents_workspace_project_id.as_deref() != Some(&key.project_id) {
+                    return Some(Err("Can't split here: this session is in another project"));
+                }
+                self.local_workspace_session_mappings
+                    .get(&GpuiLocalWorkspaceSessionKey {
+                        project_id: key.project_id,
+                        session_id: key.session_id,
+                    })
+                    .copied()
+            }
+            ghostex_gx_core::MachineId::Remote(machine_id) => {
+                if self.agents_workspace_project_id.as_deref()
+                    != Some(gpui_remote_scoped_project_id(machine_id, &key.project_id).as_str())
+                {
+                    return Some(Err("Can't split here: this session is in another project"));
+                }
+                self.remote_attach_sessions
+                    .get(&GpuiRemoteAttachSessionKey {
+                        remote_machine_id: machine_id.clone(),
+                        project_id: key.project_id,
+                        session_id: key.session_id,
+                    })
+                    .copied()
+            }
+        };
+        Some(Ok(shell_session_id.and_then(|shell_session_id| {
+            self.agents_workspace
+                .pane_id_for_session(shell_session_id)
+                .map(|pane_id| (shell_session_id, pane_id))
+        })))
     }
 
     /// CDXC:Workarea 2026-09-23 DECISION:

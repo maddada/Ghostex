@@ -16,6 +16,10 @@ pub(crate) struct SidebarDrag {
     /// Set while the pointer is over a pane that refuses this drag
     /// (`session_pane_placement.rs`); shared by the drag's value and its preview, which fades.
     pub(crate) refused: std::rc::Rc<std::cell::Cell<bool>>,
+    /// A session row that only drags onto the Agents panes: the sidebar takes no drop of it (no
+    /// reorder line, no move), because the row has no place in this computer's list to move to
+    /// (a session of another machine's project).
+    pub(crate) panes_only: bool,
 }
 
 /// How strongly the dragged row shows while it is over a pane that cannot take it.
@@ -80,6 +84,12 @@ impl GhostexGpuiApp {
             return;
         }
         if target_kind == "space-row" && source.kind != "space" {
+            return;
+        }
+        if source.panes_only {
+            if self.native_sidebar.drop_command.take().is_some() {
+                cx.notify();
+            }
             return;
         }
         if source.kind == "space" && matches!(target_kind, "space" | "space-row") {

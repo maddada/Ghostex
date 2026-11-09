@@ -180,6 +180,7 @@ impl GhostexGpuiApp {
             title: space.name.clone(),
             scale,
             refused: Default::default(),
+            panes_only: false,
             preview: super::drag::SidebarDragPreview::Space(super::space_drag::SpaceDragPreview {
                 visible_ids: visible_ids.to_vec(),
                 icon: space.icon.clone(),

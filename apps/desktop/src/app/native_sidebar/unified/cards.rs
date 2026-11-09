@@ -158,9 +158,10 @@ pub(super) fn repo_tile(
 }
 
 /// Whether a card drags onto the Agents panes, as a Project sidebar row does: a session on this
-/// computer, never a browser tab.
+/// computer or on a connected one (CDXC:RemoteMachines 2026-11-09 in native_sidebar/sessions.rs),
+/// never a browser tab.
 fn drags_to_panes(row: &SessionRow) -> bool {
-    !row.is_browser && row.key.as_ref().is_some_and(|key| key.machine.is_local())
+    !row.is_browser && row.key.is_some()
 }
 
 /// Marks a card or a slim row as the open session: its fill, and an outline drawn over it.
@@ -186,8 +187,9 @@ impl GhostexGpuiApp {
         User: "please allow me to drag a session card to split like i can for project sidebar". A Unified card or slim row is the Project sidebar row's drag source (`SidebarDrag` of kind "session", drag_source.rs), so the Agents panes take it with the same split and centre zones, refusals and preview (session_pane_placement.rs). Like that row, only a session on this computer drags, and not while a menu is open; it fades while it is dragged. Only pinned cards reorder (pinned_drag.rs), so a release anywhere else in the sidebar does nothing; a plain click still opens the session, since a press only becomes a drag once the pointer moves.
         */
         // A pinned card also drags within its pinned cards (pinned_drag.rs), from any computer.
-        let draggable = drags_to_panes(&card.row)
-            || (card.session.is_pinned && !card.row.is_browser && self.unified_pinned_reorder_on());
+        let reorders =
+            card.session.is_pinned && !card.row.is_browser && self.unified_pinned_reorder_on();
+        let draggable = drags_to_panes(&card.row) || reorders;
         let dragged = draggable.then(|| SidebarDrag {
             kind: "session",
             preview: SidebarDragPreview::Row(RowDragPreview {
@@ -202,6 +204,14 @@ impl GhostexGpuiApp {
             title: card.session.title().to_owned(),
             scale: appearance.scale,
             refused: Default::default(),
+            // A local card kept the pinned drop it always had (`unified_pinned_drop_command` says
+            // whether it takes it); a card of another computer that only drags to panes takes none.
+            panes_only: !reorders
+                && !card
+                    .row
+                    .key
+                    .as_ref()
+                    .is_some_and(|key| key.machine.is_local()),
         });
         // The ring a reveal flashes once it has scrolled to the row, as a Project sidebar row
         // draws it (native_sidebar/sessions.rs).
@@ -654,7 +664,7 @@ mod tests {
     }
 
     #[test]
-    fn only_a_session_on_this_computer_drags_onto_the_panes() {
+    fn a_session_on_any_computer_drags_onto_the_panes() {
         use ghostex_gx_core::{MachineId, SessionKey};
         let row = |key: Option<SessionKey>, is_browser: bool| SessionRow {
             key,
@@ -667,7 +677,7 @@ mod tests {
         )));
         let mut remote = SessionKey::local("p", "s");
         remote.machine = MachineId::Remote("remote-ab12".to_string());
-        assert!(!drags_to_panes(&row(Some(remote), false)));
+        assert!(drags_to_panes(&row(Some(remote), false)));
         assert!(!drags_to_panes(&row(None, true)));
         assert!(!drags_to_panes(&row(
             Some(SessionKey::local("p", "s")),

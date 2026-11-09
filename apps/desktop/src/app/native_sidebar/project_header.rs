@@ -106,6 +106,7 @@ impl GhostexGpuiApp {
             title: group.title.clone(),
             scale,
             refused: Default::default(),
+            panes_only: false,
         };
         // The chips draw short names (CDXC:RemoteMachines 2026-11-06 in gx-core
         // machine_short_names.rs); the title's tooltip names the computers in full.

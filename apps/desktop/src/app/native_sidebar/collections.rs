@@ -61,6 +61,7 @@ impl GhostexGpuiApp {
             title: collection.title.clone(),
             scale: appearance.scale,
             refused: Default::default(),
+            panes_only: false,
         };
         let rail_width = 2.0;
         let active = collection.collapsed && collection.contains_active_session;
