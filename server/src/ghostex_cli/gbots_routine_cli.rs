@@ -14,7 +14,7 @@ pub(crate) const ROUTINE_HELP: &str = "  ghostex gbots routine list [--bot <bot>
                                                  result and check
   ghostex gbots routine add --bot <bot> --name <name> (--prompt <text> | --prompt-file <file>)
                        --schedule-json '<json>' [--precheck-json '<json>']
-                       [--deliver chat|chief] [--continuity new|standing] [--json] [--paused]
+                       [--deliver chat|chief|brief] [--continuity new|standing] [--json] [--paused]
                                                  Set a routine: each run is a chat of the GBot.
                                                  Schedules: {\"kind\":\"daily\",\"time\":\"09:00\"},
                                                  {\"kind\":\"weekly\",\"days\":[1,5],\"time\":\"09:00\"},
@@ -30,7 +30,10 @@ pub(crate) const ROUTINE_HELP: &str = "  ghostex gbots routine list [--bot <bot>
                                                  {\"kind\":\"command\",\"command\":\"ls ~/inbox\"},
                                                  {\"kind\":\"url\",\"url\":\"https://…\"},
                                                  {\"kind\":\"files\",\"path\":\"~/inbox\"},
-                                                 {\"kind\":\"connector\",\"tool\":\"<read-only tool>\"}
+                                                 {\"kind\":\"connector\",\"tool\":\"<read-only tool>\"};
+                                                 a calendar check takes \"withinMinutes\" too, and
+                                                 {\"kind\":\"any\",\"checks\":[…]} runs when any of
+                                                 2 to 4 checks sees something new
   ghostex gbots routine edit <routine> [any add flag] [--no-precheck]
   ghostex gbots routine pause|resume|remove|run-now <routine> [--bot <bot>]
                                                  <routine> is its name or id. Undo a routine you
@@ -113,6 +116,9 @@ fn print_routine(routine: &Value) {
     }
     if routine["deliver"] == json!("chief") {
         println!("  Results that need you go to Chief of Staff too.");
+    }
+    if routine["deliver"] == json!("brief") {
+        println!("  What it finds goes to Chief of Staff, who tells you, with a notification.");
     }
     if let Some(run) = routine["lastRun"].as_object() {
         let summary = run

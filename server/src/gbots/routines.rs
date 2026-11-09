@@ -133,7 +133,7 @@ fn resolve(db: &Connection, reference: &str, bot: Option<&Bot>) -> Result<Value,
     }
 }
 
-fn record_change(
+pub(super) fn record_change(
     db: &Connection,
     kind: &str,
     routine_id: &str,

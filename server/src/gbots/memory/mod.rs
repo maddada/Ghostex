@@ -29,3 +29,10 @@ pub(crate) use notify::{tell_every_bot, tell_open_chats};
 pub(crate) use ops::{coordinator_remember, handles, run, MemoryCaller};
 pub(crate) use prefs::PREFERENCES_MAX_LINES;
 pub(crate) use topics::index_lines as topic_index_lines;
+// Team files (gbots/team_file/) read and write starter notes the way memory does.
+pub(crate) use journal::FileChange;
+pub(crate) use redact::redact;
+pub(crate) use store::{
+    bot_lock as bot_memory_lock, commit as commit_memory, read_file as read_memory_file,
+};
+pub(crate) use topics::{list as topic_list, relative_path as topic_path, stem_of as topic_stem};

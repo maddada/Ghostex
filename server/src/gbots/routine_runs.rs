@@ -150,6 +150,10 @@ pub(crate) fn routine_run_settled(state: &AppState, db: &Connection, run: Settle
             chat_key.as_deref(),
         );
     }
+    if run.deliver == "brief" {
+        super::day_watch::deliver(state, db, &run);
+        return;
+    }
     if run.deliver != "chief" {
         return;
     }

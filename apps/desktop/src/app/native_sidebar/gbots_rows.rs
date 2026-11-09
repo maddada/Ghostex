@@ -1,7 +1,7 @@
 //! Main Hub's GBots section: the GBots heading under Chief of Staff, then one row per GBot (its
 //! icon in its colour, its name, a status dot while a chat works or waits) whose chats fold under
 //! it like a project's sessions. A bot row's menu has New Chat, GBot Settings…, Memory…,
-//! Department… and Remove GBot…; the heading's has New GBot…. Department sub-headings are
+//! Department… and Remove GBot…; the heading's has New GBot…, Import Team… and Export Team…. Department sub-headings are
 //! gbots_departments.rs.
 //!
 //! CDXC:GBots 2026-11-09 DECISION:
@@ -160,7 +160,12 @@ fn gbot_menu(look: &GbotLook, machine_id: &str) -> Value {
 
 /// The GBots heading's menu.
 fn heading_menu() -> Value {
-    json!([{ "label": "New GBot…", "icon": "plus", "command": gbots_command("newGbot", json!({})) }])
+    json!([
+        { "label": "New GBot…", "icon": "plus", "command": gbots_command("newGbot", json!({})) },
+        { "separator": true },
+        { "label": "Import Team…", "icon": "download", "command": gbots_command("importTeam", json!({})) },
+        { "label": "Export Team…", "icon": "upload", "command": gbots_command("exportTeam", json!({})) },
+    ])
 }
 
 impl GhostexGpuiApp {
@@ -579,6 +584,8 @@ impl GhostexGpuiApp {
         let bot_id = text("botId");
         match text("op").as_str() {
             "newGbot" => self.open_gpui_new_gbot_modal(cx),
+            "importTeam" => self.open_gpui_gbot_team_import(cx),
+            "exportTeam" => self.open_gpui_gbot_team_export(cx),
             "settings" => self.open_gpui_gbot_settings_modal(bot_id, machine, cx),
             "department" => self.open_gpui_gbot_settings_modal_on(
                 bot_id,

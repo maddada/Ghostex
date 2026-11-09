@@ -3,19 +3,23 @@
 //!
 //! CDXC:GBots 2026-11-06 DECISION:
 //! User (via coordinator): "creating a bot (name, instructions, agent)", the agent being the user's own Claude Code or Codex. The agent is a segmented pick (the shared control), Claude Code first.
+//! CDXC:GBots 2026-11-09 DECISION:
+//! Plan piece 13: New GBot offers the built-in presets and the ones you kept (server/src/gbots/team_file/presets.rs) under Start from. Picking one fills the name, role and instructions, which you can still change; the preset's look, description and starter notes come with it when you create. Blank clears what a preset filled.
 //! SEE-ALSO: apps/desktop/src/app/new_gbot_modal_lifecycle.rs (open), apps/desktop/src/app/gx_store/create/bot.rs (`gx_store_create_gbot`, the gxserver call), server/src/gbots/ (what a new bot gets).
 use super::native_modal_kit::*;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable as _,
-    InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Render, Styled as _,
-    Subscription, Window, px,
+    AnyElement, App, AppContext as _, ClickEvent, Context, Entity, FocusHandle, Focusable as _,
+    InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Render,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, px, rgb, svg,
 };
 use gpui_component::input::{Enter, Escape, InputEvent, InputState, TextareaState};
-use gpui_component::v_flex;
+use gpui_component::{h_flex, v_flex};
+use serde_json::Value;
 use std::rc::Rc;
 
 pub(crate) const NEW_GBOT_MODAL_WIDTH: f32 = 540.0;
-pub(crate) const NEW_GBOT_MODAL_INITIAL_HEIGHT: f32 = 590.0;
+pub(crate) const NEW_GBOT_MODAL_INITIAL_HEIGHT: f32 = 670.0;
 
 const TITLE: &str = "New GBot";
 const DESCRIPTION: &str = "A GBot keeps its name, instructions and memory in every chat. It runs on your own agent and sits under Chief of Staff in Main Hub.";
@@ -27,6 +31,8 @@ const FIELD_INSTRUCTIONS: &str = "Instructions";
 const INSTRUCTIONS_PLACEHOLDER: &str =
     "What this GBot does, e.g. Compare flights and hotels and bring me a short list with prices.";
 const FIELD_AGENT: &str = "Runs on";
+const FIELD_START_FROM: &str = "Start from";
+const BLANK: &str = "Blank";
 const CANCEL: &str = "Cancel";
 const CREATE: &str = "Create GBot";
 
@@ -39,6 +45,8 @@ pub(crate) enum NewGbotModalCommand {
         title: String,
         instructions: String,
         agent: String,
+        /// The preset it starts from (`/api/gbots` `create` `preset`).
+        preset: Option<String>,
     },
     Cancel,
 }
@@ -47,6 +55,8 @@ pub(crate) type NewGbotModalHost = Rc<dyn Fn(NewGbotModalCommand, &mut App)>;
 
 pub(crate) struct NewGbotModalConfig {
     pub(crate) palette: ModalPalette,
+    /// `/api/gbots` `presets`' list; empty when it couldn't be read.
+    pub(crate) presets: Vec<Value>,
 }
 
 pub(crate) struct GpuiNewGbotModalWindow {
@@ -57,6 +67,9 @@ pub(crate) struct GpuiNewGbotModalWindow {
     instructions_input: Entity<TextareaState>,
     name: String,
     agent: usize,
+    presets: Vec<Value>,
+    /// The picked preset's index in `presets`.
+    preset: Option<usize>,
     fit: ModalFit,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
@@ -92,6 +105,8 @@ impl GpuiNewGbotModalWindow {
             instructions_input,
             name: String::new(),
             agent: 0,
+            presets: config.presets,
+            preset: None,
             fit: ModalFit::fixed(),
             focus_handle: cx.focus_handle(),
             _subscriptions: vec![name_subscription],
@@ -120,12 +135,18 @@ impl GpuiNewGbotModalWindow {
         let title = self.title_input.read(cx).value().trim().to_string();
         let instructions = self.instructions_input.read(cx).value().trim().to_string();
         let agent = AGENTS[self.agent.min(AGENTS.len() - 1)].0.to_string();
+        let preset = self
+            .preset
+            .and_then(|index| self.presets.get(index))
+            .and_then(|preset| preset["presetId"].as_str())
+            .map(str::to_string);
         self.close_window_and_send(
             NewGbotModalCommand::Create {
                 name,
                 title,
                 instructions,
                 agent,
+                preset,
             },
             window,
             cx,
@@ -165,6 +186,93 @@ impl GpuiNewGbotModalWindow {
         cx.stop_propagation();
     }
 
+    /// Fills the fields from preset `index` (`None`: Blank empties them).
+    fn pick_preset(&mut self, index: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
+        let field = |key: &str| {
+            index
+                .and_then(|index| self.presets.get(index))
+                .and_then(|preset| preset[key].as_str())
+                .unwrap_or_default()
+                .to_string()
+        };
+        let (name, title, instructions) = (field("name"), field("title"), field("instructions"));
+        self.name_input
+            .update(cx, |input, cx| input.set_value(name.clone(), window, cx));
+        self.title_input
+            .update(cx, |input, cx| input.set_value(title, window, cx));
+        self.instructions_input
+            .update(cx, |input, cx| input.set_value(instructions, window, cx));
+        self.name = name;
+        self.preset = index;
+        cx.notify();
+    }
+
+    /// Blank and each preset, as chips that wrap.
+    fn render_start_from(&self, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        let chip = |id: usize, label: String, icon: Option<(String, u32)>, picked: bool| {
+            h_flex()
+                .id(("new-gbot-preset", id))
+                .gap(px(6.0))
+                .px(px(10.0))
+                .h(px(28.0))
+                .rounded(px(8.0))
+                .border_1()
+                .border_color(if picked { p.foreground } else { p.hairline })
+                .bg(if picked { p.raised_hover } else { p.raised })
+                .hover(|chip| chip.bg(p.raised_hover))
+                .cursor_pointer()
+                .text_size(px(12.5))
+                .children(icon.map(|(icon, hex)| {
+                    svg()
+                        .size(px(14.0))
+                        .path(format!("titlebar/{icon}.svg"))
+                        .text_color(rgb(hex))
+                }))
+                .child(label)
+        };
+        let mut chips = vec![
+            chip(0, BLANK.to_string(), None, self.preset.is_none())
+                .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                    this.pick_preset(None, window, cx)
+                }))
+                .into_any_element(),
+        ];
+        for (index, preset) in self.presets.iter().enumerate() {
+            let hex = preset["colorHex"]
+                .as_str()
+                .and_then(|hex| u32::from_str_radix(hex.trim_start_matches('#'), 16).ok())
+                .unwrap_or(0x9fb0ff);
+            let icon = preset["icon"].as_str().unwrap_or("robot").to_string();
+            chips.push(
+                chip(
+                    index + 1,
+                    preset["name"].as_str().unwrap_or_default().to_string(),
+                    Some((icon, hex)),
+                    self.preset == Some(index),
+                )
+                .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                    this.pick_preset(Some(index), window, cx)
+                }))
+                .into_any_element(),
+            );
+        }
+        let description = self
+            .preset
+            .and_then(|index| self.presets.get(index))
+            .and_then(|preset| preset["description"].as_str())
+            .filter(|description| !description.is_empty())
+            .map(str::to_string);
+        v_flex()
+            .gap(px(8.0))
+            .child(modal_section_title(&p, FIELD_START_FROM))
+            .child(div().flex().flex_wrap().gap(px(6.0)).children(chips))
+            .when_some(description, |column, description| {
+                column.child(modal_hint(&p, description))
+            })
+            .into_any_element()
+    }
+
     fn render_body(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
         let items: Vec<ModalSegmentedItem> = AGENTS
@@ -176,6 +284,9 @@ impl GpuiNewGbotModalWindow {
             .flex_1()
             .min_h_0()
             .gap(px(16.0))
+            .when(!self.presets.is_empty(), |body| {
+                body.child(self.render_start_from(cx))
+            })
             .child(
                 v_flex()
                     .gap(px(8.0))

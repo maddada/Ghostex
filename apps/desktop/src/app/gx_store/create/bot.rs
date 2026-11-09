@@ -79,15 +79,20 @@ impl GhostexGpuiApp {
         title: String,
         instructions: String,
         agent: String,
+        preset: Option<String>,
         cx: &mut gpui::Context<Self>,
     ) {
-        let params = json!({
+        let mut params = json!({
             "op": "create",
             "name": name,
             "title": title,
             "soul": instructions,
             "agentId": agent,
         });
+        // A preset fills the look, description and starter notes (server/src/gbots/team_file/).
+        if let Some(preset) = preset {
+            params["preset"] = json!(preset);
+        }
         cx.spawn(async move |this, cx| {
             #[allow(unused_mut)]
             let mut created = gx_rpc(None, "/api/gbots", params.clone()).await;

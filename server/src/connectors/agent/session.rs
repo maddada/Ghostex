@@ -21,6 +21,8 @@ pub(crate) struct AgentSession {
     pub(crate) project_id: String,
     pub(crate) session_id: String,
     pub(crate) workspace: String,
+    /// A GBot's chat that may only read the user's apps (gbots/apps_access.rs).
+    pub(crate) reads_only: bool,
 }
 
 fn param<'a>(params: &'a Map<String, Value>, key: &str) -> Result<&'a str, DomainStateError> {
@@ -86,5 +88,6 @@ pub(crate) fn resolve(
         project_id: project_id.to_string(),
         session_id: session_id.to_string(),
         workspace: project_workspace(&db, &repository, &project)?,
+        reads_only: crate::gbots::project_reads_apps_only(&db, &project),
     })
 }

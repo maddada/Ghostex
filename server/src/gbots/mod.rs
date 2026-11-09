@@ -23,18 +23,24 @@
 //! - [`endpoint`]: `/api/gbots`.
 //! - [`routines`]: a GBot's routines (`/api/gbots` `routine…` ops, the "Routine set" card, Undo);
 //!   [`routine_runs`]: whether one may run, the chat it runs in and where its result goes.
+//! - [`day_watch`]: "keep an eye on my day", the Day Watcher GBot and its daily brief to Chief
+//!   of Staff; [`apps_access`]: GBots that may only read the user's connected apps.
 //! - [`problems`]: problems and escalations of GBot chats, reported to Chief of Staff
 //!   (`ghostex gbots problem …`, `ghostex gbots flag`).
+//! - [`team_file`]: GBots exported as one JSON team file and imported with a preview first
+//!   (`ghostex gbots team …`), and the presets New GBot starts from (`ghostex gbots preset …`).
 //! - [`retire`]: the one-time removal of the previous GBots; [`trash`]: folders to the Trash.
 //!
 //! CDXC:GBots 2026-11-08 DECISION:
 //! User: remove the previous GBots fully, "we are doing our own bots thing." The previous GBots, a downloaded runtime gxserver ran beside itself, is gone with its runtime download, transcript mirror, chat agent, Bots space source and settings; its bots and chats are not imported. Native GBots keep the name, the extension switch (`gbotsEnabled`), the `ghostex gbots` command and the `/api/gbots` route. Existing computers lose the old bots once, in retire.rs.
 
+mod apps_access;
 mod assign;
 mod assignments;
 mod brief;
 mod card;
 mod changes;
+mod day_watch;
 mod department_ops;
 mod departments;
 mod endpoint;
@@ -50,11 +56,14 @@ mod routine_runs;
 mod routines;
 mod session;
 mod sweep;
+mod team_file;
 mod trash;
 
+pub(crate) use apps_access::{project_reads_apps_only, read_only_refusal};
 pub(crate) use assign::{
     report_heading as assignment_report_heading, settle_report as settle_assignment_report,
 };
+pub(crate) use day_watch::{adds_bot as day_watch_adds_bot, brief_turn_alerts as day_brief_turn_alerts};
 pub(crate) use endpoint::{handle_gbots_http, GBOTS_ENDPOINT};
 pub(crate) use feature::{chief_adds_on_its_own, gbots_off_message, gbots_on, gbots_shown};
 pub(crate) use memory::{
@@ -74,3 +83,4 @@ pub(crate) use routine_runs::{
     SettledRoutineRun,
 };
 pub(crate) use sweep::start_gbots_sweep;
+pub(crate) use team_file::import_approval_summary as team_import_approval_summary;

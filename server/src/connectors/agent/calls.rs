@@ -74,6 +74,9 @@ async fn permission(
     inputs: Vec<Value>,
 ) -> Permission {
     let named = labels.join(", ");
+    if session.reads_only {
+        return Permission::Refused(crate::gbots::read_only_refusal(&named));
+    }
     let rule = {
         let (paths, workspace, keys) =
             (state.paths.clone(), session.workspace.clone(), keys.clone());
@@ -222,6 +225,11 @@ async fn executor_call(
         }
         "execute" if executor::program_uses_management(&arguments) => {
             return text_result(executor::management_refused(), true);
+        }
+        // A program's steps can change what its apps don't guard, so a GBot that only reads
+        // runs single read calls only.
+        "execute" if session.reads_only => {
+            return text_result(crate::gbots::read_only_refusal("this program"), true);
         }
         _ => {}
     }

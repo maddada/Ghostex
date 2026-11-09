@@ -8,8 +8,9 @@
 //! | `url` | `url` (https, or http on this computer) | the page's body changes |
 //! | `files` | `path` | a file in the folder is added, removed or saved |
 //! | `mail` | `workspace?`, `query?` | Gmail returns a message it did not before |
-//! | `calendar` | `workspace?`, `withinHours?` | an event enters the next `withinHours` (4) hours |
-//! | `connector` | `tool`, `arguments?`, `app?`, `workspace?` | the ids a read-only connector tool returns change |
+//! | `calendar` | `workspace?`, `withinHours?` or `withinMinutes?` | an event enters the next `withinHours` (4) hours, or `withinMinutes` |
+//! | `connector` | `tool`, `arguments?`, `app?`, `workspace?` | a read-only connector tool returns an id it did not before (or, with no ids, its answer changes) |
+//! | `any` | `checks` (2 to 4 of the kinds above) | any of them sees something new |
 //!
 //! CDXC:GBots 2026-11-09 WHY:
 //! A routine that watches something must cost nothing while nothing happens, so the check runs in gxserver with no model: only a changed fingerprint starts a GBot's turn. What a check read never reaches the model, only that it changed (the plan's "pre-check output must never reach a model unredacted"), and connector checks go through gxserver's own read-only connector calls, which refuse anything that writes. The first check only records what it sees, so a watcher starts quiet instead of running on everything that was already there.
@@ -29,8 +30,15 @@ const CHECK_TIMEOUT: Duration = Duration::from_secs(60);
 const READ_LIMIT: usize = 4 * 1024 * 1024;
 /// The most files a folder check walks.
 const FILES_LIMIT: usize = 20_000;
-const MAIL_TOOL: &str = "GMAIL_FETCH_EMAILS";
-const CALENDAR_TOOL: &str = "GOOGLECALENDAR_EVENTS_LIST";
+/// Composio's read tools for Gmail and Google Calendar (names and arguments checked against the
+/// Connectors tool search on 2026-11-09).
+pub(crate) const MAIL_TOOL: &str = "GMAIL_FETCH_EMAILS";
+pub(crate) const CALENDAR_TOOL: &str = "GOOGLECALENDAR_EVENTS_LIST";
+/// A fingerprint that lists what a check saw (hashed ids), so only something new counts.
+const SEEN_PREFIX: &str = "seen:";
+/// The most ids a fingerprint keeps.
+const SEEN_LIMIT: usize = 200;
+const ANY_MAX_CHECKS: usize = 4;
 
 fn text<'a>(object: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
     object
@@ -53,7 +61,7 @@ fn hash(parts: &[&[u8]]) -> String {
 pub(crate) fn normalize_precheck(value: &Value) -> Result<Value, String> {
     let object = value
         .as_object()
-        .ok_or("A pre-check is a JSON object with a kind: command, url, files, mail, calendar or connector.")?;
+        .ok_or("A pre-check is a JSON object with a kind: command, url, files, mail, calendar, connector or any.")?;
     let kind = text(object, "kind").unwrap_or_default();
     let workspace = text(object, "workspace").map(str::to_string);
     let mut stored = match kind {
@@ -79,15 +87,38 @@ pub(crate) fn normalize_precheck(value: &Value) -> Result<Value, String> {
         "mail" => {
             json!({ "kind": "mail", "query": text(object, "query").unwrap_or("is:unread newer_than:2d") })
         }
-        "calendar" => {
-            let hours = object
-                .get("withinHours")
-                .and_then(Value::as_u64)
-                .unwrap_or(4);
-            if !(1..=72).contains(&hours) {
-                return Err("A calendar pre-check looks 1 to 72 hours ahead.".into());
+        "calendar" => match object.get("withinMinutes").and_then(Value::as_u64) {
+            Some(minutes) => {
+                if !(5..=180).contains(&minutes) {
+                    return Err("A calendar pre-check looks 5 to 180 minutes ahead.".into());
+                }
+                json!({ "kind": "calendar", "withinMinutes": minutes })
             }
-            json!({ "kind": "calendar", "withinHours": hours })
+            None => {
+                let hours = object
+                    .get("withinHours")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(4);
+                if !(1..=72).contains(&hours) {
+                    return Err("A calendar pre-check looks 1 to 72 hours ahead.".into());
+                }
+                json!({ "kind": "calendar", "withinHours": hours })
+            }
+        },
+        "any" => {
+            let checks = object
+                .get("checks")
+                .and_then(Value::as_array)
+                .filter(|checks| (2..=ANY_MAX_CHECKS).contains(&checks.len()))
+                .ok_or("An any pre-check lists 2 to 4 checks in checks.")?;
+            let mut stored = Vec::new();
+            for check in checks {
+                if check.get("kind").and_then(Value::as_str) == Some("any") {
+                    return Err("An any pre-check can't hold another any.".into());
+                }
+                stored.push(normalize_precheck(check)?);
+            }
+            json!({ "kind": "any", "checks": stored })
         }
         "connector" => {
             let tool =
@@ -102,12 +133,10 @@ pub(crate) fn normalize_precheck(value: &Value) -> Result<Value, String> {
             }
             stored
         }
-        _ => {
-            return Err(
-                "Unknown pre-check kind: use command, url, files, mail, calendar or connector."
-                    .into(),
-            )
-        }
+        _ => return Err(
+            "Unknown pre-check kind: use command, url, files, mail, calendar, connector or any."
+                .into(),
+        ),
     };
     if let Some(workspace) = workspace {
         stored["workspace"] = json!(workspace);
@@ -133,14 +162,36 @@ pub(crate) fn precheck_sentence(precheck: &Value) -> String {
         "command" => format!("the output of `{}`", field("command")),
         "url" => format!("the page {}", field("url")),
         "files" => format!("the files in {}", field("path")),
+        "mail"
+            if precheck.get("query").and_then(Value::as_str)
+                == Some("is:important is:unread newer_than:1d") =>
+        {
+            "new important mail in Gmail".to_string()
+        }
         "mail" => "new mail in Gmail".to_string(),
-        "calendar" => format!(
-            "events in the next {} hours in Google Calendar",
-            precheck
-                .get("withinHours")
-                .and_then(Value::as_u64)
-                .unwrap_or(4)
-        ),
+        "calendar" => match precheck.get("withinMinutes").and_then(Value::as_u64) {
+            Some(minutes) => {
+                format!("events starting in the next {minutes} minutes in Google Calendar")
+            }
+            None => format!(
+                "events in the next {} hours in Google Calendar",
+                precheck
+                    .get("withinHours")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(4)
+            ),
+        },
+        "any" => precheck
+            .get("checks")
+            .and_then(Value::as_array)
+            .map(|checks| {
+                checks
+                    .iter()
+                    .map(precheck_sentence)
+                    .collect::<Vec<_>>()
+                    .join(" or ")
+            })
+            .unwrap_or_else(|| "a check".to_string()),
         "connector" => format!("what {} returns", field("tool")),
         _ => "a check".to_string(),
     }
@@ -167,14 +218,20 @@ pub(crate) fn run_precheck(
             state,
             precheck,
             MAIL_TOOL,
-            json!({ "query": field("query"), "max_results": 25 }),
+            json!({ "query": field("query"), "max_results": 25, "ids_only": true }),
             None,
+            true,
         ),
         "calendar" => {
-            let hours = precheck
-                .get("withinHours")
-                .and_then(Value::as_i64)
-                .unwrap_or(4);
+            let window = match precheck.get("withinMinutes").and_then(Value::as_i64) {
+                Some(minutes) => chrono::Duration::minutes(minutes),
+                None => chrono::Duration::hours(
+                    precheck
+                        .get("withinHours")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(4),
+                ),
+            };
             let now = chrono::Utc::now();
             let iso = |at: chrono::DateTime<chrono::Utc>| {
                 at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
@@ -186,11 +243,13 @@ pub(crate) fn run_precheck(
                 json!({
                     "calendarId": "primary",
                     "timeMin": iso(now),
-                    "timeMax": iso(now + chrono::Duration::hours(hours)),
+                    "timeMax": iso(now + window),
                     "singleEvents": true,
                     "maxResults": 50,
+                    "fields": "items(id),nextPageToken",
                 }),
                 None,
+                true,
             )
         }
         "connector" => connector(
@@ -202,7 +261,28 @@ pub(crate) fn run_precheck(
                 .cloned()
                 .unwrap_or_else(|| json!({})),
             Some(field("app")).filter(|app| !app.is_empty()),
+            false,
         ),
+        "any" => {
+            let mut seen = Vec::new();
+            let checks = precheck
+                .get("checks")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            for (index, check) in checks.iter().enumerate() {
+                let fingerprint = run_precheck(state, check, folder)?;
+                match fingerprint.strip_prefix(SEEN_PREFIX) {
+                    Some(ids) => seen.extend(
+                        ids.split(',')
+                            .filter(|id| !id.is_empty())
+                            .map(|id| format!("{index}.{id}")),
+                    ),
+                    None => seen.push(format!("{index}#{fingerprint}")),
+                }
+            }
+            Ok(seen_fingerprint(seen))
+        }
         other => Err(format!("Unknown pre-check kind {other}.")),
     }
 }
@@ -355,6 +435,7 @@ fn connector(
     tool: &str,
     arguments: Value,
     app: Option<String>,
+    lists_ids: bool,
 ) -> Result<String, String> {
     let state = state.ok_or("Ghostex is still starting; the check runs again soon.")?;
     if !crate::connectors::connectors_enabled(&state.paths) {
@@ -380,10 +461,44 @@ fn connector(
     let output = answer.get("output").cloned().unwrap_or(Value::Null);
     let mut ids = Vec::new();
     ids_in(&output, &mut ids);
-    if ids.is_empty() {
+    // Mail and events with nothing in them saw nothing; another tool's answer without ids is
+    // compared whole.
+    if ids.is_empty() && !lists_ids {
         return Ok(hash(&[output.to_string().as_bytes()]));
     }
+    Ok(seen_fingerprint(
+        ids.iter()
+            .map(|id| hash(&[id.as_bytes()])[..12].to_string())
+            .collect(),
+    ))
+}
+
+/// `seen:` and the sorted ids, so [`something_new`] can tell a new one from one that left.
+fn seen_fingerprint(mut ids: Vec<String>) -> String {
     ids.sort();
     ids.dedup();
-    Ok(hash(&[ids.join("\n").as_bytes()]))
+    ids.truncate(SEEN_LIMIT);
+    format!("{SEEN_PREFIX}{}", ids.join(","))
+}
+
+/// Whether a check that saw `now` after `previous` saw something new. For checks that list what
+/// they saw (mail, events, a connector's ids) only an id that wasn't there before counts: a
+/// message read or an event that ended starts nothing. Any other check counts any change.
+///
+/// CDXC:GBots 2026-11-09 WHY:
+/// The day watch looks at important unread mail and meetings about to start every 15 minutes; with a plain hash, reading a message or a meeting ending changed the fingerprint and spent a model run on nothing new.
+pub(crate) fn something_new(previous: &str, now: &str) -> bool {
+    match (
+        previous.strip_prefix(SEEN_PREFIX),
+        now.strip_prefix(SEEN_PREFIX),
+    ) {
+        (Some(before), Some(after)) => {
+            let before: std::collections::HashSet<&str> = before.split(',').collect();
+            after
+                .split(',')
+                .filter(|id| !id.is_empty())
+                .any(|id| !before.contains(id))
+        }
+        _ => previous != now,
+    }
 }

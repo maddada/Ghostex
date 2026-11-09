@@ -75,7 +75,10 @@ pub(crate) fn with_project_cli_env(
 /// while Connectors is off.
 fn project_cli_env(db: &rusqlite::Connection, project: &Value) -> Vec<(String, String)> {
     let paths = get_gxserver_paths(None);
-    if !super::super::connectors_enabled(&paths) {
+    // A GBot that only reads the user's apps gets no sign-in it could write with.
+    if !super::super::connectors_enabled(&paths)
+        || crate::gbots::project_reads_apps_only(db, project)
+    {
         return Vec::new();
     }
     // Listing projects reads no server-specific field, so no server id is needed here.

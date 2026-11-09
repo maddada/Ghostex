@@ -22,6 +22,10 @@
 //! | `memory…`, `prefs…` | see memory/ops.rs | the bot's own chats, you, Chief of Staff |
 //! | `problems` (`all?`), `problemRetry`, `problemRebrief` (`text`), `problemClose` (`handed?`) | `problem` | you, Chief of Staff (problems/ops.rs) |
 //! | `flag` | `text` | a GBot's own chat |
+//! | `dayWatch`; `dayWatchOn` (`briefTime?`, `timezone?`), `dayWatchOff` | day_watch/ops.rs | anyone here; you, Chief of Staff |
+//! | `teamExport`, `teamPreview`, `teamImport`, `presets`, `preset`, `presetSave`, `presetRemove`, `presetExport` | team_file/mod.rs | team_file/mod.rs; importing is yours alone |
+//!
+//! `create` also takes `preset` (a preset's id or name): what it leaves out comes from the preset.
 //!
 //! Every op is refused while GBots are off (feature.rs). An approval level above `ask` is set from
 //! your own computer or phone only.
@@ -206,7 +210,11 @@ fn run(
                     "Only you and Chief of Staff can add GBots. Ask Chief of Staff for one.",
                 ));
             }
-            create(state, &db, &repository, asker, params)
+            // Fields left out come from a preset (team_file/presets.rs), its starter notes after.
+            let (params, preset) = super::team_file::with_preset(&state.paths, params)?;
+            let answer = create(state, &db, &repository, asker, &params, asker.label())?;
+            super::team_file::after_preset_create(state, &db, &answer, preset.as_ref(), asker.label());
+            Ok(answer)
         }
         "edit" => {
             let mut by = asker.label().to_string();
@@ -300,6 +308,11 @@ fn run(
                     "Only you and Chief of Staff undo a change to GBots."
                 }));
             }
+            if super::team_file::is_team_change(&change.kind) {
+                return super::team_file::undo(&db, &change, asker.label(), &mut |bot_id| {
+                    remove(state, &db, &repository, asker, bot_id)
+                });
+            }
             super::changes::undo(
                 &db,
                 &change,
@@ -361,10 +374,27 @@ fn run(
                 params,
             )
         }
+        // Team files and presets (team_file/).
+        op if super::team_file::handles(op) => super::team_file::run(
+            state,
+            &db,
+            &repository,
+            super::team_file::TeamCaller {
+                is_user: asker.is_user(),
+                may_manage: asker.may_manage(),
+                label: asker.label(),
+            },
+            op,
+            params,
+            &mut |fields, created_by| create(state, &db, &repository, asker, fields, created_by),
+            &mut |bot_id| remove(state, &db, &repository, asker, bot_id),
+        ),
+        // "Keep an eye on my day" (day_watch/).
+        op if super::day_watch::handles(op) => super::day_watch::run(state, &db, &repository, asker, op, params),
         // A GBot's routines (routines.rs).
         op if op.starts_with("routine") => super::routines::run(state, &db, &repository, caller, asker, op, params),
         other => Err(DomainStateError::bad_request(format!(
-            "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat, closeChat, ask, assignments, changes, change, undo, a department op (departments, departmentCreate, …), a memory op (memoryShow, memoryAdd, …), a routine op, a problem op (problems, problemRetry, problemRebrief, problemClose) or flag."
+            "Unknown GBots op {other}: use list, show, chats, brief, create, edit, remove, newChat, closeChat, ask, assignments, changes, change, undo, a department op (departments, departmentCreate, …), a memory op (memoryShow, memoryAdd, …), a routine op, a problem op (problems, problemRetry, problemRebrief, problemClose), flag, a team op (teamExport, teamPreview, teamImport) or a preset op (presets, preset, presetSave, presetRemove, presetExport)."
         ))),
     }
 }
@@ -526,12 +556,13 @@ fn check_approval(asker: Asker, fields: &BotFields) -> Result<(), DomainStateErr
     Ok(())
 }
 
-fn create(
+pub(super) fn create(
     state: &AppState,
     db: &Connection,
     repository: &DomainRepository<'_>,
     asker: Asker,
     params: &Map<String, Value>,
+    created_by: &str,
 ) -> Result<Value, DomainStateError> {
     let fields = BotFields::from_params(params);
     if fields
@@ -586,7 +617,7 @@ fn create(
         work_folder: None,
         memory_enabled: true,
         paused_at: None,
-        created_by: asker.label().to_string(),
+        created_by: created_by.to_string(),
         created_at: now.clone(),
         updated_at: now,
     };

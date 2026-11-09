@@ -7,6 +7,8 @@
 //! | `/api/registerConnectedComputer`, `/api/issueComputerGrant` | a computer not approved in the last 30 days, with Agent access on: one request per computer, whoever asks (registering a computer with Agent access off never asks) |
 //! | `/api/autopilot` `op: "set"` | `answerApprovals` goes on, `limits` change |
 //! | `/api/gbots` `op: "create"` | from your own computer, phone or terminal (Chief of Staff's adds don't ask; other agents are refused) |
+//! | `/api/gbots` `op: "dayWatchOn"` | when it adds Day Watcher: as `create` |
+//! | `/api/gbots` `op: "teamImport"` | from your own computer, phone or terminal, once per file (no one else may import) |
 //! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a security-relaxing setting changes, or GBots goes on |
 //! | `/api/cloudBoxes` `create`, `setAgentLogin` (allowed), `projectSettings` (write) | anyone but the owner's devices: logins and project secrets go onto a box |
 //! | a create forcing full access | see security_full_access.rs |
@@ -374,6 +376,68 @@ fn gbots_add_action(
     )
 }
 
+/*
+CDXC:GBots 2026-11-09 DECISION:
+Importing a team file adds GBots, so it asks for your approval the way adding one GBot does, once for the whole file: the request names the team and its GBots and carries the file's digest, so the approval is spent only on that file. Only your computer, phone and terminal import (`/api/gbots` refuses everyone else with one sentence, so they are not asked for here); a file that can't be read is refused there too, without asking.
+*/
+fn gbots_team_import_action(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Option<ActionRequest> {
+    let user = matches!(
+        caller,
+        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent
+    );
+    if !user || !crate::gbots::gbots_on(&state.paths) {
+        return None;
+    }
+    let (team, names, digest) = crate::gbots::team_import_approval_summary(params)?;
+    let team = if team.trim().is_empty() {
+        "a team file".to_string()
+    } else {
+        format!("the team file {team}")
+    };
+    let count = names.len();
+    Some(
+        ActionRequest::new(
+            SensitiveAction::GbotsAddBot,
+            format!(
+                "Add {count} GBot{} from {team}: {}",
+                if count == 1 { "" } else { "s" },
+                names.join(", ")
+            ),
+        )
+        .params(json!({ "op": "teamImport", "names": names, "digest": digest })),
+    )
+}
+
+/*
+CDXC:GBots 2026-11-09 WHY:
+Turning the day watch on adds a GBot (Day Watcher) the first time, so it asks exactly when adding a GBot asks (`gbots_add_action`): from your own computer, phone or terminal, and for Chief of Staff only while it may not add GBots on its own. Turning it back on once Day Watcher exists adds nothing and asks no one.
+*/
+fn gbots_day_watch_action(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Option<ActionRequest> {
+    let user = matches!(
+        caller,
+        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent
+    ) || (caller.is_head() && !crate::gbots::chief_adds_on_its_own(&state.paths));
+    if !user || !crate::gbots::gbots_on(&state.paths) || !crate::gbots::day_watch_adds_bot(state, params)
+    {
+        return None;
+    }
+    Some(
+        ActionRequest::new(
+            SensitiveAction::GbotsAddBot,
+            "Add the GBot Day Watcher to keep an eye on your day".to_string(),
+        )
+        .params(Value::Object(params.clone())),
+    )
+}
+
 fn sensitive_action(
     state: &AppState,
     caller: &Principal,
@@ -385,6 +449,12 @@ fn sensitive_action(
         "/api/autopilot" => autopilot_action(params),
         "/api/gbots" if text(params, "op") == Some("create") => {
             gbots_add_action(state, caller, params)
+        }
+        "/api/gbots" if text(params, "op") == Some("teamImport") => {
+            gbots_team_import_action(state, caller, params)
+        }
+        "/api/gbots" if text(params, "op") == Some("dayWatchOn") => {
+            gbots_day_watch_action(state, caller, params)
         }
         "/api/dispatchRendererCommand" if text(params, "action") == Some("updateSettingsPatch") => {
             settings_action(params)

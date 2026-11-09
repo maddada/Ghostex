@@ -16,6 +16,8 @@ use crate::storage::open_gxserver_database;
 const POLL: Duration = Duration::from_secs(5);
 
 pub(crate) fn start_gbots_sweep(state: Arc<AppState>) {
+    // Chief of Staff offers keeping an eye on the user's day once (day_watch/offer.rs).
+    super::day_watch::start_day_watch_offer(state.clone());
     let mut shutdown = state.shutdown_tx.subscribe();
     tokio::spawn(async move {
         let reader = state.clone();

@@ -109,7 +109,28 @@ fn cron_sentence(expression: &str) -> Option<String> {
     if let Some(step) = fields.minute_step {
         return Some(every_ms(i64::from(step) * 60_000));
     }
-    let times = if fields.hours.len() == 24 && fields.minutes.len() == 1 {
+    // "*/15 7-21 * * *": every 15 minutes through a stretch of hours (the day watch's).
+    let step = fields
+        .minutes
+        .get(1)
+        .map(|second| second - fields.minutes[0])
+        .filter(|step| {
+            fields.minutes[0] == 0
+                && 60 % step == 0
+                && fields.minutes.len() as u32 == 60 / step
+                && fields.hours.len() > 1
+                && fields.hours.len() < 24
+                && fields.hours.windows(2).all(|pair| pair[1] == pair[0] + 1)
+        });
+    let times = if let Some(step) = step {
+        let last_hour = fields.hours[fields.hours.len() - 1];
+        format!(
+            "every {} from {} to {}",
+            plural(i64::from(step), "minute", "minutes"),
+            clock(fields.hours[0], 0),
+            clock(last_hour, 60 - step)
+        )
+    } else if fields.hours.len() == 24 && fields.minutes.len() == 1 {
         format!(
             "every hour at {} past",
             plural(i64::from(fields.minutes[0]), "1 minute", "minutes")
@@ -157,7 +178,21 @@ fn cron_sentence(expression: &str) -> Option<String> {
         }
         _ => return None,
     };
+    if step.is_some() {
+        return Some(match days.as_str() {
+            "Every day" => capitalized(&times),
+            _ => format!("{days}, {times}"),
+        });
+    }
     Some(format!("{days} {times}"))
+}
+
+fn capitalized(text: &str) -> String {
+    let mut characters = text.chars();
+    match characters.next() {
+        Some(first) => first.to_uppercase().chain(characters).collect(),
+        None => String::new(),
+    }
 }
 
 /// The zone note a zoned schedule ends with, when it is not this computer's own zone.

@@ -1,0 +1,1 @@
+../../../desktop/src/app/gbot_team_modal_lifecycle.rs

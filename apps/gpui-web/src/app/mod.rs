@@ -15,6 +15,7 @@ pub(crate) mod element;
 mod feedback_modal_lifecycle;
 pub(crate) mod floating_reveal;
 mod gbot_settings_modal_lifecycle;
+mod gbot_team_modal_lifecycle;
 pub(crate) mod gx_chat;
 pub(crate) mod gx_store;
 pub(crate) mod helpers;

@@ -189,7 +189,7 @@ impl AutomationRuntime {
                     "started watching; it runs when something changes",
                 )
             }
-            Some(previous) if previous == fingerprint => {
+            Some(previous) if !super::precheck::something_new(&previous, &fingerprint) => {
                 record_check(&db, &automation.id, "quiet", "Nothing changed.", None)?;
                 note_quiet(&db, automation, "nothing changed")
             }

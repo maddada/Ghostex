@@ -31,7 +31,8 @@ fn cache() -> &'static Mutex<HandoverAsks> {
 }
 
 /// Whether the finished turn behind attention event `event_id` of `session` ended with a 🛑
-/// Blocked or ❓ Needs you section (gx-chat-core `waits_on_reader`).
+/// Blocked or ❓ Needs you section (gx-chat-core `waits_on_reader`), or is Chief of Staff's reply
+/// carrying the daily brief or a heads-up (server/src/gbots/day_watch/deliver.rs).
 ///
 /// CDXC:Notifications 2026-11-06 WHY:
 /// The answer comes from the agent's last message, which lives in its transcript. Every snapshot
@@ -49,7 +50,7 @@ pub(crate) fn handover_needs_you(session: &Value, event_id: &str) -> bool {
         .unwrap_or_default();
     remembered(&format!("{session_id}\u{1f}{event_id}"), || {
         crate::notification_feed::body::newest_reply_markdown(session)
-    })
+    }) || crate::gbots::day_brief_turn_alerts(session, event_id)
 }
 
 /// The answer kept for `key`, else `read`'s answer, kept when it found a message.

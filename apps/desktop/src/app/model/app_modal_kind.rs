@@ -53,6 +53,8 @@ pub(crate) enum GpuiAppModalKind {
     NewGbot,
     /// A GBot's Profile, Instructions and Memory, from its row (gbot_settings_modal_lifecycle.rs).
     GbotSettings,
+    /// Import Team… and Export Team… from Main Hub's GBots heading (gbot_team_modal_lifecycle.rs).
+    GbotTeam,
     /// Make an existing session a coordinator, with an optional goal (new_coordinator_modal_lifecycle.rs).
     MakeCoordinator,
     /// An orchestrator's Goal & Instructions or Memory editor (coordinator_details_modal_lifecycle.rs).
@@ -121,6 +123,7 @@ impl GpuiAppModalKind {
             "newCoordinator" => Some(Self::NewCoordinator),
             "newGbot" => Some(Self::NewGbot),
             "gbotSettings" => Some(Self::GbotSettings),
+            "gbotTeam" => Some(Self::GbotTeam),
             "makeCoordinator" => Some(Self::MakeCoordinator),
             "coordinatorDetails" => Some(Self::CoordinatorDetails),
             "feedback" => Some(Self::Feedback),
@@ -173,6 +176,7 @@ impl GpuiAppModalKind {
             Self::NewCoordinator => "newCoordinator",
             Self::NewGbot => "newGbot",
             Self::GbotSettings => "gbotSettings",
+            Self::GbotTeam => "gbotTeam",
             Self::MakeCoordinator => "makeCoordinator",
             Self::CoordinatorDetails => "coordinatorDetails",
             Self::Feedback => "feedback",
@@ -222,6 +226,7 @@ impl GpuiAppModalKind {
             Self::NewCoordinator => "Ghostex New Coordinator",
             Self::NewGbot => "Ghostex New GBot",
             Self::GbotSettings => "Ghostex GBot Settings",
+            Self::GbotTeam => "Ghostex GBots Team",
             Self::MakeCoordinator => "Ghostex Make Coordinator",
             Self::CoordinatorDetails => "Ghostex Coordinator",
             Self::Feedback => "Ghostex Send Bug / Feedback",
@@ -408,6 +413,10 @@ impl GpuiAppModalKind {
                 px(crate::app::window::GBOT_SETTINGS_MODAL_WIDTH),
                 px(crate::app::window::GBOT_SETTINGS_MODAL_INITIAL_HEIGHT),
             ),
+            Self::GbotTeam => size(
+                px(crate::app::window::GBOT_TEAM_MODAL_WIDTH),
+                px(crate::app::window::GBOT_TEAM_MODAL_INITIAL_HEIGHT),
+            ),
             Self::Feedback => size(
                 px(crate::app::window::FEEDBACK_MODAL_WIDTH),
                 px(crate::app::window::FEEDBACK_MODAL_INITIAL_HEIGHT),
@@ -567,6 +576,7 @@ impl GpuiAppModalKind {
             | Self::MakeCoordinator
             | Self::CoordinatorDetails
             | Self::GbotSettings
+            | Self::GbotTeam
             | Self::CreateLinearTicket
             | Self::WorkLinkPicker
             | Self::AddSessionLink => serde_json::Value::Null,

@@ -65,9 +65,9 @@ pub(crate) fn save_routine(
         .map(normalize_precheck)
         .transpose()
         .map_err(bad)?;
-    if !matches!(save.deliver, "chat" | "chief") {
+    if !matches!(save.deliver, "chat" | "chief" | "brief") {
         return Err(bad(
-            "A routine's result goes to its own chat (chat) or to Chief of Staff (chief).",
+            "A routine's result goes to its own chat (chat), to Chief of Staff (chief), or to the user through Chief of Staff with a notification (brief).",
         ));
     }
     if !matches!(save.continuity, "new" | "standing") {

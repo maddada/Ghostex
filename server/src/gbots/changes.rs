@@ -163,6 +163,9 @@ pub(crate) fn undo_problem(
             change.after_raw.as_ref(),
         );
     }
+    if super::team_file::is_team_change(&change.kind) {
+        return super::team_file::undo_problem(db, change);
+    }
     if super::departments::is_department_change(&change.kind) {
         return Ok(Some(
             "A department change is undone by changing the department again: `ghostex gbots department edit`.".to_string(),
@@ -190,6 +193,9 @@ pub(crate) fn undo_problem(
 
 /// A change as `/api/gbots` answers it; `bot` is the bot as it is now, when it still exists.
 pub(crate) fn change_summary(db: &Connection, change: &Change) -> Result<Value, DomainStateError> {
+    if super::team_file::is_team_change(&change.kind) {
+        return super::team_file::change_summary(db, change);
+    }
     if is_routine(&change.kind) {
         let shown = change.after_raw.as_ref().or(change.before_raw.as_ref());
         let problem = undo_problem(db, change)?;

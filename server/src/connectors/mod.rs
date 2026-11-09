@@ -22,3 +22,4 @@ pub(crate) use composio::{serve_oauth_redirect, OAUTH_REDIRECT_PATH};
 pub(crate) use events::*;
 pub(crate) use executor_api::*;
 pub(crate) use gate::*;
+pub(crate) use workspace::project_workspace;

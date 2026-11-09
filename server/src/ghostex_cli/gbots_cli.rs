@@ -55,11 +55,13 @@ const HELP_TAIL: &str = "
 
 fn help() -> String {
     format!(
-        "{HELP_HEAD}{}{}{}{}{HELP_TAIL}",
+        "{HELP_HEAD}{}{}{}{}{}{}{HELP_TAIL}",
         super::gbots_department_cli::DEPARTMENT_HELP,
         super::gbots_memory_cli::MEMORY_HELP,
         super::gbots_routine_cli::ROUTINE_HELP,
-        super::gbots_problem_cli::PROBLEM_HELP
+        super::gbots_day_watch_cli::DAY_WATCH_HELP,
+        super::gbots_problem_cli::PROBLEM_HELP,
+        super::gbots_team_cli::TEAM_HELP
     )
 }
 
@@ -137,9 +139,12 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "routine" | "routines" => return super::gbots_routine_cli::run_routine(rest, &flags),
         "problem" | "problems" => return super::gbots_problem_cli::run_problem(rest, &flags),
         "flag" => return super::gbots_problem_cli::run_flag(rest, &flags),
+        "day-watch" => return super::gbots_day_watch_cli::run_day_watch(rest, &flags),
         "department" | "departments" => {
             return super::gbots_department_cli::run_department(rest, &flags)
         }
+        "team" => return super::gbots_team_cli::run_team(rest, &flags),
+        "preset" | "presets" => return super::gbots_team_cli::run_preset(rest, &flags),
         _ => {}
     }
     let answer = match verb {
@@ -160,6 +165,14 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             let mut params = Map::new();
             params.insert("op".into(), json!("create"));
             bot_fields(&flags, &mut params)?;
+            // From a preset: the fields left out come from it, its name too when --name is.
+            if let Some(preset) = flags.string_value("preset") {
+                params.insert("preset".into(), json!(preset));
+                if !params.contains_key("name") {
+                    let name = super::gbots_team_cli::preset_name(preset, &flags)?;
+                    params.insert("name".into(), json!(name));
+                }
+            }
             super::gbots_department_cli::placement_flags(&flags, &mut params)?;
             gbots(Value::Object(params), &flags)?
         }
@@ -419,6 +432,24 @@ fn print_answer(verb: &str, answer: &Value) {
         "undo" => {
             let change = &answer["change"];
             println!("Undid {} ({}).", text(change, "kind"), text(change, "name"));
+            // An import's Undo says what went (team_file/import.rs).
+            let done = &answer["done"];
+            for (label, key) in [
+                ("Removed", "removedBots"),
+                ("Removed departments", "removedDepartments"),
+                (
+                    "Kept departments (other GBots are in them)",
+                    "keptDepartments",
+                ),
+            ] {
+                let names: Vec<&str> = done[key]
+                    .as_array()
+                    .map(|items| items.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                if !names.is_empty() {
+                    println!("  {label}: {}", names.join(", "));
+                }
+            }
         }
         "edit" => {
             let bot = &answer["bot"];

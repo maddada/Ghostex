@@ -189,3 +189,19 @@ pub(crate) fn call_composio_tool(
     let output = composio::call_tool(&state.paths, &workspace, tool, &arguments).map_err(failed)?;
     Ok(json!({ "workspaceId": workspace, "tool": tool, "output": output }))
 }
+
+/// The apps (Composio slugs) connected in `workspace`, as Connectors last saw them; none while it
+/// isn't signed in. No network call (a due refresh runs in the background).
+pub(crate) fn composio_connected_apps(
+    paths: &crate::paths::GxserverPaths,
+    workspace: &str,
+) -> Vec<String> {
+    if !composio::signed_in(paths, workspace) {
+        return Vec::new();
+    }
+    composio::apps(paths, workspace)
+        .iter()
+        .filter(|app| app["connected"] == Value::Bool(true))
+        .filter_map(|app| app["slug"].as_str().map(str::to_string))
+        .collect()
+}
