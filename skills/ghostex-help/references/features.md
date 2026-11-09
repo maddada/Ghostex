@@ -4185,6 +4185,21 @@ you turn them back on.
   Computer tab shows where it works and can give it this computer back. From a
   terminal: `ghostex gbots computer <bot>` shows where it works and what it
   could have, and `ghostex gbots computer <bot> --use this` brings it back.
+- **Calling it**: right-click a GBot and choose Call (on the phone, long-press
+  it) to talk to it out loud through the Voice agent; on one of its chats, the
+  arrow beside the work area header's headset offers Call <GBot> (on the phone,
+  the chat's ⋯ menu). It answers as itself in its own voice and passes what you
+  say to its chat, so the call's messages are in that chat (your standing chat
+  with it, or the chat you called from) and the call is in its daily log. While
+  it works it says what it is doing; when its chat waits on a question or a
+  permission prompt it asks you out loud and answers with what you choose. A
+  Ghostex approval (the Touch ID kind) it can only ask for: approve it on your
+  computer or phone, since a spoken yes never approves it. Pick its voice in
+  the Profile tab of GBot Settings (or `ghostex gbots voice <bot> <voice>`);
+  without one it uses the Voice agent's voice. A call with a GBot stays with
+  it (no All sessions); calls need the Voice agent on with its key, and reach
+  GBots whose chats run on this computer. While GBots are off there is no Call
+  anywhere.
 - **Removing it**: `ghostex gbots remove <bot>` closes its chats, removes it
   and moves its folder, memory included, to the Trash.
 - **Departments**: group GBots under a name, like Research or Writing. Every
