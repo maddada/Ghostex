@@ -428,6 +428,44 @@ impl NativeChatView {
         if let Some(pictures) = self.read_pictures(&key, &tool["images"], p, cx) {
             trigger = trigger.child(pictures);
         }
+        // A Task or Agent call names its subagent after the step, and the name opens that child's
+        // transcript, as the full tool row does (tool_run.rs).
+        let subagent = text(&tool["subagent"], "name");
+        let trigger = if subagent.is_empty() {
+            trigger.into_any_element()
+        } else {
+            let link = match Self::subagent_open_command(&tool["subagent"]) {
+                Some(command) => self.subagent_link(
+                    format!("subagent:{key}"),
+                    subagent.clone(),
+                    Some(
+                        tool["subagent"]["agentType"]
+                            .as_str()
+                            .unwrap_or(&subagent)
+                            .to_string(),
+                    ),
+                    command,
+                    p,
+                    cx,
+                ),
+                None => div()
+                    .min_w_0()
+                    .truncate()
+                    .text_color(p.control_primary)
+                    .child(subagent)
+                    .into_any_element(),
+            };
+            div()
+                .flex()
+                .items_center()
+                .min_w_0()
+                .gap(px(8.0 * s))
+                .text_size(px(TEXT_SIZE * s))
+                .line_height(px(LINE_HEIGHT * s))
+                .child(trigger)
+                .child(link)
+                .into_any_element()
+        };
         let mut row = div().flex().flex_col().min_w_0().w_full().child(trigger);
         if (expanded || motion.is_some())
             && has_detail
