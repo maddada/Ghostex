@@ -384,8 +384,28 @@ fn is_agent_work_row(row: &ChatMessage) -> bool {
 /// CDXC:SessionChat 2026-11-09 DECISION:
 /// Agent work Reduced and Quiet treat a report from one of the session's own subagents (`<agent-message from="…">`, a user row) and the harness's `<task-notification>` as the agent's work. User, agreeing to the behaviour: under Reduced they are a step in the turn's line, and opening the line shows the report's card; under Quiet they sit behind the reply's work button, and while the agent runs the status line says it is reading the subagent's report; they never open a turn of their own, and a report that wakes an idle agent shows (under Quiet) only the reply it writes. So the report's turn folds with the report in it ([`completed_work_render_items`]), which merges it into the line of the message it answers (`grouped_work.rs`), and the words a report cut short fold as commentary. Messages from other sessions or agents (`ghostex agents send`, `<cross-session-message>`) stay cards: they are real messages. Default is unchanged: the report is its own card there (the 2026-09-30 decision on `parse_cross_session_message`).
 pub(crate) fn report_lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
-    messages.get(at).is_some_and(is_subagent_report)
-        && !messages[..at]
+    messages.get(at).is_some_and(is_subagent_report) && lands_mid_response(messages, at)
+}
+
+/// Under Reduced and Quiet: whether the row at `at` opens a turn that is the agent's work landing
+/// mid-response, so the words before it are commentary: a subagent's report
+/// ([`report_lands_mid_response`]), or a background task's end that gxserver handed back holding
+/// the rows after it (`deferredWork`), which opens a turn here so those rows still load.
+///
+/// CDXC:SessionChat 2026-11-09 WHY: gxserver's collapsed history cuts a turn at every user row, so a task notification after a subagent's report holds the rest of the response in its own `deferredWork`; read as one of the turn's calls, that section was never loaded and the line's steps stopped at the notification. Default still reads it the old way.
+fn work_lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
+    report_lands_mid_response(messages, at)
+        || messages.get(at).is_some_and(|row| {
+            is_background_task_row(row)
+                && row.deferred_work.is_some()
+                && lands_mid_response(messages, at)
+        })
+}
+
+/// Whether the agent's last row before `at` is not a finished reply ([`is_settled_reply`]), past
+/// the rows a wake-up test looks past.
+fn lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
+    !messages[..at]
             .iter()
             .rev()
             .find(|row| !passed_over_before_wake(row))
@@ -532,7 +552,8 @@ pub fn completed_work_render_items(
                 // A background task ending mid-response is one of the turn's calls
                 // (`background_rows.rs`); one that woke the agent after its reply opens a turn.
                 || (is_background_task_row(&messages[next_user_index])
-                    && !wakes_settled_agent(messages, next_user_index))
+                    && !wakes_settled_agent(messages, next_user_index)
+                    && !(grouped && messages[next_user_index].deferred_work.is_some()))
                 || (message.deferred_work.is_some()
                     && messages[next_user_index].byte_offset.is_none()
                     && !is_command_turn(&messages[next_user_index])))
@@ -555,7 +576,7 @@ pub fn completed_work_render_items(
             || (grouped && is_subagent_report(message));
         // Reduced and Quiet: words a subagent's report cut short are not a reply.
         let final_index = match final_index {
-            Some(at) if grouped && report_lands_mid_response(messages, next_user_index) => {
+            Some(at) if grouped && work_lands_mid_response(messages, next_user_index) => {
                 demoted.push(turn_messages[at].id.clone());
                 None
             }

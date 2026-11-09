@@ -435,3 +435,32 @@ fn the_line_keeps_default_folds_key() {
     assert_eq!(default_id.as_deref(), Some("u2"));
     assert_eq!(reduced_ids, ["u1", "u2"]);
 }
+
+/// gxserver's collapsed history: the prompt holds its work up to the report, and the task
+/// notification after the report holds the rest of the response. The line reads both.
+#[test]
+fn a_collapsed_report_turn_reads_every_section() {
+    let deferred = |start: &str, end: &str| {
+        json!({"beforeOffset": 1, "startId": start, "endId": end, "messageCount": 4, "filePaths": []})
+    };
+    let mut prompt = user("u1", T0, "audit the chat");
+    prompt.deferred_work = Some(serde_json::from_value(deferred("u1", "c2")).unwrap());
+    let mut notice = notification("n1", T0 + 60_100, "aed516f06a84e683f");
+    notice.deferred_work = Some(serde_json::from_value(deferred("n1", "r3")).unwrap());
+    let rows = vec![
+        prompt,
+        report("a1", T0 + 60_000, "aed516f06a84e683f"),
+        notice,
+        assistant("r3", T0 + 65_000, "Both audits agree: two bugs."),
+    ];
+    let items = items(&state_with(AgentWork::Reduced, rows));
+    let Some(TranscriptItem::GroupedWork { turns, .. }) = items.get(1) else {
+        panic!("{:?}", outline(&items));
+    };
+    let sections: Vec<&str> = turns
+        .iter()
+        .filter_map(|turn| turn.deferred.as_ref()?["startId"].as_str())
+        .collect();
+    assert_eq!(sections, ["u1", "n1"], "{:?}", outline(&items));
+    assert_eq!(items.len(), 2, "{:?}", outline(&items));
+}
