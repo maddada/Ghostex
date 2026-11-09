@@ -440,7 +440,10 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let key = format!("file:{stack_id}:{index}");
+        // Agent work Quiet draws only the edit waiting on an approval, which keeps the key of its
+        // place in the message (gx-chat-core `grouped_work::only_what_waits`).
+        let place = file["disclosureIndex"].as_u64().unwrap_or(index as u64);
+        let key = format!("file:{stack_id}:{place}");
         // Settings > Chat > Show file edit previews opens every row to its preview, and a write
         // waiting on an approval opens its own row so the diff shows beside the card (gx-chat-core
         // `approval_wait.rs`).

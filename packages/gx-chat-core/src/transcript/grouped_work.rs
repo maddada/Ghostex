@@ -272,8 +272,12 @@ pub fn hide_work(
 
 /// `row` showing only its calls and edits that wait on an approval: the rest of its calls keep
 /// their places, since the disclosure keys and details count by place, and draw no row, as a call
-/// with a card of its own does. Its words go too, unless they are a finished reply or ask a
-/// question.
+/// with a card of its own does. A waiting edit carries its place as `disclosureIndex`, since the
+/// renderers key a file row by its place in the list and this one has moved up. Its words go too,
+/// unless they are a finished reply or ask a question.
+///
+/// CDXC:SessionChat 2026-11-08 WHY: with the edits filtered, a second edit waiting took the first one's `file:<id>:0` key, so closing the first edit's diff left the next approval's diff closed; an approval has to surface at once (`chat_look::needs_the_user`). Rows with no `disclosureIndex` stay keyed by their place, so every other list keeps its keys.
+/// CDXC:SessionChat 2026-11-08 SEE-ALSO: apps/desktop/src/app/native_chat/file_change_card.rs and apps/mobile/app/src/chat/native/transcript/FileChanges.tsx read `disclosureIndex`.
 fn only_what_waits(row: &mut crate::document::ProjectedMessage, keep_words: bool) {
     let keep_words = keep_words || asks_in_words(row);
     let Value::Object(fields) = std::sync::Arc::make_mut(row) else {
@@ -297,7 +301,15 @@ fn only_what_waits(row: &mut crate::document::ProjectedMessage, keep_words: bool
         .get_mut("files")
         .and_then(Value::as_array_mut)
         .map(|files| {
-            files.retain(|file| file["awaitingApproval"] == true);
+            let mut place = 0usize;
+            files.retain_mut(|file| {
+                let waits = file["awaitingApproval"] == true;
+                if waits {
+                    file["disclosureIndex"] = Value::from(place);
+                }
+                place += 1;
+                waits
+            });
             (!files.is_empty()).then(|| file_change_card(files))
         });
     // The edit line and its card count only the edits still drawn.
