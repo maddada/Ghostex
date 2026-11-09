@@ -4,7 +4,8 @@
 //! States: `machines-agents` (Agents, Kubuntu VM picked), `machines-agents-open` (Agents on this
 //! computer with the picker open), `machines-integrations` (Integrations, Kubuntu VM picked),
 //! `machines-dictation` and `machines-dictation-openai` (Dictation, Kubuntu VM picked, its Hex not running
-//! or its engine OpenAI without a key),
+//! or its engine OpenAI without a key), `machines-dictation-open` (Dictation on this computer with
+//! the picker open: only Kubuntu VM is connected, so M5 and Old box are left out),
 //! `machines-old` (Agents, Kubuntu VM picked, its gxserver too old for the requests),
 //! `machines-windows` and `machines-windows-integrations` (Agents and Integrations, Kubuntu VM
 //! picked and answering as Windows: the Developer Mode notice; `GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS=
@@ -35,6 +36,7 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
             json!({ "initialTab": "agents", "initialMachineId": "remote-1" })
         }
         "machines-agents-open" => json!({ "initialTab": "agents" }),
+        "machines-dictation-open" => json!({ "initialTab": "dictation" }),
         "machines-dictation" | "machines-dictation-openai" => {
             json!({ "initialTab": "dictation", "initialMachineId": "remote-1" })
         }

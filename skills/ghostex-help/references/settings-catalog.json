@@ -13123,17 +13123,6 @@
       "agentWritable": false
     },
     {
-      "key": "dictateOldModels",
-      "title": "Old speech models",
-      "subtitle": "The models Ghostex's own speech engine downloaded before Hex replaced it. Ghostex no longer uses them; Delete frees the space.",
-      "tab": "dictation",
-      "tabTitle": "Dictation",
-      "section": "dictate",
-      "sectionTitle": "Speech to text",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
       "key": "dictateLanguage",
       "title": "Language",
       "subtitle": "Auto works for most people. Pick one when short phrases come out in the wrong language.",
@@ -13194,49 +13183,16 @@
       "agentWritable": true
     },
     {
-      "key": "dictateDictionary",
-      "title": "Dictionary",
-      "subtitle": "Names and terms it should expect. An alias fixes a word it keeps mishearing (\"GX server\" becomes gxserver). Your project names are added on their own.",
-      "tab": "dictation",
-      "tabTitle": "Dictation",
-      "section": "cleanup",
-      "sectionTitle": "Clean-up",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "dictateRemoveFillers",
-      "title": "Remove filler words",
-      "subtitle": "Drops \"um\", \"uh\" and other hesitation sounds.",
-      "tab": "dictation",
-      "tabTitle": "Dictation",
-      "section": "cleanup",
-      "sectionTitle": "Clean-up",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
       "key": "dictateInsertSpacing",
       "title": "Insert with spacing",
       "subtitle": "Adds a space before or after the text when the characters next to the caret need one.",
       "tab": "dictation",
       "tabTitle": "Dictation",
-      "section": "cleanup",
-      "sectionTitle": "Clean-up",
+      "section": "dictate",
+      "sectionTitle": "Speech to text",
       "type": "boolean",
       "default": true,
       "agentWritable": true
-    },
-    {
-      "key": "dictatePolish",
-      "title": "AI polish",
-      "subtitle": "Claude Sonnet 5.5 fixes punctuation and keeps what you meant when you corrected yourself (\"no, I mean…\"), through Claude Code on the computer that transcribes. The chat box shows Polishing with a Skip button; if it fails, the text goes in unpolished.",
-      "tab": "dictation",
-      "tabTitle": "Dictation",
-      "section": "cleanup",
-      "sectionTitle": "Clean-up",
-      "type": "ui",
-      "agentWritable": false
     },
     {
       "key": "voiceAgentDictationHistory",

@@ -1,6 +1,6 @@
 //! Dictate's settings: the first-run engine is picked once from the saved keys (Hex without one)
-//! and then kept, AI polish starts on, a client's patch is checked before it is saved, and a
-//! computer whose engine was our retired local model moves to Hex with a one-time notice.
+//! and then kept, a client's patch is checked before it is saved (settings older clients still
+//! send are ignored), and a computer whose engine was our retired local model moves to Hex.
 
 use serde_json::{json, Map, Value};
 
@@ -21,18 +21,11 @@ fn a_new_install_takes_the_xai_key_then_the_openai_key_then_hex() {
 }
 
 #[test]
-fn a_new_install_has_auto_language_fillers_off_the_text_and_polish_on() {
+fn a_new_install_has_auto_language() {
     let settings = DictateSettings::first_run(false, false);
     assert_eq!(settings.hex_model, None);
-    assert!(!settings.local_retired_notice);
-    assert!(!settings.local_retired_dictation_notice);
     assert_eq!(settings.language, "auto");
     assert_eq!(settings.language_hint(), None);
-    assert!(settings.remove_fillers);
-    assert!(settings.add_project_names);
-    assert!(settings.polish.enabled);
-    assert_eq!(settings.polish.model, "claude-sonnet-5-5");
-    assert_eq!(settings.polish.prompt, None);
 }
 
 #[test]
@@ -76,19 +69,6 @@ fn a_patch_is_saved_and_read_back() {
     .expect("saved");
     assert_eq!(saved.engine, Engine::OpenAi);
     assert_eq!(saved.language, "de");
-    assert!(!saved.remove_fillers);
-    assert!(!saved.polish.enabled);
-    assert_eq!(
-        saved.polish.model, "claude-sonnet-5-5",
-        "polish merges its own keys"
-    );
-    assert_eq!(saved.dictionary.len(), 1);
-    assert_eq!(saved.dictionary[0].word, "gxserver");
-    assert_eq!(
-        saved.dictionary[0].aliases,
-        vec!["GX server".to_string()],
-        "trimmed and deduplicated"
-    );
     assert_eq!(settings::read(&paths, || (true, true)), saved);
 }
 
@@ -105,14 +85,7 @@ fn bad_values_are_refused_with_a_sentence() {
             json!({"localModel": "whisper-base"}),
             "no longer has its own speech model",
         ),
-        (json!({"localRetiredNotice": true}), "only be set to false"),
         (json!({"language": "xx"}), "not a language"),
-        (json!({"removeFillers": "yes"}), "true or false"),
-        (json!({"polish": {"model": "gpt-5"}}), "claude-sonnet-5-5"),
-        (
-            json!({"dictionary": [{"word": "kubectl", "aliases": ["kc"]}]}),
-            "3 to 64",
-        ),
         (json!({"colour": "red"}), "no setting named colour"),
     ] {
         let error = base
@@ -120,39 +93,6 @@ fn bad_values_are_refused_with_a_sentence() {
             .expect_err(&bad.to_string());
         assert!(error.contains(says), "{bad}: {error}");
     }
-}
-
-#[test]
-fn the_dictionary_is_limited_and_repeats_are_dropped() {
-    let base = DictateSettings::first_run(false, false);
-    let words: Vec<Value> = (0..201)
-        .map(|i| json!({"word": format!("word{i}")}))
-        .collect();
-    let error = base
-        .patched(&patch(json!({ "dictionary": words })))
-        .expect_err("too many");
-    assert!(error.contains("200"), "{error}");
-    let repeated = base
-        .patched(&patch(
-            json!({"dictionary": [{"word": "SpaceO"}, {"word": "spaceo"}, {"word": "  "}]}),
-        ))
-        .expect("saved");
-    assert_eq!(repeated.dictionary.len(), 1);
-}
-
-#[test]
-fn an_empty_prompt_means_the_built_in_one() {
-    let base = DictateSettings::first_run(false, false);
-    let custom = base
-        .patched(&patch(
-            json!({"polish": {"prompt": "  Fix commas only.  "}}),
-        ))
-        .expect("saved");
-    assert_eq!(custom.polish.prompt.as_deref(), Some("Fix commas only."));
-    let reset = custom
-        .patched(&patch(json!({"polish": {"prompt": ""}})))
-        .expect("saved");
-    assert_eq!(reset.polish.prompt, None);
 }
 
 #[test]

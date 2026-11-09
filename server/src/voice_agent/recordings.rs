@@ -32,8 +32,9 @@ pub(super) enum Status {
     /// Uploaded; nobody asked for its text yet.
     Recorded,
     Transcribing,
-    /// Transcribed and cleaned (`text` holds that); AI polish is running.
-    Polishing,
+    /// A recording an older gxserver left `polishing` (AI polish, removed: `speech/cleanup.rs`)
+    /// already holds its cleaned text, so it reads as transcribed.
+    #[serde(alias = "polishing")]
     Transcribed,
     Failed,
     /// Cancelled while recording or while transcribing; Recover transcribes it.
@@ -75,15 +76,9 @@ pub(super) struct Recording {
     /// The recognizer's language hint the client sent ("en"), reused by Transcribe again.
     #[serde(default)]
     pub(super) language: Option<String>,
-    /// The recognizer's own words, before the dictionary, filler removal and polish.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) raw_text: Option<String>,
     /// What made the text: `{engine, label}` (`speech/dictate.rs`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) engine: Option<Value>,
-    /// What became of AI polish: `{status, message?}`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) polish: Option<Value>,
     pub(super) updated_at: i64,
 }
 
@@ -98,9 +93,7 @@ impl Recording {
             "client": self.client,
             "status": self.status,
             "text": self.text,
-            "rawText": self.raw_text,
             "engine": self.engine,
-            "polish": self.polish,
             "error": self.error,
             "format": audio_format(&self.audio_file),
             "bytes": self.audio_bytes,
@@ -333,9 +326,7 @@ pub(super) fn save_piece(paths: &GxserverPaths, piece: Piece<'_>) -> Result<Save
         text: None,
         error: None,
         language: finished.language,
-        raw_text: None,
         engine: None,
-        polish: None,
         updated_at: now,
     };
     write(paths, &recording)?;
@@ -404,17 +395,6 @@ pub(super) fn ensure_recovered(paths: &GxserverPaths) {
 /// week.
 fn recover_after_restart(paths: &GxserverPaths) {
     for recording in list(paths) {
-        if recording.status == Status::Polishing {
-            // The cleaned text is already saved; only the polish was lost.
-            let _ = update(paths, &recording.id, |recording| {
-                recording.status = Status::Transcribed;
-                recording.polish = Some(json!({
-                    "status": "failed",
-                    "message": "Ghostex restarted while the text was being polished.",
-                }));
-            });
-            continue;
-        }
         if recording.status == Status::Transcribing {
             let _ = update(paths, &recording.id, |recording| {
                 recording.status = Status::Failed;

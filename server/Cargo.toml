@@ -48,9 +48,6 @@ convex = { version = "0.10.4", default-features = false, features = ["rustls-tls
 # tokio-tungstenite build axum's WebSocket support compiles in (0.29; convex pins 0.28) and convex's
 # rustls stack, so no new socket or TLS code ships. `tungstenite` below is that same 0.29 build.
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
-# CDXC:Dictate 2026-11-05 WHY:
-# Dictate's filler-word removal (server/src/voice_agent/speech/cleanup.rs); no default features, so no other crate.
-telmo = { version = "0.3.3", default-features = false }
 libc = "0.2"
 markdown = "1"
 md-5 = "0.11"

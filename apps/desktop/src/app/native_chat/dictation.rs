@@ -477,13 +477,11 @@ impl NativeChatView {
             }
             _ => {
                 let recording = matches!(phase, DictatePhase::Recording);
-                let polishing = control.dictate.read(cx).polishing();
                 let label = match &phase {
                     DictatePhase::Starting => "Starting…".to_string(),
                     DictatePhase::Recording => {
                         crate::app::voice_agent::dictation_clock(control.dictate.read(cx).elapsed())
                     }
-                    _ if polishing => "Polishing".to_string(),
                     _ => "Transcribing".to_string(),
                 };
                 div()
@@ -512,40 +510,6 @@ impl NativeChatView {
                             .text_color(p.foreground)
                             .child(label),
                     )
-                    // CDXC:VoiceMode 2026-11-05 DECISION: User (Q1273, the mockup): AI polish is on
-                    // by default and the chat box shows Polishing with a Skip button, which types
-                    // the text as it was before polish at once.
-                    .when(polishing, |this| {
-                        this.child(
-                            div()
-                                .id("dictation-skip-polish")
-                                .role(gpui::Role::Button)
-                                .aria_label("Skip polish")
-                                .chat_cursor_pointer()
-                                .flex_shrink_0()
-                                .h(px(18.0 * s))
-                                .px(px(7.0 * s))
-                                .flex()
-                                .items_center()
-                                .rounded_full()
-                                .text_color(p.foreground)
-                                .bg(p.foreground.opacity(0.08))
-                                .hover(|style| style.bg(p.foreground.opacity(0.14)))
-                                .tooltip(|window, cx| {
-                                    gpui_component::tooltip::Tooltip::new(
-                                        "Type the text without AI polish",
-                                    )
-                                    .build(window, cx)
-                                })
-                                .child("Skip")
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    if let Some(control) = this.dictation.as_ref() {
-                                        let dictate = control.dictate.clone();
-                                        dictate.update(cx, |dictate, cx| dictate.skip_polish(cx));
-                                    }
-                                })),
-                        )
-                    })
                     .child(close(false, cx))
             }
         };

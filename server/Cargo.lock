@@ -1111,7 +1111,6 @@ dependencies = [
  "sha1 0.11.0",
  "sha2",
  "subtle",
- "telmo",
  "tempfile",
  "tiny-skia",
  "tokio",
@@ -2620,12 +2619,6 @@ dependencies = [
  "quote",
  "syn 3.0.9",
 ]
-
-[[package]]
-name = "telmo"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bda12fcd5f187a83746336149f1eeac470da271119815711e8aa2a11b0527de"
 
 [[package]]
 name = "tempfile"

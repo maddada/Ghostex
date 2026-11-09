@@ -15,7 +15,7 @@ pub const PAGE_INTROS: &[(&str, &str)] = &[
     ("notifications", "Sounds and alerts when an agent finishes or needs you."),
     ("tools", "Where files, links and dev servers open: in Ghostex, your browser or your editor."),
     ("system", "What Ghostex does when your computer starts, when idle views sleep, and keeping the computer awake."),
-    ("dictation", "Talk instead of typing: the engine that turns speech into text, your words, the hotkey and past recordings."),
+    ("dictation", "Talk instead of typing: the engine that turns speech into text, the hotkey and past recordings."),
     ("voiceAgent", "A spoken conversation about your sessions: its provider, voice, speed and memory."),
     ("hotkeys", "Every keyboard shortcut in Ghostex, to look up or change."),
     ("agents", "The coding agents Ghostex runs: which are on, their defaults, approvals and resume hooks."),

@@ -4,14 +4,14 @@
 //! - `/api/readDictateSettings`, `/api/setDictateSettings` `{patch}`
 //! - `/api/readDictateEngine`: what will transcribe, for the mic's tooltip
 //! - `hex` in `/api/readDictateSettings`: where the user stands with Hex 3 (`hex.rs`)
-//! - `oldModels` in `/api/readDictateSettings` and `/api/deleteOldSpeechModels`: the models our
-//!   retired local engine downloaded (`retired.rs`)
-//! - `/api/skipDictationPolish` `{id}`
+//! - `/api/deleteOldSpeechModels` and `/api/skipDictationPolish` `{id}`: kept for phones at 11.2.1
+//!   and desktops at 11.2.2, which may still call them; gxserver deletes the old models on its own
+//!   (`retired.rs`) and nothing polishes any more (CDXC:Dictate 2026-11-10 in transcribe.rs)
 
 use axum::http::StatusCode;
 use serde_json::{json, Value};
 
-use super::{cleanup, dictate, hex, languages, retired, settings};
+use super::{dictate, hex, languages, retired, settings};
 use crate::domain::{read_domain_rpc_params, DomainStateError};
 use crate::protocol::rpc_success;
 use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
@@ -90,13 +90,7 @@ async fn route(state: &AppState, path: &str, body: &Value) -> Result<Value, Doma
             .await?;
             read_all(state).await
         }
-        "/api/skipDictationPolish" => {
-            let id = params
-                .get("id")
-                .and_then(Value::as_str)
-                .ok_or_else(|| failure("invalidParams", "id must name a recording."))?;
-            Ok(json!({"skipped": cleanup::skip_polish(id)}))
-        }
+        "/api/skipDictationPolish" => Ok(json!({"skipped": false})),
         _ => Err(failure("notFound", "Unknown Dictate route.")),
     }
 }
@@ -108,18 +102,12 @@ async fn read_all(state: &AppState) -> Result<Value, DomainStateError> {
         let paths = paths.clone();
         blocking(move || Ok(dictate::current_settings(&paths))).await?
     };
-    let project_words = dictate::project_words(state);
     let key_view = |provider: Provider| {
         let key = keys::key_state(&paths, provider);
         json!({"configured": key == KeyState::Saved, "unreadable": key == KeyState::Unreadable})
     };
-    let old_models = {
-        let paths = paths.clone();
-        blocking(move || Ok(retired::old_models_view(&paths))).await?
-    };
     // Phones and desktops from before the local engine was retired read these without a guard.
     let mut answer = json!({
-        "oldModels": old_models,
         "models": [],
         "modelsDiskBytes": 0,
         "localAvailable": false,
@@ -130,7 +118,20 @@ async fn read_all(state: &AppState) -> Result<Value, DomainStateError> {
         let home = paths.home_dir.clone();
         blocking(move || Ok(hex::state(&home))).await?
     };
-    object.insert("settings".to_string(), json!(settings));
+    let mut settings_view = json!(settings);
+    // Phones at 11.2.1 read these without a guard, and desktops at 11.2.2 take a missing switch as
+    // on: both show an empty dictionary and their filler and AI polish switches off, with polish
+    // unavailable (`polishAvailable` below). Their changes to them are ignored (`settings.rs`).
+    if let Some(view) = settings_view.as_object_mut() {
+        view.insert("dictionary".to_string(), json!([]));
+        view.insert("addProjectNames".to_string(), Value::Bool(false));
+        view.insert("removeFillers".to_string(), Value::Bool(false));
+        view.insert(
+            "polish".to_string(),
+            json!({"enabled": false, "model": "claude-sonnet-5-5", "prompt": null}),
+        );
+    }
+    object.insert("settings".to_string(), settings_view);
     object.insert(
         "engine".to_string(),
         dictate::engine_view(
@@ -147,19 +148,11 @@ async fn read_all(state: &AppState) -> Result<Value, DomainStateError> {
         "keys".to_string(),
         json!({"xai": key_view(Provider::Xai), "openai": key_view(Provider::OpenAi)}),
     );
-    object.insert(
-        "localRetired".to_string(),
-        if settings.local_retired_notice {
-            json!({ "message": retired::NOTICE })
-        } else {
-            Value::Null
-        },
-    );
-    object.insert("projectWords".to_string(), json!(project_words));
-    object.insert(
-        "polishAvailable".to_string(),
-        json!(cleanup::polish_available(state)),
-    );
+    // Older clients hide the retired engine's notice and Old speech models row when these are null.
+    object.insert("localRetired".to_string(), Value::Null);
+    object.insert("oldModels".to_string(), Value::Null);
+    object.insert("projectWords".to_string(), json!([]));
+    object.insert("polishAvailable".to_string(), Value::Bool(false));
     object.insert(
         "languages".to_string(),
         Value::Array(

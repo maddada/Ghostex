@@ -1,5 +1,5 @@
 //! A dictation goes to the engine Dictate's settings name and nowhere else: Hex that isn't ready
-//! says so (once with the notice for someone who used our retired local engine), and a cloud
+//! says so (also for someone who used our retired local engine), and a cloud
 //! engine with no key says which key, never trying another.
 
 use serde_json::json;
@@ -54,7 +54,7 @@ fn choose(paths: &crate::paths::GxserverPaths, engine: &str) {
 }
 
 #[tokio::test]
-async fn our_retired_local_engine_moves_to_hex_and_the_next_failed_dictation_says_why_once() {
+async fn our_retired_local_engine_moves_to_hex() {
     let temp = tempfile::tempdir().expect("temp");
     let state = test_state(&temp);
     let file = super::settings::file(&state.paths);
@@ -76,22 +76,6 @@ async fn our_retired_local_engine_moves_to_hex_and_the_next_failed_dictation_say
         "never a paid engine"
     );
     assert!(error.code.starts_with("hex"), "{}", error.code);
-    assert!(
-        error.message.starts_with(super::retired::NOTICE),
-        "{}",
-        error.message
-    );
-    record(&state.paths, "hex-2");
-    let second = transcribe::transcribe(&state, "hex-2")
-        .await
-        .expect("answered");
-    let error = second.error.expect("a reason");
-    assert_eq!(error.provider.as_deref(), Some("hex"));
-    assert!(
-        !error.message.contains(super::retired::NOTICE),
-        "said once: {}",
-        error.message
-    );
 }
 
 #[tokio::test]
@@ -140,28 +124,5 @@ fn the_tooltip_names_the_engine_and_model_and_what_is_missing() {
     assert_eq!(
         super::dictate::engine_label(&settings),
         "OpenAI gpt-4o-transcribe"
-    );
-}
-
-#[test]
-fn hints_start_with_ghostex_then_the_dictionary_then_project_names() {
-    let mut settings = super::settings::DictateSettings::first_run(false, false);
-    settings.dictionary = vec![super::settings::DictionaryWord {
-        word: "SpaceO".to_string(),
-        aliases: vec!["space oh".to_string()],
-    }];
-    let projects = vec!["Sajda".to_string(), "spaceo".to_string()];
-    assert_eq!(
-        super::dictate::hint_words(&settings, &projects),
-        ["Ghostex", "SpaceO", "Sajda"]
-    );
-    settings.add_project_names = false;
-    assert_eq!(
-        super::dictate::hint_words(&settings, &projects),
-        ["Ghostex", "SpaceO"]
-    );
-    assert_eq!(
-        super::dictate::alias_pairs(&settings),
-        [("SpaceO".to_string(), "space oh".to_string())]
     );
 }

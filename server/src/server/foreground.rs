@@ -145,6 +145,7 @@ pub async fn run_gxserver_foreground(
         });
     }
     crate::agent_skills_remote::spawn_startup_skill_refresh(paths.clone(), logger.clone());
+    crate::voice_agent::spawn_old_speech_models_delete(paths.clone(), logger.clone());
     let started_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     // Install age for the analytics heartbeat, taken before `identity` is
     // consumed by the runtime metadata below.

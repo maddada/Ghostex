@@ -2,12 +2,15 @@
 //! Dictate's settings name (`speech/settings.rs`): Hex 3's local API on this computer
 //! (`speech/hex.rs`), or a batch speech-to-text, xAI's (`POST /v1/stt`) or OpenAI's
 //! (`POST /v1/audio/transcriptions`), both of which take the `.m4a` or `.wav` as it is. The text
-//! then goes through the clean-up (`speech/cleanup.rs`: aliases, fillers, AI polish). A failure is kept on the recording with a sentence that says
+//! goes to the client as the engine wrote it. A failure is kept on the recording with a sentence that says
 //! what went wrong and what to do; the audio stays whatever happens, so Transcribe again works once
 //! the cause is gone.
 //!
 //! CDXC:VoiceMode 2026-10-20 WHY:
 //! The streaming dictation socket (`dictation.rs`) tied the recording to the provider connection: a refused key, an empty account or a dropped connection ended the dictation and lost what was said. Transcribing a finished file decouples the two (the user's decision in `recordings.rs`). Time-fixable failures (rate limits, xAI unavailable, no connection) are retried here a few times before the recording is marked failed.
+//!
+//! CDXC:Dictate 2026-11-10 DECISION:
+//! User: "let's please take out polishing with AI step from ghostex, this should be part of hex i don't want ghostex to deal with this", then (Q2108) filler removal and the Dictionary go too: the text goes into the chat box as the engine wrote it, on every engine, and Hex does any clean-up the user wants. The only word OpenAI and xAI are still told to expect is "Ghostex" (`dictate.rs`); the user's words and project names are no longer hints, knowing those engines will mishear names more. Supersedes the 2026-11-05 decisions (Q1264 the dictionary, filler removal and AI polish in that order; Q1273 polish on by default with a Polishing pill and Skip). Phones at 11.2.1 and desktops at 11.2.2 still send and read those settings: `settings.rs` ignores them in a patch, `speech/http.rs` answers them empty and off, and `/api/skipDictationPolish` answers `{"skipped": false}`.
 
 use std::time::Duration;
 
@@ -16,7 +19,6 @@ use serde_json::{json, Value};
 use super::keys::{self, KeyState};
 use super::provider::{self, Provider};
 use super::recordings::{self, Problem, Recording, Status};
-use super::speech::cleanup::{self, PolishOutcome};
 use super::speech::dictate;
 use super::speech::settings::{DictateSettings, Engine};
 use crate::server::AppState;
@@ -92,7 +94,7 @@ pub(super) async fn transcribe(state: &AppState, id: &str) -> Result<Recording, 
             .await
             .map_err(|error| error.to_string())?
     };
-    let words = dictate::hint_words(&settings, &dictate::project_words(state));
+    let words = dictate::hint_words();
     let engine_used =
         json!({"engine": settings.engine.id(), "label": dictate::engine_label(&settings)});
     let mut outcome = call_once(&paths, &recording, &settings, &words).await;
@@ -120,53 +122,12 @@ pub(super) async fn transcribe(state: &AppState, id: &str) -> Result<Recording, 
             .await;
         }
     };
-    let cleaned = cleanup::clean(&raw, &settings);
-    if !settings.polish.enabled || cleaned.is_empty() {
-        return save(&paths, id, generation, move |recording| {
-            recording.status = Status::Transcribed;
-            recording.text = Some(cleaned);
-            recording.raw_text = Some(raw);
-            recording.engine = Some(engine_used);
-            recording.polish = None;
-            recording.error = None;
-        })
-        .await;
-    }
-    // Saved before polishing, so a restart or a failed polish still has the cleaned text.
-    {
-        let cleaned = cleaned.clone();
-        let raw = raw.clone();
-        let engine_used = engine_used.clone();
-        save(&paths, id, generation, move |recording| {
-            recording.status = Status::Polishing;
-            recording.text = Some(cleaned);
-            recording.raw_text = Some(raw);
-            recording.engine = Some(engine_used);
-            recording.error = None;
-        })
-        .await?;
-    }
-    let (text, report) = match cleanup::polish(state, id, &settings, &words, &cleaned).await {
-        PolishOutcome::Polished(text) => (text, json!({"status": "polished"})),
-        PolishOutcome::Skipped => (cleaned, json!({"status": "skipped"})),
-        PolishOutcome::Unavailable => (
-            cleaned,
-            json!({"status": "unavailable", "message": "AI polish needs Claude Code on this computer."}),
-        ),
-        PolishOutcome::Failed(message) => {
-            super::warn_error(
-                state,
-                "voiceAgent.dictationPolishFailed",
-                &message,
-                json!({"durationMs": recording.duration_ms}),
-            );
-            (cleaned, json!({"status": "failed", "message": message}))
-        }
-    };
+    let text = raw.trim().to_string();
     save(&paths, id, generation, move |recording| {
         recording.status = Status::Transcribed;
         recording.text = Some(text);
-        recording.polish = Some(report);
+        recording.engine = Some(engine_used);
+        recording.error = None;
     })
     .await
 }
@@ -306,20 +267,9 @@ async fn transcribe_with_hex(
             )
         }
     };
-    // Someone whose engine was our retired local model hears why it is Hex now, once.
-    let message = if settings.local_retired_dictation_notice && !failure.transient {
-        let paths = paths.clone();
-        let _ = tokio::task::spawn_blocking(move || {
-            super::speech::settings::dictation_notice_said(&paths)
-        })
-        .await;
-        format!("{} {}", super::speech::retired::NOTICE, failure.message)
-    } else {
-        failure.message
-    };
     let problem = Problem {
         code: failure.code.to_string(),
-        message,
+        message: failure.message,
         provider: Some("hex".to_string()),
         detail: None,
     }

@@ -51,7 +51,7 @@ fn preview_phase() -> Option<DictatePhase> {
         .find_map(|pair| pair.strip_prefix("dictatePreview="))?;
     match value {
         "recording" => Some(DictatePhase::Recording),
-        "transcribing" | "polishing" => Some(DictatePhase::Transcribing),
+        "transcribing" => Some(DictatePhase::Transcribing),
         "failed" => preview_failure("paymentRequired"),
         _ => value.strip_prefix("failed:").and_then(preview_failure),
     }
@@ -174,25 +174,6 @@ impl Dictate {
             self.toggle(cx);
         }
     }
-
-    /// `?dictatePreview=polishing` shows the Polishing pill with Skip.
-    pub(crate) fn polishing(&self) -> bool {
-        self.transcribing() && preview_value().as_deref() == Some("polishing")
-    }
-
-    pub(crate) fn skip_polish(&mut self, cx: &mut Context<Self>) {
-        self.phase = DictatePhase::Idle;
-        cx.notify();
-    }
-}
-
-fn preview_value() -> Option<String> {
-    let search = web_sys::window().and_then(|window| window.location().search().ok())?;
-    search
-        .trim_start_matches('?')
-        .split('&')
-        .find_map(|pair| pair.strip_prefix("dictatePreview="))
-        .map(str::to_string)
 }
 
 /// What will transcribe: the page asks no gxserver for it, so the tooltip says only "Dictate".

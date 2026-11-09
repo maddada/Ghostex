@@ -1,8 +1,8 @@
 //! Dictate for the chat box and the terminal bar: record first (`recorder.rs`, a WAV file this app
 //! keeps until gxserver has it), transcribe second (gxserver's `/api/transcribeDictation`, with the
 //! engine picked in Settings › Dictation: Hex on that computer, or OpenAI's or xAI's speech-to-text
-//! with the key kept on this computer), then gxserver's clean-up and AI polish, which the chat box shows as
-//! Polishing with Skip. The two steps are independent: whatever goes
+//! with the key kept on this computer), then gxserver's clean-up (dictionary and filler removal).
+//! The two steps are independent: whatever goes
 //! wrong while transcribing, the recording stays and Transcribe again or Transcribe previous sends
 //! it once more.
 //!
@@ -24,8 +24,6 @@ const TRANSCRIBE_TIMEOUT: Duration = Duration::from_secs(180);
 const LIST_TIMEOUT: Duration = Duration::from_secs(10);
 /// How often the recording row's clock and the microphone health are looked at.
 const TICK: Duration = Duration::from_millis(250);
-/// How often a transcription in flight is asked whether AI polish is working on it.
-const POLISH_POLL: Duration = Duration::from_millis(500);
 
 /// Where a recording that has no text yet is.
 #[derive(Clone, Debug)]
@@ -116,11 +114,6 @@ pub(crate) struct Dictate {
     elapsed: Duration,
     /// A hotkey hold ended while the microphone was still opening: stop as soon as it records.
     stop_when_started: bool,
-    /// gxserver has the text and AI polish is working on it (the recording's `polishing` status):
-    /// the pill says Polishing and offers Skip.
-    polishing: bool,
-    /// Watches the recording's status while it transcribes (`watch_polish`).
-    polish_watch: Option<Task<()>>,
 }
 
 impl EventEmitter<DictateEvent> for Dictate {}
@@ -136,8 +129,6 @@ impl Dictate {
             ticker: None,
             elapsed: Duration::ZERO,
             stop_when_started: false,
-            polishing: false,
-            polish_watch: None,
         }
     }
 
@@ -152,60 +143,6 @@ impl Dictate {
 
     pub(crate) fn transcribing(&self) -> bool {
         matches!(self.phase, DictatePhase::Transcribing)
-    }
-
-    /// Transcribed, and AI polish is working on the text.
-    pub(crate) fn polishing(&self) -> bool {
-        self.transcribing() && self.polishing
-    }
-
-    /// Skip on the Polishing pill: gxserver answers at once with the text as it was before
-    /// polish (dictionary and filler clean-up kept), which is typed in as usual.
-    pub(crate) fn skip_polish(&mut self, cx: &mut Context<Self>) {
-        let Some(id) = self.in_flight.lock().ok().and_then(|id| id.clone()) else {
-            return;
-        };
-        cx.background_executor()
-            .spawn(async move {
-                let _ = recorder::rpc("skipDictationPolish", json!({"id": id}), LIST_TIMEOUT);
-            })
-            .detach();
-    }
-
-    /// While a transcription runs, looks at its recording every half second for gxserver's
-    /// `polishing` status (`/api/listDictations`), which only that list reports.
-    fn watch_polish(&mut self, cx: &mut Context<Self>) {
-        self.polishing = false;
-        let in_flight = self.in_flight.clone();
-        self.polish_watch = Some(cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(POLISH_POLL).await;
-                let Some(id) = in_flight.lock().ok().and_then(|id| id.clone()) else {
-                    let going = this.update(cx, |this, _| this.transcribing());
-                    if !matches!(going, Ok(true)) {
-                        break;
-                    }
-                    continue;
-                };
-                let polishing = cx
-                    .background_executor()
-                    .spawn(async move { recording_polishing(&id) })
-                    .await;
-                let going = this.update(cx, |this, cx| {
-                    if !this.transcribing() {
-                        return false;
-                    }
-                    if this.polishing != polishing {
-                        this.polishing = polishing;
-                        cx.notify();
-                    }
-                    true
-                });
-                if !matches!(going, Ok(true)) {
-                    break;
-                }
-            }
-        }));
     }
 
     /// How long the current recording has run.
@@ -328,7 +265,6 @@ impl Dictate {
         };
         self.ticker = None;
         self.phase = DictatePhase::Transcribing;
-        self.watch_polish(cx);
         let cancelled = self.cancelled.clone();
         let in_flight = self.in_flight.clone();
         self.work = Some(cx.spawn(async move |this, cx| {
@@ -393,8 +329,6 @@ impl Dictate {
             DictatePhase::Failed { .. } => {}
         }
         self.phase = DictatePhase::Idle;
-        self.polishing = false;
-        self.polish_watch = None;
         cx.notify();
     }
 
@@ -419,7 +353,6 @@ impl Dictate {
     fn transcribe_kept(&mut self, kept: Option<Kept>, cx: &mut Context<Self>) {
         self.phase = DictatePhase::Transcribing;
         self.reset_run();
-        self.watch_polish(cx);
         let cancelled = self.cancelled.clone();
         let in_flight = self.in_flight.clone();
         self.work = Some(cx.spawn(async move |this, cx| {
@@ -451,8 +384,6 @@ impl Dictate {
             return;
         }
         self.work = None;
-        self.polishing = false;
-        self.polish_watch = None;
         match outcome {
             Outcome::Text(text) => {
                 self.phase = DictatePhase::Idle;
@@ -607,20 +538,6 @@ fn outcome_of(answer: Result<Value, String>, kept: Kept) -> Outcome {
         }
         _ => Outcome::Failed(kept, DictateFailure::from_problem(&dictation["error"])),
     }
-}
-
-/// Whether gxserver reports recording `id` as `polishing` (blocking).
-fn recording_polishing(id: &str) -> bool {
-    recorder::rpc("listDictations", json!({"limit": 5}), LIST_TIMEOUT)
-        .ok()
-        .and_then(|answer| {
-            answer["dictations"]
-                .as_array()?
-                .iter()
-                .find(|dictation| dictation["id"].as_str() == Some(id))
-                .map(|dictation| dictation["status"] == "polishing")
-        })
-        .unwrap_or(false)
 }
 
 /// A recording cancelled before it really began: kept as dismissed like any other.

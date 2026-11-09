@@ -1,4 +1,4 @@
-//! What Dictate will do on this computer: the settings with their first-run default, the words the
+//! What Dictate will do on this computer: the settings with their first-run default, the word the
 //! recognizer is told to expect, and the engine and model that will transcribe (the mic tooltip).
 
 use serde_json::{json, Value};
@@ -22,58 +22,10 @@ pub(crate) fn saved_keys(paths: &GxserverPaths) -> (bool, bool) {
     )
 }
 
-/// Always a hint: recognizers otherwise write "Gostex".
-const BUILT_IN_WORDS: &[&str] = &["Ghostex"];
-
-/// The project names on this computer, as dictionary words.
-pub(crate) fn project_words(state: &AppState) -> Vec<String> {
-    let mut words: Vec<String> = Vec::new();
-    for project in crate::project_git_state::list_projects(state).unwrap_or_default() {
-        let Some(name) = project.get("name").and_then(Value::as_str) else {
-            continue;
-        };
-        let name = name.trim();
-        if name.chars().count() >= 3
-            && name.chars().count() <= 64
-            && !words.iter().any(|seen| seen.eq_ignore_ascii_case(name))
-        {
-            words.push(name.to_string());
-        }
-    }
-    words
-}
-
-/// The words every engine is told to expect: Ghostex, the user's words, then project names.
-pub(crate) fn hint_words(settings: &DictateSettings, projects: &[String]) -> Vec<String> {
-    let mut words: Vec<String> = Vec::new();
-    let mut add = |word: &str| {
-        if !words.iter().any(|seen| seen.eq_ignore_ascii_case(word)) {
-            words.push(word.to_string());
-        }
-    };
-    BUILT_IN_WORDS.iter().for_each(|word| add(word));
-    settings
-        .dictionary
-        .iter()
-        .for_each(|entry| add(&entry.word));
-    if settings.add_project_names {
-        projects.iter().for_each(|word| add(word));
-    }
-    words
-}
-
-/// (word, alias) for every alias in the dictionary.
-pub(crate) fn alias_pairs(settings: &DictateSettings) -> Vec<(String, String)> {
-    settings
-        .dictionary
-        .iter()
-        .flat_map(|entry| {
-            entry
-                .aliases
-                .iter()
-                .map(move |alias| (entry.word.clone(), alias.clone()))
-        })
-        .collect()
+/// The words OpenAI and xAI are told to expect: recognizers otherwise write "Gostex". The user's
+/// dictionary and project names are no longer hints (CDXC:Dictate 2026-11-10 in transcribe.rs).
+pub(crate) fn hint_words() -> Vec<String> {
+    vec!["Ghostex".to_string()]
 }
 
 pub(crate) fn provider_of(engine: Engine) -> Option<Provider> {
@@ -161,6 +113,7 @@ pub(crate) fn engine_view(
         "label": engine_label_with(settings, hex_state),
         "ready": problem.is_none(),
         "problem": problem.map(|(code, message)| json!({"code": code, "message": message})),
-        "polish": settings.polish.enabled && super::cleanup::polish_available(state),
+        // Phones at 11.2.1 add ", then AI polish" to the engine line when this is true.
+        "polish": false,
     })
 }

@@ -7,7 +7,7 @@
 //! (Sidebar Tags with the New tag form, from the sidebar's New tag deep link), `hotkeys` (the
 //! Hotkeys entry point), `marked-preview` (the Marked sections style Preview dialog open). Saves are
 //! applied back to the modal the way the app rehydrates it.
-//! `dictation`, `dictation-retired`, `dictation-openai` and `voice-agent` are Settings › Dictation and
+//! `dictation`, `dictation-hex-missing`, `dictation-openai` and `voice-agent` are Settings › Dictation and
 //! Voice Agent (settings_voice.rs).
 //! `page-<id>` opens the rail page with that id (`page-connectors`, `page-tools`).
 //! `GHOSTEX_NATIVE_MODAL_DEMO_GLASS=1` previews the frosted palette.
@@ -215,8 +215,14 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     cx.defer(move |cx| reply(result, cx));
                     return;
                 }
-                if settings_voice::owns(&host_state)
-                    && let Some(result) = settings_voice::rpc(&host_state, &path, &params)
+                // This computer's Dictation under the machine picker stories.
+                let voice_story = if host_state == "machines-dictation-open" {
+                    "dictation"
+                } else {
+                    host_state.as_str()
+                };
+                if settings_voice::owns(voice_story)
+                    && let Some(result) = settings_voice::rpc(voice_story, &path, &params)
                 {
                     cx.defer(move |cx| reply(result, cx));
                     return;
@@ -325,7 +331,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     if state == "updates-computers-open" {
         request.open_select = Some("settings-machine-picker".to_string());
     }
-    if state == "machines-agents-open" {
+    if state == "machines-agents-open" || state == "machines-dictation-open" {
         request.open_select = Some("settings-machine-picker".to_string());
     }
     request.gxserver_rpc_available = if settings_sync::owns(&state) {

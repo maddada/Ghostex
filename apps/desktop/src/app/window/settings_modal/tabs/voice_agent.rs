@@ -1,7 +1,6 @@
 //! Settings › Dictation and Settings › Voice Agent, two pages drawn by one view type
 //! ([`VoiceAgentTab`], `page` says which). Dictation: the machine picker, Dictate's engine with
-//! the key a cloud engine needs right under it, its clean-up (`voice_dictate.rs`) and the
-//! Dictation history. Voice Agent: the provider with its key right under it, the voice, speed and
+//! the key a cloud engine needs right under it (`voice_dictate.rs`) and the Dictation history. Voice Agent: the provider with its key right under it, the voice, speed and
 //! call mode (catalog rows, `packages/settings-catalog/src/pages/voice_agent.rs`), and Memory.
 //! A key is pasted, sent once to `/api/setVoiceAgentKey` (which checks it with the provider
 //! before sealing it) and never shown again; the pages only learn whether each provider has one
@@ -178,7 +177,7 @@ impl VoiceAgentTab {
             let store = store.clone();
             cx.new(|cx| super::voice_agent_history::DictationHistory::new(store, window, cx))
         });
-        let dictate = super::voice_dictate::DictateState::new(window, cx);
+        let dictate = super::voice_dictate::DictateState::new(cx);
         let mut tab = Self {
             page,
             history,
@@ -619,8 +618,8 @@ impl Render for VoiceAgentTab {
 }
 
 impl VoiceAgentTab {
-    /// Settings › Dictation: the machine picker, Dictation (engine, its key, hotkey, microphone),
-    /// Clean-up and Dictation history.
+    /// Settings › Dictation: the machine picker (connected machines only), Speech to text (engine,
+    /// its key, language, hotkey, microphone, Insert with spacing) and Dictation history.
     fn dictation_blocks(
         &mut self,
         p: &super::super::palette::SettingsPalette,
@@ -636,16 +635,16 @@ impl VoiceAgentTab {
         // CDXC:VoiceMode 2026-11-05 DECISION: User (Q1275): Dictate's settings belong to each
         // computer, so the page carries the machine picker Agents and Integrations use; a remote
         // machine shows its Dictate, while the keys stay this computer's.
-        if let Some(picker) = super::machine_picker::render_machine_picker_described(
+        if let Some(picker) = super::machine_picker::render_connected_machine_picker(
             self,
             p,
             &self.store.clone(),
             |shown| match shown {
                 Some(name) => format!(
-                    "Showing Dictation on {name}: its engine and clean-up are saved there and transcribe its sessions. Its API keys are added on {name} itself."
+                    "Showing Dictation on {name}: its engine and language are saved there and transcribe its sessions. Its API keys are added on {name} itself."
                 ),
                 None => {
-                    "Pick a connected remote machine to change its Dictation engine and clean-up."
+                    "Pick a connected remote machine to change its Dictation engine and language."
                         .to_string()
                 }
             },
@@ -664,17 +663,6 @@ impl VoiceAgentTab {
             dictate_rows,
         ) {
             blocks.push(PageBlock::section("dictate", section));
-        }
-        let cleanup_visible = |key: &str| search.row_visible("cleanup", key);
-        let cleanup_rows = self.cleanup_rows(p, &cleanup_visible, window, cx);
-        if let Some(section) = settings_section(
-            p,
-            "Clean-up",
-            Some("Applied after you stop, before the text is typed.".into()),
-            None,
-            cleanup_rows,
-        ) {
-            blocks.push(PageBlock::section("cleanup", section));
         }
         if !remote
             && search.row_visible("dictations", DICTATION_HISTORY)

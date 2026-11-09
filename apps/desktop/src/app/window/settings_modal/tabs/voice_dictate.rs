@@ -1,9 +1,8 @@
-//! Settings › Dictation's Dictation and Clean-up sections: the engine (Hex, OpenAI, xAI) with the
-//! key a cloud engine needs right under it, the notice for people who used our retired local
-//! engine and its old models, the language, the hotkey and its mode, the microphone, the
-//! dictionary, filler removal, Insert with spacing and AI polish.
+//! Settings › Dictation's Speech to text section: the engine (Hex, OpenAI, xAI) with the key a
+//! cloud engine needs right under it, the language, the hotkey and its mode, the microphone and
+//! Insert with spacing.
 //!
-//! The engine, models, language, dictionary, filler removal and polish belong to the computer whose
+//! The engine, models and language belong to the computer whose
 //! gxserver transcribes, so the page reads and writes them through `/api/readDictateSettings` and
 //! `/api/setDictateSettings` on the machine the picker at the top shows (this computer, or a
 //! connected remote one: `store_machine_gxserver_rpc`). The hotkey mode, the microphone and Insert
@@ -22,7 +21,7 @@ use super::super::super::native_modal_kit::*;
 use super::super::catalog::SettingOption;
 use super::super::fields::{
     ButtonVariant, RowSpec, format_hotkey_label, setting_row, settings_button, settings_segmented,
-    settings_select, settings_text_input, settings_textarea, toggle_field_with,
+    settings_select, toggle_field_with,
 };
 use super::super::model::SettingsTabId;
 use super::super::palette::SettingsPalette;
@@ -30,11 +29,9 @@ use super::super::store::{SettingsStore, post_store_message, store_machine_gxser
 use super::voice_agent::VoiceAgentTab;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Task, Window,
-    div, px,
+    AnyElement, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Task, Window, div, px,
 };
-use gpui_component::input::InputState;
 use gpui_component::{h_flex, v_flex};
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -48,15 +45,11 @@ const READ_TIMEOUT: Duration = Duration::from_secs(15);
 pub(super) const ENGINE: &str = "dictateEngine";
 pub(super) const OPENAI_KEY: &str = "dictateOpenaiKey";
 pub(super) const XAI_KEY: &str = "dictateXaiKey";
-pub(super) const OLD_MODELS: &str = "dictateOldModels";
 pub(super) const LANGUAGE: &str = "dictateLanguage";
 pub(super) const HOTKEY: &str = "dictateHotkey";
 pub(super) const HOTKEY_MODE: &str = "dictateHotkeyMode";
 pub(super) const MICROPHONE: &str = "dictateMicrophone";
-pub(super) const DICTIONARY: &str = "dictateDictionary";
-pub(super) const FILLERS: &str = "dictateRemoveFillers";
 pub(super) const SPACING: &str = "dictateInsertSpacing";
-pub(super) const POLISH: &str = "dictatePolish";
 
 /// The hotkey Dictate ships with, and the one offered when macOS takes it.
 const DEFAULT_CHORD: &str = "ctrl+alt+space";
@@ -72,13 +65,6 @@ pub(crate) struct DictateState {
     read_error: Option<String>,
     /// The last change's failure, shown under the section.
     action_error: Option<String>,
-    /// Delete old models is running.
-    old_models_busy: bool,
-    word_input: Entity<InputState>,
-    alias_input: Entity<InputState>,
-    dictionary_note: Option<String>,
-    /// The polish prompt editor is open, with the text typed so far.
-    prompt_draft: Option<String>,
     devices_requested: bool,
     /// Install Hex is running on the shown computer (`hex.rs`).
     hex_install: Option<Task<()>>,
@@ -92,19 +78,12 @@ pub(crate) struct DictateState {
 }
 
 impl DictateState {
-    pub(crate) fn new(window: &mut Window, cx: &mut Context<VoiceAgentTab>) -> Self {
+    pub(crate) fn new(cx: &mut Context<VoiceAgentTab>) -> Self {
         Self {
             answer: None,
             machine: None,
             read_error: None,
             action_error: None,
-            old_models_busy: false,
-            word_input: cx.new(|cx| InputState::new(window, cx).placeholder("Word, e.g. gxserver")),
-            alias_input: cx.new(|cx| {
-                InputState::new(window, cx).placeholder("Heard as (optional), e.g. GX server")
-            }),
-            dictionary_note: None,
-            prompt_draft: None,
             devices_requested: false,
             hex_install: None,
             hex_install_confirm: false,
@@ -120,46 +99,6 @@ impl DictateState {
     pub(crate) fn machine(&self) -> Option<&str> {
         self.machine.as_deref()
     }
-}
-
-/// "0.72 GB", "150 MB".
-pub(super) fn size_label(bytes: u64) -> String {
-    if bytes < 200_000_000 {
-        return format!("{} MB", (bytes as f64 / 1_000_000.0).round() as u64);
-    }
-    let gb = format!("{:.2}", bytes as f64 / 1_000_000_000.0);
-    let gb = gb.trim_end_matches('0').trim_end_matches('.');
-    format!("{gb} GB")
-}
-
-/// A dictionary entry from the add form: the word and its aliases (comma separated), checked
-/// against gxserver's limits (word 1 to 64 characters; each alias 3 to 64, at most 8).
-pub(super) fn dictionary_entry(word: &str, aliases: &str) -> Result<Value, String> {
-    let word = word.trim();
-    if word.is_empty() {
-        return Err("Type a word first.".to_string());
-    }
-    if word.chars().count() > 64 {
-        return Err("A word can be at most 64 characters.".to_string());
-    }
-    let aliases: Vec<String> = aliases
-        .split(',')
-        .map(str::trim)
-        .filter(|alias| !alias.is_empty())
-        .map(str::to_string)
-        .collect();
-    if aliases.len() > 8 {
-        return Err("A word can have at most 8 aliases.".to_string());
-    }
-    if let Some(alias) = aliases
-        .iter()
-        .find(|alias| !(3..=64).contains(&alias.chars().count()))
-    {
-        return Err(format!(
-            "\"{alias}\" is too short or too long: an alias is 3 to 64 characters."
-        ));
-    }
-    Ok(json!({ "word": word, "aliases": aliases }))
 }
 
 impl VoiceAgentTab {
@@ -195,7 +134,6 @@ impl VoiceAgentTab {
         self.dictate.machine = machine;
         self.dictate.answer = None;
         self.dictate.read_error = None;
-        self.dictate.prompt_draft = None;
         if !self.dictate.devices_requested {
             self.dictate.devices_requested = true;
             post_store_message(&self.store, json!({ "type": "requestDictateDevices" }), cx);
@@ -220,18 +158,7 @@ impl VoiceAgentTab {
         // Shown at once; the answer brings gxserver's own copy.
         if let (Some(answer), Some(fields)) = (self.dictate.answer.as_mut(), patch.as_object()) {
             for (key, value) in fields {
-                if key == "polish" {
-                    if let (Some(polish), Some(changes)) = (
-                        answer["settings"]["polish"].as_object_mut(),
-                        value.as_object(),
-                    ) {
-                        for (key, value) in changes {
-                            polish.insert(key.clone(), value.clone());
-                        }
-                    }
-                } else {
-                    answer["settings"][key] = value.clone();
-                }
+                answer["settings"][key] = value.clone();
             }
         }
         self.dictate.action_error = None;
@@ -319,9 +246,6 @@ impl VoiceAgentTab {
                 );
             }
         } else {
-            if let Some(row) = self.local_retired_row(p, cx) {
-                rows.push(row);
-            }
             if visible(ENGINE) {
                 rows.push(self.engine_row(p, cx));
                 if let Some(row) = self.hex_row(p, window, cx) {
@@ -333,11 +257,6 @@ impl VoiceAgentTab {
             }
             if visible(ENGINE)
                 && let Some(row) = self.remote_key_missing_row(p, cx)
-            {
-                rows.push(row);
-            }
-            if visible(OLD_MODELS)
-                && let Some(row) = self.old_models_row(p, cx)
             {
                 rows.push(row);
             }
@@ -356,6 +275,9 @@ impl VoiceAgentTab {
         if visible(MICROPHONE) {
             rows.push(self.microphone_row(p, window, cx));
         }
+        if visible(SPACING) {
+            rows.push(self.spacing_row(p, cx));
+        }
         if let Some(error) = &self.dictate.action_error {
             rows.push(
                 div()
@@ -370,57 +292,22 @@ impl VoiceAgentTab {
         rows
     }
 
-    /// The Clean-up section's rows.
-    pub(super) fn cleanup_rows(
-        &mut self,
-        p: &SettingsPalette,
-        visible: &dyn Fn(&str) -> bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let mut rows = Vec::new();
-        let ready = self.dictate.answer.is_some();
-        if ready && visible(DICTIONARY) {
-            rows.push(self.dictionary_row(p, window, cx));
-        }
-        if ready && visible(FILLERS) {
-            let (title, subtitle, _) = Self::catalog_row(FILLERS).unwrap_or_default();
-            let on = self
-                .dictate_settings()
-                .and_then(|settings| settings["removeFillers"].as_bool())
-                .unwrap_or(true);
-            rows.push(toggle_field_with(
-                p,
-                FILLERS,
-                RowSpec::new(title).description(subtitle),
-                on,
-                None,
-                |page: &mut Self, on, _window, cx| {
-                    page.set_dictate(json!({ "removeFillers": on }), cx)
-                },
-                cx,
-            ));
-        }
-        if visible(SPACING) {
-            let (title, subtitle, _) = Self::catalog_row(SPACING).unwrap_or_default();
-            let on = self.store.read(cx).values().bool(SPACING);
-            rows.push(toggle_field_with(
-                p,
-                SPACING,
-                RowSpec::new(title).description(subtitle),
-                on,
-                None,
-                |page: &mut Self, on, _window, cx| {
-                    page.store
-                        .update(cx, |store, cx| store.update_setting(SPACING, json!(on), cx));
-                },
-                cx,
-            ));
-        }
-        if ready && visible(POLISH) {
-            rows.extend(self.polish_rows(p, window, cx));
-        }
-        rows
+    /// Insert with spacing, this app's own setting.
+    fn spacing_row(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> AnyElement {
+        let (title, subtitle, _) = Self::catalog_row(SPACING).unwrap_or_default();
+        let on = self.store.read(cx).values().bool(SPACING);
+        toggle_field_with(
+            p,
+            SPACING,
+            RowSpec::new(title).description(subtitle),
+            on,
+            None,
+            |page: &mut Self, on, _window, cx| {
+                page.store
+                    .update(cx, |store, cx| store.update_setting(SPACING, json!(on), cx));
+            },
+            cx,
+        )
     }
 
     fn engine_row(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> AnyElement {
@@ -698,395 +585,6 @@ impl VoiceAgentTab {
             cx,
         )
     }
-
-    fn dictionary_row(
-        &mut self,
-        p: &SettingsPalette,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let (title, subtitle, _) = Self::catalog_row(DICTIONARY).unwrap_or_default();
-        let answer = self.dictate.answer.clone().unwrap_or_default();
-        let words: Vec<Value> = answer["settings"]["dictionary"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-        let add_projects = answer["settings"]["addProjectNames"]
-            .as_bool()
-            .unwrap_or(true);
-        let project_words: Vec<String> = answer["projectWords"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_string)
-            .collect();
-        let chip = |text: String| {
-            div()
-                .flex()
-                .items_center()
-                .gap(px(4.0))
-                .px(px(9.0))
-                .py(px(3.0))
-                .rounded_full()
-                .text_size(px(12.5))
-                .text_color(hsla(p.foreground))
-                .child(text)
-        };
-        let mut chips = div().flex().flex_wrap().gap(px(6.0)).w_full();
-        for (index, entry) in words.iter().enumerate() {
-            let word = entry["word"].as_str().unwrap_or_default().to_string();
-            let aliases: Vec<String> = entry["aliases"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .map(|alias| format!("\"{alias}\""))
-                .collect();
-            let text = if aliases.is_empty() {
-                word.clone()
-            } else {
-                format!("{word} ← {}", aliases.join(", "))
-            };
-            chips = chips.child(
-                chip(text)
-                    .border_1()
-                    .border_color(hsla(p.hairline))
-                    .bg(hsla(p.foreground_alpha(0.06)))
-                    .child(
-                        div()
-                            .id(SharedString::from(format!("dictate-word-remove-{index}")))
-                            .cursor_pointer()
-                            .px(px(2.0))
-                            .text_color(hsla(p.muted))
-                            .hover(|style| style.text_color(hsla(p.foreground)))
-                            .tooltip(move |window, cx| {
-                                gpui_component::tooltip::Tooltip::new("Remove").build(window, cx)
-                            })
-                            .child("✕")
-                            .on_click(cx.listener(move |page, _, _, cx| {
-                                page.remove_word(index, cx);
-                            })),
-                    ),
-            );
-        }
-        if add_projects {
-            for word in project_words.iter().take(24) {
-                chips = chips.child(
-                    chip(word.clone())
-                        .border_1()
-                        .border_dashed()
-                        .border_color(hsla(p.foreground_alpha(0.25)))
-                        .text_color(hsla(p.muted)),
-                );
-            }
-        }
-        let form = h_flex()
-            .w_full()
-            .gap(px(8.0))
-            .items_center()
-            .child(
-                div()
-                    .w(px(170.0))
-                    .flex_shrink_0()
-                    .child(settings_text_input(
-                        p,
-                        &self.dictate.word_input,
-                        None,
-                        false,
-                        window,
-                        cx,
-                    )),
-            )
-            .child(settings_text_input(
-                p,
-                &self.dictate.alias_input,
-                None,
-                false,
-                window,
-                cx,
-            ))
-            .child(settings_button(
-                p,
-                "dictate-word-add",
-                "Add word",
-                None,
-                ButtonVariant::Outline,
-                false,
-                None,
-                |page: &mut Self, window, cx| page.add_word(window, cx),
-                cx,
-            ));
-        let project_words_switch = super::super::fields::switch_control(
-            p,
-            "dictate-project-words-switch",
-            "Add project names",
-            add_projects,
-            false,
-            None,
-            |page: &mut Self, on, _window, cx| {
-                page.set_dictate(json!({ "addProjectNames": on }), cx)
-            },
-            cx,
-        );
-        let project_words_press = project_words_switch.press();
-        let projects_switch = h_flex()
-            .id("dictate-project-words-row")
-            .gap(px(8.0))
-            .items_center()
-            .when_some(project_words_press, |row, press| {
-                row.switch_row_press(switch_row_wash(p.foreground), false, press)
-            })
-            .child(project_words_switch)
-            .child(
-                div()
-                    .text_size(px(12.5))
-                    .text_color(hsla(p.muted))
-                    .child(format!(
-                        "Add project names ({}), drawn dashed",
-                        project_words.len()
-                    )),
-            );
-        let control = v_flex()
-            .w_full()
-            .gap(px(10.0))
-            .when(
-                !words.is_empty() || (add_projects && !project_words.is_empty()),
-                |this| this.child(chips),
-            )
-            .child(form)
-            .when_some(self.dictate.dictionary_note.clone(), |this, note| {
-                this.child(
-                    div()
-                        .text_size(px(12.5))
-                        .text_color(hsla(p.destructive))
-                        .child(note),
-                )
-            })
-            .child(projects_switch)
-            .into_any_element();
-        setting_row(
-            p,
-            DICTIONARY,
-            RowSpec::new(title).description(subtitle).wide(),
-            None,
-            control,
-            cx,
-        )
-    }
-
-    fn add_word(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let word = self.dictate.word_input.read(cx).value().to_string();
-        let aliases = self.dictate.alias_input.read(cx).value().to_string();
-        let entry = match dictionary_entry(&word, &aliases) {
-            Ok(entry) => entry,
-            Err(note) => {
-                self.dictate.dictionary_note = Some(note);
-                cx.notify();
-                return;
-            }
-        };
-        let mut words = self
-            .dictate_settings()
-            .and_then(|settings| settings["dictionary"].as_array().cloned())
-            .unwrap_or_default();
-        // The same word again replaces its aliases.
-        words.retain(|existing| {
-            !existing["word"].as_str().is_some_and(|existing| {
-                existing.eq_ignore_ascii_case(entry["word"].as_str().unwrap_or_default())
-            })
-        });
-        if words.len() >= 200 {
-            self.dictate.dictionary_note =
-                Some("The dictionary holds at most 200 words.".to_string());
-            cx.notify();
-            return;
-        }
-        words.push(entry);
-        self.dictate.dictionary_note = None;
-        self.dictate
-            .word_input
-            .update(cx, |input, cx| input.set_value("", window, cx));
-        self.dictate
-            .alias_input
-            .update(cx, |input, cx| input.set_value("", window, cx));
-        self.set_dictate(json!({ "dictionary": words }), cx);
-    }
-
-    fn remove_word(&mut self, index: usize, cx: &mut Context<Self>) {
-        let mut words = self
-            .dictate_settings()
-            .and_then(|settings| settings["dictionary"].as_array().cloned())
-            .unwrap_or_default();
-        if index < words.len() {
-            words.remove(index);
-            self.set_dictate(json!({ "dictionary": words }), cx);
-        }
-    }
-
-    fn polish_rows(
-        &mut self,
-        p: &SettingsPalette,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let (title, subtitle, _) = Self::catalog_row(POLISH).unwrap_or_default();
-        let answer = self.dictate.answer.clone().unwrap_or_default();
-        let polish = &answer["settings"]["polish"];
-        let on = polish["enabled"].as_bool().unwrap_or(true);
-        let available = answer["polishAvailable"].as_bool().unwrap_or(true);
-        let description = if available {
-            subtitle
-        } else {
-            format!(
-                "{subtitle}\nClaude Code isn't set up on {}, so the text goes in unpolished until it is.",
-                if self.dictate.machine.is_some() {
-                    "that computer"
-                } else {
-                    "this computer"
-                }
-            )
-        };
-        let mut rows = vec![toggle_field_with(
-            p,
-            POLISH,
-            RowSpec::new(title).description(description),
-            on,
-            None,
-            |page: &mut Self, on, _window, cx| {
-                page.set_dictate(json!({ "polish": { "enabled": on } }), cx)
-            },
-            cx,
-        )];
-        if !on {
-            return rows;
-        }
-        let custom = polish["prompt"].as_str().map(str::to_string);
-        let editing = self.dictate.prompt_draft.is_some();
-        let control = h_flex()
-            .gap(px(8.0))
-            .items_center()
-            .child(
-                div()
-                    .text_size(px(13.0))
-                    .text_color(hsla(p.foreground))
-                    .child("Claude Sonnet 5.5"),
-            )
-            .when(!editing, |this| {
-                let custom = custom.clone();
-                this.child(settings_button(
-                    p,
-                    "dictate-polish-prompt-edit",
-                    if custom.is_some() {
-                        "Edit prompt (custom)"
-                    } else {
-                        "Edit prompt"
-                    },
-                    None,
-                    ButtonVariant::Outline,
-                    false,
-                    None,
-                    move |page: &mut Self, _window, cx| {
-                        page.dictate.prompt_draft = Some(custom.clone().unwrap_or_default());
-                        cx.notify();
-                    },
-                    cx,
-                ))
-            })
-            .into_any_element();
-        let mut spec = RowSpec::new("Polish model").description(
-            "The model that polishes, through Claude Code on the computer that transcribes. Edit prompt replaces the built-in instructions; leave it empty to use them.",
-        );
-        spec = spec.dependent();
-        rows.push(setting_row(
-            p,
-            "dictatePolishModel",
-            spec,
-            None,
-            control,
-            cx,
-        ));
-        if let Some(draft) = self.dictate.prompt_draft.clone() {
-            let id = SharedString::from("dictate-polish-prompt");
-            let input = super::super::fields::FieldStates::textarea_state(
-                self,
-                &id,
-                &draft,
-                Some("Leave empty to use the built-in prompt"),
-                (4, 12),
-                |page: &mut Self, text, _window, cx| {
-                    if page.dictate.prompt_draft.is_some() {
-                        page.dictate.prompt_draft = Some(text);
-                    }
-                    let _ = cx;
-                },
-                window,
-                cx,
-            );
-            let editor = v_flex()
-                .w_full()
-                .gap(px(8.0))
-                .px(px(16.0))
-                .pb(px(12.0))
-                .child(settings_textarea(p, &input, 96.0, false, false, window, cx))
-                .child(
-                    h_flex()
-                        .gap(px(8.0))
-                        .justify_end()
-                        .child(settings_button(
-                            p,
-                            "dictate-polish-prompt-cancel",
-                            "Cancel",
-                            None,
-                            ButtonVariant::Outline,
-                            false,
-                            None,
-                            |page: &mut Self, _window, cx| {
-                                page.dictate.prompt_draft = None;
-                                cx.notify();
-                            },
-                            cx,
-                        ))
-                        .child(settings_button(
-                            p,
-                            "dictate-polish-prompt-reset",
-                            "Use built-in",
-                            None,
-                            ButtonVariant::Outline,
-                            false,
-                            None,
-                            |page: &mut Self, _window, cx| {
-                                page.dictate.prompt_draft = None;
-                                page.set_dictate(json!({ "polish": { "prompt": null } }), cx);
-                            },
-                            cx,
-                        ))
-                        .child(settings_button(
-                            p,
-                            "dictate-polish-prompt-save",
-                            "Save prompt",
-                            None,
-                            ButtonVariant::Default,
-                            false,
-                            None,
-                            |page: &mut Self, _window, cx| {
-                                let text = page.dictate.prompt_draft.take().unwrap_or_default();
-                                let prompt = text.trim();
-                                let value = if prompt.is_empty() {
-                                    Value::Null
-                                } else {
-                                    Value::String(prompt.to_string())
-                                };
-                                page.set_dictate(json!({ "polish": { "prompt": value } }), cx);
-                            },
-                            cx,
-                        )),
-                )
-                .into_any_element();
-            rows.push(editor);
-        }
-        rows
-    }
 }
 
 /// Whether the app found that macOS takes Ctrl+Alt+Space for input sources (`dictateDevices`).
@@ -1096,32 +594,4 @@ pub(crate) fn input_source_conflict(store: &Entity<SettingsStore>, cx: &gpui::Ap
         .host_payload("dictateDevices")
         .and_then(|devices| devices["inputSourceConflict"].as_bool())
         .unwrap_or(false)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sizes_read_like_the_mockup() {
-        assert_eq!(size_label(715_135_416), "0.72 GB");
-        assert_eq!(size_label(1_600_000_000), "1.6 GB");
-        assert_eq!(size_label(147_951_465), "148 MB");
-    }
-
-    #[test]
-    fn the_dictionary_form_keeps_to_gxservers_limits() {
-        assert_eq!(
-            dictionary_entry(" gxserver ", "GX server, g x server").unwrap(),
-            json!({"word": "gxserver", "aliases": ["GX server", "g x server"]})
-        );
-        assert_eq!(
-            dictionary_entry("Ghostex", "").unwrap(),
-            json!({"word": "Ghostex", "aliases": []})
-        );
-        assert!(dictionary_entry("  ", "").is_err());
-        assert!(dictionary_entry("word", "ab").is_err());
-        assert!(dictionary_entry(&"x".repeat(65), "").is_err());
-        assert!(dictionary_entry("word", "aaa,bbb,ccc,ddd,eee,fff,ggg,hhh,iii").is_err());
-    }
 }

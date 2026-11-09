@@ -110,8 +110,6 @@ async fn route(state: &AppState, path: &str, body: &Value) -> Result<Value, Doma
         }
         "/api/dismissDictation" => {
             let id = id_param(&params)?;
-            // A polish in flight stops; the dismissal keeps the cleaned text for Recover.
-            super::speech::cleanup::skip_polish(&id);
             let recording = {
                 let paths = paths.clone();
                 blocking(move || recordings::dismiss(&paths, &id)).await?

@@ -121,10 +121,43 @@ pub(crate) fn settings_select_with_unavailable<V: SettingsPage>(
         id.into(),
         options,
         unavailable,
+        None,
         value,
         width,
         disabled,
         disabled_reason,
+        Rc::new(on_change),
+        window,
+        cx,
+    )
+}
+
+/// [`settings_select`] whose open list ends with a quiet line that can't be picked (`footer`):
+/// Settings › Dictation's machine picker says "Only connected shown" there.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn settings_select_with_footer<V: SettingsPage>(
+    page: &mut V,
+    p: &SettingsPalette,
+    id: impl Into<SharedString>,
+    options: &[SettingOption],
+    footer: SharedString,
+    value: &str,
+    width: Option<f32>,
+    on_change: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + Clone + 'static,
+    window: &mut Window,
+    cx: &mut Context<V>,
+) -> AnyElement {
+    settings_select_shared(
+        page,
+        p,
+        id.into(),
+        options,
+        &[],
+        Some(footer),
+        value,
+        width,
+        false,
+        None,
         Rc::new(on_change),
         window,
         cx,
@@ -138,6 +171,7 @@ fn settings_select_shared<V: SettingsPage>(
     id: SharedString,
     options: &[SettingOption],
     unavailable: &[String],
+    footer: Option<SharedString>,
     value: &str,
     width: Option<f32>,
     disabled: bool,
@@ -366,7 +400,21 @@ fn settings_select_shared<V: SettingsPage>(
                 close_select(page, cx);
             }),
         )
-        .children(rows);
+        .children(rows)
+        .when_some(footer, |this, footer| {
+            this.child(
+                div()
+                    .w_full()
+                    .flex_shrink_0()
+                    .px(px(8.0))
+                    .pt(px(6.0))
+                    .pb(px(4.0))
+                    .text_size(px(12.0))
+                    .line_height(px(16.0))
+                    .text_color(hsla(p.muted))
+                    .child(footer),
+            )
+        });
     wrapper
         .child(
             deferred(
