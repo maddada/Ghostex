@@ -951,6 +951,41 @@ pub(crate) fn gpui_remote_is_this_computer(remote: Option<&str>, local: Option<&
     matches!((remote, local), (Some(remote), Some(local)) if remote == local)
 }
 
+/// CDXC:RemoteMachines 2026-11-10 WHY: the gxserver Ghostex installed over SSH
+/// (`<data>/gxserver/package`, linked from `~/.local/bin`) was always started when it existed, so
+/// a machine that later got a newer Ghostex from a package (`/opt/ghostex` from the deb, rpm, AUR
+/// or tarball, the AppImage's copy in `<data>/appimage`, or the Mac app) kept starting the old
+/// copy on every connect, which also replaced the newer server its own app had started (GitHub
+/// #533: an Arch machine on 11.2.1 ran 10.45.0, from before the security upgrade). The connect's
+/// own refresh could not catch it: it compares with the package this app carries, and a Mac
+/// carries no Linux package (it downloads one only to install). So every installed gxserver
+/// says its version (`build-identity.json` reads 0.1.0 for every build; `--version` prints the
+/// release) and the newest starts; on a tie, or when the first found prints no version, today's
+/// order is kept, and a program that prints none is never picked. Starting it replaces
+/// an older running gxserver through `gxserver start`'s build check, which stops only the control
+/// plane, so the machine's sessions keep running. Expects `GXSERVER_BIN` (the first found, as
+/// before) and `GHOSTEX_REMOTE_DATA_DIR`; leaves the chosen program's version in
+/// `GHOSTEX_REMOTE_GXSERVER_VERSION`.
+/// SEE-ALSO: `start_gxserver_background` in server/src/cli.rs, the AppImage's install folder in
+/// tooling/packaging/appimage/AppRun, the package layout in tooling/release-gpui/linux-stage.sh.
+macro_rules! gpui_remote_newest_gxserver_selection {
+    () => {
+        concat!(
+            "ghostex_remote_gxserver_version() { \"$1\" --version 2>/dev/null | head -n 1 | sed 's/^gxserver[[:space:]]*//'; }; ",
+            "ghostex_remote_version_newer() { awk -v a=\"$1\" -v b=\"$2\" 'BEGIN { na = split(a, x, /[^0-9]+/); nb = split(b, y, /[^0-9]+/); n = (na > nb) ? na : nb; for (i = 1; i <= n; i++) { if (x[i] + 0 > y[i] + 0) exit 0; if (x[i] + 0 < y[i] + 0) exit 1 } exit 1 }'; }; ",
+            "GHOSTEX_REMOTE_GXSERVER_VERSION=\"\"; ",
+            "if [ -x \"$GXSERVER_BIN\" ]; then GHOSTEX_REMOTE_GXSERVER_VERSION=\"$(ghostex_remote_gxserver_version \"$GXSERVER_BIN\")\"; fi; ",
+            "for GHOSTEX_REMOTE_CANDIDATE in \"/Applications/Ghostex.app/Contents/Resources/Web/gxserver/bin/gxserver\" \"/opt/ghostex/gxserver/bin/gxserver\" \"$GHOSTEX_REMOTE_DATA_DIR/appimage/gxserver/bin/gxserver\"; do ",
+            "if [ \"$GHOSTEX_REMOTE_CANDIDATE\" != \"$GXSERVER_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_CANDIDATE\" ]; then ",
+            "GHOSTEX_REMOTE_CANDIDATE_VERSION=\"$(ghostex_remote_gxserver_version \"$GHOSTEX_REMOTE_CANDIDATE\")\"; ",
+            "if [ -n \"$GHOSTEX_REMOTE_CANDIDATE_VERSION\" ] && { [ ! -x \"$GXSERVER_BIN\" ] || { [ -n \"$GHOSTEX_REMOTE_GXSERVER_VERSION\" ] && ghostex_remote_version_newer \"$GHOSTEX_REMOTE_CANDIDATE_VERSION\" \"$GHOSTEX_REMOTE_GXSERVER_VERSION\"; }; }; then ",
+            "GXSERVER_BIN=\"$GHOSTEX_REMOTE_CANDIDATE\"; GHOSTEX_REMOTE_GXSERVER_VERSION=\"$GHOSTEX_REMOTE_CANDIDATE_VERSION\"; fi; ",
+            "fi; ",
+            "done; "
+        )
+    };
+}
+
 pub(crate) fn gpui_remote_token_read_command() -> &'static str {
     /*
     Remote packages released before the platform-storage migration remain
@@ -969,6 +1004,7 @@ pub(crate) fn gpui_remote_token_read_command() -> &'static str {
         "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/gxserver\" ]; then GXSERVER_BIN=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/gxserver\"; fi; ",
         "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$HOME/.local/bin/gxserver\" ]; then GXSERVER_BIN=\"$HOME/.local/bin/gxserver\"; fi; ",
         "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"/Applications/Ghostex.app/Contents/Resources/Web/gxserver/bin/gxserver\" ]; then GXSERVER_BIN=\"/Applications/Ghostex.app/Contents/Resources/Web/gxserver/bin/gxserver\"; fi; ",
+        gpui_remote_newest_gxserver_selection!(),
         "GHOSTEX_BIN=\"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/bin/ghostex\"; ",
         "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\" ]; then GHOSTEX_BIN=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\"; fi; ",
         "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$HOME/.local/bin/ghostex\" ]; then GHOSTEX_BIN=\"$HOME/.local/bin/ghostex\"; fi; ",
@@ -1111,6 +1147,7 @@ pub(crate) fn gpui_remote_installed_gxserver_version_command() -> &'static str {
         "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/gxserver\" ]; then GXSERVER_BIN=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/gxserver\"; fi; ",
         "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$HOME/.local/bin/gxserver\" ]; then GXSERVER_BIN=\"$HOME/.local/bin/gxserver\"; fi; ",
         "if [ ! -x \"$GXSERVER_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_APP_ROOT/bin/gxserver\" ]; then GXSERVER_BIN=\"$GHOSTEX_REMOTE_APP_ROOT/bin/gxserver\"; fi; ",
+        gpui_remote_newest_gxserver_selection!(),
         "GHOSTEX_BIN=\"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/bin/ghostex\"; ",
         "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\" ]; then GHOSTEX_BIN=\"$GHOSTEX_REMOTE_LEGACY_ROOT/package/bin/ghostex\"; fi; ",
         "if [ ! -x \"$GHOSTEX_BIN\" ] && [ -x \"$HOME/.local/bin/ghostex\" ]; then GHOSTEX_BIN=\"$HOME/.local/bin/ghostex\"; fi; ",
@@ -1125,7 +1162,8 @@ pub(crate) fn gpui_remote_installed_gxserver_version_command() -> &'static str {
         // A package Ghostex installed there (the one Reinstall replaces), printed outside the markers.
         "if [ -r \"$GHOSTEX_REMOTE_DATA_DIR/gxserver/package/build-identity.json\" ] || [ -r \"$GHOSTEX_REMOTE_LEGACY_ROOT/package/build-identity.json\" ]; then printf '__GHOSTEX_REMOTE_GXSERVER_MANAGED__\\n'; fi; ",
         "printf '__GHOSTEX_REMOTE_GXSERVER_VERSION_START__\\n'; ",
-        "if [ -r \"$GHOSTEX_REMOTE_IDENTITY_FILE\" ]; then cat \"$GHOSTEX_REMOTE_IDENTITY_FILE\"; elif [ -x \"$GXSERVER_BIN\" ]; then \"$GXSERVER_BIN\" --version 2>/dev/null || true; fi; ",
+        // The release the program prints first: every package's build-identity.json says 0.1.0.
+        "if [ -n \"$GHOSTEX_REMOTE_GXSERVER_VERSION\" ]; then printf '%s\\n' \"$GHOSTEX_REMOTE_GXSERVER_VERSION\"; elif [ -r \"$GHOSTEX_REMOTE_IDENTITY_FILE\" ]; then cat \"$GHOSTEX_REMOTE_IDENTITY_FILE\"; elif [ -x \"$GXSERVER_BIN\" ]; then \"$GXSERVER_BIN\" --version 2>/dev/null || true; fi; ",
         "printf '\\n__GHOSTEX_REMOTE_GXSERVER_VERSION_END__\\n'"
     )
 }
