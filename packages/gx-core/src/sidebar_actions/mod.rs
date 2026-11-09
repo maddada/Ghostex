@@ -114,8 +114,8 @@ pub use remote_focus::{
 };
 pub use remote_machine_settings::normalize_remote_machine_settings;
 pub use resolve::{
-    local_project_group_project_id, NATIVE_PROJECT_PATH_ACTION_MESSAGE_TYPE,
-    NATIVE_PROJECT_PATH_ACTION_MESSAGE_VERSION,
+    local_project_group_project_id, view_has_action_project,
+    NATIVE_PROJECT_PATH_ACTION_MESSAGE_TYPE, NATIVE_PROJECT_PATH_ACTION_MESSAGE_VERSION,
 };
 pub use sleep_sweep::{running_local_session_ids, titlebar_sleep_inactive_ids};
 pub use snooze::{

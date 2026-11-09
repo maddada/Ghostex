@@ -82,6 +82,18 @@ impl UnifiedSidebarHost {
             .and_then(|session| session.row.key.clone())
     }
 
+    /// The machine list that holds the project a header action names, while the Unified sidebar
+    /// is on (CDXC:Sidebar 2026-11-09 in gx-core `view_has_action_project`).
+    pub(crate) fn view_holding_project(
+        &self,
+        group_id: &str,
+    ) -> Option<&ghostex_gx_core::SidebarView> {
+        self.lanes
+            .values()
+            .map(|lane| lane.model.view())
+            .find(|view| ghostex_gx_core::view_has_action_project(view, group_id))
+    }
+
     /// A Quick Access pick waiting to filter the list gives way to a filter set since.
     pub(crate) fn pending_project_clear(&mut self) {
         self.pending_project = None;

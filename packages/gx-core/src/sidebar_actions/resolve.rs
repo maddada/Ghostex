@@ -138,3 +138,13 @@ pub(super) fn action_project<'a>(
         })
     })
 }
+
+/// Whether `view` holds the project `group_id` names for a project header action
+/// (`action_project`). The host asks it to pick the list a Unified project menu's action is
+/// planned against.
+///
+/// CDXC:Sidebar 2026-11-09 WHY:
+/// The Unified sidebar lists projects the Project sidebar's list leaves out (with Hide projects without sessions on, a project with no session is not drawn there, yet the Unified filter still lists it), and its project menu's Add Worktree, History and Create Linear Ticket were planned against that list only, so they did nothing on such a project. The Unified sidebar's per-machine lists hold every project, so the host plans against the one that holds it when the Project sidebar's does not.
+pub fn view_has_action_project(view: &SidebarView, group_id: &str) -> bool {
+    action_project(view, group_id).is_some()
+}
