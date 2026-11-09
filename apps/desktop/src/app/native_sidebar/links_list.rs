@@ -46,6 +46,9 @@ use ghostex_gx_core::{
 };
 
 /// How long a × waits for its confirming click.
+/// The `hovered` and `armed` key of the Suggested header's ×, which no link's key can equal.
+const SUGGESTED_HEADER_KEY: &str = "group:suggested";
+
 const REMOVE_ARMED_FOR: Duration = Duration::from_secs(3);
 /// How long a removed link stays out of the list without gxserver publishing its removal; past it
 /// the list shows what gxserver says again (the removal failed, and said so in a toast).
@@ -319,22 +322,59 @@ impl SessionLinksList {
     }
 
     fn click_remove(&mut self, key: String, cx: &mut Context<Self>) {
-        if self.armed.as_deref() == Some(&key) {
+        self.click_remove_keys(key.clone(), vec![key], cx);
+    }
+
+    /// The × of the Suggested header: removes every suggestion, the hidden ones under "Show all"
+    /// too, on the same two clicks as one row's ×.
+    ///
+    /// CDXC:SessionLinks 2026-11-09 DECISION:
+    /// User (of the Links list's "Suggested 2" header): "add x button that appears here so that i can click twice to remove all the suggested ones". A × at the header's right end, shown while the pointer is on the header (like a row's), arms on the first click (soft red, "Remove all?") and removes every suggestion on the second within three seconds; moving off the header lets go. They go to Removed like one row's ×, so Restore brings each back. Each is the existing `removeSessionLink` of that suggestion (gxserver's `dismiss_suggestion`), sent in turn by `removeSessionLinks`.
+    fn click_remove_all_suggested(&mut self, cx: &mut Context<Self>) {
+        let keys: Vec<String> = self
+            .shown_links()
+            .map(|links| {
+                links
+                    .suggested
+                    .iter()
+                    .map(|link| link.key.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        if keys.is_empty() {
+            return;
+        }
+        self.click_remove_keys(SUGGESTED_HEADER_KEY.to_string(), keys, cx);
+    }
+
+    /// A first click on `armed_key` arms it; a second removes `keys` (one link's key, or every
+    /// suggestion's).
+    fn click_remove_keys(&mut self, armed_key: String, keys: Vec<String>, cx: &mut Context<Self>) {
+        if self.armed.as_deref() == Some(&armed_key) {
             self.armed = None;
             self.hovered = None;
             let sidebar_id = self.key.to_sidebar_session_id();
-            if !self.removing.contains(&key) {
-                self.removing.push(key.clone());
+            for key in &keys {
+                if !self.removing.contains(key) {
+                    self.removing.push(key.clone());
+                }
             }
-            self.send(
-                json!({ "type": "removeSessionLink", "sessionId": sidebar_id, "key": key }),
-                cx,
-            );
+            if let [key] = keys.as_slice() {
+                self.send(
+                    json!({ "type": "removeSessionLink", "sessionId": sidebar_id, "key": key }),
+                    cx,
+                );
+            } else {
+                self.send(
+                    json!({ "type": "removeSessionLinks", "sessionId": sidebar_id, "keys": keys }),
+                    cx,
+                );
+            }
             cx.spawn(async move |list, cx| {
                 cx.background_executor().timer(REMOVAL_PENDING_FOR).await;
                 let _ = list.update(cx, |list, cx| {
                     let before = list.removing.len();
-                    list.removing.retain(|pending| pending != &key);
+                    list.removing.retain(|pending| !keys.contains(pending));
                     if list.removing.len() != before {
                         cx.notify();
                     }
@@ -342,11 +382,11 @@ impl SessionLinksList {
             })
             .detach();
         } else {
-            self.armed = Some(key.clone());
+            self.armed = Some(armed_key.clone());
             cx.spawn(async move |list, cx| {
                 cx.background_executor().timer(REMOVE_ARMED_FOR).await;
                 let _ = list.update(cx, |list, cx| {
-                    if list.armed.as_deref() == Some(&key) {
+                    if list.armed.as_deref() == Some(&armed_key) {
                         list.armed = None;
                         cx.notify();
                     }
@@ -757,6 +797,13 @@ impl SessionLinksList {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let folded = self.is_folded(section);
+        // Suggested's header carries a × that removes every suggestion, shown while the pointer
+        // is on the header or the × waits for its second click.
+        let clear = (section == "suggested").then(|| {
+            let armed = self.armed.as_deref() == Some(SUGGESTED_HEADER_KEY);
+            let hovered = self.hovered.as_deref() == Some(SUGGESTED_HEADER_KEY);
+            (hovered || armed).then(|| self.render_remove_all_button(armed, cx))
+        });
         h_flex()
             .id(gpui::SharedString::from(format!(
                 "session-links-section-{section}"
@@ -790,7 +837,69 @@ impl SessionLinksList {
                     .child(title.to_string())
                     .child(count.to_string()),
             )
+            .when_some(clear, |header, clear| {
+                header
+                    .on_hover(cx.listener(|list, hovered: &bool, _, cx| {
+                        if *hovered {
+                            list.hovered = Some(SUGGESTED_HEADER_KEY.to_string());
+                        } else if list.hovered.as_deref() == Some(SUGGESTED_HEADER_KEY) {
+                            list.hovered = None;
+                        }
+                        // Moving off the header lets go of its armed ×.
+                        if list.armed.is_some() && list.armed != list.hovered {
+                            list.armed = None;
+                        }
+                        cx.notify();
+                    }))
+                    .child(div().flex_1())
+                    .children(clear)
+            })
             .on_click(cx.listener(move |list, _, _, cx| list.toggle_section(section, cx)))
+            .into_any_element()
+    }
+
+    /// The Suggested header's ×: the same look as a row's, which turns soft red once armed.
+    fn render_remove_all_button(&self, armed: bool, cx: &mut Context<Self>) -> AnyElement {
+        let red = session_link_tone_color(SessionLinkTone::Closed);
+        let label = if armed {
+            "Click again to remove all"
+        } else {
+            "Remove all"
+        };
+        h_flex()
+            .id("session-links-suggested-remove-all")
+            .flex_shrink_0()
+            .h(px(BUTTON_HEIGHT))
+            .px(px(4.0))
+            .items_center()
+            .rounded(px(5.0))
+            .cursor_pointer()
+            .role(gpui::Role::Button)
+            .aria_label(label)
+            .when(armed, |button| button.bg(red.opacity(0.16)))
+            .when(!armed, |button| {
+                button.hover(|button| button.bg(chrome_ink().opacity(0.12)))
+            })
+            .child(titlebar_svg_icon(
+                "titlebar/x.svg",
+                12.0,
+                if armed {
+                    red
+                } else {
+                    chrome_ink().opacity(0.6).into()
+                },
+            ))
+            .tooltip(move |window, cx| {
+                sidebar_style_tooltip(
+                    if armed { "Remove all?" } else { "Remove all" }.to_string(),
+                    window,
+                    cx,
+                )
+            })
+            .on_click(cx.listener(|list, _, _, cx| {
+                cx.stop_propagation();
+                list.click_remove_all_suggested(cx);
+            }))
             .into_any_element()
     }
 

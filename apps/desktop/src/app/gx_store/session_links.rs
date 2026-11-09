@@ -12,7 +12,7 @@ use crate::GhostexGpuiApp;
 use crate::app::model::{GpuiBrowserRendererOpenReuse, GpuiSidebarOpenBrowserUrlMessage};
 
 impl GhostexGpuiApp {
-    /// Answers `openSessionLink {url, sessionId}`, `removeSessionLink {sessionId, key}`,
+    /// Answers `openSessionLink {url, sessionId}`, `removeSessionLink {sessionId, key}`, `removeSessionLinks {sessionId, keys}`,
     /// `restoreSessionLink {sessionId, key}`, `pinSessionLink {sessionId, key, pinned}` and
     /// `addSessionLink {sessionId, link}`; the session is
     /// named by its sidebar id.
@@ -65,6 +65,49 @@ impl GhostexGpuiApp {
                     let session_id = command.get("sessionId").and_then(Value::as_str);
                     self.open_session_link(url.to_string(), session_id, cx);
                 }
+                true
+            }
+            // Every suggestion's ×: each key is removed by its own `/api/removeSessionLink`, one
+            // after the other, because gxserver reads and writes a session's links whole for each.
+            Some("removeSessionLinks") => {
+                let Some(session) = command
+                    .get("sessionId")
+                    .and_then(Value::as_str)
+                    .and_then(SessionKey::parse_sidebar_session_id)
+                else {
+                    return true;
+                };
+                let Some(remote) = self.session_links_machine(&session) else {
+                    return true;
+                };
+                let keys: Vec<Value> = command
+                    .get("keys")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                cx.spawn(async move |this, cx| {
+                    for key in keys {
+                        let params = json!({
+                            "projectId": session.project_id,
+                            "sessionId": session.session_id,
+                            "key": key,
+                        });
+                        if let Err(error) =
+                            gx_rpc(remote.clone(), "/api/removeSessionLink", params).await
+                        {
+                            let _ = this.update(cx, |this, cx| {
+                                this.dispatch_gpui_workspace_action_toast(
+                                    "error",
+                                    "Couldn't remove the links",
+                                    &error.message,
+                                    cx,
+                                );
+                            });
+                            break;
+                        }
+                    }
+                })
+                .detach();
                 true
             }
             Some(
