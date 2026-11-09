@@ -449,6 +449,10 @@ impl ChatOptionMenu {
             Some(MenuSide::Right) => {
                 width.min(anchor.right() - available.left() - px(12.0 * scale))
             }
+            // CDXC:SessionChat 2026-11-09 DECISION: User: the Context window popover's text got the model name's size and "never clip or wrap mid-number": on a narrow chat the room right of the ring is a fraction of the popover, so it keeps its width and slides left to stay inside the chat (the clamp below) instead of narrowing to that room. Every other Left menu still narrows (2026-10-16).
+            Some(MenuSide::Left) if rows.first().is_some_and(|row| row["context"].is_object()) => {
+                width
+            }
             Some(MenuSide::Left) => width.min(available.right() - px(12.0 * scale) - anchor.left()),
             Some(MenuSide::Pill(within)) => width.min(within.size.width),
             None => width,
