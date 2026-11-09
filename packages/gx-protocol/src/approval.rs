@@ -147,6 +147,7 @@ open_string_enum! {
         TouchId => "touchId",
         MacPassword => "macPassword",
         WindowsHello => "windowsHello",
+        WindowsPassword => "windowsPassword",
         Polkit => "polkit",
         FaceId => "faceId",
         Biometric => "biometric",

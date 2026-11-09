@@ -28,7 +28,14 @@ windows = { version = "0.62", features = [
     "Win32_System_WinRT",
     "Win32_UI_WindowsAndMessaging",
 ] }
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Security_Credentials",
+    "Win32_System_Com",
+    "Win32_System_Threading",
+] }
 windows-future = "0.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]

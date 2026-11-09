@@ -44,6 +44,8 @@ pub enum Presence {
     TouchId,
     MacPassword,
     WindowsHello,
+    /// The Windows account password, where Windows Hello isn't set up.
+    WindowsPassword,
     Polkit,
 }
 
@@ -53,6 +55,7 @@ impl Presence {
             Self::TouchId => "touchId",
             Self::MacPassword => "macPassword",
             Self::WindowsHello => "windowsHello",
+            Self::WindowsPassword => "windowsPassword",
             Self::Polkit => "polkit",
         }
     }

@@ -261,7 +261,7 @@ The pinned examples are the tests in `approval.rs`; the phone's TypeScript port
 | Device | Approver key | Unlocked by | Owner key |
 | --- | --- | --- | --- |
 | macOS desktop | P-256 in the login Keychain (another program reads it only with the user's keychain password) | LocalAuthentication: Touch ID or the Mac password, before each signature | P-256 in the login Keychain, no prompt |
-| Windows desktop | P-256 in Credential Manager | Windows Hello (`UserConsentVerifier`) before each signature | Credential Manager |
+| Windows desktop | P-256 in Credential Manager | Windows Hello (`UserConsentVerifier`) before each signature; where Windows Hello isn't set up, the Windows sign-in prompt for the signed-in account, accepted only with that account's correct password (`LogonUserW`, same SID as Ghostex), presence `windowsPassword` (GitHub #520) | Credential Manager |
 | Linux desktop | P-256 in the Secret Service | polkit password prompt (`pkcheck`, a fresh subject each time so the "keep" cache never applies) | Secret Service |
 | iPhone | Secure Enclave P-256, `.userPresence` | Face ID / Touch ID / passcode, per signature | (pairing's device key) |
 | Android | Android Keystore P-256 (StrongBox when present), user authentication per use | BiometricPrompt: strong biometric or screen lock | (pairing's device key) |
