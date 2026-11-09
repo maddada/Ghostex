@@ -323,8 +323,9 @@ pub(crate) fn modal_bordered_segmented_control<V: 'static>(
             .role(gpui::Role::RadioButton)
             .aria_label(item.label.clone())
             .aria_toggled(a11y_toggled(pressed))
-            .flex_1()
-            .flex_basis(px(0.0))
+            // CDXC:AppModal 2026-11-09 DECISION:
+            // User, of Remote's tab strip at a narrow Settings width: labels touched their segment edges. A segment takes its label's width plus an equal share of the spare room, and when the strip is too narrow the labels shrink together and end in an ellipsis inside their padding, so a label never touches the edge or hides another tab.
+            .flex_auto()
             .min_w_0()
             .h_full()
             .items_center()
@@ -355,7 +356,13 @@ pub(crate) fn modal_bordered_segmented_control<V: 'static>(
             .on_press(cx, move |this, window, cx| {
                 on_select(this, index, window, cx);
             })
-            .child(item.label.clone())
+            .child(
+                div()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .child(item.label.clone()),
+            )
             .children(item.dot.map(|dot| {
                 div()
                     .flex_shrink_0()
@@ -366,7 +373,7 @@ pub(crate) fn modal_bordered_segmented_control<V: 'static>(
             .children(
                 item.trailing
                     .clone()
-                    .map(|note| div().text_color(hsla(trailing)).child(note)),
+                    .map(|note| div().flex_shrink_0().text_color(hsla(trailing)).child(note)),
             )
     });
     h_flex()

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Settings' tab strips and pickers keep their labels off the edges at narrow widths:** Remote's Easy Connect / Tailscale / Remote machines / Advanced strip and its Connect a phone / Connect a computer picker give every label side padding and shorten it with an ellipsis, instead of letting it touch or cross its segment edge, when the window is narrow.
 - **New installs show no status line under the chat box:** nothing is pinned there for any agent until you star items in Context details; everyone who already used Ghostex keeps the line they had, on the computer and the phone, and Reset to recommended still pins the suggested setup.
 - **Settings > Remote's Relay picker fits its labels, and each option has an (i):** "Public relays only" no longer spills past its highlight, the picker spans the card, and hovering the (i) after Ghostex relay, Public relays only or Custom explains what the option does.
 - **The "still use the old pairing" count in Settings > Remote counts only devices that really need pairing again:** it no longer counts phones you already removed, an older pairing of the same phone, a pairing that was never used, a phone that now signs in over Tailscale or SSH, or a phone waiting for your Approve; the line goes away when none is left, and in the notice Pair again opens, each old pairing that needs nothing has Forget.

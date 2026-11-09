@@ -293,10 +293,13 @@ pub(super) fn raised_segmented<V: 'static>(
         let text = if pressed { pressed_text } else { resting_text };
         h_flex()
             .id(SharedString::from(format!("{id}-segment-{index}")))
-            .flex_1()
+            // A segment takes its label's width plus an equal share of the spare room; when the
+            // picker is too narrow the labels shrink together and end in an ellipsis inside
+            // their padding (the tab strip's rule, `modal_bordered_segmented_control`).
+            .flex_auto()
             .min_w_0()
             .h_full()
-            .px(px(10.0))
+            .px(px(12.0))
             .gap(px(6.0))
             .items_center()
             .justify_center()
@@ -332,8 +335,18 @@ pub(super) fn raised_segmented<V: 'static>(
                     on_select(page, value, window, cx);
                 }
             }))
-            .children(segment.icon.map(|path| settings_icon(path, 16.0, text)))
-            .child(segment.label)
+            .children(
+                segment
+                    .icon
+                    .map(|path| settings_icon(path, 16.0, text).flex_shrink_0()),
+            )
+            .child(
+                div()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .child(segment.label),
+            )
     });
     h_flex()
         .id(SharedString::from(format!("{id}-segmented")))
