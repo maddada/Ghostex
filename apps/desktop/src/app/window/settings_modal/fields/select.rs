@@ -133,7 +133,7 @@ pub(crate) fn settings_select_with_unavailable<V: SettingsPage>(
 }
 
 /// [`settings_select`] whose open list ends with a quiet line that can't be picked (`footer`):
-/// Settings › Dictation's machine picker says "Only connected shown" there.
+/// Settings › Dictation's machine picker says "Only connected machines shown" there.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn settings_select_with_footer<V: SettingsPage>(
     page: &mut V,

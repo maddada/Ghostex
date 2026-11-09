@@ -1,10 +1,10 @@
 //! The machine picker at the top of Settings > Agents, Integrations, Dictation and Updates: this
-//! computer first, then the saved remote machines connected right now, with "Only connected shown"
+//! computer first, then the saved remote machines connected right now, with "Only connected machines shown"
 //! under the list. Picking one makes those pages read and install through that machine's gxserver
 //! (`store_machine_gxserver_rpc`); a picked machine that disconnects goes back to this computer.
 //!
 //! CDXC:RemoteMachines 2026-11-10 DECISION:
-//! User (Q2108, then Q2112 "Yes, connected only everywhere"): "for machine picker, please don't show disconneted machines. just show text at the bottom saying 'Only connected shown'". Every page's picker lists only connected machines, and a picked machine that is no longer connected falls back to this computer. Supersedes the 2026-10-26 picker that listed every saved machine with why it couldn't be picked. A connected machine that can't do a page's work (an older Ghostex, no agent there) is still listed, and the page says why.
+//! User (Q2108, then Q2112 "Yes, connected only everywhere"): "for machine picker, please don't show disconneted machines. just show text at the bottom saying 'Only connected shown'", later worded "Only connected machines shown". Every page's picker lists only connected machines, and a picked machine that is no longer connected falls back to this computer. Supersedes the 2026-10-26 picker that listed every saved machine with why it couldn't be picked. A connected machine that can't do a page's work (an older Ghostex, no agent there) is still listed, and the page says why.
 //!
 //! CDXC:RemoteMachines 2026-10-26 DECISION:
 //! User: "we need to show a dropdown at the top on agents page showing all the machines in settings and allowing us to update different remote machines. also same for integrations page (all should go through gxserver on that remote machine basically)". One pick serves both pages and lasts until Settings closes; the picker shows only once a remote machine is saved.
@@ -254,7 +254,7 @@ fn picker_card<V: SettingsPage>(
         p,
         PICKER_ID,
         &options,
-        "Only connected shown".into(),
+        "Only connected machines shown".into(),
         &value,
         Some(PICKER_WIDTH),
         on_change,
