@@ -657,10 +657,16 @@ pub(crate) async fn handle_read_session_chat_http(
     // The chat look rides every read too, so the phone draws the computer's look; an unset key is
     // sent as its default, so switching back to Default reaches the phone
     // (CDXC:SessionChat 2026-11-07 in packages/gx-chat-core/src/transcript/chat_look.rs).
+    // One read of the settings file for the five, as every chat read (and the phone's catch-ups)
+    // pays for it.
+    let settings = crate::session_chat_catch_up::read_settings(&state.paths);
     let look_option = |key: &str| {
         Some(
-            crate::session_chat_catch_up::chat_setting_string(&state.paths, key)
-                .unwrap_or_else(|| "default".to_string()),
+            settings
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or("default")
+                .to_string(),
         )
     };
     result.insert(
@@ -669,10 +675,12 @@ pub(crate) async fn handle_read_session_chat_http(
             message_layout: look_option("chatMessageLayout"),
             user_style: look_option("chatUserMessageStyle"),
             agent_work: look_option("chatAgentWorkStyle"),
-            status_in_transcript: Some(crate::session_chat_catch_up::chat_setting_enabled(
-                &state.paths,
-                "chatStatusInTranscript"
-            )),
+            status_in_transcript: Some(
+                settings
+                    .get("chatStatusInTranscript")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+            ),
             spacing: look_option("chatMessageSpacing"),
         }),
     );

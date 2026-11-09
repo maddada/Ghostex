@@ -63,14 +63,6 @@ pub(crate) fn chat_setting_number(paths: &GxserverPaths, key: &str) -> Option<f6
     read_settings(paths).get(key).and_then(Value::as_f64)
 }
 
-/// A string chat setting from the settings file, `None` while it is unset or not a string.
-pub(crate) fn chat_setting_string(paths: &GxserverPaths, key: &str) -> Option<String> {
-    read_settings(paths)
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::to_string)
-}
-
 pub(crate) fn read_settings(paths: &GxserverPaths) -> Value {
     crate::shared_settings_file::read_shared_settings(paths).unwrap_or(Value::Null)
 }
