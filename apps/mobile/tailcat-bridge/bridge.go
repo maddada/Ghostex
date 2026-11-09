@@ -189,7 +189,73 @@ var (
 	// clientKey is this phone's Easy Connect identity once UseClientKeyFile
 	// loaded it; while zero, every tunnel makes a throwaway key. Guarded by mu.
 	clientKey key.NodePrivate
+
+	// machineKeys holds a machine's own key, which its tunnels dial with instead
+	// of clientKey (UseMachineClientKeyFile). Guarded by mu.
+	machineKeys = map[string]key.NodePrivate{}
 )
+
+// clientKeyFor is the key machine id's tunnels dial with. Callers hold mu.
+func clientKeyFor(id string) key.NodePrivate {
+	if k, ok := machineKeys[id]; ok {
+		return k
+	}
+	return clientKey
+}
+
+// MachineClientKeyPublic loads the client key at path, creating it on first
+// use, and returns its public key ("nodekey:…"). It changes no tunnel: the
+// app registers the key with its computer first (UseMachineClientKeyFile).
+func MachineClientKeyPublic(path string) (string, error) {
+	loaded, err := readOrCreateClientKey(path)
+	if err != nil {
+		return "", err
+	}
+	return loaded.Public().String(), nil
+}
+
+// UseMachineClientKeyFile makes machine id's tunnels dial with the key at
+// path, or with this phone's shared key when path is empty. A tunnel built
+// with the other key is closed, so the next StartForward builds one with the
+// key now chosen; an unchanged choice leaves the tunnel alone.
+//
+// CDXC:RemotePairing 2026-11-10 WHY:
+// A relay delivers a key's traffic only to that key's newest connection, so a
+// phone that dialed two Easy Connect computers on one relay with its one key
+// starved the older tunnel for 15 to 30 s whenever the other connected
+// (measured on relay-eu.ghostex.dev; separate keys never stalled). Each
+// computer the app registered a key with gets its own here.
+// SEE-ALSO: apps/mobile/app/src/machines/easyConnectLinkKeyState.ts,
+// server/src/remote_access/paired_devices.rs (register_device_link_key).
+func UseMachineClientKeyFile(id, path string) error {
+	var chosen key.NodePrivate
+	if path != "" {
+		loaded, err := readOrCreateClientKey(path)
+		if err != nil {
+			return err
+		}
+		chosen = loaded
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	previous, had := machineKeys[id]
+	if path == "" {
+		if !had {
+			return nil
+		}
+		delete(machineKeys, id)
+	} else {
+		if had && previous.Equal(chosen) {
+			return nil
+		}
+		machineKeys[id] = chosen
+	}
+	log.Printf("tailcat[%s]: dials with %s from now on", id, map[bool]string{true: "its own key", false: "the shared key"}[path != ""])
+	for _, f := range forwards[id] {
+		stopLocked(f)
+	}
+	return nil
+}
 
 // UseClientKeyFile loads this phone's Easy Connect client key from path,
 // creating it on first use, makes every later tunnel use it, and returns its
@@ -591,7 +657,7 @@ func ensureForward(id, token string, remotePort int) (f *forward, port int, reus
 		token:      token,
 		remotePort: remotePort,
 		listener:   listener,
-		client:     newTunnel(id, token, clientKey),
+		client:     newTunnel(id, token, clientKeyFor(id)),
 		closed:     make(chan struct{}),
 		ctx:        ctx,
 		cancel:     cancel,
