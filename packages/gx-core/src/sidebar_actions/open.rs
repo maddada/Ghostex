@@ -244,6 +244,19 @@ fn plan_edit_space(view: &SidebarView, space_id: Option<&str>) -> SidebarActionP
     })
 }
 
+/// The New Coordinator dialog's open message for the project a sidebar group id names, on its
+/// machine. The New thread picker opens it straight from its pick, because a copy of a project
+/// merged into another's entry (another computer's, or a second clone here) has no drawn group for
+/// `projectAction` to find.
+pub fn new_coordinator_modal_payload(group_id: &str, project_name: &str) -> Value {
+    json!({
+        "type": "open",
+        "modal": "newCoordinator",
+        "groupId": group_id,
+        "projectName": project_name,
+    })
+}
+
 /// Add Worktree and History on a project header. Both read the DRAWN group, which is the same
 /// early return the TypeScript has: `if (!group || !project) return`, an answer of nothing rather
 /// than a hand-off, because a row that is not drawn cannot have been clicked.
@@ -254,6 +267,27 @@ fn plan_project_action(view: &SidebarView, command: &Value) -> Option<SidebarAct
         return None;
     }
     let group_id = text_field(command, "groupId")?;
+    // A merged entry's launcher names the copy a session last started in (`action_target`), which
+    // has no drawn group of its own; the dialog needs only that id and the entry's name.
+    if action == "coordinator" {
+        let group = view.group(group_id).or_else(|| {
+            view.groups.iter().find(|group| {
+                group
+                    .core
+                    .action_target
+                    .as_ref()
+                    .is_some_and(|target| target.group_id == group_id)
+            })
+        });
+        return Some(
+            match group.filter(|group| group.core.project_context.is_some()) {
+                Some(group) => SidebarActionPlan::one(ActionEffect::OpenAppModal {
+                    payload: new_coordinator_modal_payload(group_id, &group.core.title),
+                }),
+                None => SidebarActionPlan::nothing(),
+            },
+        );
+    }
     let Some(group) = view.group(group_id) else {
         return Some(SidebarActionPlan::nothing());
     };
@@ -297,22 +331,6 @@ fn plan_project_action(view: &SidebarView, command: &Value) -> Option<SidebarAct
                     Value::String(machine.machine_name.clone()),
                 );
             }
-            Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
-                payload: Value::Object(open),
-            }))
-        }
-        "coordinator" => {
-            let mut open = Map::new();
-            open.insert("type".to_string(), Value::String("open".to_string()));
-            open.insert(
-                "modal".to_string(),
-                Value::String("newCoordinator".to_string()),
-            );
-            open.insert("groupId".to_string(), Value::String(group_id.to_string()));
-            open.insert(
-                "projectName".to_string(),
-                Value::String(group.core.title.clone()),
-            );
             Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
                 payload: Value::Object(open),
             }))

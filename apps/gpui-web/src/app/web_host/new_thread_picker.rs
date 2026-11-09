@@ -177,12 +177,9 @@ impl GhostexGpuiApp {
                     .picker_target
                     .take()
                     .or_else(|| self.gx_store_active_group_id());
-                // The sidebar's own route, as on the desktop (new_thread_picker_lifecycle.rs).
+                // Straight from the pick, as on the desktop (new_thread_picker_lifecycle.rs).
                 if let Some(group_id) = group_id {
-                    self.dispatch_native_sidebar_ui(
-                        json!({ "type": "projectAction", "action": "coordinator", "groupId": group_id }),
-                        cx,
-                    );
+                    self.gx_store_open_new_coordinator(&group_id, cx);
                 }
             }
             NewThreadPickerCommand::CreateTerminal { target } => {

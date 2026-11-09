@@ -7,8 +7,8 @@
 
 use ghostex_gx_core::{
     ProjectKey, SessionKey, created_session, default_agent_id_for_icon, local_agent_launch_params,
-    open_remote_session_terminal, remote_agent_launch_params, remote_launch_agent_id,
-    resolve_sidebar_agent, start_provider_params,
+    new_coordinator_modal_payload, open_remote_session_terminal, remote_agent_launch_params,
+    remote_launch_agent_id, resolve_sidebar_agent, start_provider_params,
 };
 use serde_json::{Map, Value, json};
 
@@ -142,6 +142,24 @@ impl GhostexGpuiApp {
             .collect::<Vec<_>>();
         agents.sort_by_key(|(family, _)| *family != "claude");
         agents.into_iter().map(|(_, agent)| agent).collect()
+    }
+
+    /// Opens the New Coordinator dialog for the project a group id names, read from the machine
+    /// that has it rather than from the drawn list, which has no group for a merged copy (gx-core
+    /// `new_coordinator_modal_payload`). The New thread picker's Coordinator, on the desktop and
+    /// the web build.
+    pub(crate) fn gx_store_open_new_coordinator(
+        &mut self,
+        group_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let project_name = ProjectKey::parse_sidebar_group_id(group_id)
+            .and_then(|project| {
+                let loaded = self.gx_store.core.presentation().loaded(&project.machine)?;
+                Some(loaded.project(&project.project_id)?.title.clone())
+            })
+            .unwrap_or_default();
+        self.open_app_modal_from_bridge(new_coordinator_modal_payload(group_id, &project_name), cx);
     }
 
     /// Creates the coordinator in the project a group id names (this computer or a remote one) and
