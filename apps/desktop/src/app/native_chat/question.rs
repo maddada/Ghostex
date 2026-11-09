@@ -57,14 +57,27 @@ impl NativeChatView {
         let motion = self.disclosure_frame(&collapse_key, !collapsed, cx);
         let multiple = question["multiSelect"] == true;
         let max_h = question_card_max_height(self.bounds.get().size.height, window);
+        let has_previews = question["options"].as_array().is_some_and(|options| {
+            options
+                .iter()
+                .any(|option| !text(option, "preview").is_empty())
+        });
+        let options_scroll = self
+            .nested_scrolls
+            .borrow_mut()
+            .entry(format!("question-options:{}", prompt_hash(&collapse_key, index)).into())
+            .or_default()
+            .clone();
         let mut options = div()
             .id("question-options")
-            .flex_shrink_0()
+            .track_scroll(&options_scroll)
             .flex()
             .flex_col()
             .gap(px(8.0 * s))
             .max_h(max_h * 0.45)
-            .overflow_y_scroll();
+            .overflow_y_scroll()
+            // Clear of the thumb, which sits over the list's right edge.
+            .when(has_previews, |options| options.pr(px(12.0 * s)));
         for (option_index, option) in question["options"]
             .as_array()
             .into_iter()
@@ -99,22 +112,14 @@ impl NativeChatView {
             // The mockup Claude shows beside the option, under the row that picks it.
             let preview = text(option, "preview");
             if !preview.is_empty() {
-                options = options.child(
-                    div()
-                        .id(format!("question-option-preview:{index}:{option_index}"))
-                        .ml(px(28.0 * s))
-                        .max_h(px(160.0 * s))
-                        .overflow_y_scroll()
-                        .px(px(10.0 * s))
-                        .py(px(8.0 * s))
-                        .rounded(px(8.0 * s))
-                        .bg(p.card_row)
-                        .font_family(super::fonts::CHAT_MONO)
-                        .text_size(px(12.6 * s))
-                        .line_height(px(18.0 * s))
-                        .text_color(p.muted)
-                        .child(preview),
-                );
+                options = options.child(self.question_option_preview(
+                    format!(
+                        "question-option-preview:{}:{option_index}",
+                        prompt_hash(&collapse_key, index)
+                    ),
+                    &preview,
+                    p,
+                ));
             }
         }
         let question_scroll = self
@@ -161,7 +166,18 @@ impl NativeChatView {
                         .child("Select one or more options."),
                 )
             })
-            .child(options)
+            .child(
+                div()
+                    .relative()
+                    .flex_shrink_0()
+                    .flex()
+                    .flex_col()
+                    .min_w_0()
+                    .child(options)
+                    .child(
+                        app_vertical_scrollbar(&options_scroll).id("question-options-scrollbar"),
+                    ),
+            )
             .when(
                 self.snapshot["questionCard"]["reconnecting"] == true,
                 |body| body.child(reconnecting_note(p)),
@@ -361,6 +377,125 @@ impl NativeChatView {
             .when(!disabled, |button| {
                 button.on_click(cx.listener(move |this, _, _, cx| this.invoke(action.clone(), cx)))
             })
+    }
+}
+
+/// The tallest an option's preview grows before it scrolls: 10 lines of its 18px line height, so an
+/// option and its whole preview box fit in the options' share of the card.
+const PREVIEW_MAX_LINES: f32 = 10.0;
+
+impl NativeChatView {
+    /// An option's preview (Claude's `AskUserQuestion` mockup): monospace lines kept exactly as
+    /// written, up to `PREVIEW_MAX_LINES` tall, then its own scroll with a scrollbar that stays
+    /// shown; long lines never wrap and scroll sideways, so a mockup's columns stay lined up.
+    ///
+    /// CDXC:SessionChat 2026-11-09 WHY: the options list is a height-capped flex column, and a
+    /// box that scrolls has no minimum height in it, so a preview was squeezed to a row or two
+    /// (GitHub #524). It must keep `flex_shrink_0`, and the list scrolls instead.
+    fn question_option_preview(
+        &self,
+        key: String,
+        preview: &str,
+        p: &ChatAppearance,
+    ) -> AnyElement {
+        let s = p.scale;
+        let handle = self
+            .nested_scrolls
+            .borrow_mut()
+            .entry(key.clone().into())
+            .or_default()
+            .clone();
+        let preview = preview.trim_end_matches('\n');
+        // Lines never wrap, so their count says whether the box scrolls down; a box that fits
+        // would otherwise show a vertical bar over a fraction of a pixel.
+        let tall = preview.lines().count() as f32 > PREVIEW_MAX_LINES;
+        let lines = preview.lines().map(|line| {
+            // An empty line keeps its height.
+            div().child(if line.is_empty() {
+                " ".to_string()
+            } else {
+                line.replace('\t', "    ")
+            })
+        });
+        let wheel = handle.clone();
+        div()
+            .relative()
+            .flex_shrink_0()
+            .ml(px(28.0 * s))
+            .rounded(px(8.0 * s))
+            .bg(p.card_row)
+            .overflow_hidden()
+            .child(
+                div()
+                    .id(gpui::SharedString::from(key))
+                    .track_scroll(&handle)
+                    .overflow_scroll()
+                    // A row that doesn't stretch it, so the lines' column keeps its widest line's
+                    // width and all its lines' height: that is what the box measures to scroll.
+                    .flex()
+                    .items_start()
+                    .max_h(px((PREVIEW_MAX_LINES * 18.0 + 16.0) * s))
+                    .font_family(super::fonts::CHAT_MONO)
+                    .text_size(px(12.6 * s))
+                    .line_height(px(18.0 * s))
+                    .text_color(p.muted)
+                    .whitespace_nowrap()
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .flex()
+                            .flex_col()
+                            .px(px(10.0 * s))
+                            .py(px(8.0 * s))
+                            .children(lines),
+                    ),
+            )
+            .child(
+                if tall {
+                    gpui_component::scroll::Scrollbar::new(&handle)
+                } else {
+                    gpui_component::scroll::Scrollbar::horizontal(&handle)
+                }
+                .mode(gpui_component::scroll::ScrollbarMode::Always),
+            )
+            .child(
+                // The wheel moves the preview before the options list around it (GPUI hands a
+                // wheel to every scroller under the pointer), and goes on to the list once the
+                // preview is at its end, as `nested_scroll` does for the transcript's boxes.
+                gpui::canvas(
+                    |bounds, window, _| window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal),
+                    move |_, hitbox, window, _| {
+                        let handle = wheel.clone();
+                        window.on_mouse_event(
+                            move |event: &gpui::ScrollEvent, phase, window, cx| {
+                                if phase != gpui::DispatchPhase::Capture
+                                    || !hitbox.should_handle_scroll(window)
+                                {
+                                    return;
+                                }
+                                let delta = event.delta.pixel_delta(window.line_height());
+                                let offset = handle.offset();
+                                let max = handle.max_offset();
+                                let next = gpui::point(
+                                    (offset.x + delta.x).clamp(-max.x, px(0.0)),
+                                    (offset.y + delta.y).clamp(-max.y, px(0.0)),
+                                );
+                                if next == offset {
+                                    return;
+                                }
+                                handle.set_offset(next);
+                                cx.stop_propagation();
+                                window.refresh();
+                            },
+                        );
+                    },
+                )
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full(),
+            )
+            .into_any_element()
     }
 }
 
