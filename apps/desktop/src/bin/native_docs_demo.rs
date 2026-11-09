@@ -10,7 +10,7 @@
 //!     GHOSTEX_NATIVE_DOCS_DEMO_ZOOM=<percent>             (the Files text zoom, 70 to 200, default 100)
 //!     GHOSTEX_NATIVE_DOCS_DEMO_SCROLL=<px>                (scroll the document down by this much)
 //!     GHOSTEX_NATIVE_DOCS_DEMO_CARET=<line>               (1-based line to put the caret on)
-//!     GHOSTEX_NATIVE_DOCS_DEMO_KEYS="<keystroke> ..."     (pressed in order through the keymap once loaded)
+//!     GHOSTEX_NATIVE_DOCS_DEMO_KEYS="<keystroke> ..."     (pressed in order through the keymap once loaded; the Markdown and code editors answer alt-up / alt-down like Files)
 //!     GHOSTEX_NATIVE_DOCS_DEMO_BASE=<absolute path>       (a HEAD version for the git stripe)
 //!     GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND=1              (open without taking focus)
 
@@ -40,9 +40,9 @@ use app::native_docs::{
     blocks, editor_style, gutter, markdown_body, palette::DocsPalette, table_tools,
 };
 use gpui::{
-    App, AppContext as _, Bounds, Context, Entity, IntoElement, ParentElement as _, Render,
-    ScrollHandle, SharedString, Styled as _, Window, WindowBounds, WindowOptions, div, point, px,
-    size,
+    App, AppContext as _, Bounds, Context, Entity, InteractiveElement as _, IntoElement,
+    ParentElement as _, Render, ScrollHandle, SharedString, Styled as _, Window, WindowBounds,
+    WindowOptions, div, point, px, size,
 };
 use gpui_component::Root;
 use zorite_editor::{EditorEvent, EditorState};
@@ -138,6 +138,16 @@ impl Render for DocsDemo {
             .bg(p.page)
             .font_family(p.font.clone())
             .text_color(p.text)
+            // The Files view's own Option+Up / Option+Down handler (`native_docs_key_down`), on the
+            // ancestor of the focused editor as in the app.
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
+                if let Some(down) = app::native_docs::move_lines::move_lines_key(event) {
+                    this.live.update(cx, |editor, cx| {
+                        app::native_docs::move_lines::move_lines_in_live(editor, down, cx)
+                    });
+                    cx.stop_propagation();
+                }
+            }))
             .child(
                 div()
                     .flex_none()

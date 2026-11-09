@@ -30,6 +30,7 @@ pub(crate) mod list_keys;
 pub(crate) mod live;
 pub(crate) mod markdown_body;
 pub(crate) mod mermaid_widget;
+pub(crate) mod move_lines;
 pub(crate) mod notes;
 pub(crate) mod notes_view;
 pub(crate) mod notes_windows;

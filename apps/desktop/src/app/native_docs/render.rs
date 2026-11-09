@@ -263,6 +263,40 @@ impl GhostexGpuiApp {
         )
     }
 
+    /// Moves the lines at the focused Files editor's selection up or down (`move_lines.rs`). False
+    /// when the key is not for an editor here (none focused, or a read-only file), so it goes on.
+    fn native_docs_move_lines(
+        &mut self,
+        down: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(document) = self.native_docs.active_document() else {
+            return false;
+        };
+        if document.read_only {
+            return false;
+        }
+        if let Some(live) = document.live.clone() {
+            if !gpui::Focusable::focus_handle(live.read(cx), cx).is_focused(window) {
+                return false;
+            }
+            live.update(cx, |editor, cx| {
+                super::move_lines::move_lines_in_live(editor, down, cx)
+            });
+            return true;
+        }
+        let Some(code) = document.editor.clone() else {
+            return false;
+        };
+        if !gpui::Focusable::focus_handle(code.read(cx), cx).is_focused(window) {
+            return false;
+        }
+        code.update(cx, |state, cx| {
+            super::move_lines::move_lines_in_code(state, down, window, cx)
+        })
+    }
+
     /// Cmd+S saves; Cmd+F (Ctrl+F on Windows and Linux) shows the files search.
     ///
     /// CDXC:Docs 2026-09-12 DECISION:
@@ -274,6 +308,13 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) {
         let modifiers = event.keystroke.modifiers;
+        // Option+Up / Option+Down (Alt on Windows and Linux) move the editor's lines (`move_lines.rs`).
+        if let Some(down) = super::move_lines::move_lines_key(event)
+            && self.native_docs_move_lines(down, window, cx)
+        {
+            cx.stop_propagation();
+            return;
+        }
         // F3 and Shift+F3 step through the open document's matches while its find bar is up.
         if event.keystroke.key == "f3"
             && !modifiers.control

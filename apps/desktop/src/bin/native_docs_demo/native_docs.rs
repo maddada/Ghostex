@@ -20,6 +20,8 @@ pub(crate) mod json_view;
 pub(crate) mod markdown_body;
 #[path = "../../app/native_docs/mermaid_widget.rs"]
 pub(crate) mod mermaid_widget;
+#[path = "../../app/native_docs/move_lines.rs"]
+pub(crate) mod move_lines;
 #[path = "../../app/native_docs/palette.rs"]
 pub(crate) mod palette;
 #[path = "../../app/native_docs/picture_zoom.rs"]

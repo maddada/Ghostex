@@ -10,8 +10,9 @@ use std::path::Path;
 use std::rc::Rc;
 
 use gpui::{
-    App, AppContext as _, Bounds, Context, Entity, IntoElement, ParentElement as _, Render,
-    SharedString, Styled as _, Window, WindowBounds, WindowOptions, div, point, px, size,
+    App, AppContext as _, Bounds, Context, Entity, InteractiveElement as _, IntoElement,
+    ParentElement as _, Render, SharedString, Styled as _, Window, WindowBounds, WindowOptions,
+    div, point, px, size,
 };
 use gpui_component::Root;
 use gpui_component::input::{Editor, EditorState};
@@ -26,6 +27,15 @@ enum Body {
     Table(Entity<TableState<DocsDataTable>>, Option<String>),
     Tree(Entity<DocsJsonTree>),
     Code(Entity<EditorState>),
+}
+
+impl Body {
+    fn clone_code(&self) -> Option<Entity<EditorState>> {
+        match self {
+            Body::Code(editor) => Some(editor.clone()),
+            _ => None,
+        }
+    }
 }
 
 struct DataDemo {
@@ -62,6 +72,23 @@ impl Render for DataDemo {
             }
             Body::Code(editor) => div()
                 .size_full()
+                // The Files view's own Option+Up / Option+Down handler (`native_docs_key_down`), on
+                // the ancestor of the focused editor as in the app.
+                .on_key_down({
+                    let editor = editor.clone();
+                    move |event, window, cx| {
+                        if let Some(down) =
+                            crate::app::native_docs::move_lines::move_lines_key(event)
+                        {
+                            editor.update(cx, |state, cx| {
+                                crate::app::native_docs::move_lines::move_lines_in_code(
+                                    state, down, window, cx,
+                                )
+                            });
+                            cx.stop_propagation();
+                        }
+                    }
+                })
                 .font_family(p.mono_font.clone())
                 .text_size(px(12.0))
                 .child(
@@ -138,70 +165,100 @@ pub(crate) fn run(file: &Path, text: String, light: bool, width: f32, height: f3
                 show: true,
                 ..Default::default()
             };
-            cx.open_window(options, move |window, cx| {
-                window.set_window_title("Native Docs demo");
-                let palette = DocsPalette::resolve(
-                    false,
-                    light,
-                    ui_fonts::UI_FONT.to_string(),
-                    gpui::rgb(if light { 0xffffff } else { 0x0e0e0e }).into(),
-                );
-                let copy: Rc<dyn Fn(String, &mut App)> = Rc::new(|text, cx| {
-                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(text))
-                });
-                let (body, title) = match (mode.as_str(), delimiter) {
-                    ("table", Some(delimiter)) => {
-                        let read = data_table::read_delimited(&text, delimiter);
-                        let notice = data_table::delimited_notice(&read);
-                        let table = data_table::new_data_table(read.headers, read.rows, window, cx);
-                        if let Some((row, col)) = env("GHOSTEX_NATIVE_DOCS_DEMO_SELECT")
-                            .split_once(',')
-                            .and_then(|(r, c)| Some((r.parse().ok()?, c.parse().ok()?)))
-                        {
-                            table.update(cx, |table, cx| table.set_selected_cell(row, col, cx));
+            let window = cx
+                .open_window(options, move |window, cx| {
+                    window.set_window_title("Native Docs demo");
+                    let palette = DocsPalette::resolve(
+                        false,
+                        light,
+                        ui_fonts::UI_FONT.to_string(),
+                        gpui::rgb(if light { 0xffffff } else { 0x0e0e0e }).into(),
+                    );
+                    let copy: Rc<dyn Fn(String, &mut App)> = Rc::new(|text, cx| {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text))
+                    });
+                    let (body, title) = match (mode.as_str(), delimiter) {
+                        ("table", Some(delimiter)) => {
+                            let read = data_table::read_delimited(&text, delimiter);
+                            let notice = data_table::delimited_notice(&read);
+                            let table =
+                                data_table::new_data_table(read.headers, read.rows, window, cx);
+                            if let Some((row, col)) = env("GHOSTEX_NATIVE_DOCS_DEMO_SELECT")
+                                .split_once(',')
+                                .and_then(|(r, c)| Some((r.parse().ok()?, c.parse().ok()?)))
+                            {
+                                table.update(cx, |table, cx| table.set_selected_cell(row, col, cx));
+                            }
+                            (Body::Table(table, notice), format!("{name}  ·  Table"))
                         }
-                        (Body::Table(table, notice), format!("{name}  ·  Table"))
-                    }
-                    ("tree", _) => {
-                        let palette = palette.clone();
-                        let tree = cx.new(|cx| DocsJsonTree::new(&text, palette, copy, window, cx));
-                        let search = env("GHOSTEX_NATIVE_DOCS_DEMO_SEARCH");
-                        if !search.is_empty() {
-                            tree.update(cx, |tree, cx| tree.search_for(&search, window, cx));
+                        ("tree", _) => {
+                            let palette = palette.clone();
+                            let tree =
+                                cx.new(|cx| DocsJsonTree::new(&text, palette, copy, window, cx));
+                            let search = env("GHOSTEX_NATIVE_DOCS_DEMO_SEARCH");
+                            if !search.is_empty() {
+                                tree.update(cx, |tree, cx| tree.search_for(&search, window, cx));
+                            }
+                            (Body::Tree(tree), format!("{name}  ·  Tree"))
                         }
-                        (Body::Tree(tree), format!("{name}  ·  Tree"))
+                        (mode, _) => {
+                            let shown = match mode {
+                                "format" | "minify" => json_view::reformat(&text, mode == "format")
+                                    .unwrap_or_else(|error| error),
+                                _ => text.clone(),
+                            };
+                            let language = match env("GHOSTEX_NATIVE_DOCS_DEMO_LANG") {
+                                language if !language.is_empty() => language,
+                                _ => "text".to_string(),
+                            };
+                            let title = format!("{name}  ·  {mode}  ·  {language}");
+                            let editor = cx.new(|cx| {
+                                EditorState::new(window, cx)
+                                    .language(language)
+                                    .line_number(true)
+                                    .default_value(shown)
+                            });
+                            (Body::Code(editor), title)
+                        }
+                    };
+                    let view = cx.new(|_| DataDemo {
+                        body,
+                        palette,
+                        title,
+                    });
+                    if !background {
+                        window.activate_window();
                     }
-                    (mode, _) => {
-                        let shown = match mode {
-                            "format" | "minify" => json_view::reformat(&text, mode == "format")
-                                .unwrap_or_else(|error| error),
-                            _ => text.clone(),
+                    // The code editor starts focused so keystrokes reach it.
+                    if let Some(editor) = view.read(cx).body.clone_code() {
+                        editor.update(cx, |editor, cx| editor.focus(window, cx));
+                    }
+                    cx.new(|cx| Root::new(view, window, cx))
+                })
+                .expect("open the demo window");
+            // Keystrokes through the keymap, as a keyboard would send them.
+            let keys = env("GHOSTEX_NATIVE_DOCS_DEMO_KEYS");
+            if !keys.is_empty() {
+                let handle: gpui::AnyWindowHandle = window.into();
+                let os = cx.platform_info().os;
+                cx.spawn(async move |cx| {
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_secs(3))
+                        .await;
+                    for key in keys.split_whitespace() {
+                        let Ok(keystroke) = gpui::Keystroke::parse_with_os(key, os) else {
+                            continue;
                         };
-                        let language = match env("GHOSTEX_NATIVE_DOCS_DEMO_LANG") {
-                            language if !language.is_empty() => language,
-                            _ => "text".to_string(),
-                        };
-                        let title = format!("{name}  ·  {mode}  ·  {language}");
-                        let editor = cx.new(|cx| {
-                            EditorState::new(window, cx)
-                                .language(language)
-                                .line_number(true)
-                                .default_value(shown)
+                        let _ = cx.update_window(handle, |_, window, cx| {
+                            window.dispatch_keystroke(keystroke, cx);
                         });
-                        (Body::Code(editor), title)
+                        cx.background_executor()
+                            .timer(std::time::Duration::from_millis(120))
+                            .await;
                     }
-                };
-                let view = cx.new(|_| DataDemo {
-                    body,
-                    palette,
-                    title,
-                });
-                if !background {
-                    window.activate_window();
-                }
-                cx.new(|cx| Root::new(view, window, cx))
-            })
-            .expect("open the demo window");
+                })
+                .detach();
+            }
             cx.activate(!background);
         });
 }

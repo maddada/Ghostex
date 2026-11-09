@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Files moves lines with Option+Up and Option+Down:** in a Markdown, code or text file, Option+Up / Option+Down (Alt+Up / Alt+Down on Windows and Linux) move the current line, or every line the selection touches, up or down by one line, like VS Code; one undo step each.
+
 ## 11.2.1 - 2026-11-09
 
 **Ghostex 11.2.1 is out.** GBots come back as Ghostex's own bots (beta, off by default), chats get opt-in looks and one / key for skills, cloning runs in the background, Settings and Extensions get tidier, iPhone voice calls keep the microphone, and Windows and macOS get a round of fixes.
