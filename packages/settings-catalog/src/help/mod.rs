@@ -644,12 +644,7 @@ pub const HELD_FROM_HELP_FILES: &[&str] = &[];
 /// The coordinator, for the user: Settings > Chat > Playbook overrides became the Coordinator
 /// playbook row (out of Advanced, with View playbook and Edit overrides); its Help waits in the held
 /// help patch like any other, so installed copies keep reading the row they have.
-pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[(
-    "orchestratorPlaybook",
-    "Playbook overrides",
-    "Your own instructions for every coordinator, such as \"Never push without asking\". Coordinators read them after Ghostex's playbook and follow them over it, and Ghostex's playbook keeps getting its updates. Existing coordinators follow them from their next message.",
-    true,
-)];
+pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`],
 /// and with [`HELD_ROW_WORDING`]'s rows as they read before.

@@ -93,7 +93,7 @@ they ask for one.
    flag. When the user asks what a coordinator knows or will do, read the
    playbook it actually follows, `ghostex coordinator guide` (add
    `--project-id <id>` for another project), which ends with the user's own
-   playbook overrides (Settings > Chat > Playbook overrides). If something the
+   playbook overrides (Settings > Chat > Coordinator playbook). If something the
    guide promises is
    missing from the playbook, say so: a coordinator only learns it from there.
    Threads on another computer need that computer connected in Settings >

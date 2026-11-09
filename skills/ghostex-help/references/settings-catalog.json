@@ -364,14 +364,13 @@
     },
     {
       "key": "orchestratorPlaybook",
-      "title": "Playbook overrides",
-      "subtitle": "Your own instructions for every coordinator, such as \"Never push without asking\". Coordinators read them after Ghostex's playbook and follow them over it, and Ghostex's playbook keeps getting its updates. Existing coordinators follow them from their next message.",
+      "title": "Coordinator playbook",
+      "subtitle": "How your coordinators work: Ghostex's playbook, then your overrides, which they follow over it.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
       "sectionTitle": "Chat",
       "type": "ui",
-      "advanced": true,
       "agentWritable": false
     },
     {

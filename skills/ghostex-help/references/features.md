@@ -578,7 +578,11 @@ view from the strip.
   search: inside a Markdown, code or text file it shows Find and Replace with the
   caret ready (starting from the selected text), marking every match and moving
   through them with Enter and Shift+Enter, and anywhere else it reveals the files
-  list and focuses its search. Escape closes the document search. The filter
+  list and focuses its search. Escape closes the document search. In a Markdown,
+  code or text file, Option+Up and Option+Down (Alt+Up and Alt+Down on Windows and
+  Linux) move the current line, or every line the selection touches, up or down by
+  one line, like VS Code; each press is one undo step, and a read-only file stays
+  as it is. The filter
   button at the start of the files list's search box shows only HTML, Markdown,
   Excalidraw, image or video files: pick one or several types (All files shows
   everything again) and typing still narrows them by name. While a type is
@@ -1567,6 +1571,14 @@ On the computer, Ghostex saves pasted images at up to 32 MiB; it converts BMP
 and TIFF to PNG and reduces very large pictures when needed. OpenCode reduces large
 images further when sending them to its service. If an image still cannot fit,
 the chat box shows its size and the limit.
+Press Enter while a pasted, dropped or attached picture is still being saved and
+the message is sent at once: it moves into the chat with a loading tile where the
+picture will be, and goes to the agent the moment the picture is in. When saving
+takes more than a moment, the message gets a spinner and the Back to composer
+arrow beside it; the arrow (or Up in an empty chat box) puts the text back in the
+chat box until the message leaves, and the picture lands there instead. If the
+picture can't be saved, the message comes back to the chat box and its error card
+says why. The phone's Send works while a picture uploads, the same way.
 Type `/` in the chat box to pick one of the agent's skills (`$` opens the same
 list), `@` to mention a project file, and `+` (at the start or after a space) to mention another agent
 session of the same project: the list shows each session's logo, title and
@@ -2155,19 +2167,20 @@ composer cursor. Older messages load as needed when returning to a place in
 the conversation's history. Shortcuts: `openSessionSearchPalette`,
 `navigateHistoryBack`, `navigateHistoryForward`.
 
-Star items in Context details to show them in the status line under the chat
-box; hover the status line and click the pen after its last item to open
-Context details. Claude
-Code starts with Account, Model limit, 5h limit, 7d limit, and Repository
-starred; Codex starts with Account email, 7d limit, 7d reset, and Account
-resets; Cursor starts with Context used, Branch, and Lines changed; Hermes
-starts with Context used, Cost, Tokens, and Session time; Pi starts with Model,
-Context used, Cost, and Tokens (read from Pi's own session record) and can also
-show Context tokens, Thinking level, Session time, Output tokens, Repository,
-Folder, Branch, and Session title; every other chat
-agent (Freebuff, OMP, Grok Build, Antigravity, OpenCode, ZCode) starts with
-Repository and Branch, and can also show Folder, Model, and Session title. Reset
-to recommended returns to these.
+Nothing is pinned to the status line under the chat box until you pin
+something, so a new install shows no line there. To show one, star items in
+Context details; hover the status line and click the pen after its last item to
+open Context details again. Everyone who already used Ghostex keeps the line
+they had, and your own changes are never overwritten. Reset to recommended
+pins the setup Ghostex suggests: Claude Code gets Account, Model limit, 5h
+limit, 7d limit, and Repository; Codex gets Account email, 7d limit, 7d reset,
+and Account resets; Cursor gets Context used, Branch, and Lines changed; Hermes
+gets Context used, Cost, Tokens, and Session time; Pi gets Model, Context used,
+Cost, and Tokens (read from Pi's own session record) and can also show Context
+tokens, Thinking level, Session time, Output tokens, Repository, Folder,
+Branch, and Session title; every other chat agent (Freebuff, OMP, Grok Build,
+Antigravity, OpenCode, ZCode) gets Repository and Branch, and can also show
+Folder, Model, and Session title.
 Items without a value are hidden until their data is available again;
 your starred selections stay saved. Wrapped rows are centered and balanced where
 space allows, with separators only between items on the same row.
@@ -2455,7 +2468,7 @@ While the agent is working, its thinking shows as a closed "Thinking…" card wi
 
 Show thinking in grey (Settings > Interface > Text, off by default) shows the agent's thinking in grey, so it reads apart from the agent's replies, which Text strength sets how bright (`sessionChatMutedThinking`); the phone has the same switch in its Settings > Chat.
 
-Tool call cards (Settings > Chat, a preview, off by default) show each run of tool calls between two pieces of the agent's text as one card: its header stacks the tools' icons and says "Used 6 tools" with any failures and the time once done, and each call reads like a sentence that changes tense when it ends ("Reading main.rs", then "Read main.rs · 92 lines · 30ms"), with its result and time on the right. A failed call says what failed with the reason underneath, and calls to apps such as Linear, GitHub or Notion show the app's logo. The card stays one line while its calls run and after: while a call runs, that line says what it is doing in its own words ("Reading main.rs") with "+2 more" for the card's other calls, and once they are done it says "Used 6 tools". It never opens or folds by itself: click (or tap) it to see every call, and it opens on its own only when a call in it waits for your approval. Click a call to see its command and output (`chatToolCallCards`). The phone has its own switch for it in its Settings > Chat.
+Tool call cards (Settings > Chat, a preview, off by default) show each run of tool calls between two pieces of the agent's text as one card: its header stacks the tools' icons and says "Used 6 tools" with any failures and the time once done, and each call reads like a sentence that changes tense when it ends ("Reading main.rs", then "Read main.rs · 92 lines · 30ms"), with its result and time on the right. A failed call says what failed with the reason underneath, and calls to apps such as Linear, GitHub or Notion show the app's logo. The card stays one line while its calls run and after: while a call runs, that line says what it is doing in its own words ("Reading main.rs") with "+2 more" for the card's other calls, and once they are done it says "Used 6 tools". It never opens or folds by itself: click (or tap) it to see every call, and it opens on its own only when a call in it waits for your approval. Click a call to see its command and output (`chatToolCallCards`). With Tool call cards on, or Agent work set to Reduced, the messages a turn sent to other sessions, the messages it got from them and your answers to its questions fold into that turn's "Worked for" line too: the line counts them ("2 messages", "1 answer") and opening it shows them first, above the work. The phone has its own switch for it in its Settings > Chat.
 
 Tool call lines (Settings > Extensions > Experimental, off by default; on the phone, Settings > Chat > Tool call lines) draw each run of an agent's tool calls as one quiet line with no box: its tools' icons, the running call's own words while it runs (with "+2 more" for the run's other calls), then the call's words for a run of one or "Used 3 tools" for a longer run, with a red "1 failed" count and the time. Click (or tap) the line to see its calls as rows, each in its tense with its result and time and the reason for a failure; Detailed view opens every line and Simple keeps them shut, and a call waiting for your approval opens its line. Opening a call shows its output's first 12 lines and a Show all button for the rest. A run that starts a background task, or reports one ending, stays as rows (`chatToolCallLines`).
 
@@ -3718,20 +3731,25 @@ version of the Projects features in Cursor and Claude Code.
   rules". Coordinators read them after Ghostex's playbook, and they take
   precedence over it: the playbook is written for everyone, the overrides are
   yours. Ghostex's playbook itself is never edited, so its updates keep
-  arriving. Edit them in **Settings > Chat > Playbook overrides** (Edit…), from
-  the **Playbook overrides** row of the New Coordinator dialog (Edit), or by
-  right-clicking a coordinator and choosing **Playbook overrides…**. To read
-  the playbook your coordinators follow, click **View playbook** (in Settings,
-  in the New Coordinator dialog and in the right-click editor): it shows
-  Ghostex's playbook with the reply format you chose, read-only, then your
-  overrides in their own box marked as yours, with **Edit overrides** to
-  change them. It is the same text `ghostex coordinator guide` prints. The
+  arriving. Edit them in **Settings > Chat > Coordinator playbook** (Edit
+  overrides…), from the **Playbook overrides** row of the New Coordinator
+  dialog (Edit), or by right-clicking a coordinator and choosing **Playbook
+  overrides…**. To read the playbook a coordinator follows, right-click it in
+  the sidebar (long-press on the phone) and choose **View playbook**, or choose
+  **View playbook** in its chat's More actions menu (…); it is also in
+  **Settings > Chat > Coordinator playbook**, in the New Coordinator dialog and
+  in the overrides editor. It shows Ghostex's playbook with the reply format
+  you chose, read-only, then your overrides in their own box marked as yours,
+  with **Edit overrides** to change them (on the phone it is read-only; edit
+  the overrides on the computer). It is the same text `ghostex coordinator
+  guide` prints. The
   overrides are one text for every coordinator on that computer; there is no
   per-project playbook. Every coordinator, existing ones too, follows a change
   from its next message, with nothing to do on your side: when a Ghostex update
   or your overrides change its playbook, the next message it gets (yours, a
   thread's report, a queued one) carries one line under it telling it to run
-  `ghostex coordinator guide` and follow it from then on. That line comes once
+  `ghostex coordinator guide` and follow it from then on. That line is for the
+  agent only: the chat shows your message as you typed it. That line comes once
   per change and not at all once it has read the new guide, and an idle
   coordinator is not woken for it. `ghostex coordinator status` says it too.
   If you edited a full copy of the playbook in Ghostex 11.0 or earlier, it
@@ -4576,13 +4594,20 @@ sessions, so any client can control agents on any machine.
   with a hollow dot) brings it back on its computer and opens it. Closed
   sessions appear once that computer runs an up-to-date Ghostex.
   A phone that signs in over Tailscale, the local network or SSH (not Easy
-  Connect) pairs once too: the first time it signs in after the update it shows
-  three words and the computer lists it as waiting, marked signs in over SSH.
-  Approve it on the computer (Touch ID) or on a phone already paired (Face ID)
-  only when the words match. Until then, answering an agent, Stop and typing
-  from that phone wait for approval on the computer; chat messages and reading
-  work as before. If you deny it, Ask again on the phone asks once more.
-  Removing it under Paired devices puts it back to asking. Computers you reach
+  Connect) pairs once with each computer: the first time it signs in, a card
+  "Approve this phone on <computer>" shows three words, and Ghostex on that
+  computer shows "Approve this phone?" with the same words. Approve it there
+  (Touch ID) or on a phone already paired (Face ID) only when the words match;
+  the card then says Paired and doesn't come back. Until then you can read
+  everything, while replying, Stop and typing from that phone wait for approval
+  on the computer. The phone asks once: opening the app again or reconnecting
+  waits on the same request (the same words), and if nobody approves it within
+  10 minutes the card says so and Ask again asks once more; it never asks again
+  by itself. Several computers waiting share one card, a computer that is asleep
+  or offline shows none, and Hide puts the card away for that computer until
+  something changes; to see it again, open Machines, tap the computer and tap
+  Show beside Approve this phone. If you deny it, Ask again on the phone asks
+  once more. Removing it under Paired devices puts it back to asking. Computers you reach
   over SSH don't pair again; the first connection shows one Approval needed
   card to let the two computers' agents reach each other, however often the
   computers reconnect or restart while it waits (it waits a day). Approve asks
@@ -4611,7 +4636,8 @@ sessions, so any client can control agents on any machine.
   Easy Connect meets the phone on a relay. Relay (below Paired devices) picks
   which: Ghostex relay (the default) has phones try Ghostex's own relay first
   and Tailscale's public relays second; Public relays only uses Tailscale's;
-  Custom takes the hostname of a relay you run (Tailscale's derper). Phones
+  Custom takes the hostname of a relay you run (Tailscale's derper); hover the
+  (i) after an option's name for what it does. Phones
   paired earlier keep working whichever you pick, and an up-to-date phone app
   learns the new address on its next connection. When the chosen relay is
   down, the pairing QR and phones use the public relays. Computers that
@@ -5189,11 +5215,11 @@ Settings > Security is hidden until you turn on Settings > Extensions > Experime
 
 Agents and the `ghostex` CLI can't change settings that only you may change (Remote, Accounts, keys and tokens), even through `ghostex actions`; the attempt is refused and logged. Easy Connect serves only SSH and Ghostex itself, never other ports. Private file links never open keys (such as `~/.ssh`), Ghostex's own data, or a project's hidden files like `.env`.
 
-After updating to 11.1, Ghostex shows a one-time notice: Ghostex went through a big security audit and every phone and computer now gets its own key, so each one pairs once. The notice lists your devices, one row each, with a status (Needs pairing, Waiting for you, Paired, Nothing to do); click one to pair it. A phone on Easy Connect: its page shows the Easy Connect code (scan it, or Copy Easy Connect code and paste it on the phone), then the phone's three words to approve. A phone that signs in over Tailscale, your network or SSH: open Ghostex on it, then approve its words. A computer on Easy Connect: on that computer open Settings > Remote > Easy Connect > Show QR > Copy Easy Connect code, paste it on the computer's page here, and approve it there when its words match. Computers you reach over SSH need nothing. Remind me later brings the notice back tomorrow (twice at most); Settings > Remote keeps a Pair again line until every device is done.
+After updating to 11.1, Ghostex shows a one-time notice: Ghostex went through a big security audit and every phone and computer now gets its own key, so each one pairs once. The notice lists your devices, one row each, with a status (Needs pairing, Waiting for you, Paired, Nothing to do); click one to pair it. A phone on Easy Connect: its page shows the Easy Connect code (scan it, or Copy Easy Connect code and paste it on the phone), then the phone's three words to approve. A phone that signs in over Tailscale, your network or SSH: open Ghostex on it, then approve its words. A computer on Easy Connect: on that computer open Settings > Remote > Easy Connect > Show QR > Copy Easy Connect code, paste it on the computer's page here, and approve it there when its words match. Computers you reach over SSH need nothing. Remind me later brings the notice back tomorrow (twice at most); Settings > Remote keeps a Pair again line, counting only devices that still need pairing again, until every one is done. An old pairing that needs nothing (never used, an older pairing of the same phone, or a phone that now signs in over Tailscale or SSH) shows Not needed and isn't counted; Forget on its row (then Forget again to confirm) takes it off the notice without unpairing anything. Phones you already removed don't show at all.
 
 ## Approvals (sensitive changes need your Touch ID, Windows Hello or phone)
 
-Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a GBot (Chief of Staff adds one without asking while Chief of Staff may add GBots on its own is on), or change a setting that loosens security (the Sync page's, for example), the change waits and an "Approval needed" notice opens in the middle of the Ghostex window on your computer, saying who asked and on which computer, with Deny and Approve. Enter never approves; Escape, Close or the corner X put it aside, still waiting, behind an "Approvals waiting" pill in the work area header: click the pill (or wait for the next notice) to bring it back. When several wait, they show one at a time ("1 of 3"). Agents can message, start sessions in, type into, stop and answer the permission prompts of sessions in any project without asking, as can the `ghostex` CLI and agents on your connected computers (within what you let that computer do). Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows (or your Windows password where Windows Hello isn't set up), or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. Adding, editing, hiding or removing a computer that this one connects to (Settings > Remote, Remote machines), saving its SSH password, and changing this computer's short name never ask: they let no one in. An approval is good for that one change only and lapses after 10 minutes unanswered (a connected computer's request waits a day, as one card whoever asks); a connected computer, once approved, stays connected for 30 days. Starting an agent with approvals off ("accept all") when your own setting for that agent doesn't asks every time. Starting a Cloud Box, letting Cloud Boxes use one of your agent logins, and changing what a project's boxes get ask when an agent does them, and so does connecting this computer to a team backend (the last step of `ghostex team deploy`).
+Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a GBot (Chief of Staff adds one without asking while Chief of Staff may add GBots on its own is on), or change a setting that loosens security (the Sync page's, for example), the change waits and an "Approval needed" notice opens in the middle of the Ghostex window on your computer, saying who asked and on which computer, with Deny and Approve. Enter never approves; Escape, Close or the corner X put it aside, still waiting, behind an "Approvals waiting" pill in the work area header: click the pill (or wait for the next notice) to bring it back. When several wait, they show one at a time ("1 of 3"). Agents can message, start sessions in, type into, stop and answer the permission prompts of sessions in any project without asking, as can the `ghostex` CLI and agents on your connected computers (within what you let that computer do). Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows (or your Windows password where Windows Hello isn't set up), or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. Adding, editing, hiding or removing a computer that this one connects to (Settings > Remote, Remote machines), saving its SSH password, and changing this computer's short name never ask: they let no one in. An approval is good for that one change only and lapses after 10 minutes unanswered (a connected computer's request waits a day, as one card whoever asks); a connected computer, once approved, stays connected for 30 days. A computer you added under Settings > Remote shows its requests here too, with Approve once this computer may answer them: a computer with its own Ghostex app asks you once, on that computer, to let this one "act as the owner … and answer its requests", and until you approve that, this computer shows a notice saying where to approve instead; a computer that runs only gxserver sends all its requests here. Until both computers' "Let the agents on … reach each other" are approved, `ghostex computers` lists the computer as waiting and names where to approve. Starting an agent with approvals off ("accept all") when your own setting for that agent doesn't asks every time. Starting a Cloud Box, letting Cloud Boxes use one of your agent logins, and changing what a project's boxes get ask when an agent does them, and so does connecting this computer to a team backend (the last step of `ghostex team deploy`).
 
 Some things only you can do, in Settings, and agents can't even ask for them: installing an extension or turning one on and giving it permissions (Settings > Extensions), adding, changing or removing a secret provider (Settings > Secrets), joining a team, making invites, the team's Linear keys and its Slack flow (Settings > Workspaces), and the settings that loosen security: Agent approvals accept all, Workspaces, Cloud Boxes' Start boxes from your phone, Trust project folders automatically, Connectors, the custom commands Ghostex runs (Custom Title Command, Global worktree command, Custom editor command), Paste protection and Bot automations. An agent asked to do one of these explains it and points you to the page. This includes the `ghostex` CLI in your own terminal, which Ghostex can't tell apart from an agent. Turning things off never asks. Every request, approval and denial is in Settings > Security's log. Each session now gets its own key to Ghostex that ends with the session, and the shared key file only gives agent-level access. The keys that approve are kept in macOS Keychain, Windows Credential Manager or the Linux Secret Service; on Windows and Linux other programs running as you can read those, so the protection there is weaker than on macOS. The CLI waits for your answer (`--no-wait` returns at once).
 
@@ -5954,8 +5980,11 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   at the (i) beside the name to read all of it). The search box at the top of
   Settings searches every tab at once: while you type, the page lists the matches
   of every tab and each tab shows how many it has. Each tile's switch turns it on
-  or off, and its actions (Edit, Details, Remove, Reinstall) appear when you hover
-  it. Extension commands use the active local project's folder unless the
+  or off, and its actions (Edit, Remove, Reinstall) appear when you hover it.
+  Clicking an installed or Community extension's tile (anywhere but its switch,
+  buttons and (i)) opens its page: what it does, its settings, permissions and
+  version, with Update, Uninstall or Install; the arrow at the top goes back to
+  the same tab. Extension commands use the active local project's folder unless the
   extension supplies a folder; relative folders are resolved inside the active
   project. Installing or updating a third-party extension first lists what it
   asks for (permissions, a background process, a remote website) and grants only
