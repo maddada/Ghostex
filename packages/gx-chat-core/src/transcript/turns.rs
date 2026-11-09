@@ -135,7 +135,7 @@ pub fn opens_turn(message: &ChatMessage) -> bool {
 
 /// One compact row per genuine user prompt, paired with its settled final reply.
 ///
-/// CDXC:SessionChat 2026-10-13 DECISION: User: "ok if the issue was that i had summary mode on, i think we should just expand the currently running agent's work even in this status you know? (the stuff under the last user message basically needs to not be all hidden like this)" and "also yea why not, if you can show the description of the tool call would be nice". While a summary-mode turn runs, its "Active work" fold starts open (`workOpen`) and the agent's newest row opens its tool calls (`running_row`, `toolsOpen`), so the work under the last prompt shows as it does with summary mode off; the reader can close the fold for the rest of that turn, and the settled turn folds as before. (A tool row's description label, which this decision first gave Simple mode, now applies in every mode: see `tool_description` in `tool_summary.rs`.) Supersedes the same day's rule that kept the newest message and running row in view under a closed fold.
+/// CDXC:SessionChat 2026-10-13 DECISION: User: "ok if the issue was that i had summary mode on, i think we should just expand the currently running agent's work even in this status you know? (the stuff under the last user message basically needs to not be all hidden like this)" and "also yea why not, if you can show the description of the tool call would be nice". While a summary-mode turn runs, its "Active work" fold starts open (`workOpen`) and the agent's newest row opens its tool calls (`running_row`, `toolsOpen`), so the work under the last prompt shows as it does with summary mode off; the reader can close the fold for the rest of that turn, and the settled turn folds as before. (A tool row's description label, which this decision first gave Simple mode, now applies in every mode: see `tool_description` in `tool_summary.rs`.) Supersedes the same day's rule that kept the newest message and running row in view under a closed fold. Exception (Sebastian, 2026-11-09): under Agent work Reduced and Quiet the running work starts shut and Quiet hides it while the agent runs (`presentation::turn_items`).
 pub fn summary_mode_turns(
     messages: &[ChatMessage],
     final_assistant_message_ids: &[String],
@@ -406,10 +406,10 @@ fn work_lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
 /// the rows a wake-up test looks past.
 fn lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
     !messages[..at]
-            .iter()
-            .rev()
-            .find(|row| !passed_over_before_wake(row))
-            .is_some_and(is_settled_reply)
+        .iter()
+        .rev()
+        .find(|row| !passed_over_before_wake(row))
+        .is_some_and(is_settled_reply)
 }
 
 /// Where the response the agent is CURRENTLY producing begins: the last user row that is a genuine
@@ -586,8 +586,8 @@ pub fn completed_work_render_items(
             .iter()
             .any(|row| interacted_message_ids.contains(&row.id));
         let interacted_grouped_diff = interacted_message_ids.contains(&message.id);
-        let folds_without_reply = grouped
-            && (opener_is_work || turn_messages.iter().any(is_agent_work_row));
+        let folds_without_reply =
+            grouped && (opener_is_work || turn_messages.iter().any(is_agent_work_row));
         if (section.is_none() && final_index.is_none() && !interrupted && !folds_without_reply)
             || (index >= active_start && !interacted_grouped_diff)
             || interacted_inline_diff

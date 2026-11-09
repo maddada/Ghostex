@@ -98,6 +98,13 @@ pub fn visible_segments(item: &Value, folds: &SearchFolds) -> Vec<Segment> {
             for message in array(item, "outcome") {
                 message_segments(message, folds, false, &mut out);
             }
+            // The rows drawn in full under the prompt, which the folds below leave out
+            // (`turns::content_rows`, `grouped_work::keep_in_view_while_shut`).
+            let cards = array(item, "cards");
+            for message in cards {
+                message_segments(message, folds, false, &mut out);
+            }
+            let carded = |message: &Value| cards.iter().any(|card| card["id"] == message["id"]);
             let has_final = item["final"].is_object();
             if has_final || item["active"] == true {
                 let key = if has_final {
@@ -109,12 +116,18 @@ pub fn visible_segments(item: &Value, folds: &SearchFolds) -> Vec<Segment> {
                 if folds.open(&key, default) {
                     if has_final {
                         for reply in array(item, "earlierReplies") {
-                            message_segments(reply, folds, false, &mut out);
+                            if !carded(reply) {
+                                message_segments(reply, folds, false, &mut out);
+                            }
                         }
-                        message_segments(&item["final"], folds, false, &mut out);
+                        if !carded(&item["final"]) {
+                            message_segments(&item["final"], folds, false, &mut out);
+                        }
                     } else {
                         for message in array(item, "work") {
-                            message_segments(message, folds, false, &mut out);
+                            if !carded(message) {
+                                message_segments(message, folds, false, &mut out);
+                            }
                         }
                     }
                 }

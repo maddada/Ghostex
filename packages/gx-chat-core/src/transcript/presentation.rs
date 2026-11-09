@@ -1234,13 +1234,15 @@ pub(crate) fn hide_running_work(
     projection: &TranscriptProjection,
 ) {
     let live = hidden_live(scope, projection);
-    if live.is_empty() {
-        return;
+    if !live.is_empty() {
+        if scope.hides_running {
+            crate::transcript::grouped_work::hide_work(items, &live, scope.quiet_finished_before);
+        } else {
+            crate::transcript::grouped_work::hide_live_calls(items, &live);
+        }
     }
-    if scope.hides_running {
-        crate::transcript::grouped_work::hide_work(items, &live, scope.quiet_finished_before);
-    } else {
-        crate::transcript::grouped_work::hide_live_calls(items, &live);
+    if scope.grouped_work && scope.summary {
+        crate::transcript::grouped_work::keep_in_view_while_shut(items);
     }
 }
 
@@ -1259,7 +1261,7 @@ fn hidden_live<'p>(
 
 /// The rows for `projection`: its summary turns in the Summary view, else its render items.
 ///
-/// CDXC:SessionChat 2026-11-09 WHY: the Summary view's running turn opens its "Active work" and its newest row's calls (the 2026-10-13 decision on `summary_mode_turns`), but under Agent work Reduced and Quiet the work stays shut there too, and Quiet leaves the running rows out as it does outside the Summary view (`grouped_work::hide_work`): Sebastian filed the Summary view ignoring them as a bug, and Quiet's own decision is that only the status line shows while the agent runs (`chat_look.rs`). Default keeps the 2026-10-13 behaviour.
+/// CDXC:SessionChat 2026-11-09 DECISION: Sebastian confirmed that Agent work Reduced and Quiet win over the Summary view's open running work (the 2026-10-13 decision on `summary_mode_turns`): under Reduced and Quiet the running turn's "Active work" starts shut and its newest row's calls start shut, and under Quiet its rows are hidden while the agent runs, as outside the Summary view (`grouped_work::hide_work`); what needs the user still shows at once (`grouped_work::keep_in_view_while_shut`). Default keeps the 2026-10-13 behaviour.
 fn turn_items(
     builder: &mut Builder,
     projection: &TranscriptProjection,
@@ -1367,7 +1369,8 @@ fn turn_items(
                         .and_then(|section| scope.deferred.get(&section.start_id))
                 });
                 let work = completed_chat_work(turn, section.map(Vec::as_slice));
-                let (visible_artifacts, collapsed_work) = partition_completed_work(&work, scope.grouped_work);
+                let (visible_artifacts, collapsed_work) =
+                    partition_completed_work(&work, scope.grouped_work);
                 /*
                 A finished turn's writes leave their rows and collect under one "N files changed"
                 fold. The rows come back through the per-message projection so an unchanged turn

@@ -92,11 +92,19 @@ fn outline(items: &[TranscriptItem]) -> Vec<String> {
         .iter()
         .map(|item| match item {
             TranscriptItem::Message { message } => {
-                format!("{} {}", message["role"].as_str().unwrap_or_default(), id(message))
+                format!(
+                    "{} {}",
+                    message["role"].as_str().unwrap_or_default(),
+                    id(message)
+                )
             }
             TranscriptItem::GroupedWork { turns, work, .. } => format!(
                 "line [{}] replies [{}] work [{}]",
-                turns.iter().map(|turn| turn.id.as_str()).collect::<Vec<_>>().join(" "),
+                turns
+                    .iter()
+                    .map(|turn| turn.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" "),
                 turns
                     .iter()
                     .filter_map(|turn| turn.final_message.as_deref().map(id))
@@ -149,10 +157,18 @@ fn default_keeps_a_turn_with_no_reply_as_its_rows() {
 fn subagent_reports() -> Vec<ChatMessage> {
     let mut rows = vec![user("u1", T0, "audit the chat")];
     rows.extend(call("c1", T0 + 1_000, "start audit"));
-    rows.push(assistant("r1", T0 + 2_000, "Two auditors are running; I'll wait."));
+    rows.push(assistant(
+        "r1",
+        T0 + 2_000,
+        "Two auditors are running; I'll wait.",
+    ));
     rows.push(report("a1", T0 + 60_000, "aed516f06a84e683f"));
     rows.push(notification("n1", T0 + 60_100, "aed516f06a84e683f"));
-    rows.push(assistant("m1", T0 + 61_000, "The first audit is in, checking it."));
+    rows.push(assistant(
+        "m1",
+        T0 + 61_000,
+        "The first audit is in, checking it.",
+    ));
     rows.extend(call("c2", T0 + 62_000, "rg chat_look"));
     rows.push(report("a2", T0 + 63_000, "ac26f28eca2e672ed"));
     rows.push(notification("n2", T0 + 63_100, "ac26f28eca2e672ed"));
@@ -232,8 +248,13 @@ fn a_long_chat_folds_reports_into_the_same_line() {
         ..Default::default()
     };
     ghostex_gx_chat_core::transcript::rows::refresh(&mut state, &context);
-    assert!(state.transcript_view.settled.is_some(), "built on settled turns");
-    let outline = outline(&ghostex_gx_chat_core::transcript::rows::rows(&state, &context));
+    assert!(
+        state.transcript_view.settled.is_some(),
+        "built on settled turns"
+    );
+    let outline = outline(&ghostex_gx_chat_core::transcript::rows::rows(
+        &state, &context,
+    ));
     let at = outline.iter().position(|row| row == "user u1").expect("u1");
     assert_eq!(
         outline[at + 1],
@@ -286,9 +307,9 @@ fn a_replys_and_a_pictures_calls_are_steps_of_the_line() {
         let ids: Vec<&str> = work.iter().map(|row| id(row)).collect();
         assert_eq!(ids, ["c1", "pic", "r1"], "{look:?}");
         let calls = |row: &Value| {
-            row["tools"]
-                .as_array()
-                .map_or(0, |tools| tools.iter().filter(|tool| tool["hasCall"] == true).count())
+            row["tools"].as_array().map_or(0, |tools| {
+                tools.iter().filter(|tool| tool["hasCall"] == true).count()
+            })
         };
         assert_eq!(calls(&work[1]), 2, "{look:?}");
         assert_eq!(calls(&work[2]), 1, "{look:?}");
@@ -334,14 +355,21 @@ fn reduced_draws_a_running_sentences_calls_as_its_line() {
     let Some(TranscriptItem::Message { message }) = default.last() else {
         panic!("{:?}", outline(&default));
     };
-    assert_ne!(message["toolsFlat"], true, "Default keeps the heading over its calls");
+    assert_ne!(
+        message["toolsFlat"], true,
+        "Default keeps the heading over its calls"
+    );
 }
 
 #[test]
 fn quiet_hides_a_running_report_and_the_status_line_names_it() {
     use ghostex_gx_chat_core::extras::working_card::working_card;
     let mut rows = vec![user("u1", T0, "audit the chat")];
-    rows.push(assistant("r1", T0 + 2_000, "Two auditors are running; I'll wait."));
+    rows.push(assistant(
+        "r1",
+        T0 + 2_000,
+        "Two auditors are running; I'll wait.",
+    ));
     rows.push(report("a1", T0 + 60_000, "aed516f06a84e683f"));
     rows.push(notification("n1", T0 + 60_100, "aed516f06a84e683f"));
     let state = working(state_with(AgentWork::Quiet, rows.clone()), T0 + 60_000);
@@ -366,7 +394,13 @@ fn the_summary_views_running_work_follows_reduced_and_quiet() {
         let mut state = working(state_with(look, rows.clone()), T0);
         state.transcript_view.summary_mode = true;
         let items = items(&state);
-        let Some(TranscriptItem::Summary { work, work_open, active, .. }) = items.last() else {
+        let Some(TranscriptItem::Summary {
+            work,
+            work_open,
+            active,
+            ..
+        }) = items.last()
+        else {
             panic!("{look:?}: no summary turn");
         };
         assert!(*active, "{look:?}");
@@ -374,12 +408,18 @@ fn the_summary_views_running_work_follows_reduced_and_quiet() {
         (*work_open, opened, work.len())
     };
     let (open, opened, rows_in) = summary(AgentWork::Default);
-    assert!(open && opened && rows_in > 0, "Default opens the running work");
+    assert!(
+        open && opened && rows_in > 0,
+        "Default opens the running work"
+    );
     let (open, opened, rows_in) = summary(AgentWork::Reduced);
     assert!(!open && !opened && rows_in > 0, "Reduced keeps it shut");
     let (open, _, rows_in) = summary(AgentWork::Quiet);
     assert!(!open, "Quiet keeps it shut");
-    assert_eq!(rows_in, 0, "Quiet shows only the status line while the agent runs");
+    assert_eq!(
+        rows_in, 0,
+        "Quiet shows only the status line while the agent runs"
+    );
 }
 
 /// An agent that reports no Working (Cursor): Quiet still keeps its running calls out of the
@@ -395,9 +435,11 @@ fn quiet_hides_the_running_calls_when_the_working_signal_is_in_doubt() {
         row(json!({"id": "u1", "role": "user", "text": "fix it"})),
         row(json!({"id": "m1", "role": "assistant", "text": "Checking.", "tools": [tool]})),
         row(json!({"id": "m2", "role": "assistant", "text": "", "tools": [tool]})),
-        row(json!({"id": "m3", "role": "assistant", "text": "", "tools": [
-            {"hasCall": true, "name": "Bash", "status": "running", "awaitingApproval": true}
-        ]})),
+        row(
+            json!({"id": "m3", "role": "assistant", "text": "", "tools": [
+                {"hasCall": true, "name": "Bash", "status": "running", "awaitingApproval": true}
+            ]}),
+        ),
     ];
     let live = ["m1", "m2", "m3"].into_iter().collect();
     hide_live_calls(&mut items, &live);
@@ -412,7 +454,11 @@ fn quiet_hides_the_running_calls_when_the_working_signal_is_in_doubt() {
             _ => String::new(),
         })
         .collect();
-    assert_eq!(outline, ["u1 0", "m1 0", "m3 1"], "the words stay, the calls go, an approval stays");
+    assert_eq!(
+        outline,
+        ["u1 0", "m1 0", "m3 1"],
+        "the words stay, the calls go, an approval stays"
+    );
 }
 
 /// The line's fold is keyed `work:<first turn id>`, as Default's "Worked for" fold is, so a fold
@@ -440,9 +486,7 @@ fn the_line_keeps_default_folds_key() {
 /// notification after the report holds the rest of the response. The line reads both.
 #[test]
 fn a_collapsed_report_turn_reads_every_section() {
-    let deferred = |start: &str, end: &str| {
-        json!({"beforeOffset": 1, "startId": start, "endId": end, "messageCount": 4, "filePaths": []})
-    };
+    let deferred = |start: &str, end: &str| json!({"beforeOffset": 1, "startId": start, "endId": end, "messageCount": 4, "filePaths": []});
     let mut prompt = user("u1", T0, "audit the chat");
     prompt.deferred_work = Some(serde_json::from_value(deferred("u1", "c2")).unwrap());
     let mut notice = notification("n1", T0 + 60_100, "aed516f06a84e683f");
@@ -463,4 +507,64 @@ fn a_collapsed_report_turn_reads_every_section() {
         .collect();
     assert_eq!(sections, ["u1", "n1"], "{:?}", outline(&items));
     assert_eq!(items.len(), 2, "{:?}", outline(&items));
+}
+
+/// The Summary view's running work starts shut under Reduced and Quiet, but a one-click question
+/// in a sentence still shows at once, drawn in full under the prompt.
+#[test]
+fn a_shut_summary_fold_keeps_a_question_in_view() {
+    let mut rows = vec![user("u1", T0, "fix it")];
+    rows.extend(call("c1", T0 + 1_000, "cargo check"));
+    rows.push(assistant(
+        "q1",
+        T0 + 2_000,
+        "Continue? [Yes](ghostex-answer:Q1) [No](ghostex-answer:Q1)",
+    ));
+    for look in [AgentWork::Reduced, AgentWork::Quiet] {
+        let mut state = working(state_with(look, rows.clone()), T0);
+        state.transcript_view.summary_mode = true;
+        let items = items(&state);
+        let Some(TranscriptItem::Summary {
+            cards, work_open, ..
+        }) = items.last()
+        else {
+            panic!("{look:?}: no summary turn");
+        };
+        assert!(!work_open, "{look:?}");
+        let ids: Vec<&str> = cards.iter().map(|card| id(card)).collect();
+        assert_eq!(ids, ["q1"], "{look:?}");
+    }
+}
+
+/// A reply's call that read a picture: under Reduced its thumbnail moves with the call into the
+/// line, whose strip and count keep it.
+#[test]
+fn a_moved_calls_picture_stays_in_the_lines_strip() {
+    let rows = vec![
+        user("u1", T0, "show me"),
+        message(json!({
+            "id": "r1", "role": "assistant", "timestamp": T0 + 1_000, "source": "transcript",
+            "blocks": [
+                { "type": "text", "text": "Here it is." },
+                { "type": "tool-call", "name": "Read", "callId": "c1", "input": {"file_path": "/shots/after.png"} },
+            ],
+        })),
+        message(json!({
+            "id": "c1-result", "role": "tool", "timestamp": T0 + 1_500, "source": "transcript",
+            "blocks": [{ "type": "tool-result", "callId": "c1", "output": "ok" }],
+        })),
+    ];
+    let items = items(&state_with(AgentWork::Reduced, rows));
+    let Some(TranscriptItem::GroupedWork {
+        read_images, stats, ..
+    }) = items.get(1)
+    else {
+        panic!("{:?}", outline(&items));
+    };
+    let paths: Vec<&str> = read_images
+        .iter()
+        .filter_map(|image| image["path"].as_str())
+        .collect();
+    assert_eq!(paths, ["/shots/after.png"]);
+    assert_eq!(stats[0]["kind"], "images");
 }

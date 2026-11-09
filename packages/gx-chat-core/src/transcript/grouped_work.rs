@@ -105,9 +105,19 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
         expandable |= turn_expandable;
         let turn_start = work.len();
         work.extend(turn_work);
+        // The pictures the moved calls read, which their rows no longer show: the line's strip and
+        // its "N images" take them over.
+        let mut moved_images: Vec<Value> = Vec::new();
+        let mut take_images = |row: &crate::document::ProjectedMessage| {
+            for image in row["readImages"].as_array().into_iter().flatten() {
+                moved_images.push(image.clone());
+            }
+        };
         // A picture's or a question form's calls go where the row sat among the turn's work.
         for artifact in artifacts.iter_mut() {
+            let before = artifact.clone();
             if let Some(calls) = reply_calls(artifact) {
+                take_images(&before);
                 expandable = true;
                 let at = calls["timestamp"].as_i64().map_or(work.len(), |at| {
                     work[turn_start..]
@@ -118,12 +128,16 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
                 work.insert(at, calls);
             }
         }
+        let reply_before = final_message.clone();
         if let Some(calls) = final_message.as_mut().and_then(reply_calls) {
             // The line opens onto these even when the reply held the turn's only calls.
             expandable = true;
             work.push(calls);
+            if let Some(reply) = &reply_before {
+                take_images(reply);
+            }
         }
-        for image in turn_images {
+        for image in turn_images.into_iter().chain(moved_images) {
             push_once(&mut read_images, image);
         }
         turns.push(GroupedTurn {
@@ -239,7 +253,9 @@ pub fn calls_as_lines(items: &mut [TranscriptItem]) {
         let TranscriptItem::Message { message } = item else {
             continue;
         };
-        let words = message["text"].as_str().is_some_and(|text| !text.is_empty());
+        let words = message["text"]
+            .as_str()
+            .is_some_and(|text| !text.is_empty());
         let calls = message["tools"]
             .as_array()
             .is_some_and(|tools| !tools.is_empty());
@@ -348,6 +364,43 @@ pub fn hide_live_calls(items: &mut Vec<TranscriptItem>, live: &std::collections:
         }
         _ => true,
     });
+}
+
+/// The Summary view under Agent work Reduced and Quiet, where the running turn's "Active work"
+/// starts shut: every row of it that needs the user (`chat_look::needs_the_user`: a question, an
+/// approval, a picture, a card) joins the rows drawn in full under the prompt (`cards`, which the
+/// fold leaves out), in the order they came, with its calls as one quiet line. Runs once the
+/// waiting call is marked and Quiet has hidden the rest.
+///
+/// CDXC:SessionChat 2026-11-09 WHY: the summary turn only hoisted fenced forms, pages and charts (`turns::content_rows`), which was enough while the running fold started open; shut, it also hid one-click answers in a sentence, shared pictures and approvals, which must surface at once (the 2026-11-08 decision on `chat_look::needs_the_user`).
+pub fn keep_in_view_while_shut(items: &mut [TranscriptItem]) {
+    for item in items {
+        let TranscriptItem::Summary {
+            active: true,
+            work,
+            cards,
+            ..
+        } = item
+        else {
+            continue;
+        };
+        let id = |row: &crate::document::ProjectedMessage| row["id"].as_str().map(str::to_string);
+        let carded: Vec<Option<String>> = cards.iter().map(id).collect();
+        let mut kept: Vec<crate::document::ProjectedMessage> = work
+            .iter()
+            .filter(|row| carded.contains(&id(row)) || needs_the_user(row))
+            .map(|row| {
+                let mut row = row.clone();
+                if let Value::Object(fields) = std::sync::Arc::make_mut(&mut row) {
+                    fields.insert("toolsShowAllRows".into(), Value::Bool(false));
+                }
+                row
+            })
+            .collect();
+        let shown: Vec<Option<String>> = kept.iter().map(id).collect();
+        kept.extend(cards.drain(..).filter(|card| !shown.contains(&id(card))));
+        *cards = kept;
+    }
 }
 
 /// [`hide_work`] for one row: whether it stays, and what of it.
