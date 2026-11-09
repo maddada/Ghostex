@@ -4,15 +4,43 @@
 //! States: `updates` (failures, updates, one updating, Up to date), `updates-done` (everything up
 //! to date), `updates-loading` (no answer yet), `updates-computers` (this computer and three remote
 //! ones: a Linux box with its own updates and Not installed, one offline, one on an old Ghostex),
-//! `updates-computers-away` (this computer up to date, the others offline or too old).
-use serde_json::{Value, json};
+//! `updates-computers-away` (this computer up to date, the others offline or too old),
+//! `updates-computers-box` (the Linux box picked), `updates-computers-air` (MacBook Air picked
+//! while it is offline), `updates-computers-run` (an Update all machines running: this computer
+//! updating, the Linux box's Claude Code failed, the others skipped), `updates-computers-open`
+//! (the machine picker open). The `updates-computers*` states save the three machines, so the
+//! picker shows.
+use serde_json::{Map, Value, json};
+
+/// The saved machines the picker lists (the Linux box connected, the others not).
+pub(super) fn story_settings(state: &str, settings: &mut Map<String, Value>) {
+    if !state.starts_with("updates-computers") {
+        return;
+    }
+    settings.insert(
+        "remoteMachines".into(),
+        json!([
+            { "id": "remote-linux-box", "name": "Linux box", "sshHost": "10.0.0.2", "sshUser": "madda" },
+            { "id": "remote-air", "name": "MacBook Air", "sshHost": "10.0.0.3", "sshUser": "madda" },
+            { "id": "remote-mini", "name": "Old Mini", "sshHost": "10.0.0.4", "sshUser": "madda" }
+        ]),
+    );
+}
 
 pub(super) fn owns(state: &str) -> bool {
     state.starts_with("updates")
 }
 
 pub(super) fn open_message(state: &str) -> Option<Value> {
-    owns(state).then(|| json!({ "initialTab": "updates" }))
+    let machine = match state {
+        "updates-computers-box" => Some("remote-linux-box"),
+        "updates-computers-air" => Some("remote-air"),
+        _ => None,
+    };
+    owns(state).then(|| match machine {
+        Some(machine) => json!({ "initialTab": "updates", "initialMachineId": machine }),
+        None => json!({ "initialTab": "updates" }),
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -292,6 +320,23 @@ fn computers_items() -> Vec<Value> {
             "upToDate",
             json!({}),
         ),
+        // The VS Code view's code-server version is a build id (app/updates/items.rs).
+        item(
+            "component:code",
+            "component",
+            "ghostex",
+            "VS Code view",
+            "code",
+            "Ghostex component",
+            Some(
+                "6f3e4df1e6b8-p2-2dbe7754240c2a59f76ef13c11d2bfd240d0e313f144446ced3e2413eecb60d1",
+            ),
+            Some(
+                "6f3e4df1e6b8-p2-2dbe7754240c2a59f76ef13c11d2bfd240d0e313f144446ced3e2413eecb60d1",
+            ),
+            "upToDate",
+            json!({}),
+        ),
         missing(
             "agent:gemini",
             "agent",
@@ -468,12 +513,20 @@ fn computers_items() -> Vec<Value> {
 
 /// The app's answer to a page's `updates` post.
 pub(super) fn answers(state: &str, message: &Value) -> Vec<Value> {
+    if state.starts_with("updates-computers")
+        && message["type"] == "requestRemoteMachineConnectStates"
+    {
+        return vec![json!({
+            "type": "remoteMachineConnectStates",
+            "states": { "remote-linux-box": "connected", "remote-air": "sshFailed", "remote-mini": "connected" },
+        })];
+    }
     if !owns(state) || message["type"] != "updates" || state == "updates-loading" {
         return Vec::new();
     }
     let computers_state = state.starts_with("updates-computers");
     let away = state == "updates-computers-away";
-    let items = if away {
+    let mut items = if away {
         computers_items()
             .into_iter()
             .filter(|item| item["computer"] == "local" && item["state"] != "available")
@@ -483,6 +536,40 @@ pub(super) fn answers(state: &str, message: &Value) -> Vec<Value> {
     } else {
         items(state)
     };
+    if state == "updates-computers-box" {
+        // An install running from the Linux box's Node.js pill.
+        for item in &mut items {
+            if item["id"] == "remote:remote-linux-box:tool:node" {
+                item["state"] = json!("updating");
+                item["progress"] = json!("Installing…");
+            }
+        }
+    }
+    if state == "updates-computers-run" {
+        // Mid-run: Ghostex updating here, Claude Code done; the Linux box's Claude Code failed.
+        for item in &mut items {
+            match item["id"].as_str() {
+                Some("app") => {
+                    item["state"] = json!("updating");
+                    item["progress"] = json!("Downloading 10.48.0…");
+                }
+                Some("agent:claude") => {
+                    item["state"] = json!("upToDate");
+                    item["installed"] = json!("2.1.318");
+                }
+                Some("remote:remote-linux-box:agent:claude") => {
+                    item["state"] = json!("failed");
+                    item["error"] = json!("npm: EACCES, permission denied /usr/lib/node_modules");
+                }
+                Some("agent:gemini") => {
+                    // An install running from its Not installed pill.
+                    item["state"] = json!("updating");
+                    item["progress"] = json!("Installing…");
+                }
+                _ => {}
+            }
+        }
+    }
     let count = items.iter().filter(|item| item["counts"] == true).count();
     let computers = if away {
         json!([

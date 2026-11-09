@@ -75,6 +75,7 @@ fn story_settings(state: &str) -> serde_json::Map<String, Value> {
     settings_e::story_settings(state, &mut settings);
     settings_workspaces::story_settings(state, &mut settings);
     settings_machines::story_settings(state, &mut settings);
+    settings_updates::story_settings(state, &mut settings);
     if let Ok(Value::Object(extra)) = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_SETTINGS")
         .map_err(|_| ())
         .and_then(|text| serde_json::from_str::<Value>(&text).map_err(|_| ()))
@@ -317,6 +318,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     }
     if state == "select" {
         request.open_select = Some("commandsPanelSide".to_string());
+    }
+    if state == "updates-computers-open" {
+        request.open_select = Some("settings-machine-picker".to_string());
     }
     if state == "machines-agents-open" {
         request.open_select = Some("settings-machine-picker".to_string());

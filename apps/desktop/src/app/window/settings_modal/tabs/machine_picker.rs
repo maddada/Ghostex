@@ -1,6 +1,6 @@
-//! The machine picker at the top of Settings > Agents and Settings > Integrations: this computer
+//! The machine picker at the top of Settings > Agents, Integrations, Voice agent and Updates: this computer
 //! first, then every saved remote machine with its connection state. Picking a connected machine
-//! makes both pages read and install through that machine's gxserver
+//! makes those pages read and install through that machine's gxserver
 //! (`store_machine_gxserver_rpc`); a machine that is not connected shows why and can't be picked.
 //!
 //! CDXC:RemoteMachines 2026-10-26 DECISION:
@@ -161,6 +161,22 @@ pub(crate) fn render_machine_picker_described<V: SettingsPage>(
     window: &mut Window,
     cx: &mut Context<V>,
 ) -> Option<AnyElement> {
+    render_machine_picker_with(page, p, store, describe, None, Vec::new(), window, cx)
+}
+
+/// [`render_machine_picker_described`] with `actions` beside the "Machine" heading and `rows`
+/// under the picker in its card (Settings > Updates: Update all machines and how each went).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_machine_picker_with<V: SettingsPage>(
+    page: &mut V,
+    p: &SettingsPalette,
+    store: &Entity<SettingsStore>,
+    describe: impl Fn(Option<&str>) -> String,
+    actions: Option<AnyElement>,
+    rows: Vec<AnyElement>,
+    window: &mut Window,
+    cx: &mut Context<V>,
+) -> Option<AnyElement> {
     let choices = store_choices(store.read(cx));
     if choices.len() < 2 {
         return None;
@@ -235,7 +251,9 @@ pub(crate) fn render_machine_picker_described<V: SettingsPage>(
         select,
         cx,
     );
-    settings_section(p, "Machine", None, None, vec![row]).map(IntoElement::into_any_element)
+    let mut all_rows = vec![row];
+    all_rows.extend(rows);
+    settings_section(p, "Machine", None, actions, all_rows).map(IntoElement::into_any_element)
 }
 
 #[cfg(test)]

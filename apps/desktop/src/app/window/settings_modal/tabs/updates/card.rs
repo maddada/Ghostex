@@ -3,7 +3,8 @@
 //! with the "Auto-update" switch and the card's one action.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
-    ButtonSize, ButtonVariant, settings_button_sized, settings_icon, small_switch_control,
+    ButtonSize, ButtonVariant, ROW_PADDING_X, full_value_tooltip, settings_button_sized,
+    settings_icon, short_version, small_switch_control,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::agents::logos::{agent_logo, muted_fill};
@@ -11,11 +12,13 @@ use super::super::extensions::cards::CARD_MIN_HEIGHT;
 use super::UpdatesTab;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, div, img, px,
+    Animation, AnimationExt as _, AnyElement, Context, FontWeight, InteractiveElement as _,
+    IntoElement, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
+    Transformation, div, img, px, radians,
 };
 use gpui_component::{h_flex, v_flex};
 use serde_json::Value;
+use std::time::Duration;
 
 fn text<'a>(item: &'a Value, key: &str) -> Option<&'a str> {
     item[key].as_str().filter(|text| !text.is_empty())
@@ -73,37 +76,90 @@ fn logo_tile(p: &SettingsPalette, item: &Value, tile: f32, logo: f32) -> AnyElem
         .into_any_element()
 }
 
-/// One Up to date pill: logo, name, and the version in the muted tone.
-pub(super) fn up_to_date_pill(p: &SettingsPalette, item: &Value) -> AnyElement {
+/// The pills' shared shape: logo, then name, at one height and padding.
+fn pill_base(p: &SettingsPalette, item: &Value, id: String) -> gpui::Stateful<gpui::Div> {
     h_flex()
+        .id(SharedString::from(id))
         .flex_shrink_0()
         .items_center()
         .gap(px(6.0))
-        .h(px(26.0))
-        .pl(px(7.0))
-        .pr(px(10.0))
+        .h(px(PILL_HEIGHT))
+        .pl(px(8.0))
+        .pr(px(11.0))
         .rounded_full()
-        .bg(hsla(muted_fill(p)))
         .text_size(px(12.0))
         .line_height(px(16.0))
         .child(item_icon(p, item, 13.0))
-        .child(
-            div()
-                .whitespace_nowrap()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(hsla(p.foreground_alpha(0.88)))
-                .child(text(item, "name").unwrap_or_default().to_string()),
+}
+
+/// A small turning loader (an install or update that runs).
+pub(super) fn spinner(p: &SettingsPalette, id: &str, size: f32) -> AnyElement {
+    settings_icon("modals/settings/loader-2.svg", size, p.muted)
+        .flex_shrink_0()
+        .with_animation(
+            SharedString::from(format!("{id}-spin")),
+            Animation::new(Duration::from_millis(1000))
+                .repeat()
+                .with_max_fps(crate::app::helpers::INDICATOR_MAX_FPS),
+            |icon, delta| {
+                icon.with_transformation(Transformation::rotate(radians(
+                    delta * std::f32::consts::TAU,
+                )))
+            },
         )
-        .children(text(item, "installed").map(|version| {
-            div()
-                .whitespace_nowrap()
-                .text_color(hsla(p.muted))
-                .child(version.to_string())
-        }))
         .into_any_element()
 }
 
-/// One Not installed pill: logo, name and "Install"; a click installs it on its computer.
+/// The pills' height.
+const PILL_HEIGHT: f32 = 28.0;
+
+/// The version a pill or card shows, and the whole value when that was shortened (its tooltip).
+/// A build id or hash is never shown whole (`long_value.rs`).
+pub(super) fn shown_version(version: &str) -> (Option<String>, Option<String>) {
+    let short = short_version(version);
+    let full = (short.as_deref() != Some(version)).then(|| version.to_string());
+    (short, full)
+}
+
+/// One Up to date pill: logo, name, and the version in the muted tone; a version too long to show
+/// (a build id) is cut to its number, or left out, and is whole on hover.
+pub(super) fn up_to_date_pill(p: &SettingsPalette, item: &Value) -> AnyElement {
+    let name = text(item, "name").unwrap_or_default().to_string();
+    let (version, full) = text(item, "installed")
+        .map(shown_version)
+        .unwrap_or((None, None));
+    let pill = pill_base(
+        p,
+        item,
+        format!("updates-pill-{}", text(item, "id").unwrap_or_default()),
+    )
+    .bg(hsla(muted_fill(p)))
+    .child(
+        div()
+            .whitespace_nowrap()
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(hsla(p.foreground_alpha(0.88)))
+            .child(name.clone()),
+    )
+    .children(version.map(|version| {
+        div()
+            .whitespace_nowrap()
+            .text_color(hsla(p.muted))
+            .child(version)
+    }));
+    match full {
+        Some(full) => full_value_tooltip(pill, format!("{name} {full}")).into_any_element(),
+        None => pill.into_any_element(),
+    }
+}
+
+/// One Not installed pill: logo and name. The pill is the button: hover shows it can be pressed,
+/// a click installs it on its computer, and while that runs it shows a spinner, then moves to
+/// where its new state belongs.
+///
+/// CDXC:Updates 2026-11-09 DECISION:
+/// User: "please don't show Install next to each pill for something I can install in the update
+/// page I dont like that". No "Install" word; the tooltip says "Install <name>".
 pub(super) fn install_pill(
     p: &SettingsPalette,
     item: &Value,
@@ -111,44 +167,37 @@ pub(super) fn install_pill(
 ) -> AnyElement {
     let id = text(item, "id").unwrap_or_default().to_string();
     let name = text(item, "name").unwrap_or_default().to_string();
-    let hover = p.foreground_alpha(0.08);
-    let tooltip = text(item, "note")
-        .map(|note| format!("Install {name} here. {note}"))
-        .unwrap_or_else(|| format!("Install {name} here"));
-    h_flex()
-        .id(SharedString::from(format!("updates-install-{id}")))
-        .flex_shrink_0()
-        .items_center()
-        .gap(px(6.0))
-        .h(px(26.0))
-        .pl(px(7.0))
-        .pr(px(10.0))
-        .rounded_full()
+    let installing = super::installing(item);
+    let pill = pill_base(p, item, format!("updates-install-{id}"))
         .border_1()
         .border_color(hsla(p.hairline))
-        .cursor_pointer()
-        .hover(move |this| this.bg(hsla(hover)))
-        .text_size(px(12.0))
-        .line_height(px(16.0))
-        .child(item_icon(p, item, 13.0))
         .child(
             div()
                 .whitespace_nowrap()
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(hsla(p.foreground_alpha(0.78)))
-                .child(name),
+                .child(name.clone()),
+        );
+    if installing {
+        let step = text(item, "progress").unwrap_or("Installing…").to_string();
+        return full_value_tooltip(
+            pill.child(spinner(p, &format!("updates-installing-{id}"), 12.0)),
+            format!("{name}: {step}"),
         )
-        .child(
-            div()
-                .whitespace_nowrap()
-                .text_color(hsla(p.muted))
-                .child("Install"),
-        )
-        .tooltip(move |window, cx| {
-            gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
-        })
-        .on_click(cx.listener(move |tab, _, _, cx| tab.install(&id, cx)))
-        .into_any_element()
+        .into_any_element();
+    }
+    let hover = p.foreground_alpha(0.08);
+    let tooltip = match text(item, "note") {
+        Some(note) => format!("Install {name}\n{note}"),
+        None => format!("Install {name}"),
+    };
+    full_value_tooltip(
+        pill.cursor_pointer()
+            .hover(move |this| this.bg(hsla(hover))),
+        tooltip,
+    )
+    .on_click(cx.listener(move |tab, _, _, cx| tab.install(&id, cx)))
+    .into_any_element()
 }
 
 /// A row under the pills (Checking, or a version Ghostex can't read), laid out like a card's title.
@@ -162,9 +211,9 @@ pub(super) fn up_to_date_row(
         .w_full()
         .min_w_0()
         .items_center()
-        .gap(px(10.0))
-        .px(px(14.0))
-        .py(px(11.0))
+        .gap(px(12.0))
+        .px(px(ROW_PADDING_X))
+        .py(px(12.0))
         .child(logo_tile(p, item, 30.0, 16.0))
         .child(
             v_flex()
@@ -266,8 +315,29 @@ impl UpdatesTab {
                     .child(word)
             }));
 
-        let installed = text(item, "installed");
-        let latest = text(item, "latest");
+        // A build id or hash shows as its version number, or not at all (`long_value.rs`).
+        let installed_full = text(item, "installed");
+        let latest_full = text(item, "latest");
+        let installed_short = installed_full.and_then(short_version);
+        let latest_short = latest_full.and_then(short_version);
+        let shortened =
+            installed_short.as_deref() != installed_full || latest_short.as_deref() != latest_full;
+        // The whole values, on hover, when either was shortened.
+        let full_versions = shortened.then(|| match (installed_full, latest_full) {
+            (Some(installed), Some(latest)) if installed != latest => {
+                format!("{installed} → {latest}")
+            }
+            (Some(version), _) | (None, Some(version)) => version.to_string(),
+            (None, None) => String::new(),
+        });
+        let installed = installed_short.as_deref();
+        let latest = latest_short.as_deref();
+        let latest = if installed_full != latest_full && installed == latest {
+            // Two builds of one version: still an update, say so without the ids.
+            None
+        } else {
+            latest
+        };
         let version = match (installed, latest, text(item, "summary")) {
             (_, _, Some(summary)) if latest.is_none() => Some(
                 h_flex()
@@ -321,7 +391,7 @@ impl UpdatesTab {
                     .gap(px(6.0))
                     .text_size(px(12.0))
                     .text_color(hsla(p.muted))
-                    .child(settings_icon("modals/settings/loader-2.svg", 13.0, p.muted))
+                    .child(spinner(p, &format!("updates-updating-{id}"), 13.0))
                     .child("Updating")
                     .into_any_element(),
             )
@@ -435,12 +505,17 @@ impl UpdatesTab {
             .bg(hsla(p.raised))
             .child(title)
             .children(version.map(|version| {
-                div()
+                let row = div()
+                    .id(SharedString::from(format!("updates-version-{id}")))
                     .min_w_0()
                     .font_family(MODAL_MONO_FONT)
                     .text_size(px(12.0))
                     .line_height(px(16.0))
-                    .child(version)
+                    .child(version);
+                match full_versions.clone() {
+                    Some(full) => full_value_tooltip(row, full).into_any_element(),
+                    None => row.into_any_element(),
+                }
             }))
             .children(line.map(|line| {
                 div()
