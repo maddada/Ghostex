@@ -123,7 +123,7 @@ pub(super) fn inline_dots(dots: &[(gpui::Hsla, String)], p: &ChatAppearance) -> 
 }
 
 /// The dot of a switch pill that is on (Autopilot): green, apart from the status dots' tones.
-const AUTOPILOT_ON_COLOR: u32 = 0x22c55e;
+pub(super) const AUTOPILOT_ON_COLOR: u32 = 0x22c55e;
 
 /// The Autopilot pill's menu-toggle key, and its menu's width (unscaled): a small row menu in the
 /// sidebar menu's style (`autopilot_menu`).

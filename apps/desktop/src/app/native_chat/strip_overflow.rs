@@ -178,6 +178,15 @@ impl NativeChatView {
                             .text_color(p.foreground)
                             .child(name),
                     )
+                    .when(pill["switch"] == true, |row| {
+                        row.child(
+                            div()
+                                .size(px(7.0 * s))
+                                .rounded_full()
+                                .flex_shrink_0()
+                                .bg(gpui::rgb(super::chat_pills::AUTOPILOT_ON_COLOR)),
+                        )
+                    })
                     .children((!dots.is_empty()).then(|| inline_dots(&dots, p)))
                     .when(!count.is_empty(), |row| {
                         row.child(
