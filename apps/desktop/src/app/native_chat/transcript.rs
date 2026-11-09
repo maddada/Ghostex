@@ -310,9 +310,15 @@ impl NativeChatView {
     ) -> AnyElement {
         // A prompt drawn with its turn's rows still open below it; when the same turn comes
         // back folded, `disclosure_motion.rs` folds those rows away instead of swapping them.
+        // Under Agent work Reduced or Quiet the finished turn is a `grouped-work` row that names
+        // it among its turns, so the prompt is not live there either.
         if message["role"] == "user"
-            && !next.is_some_and(|next| {
-                matches!(next, TranscriptItem::CompletedWork { id, .. } if message["id"] == *id)
+            && !next.is_some_and(|next| match next {
+                TranscriptItem::CompletedWork { id, .. } => message["id"] == *id,
+                TranscriptItem::GroupedWork { turns, .. } => {
+                    turns.iter().any(|turn| message["id"] == turn.id)
+                }
+                _ => false,
             })
         {
             self.disclosure_motion
