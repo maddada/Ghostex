@@ -395,7 +395,7 @@ impl NativeChatView {
         div()
             .w_full()
             .min_w_0()
-            .pb(px(13.0 * s))
+            .pb(px(p.inner_gap(13.0) * s))
             .child(
                 div()
                     .w_full()

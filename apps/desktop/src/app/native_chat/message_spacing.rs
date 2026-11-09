@@ -1,7 +1,7 @@
 //! Message spacing (`chatMessageSpacing`, gx-chat-core `transcript/chat_look.rs`): at Compact the
 //! transcript's rows sit 8px apart instead of 16px, a message's hover buttons sit in a 20px footer
-//! row kept under it (instead of today's 24px row and its 4px gap), and a quiet line sits closer to
-//! the agent text above it. At Default nothing here changes a size.
+//! row kept under it (instead of today's 24px row and its 4px gap), a quiet line sits closer to
+//! the agent text above it, and the gaps inside a row shrink by the same ratio (`inner_gap`). At Default nothing here changes a size.
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use ghostex_gx_chat_core::transcript::chat_look::MessageSpacing;
@@ -29,6 +29,17 @@ impl ChatAppearance {
             COMPACT_ROW_GAP
         } else {
             super::transcript_layout::LAYOUT.row_gap
+        }
+    }
+
+    /// A gap inside a row (between a finished turn's parts, under a thinking, side question or
+    /// status row), shrunk at Compact by the row gap's own ratio (16px to 8px): `default` at
+    /// Default.
+    pub(super) fn inner_gap(&self, default: f32) -> f32 {
+        if self.compact() {
+            default * COMPACT_ROW_GAP / super::transcript_layout::LAYOUT.row_gap
+        } else {
+            default
         }
     }
 

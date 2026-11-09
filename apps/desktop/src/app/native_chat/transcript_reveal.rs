@@ -8,6 +8,7 @@ The one exception is the user's 2026-10-08 decision (CDXC:SessionChat in package
 */
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
+use ghostex_gx_chat_core::transcript::chat_look::UserStyle;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -182,9 +183,12 @@ fn transcript_skeleton(p: &ChatAppearance) -> AnyElement {
         })
         .flex()
         .flex_col()
-        .gap(px(g.row_gap * s))
+        // Message spacing Compact shrinks its gaps by the transcript's own ratio (16px to 8px).
+        .gap(px(p.inner_gap(g.row_gap) * s))
         .children(g.rows.iter().map(|row| {
             if row.role == "user" {
+                // Your messages Band draws the bubble across the column (user_message_look.rs).
+                let band = p.chat_look.user_style == UserStyle::Band;
                 div()
                     .w_full()
                     .flex()
@@ -197,9 +201,18 @@ fn transcript_skeleton(p: &ChatAppearance) -> AnyElement {
                     })
                     .child(
                         div()
-                            .w(gpui::relative(row.widths.first().copied().unwrap_or(0.4)))
+                            .map(|bubble| {
+                                if band {
+                                    bubble.w_full().rounded(px(8.0 * s))
+                                } else {
+                                    bubble
+                                        .w(gpui::relative(
+                                            row.widths.first().copied().unwrap_or(0.4),
+                                        ))
+                                        .rounded(px(g.bubble_radius * s))
+                                }
+                            })
                             .h(px(g.bubble_height * s))
-                            .rounded(px(g.bubble_radius * s))
                             .bg(tint),
                     )
             } else {

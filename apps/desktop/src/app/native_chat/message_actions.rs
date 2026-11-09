@@ -351,10 +351,13 @@ impl NativeChatView {
         let button = |key: &str, label: String, icon: &'static str, action: Value| {
             Self::user_action_button(&id, key, label, icon, action, compact, p, cx)
         };
+        // Under a left-aligned message the order is mirrored, so Copy still lands at the bubble's
+        // edge, then Save prompt, Rewind and the time.
         let buttons = div()
             .flex()
             .items_center()
             .gap(px(2.0 * p.scale))
+            .when(left, |buttons| buttons.flex_row_reverse())
             .when(editable, |buttons| {
                 buttons.child(button(
                     "edit-waiting",
@@ -437,8 +440,12 @@ impl NativeChatView {
             );
         }
         let fill = |row: gpui::Div| {
-            row.when_some(message_time(&id, message, p), |row, time| row.child(time))
-                .child(buttons)
+            let time = message_time(&id, message, p);
+            if left {
+                row.child(buttons).children(time)
+            } else {
+                row.children(time).child(buttons)
+            }
         };
         Some(
             fill(

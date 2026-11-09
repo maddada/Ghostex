@@ -41,6 +41,9 @@ impl NativeChatView {
         };
         text_look.code_text = p.primary;
         let indicator = self.delivery_indicator(message, p, cx);
+        // A message with pictures and no words draws only its pictures and icons, the icons still
+        // at the row's right end under Band (as the phone does).
+        let has_body = !body.trim().is_empty() || self.attaching_pictures(id) > 0;
         let prompt = div()
             .min_w_0()
             // A slash command reads as one, in the chat's monospace (gx-chat-core `is_slash_command_line`).
@@ -54,6 +57,14 @@ impl NativeChatView {
                 p,
             ));
         let frame = match style {
+            _ if !has_body => match style {
+                UserStyle::Default => div().children(indicator.map(|(icon, _)| icon)),
+                UserStyle::Band => div()
+                    .w_full()
+                    .flex()
+                    .justify_end()
+                    .children(indicator.map(|(icon, _)| icon)),
+            },
             UserStyle::Default => {
                 // The bubble's indicator hangs off its right edge, level with its last line, at the
                 // same 6px gap the right-aligned bubble keeps on its left.

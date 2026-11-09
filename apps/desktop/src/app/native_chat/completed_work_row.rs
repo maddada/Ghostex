@@ -25,8 +25,13 @@ use std::{cell::Cell, rc::Rc};
 
 /// Space between the rows of an opened turn's log.
 const LOG_GAP: f32 = 8.0;
-/// Space between the parts of a finished turn.
+/// Space between the parts of a finished turn, at Message spacing Default (`part_gap`).
 const PART_GAP: f32 = 10.0;
+
+/// Space between the parts of a finished turn: `PART_GAP`, shrunk at Compact like the row gap.
+fn part_gap(p: &ChatAppearance) -> f32 {
+    p.inner_gap(PART_GAP)
+}
 
 /// A part whose height eases between nothing and its natural height; the fold applies its own
 /// opacity to the rows, so the clip carries none.
@@ -122,7 +127,7 @@ pub(super) fn spaced_tail(
         .map(|(part, is_card)| {
             let gap = match first_text_gap {
                 Some(gap) if first && !is_card => gap,
-                _ => SINGLE_LINE_CARD.gap_above(above_is_card, is_card, PART_GAP, p),
+                _ => SINGLE_LINE_CARD.gap_above(above_is_card, is_card, part_gap(p), p),
             };
             first = false;
             above_is_card = is_card;
@@ -265,7 +270,7 @@ impl NativeChatView {
             let spaced = |part: AnyElement, gap: f32| div().pt(px(gap * s)).child(part);
             let mut row = div().flex().flex_col().w_full().child(heading);
             if let Some(log) = log {
-                row = row.children(log.into_iter().map(|part| spaced(part, PART_GAP)));
+                row = row.children(log.into_iter().map(|part| spaced(part, part_gap(p))));
             }
             return row
                 .children(tail.into_iter().map(|(part, gap)| spaced(part, gap)))
@@ -562,7 +567,7 @@ impl NativeChatView {
     /// work log, which ease together.
     ///
     /// CDXC:SessionChat 2026-11-08 WHY:
-    /// Folding rows sit one row gap above the tail, whose first part brings its own `PART_GAP`. At Compact the row gap (8px) is smaller than `PART_GAP`, and the log's clip measures the padding too, so making up the difference with negative padding clipped the bottom of the last row (a tool card's border). The first tail part's own gap gives the difference back instead, eased with the log so it lands on `PART_GAP`.
+    /// Folding rows sit one row gap above the tail, whose first part brings its own part gap (`part_gap`). When the row gap is smaller than the part gap, the log's clip measures the padding too, so making up the difference with negative padding clipped the bottom of the last row (a tool card's border). The first tail part's own gap gives the difference back instead, eased with the log so it lands on the part gap. Since 2026-11-09 Compact shrinks the part gap with the row gap (8px row gap, 5px part gap), so there the log pads its own bottom up to the part gap's place instead; at Default the row gap (16px) is the larger one too.
     fn moving_completed_work_row(
         &mut self,
         id: &str,
@@ -576,6 +581,7 @@ impl NativeChatView {
         // The space between two transcript list items, the gap every row wrapper ends with, which
         // the live rows had between them before they folded.
         let live_row_gap = p.row_gap();
+        let part_gap = part_gap(p);
         let mut row = div().flex().flex_col().w_full();
         let top = div()
             .flex()
@@ -598,7 +604,7 @@ impl NativeChatView {
             ));
             if let Some(rows) = log {
                 if let Some((_, gap)) = tail.first_mut() {
-                    *gap -= (PART_GAP - live_row_gap).max(0.0) * frame.log.clamp(0.0, 1.0);
+                    *gap -= (part_gap - live_row_gap).max(0.0) * frame.log.clamp(0.0, 1.0);
                 }
                 row = row.child(eased_part(
                     self.disclosure_motion.borrow_mut().height(id, "log"),
@@ -607,7 +613,7 @@ impl NativeChatView {
                         .flex()
                         .flex_col()
                         .gap(px(live_row_gap * s))
-                        .pb(px((live_row_gap - PART_GAP).max(0.0) * s))
+                        .pb(px((live_row_gap - part_gap).max(0.0) * s))
                         .opacity(frame.rows_opacity)
                         .children(rows)
                         .into_any_element(),
@@ -622,8 +628,8 @@ impl NativeChatView {
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(PART_GAP * s))
-                        .pt(px(PART_GAP * s))
+                        .gap(px(part_gap * s))
+                        .pt(px(part_gap * s))
                         .opacity(frame.rows_opacity)
                         .children(log)
                         .into_any_element(),

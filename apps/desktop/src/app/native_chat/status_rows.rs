@@ -249,7 +249,7 @@ impl NativeChatView {
             .w_full()
             .min_w_0()
             .gap(px(6.0 * s))
-            .pb(px(13.0 * s))
+            .pb(px(p.inner_gap(13.0) * s))
             .text_size(px(14.0 * s))
             .text_color(p.muted)
             .child(lane_marker(p.muted, p))

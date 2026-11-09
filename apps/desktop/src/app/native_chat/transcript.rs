@@ -186,11 +186,13 @@ impl NativeChatView {
                 };
                 let expanded = self.is_expanded(&key, *latest_reply || *work_open);
                 let motion = self.disclosure_frame(&key, expanded, cx);
+                // The gap between the turn's parts shrinks at Message spacing Compact (message_spacing.rs).
+                let part_gap = p.inner_gap(8.0) * s;
                 let mut row = div()
                     .flex()
                     .flex_col()
                     .w_full()
-                    .gap(px(8.0 * s))
+                    .gap(px(part_gap))
                     .child(self.message_row(user, &p, window, cx));
                 for output in outcome {
                     row = row.child(self.message_row(output, &p, window, cx));
@@ -250,14 +252,14 @@ impl NativeChatView {
                         }
                     }
                     if expanded || motion.is_some() {
-                        let mut body = div().flex().flex_col().w_full().gap(px(8.0 * s));
+                        let mut body = div().flex().flex_col().w_full().gap(px(part_gap));
                         for message in fold_rows {
                             body = body.child(self.message_row(message, &p, window, cx));
                         }
                         row = row.child(self.disclosure_body_motion(
                             &key,
                             motion,
-                            8.0 * s,
+                            part_gap,
                             body.into_any_element(),
                         ));
                     }
@@ -530,17 +532,36 @@ impl NativeChatView {
             bubble_appearance.prose = p.strengthened(p.primary);
             bubble_appearance.code_text = p.primary;
             // The delivery indicator sits left of the bubble, level with its last line, so it never drifts away from a short prompt. It hangs off the bubble's own left edge (6px gap, the 1px border counted) because a flex row around the bubble measured a prompt with an inline picture at min-content, one word per line.
-            let indicator = self
-                .delivery_indicator(message, p, cx)
-                .map(|(icon, slots)| {
-                    // Each 24px slot after the first adds its own width and the 2px gap between them.
-                    let offset = 31.0 + 26.0 * slots.saturating_sub(1) as f32;
-                    div()
-                        .absolute()
-                        .bottom(px(11.0 * s))
-                        .left(px(-offset * s))
-                        .child(icon)
-                });
+            // A message with pictures and no words draws only its pictures and icons (as the phone does).
+            let has_body = !body.trim().is_empty() || self.attaching_pictures(&id) > 0;
+            let indicator = self.delivery_indicator(message, p, cx);
+            if !has_body {
+                let failed_delivery = self.render_startup_delivery(message, false, p, cx);
+                let thumbnails = self.user_image_thumbnails(message, p, cx);
+                let actions = self.user_actions(message, reply_focused, p, cx);
+                return row
+                    .when_some(thumbnails, |this, images| this.child(images))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_end()
+                            .gap(px(4.0 * s))
+                            .children(indicator.map(|(icon, _)| icon))
+                            .children(failed_delivery)
+                            .children(actions),
+                    )
+                    .into_any_element();
+            }
+            let indicator = indicator.map(|(icon, slots)| {
+                // Each 24px slot after the first adds its own width and the 2px gap between them.
+                let offset = 31.0 + 26.0 * slots.saturating_sub(1) as f32;
+                div()
+                    .absolute()
+                    .bottom(px(11.0 * s))
+                    .left(px(-offset * s))
+                    .child(icon)
+            });
             let bubble = div()
                 .relative()
                 .max_w(relative(0.8))
