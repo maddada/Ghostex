@@ -57,6 +57,12 @@ pub(crate) fn missing_resume_on_screen(agent: Option<&str>, screen: &str) -> Opt
                     .split_once(':')
                     .map(|(_, id)| id.trim().to_string())
                     .filter(|id| !id.is_empty()),
+            })
+            // Ghostex's own title lookup found nothing (GitHub #521): a restart runs the same
+            // lookup, so it gives up and the message's card offers Start fresh.
+            .or_else(|| {
+                line.contains("Unable to find restorable Claude session id")
+                    .then_some(MissingResume { reference: None })
             }),
         "codex" => (line.contains("No saved session found")
             || line.contains("Unable to restore Codex session"))

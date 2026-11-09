@@ -11,6 +11,9 @@ pub(super) struct NoticeActionSpec {
     pub(super) send: Option<&'static str>,
 }
 
+/// Start a new conversation in the session whose restore could not find its old one.
+pub const SESSION_CHAT_NOTICE_ACTION_START_FRESH: &str = "startFreshConversation";
+
 pub(super) const OPEN_TERMINAL: NoticeActionSpec = NoticeActionSpec {
     id: "switchToTerminal",
     label: "Terminal view",
@@ -620,12 +623,13 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         actions: &[OPEN_TERMINAL],
         quote_evidence: true,
     },
-    // Ghostex's own restore script, when neither the exact resume nor its fallback started Claude.
+    // Ghostex's own restore script, when the chat had no conversation id and its title found none.
+    // CDXC:SessionChat 2026-11-09 WHY: GitHub #521: the card said Ghostex would try again by itself, but every try ran the same title lookup and failed the same way, and its only button did too, so the chat stayed blocked. It now says the conversation could not be found and offers Start fresh (a new conversation in this session, `restart` in session_chat_agent_restart.rs), the way out a failed send's card already offers when there is nothing to resume.
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_AGENT_EXITED,
         severity: SessionChatTerminalNoticeSeverity::Error,
-        title: "Couldn't reopen this chat",
-        detail: "Claude Code quit before the chat loaded. Ghostex tries again by itself, or try now.",
+        title: "Couldn't find this chat's conversation",
+        detail: "Ghostex couldn't find the Claude Code conversation this chat was on. Start fresh starts a new conversation in this session, or open the terminal.",
         blocks_input: true,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Exit,
@@ -635,6 +639,12 @@ const CLAUDE_RULES: &[NoticeRule] = &[
             corroborators: &[],
         }],
         actions: &[
+            NoticeActionSpec {
+                id: SESSION_CHAT_NOTICE_ACTION_START_FRESH,
+                label: "Start fresh",
+                kind: SessionChatTerminalNoticeActionKind::RestartAgent,
+                send: None,
+            },
             NoticeActionSpec {
                 id: "restartAgent",
                 label: "Try again",

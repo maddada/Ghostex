@@ -882,16 +882,36 @@ fn retry_row(
 }
 
 /// Start fresh: a wake with no saved identity launches the agent on a new conversation.
-fn forget_conversation(state: &AppState, project_id: &str, session_id: &str) {
+/// CDXC:SessionIdentity 2026-11-09 WHY:
+/// GitHub #521: a Claude session without an id does not start fresh: its wake looks the conversation up by the chat's title (or the pane's hook records), so Start fresh on a titled chat reopened the old conversation or failed with "Unable to find restorable Claude session id". A Claude session gets a new conversation id instead, with no transcript behind it, which the wake starts as `claude --session-id <new id>` (`build_agent_resume_command`), and its next wake resumes that id. The conversations this pane's hooks named before it are set aside by time (`CLAUDE_CONVERSATIONS_SET_ASIDE_AT`), so the wake's id repair (resume_plan/claude_identity.rs) does not bring one back.
+pub(crate) fn forget_conversation(state: &AppState, project_id: &str, session_id: &str) {
     if let Ok(db) = open_gxserver_database(&state.paths) {
         let before = crate::domain::DomainRepository::new(&db, &state.metadata.server_id)
             .get_session(project_id, session_id)
             .ok()
             .flatten();
-        let forgotten = db.execute(
-            "UPDATE sessions SET runtimeSettingsJson = json_remove(runtimeSettingsJson, '$.agentSessionId', '$.agentSessionPath') WHERE projectId = ?1 AND sessionId = ?2",
-            rusqlite::params![project_id, session_id],
-        );
+        let fresh_claude_id = before
+            .as_ref()
+            .and_then(crate::session_chat_composer::session_chat_composer_agent_id)
+            .filter(|agent| agent == "claude")
+            .map(|_| uuid::Uuid::new_v4().to_string());
+        let forgotten = match fresh_claude_id.as_deref() {
+            Some(id) => db.execute(
+                &format!("UPDATE sessions SET runtimeSettingsJson = json_set(json_remove(runtimeSettingsJson, '$.agentSessionPath'), '$.agentSessionId', ?3, '$.{}', ?4) WHERE projectId = ?1 AND sessionId = ?2", crate::agents::CLAUDE_CONVERSATIONS_SET_ASIDE_AT),
+                rusqlite::params![
+                    project_id,
+                    session_id,
+                    id,
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0.0, |elapsed| elapsed.as_secs_f64())
+                ],
+            ),
+            None => db.execute(
+                "UPDATE sessions SET runtimeSettingsJson = json_remove(runtimeSettingsJson, '$.agentSessionId', '$.agentSessionPath') WHERE projectId = ?1 AND sessionId = ?2",
+                rusqlite::params![project_id, session_id],
+            ),
+        };
         // CDXC:SessionIdentity 2026-11-05: the one raw write of these keys outside the
         // repository logs its change too (server/src/session_identity_log.rs).
         if let (Some(before), Ok(1)) = (before, forgotten) {
@@ -903,7 +923,10 @@ fn forget_conversation(state: &AppState, project_id: &str, session_id: &str) {
                 session_id,
                 before.get("agentId").and_then(Value::as_str),
                 &crate::session_identity_log::StoredIdentity::of_session(&before),
-                &crate::session_identity_log::StoredIdentity::default(),
+                &crate::session_identity_log::StoredIdentity {
+                    agent_session_id: fresh_claude_id,
+                    agent_session_path: None,
+                },
             );
         }
     }

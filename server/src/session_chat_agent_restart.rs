@@ -58,6 +58,8 @@ pub(crate) async fn restart(
         }
         _ => {}
     }
+    let start_fresh = params.get("actionId").and_then(Value::as_str)
+        == Some(crate::session_chat_notice::SESSION_CHAT_NOTICE_ACTION_START_FRESH);
     let state = state.clone();
     let params = params.clone();
     tokio::task::spawn_blocking(move || {
@@ -88,6 +90,15 @@ pub(crate) async fn restart(
             return Err(invalid(
                 "The agent is running in this terminal again, so it was not restarted.",
             ));
+        }
+        // Start fresh on "Couldn't find this chat's conversation": the wake starts a new
+        // conversation instead of looking the old one up again (`forget_conversation`).
+        if start_fresh {
+            crate::session_chat_send_failure::forget_conversation(
+                &state,
+                &target.project_id,
+                &target.session_id,
+            );
         }
         let session = repository
             .get_session(&target.project_id, &target.session_id)?

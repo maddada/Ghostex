@@ -222,6 +222,10 @@ pub(crate) fn agent_conversation_written(
     }
 }
 
+/// When Start fresh last set this Claude session's conversations aside (seconds since the epoch,
+/// the hook store's clock): the pane's hook records from before it are never resumed again.
+pub(crate) const CLAUDE_CONVERSATIONS_SET_ASIDE_AT: &str = "claudeConversationsSetAsideAt";
+
 #[derive(Clone)]
 pub(crate) struct AgentResumeInput {
     agent_command: Option<String>,
@@ -384,6 +388,9 @@ pub(crate) fn to_agent_resume_input(
             read_text_value(session, "zmxName").as_deref(),
             agent_session_id,
             agent_session_path,
+            runtime_settings
+                .get(CLAUDE_CONVERSATIONS_SET_ASIDE_AT)
+                .and_then(Value::as_f64),
         )
     } else {
         (agent_session_id, agent_session_path)
