@@ -43,6 +43,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:SessionLinks 2026-10-24 DECISION: User: "user can pick to open in embedded or external browser in settings (default to embedded)".
     ("sessionLinkOpenTarget", J::Str("embedded")),
     ("browserPagesInViewRow", J::Bool(false)),
+    // CDXC:Extensions 2026-11-09 DECISION: User: "that url is mine but it should open grok.com usually please". The Grok page opens grok.com unless the user puts their own page (a Grok bot, say) here; no one's own page ships as a default.
+    ("grokWebStartPage", J::Str("https://grok.com/")),
+    // The Grok logins, each `{ "id", "name" }` with its own browser profile (apps/desktop/src/app/claude_web/grok.rs). Empty is one login named Grok.
+    ("grokWebLogins", J::Arr(&[])),
     // CDXC:SessionLinks 2026-10-27 SEE-ALSO: `SessionLinksDisplay` in packages/gx-core/src/sidebar_view/links.rs (what each value shows). The default is Badge (2026-10-27: "and also please make the sidebar show as badge by default"), which replaces the 2026-10-24 Always default.
     ("sidebarSessionLinks", J::Str("badge")),
     // CDXC:SessionLinks 2026-10-24 SEE-ALSO: native_sidebar/links_list.rs; the links list's folded groups, kept app-wide (Merged or closed and Removed folded until opened).
@@ -141,6 +145,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("sessionNotesHidden", J::Bool(true)),
     // CDXC:Extensions 2026-10-25 DECISION: Claude is off by default (official_extensions.rs).
     ("claudeWebHidden", J::Bool(true)),
+    // CDXC:Extensions 2026-11-09 DECISION: Grok is off by default, like Claude (official_extensions.rs).
+    ("grokWebHidden", J::Bool(true)),
     // CDXC:Extensions 2026-10-19 DECISION: Connectors, OS Integration and Debugging are on by default; their old gates still apply (official_extensions.rs).
     // Off by default since Experimental features became one switch each (2026-11-09).
     ("connectorsHidden", J::Bool(true)),

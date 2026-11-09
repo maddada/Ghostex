@@ -346,16 +346,17 @@ impl GhostexGpuiApp {
                     .unwrap_or_else(|| self.extension_view_placeholder_signature(id));
                 self.render_project_editor_placeholder(signature, cx)
             };
-        // The Claude view has its account bar above the page (claude_web/accounts.rs), a sibling
-        // row, never over it.
-        if !TitlebarMode::Extension(id).is_claude_web() {
+        // The Claude and Grok views have their account or login bar above the page
+        // (claude_web/accounts.rs, claude_web/grok.rs), a sibling row, never over it.
+        let Some(place) = crate::app::claude_web::WebPlace::from_mode(TitlebarMode::Extension(id))
+        else {
             return page;
-        }
+        };
         v_flex()
             .size_full()
             .min_w_0()
             .min_h_0()
-            .child(self.render_claude_web_account_bar(cx))
+            .child(self.render_web_place_bar(place, cx))
             .child(
                 div()
                     .flex()

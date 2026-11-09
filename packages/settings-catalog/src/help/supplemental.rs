@@ -512,6 +512,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
+        key: "grokWebHidden",
+        tab: EXTENSIONS,
+        group: None,
+        section: "official",
+        section_title: "Built-in",
+        title: "Turn off Grok",
+        subtitle: "Turn off Grok: the Grok button in the sidebar and the Grok view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.",
+        options: &[],
+        user_only: false,
+    },
+    Supplemental {
         key: "connectorsHidden",
         tab: EXTENSIONS,
         group: None,

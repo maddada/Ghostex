@@ -575,7 +575,7 @@ pub(crate) fn project_view_state_from_shell_state(
         .and_then(serde_json::Value::as_str)
         .and_then(TitlebarMode::from_slug)
         .map(|mode| {
-            if mode.is_claude_web() {
+            if mode.is_web_place() {
                 TitlebarMode::Agents
             } else {
                 mode
@@ -614,13 +614,13 @@ pub(crate) fn open_view_modes_from_shell_state(
         };
         // Claude is never a side panel tab (CDXC:Extensions 2026-10-28 in
         // app/claude_web/takeover.rs), so one saved by an older build is dropped.
-        if mode == TitlebarMode::Agents || mode.is_claude_web() || modes.contains(&mode) {
+        if mode == TitlebarMode::Agents || mode.is_web_place() || modes.contains(&mode) {
             continue;
         }
         modes.push(mode);
     }
     if active_mode != TitlebarMode::Agents
-        && !active_mode.is_claude_web()
+        && !active_mode.is_web_place()
         && !modes.contains(&active_mode)
     {
         modes.push(active_mode);

@@ -1,4 +1,4 @@
-//! Claude's page in the sessions column's place while Claude is on (claude_web/takeover.rs): the
+//! Claude's (or Grok's) page in the sessions column's place while it is on (claude_web/takeover.rs): the
 //! whole work area with the side panel closed, the left column beside it when it is open.
 
 use gpui::AnyElement;
@@ -12,7 +12,7 @@ use gpui::px;
 use gpui::relative;
 use gpui_component::v_flex;
 
-use super::view::{claude_web_enabled, claude_web_view_id};
+use super::place::WebPlace;
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::render::agents_workspace_layout::AgentsWorkspaceLayout;
@@ -20,20 +20,22 @@ use crate::app::render::resize_rail::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    /// The work area's main column: the sessions, or Claude's page while Claude is on.
+    /// The work area's main column: the sessions, or Claude's or Grok's page while it is on.
     pub(crate) fn render_workarea_primary_column(
         &mut self,
         layout: AgentsWorkspaceLayout,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        if self.claude_on() {
-            if claude_web_enabled()
-                && self.titlebar_mode_available(TitlebarMode::Extension(claude_web_view_id()))
-            {
-                return self.render_claude_column(layout, window, cx);
+        if let Some(place) = self.web_place_on() {
+            if place.enabled() && self.titlebar_mode_available(place.mode()) {
+                if place == WebPlace::Grok {
+                    // A login renamed away or removed in Settings moves the page to another.
+                    self.sync_grok_web_page_if_moved(cx);
+                }
+                return self.render_claude_column(place, layout, window, cx);
             }
-            // Claude was switched off in Settings: the layout it replaced comes back.
+            // Its extension was switched off in Settings: the layout it replaced comes back.
             self.turn_claude_off(cx);
         }
         self.render_agents_workspace(layout, window, cx)
@@ -41,11 +43,12 @@ impl GhostexGpuiApp {
 
     fn render_claude_column(
         &self,
+        place: WebPlace,
         layout: AgentsWorkspaceLayout,
         window: &Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let id = claude_web_view_id();
+        let id = place.view_id();
         let mode = TitlebarMode::Extension(id);
         let slot_key = ProjectWorkareaCefSurfaceSlotKey::Extension(id);
         let page = if !self.project_editor_shell.is_mode_awake(mode) {
@@ -96,7 +99,7 @@ impl GhostexGpuiApp {
             .min_h_0()
             .overflow_hidden()
             // The account bar is a sibling row above the page, never over it.
-            .child(self.render_claude_web_account_bar(cx))
+            .child(self.render_web_place_bar(place, cx))
             .child(
                 div()
                     .flex()
@@ -117,5 +120,19 @@ impl GhostexGpuiApp {
                 None,
             ))
             .into_any_element()
+    }
+}
+
+impl GhostexGpuiApp {
+    /// The bar above Claude's or Grok's page: Claude's accounts or Grok's logins.
+    pub(crate) fn render_web_place_bar(
+        &self,
+        place: WebPlace,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        match place {
+            WebPlace::Claude => self.render_claude_web_account_bar(cx),
+            WebPlace::Grok => self.render_grok_web_login_bar(cx),
+        }
     }
 }

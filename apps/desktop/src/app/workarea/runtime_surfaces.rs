@@ -282,15 +282,23 @@ impl GhostexGpuiApp {
             ProjectWorkareaCefSurfaceSlotKey::Extension(id) => {
                 if gpui_custom_view(id).is_some() {
                     // The built-in Claude view opens on the picked Claude account's own claude.ai
-                    // sign-in, and waits while the account list loads (claude_web/accounts.rs).
-                    let profile = if slot_key.titlebar_mode().is_claude_web() {
-                        let account_profile = self.claude_web_profile(&profile, cx)?;
-                        if !self.prepare_workspace_browser_context(&account_profile, cx) {
-                            return None;
-                        }
-                        account_profile
+                    // sign-in, and waits while the account list loads (claude_web/accounts.rs);
+                    // the Grok view on the picked Grok login's own profile (claude_web/grok.rs).
+                    let place_profile = if slot_key.titlebar_mode().is_claude_web() {
+                        Some(self.claude_web_profile(&profile, cx)?)
+                    } else if slot_key.titlebar_mode().is_grok_web() {
+                        Some(self.grok_web_profile())
                     } else {
-                        profile
+                        None
+                    };
+                    let profile = match place_profile {
+                        Some(place_profile) => {
+                            if !self.prepare_workspace_browser_context(&place_profile, cx) {
+                                return None;
+                            }
+                            place_profile
+                        }
+                        None => profile,
                     };
                     // CDXC:Browser 2026-09-22 DECISION:
                     // User: middle-click and Cmd-click in project website views open other tickets in new Browser tabs. Reuse the project-owned popup route, including its background placement and parked-project handling.
@@ -474,10 +482,8 @@ impl GhostexGpuiApp {
         if let TitlebarMode::Extension(id) = self.active_mode {
             slot_keys.push(ProjectWorkareaCefSurfaceSlotKey::Extension(id));
         }
-        if self.claude_page_on_screen() {
-            slot_keys.push(ProjectWorkareaCefSurfaceSlotKey::Extension(
-                crate::app::claude_web::claude_web_view_id(),
-            ));
+        if let Some(place) = self.web_place_page_on_screen() {
+            slot_keys.push(ProjectWorkareaCefSurfaceSlotKey::Extension(place.view_id()));
         }
         if self.active_mode == TitlebarMode::Work {
             slot_keys.push(ProjectWorkareaCefSurfaceSlotKey::Work);

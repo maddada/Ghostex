@@ -186,7 +186,7 @@ impl GpuiShellLayoutState {
             fallback_availability.available_titlebar_mode_or_agents(persisted_active_mode);
         // Claude is never a side panel view (CDXC:Extensions 2026-10-28 in
         // app/claude_web/takeover.rs): a Claude tab saved by an older build comes back closed.
-        let active_mode = if active_mode.is_claude_web() {
+        let active_mode = if active_mode.is_web_place() {
             TitlebarMode::Agents
         } else {
             active_mode

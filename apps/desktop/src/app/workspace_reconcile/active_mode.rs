@@ -32,8 +32,8 @@ impl GhostexGpuiApp {
         }
         // Claude is never a side panel view: opening it (the Open a view picker, a hotkey, a saved
         // tab) turns Claude on (CDXC:Extensions 2026-10-28 in app/claude_web/takeover.rs).
-        if mode.is_claude_web() {
-            return self.show_claude(cx);
+        if let Some(place) = crate::app::claude_web::WebPlace::from_mode(mode) {
+            return self.show_web_place(place, cx);
         }
 
         let previous_mode = self.active_mode;

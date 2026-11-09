@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Grok, a new built-in extension (off by default):** a Grok button beside Claude's opens grok.com inside Ghostex, with several Grok logins kept apart (each signed in on its own) and a start page you can set in Settings > Files & Links.
 - **File and folder paths in Ghostex's own screens open in Files when clicked** (Settings pages and their descriptions, dialogs, chat folders): `~` expands to your home folder, a right-click offers Copy path and Reveal in Finder, and a folder outside the project opens in your file manager.
 
 ## 11.2.0 - 2026-11-08

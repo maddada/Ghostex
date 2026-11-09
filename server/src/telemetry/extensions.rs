@@ -51,9 +51,10 @@ pub const MAX_STORE_EXTENSION_LIST_LENGTH: usize = 64;
 
 const CATALOG_CACHE_FILE: &str = "catalog-cache.json";
 
-/// The desktop names the built-in Claude view `claude-web`; the catalog entry
-/// that switches it is `claudeWeb`.
-const BUILT_IN_VIEW_ALIASES: &[(&str, &str)] = &[("claude-web", "claudeWeb")];
+/// The desktop names the built-in Claude and Grok views `claude-web` and
+/// `grok-web`; the catalog entries that switch them are `claudeWeb` and `grokWeb`.
+const BUILT_IN_VIEW_ALIASES: &[(&str, &str)] =
+    &[("claude-web", "claudeWeb"), ("grok-web", "grokWeb")];
 
 /// An extension as analytics may name it.
 #[derive(Clone, Debug, PartialEq, Eq)]

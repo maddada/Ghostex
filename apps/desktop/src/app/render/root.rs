@@ -23,7 +23,8 @@ use gpui_component::v_flex;
 
 use crate::app::actions::*;
 use crate::app::claude_web::{
-    ManageClaudeWebAccounts, SelectClaudeWebAccount, SignOutClaudeWebAccount,
+    AddGrokWebLogin, ManageClaudeWebAccounts, ManageGrokWebLogins, SelectClaudeWebAccount,
+    SelectGrokWebLogin, SignOutClaudeWebAccount,
 };
 use crate::app::consts::*;
 use crate::app::helpers::*;
@@ -1201,6 +1202,15 @@ impl Render for GhostexGpuiApp {
             }))
             .on_action(cx.listener(|this, _: &ManageClaudeWebAccounts, _window, cx| {
                 this.open_gpui_settings_tab_from_new_thread_picker("accounts", cx);
+            }))
+            .on_action(cx.listener(|this, action: &SelectGrokWebLogin, _window, cx| {
+                this.select_grok_web_login(&action.login_id, cx);
+            }))
+            .on_action(cx.listener(|this, _: &AddGrokWebLogin, _window, cx| {
+                this.add_grok_web_login(cx);
+            }))
+            .on_action(cx.listener(|this, _: &ManageGrokWebLogins, _window, cx| {
+                this.manage_grok_web_logins(cx);
             }))
             .on_action(
                 cx.listener(|this, action: &SelectBrowserProfile, window, cx| {

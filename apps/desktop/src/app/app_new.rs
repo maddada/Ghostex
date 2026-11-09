@@ -99,13 +99,12 @@ impl GhostexGpuiApp {
         shell_layout_state
             .project_editor_shell
             .sleep_all_modes_for_launch(shell_layout_state.active_mode);
-        // Claude comes back on with its page asleep until clicked, like every web view.
-        if shell_layout_state.claude_takeover.is_some() {
+        // Claude (or Grok) comes back on with its page asleep until clicked, like every web view.
+        if let Some(takeover) = &shell_layout_state.claude_takeover {
+            let mode = takeover.view().mode();
             shell_layout_state
                 .project_editor_shell
-                .mark_mode_sleeping(TitlebarMode::Extension(
-                    crate::app::claude_web::claude_web_view_id(),
-                ));
+                .mark_mode_sleeping(mode);
         }
         let restored_sidebar_collapsed = match sidebar_visibility_memory {
             GpuiSidebarVisibilityMemory::Shared => {

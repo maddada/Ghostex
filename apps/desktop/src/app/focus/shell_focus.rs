@@ -779,14 +779,9 @@ impl GhostexGpuiApp {
         // (app/claude_web/takeover.rs).
         if self.active_mode == TitlebarMode::Agents
             && !self.view_panel_picker_open
-            && self.claude_page_on_screen()
+            && let Some(place) = self.web_place_page_on_screen()
         {
-            self.focus_shell_target(
-                ShellFocusTarget::ProjectEditorSurface(TitlebarMode::Extension(
-                    crate::app::claude_web::claude_web_view_id(),
-                )),
-                cx,
-            );
+            self.focus_shell_target(ShellFocusTarget::ProjectEditorSurface(place.mode()), cx);
             return;
         }
         self.focus_shell_target(

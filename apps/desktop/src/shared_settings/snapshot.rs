@@ -200,6 +200,14 @@ impl SharedSidebarSettingsSnapshot {
         )
     }
 
+    /// Whether the Grok built-in extension is on (app/claude_web/grok.rs).
+    pub fn grok_web_enabled(&self) -> bool {
+        ghostex_settings_catalog::built_in_extensions::enabled(
+            &self.object,
+            ghostex_settings_catalog::built_in_extensions::GROK_WEB,
+        )
+    }
+
     /// Whether the floating Ghostex Capture button, its hotkeys and its capture tools are on.
     pub fn ghostex_capture_enabled(&self) -> bool {
         strict_bool_field(&self.object, "ghostexCaptureEnabled")

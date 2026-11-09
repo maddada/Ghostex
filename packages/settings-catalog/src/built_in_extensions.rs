@@ -50,6 +50,9 @@ pub const GBOTS: &str = "gbots";
 /// Claude (claude.ai in a view opened from the sidebar's top bar, with an account bar to switch
 /// between the saved Claude accounts' sign-ins). Off by default.
 pub const CLAUDE_WEB: &str = "claudeWeb";
+/// Grok (grok.com in the same place as Claude, opened from its own sidebar button, with a bar to
+/// switch between Grok logins, each with its own browser profile). Off by default.
+pub const GROK_WEB: &str = "grokWeb";
 /// Connectors (Settings > Connectors, the `ghostex connectors` verbs and routes). Experimental, off
 /// by default.
 pub const CONNECTORS: &str = "connectors";

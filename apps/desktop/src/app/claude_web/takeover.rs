@@ -11,7 +11,7 @@
 use gpui::Window;
 use serde_json::{Value, json};
 
-use super::view::{claude_web_enabled, claude_web_view_id};
+use super::place::WebPlace;
 use crate::*;
 
 /// The side panel as Claude found it.
@@ -148,12 +148,14 @@ impl ClaudePlace {
     }
 }
 
-/// Claude is on: the window's layout and place from before, to put back when it goes off. Saved
-/// with the window's shell state, so a relaunch comes back with Claude on.
+/// Claude (or Grok, which shares it: claude_web/place.rs) is on: the window's layout and place from
+/// before, to put back when it goes off, and which of them is on. Saved with the window's shell
+/// state, so a relaunch comes back with it on.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ClaudeTakeover {
     before: ClaudeLayout,
     place: Option<ClaudePlace>,
+    view: WebPlace,
 }
 
 impl ClaudeTakeover {
@@ -163,6 +165,7 @@ impl ClaudeTakeover {
             Self {
                 before: current,
                 place: Some(place),
+                view: WebPlace::Claude,
             },
             ClaudeLayout::CLAUDE_ALONE,
         )
@@ -188,12 +191,23 @@ impl ClaudeTakeover {
         self.place.as_ref()
     }
 
+    /// Which page is on: Claude or Grok.
+    pub(crate) fn view(&self) -> WebPlace {
+        self.view
+    }
+
+    /// Switching from one page to the other keeps the layout and place from before either.
+    pub(crate) fn set_view(&mut self, view: WebPlace) {
+        self.view = view;
+    }
+
     pub(crate) fn to_shell_state_json(&self) -> Value {
         let mut value = self.before.to_shell_state_json();
         value["place"] = self
             .place
             .as_ref()
             .map_or(Value::Null, ClaudePlace::to_shell_state_json);
+        value["view"] = json!(self.view.slug());
         value
     }
 
@@ -203,6 +217,12 @@ impl ClaudeTakeover {
             place: value
                 .get("place")
                 .and_then(ClaudePlace::from_shell_state_json),
+            // Saved before Grok existed: Claude.
+            view: value
+                .get("view")
+                .and_then(Value::as_str)
+                .and_then(WebPlace::from_slug)
+                .unwrap_or(WebPlace::Claude),
         })
     }
 }
@@ -247,20 +267,34 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// Claude or Grok is on (claude_web/place.rs): the takeover below holds for both.
     pub(crate) fn claude_on(&self) -> bool {
         self.claude_takeover.is_some()
     }
 
-    /// Claude's page is on screen: Claude is on and no expanded side panel covers its column.
+    /// Which of Claude and Grok is on.
+    pub(crate) fn web_place_on(&self) -> Option<WebPlace> {
+        self.claude_takeover.as_ref().map(ClaudeTakeover::view)
+    }
+
+    /// Claude's (or Grok's) page is on screen: it is on and no expanded side panel covers its
+    /// column.
     pub(crate) fn claude_page_on_screen(&self) -> bool {
         self.claude_on() && !self.view_panel_maximized()
     }
 
-    /// Whether a view's page is on screen: the side panel's view, or Claude in the sessions
-    /// column's place. Visibility, keyboard and focus ask this instead of comparing `active_mode`,
-    /// which only ever names the side panel's view.
+    /// The page on screen in the sessions column's place, if any.
+    pub(crate) fn web_place_page_on_screen(&self) -> Option<WebPlace> {
+        self.web_place_on().filter(|_| self.claude_page_on_screen())
+    }
+
+    /// Whether a view's page is on screen: the side panel's view, or Claude or Grok in the
+    /// sessions column's place. Visibility, keyboard and focus ask this instead of comparing
+    /// `active_mode`, which only ever names the side panel's view.
     pub(crate) fn view_page_on_screen(&self, mode: TitlebarMode) -> bool {
-        self.active_mode == mode || (mode.is_claude_web() && self.claude_page_on_screen())
+        self.active_mode == mode
+            || WebPlace::from_mode(mode)
+                .is_some_and(|place| self.web_place_page_on_screen() == Some(place))
     }
 
     fn claude_place_now(&self) -> ClaudePlace {
@@ -337,27 +371,42 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// The Claude button: turns Claude on, or off when it is on.
-    pub(crate) fn toggle_claude(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
-        if self.claude_on() {
+    /// The Claude (or Grok) button: turns it on, or off when it is on. With the other one on, it
+    /// switches to this one in place.
+    pub(crate) fn toggle_web_place(
+        &mut self,
+        place: WebPlace,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.web_place_on() == Some(place) {
             self.turn_claude_off(cx);
             self.sync_browser_address_input_if_shown(window, cx);
-        } else if !self.show_claude(cx) {
+        } else if !self.show_web_place(place, cx) {
             self.dispatch_gpui_workspace_action_toast(
                 "warning",
-                "Claude could not open",
+                &format!("{} could not open", place.title()),
                 "Open a project in this window first.",
                 cx,
             );
         }
     }
 
-    /// Turns Claude on, or with Claude on wakes and focuses its page. Returns whether Claude is on.
-    pub(crate) fn show_claude(&mut self, cx: &mut gpui::Context<Self>) -> bool {
-        let id = claude_web_view_id();
+    /// Turns `place` on, or with it on wakes and focuses its page. With the other page on, switches
+    /// to this one and keeps the layout from before either. Returns whether it is on.
+    pub(crate) fn show_web_place(&mut self, place: WebPlace, cx: &mut gpui::Context<Self>) -> bool {
+        let id = place.view_id();
         let mode = TitlebarMode::Extension(id);
-        if !claude_web_enabled() || !self.titlebar_mode_available(mode) {
+        if !place.enabled() || !self.titlebar_mode_available(mode) {
             return false;
+        }
+        if let Some(takeover) = self
+            .claude_takeover
+            .as_mut()
+            .filter(|takeover| takeover.view() != place)
+        {
+            takeover.set_view(place);
+            self.open_views.retain(|tab| *tab != mode);
         }
         if self.claude_takeover.is_none() {
             // A Claude tab saved by an older build leaves the side panel, and so does the Open a
@@ -366,8 +415,9 @@ impl GhostexGpuiApp {
                 self.close_view_panel(cx);
             }
             self.open_views.retain(|tab| *tab != mode);
-            let (takeover, alone) =
+            let (mut takeover, alone) =
                 ClaudeTakeover::turn_on(self.claude_layout_now(), self.claude_place_now());
+            takeover.set_view(place);
             self.claude_takeover = Some(takeover);
             self.apply_claude_layout(alone, cx);
         } else if self.view_picker_open() {

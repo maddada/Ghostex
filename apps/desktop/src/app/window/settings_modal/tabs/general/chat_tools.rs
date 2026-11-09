@@ -3,9 +3,9 @@
 use super::super::super::catalog::SettingOption;
 use super::super::super::catalog::settings_catalog;
 use super::super::super::fields::{
-    RowSpec, SELECT_WIDTH, SliderBinding, SliderSaver, ignored_ports_field, reset_key,
-    segmented_field, setting_row, settings_section, settings_select_with_unavailable,
-    slider_number_field_with,
+    RowSpec, SELECT_WIDTH, SliderBinding, SliderSaver, grok_logins_field, ignored_ports_field,
+    reset_key, segmented_field, setting_row, settings_section, settings_select_with_unavailable,
+    slider_number_field_with, text_field,
 };
 use super::super::super::page::PageBlock;
 use super::super::super::store::SettingsStore;
@@ -338,6 +338,40 @@ fn browser_section(
         false,
         cx,
     ));
+    // The Grok extension's rows (claude_web/grok.rs), shown while it is on: the catalog hides a
+    // feature's `settingKeys` while the feature is off.
+    if g.visible("browser", "grokWebStartPage") {
+        let spec = g.spec(
+            "grokWebStartPage",
+            "Grok start page",
+            "The page the Grok view opens on, for every Grok login: grok.com, or a page of your own such as one of your Grok bots. Left empty, or not a web address, it opens grok.com.",
+        );
+        let value = g.values.string("grokWebStartPage");
+        rows.push(text_field(
+            page,
+            &g.p,
+            "grokWebStartPage",
+            spec,
+            Some(reset_key::<GeneralTab>("grokWebStartPage")),
+            &value,
+            Some("https://grok.com/"),
+            None,
+            None,
+            window,
+            cx,
+        ));
+    }
+    if g.visible("browser", "grokWebLogins") {
+        let spec = g.spec(
+            "grokWebLogins",
+            "Grok logins",
+            "The logins the bar above the Grok page switches between, each signed in on its own. Removing one signs it out.",
+        );
+        let value = g.values.value("grokWebLogins");
+        rows.push(grok_logins_field(
+            page, &g.p, spec, None, &value, window, cx,
+        ));
+    }
     settings_section(
         &g.p,
         g.section_title("browser", "Browser"),
