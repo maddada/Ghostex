@@ -137,7 +137,15 @@ pub(super) fn chat_settings() -> ChatSettings {
         chat_text_strength: object
             .get("sessionChatTextStrengthPercent")
             .and_then(Value::as_f64),
-        tool_cards: object.get("chatToolCallCards").and_then(Value::as_bool),
+        // The core builds the card for either look: Tool call cards (Settings > Chat) or Tool call
+        // lines (Extensions > Experimental), which draws the same card as one quiet line.
+        tool_cards: match (
+            object.get("chatToolCallCards").and_then(Value::as_bool),
+            object.get("chatToolCallLines").and_then(Value::as_bool),
+        ) {
+            (None, None) => None,
+            (cards, lines) => Some(cards == Some(true) || lines == Some(true)),
+        },
         detailed_default: object
             .get("sessionChatDetailedView")
             .and_then(Value::as_bool),

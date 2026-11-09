@@ -25,7 +25,7 @@ use std::time::Duration;
 /// How long a row takes to grow in, and the header's text to settle into its next value.
 const ENTER: Duration = Duration::from_millis(320);
 /// One sweep of the running row's shimmer.
-const SHIMMER: Duration = Duration::from_millis(1400);
+pub(super) const SHIMMER: Duration = Duration::from_millis(1400);
 /// One turn of the spinner.
 const SPIN: Duration = Duration::from_millis(800);
 /// The header's icon circles and how far each overlaps the one before it.
@@ -36,6 +36,10 @@ const STACK_OVERLAP: f32 = 7.0;
 const STACK_RING: f32 = 2.0;
 /// A row's icon slot.
 const ROW_ICON: f32 = 18.0;
+/// Tool call lines: the line's height, and where the rail its rows hang from sits.
+const LINE_HEIGHT: f32 = 34.0;
+const LINE_RAIL_INSET: f32 = 18.0;
+const LINE_RAIL_GAP: f32 = 8.0;
 
 /// The bundled icon for each glyph the core classifies a tool into (`tool_rows::tool_glyph`).
 fn glyph_icon(glyph: &str) -> &'static str {
@@ -123,7 +127,13 @@ fn stack_colors(surface: Hsla, p: &ChatAppearance) -> (Hsla, Hsla, f32) {
 
 /// `text` in `font` with a band of light sweeping across it from left to right, `phase` running
 /// 0 to 1.
-fn shimmer_text(text: &str, font: &str, phase: f32, dim: Hsla, bright: Hsla) -> StyledText {
+pub(super) fn shimmer_text(
+    text: &str,
+    font: &str,
+    phase: f32,
+    dim: Hsla,
+    bright: Hsla,
+) -> StyledText {
     let count = text.chars().count().max(1) as f32;
     // The band is about a quarter of the text wide and starts and ends off it.
     let band = (count * 0.25).max(4.0);
@@ -170,11 +180,47 @@ impl NativeChatView {
         let running = card["running"] == true;
         // One line until the reader opens it; a call waiting on an approval opens it (`waiting`).
         // While calls run the header carries the newest one's words (the core's `liveLabel`).
-        let open = self.is_expanded(&key, card["waiting"] == true);
+        // Tool call lines open in Detailed view and stay shut in Simple (Q1964).
+        let line = p.tool_lines;
+        let open = self.is_expanded(&key, card["waiting"] == true || (line && p.work_open));
         let motion = self.disclosure_frame(&key, open, cx);
         let animate = (running || live) && !cx.reduce_motion();
         let (surface, border, hairline, _, _, _) = card_colors(p);
         let entries = card["entries"].as_array().cloned().unwrap_or_default();
+
+        // Settings > Extensions > Experimental > Tool call lines: the card's header without its
+        // box, and its calls as rows on the rail under it.
+        if line {
+            let mut column = div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(self.tool_card_header(&key, &card, open, animate, true, p, cx));
+            if open || motion.is_some() {
+                let rows: Vec<AnyElement> = entries
+                    .iter()
+                    .enumerate()
+                    .map(|(position, entry)| {
+                        self.tool_card_row(&id, &key, position, entry, message, animate, p, cx)
+                    })
+                    .collect();
+                let body = div()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(px(1.0 * s))
+                    .mt(px(2.0 * s))
+                    .ml(px(LINE_RAIL_INSET * s))
+                    .pl(px(LINE_RAIL_GAP * s))
+                    .border_l_1()
+                    .border_color(border)
+                    .children(rows)
+                    .into_any_element();
+                column = column.child(self.disclosure_body_motion(&key, motion, 0.0, body));
+            }
+            return Some(column.into_any_element());
+        }
 
         let mut column = div()
             .w_full()
@@ -188,7 +234,7 @@ impl NativeChatView {
             .border_color(border)
             .bg(surface)
             .overflow_hidden()
-            .child(self.tool_card_header(&key, &card, open, animate, p, cx));
+            .child(self.tool_card_header(&key, &card, open, animate, false, p, cx));
         if open || motion.is_some() {
             let rows: Vec<AnyElement> = entries
                 .iter()
@@ -213,27 +259,33 @@ impl NativeChatView {
         Some(column.into_any_element())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn tool_card_header(
         &self,
         key: &str,
         card: &Value,
         open: bool,
         animate: bool,
+        line: bool,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
         let live_label = text(card, "liveLabel");
         let live_more = text(card, "liveMore");
-        let title = if live_label.is_empty() {
-            text(card, "title")
-        } else {
+        let title = if !live_label.is_empty() {
             live_label.clone()
+        } else if line {
+            text(card, "lineTitle")
+        } else {
+            text(card, "title")
         };
         let failed = text(card, "failedLabel");
         let time = text(card, "time");
         let more = card["moreIcons"].as_u64().unwrap_or(0);
-        let (surface, _, _, hover, _, _) = card_colors(p);
+        let (card_surface, _, _, hover, _, _) = card_colors(p);
+        // A line has no box: its circles are cut out of the chat's own background.
+        let surface = if line { p.background } else { card_surface };
         let icons = card["icons"].as_array().cloned().unwrap_or_default();
         let mut stack = div().flex().items_center().flex_shrink_0();
         let (disc, ring_color, ring_width) = stack_colors(surface, p);
@@ -370,10 +422,15 @@ impl NativeChatView {
             .flex()
             .items_center()
             .gap(px(8.0 * s))
-            .px(px(10.0 * s))
+            .px(px(if line { 8.0 } else { 10.0 } * s))
             // The one-line cards' header height ("Message to …", "Worked for 12s"), so a tool card
-            // folded beside one of them is the same height.
-            .h(px(super::cards::SINGLE_LINE_CARD.header_height(s)))
+            // folded beside one of them is the same height; a line is a tool row's height.
+            .h(px(if line {
+                LINE_HEIGHT * s
+            } else {
+                super::cards::SINGLE_LINE_CARD.header_height(s)
+            }))
+            .when(line, |this| this.rounded(px(8.0 * s)))
             .min_w_0()
             .chat_cursor_pointer()
             .hover(move |style| style.bg(hover))

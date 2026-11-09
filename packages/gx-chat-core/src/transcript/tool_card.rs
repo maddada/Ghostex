@@ -6,12 +6,15 @@
 //! CDXC:SessionChat 2026-10-28 DECISION: User, after a video of tool calls they liked: "Let's please do this under feature flag if possible (toggle in settings) so i can test it. Keep current look as it is." With Settings > Chat > Tool call cards (`chatToolCallCards`, off by default) on, a message's tool calls and file edits are one card (Q708, all seven parts): the tools' icons stacked in its header with "Using N tools" / "Used N tools", "N failed" and the burst's time; each row in the call's tense with its result ("92 lines", "6 matches", "+18 −4", "214 passed", "exit 1") and time ("30ms", "1.2s"); a shimmer on the running row; short motion; a failed row says what failed with the reason on a second line, and no Retry; MCP calls of known apps read as a verb on the app ("Reading SPX-412 in Linear") with its logo (`tool_apps.rs`). Approvals keep their approval card; the waiting call's row says it waits (Q709). A card folds to one line as soon as its tools are done and the agent writes again, and the turn still folds into "Worked for" (Q710). With the switch off nothing here runs and every row draws as before. The renderers only draw this: desktop `native_chat/tool_card.rs`, phone `ToolCard.tsx`.
 //!
 //! CDXC:SessionChat 2026-11-08 DECISION: User, with Tool call cards on: "when this is enabled i see tools card area jump open then close", then picked "Folded, with the live line in the header" (Q1925) and the newest running call in it (Q1926), with "i dont get what 2 of 3 means tho, we need different text there pls". A card is one line while its calls run and after: the header says the newest running call in its own words with the shimmer and a spinner (`liveLabel`), and "+N more" for the card's other calls (`liveMore`); once they are done it says "Used N tools" as before. It never opens or folds by itself: it opens when the reader clicks it, or when a call in it waits on an approval (`waiting`, set by `mark_card_waiting`). Supersedes the part of the 2026-10-28 decision (Q710) that drew a card open while its calls ran and until the agent wrote again; every card opened, then folded a second later, because Claude writes a sentence before almost every call, and a line streamed from the terminal folded it and opened it again on top of that.
+//!
+//! CDXC:SessionChat 2026-11-09 DECISION: User, on the page that merged the cards preview into the rows: design C, "one quiet line per run, rows inside" (Q1960), a shut run with a failure shows only the red "1 failed" count (Q1961), a long output shows its first 12 lines and "Show all" (Q1962), background tasks keep today's two rows (Q1963), runs open in Detailed view and shut in Simple (Q1964), the phone in the same release (Q1965); then "let's keep the current way how things work as is ... still keep the new behavior under a toggle please. also 1 thing we must keep is the relly cool shimmering effect on the currently in progress tool calls like we have now in Tool call cards". Settings > Extensions > Experimental > Tool call lines (`chatToolCallLines`, off) draws this card's data as that quiet line (`lineTitle` is its words: the call's own for a run of one), and the hosts build the card when either switch is on. A run that starts a background task or reports one ending is marked `background`, and Tool call lines draw it as the rows it was; the cards preview keeps its card (a cancelled OMP job's stopped look, 2026-10-30).
 
 use std::collections::HashMap;
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 use serde_json::{json, Map, Value};
 
+use crate::transcript::background_rows::BACKGROUND_COMMAND_TOOL;
 use crate::transcript::file_changes::file_changes;
 use crate::transcript::jsstr::{collapse_whitespace, js_trim};
 use crate::transcript::tool_apps::{tool_app_for_server, ToolApp};
@@ -117,6 +120,7 @@ pub fn tool_card(
     working: bool,
 ) -> Option<Value> {
     let mut entries: Vec<Value> = Vec::new();
+    let mut background = false;
     let mut started: Option<i64> = None;
     let mut ended: Option<i64> = None;
     for slot in slots(tools) {
@@ -125,6 +129,15 @@ pub fn tool_card(
                 let Some(row) = rows.get(index) else {
                     continue;
                 };
+                // A run that starts a background task or reports one ending: Tool call lines draw
+                // it as the rows it always was (`background`, the 2026-11-09 decision above).
+                if pair.call_name() == Some(BACKGROUND_COMMAND_TOOL)
+                    || pair
+                        .call_input()
+                        .is_some_and(|input| input["run_in_background"] == true)
+                {
+                    background = true;
+                }
                 // An `exec` that only wrote files is already its file rows.
                 if wrote && edits_only(&pair, working_directory) {
                     continue;
@@ -201,6 +214,12 @@ pub fn tool_card(
         format!("+{} more", count - 1)
     };
     let used = tools_label(if running { "Using" } else { "Used" }, count);
+    // The quiet line's words when no call runs: a run of one call is that call ("Printed numbers
+    // 1 to 300"), a longer run counts its calls.
+    let line_title = match entries.as_slice() {
+        [only] => text(only, "label"),
+        _ => used.clone(),
+    };
     let folded = [used.as_str(), failed_label.as_str(), time.as_str()]
         .into_iter()
         .filter(|part| !part.is_empty())
@@ -214,6 +233,8 @@ pub fn tool_card(
         "running": running,
         "stopped": stopped,
         "title": used,
+        "lineTitle": line_title,
+        "background": background,
         "liveLabel": live_label,
         "liveMore": live_more,
         "failed": failed,
@@ -927,6 +948,7 @@ pub fn mark_card_waiting(
     }
     if marked {
         card.insert("title".to_string(), "Waiting for approval".into());
+        card.insert("lineTitle".to_string(), "Waiting for approval".into());
         // The header says it waits, and the card opens to the call that waits (`waiting`).
         card.insert("liveLabel".to_string(), "".into());
         card.insert("liveMore".to_string(), "".into());

@@ -90,6 +90,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     //
     // CDXC:Automations 2026-09-17:
     ("fasterRendering", J::Bool(false)),
+    ("chatToolCallLines", J::Bool(false)),
     ("codeViewTabHidden", J::Bool(false)),
     ("browserViewTabHidden", J::Bool(false)),
     ("kanbanViewTabHidden", J::Bool(false)),

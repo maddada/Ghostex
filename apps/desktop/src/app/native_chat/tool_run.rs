@@ -10,6 +10,7 @@ use super::file_actions::FileMenuExt as _;
 use super::{
     appearance::ChatAppearance, fonts::CHAT_MONO, state::NativeChatView, transcript::text,
 };
+use crate::app::helpers::ThrottledAnimationExt as _;
 use crate::app::native_chat::cursor::ChatCursor as _;
 use ghostex_gx_chat_core::transcript::tool_rows::tool_fold_toggle_before;
 use gpui::prelude::FluentBuilder as _;
@@ -25,6 +26,9 @@ use serde_json::Value;
 /// it is outside one so opening a group never re-flows the rows it reveals. Each
 /// row carries its own padding (the 2026-10-11 work look), so the gap is small.
 const ROW_GAP: f32 = 2.0;
+
+/// How many lines of a tool's output Tool call lines show before "Show all N lines".
+const LINE_OUTPUT_LINES: usize = 12;
 
 /// A tool row's padding beside its glyph tile; its detail's rail is moved in by the same
 /// amount so the line still runs down from the middle of the tile.
@@ -54,7 +58,10 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         // Settings > Chat > Tool call cards: the calls and edits are one card (`tool_card.rs`).
-        if message["toolCard"].is_object() {
+        // Tool call lines leave a background task's run as these rows (the core's `background`).
+        if message["toolCard"].is_object()
+            && !(p.tool_lines && message["toolCard"]["background"] == true)
+        {
             return self.tool_card(message, p, cx).into_iter().collect();
         }
         let tools = message["tools"].as_array().cloned().unwrap_or_default();
@@ -377,6 +384,7 @@ impl NativeChatView {
                         content,
                         error,
                         None,
+                        false,
                         p,
                     ));
                 }
@@ -625,7 +633,31 @@ impl NativeChatView {
         let fills = subagent.is_empty();
         let name_key = key.clone();
         let preview_key = format!("tool-preview:{message_id}:{index}");
-        trigger = if !preview.is_empty() && subagent.is_empty() {
+        // A call still running sweeps the Tool call cards' shimmer across its words, in every
+        // look (the 2026-11-09 decision in gx-chat-core `transcript/tool_card.rs`).
+        let shimmer =
+            status == "running" && self.snapshot["working"] == true && !cx.reduce_motion();
+        trigger = if shimmer {
+            let (dim, bright) = (p.muted.opacity(0.8), p.foreground);
+            let (label, font) = (name, p.font.clone());
+            trigger.child(
+                div()
+                    .when(fills, |this| this.flex_1())
+                    .min_w_0()
+                    .truncate()
+                    .font_weight(name_weight)
+                    .when(described, |this| this.text_size(px(14.0 * s)))
+                    .with_throttled_animation(
+                        SharedString::from(format!("{key}:shimmer")),
+                        super::tool_card::SHIMMER,
+                        move |title, phase| {
+                            title.child(super::tool_card::shimmer_text(
+                                &label, &font, phase, dim, bright,
+                            ))
+                        },
+                    ),
+            )
+        } else if !preview.is_empty() && subagent.is_empty() {
             let name_marks = self.label_highlights(&name_key, &name);
             let preview_marks = self.label_highlights(&preview_key, &preview);
             trigger.child(
@@ -743,7 +775,20 @@ impl NativeChatView {
         let failed = tool["failed"] == true;
         let detail = self.row_detail(key, "tool", message_id, index as u64);
         let input = text(&detail, "input");
-        let output = text(&detail, "output");
+        let mut output = text(&detail, "output");
+        // Tool call lines show a long output's first lines and a button for the rest, instead of a
+        // box that scrolls inside the chat (Q1962 in gx-chat-core `transcript/tool_card.rs`).
+        let show_all_key = format!("show-all:{key}");
+        let output_lines = output.lines().count();
+        let shown_all = self.expanded.contains(&show_all_key);
+        let capped = p.tool_lines && output_lines > LINE_OUTPUT_LINES && !shown_all;
+        if capped {
+            output = output
+                .lines()
+                .take(LINE_OUTPUT_LINES)
+                .collect::<Vec<_>>()
+                .join("\n");
+        }
         let has_call = tool["hasCall"] == true;
         let command = tool["glyph"] == "terminal";
         // The first block's label row carries the copy button, which copies the whole call.
@@ -763,6 +808,7 @@ impl NativeChatView {
                 input,
                 false,
                 copy.take(),
+                false,
                 p,
             ));
         }
@@ -774,8 +820,36 @@ impl NativeChatView {
                 output,
                 failed,
                 copy.take(),
+                // The 12 lines and the full output after "Show all" both show without a scroll box.
+                p.tool_lines,
                 p,
             ));
+            if capped {
+                let toggle = show_all_key.clone();
+                detail.push(
+                    div()
+                        .id(SharedString::from(toggle.clone()))
+                        .role(gpui::Role::Button)
+                        .aria_label(format!("Show all {output_lines} lines"))
+                        .flex_none()
+                        .self_start()
+                        .px(px(10.0 * s))
+                        .py(px(3.0 * s))
+                        .rounded_full()
+                        .border_1()
+                        .border_color(p.border)
+                        .text_size(px(12.0 * s))
+                        .text_color(p.foreground)
+                        .chat_cursor_pointer()
+                        .hover(|style| style.bg(p.foreground.opacity(0.04)))
+                        .child(format!("Show all {output_lines} lines"))
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.expanded.insert(toggle.clone());
+                            cx.notify();
+                        }))
+                        .into_any_element(),
+                );
+            }
         }
         if !detail.is_empty() {
             let body = disclosure_body(
@@ -814,6 +888,7 @@ impl NativeChatView {
         content: String,
         failed: bool,
         copy: Option<String>,
+        uncapped: bool,
         p: &ChatAppearance,
     ) -> AnyElement {
         let s = p.scale;
@@ -878,8 +953,9 @@ impl NativeChatView {
                     key,
                     div()
                         .min_w_0()
-                        // React capped the block at 16.25 of its own lines plus its padding.
-                        .max_h(px(220.75 * s))
+                        // React capped the block at 16.25 of its own lines plus its padding; Tool
+                        // call lines cut the output at 12 lines instead (`LINE_OUTPUT_LINES`).
+                        .when(!uncapped, |this| this.max_h(px(220.75 * s)))
                         .px(px(10.0 * s))
                         .py(px(8.0 * s))
                         .bg(p.input)

@@ -48,6 +48,9 @@ pub(crate) struct ChatAppearance {
     ///
     /// CDXC:SessionChat 2026-10-14 DECISION: User: "if the user disables simple mode we should expand what's under the areas under each agent message by default". In Detailed view (Simple mode off, now) the work under each reply starts open; closing one sticks as a manual toggle does, each tool row's own output stays closed, and Normal keeps its folds. Verbose, which opened them too, is retired (gx-chat-core transcript/view_level.rs).
     /// SEE-ALSO: apps/mobile/app/src/chat/native/transcript/Transcript.tsx (`workOpen`).
+    /// Settings > Extensions > Experimental > Tool call lines: a tool card draws as one quiet line
+    /// with its calls as rows under it (`tool_card.rs`).
+    pub(crate) tool_lines: bool,
     pub(crate) work_open: bool,
     pub(crate) file_previews: bool,
     /// Grey thinking (`sessionChatMutedThinking`): thinking takes the muted text colour, so it reads
@@ -287,6 +290,7 @@ impl ChatAppearance {
             light,
             simple,
             work_open: !simple,
+            tool_lines: enabled("chatToolCallLines"),
             file_previews: enabled("sessionChatFileEditPreviews"),
             muted_thinking: enabled("sessionChatMutedThinking"),
             marked_sections: super::marked_sections::MarkerStyle::from_settings(settings),

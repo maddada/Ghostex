@@ -485,6 +485,20 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("appWide", J::Bool(true)),
         ("title", J::Str("Faster rendering")),
     ]),
+    // CDXC:SessionChat 2026-11-09 DECISION: User, after picking design C for the tool calls ("one
+    // quiet line per run, rows inside"): "let's keep the current way how things work as is ... still
+    // keep the new behavior under a toggle please". Off by default; the tool rows stay the look
+    // (gx-chat-core `transcript/tool_card.rs`).
+    J::Obj(&[
+        ("description", J::Str("Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows.")),
+        ("category", J::Str("experimental")),
+        ("id", J::Str("toolCallLines")),
+        ("placement", J::Str("feature")),
+        ("settingsKey", J::Str("chatToolCallLines")),
+        ("settingsKeyEnables", J::Bool(true)),
+        ("appWide", J::Bool(true)),
+        ("title", J::Str("Tool call lines")),
+    ]),
 ]);
 
 pub const GHOSTEX_OFFICIAL_EXTENSION_CATEGORIES: J = J::Arr(&[
