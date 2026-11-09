@@ -151,6 +151,14 @@ pub fn approver_public_key() -> Result<Option<String>, KeyError> {
         .transpose()
 }
 
+/// The approver key's public half, made and saved first when it was never made, without a prompt:
+/// the app sends it with its owner key, so the one approval that lets it act as the owner on a
+/// connected computer also lets it answer requests there. Signing with it still needs
+/// [`unlock_approver_key`].
+pub fn approver_public_key_or_create() -> Result<String, KeyError> {
+    Ok(load_or_create(KeyRole::Approver)?.public_key_b64())
+}
+
 /// `macos`, `windows` or `linux`, as gxserver's `ApproverKey.platform` names it.
 pub fn platform_name() -> &'static str {
     if cfg!(target_os = "macos") {

@@ -41,6 +41,24 @@ pub struct ActionRequest {
     pub shared: bool,
     /// How long the request waits for the owner, when not [`PENDING_TTL_MS`].
     pub pending_ttl_ms: Option<u64>,
+    /// What gxserver does itself the moment the owner approves (see [`ApprovalEffect`]).
+    pub on_approve: Option<ApprovalEffect>,
+}
+
+/*
+CDXC:Security 2026-11-10 WHY:
+A Ghostex user with four computers approved "Let <Mac> (Ghostex app) act as the owner of Ghostex on this computer" on a connected computer, and the Mac still couldn't answer that computer's requests: the key went in only when the Mac's call came back with the approval within its two minutes (it asked again only when the owner next acted there), and its approver key then needed a second approval that the connected computer's app never showed. A key the owner approves now goes in the moment they approve it, whoever comes back for it.
+*/
+/// What gxserver does itself when the owner approves a request, before (and whether or not) the
+/// asking call comes back with its approval.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ApprovalEffect {
+    /// Enroll these keys: the owner key another computer's app asked to add (with that app's
+    /// approver key, so the one approval also lets it answer requests here), or an approver key.
+    EnrollKeys {
+        owner: Option<ghostex_gx_protocol::approval::ApproverKey>,
+        approver: Option<ghostex_gx_protocol::approval::ApproverKey>,
+    },
 }
 
 impl ActionRequest {
@@ -53,7 +71,14 @@ impl ActionRequest {
             detail: None,
             shared: false,
             pending_ttl_ms: None,
+            on_approve: None,
         }
+    }
+
+    /// Runs `effect` the moment the owner approves (see [`ApprovalEffect`]).
+    pub fn on_approve(mut self, effect: ApprovalEffect) -> Self {
+        self.on_approve = Some(effect);
+        self
     }
 
     /*
@@ -135,6 +160,7 @@ struct StoredRequest {
     requester: Principal,
     /// [`ActionRequest::shared`]: any caller that can ask may read and spend it.
     shared: bool,
+    on_approve: Option<ApprovalEffect>,
 }
 
 impl StoredRequest {
@@ -195,6 +221,7 @@ impl ApprovalStore {
                 request: request.clone(),
                 requester: requester.clone(),
                 shared: action.shared,
+                on_approve: action.on_approve.clone(),
             },
         );
         (request, true)
@@ -253,6 +280,13 @@ impl ApprovalStore {
         stored.request.decided_by = Some(key.key_id.clone());
         stored.request.expires_at_ms = now_ms + APPROVED_TTL_MS;
         Ok(stored.request.clone())
+    }
+
+    /// What request `id` does when approved ([`ApprovalEffect`]), if anything.
+    pub fn effect_of(&self, id: &str) -> Option<ApprovalEffect> {
+        self.lock()
+            .get(id)
+            .and_then(|stored| stored.on_approve.clone())
     }
 
     /// Denying needs no signature: saying no only closes a door.

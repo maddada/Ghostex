@@ -235,7 +235,9 @@ Ghostex on this computer" was asked 8 times in one day, never answered, because 
 enrolled its owner key on every connect (its owner session opener runs on the first call to a
 connected computer), and each restart of either side made a new request. That owner session only
 lets the owner's Stop, prompt answers and typing on this computer's sessions go without asking, so
-it is asked for when one of those first needs it, not at connect: the opener sends
+it is asked for when one of those first needs it, or (since 2026-11-10) when the app first shows a
+request of this computer it can't answer yet (desktop `owner_security::answerer`), never at
+connect: the opener sends
 `askOwner: false`, which enrolls a key that needs no approval and otherwise answers
 `ownerApprovalNeeded` without making a request. A call without the field asks, as before.
 */
@@ -243,6 +245,13 @@ it is asked for when one of those first needs it, not at connect: the opener sen
 const ASK_OWNER_PARAM: &str = "askOwner";
 /// The answer to `askOwner: false` when the key needs the owner's approval.
 const OWNER_APPROVAL_NEEDED: &str = "ownerApprovalNeeded";
+
+/// `/api/enrollOwnerKey`'s optional second key: the same app's approver key. Enrolled with the
+/// first owner key while no approver key is, and with a later owner key on the one approval that
+/// lets it in, so the app that may act as the owner here can also answer requests here without a
+/// second approval nobody would see (CDXC:Security 2026-11-10 at `security::ApprovalEffect`).
+/// Older apps don't send it and keep today's two steps.
+const APPROVER_KEY_PARAM: &str = "approverKey";
 
 /// How long another computer's request to act as the owner here waits for an answer.
 const OWNER_KEY_REQUEST_TTL_MS: u64 = 24 * 60 * 60 * 1000;
@@ -272,11 +281,27 @@ fn enroll_key(
         .remove(ASK_OWNER_PARAM)
         .and_then(|value| value.as_bool())
         != Some(false);
-    let EnrollKeyParams { key } =
-        parse(params.clone()).map_err(|(code, message)| EnrollRefusal::Reply(code, message))?;
+    let owner = endpoint_path == security::OWNER_KEY_ENROLL_ENDPOINT;
+    // The same app's approver key, sent with its owner key (see `APPROVER_KEY_PARAM`).
+    let approver_key = match params.get(APPROVER_KEY_PARAM).filter(|_| owner) {
+        Some(value) => Some(
+            serde_json::from_value::<ghostex_gx_protocol::approval::ApproverKey>(value.clone())
+                .map_err(|error| {
+                    EnrollRefusal::Reply("badRequest", format!("Invalid approverKey: {error}"))
+                })?,
+        ),
+        None => None,
+    };
+    let EnrollKeyParams { key } = parse(
+        params
+            .iter()
+            .filter(|(name, _)| name.as_str() != APPROVER_KEY_PARAM)
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect(),
+    )
+    .map_err(|(code, message)| EnrollRefusal::Reply(code, message))?;
     let key_id = security::key_id_of(&key)
         .map_err(|error| EnrollRefusal::Reply("badRequest", error.to_string()))?;
-    let owner = endpoint_path == security::OWNER_KEY_ENROLL_ENDPOINT;
     let registry = if owner {
         &security.owner_keys
     } else {
@@ -301,6 +326,11 @@ fn enroll_key(
         let key = security
             .enroll_first_owner_key(key, now)
             .map_err(|error| EnrollRefusal::Reply("badRequest", error.to_string()))?;
+        // Its own approver key goes in with it while none is enrolled: the owner session this key
+        // opens next may add the first one anyway (`enroll_key` below), so this grants nothing more.
+        if let Some(approver) = approver_key.filter(|_| security.approver_keys.is_empty()) {
+            enroll_approved_key(state, caller, false, approver, now);
+        }
         // Trusted on first use (user decision 1A), so the log is where a surprise shows.
         crate::audit::record(
             crate::audit::Action::new(
@@ -336,15 +366,25 @@ fn enroll_key(
             "Let {} ({}) {}",
             key.label,
             key.platform,
-            if owner {
-                "act as the owner of Ghostex on this computer"
-            } else {
-                "approve requests for this computer"
+            match (owner, approver_key.is_some()) {
+                (true, true) =>
+                    "act as the owner of Ghostex on this computer and answer its requests",
+                (true, false) => "act as the owner of Ghostex on this computer",
+                (false, _) => "approve requests for this computer",
             }
         );
+        let effect = security::ApprovalEffect::EnrollKeys {
+            owner: owner.then(|| key.clone()),
+            approver: if owner {
+                approver_key.clone()
+            } else {
+                Some(key.clone())
+            },
+        };
         let mut action = ActionRequest::new(SensitiveAction::AddApproverKey, summary)
             .target(key_id.clone())
-            .params(Value::Object(params));
+            .params(Value::Object(params))
+            .on_approve(effect);
         /*
         CDXC:Security 2026-11-08 WHY:
         User, after Escape in the chat of a session on their connected Windows PC showed "Waiting for your approval … Stop what session G506f is doing …": "wtf is this line". This Mac acted on Windows at agent level because its owner key there waited on this request, which only Windows' own app or a phone paired with it can approve, and which lapsed after ten minutes while the user was at the Mac. Another computer's app asks it once and waits on it (desktop `owner_security::enroll_owner_key`), so it now waits a day, and the card says what approving it does.
@@ -352,14 +392,20 @@ fn enroll_key(
         if owner {
             action = action
                 .pending_ttl(OWNER_KEY_REQUEST_TTL_MS)
-                .detail(
-                    "Asked by Ghostex on another computer you connected to this one. Once approved, Stop, answering prompts and typing in this computer's sessions from there work without asking each time. Approve only if you connected that computer.",
-                );
+                .detail(if approver_key.is_some() {
+                    "Asked by Ghostex on another computer you connected to this one. Once approved, you can answer this computer's approval requests there too, and Stop, answering prompts and typing in this computer's sessions from there work without asking each time. Approve only if you connected that computer."
+                } else {
+                    "Asked by Ghostex on another computer you connected to this one. Once approved, Stop, answering prompts and typing in this computer's sessions from there work without asking each time. Approve only if you connected that computer."
+                });
         }
         require_owner_presence(state, caller, action, body, endpoint_path, request_id)
             .map_err(EnrollRefusal::Response)?;
     }
     let label = key.label.clone();
+    // The approval was spent on this call; its approver key went in when it was approved.
+    if let Some(known) = registry.get(&key_id) {
+        return Ok(json!({ "key": known }));
+    }
     let added = if owner {
         security.add_owner_key(key)
     } else {
@@ -385,6 +431,56 @@ fn enroll_key(
         None,
     );
     Ok(json!({ "key": added }))
+}
+
+/// Adds an owner or approver key the owner approved (or that comes with the first owner key),
+/// unless it is already there, and writes it to the security log.
+fn enroll_approved_key(
+    state: &AppState,
+    caller: &Principal,
+    owner: bool,
+    mut key: ghostex_gx_protocol::approval::ApproverKey,
+    now: u64,
+) {
+    let security = &state.security;
+    let registry = if owner {
+        &security.owner_keys
+    } else {
+        &security.approver_keys
+    };
+    if security::key_id_of(&key).is_ok_and(|key_id| registry.get(&key_id).is_some()) {
+        return;
+    }
+    let label = key.label.clone();
+    key.added_at_ms = now;
+    let added = if owner {
+        security.add_owner_key(key)
+    } else {
+        security.add_approver_key(key, now)
+    };
+    match added {
+        Ok(added) => {
+            let _ = crate::audit::record(
+                crate::audit::Action::new(
+                    if owner {
+                        "ownerKey.add"
+                    } else {
+                        "approverKey.add"
+                    },
+                    if owner {
+                        format!("Made {label} an owner of Ghostex on this computer")
+                    } else {
+                        format!("Let {label} approve requests for this computer")
+                    },
+                )
+                .target(added.key_id.clone()),
+                crate::audit::Actor::from(caller),
+                crate::audit::Outcome::Done,
+                None,
+            );
+        }
+        Err(error) => eprintln!("[gxserver] an approved key was not enrolled: {error}"),
+    }
 }
 
 fn parse<T: serde::de::DeserializeOwned>(
@@ -448,6 +544,18 @@ fn handle(
             ) {
                 if let Some(server_id) = request.target.as_deref() {
                     security.approve_computer(server_id, now);
+                }
+            }
+            // A key the owner approved goes in now (CDXC:Security 2026-11-10 at
+            // `security::ApprovalEffect`).
+            if let Some(security::ApprovalEffect::EnrollKeys { owner, approver }) =
+                security.approvals.effect_of(&id)
+            {
+                if let Some(key) = owner {
+                    enroll_approved_key(state, caller, true, key, now);
+                }
+                if let Some(key) = approver {
+                    enroll_approved_key(state, caller, false, key, now);
                 }
             }
             security.publish(security::SecurityEvent::ApprovalApproved {

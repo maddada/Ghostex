@@ -52,12 +52,22 @@ impl GhostexGpuiApp {
         };
         let id = card_id(machine_id.as_deref(), &request.id);
         if change != "requested" {
+            // That computer let this app act as the owner there: open the owner session now.
+            if change == "approved" && super::asks_for_this_app(&request) {
+                if let Some(target) = machine_id
+                    .as_deref()
+                    .and_then(|machine| self.gpui_remote_gxserver_request_target(machine))
+                {
+                    super::note_owner_key_approved(&Transport::Remote(target));
+                }
+            }
             self.remove_gpui_app_toast(&id, cx);
             return;
         }
         // The app's own clicks are approved right where they happen (`approve_own_call`); its
-        // background work shows its own card (`owner_security_show_waiting_request`).
-        if request.requested_by.kind == "owner" || super::asks_for_this_app(&request) {
+        // background work shows its own card (`owner_security_show_waiting_request`). Another
+        // computer's app acting as the owner here is someone else asking, and shows.
+        if super::asked_by_this_app(&request) || super::asks_for_this_app(&request) {
             return;
         }
         self.owner_security_show_card(machine_id, request, cx);
@@ -119,7 +129,82 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// The card for a request: with Approve where this app can answer it (this computer, or a
+    /// connected one where it acts as the owner with its approver key), else a notice naming where
+    /// to approve it (CDXC:Security 2026-11-10 at `owner_security::answerer`).
     fn owner_security_show_card(
+        &mut self,
+        machine_id: Option<String>,
+        request: ApprovalRequest,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(machine) = machine_id.clone() else {
+            self.owner_security_show_approvable_card(None, request, cx);
+            return;
+        };
+        let Some(target) = self.gpui_remote_gxserver_request_target(&machine) else {
+            return;
+        };
+        let checked = cx
+            .background_executor()
+            .spawn(async move { super::answerer(&Transport::Remote(target)) });
+        cx.spawn(async move |this, cx| {
+            let answerer = checked.await;
+            let _ = this.update(cx, |this, cx| match answerer {
+                super::Answerer::ThisApp => {
+                    this.owner_security_show_approvable_card(machine_id, request, cx)
+                }
+                super::Answerer::Elsewhere { devices, asked } => this
+                    .owner_security_show_approve_elsewhere(&machine, &request, &devices, asked, cx),
+            });
+        })
+        .detach();
+    }
+
+    /// A connected computer's request this app can't answer: a notice (no Approve) that says what
+    /// it asks and where to approve it; it goes when the request is answered there.
+    fn owner_security_show_approve_elsewhere(
+        &mut self,
+        machine_id: &str,
+        request: &ApprovalRequest,
+        devices: &[String],
+        asked: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let computer = crate::app::helpers::gpui_remote_machine_name_from_settings(machine_id)
+            .unwrap_or_else(|| machine_id.to_string());
+        let summary = request.summary.trim().trim_end_matches('.');
+        let where_to = match devices {
+            [] => format!("in Ghostex on {computer}"),
+            several => format!("on {}", several.join(" or ")),
+        };
+        let then = if asked {
+            format!(
+                " It also asks there, once, to let this computer answer {computer}'s requests from here."
+            )
+        } else {
+            String::new()
+        };
+        self.upsert_gpui_app_toast(
+            GpuiAppToast {
+                id: card_id(Some(machine_id), &request.id),
+                level: GpuiAppToastLevel::Info,
+                title: format!("Approve on {computer}"),
+                description: Some(format!(
+                    "{computer} asks: {summary}. Approve it {where_to}.{then}"
+                )),
+                copy_text: None,
+                action: None,
+                loading: false,
+                persistent: true,
+                duration_ms: 0,
+                epoch: 0,
+            },
+            cx,
+        );
+    }
+
+    fn owner_security_show_approvable_card(
         &mut self,
         machine_id: Option<String>,
         request: ApprovalRequest,

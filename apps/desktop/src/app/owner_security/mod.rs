@@ -327,6 +327,12 @@ fn open_owner_session(transport: &Transport, may_ask: bool) -> Result<String, St
         let public_key = key.public_key_b64();
         remember_own_owner_key(&public_key);
         let mut params = json!({ "key": key_json(&public_key, &public_key, "Ghostex app") });
+        // The approver key goes along, so the one approval that lets this app act as the owner
+        // there also lets it answer requests there (server/src/server/security_http.rs,
+        // `APPROVER_KEY_PARAM`); a gxserver from before it ignores the field.
+        if let Ok(approver) = ghostex_owner_keys::approver_public_key_or_create() {
+            params["approverKey"] = key_json(&approver, &public_key, "approvals");
+        }
         if !may_ask {
             params["askOwner"] = json!(false);
         }
@@ -362,14 +368,53 @@ When another owner key is already enrolled on a computer (a second computer conn
 /// public key), learned the first time the app sends it anywhere.
 static OWN_OWNER_KEY_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
+/// The device id this app's keys carry (`key_json`), learned with [`OWN_OWNER_KEY_ID`].
+static OWN_DEVICE_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
 fn remember_own_owner_key(public_key_b64: &str) {
-    use base64::Engine as _;
     if OWN_OWNER_KEY_ID.get().is_some() {
         return;
     }
-    if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(public_key_b64) {
-        let digest = ring::digest::digest(&ring::digest::SHA256, &bytes);
-        let _ = OWN_OWNER_KEY_ID.set(hex::encode(&digest.as_ref()[..16]));
+    if let Some(key_id) = key_id_of(public_key_b64) {
+        let _ = OWN_OWNER_KEY_ID.set(key_id);
+    }
+    if let Some(device_id) = key_json(public_key_b64, public_key_b64, "Ghostex app")
+        .get("deviceId")
+        .and_then(Value::as_str)
+    {
+        let _ = OWN_DEVICE_ID.set(device_id.to_string());
+    }
+}
+
+/// gxserver's key id for a public key: hex of the first 16 bytes of SHA-256 over its bytes.
+fn key_id_of(public_key_b64: &str) -> Option<String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(public_key_b64)
+        .ok()?;
+    let digest = ring::digest::digest(&ring::digest::SHA256, &bytes);
+    Some(hex::encode(&digest.as_ref()[..16]))
+}
+
+/// Whether `request` was made by this very app (its owner session on any computer): its own click
+/// is approved where it happens (`approve_own_call`), so it shows no card here. Another
+/// computer's app acting as the owner on a computer this app owns is someone else asking.
+pub(crate) fn asked_by_this_app(request: &ApprovalRequest) -> bool {
+    if request.requested_by.kind != "owner" {
+        return false;
+    }
+    if OWN_DEVICE_ID.get().is_none() {
+        if let Ok(key) = ghostex_owner_keys::load_or_create_owner_key() {
+            remember_own_owner_key(&key.public_key_b64());
+        }
+    }
+    match (
+        request.requested_by.device_id.as_deref(),
+        OWN_DEVICE_ID.get(),
+    ) {
+        (Some(asker), Some(own)) => asker == own,
+        // Without a device id to compare, keep the rule from before: an owner's own request.
+        _ => true,
     }
 }
 
@@ -395,8 +440,11 @@ pub(crate) fn pending_requests(transport: &Transport) -> Vec<ApprovalRequest> {
             Transport::Local => {
                 require_owner_session(transport)?;
             }
+            // Opened here when that needs no approval: the stream usually goes live before the
+            // background opener ran, which listed nothing and left requests made meanwhile with
+            // no card.
             Transport::Remote(_) => {
-                if !with_session(&transport.key(), |session| session.token.is_some()) {
+                if quiet_owner_session(transport).is_none() {
                     return Ok(Vec::new());
                 }
             }
@@ -504,11 +552,20 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
             RequestState::Approved => {
                 params = with_approval_id(&params, &id).unwrap_or(params);
             }
+            // Approved and then lapsed unspent reads the same as denied, yet the key went in when
+            // it was approved (CDXC:Security 2026-11-10 in server/src/security/approvals.rs): ask
+            // once more without making a request, and stop only if it isn't there.
             RequestState::Declined => {
-                with_session(&key, |session| {
-                    session.waiting_approval = None;
-                    session.gave_up = true;
-                });
+                with_session(&key, |session| session.waiting_approval = None);
+                params["askOwner"] = json!(false);
+                let (status, body) = raw_rpc(transport, "/api/enrollOwnerKey", &params)?;
+                let envelope: Value = serde_json::from_str(&body).unwrap_or_default();
+                if (200..300).contains(&status)
+                    && envelope.get("ok").and_then(Value::as_bool) == Some(true)
+                {
+                    return Ok(envelope.get("result").cloned().unwrap_or(Value::Null));
+                }
+                with_session(&key, |session| session.gave_up = true);
                 return Err(STOPPED.to_string());
             }
             RequestState::Gone => {}
@@ -524,6 +581,9 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
     {
         with_session(&key, |session| session.needs_ask = true);
         return Err("This app isn't approved as an owner on that computer yet; it asks when you first act there.".to_string());
+    }
+    if (200..300).contains(&status) {
+        with_session(&key, |session| session.needs_ask = false);
     }
     if let Some(request) = waiting_request_in(status, &body) {
         with_session(&key, |session| {
@@ -551,6 +611,148 @@ fn raw_rpc(transport: &Transport, endpoint: &str, params: &Value) -> Result<(u16
             gpui_remote_gxserver_post_typed_operation(target, endpoint, params, CALL_TIMEOUT)
         }
     }
+}
+
+/// The owner session on `transport` when it is open or opens without asking anyone (this app's key
+/// is enrolled there, or it is the first); `None` otherwise. Never makes a request.
+fn quiet_owner_session(transport: &Transport) -> Option<String> {
+    let key = transport.key();
+    if let Some(token) = with_session(&key, |session| session.token.clone()) {
+        return Some(token);
+    }
+    if with_session(&key, |session| session.gave_up) {
+        return None;
+    }
+    let token = in_security_flow(|| open_owner_session(transport, false)).ok()?;
+    with_session(&key, |session| {
+        session.token = Some(token.clone());
+        session.needs_ask = false;
+    });
+    Some(token)
+}
+
+/// That computer let this app act as the owner there (the request asking it was approved): the
+/// next call opens the owner session instead of waiting for the owner to act there first.
+pub(crate) fn note_owner_key_approved(transport: &Transport) {
+    with_session(&transport.key(), |session| {
+        session.needs_ask = false;
+        session.gave_up = false;
+        session.waiting_approval = None;
+        session.last_attempt = None;
+    });
+}
+
+/// Who may answer a computer's requests.
+pub(crate) enum Answerer {
+    /// This app: Approve here signs it.
+    ThisApp,
+    /// Only the named devices there (Ghostex on another computer, a paired phone; empty when
+    /// gxserver doesn't say). `asked`: a request waits there to let this app answer from here.
+    Elsewhere { devices: Vec<String>, asked: bool },
+}
+
+/*
+CDXC:Security 2026-11-10 WHY:
+A Ghostex user with four computers: "Clicking approve on that gave me the error that the other machines is where that should happen." This app showed every connected computer's requests as cards with Approve, but it can only sign for a computer where it acts as the owner and its approver key is enrolled, which a computer with its own Ghostex app grants only once its owner approves it. So a connected computer's request is an approvable card only where this app can answer it; elsewhere it is a notice that names where to approve it, and this app asks that computer once (one card there) to let it answer its requests from here too.
+*/
+/// Whether this app can answer `transport`'s requests now, and if not, who can. Runs on a
+/// background thread; may ask that computer once to let this app act as the owner there.
+pub(crate) fn answerer(transport: &Transport) -> Answerer {
+    if matches!(transport, Transport::Local) {
+        return Answerer::ThisApp;
+    }
+    in_security_flow(|| {
+        let own_approver = ghostex_owner_keys::approver_public_key_or_create()
+            .ok()
+            .and_then(|public_key| key_id_of(&public_key));
+        let mut session = quiet_owner_session(transport);
+        if session.is_none() && !with_session(&transport.key(), |session| session.gave_up) {
+            // One request there, reused until answered (`enroll_owner_key`).
+            if let Ok(token) = open_owner_session(transport, true) {
+                with_session(&transport.key(), |state| state.token = Some(token.clone()));
+                session = Some(token);
+            }
+        }
+        let asked = with_session(&transport.key(), |session| {
+            session.waiting_approval.is_some()
+        });
+        let status = rpc(transport, "/api/securityStatus", json!({})).unwrap_or_default();
+        let labels = |field: &str, suffix: &str| -> Vec<String> {
+            status
+                .get(field)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|key| own_approver.is_none() || text(key, "keyId") != own_approver)
+                .filter_map(|key| {
+                    // A phone's key is labelled with whatever the phone sent ("Phone" on 11.2.1).
+                    if matches!(text(key, "platform").as_deref(), Some("ios" | "android")) {
+                        return Some("your phone".to_string());
+                    }
+                    text(key, "label")
+                        .map(|label| label.trim_end_matches(suffix).trim().to_string())
+                })
+                .fold(Vec::new(), |mut names: Vec<String>, name| {
+                    if !names.contains(&name) {
+                        names.push(name);
+                    }
+                    names
+                })
+        };
+        let approvers = labels("approverKeys", "(approvals)");
+        let approver_ids: Vec<String> = status
+            .get("approverKeys")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|key| text(key, "keyId"))
+            .collect();
+        let elsewhere = || {
+            if approvers.is_empty() {
+                labels("ownerKeys", "(Ghostex app)")
+            } else {
+                approvers.clone()
+            }
+        };
+        if session.is_none() {
+            return Answerer::Elsewhere {
+                devices: elsewhere(),
+                asked,
+            };
+        }
+        if approver_ids.is_empty()
+            || own_approver
+                .as_ref()
+                .is_some_and(|own| approver_ids.contains(own))
+        {
+            return Answerer::ThisApp;
+        }
+        // The owner there let this app in before its approver key came along with it: ask for
+        // that key once (a card there, `addApproverKey`), and send people there meanwhile.
+        if let (Ok(owner_key), Ok(approver)) = (
+            ghostex_owner_keys::load_or_create_owner_key(),
+            ghostex_owner_keys::approver_public_key_or_create(),
+        ) {
+            let wire_key = key_json(&approver, &owner_key.public_key_b64(), "approvals");
+            match rpc(
+                transport,
+                "/api/enrollApproverKey",
+                json!({ "key": wire_key }),
+            ) {
+                Ok(_) => return Answerer::ThisApp,
+                Err((code, _)) => {
+                    return Answerer::Elsewhere {
+                        devices: elsewhere(),
+                        asked: code.as_deref() == Some(APPROVAL_REQUIRED_ERROR),
+                    };
+                }
+            }
+        }
+        Answerer::Elsewhere {
+            devices: elsewhere(),
+            asked: false,
+        }
+    })
 }
 
 /// Shows the system prompt with the request's summary, signs the request with this computer's
