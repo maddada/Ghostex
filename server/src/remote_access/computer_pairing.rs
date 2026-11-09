@@ -393,6 +393,7 @@ pub fn computer_pairing_status(paths: &GxserverPaths, pending_id: &str) -> Resul
     };
     if status == "approved" {
         record_paired_computer(paths, &address, &computer_name, gxserver_port);
+        super::computer_link_keys::forget_computer_link_keys(paths, &address);
     }
     if status != "pending" {
         cancel_computer_pairing(pending_id);

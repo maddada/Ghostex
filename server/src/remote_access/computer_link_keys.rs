@@ -104,6 +104,24 @@ fn write_registry(paths: &GxserverPaths, registry: &LinkKeyRegistry) {
     );
 }
 
+/// Forgets what this computer last heard about its keys for the computer at `address`, so the next
+/// connection there registers them at once.
+///
+/// CDXC:RemotePairing 2026-11-10 WHY: a computer that refused the keys (HTTP 401: it no longer knew
+/// this computer's device key, because the pairing was removed or replaced) was asked again only
+/// after a day, so pairing it again left this computer on `client-default` for up to 24 hours. A
+/// pairing that computer just approved is the answer to that refusal; registering keys it already
+/// holds changes nothing there, so a stale `registered` entry costs one quick request.
+pub fn forget_computer_link_keys(paths: &GxserverPaths, address: &str) {
+    let _guard = registry_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut registry = read_registry(paths);
+    if registry.computers.remove(&computer_id(address)).is_some() {
+        write_registry(paths, &registry);
+    }
+}
+
 /// A short stable name for the computer behind `address`.
 fn computer_id(address: &str) -> String {
     hex::encode(&Sha256::digest(address.trim().as_bytes())[..8])
