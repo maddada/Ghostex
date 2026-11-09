@@ -556,8 +556,11 @@ impl GhostexGpuiApp {
                     .take()
                     .or_else(|| self.gx_store_active_group_id());
                 self.release_gpui_new_thread_picker_window(cx);
+                // `projectAction` is a sidebar renderer command, answered on the sidebar's own
+                // route (gx_store/sidebar_open.rs) as the launcher's row is; the host message
+                // door has no owner for it and dropped it.
                 if let Some(group_id) = group_id {
-                    self.dispatch_gpui_sidebar_host_message(
+                    self.dispatch_native_sidebar_ui(
                         json!({
                             "type": "projectAction",
                             "action": "coordinator",
