@@ -1,4 +1,5 @@
 # Maintainer: Ghostex <support@ghostex.app>
+# Maintainer: Alper Ortac <alportac@gmail.com> (created this AUR package)
 #
 # Generated from tooling/packaging/aur/ghostex-bin/PKGBUILD.template in the Ghostex
 # repository by tooling/release-gpui/publish-aur.mjs, which also derives the
@@ -23,10 +24,13 @@ license=('MIT')
 # merged atk and at-spi2-atk into it. `dbus` owns libdbus-1.so.3 (the short-lived
 # `libdbus` split was folded back in). hicolor-icon-theme is not in the deb list;
 # it owns the theme directory this package drops its icon into, which is also
-# what makes pacman's gtk-update-icon-cache hook fire.
+# what makes pacman's gtk-update-icon-cache hook fire. `bash` runs the
+# /usr/bin/ghostex wrapper; libxkbcommon-x11 is the deb's libxkbcommon-x11-0
+# (namcap flags both when they are missing).
 depends=(
   'alsa-lib'
   'at-spi2-core'
+  'bash'
   'cairo'
   'dbus'
   'expat'
@@ -45,6 +49,7 @@ depends=(
   'libxext'
   'libxfixes'
   'libxkbcommon'
+  'libxkbcommon-x11'
   'libxrandr'
   'libxshmfence'
   'mesa'

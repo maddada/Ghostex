@@ -214,8 +214,19 @@ export function sha256FromManifest(manifest, version) {
   return assertSha256(artifact.sha256, `manifest sha256 for ${assetName}`);
 }
 
+/*
+ * CDXC:Release 2026-11-10 DECISION:
+ * User (Q2160): our release pushes ghostex-bin itself, so Arch users get a release within minutes
+ * instead of hours, and a failed AUR push never fails or holds the release. Every network git call
+ * is bounded, so a hung SSH connection costs at most this long before the step gives up.
+ */
+const gitNetworkTimeoutMs = 120_000;
+
 function runGit(args, options = {}) {
-  const result = spawnSync('git', args, { cwd: options.cwd, encoding: 'utf8' });
+  const result = spawnSync('git', args, { cwd: options.cwd, encoding: 'utf8', timeout: gitNetworkTimeoutMs });
+  if (result.error?.code === 'ETIMEDOUT') {
+    throw new Error(`git ${args.join(' ')} gave no answer within ${gitNetworkTimeoutMs / 1000} seconds`);
+  }
   if (result.status !== 0 && !options.allowFailure) {
     throw new Error(`git ${args.join(' ')} failed: ${(result.stderr || result.stdout || 'unknown error').trim()}`);
   }
@@ -280,6 +291,20 @@ function publish({ outputDirectory, version }) {
         'account that owns it. See tooling/packaging/aur/ghostex-bin/README.md for the one-time setup.'
     );
   }
+  /*
+   * The AUR holds one version. Leave a version that is already there (a co-maintainer may have
+   * pushed it first, perhaps with a newer pkgrel) and never replace a newer one: either would
+   * rebuild or downgrade every Arch user's Ghostex for nothing.
+   */
+  const published = publishedPkgver(checkout);
+  if (published && compareVersions(published, version) >= 0) {
+    process.stdout.write(
+      published === version
+        ? `AUR ghostex-bin is already at ${version}; leaving it as it is.\n`
+        : `AUR ghostex-bin is at ${published}, newer than ${version}; not downgrading it.\n`
+    );
+    return;
+  }
   for (const name of aurRepositoryFiles) {
     copyFileSync(path.join(outputDirectory, name), path.join(checkout, name));
   }
@@ -296,12 +321,37 @@ function publish({ outputDirectory, version }) {
       'user.email=support@ghostex.app',
       'commit',
       '-m',
-      `Update to ${version}`,
+      `Update ghostex-bin to ${version}-1`,
     ],
     { cwd: checkout }
   );
-  runGit(['push', 'origin', 'HEAD:master'], { cwd: checkout });
+  const push = runGit(['push', 'origin', 'HEAD:master'], { cwd: checkout, allowFailure: true });
+  if (push.status !== 0) {
+    throw new Error(
+      `The AUR refused the ghostex-bin ${version} push: ${(push.stderr || push.stdout || 'unknown error').trim()}\n` +
+        'Usually the key is not on an AUR account that maintains or co-maintains ghostex-bin. ' +
+        'See tooling/packaging/aur/ghostex-bin/README.md.'
+    );
+  }
   process.stdout.write(`Pushed ghostex-bin ${version} to the AUR.\n`);
+}
+
+/** The pkgver the AUR repository's .SRCINFO publishes now, or null for an empty repository. */
+function publishedPkgver(checkout) {
+  const srcinfoPath = path.join(checkout, '.SRCINFO');
+  if (!existsSync(srcinfoPath)) return null;
+  return /^\s*pkgver = (\S+)$/mu.exec(readFileSync(srcinfoPath, 'utf8'))?.[1] ?? null;
+}
+
+/** Compares dotted numeric versions (11.2.10 > 11.2.9); a part that is not a number counts as 0. */
+export function compareVersions(left, right) {
+  const leftParts = left.split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const rightParts = right.split('.').map((part) => Number.parseInt(part, 10) || 0);
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const difference = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (difference !== 0) return Math.sign(difference);
+  }
+  return 0;
 }
 
 function hasSshIdentityFile() {

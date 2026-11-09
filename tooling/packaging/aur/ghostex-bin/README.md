@@ -1,4 +1,4 @@
-# `ghostex-bin` — the vendor-maintained Ghostex AUR package
+# `ghostex-bin`: the Ghostex AUR package our release pushes
 
 This directory is the upstream source for the [`ghostex-bin`](https://aur.archlinux.org/packages/ghostex-bin)
 package on the Arch User Repository. Arch users install Ghostex with:
@@ -50,75 +50,56 @@ Ghostex does **not** bundle Chromium. The first GUI launch downloads the ~346 MB
 CEF browser runtime into the user's cache directory. That is why the package is
 comparatively small and why `ghostex-bin.install` prints a note about it.
 
-## One-time setup (must be done by hand, once, before automation works)
+## One-time setup (by hand, once, before automation works)
 
-The release pipeline can only _update_ an AUR package that already exists.
-These four steps are manual and cannot be automated:
+`ghostex-bin` was created on the AUR by Alper Ortac (AUR user `Alp`), who kept
+it up to date by hand until 11.2.x. The release pushes it as a co-maintainer
+(user decision Q2160, 10 Nov 2026), so these steps are done once:
 
-1. **Create an AUR account** at <https://aur.archlinux.org/register>.
-2. **Register an SSH key on that account.** Generate a dedicated key for CI —
-   do not reuse a personal key:
-
-   ```sh
-   ssh-keygen -t ed25519 -C "ghostex-aur-release-bot" -f ~/.ssh/ghostex_aur_ed25519 -N ""
-   ```
-
-   Paste the contents of `~/.ssh/ghostex_aur_ed25519.pub` into _My Account →
-   SSH Public Key_ on the AUR.
-
-3. **Submit the initial `ghostex-bin` repository.** The AUR creates a package
-   repo on first push; there is no web form.
+1. **An AUR account for Ghostex.** Sign in at <https://aur.archlinux.org/login>
+   (or use "Forgot password" there to find out whether an account exists), or
+   register one at <https://aur.archlinux.org/register>.
+2. **A dedicated SSH key, private half straight into the repository secret.**
+   This never shows the private key, and nothing is left on disk:
 
    ```sh
-   # Render the real files for the version you want to seed with.
-   node tooling/release-gpui/publish-aur.mjs --version 7.7.1 --out /tmp/ghostex-aur
-
-   git clone ssh://aur@aur.archlinux.org/ghostex-bin.git /tmp/ghostex-bin
-   cp /tmp/ghostex-aur/PKGBUILD /tmp/ghostex-aur/.SRCINFO \
-      /tmp/ghostex-aur/ghostex-bin.install /tmp/ghostex-aur/LICENSE /tmp/ghostex-bin/
-   cd /tmp/ghostex-bin
-   git add PKGBUILD .SRCINFO ghostex-bin.install LICENSE
-   git commit -m "Initial import of ghostex-bin"
-   git push origin HEAD:master
+   d="$(mktemp -d)" && ssh-keygen -q -t ed25519 -N "" -C "ghostex-aur-release-bot" -f "$d/key" && gh secret set AUR_SSH_PRIVATE_KEY --repo maddada/Ghostex <"$d/key" && pbcopy <"$d/key.pub" && cat "$d/key.pub"; rm -rf "$d"
    ```
 
-   The AUR's default branch is `master`, which is why the push is explicit.
-
-   Before that first push, build it once on a real Arch machine to confirm the
-   dependency list is complete:
-
-   ```sh
-   cd /tmp/ghostex-bin && makepkg -si
-   namcap PKGBUILD ghostex-bin-*.pkg.tar.zst   # optional but recommended
-   ```
-
-4. **Add the `AUR_SSH_PRIVATE_KEY` GitHub secret.** In the `maddada/Ghostex`
-   repository, go to _Settings → Secrets and variables → Actions → New
-   repository secret_, name it `AUR_SSH_PRIVATE_KEY`, and paste the **private**
-   key (`~/.ssh/ghostex_aur_ed25519`, the file _without_ `.pub`), including its
-   `BEGIN OPENSSH PRIVATE KEY` and `END OPENSSH PRIVATE KEY` armor lines and the
-   trailing newline. (Written without the dashes here so the release preflight's
-   secret scan does not read this instruction as a leaked key.)
-
-Until step 4 is done, the release workflow logs `AUR_SSH_PRIVATE_KEY is not
-configured; skipping the AUR update` and succeeds — it never fails the release.
+   It prints the public half and copies it to the clipboard.
+3. **The public half on the AUR account.** _My Account_ → _SSH Public Key_,
+   paste, enter the current password, _Update_.
+4. **Co-maintainer access.** Alp adds the Ghostex AUR user on the package page
+   (<https://aur.archlinux.org/packages/ghostex-bin>, _Manage Co-Maintainers_).
+   Until then every push is refused and the release goes on without it.
 
 ## How the automated bump works
 
-`.github/workflows/release-gpui-publish.yml` runs an AUR step at the end of the
-`publish` job, after the GitHub release itself is live. It is skipped, with a
-log line explaining why, unless all of these hold:
+`.github/workflows/release-gpui-publish.yml` runs two AUR steps at the end of
+the `publish` job of the Linux x64 stage, right after that stage has uploaded
+the Linux assets, so the AUR has the release within a minute or two. They are
+skipped, with a log line explaining why, unless all of these hold:
 
-- the publish is **not** a prerelease (`inputs.prerelease != true`) — the AUR
+- the publish is **not** a prerelease (`inputs.prerelease != true`): the AUR
   tracks stable releases only;
 - the published release actually contains `ghostex-${version}-linux-x64.tar.zst`;
+- that release is the repository's latest (a recovery of an older release
+  must not downgrade Arch users);
 - the `AUR_SSH_PRIVATE_KEY` secret is set.
 
 When it runs, it installs the key, pins the `aur.archlinux.org` host keys into
 `known_hosts` (no blind `ssh-keyscan`), and runs the publisher with
-`--publish`. The publisher clones `ghostex-bin`, writes the rendered files,
-and pushes. If the AUR is already at that exact version and checksum it prints
-a no-op message and exits 0, so re-running a publish is safe.
+`--publish`. The publisher clones `ghostex-bin` and reads the version the AUR
+has now: if that is this version (a co-maintainer pushed it first) or newer,
+it leaves the package alone. Otherwise it writes the rendered files, commits
+"Update ghostex-bin to X.Y.Z-1" and pushes.
+
+**It never fails or holds the release.** Both steps continue on error, the
+push step stops after 5 minutes, each git call after 2, and SSH gives up on a
+dead connection. The outcome is one line in the run's summary ("AUR
+ghostex-bin: Pushed ghostex-bin X.Y.Z to the AUR.", "... already at X.Y.Z",
+or "... was NOT updated: <reason>"), and a failure also adds a warning
+annotation "AUR ghostex-bin not updated" to the run.
 
 ## Running the publisher manually
 

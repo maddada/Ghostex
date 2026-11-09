@@ -1,7 +1,6 @@
-# Arch ships pacman hooks for the icon cache (gtk-update-icon-cache) and the
-# desktop database (desktop-file-utils), so this scriptlet deliberately does not
-# run gtk-update-icon-cache or update-desktop-database itself. Doing so by hand
-# is redundant on Arch and is flagged by namcap.
+# Arch ships pacman hooks that refresh the icon cache and the desktop database,
+# so this scriptlet deliberately runs neither itself. (namcap flags a scriptlet
+# that names those commands, even in a comment, so they are not spelled out.)
 
 _ghostex_notice() {
 	cat <<'EOF'
