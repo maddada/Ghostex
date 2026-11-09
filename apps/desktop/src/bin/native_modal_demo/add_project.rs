@@ -314,6 +314,10 @@ fn demo_new_project() -> AddProjectNewProjectConfig {
 
 fn local_machine() -> AddProjectMachineOption {
     AddProjectMachineOption {
+        // GHOSTEX_ADD_PROJECT_DEMO_BASE_DIR: This machine's Default projects folder, for a live run.
+        add_project_base_directory: std::env::var("GHOSTEX_ADD_PROJECT_DEMO_BASE_DIR")
+            .ok()
+            .filter(|folder| !folder.trim().is_empty()),
         description: Some("This computer".to_string()),
         label: "Local".to_string(),
         machine_id: "local".to_string(),
@@ -330,6 +334,67 @@ fn remote_machine() -> AddProjectMachineOption {
         machine_id: "machine-bigbox".to_string(),
         platform: Some("Linux".to_string()),
         ..Default::default()
+    }
+}
+
+/// GHOSTEX_ADD_PROJECT_DEMO_GXSERVER=<base url> with GHOSTEX_ADD_PROJECT_DEMO_GXSERVER_TOKEN=<token
+/// file> answers every round trip from a real gxserver (a `cargo xtask test-server`), so the
+/// listing and a clone run against the daemon's own answers instead of the fixture tree.
+struct LiveGxserver {
+    base_url: String,
+    token: String,
+}
+
+impl LiveGxserver {
+    fn from_env() -> Option<Self> {
+        let base_url = std::env::var("GHOSTEX_ADD_PROJECT_DEMO_GXSERVER").ok()?;
+        let token_file = std::env::var("GHOSTEX_ADD_PROJECT_DEMO_GXSERVER_TOKEN").ok()?;
+        let token = std::fs::read_to_string(token_file.trim()).ok()?;
+        Some(Self {
+            base_url: base_url.trim().trim_end_matches('/').to_string(),
+            token: token.trim().to_string(),
+        })
+    }
+
+    fn endpoint(operation: &str) -> Option<&'static str> {
+        Some(match operation {
+            "add" => "/api/addProjectPath",
+            "browse" => "/api/browseProjectDirectories",
+            "cancelCloneJob" => "/api/cancelRepositoryCloneJob",
+            "createDirectory" => "/api/createProjectDirectory",
+            "discoverSourceControl" => "/api/discoverSourceControl",
+            "lookupRepository" => "/api/lookupRepository",
+            "previewClone" => "/api/previewRepositoryClone",
+            "readCloneJob" => "/api/readRepositoryCloneJob",
+            "startClone" => "/api/startRepositoryClone",
+            _ => return None,
+        })
+    }
+
+    fn call(base_url: &str, token: &str, endpoint: &str, params: Value) -> Result<Value, String> {
+        let config = ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(120)))
+            .http_status_as_error(false)
+            .build();
+        let mut response = ureq::Agent::new_with_config(config)
+            .post(&format!("{base_url}{endpoint}"))
+            .header("Authorization", &format!("Bearer {token}"))
+            .header("Content-Type", "application/json")
+            .send(json!({ "protocolVersion": 1, "params": params }).to_string())
+            .map_err(|error| error.to_string())?;
+        let text = response
+            .body_mut()
+            .read_to_string()
+            .map_err(|error| error.to_string())?;
+        let body: Value = serde_json::from_str(&text).map_err(|error| error.to_string())?;
+        if body["ok"] == true {
+            Ok(body["result"].clone())
+        } else {
+            Err(body["message"]
+                .as_str()
+                .unwrap_or("The machine refused the request.")
+                .to_string())
+        }
     }
 }
 
@@ -400,6 +465,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     let target: Target = Rc::new(RefCell::new(None));
     let mock = Rc::new(RefCell::new(Mock::default()));
     let host_target = target.clone();
+    let live = LiveGxserver::from_env().map(Rc::new);
     let host: AddProjectModalHost = Rc::new(move |command, cx: &mut App| match command {
         AddProjectModalCommand::Request {
             request_id,
@@ -408,6 +474,40 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             params,
         } => {
             eprintln!("request {request_id}: {operation} on {machine_id} {params}");
+            if let Some(live) = &live {
+                let Some(endpoint) = LiveGxserver::endpoint(operation) else {
+                    return;
+                };
+                let (base_url, token) = (live.base_url.clone(), live.token.clone());
+                let target = host_target.clone();
+                let background = cx.background_executor().clone();
+                cx.spawn(async move |cx| {
+                    let answer = background
+                        .spawn(
+                            async move { LiveGxserver::call(&base_url, &token, endpoint, params) },
+                        )
+                        .await;
+                    eprintln!(
+                        "answer {request_id}: {}",
+                        match &answer {
+                            Ok(value) => value.to_string().chars().take(400).collect::<String>(),
+                            Err(error) => format!("error: {error}"),
+                        }
+                    );
+                    let current = target.borrow().clone();
+                    if let Some((window, view)) = current {
+                        cx.update(|cx| {
+                            let _ = window.update(cx, |_root, window, cx| {
+                                view.update(cx, |modal, cx| {
+                                    modal.receive_response(request_id, answer, window, cx)
+                                });
+                            });
+                        });
+                    }
+                })
+                .detach();
+                return;
+            }
             // The slow state's add never answers, so the notice stays up for the screenshot.
             let delay = if operation == "add" || operation == "readCloneJob" {
                 latency
