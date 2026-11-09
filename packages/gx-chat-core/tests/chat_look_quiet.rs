@@ -129,6 +129,8 @@ fn items(state: &mut ChatState, now: i64) -> Vec<Value> {
         now_ms: now as f64,
         ..Default::default()
     };
+    // The pass a publish runs: the session settle (which clears a settled Stop), then the rows.
+    ghostex_gx_chat_core::session::before_compose(state, &context);
     ghostex_gx_chat_core::transcript::rows::refresh(state, &context);
     ghostex_gx_chat_core::transcript::rows::rows(state, &context)
         .iter()
@@ -218,14 +220,28 @@ fn stop_releases_the_question_hold() {
     rows.push(ask("q1", T0 + 5_000));
     let mut state = quiet_chat(rows);
     items(&mut state, T0 + 5_100);
-    // Stop lands after the question call, before its card.
-    working(&mut state, false, T0);
-    state.session.interrupted = true;
+    // Stop lands after the question call, before its card, while the agent still reads as working.
+    let context = ChatContext {
+        now_ms: (T0 + 5_150) as f64,
+        ..Default::default()
+    };
+    assert!(ghostex_gx_chat_core::session::sends::begin_interrupt(
+        &mut state, &context
+    ));
     let stopped = items(&mut state, T0 + 5_200);
     assert_ne!(
         kinds(&stopped),
         ["message"],
         "the interrupted turn is in view: {stopped:#?}"
+    );
+    // An idle update clears the Stop flag before the call's result or lifecycle arrives.
+    working(&mut state, false, T0);
+    let idle = items(&mut state, T0 + 5_300);
+    assert!(!state.session.interrupted, "the settle cleared the flag");
+    assert_ne!(
+        kinds(&idle),
+        ["message"],
+        "the stopped turn stays in view: {idle:#?}"
     );
 }
 

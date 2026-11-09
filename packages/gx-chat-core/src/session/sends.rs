@@ -237,6 +237,8 @@ pub fn begin_interrupt(state: &mut ChatState, context: &ChatContext) -> bool {
     // Stop: suppress the spinner and drop optimistic echoes. The delayed server-side Enter may
     // never fire, so the echo would be a ghost bubble.
     state.session.interrupted = true;
+    // Agent work Quiet: the stop outlives the flag, which clears once working settles.
+    state.transcript_view.quiet_card = crate::session::working::stopped_at(state);
     // `setPending([])`: a new array even when there was nothing to drop.
     state.pending.sends.clear();
     state.messages.new_composition_identity();
