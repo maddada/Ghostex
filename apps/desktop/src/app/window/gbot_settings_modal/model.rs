@@ -129,8 +129,14 @@ impl GbotVoiceChoices {
         };
         let provider = choices["provider"].as_str().unwrap_or("xai");
         Self {
-            provider_label: choices["providerLabel"].as_str().unwrap_or("xAI").to_string(),
-            default_voice: choices["defaultVoice"].as_str().unwrap_or_default().to_string(),
+            provider_label: choices["providerLabel"]
+                .as_str()
+                .unwrap_or("xAI")
+                .to_string(),
+            default_voice: choices["defaultVoice"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
             voices: choices["voiceOptions"][provider]
                 .as_array()
                 .into_iter()

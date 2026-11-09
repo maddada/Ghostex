@@ -6,7 +6,9 @@
 use super::super::native_modal_kit::*;
 use super::parts::wide_row;
 use super::window::GpuiGbotSettingsModalWindow;
-use gpui::{AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, Window};
+use gpui::{
+    AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, Window,
+};
 use gpui_component::h_flex;
 
 impl GpuiGbotSettingsModalWindow {

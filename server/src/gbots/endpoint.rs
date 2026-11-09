@@ -469,8 +469,8 @@ fn list(
                         .unwrap_or(0)
             );
             summary["computerInfo"] = super::computer::computer_status(state, db, &bot.bot_id);
-    summary["voice"] = json!(super::call::read_voice(db, &bot.bot_id));
-    summary["voiceChoices"] = crate::voice_agent::gbot_voice_choices(&state.paths);
+            summary["voice"] = json!(super::call::read_voice(db, &bot.bot_id));
+            summary["voiceChoices"] = crate::voice_agent::gbot_voice_choices(&state.paths);
             summary
         })
         .collect::<Vec<_>>();

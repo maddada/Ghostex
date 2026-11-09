@@ -172,7 +172,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     // `voice-menu`: the Voice row's list open (after the first frame placed its trigger).
     if open_voices {
         cx.spawn(async move |cx| {
-            cx.background_executor().timer(Duration::from_millis(600)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(600))
+                .await;
             let _ = window.update(cx, |_, _, cx| {
                 view.update(cx, |view, cx| view.toggle_voice_select(cx));
             });

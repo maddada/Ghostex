@@ -230,7 +230,9 @@ fn connect(mode: &str, options: &Options) -> CliResult<WebSocket<TcpStream>> {
         let gbot: String = gbot
             .bytes()
             .map(|byte| match byte {
-                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => (byte as char).to_string(),
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => {
+                    (byte as char).to_string()
+                }
                 other => format!("%{other:02X}"),
             })
             .collect();

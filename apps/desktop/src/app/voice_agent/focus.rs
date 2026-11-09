@@ -102,7 +102,9 @@ pub(crate) fn parse_focus(value: &Value, machine: &MachineId) -> Option<VoiceFoc
         orchestrator: text("orchestrator"),
         closed: value["closed"].as_bool().unwrap_or(false),
         agent_icon: None,
-        gbot: value.get("gbot").and_then(super::gbot_call::CallGbot::parse),
+        gbot: value
+            .get("gbot")
+            .and_then(super::gbot_call::CallGbot::parse),
     })
 }
 

@@ -90,18 +90,18 @@ impl VoicePanelWindow {
                 )
                 .into_any_element(),
             None => match focus
-            .agent_icon
-            .as_deref()
-            .and_then(|icon| workspace_tab_agent_icon_path(icon).map(|path| (icon, path)))
-        {
-            Some((icon, path)) => gpui::svg()
-                .path(path)
-                .size(px(14.0))
-                .flex_shrink_0()
-                .text_color(rgb(workspace_tab_agent_icon_accent_color(icon)))
-                .into_any_element(),
-            None => titlebar_svg_icon(ICON_SESSION, 14.0, colors.muted).into_any_element(),
-        },
+                .agent_icon
+                .as_deref()
+                .and_then(|icon| workspace_tab_agent_icon_path(icon).map(|path| (icon, path)))
+            {
+                Some((icon, path)) => gpui::svg()
+                    .path(path)
+                    .size(px(14.0))
+                    .flex_shrink_0()
+                    .text_color(rgb(workspace_tab_agent_icon_accent_color(icon)))
+                    .into_any_element(),
+                None => titlebar_svg_icon(ICON_SESSION, 14.0, colors.muted).into_any_element(),
+            },
         };
         let title_color = if focus.closed {
             colors.muted

@@ -57,10 +57,15 @@ pub(crate) fn run_voice(rest: &[String], flags: &Flags) -> CliResult<()> {
                 println!("{name}'s voice is {voice}, which {label} (the Voice agent's provider now) doesn't have, so calls use {default}.");
             }
         }
-        None => println!("{name} answers calls in the Voice agent's own voice ({label} {default})."),
+        None => {
+            println!("{name} answers calls in the Voice agent's own voice ({label} {default}).")
+        }
     }
     if params["op"] == "voice" {
-        println!("{label} voices: {}", names(&answer["voiceOptions"][provider]));
+        println!(
+            "{label} voices: {}",
+            names(&answer["voiceOptions"][provider])
+        );
     }
     Ok(())
 }

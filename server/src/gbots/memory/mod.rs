@@ -24,8 +24,8 @@ mod store;
 mod topics;
 
 pub(crate) use budget::{within_budget, MEMORY_MAX_BYTES, MEMORY_MAX_LINES};
-pub(crate) use log::observe_activity;
 pub(crate) use log::append_line as append_log_line;
+pub(crate) use log::observe_activity;
 pub(crate) use notify::{tell_every_bot, tell_open_chats};
 pub(crate) use ops::{coordinator_remember, handles, run, MemoryCaller};
 pub(crate) use prefs::PREFERENCES_MAX_LINES;

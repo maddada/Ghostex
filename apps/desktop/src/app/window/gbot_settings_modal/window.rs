@@ -541,10 +541,7 @@ impl GpuiGbotSettingsModalWindow {
             }
             ModalSelectKey::Ignored => {}
         }
-        match self
-            .voice_select
-            .handle_key(key, self.voice_labels().len())
-        {
+        match self.voice_select.handle_key(key, self.voice_labels().len()) {
             ModalSelectKey::Consumed => {
                 cx.notify();
                 cx.stop_propagation();

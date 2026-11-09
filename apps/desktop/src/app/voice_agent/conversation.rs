@@ -994,7 +994,10 @@ impl GhostexGpuiApp {
         }
         // A call with a GBot speaks in the GBot's voice, whatever the Voice agent's is.
         if agent.phase == VoicePhase::Live
-            && agent.focus.as_ref().is_none_or(|focus| focus.gbot.is_none())
+            && agent
+                .focus
+                .as_ref()
+                .is_none_or(|focus| focus.gbot.is_none())
             && let Some(provider) = agent.provider.as_deref()
             && let Some(voice) = settings
                 .get(voice_setting_key(provider))

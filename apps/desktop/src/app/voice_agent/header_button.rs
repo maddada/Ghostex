@@ -176,9 +176,11 @@ impl GhostexGpuiApp {
         if let Some(target) = target.as_ref()
             && let Some(label) = super::gbot_call::gbot_call_menu_label(target)
         {
-            let checked = self.voice_agent.focus.as_ref().is_some_and(|focus| {
-                focus.gbot.is_some() && focus.key == target.key
-            });
+            let checked = self
+                .voice_agent
+                .focus
+                .as_ref()
+                .is_some_and(|focus| focus.gbot.is_some() && focus.key == target.key);
             menu = menu.separator().menu_with_check(
                 label,
                 checked,
