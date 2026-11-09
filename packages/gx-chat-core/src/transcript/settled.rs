@@ -1240,6 +1240,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         grouped_work: view.grouped_work(),
         hidden_work: view.hidden_work(),
         hides_running: crate::session::working::hides_running_response(state),
+        hides_live_calls: true,
         quiet_finished_before: crate::session::working::quiet_finished_before(state),
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),

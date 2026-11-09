@@ -188,6 +188,7 @@ fn build_after(
         grouped_work: view.grouped_work(),
         hidden_work: view.hidden_work(),
         hides_running,
+        hides_live_calls: true,
         quiet_finished_before,
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),

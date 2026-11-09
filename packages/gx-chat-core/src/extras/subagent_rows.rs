@@ -67,6 +67,7 @@ fn scope<'a>(
         hidden_work: view.hidden_work(),
         // The viewer is opened to read what the subagent does.
         hides_running: false,
+        hides_live_calls: false,
         quiet_finished_before: None,
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),

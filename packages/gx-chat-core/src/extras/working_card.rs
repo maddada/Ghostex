@@ -192,7 +192,7 @@ fn reduced_shows_running_call(state: &ChatState) -> bool {
                 work_open,
                 cards,
                 ..
-            } => work.iter().filter(runs).last().map(|row| {
+            } => work.iter().rev().find(runs).map(|row| {
                 match cards.iter().find(|card| card["id"] == row["id"]) {
                     Some(card) => line_open(card),
                     None => folds.open(&format!("active-work:{id}"), *work_open) && line_open(row),

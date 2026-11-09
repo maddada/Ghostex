@@ -684,6 +684,11 @@ pub struct ProjectionScope<'a> {
     /// [`crate::session::working::hides_running_response`]: the running response draws only what
     /// needs the user (`grouped_work::hide_work`).
     pub hides_running: bool,
+    /// Under Agent work Quiet while the agent works but [`Self::hides_running`] doubts it is
+    /// mid-response: its words stay and its running calls are hidden (`grouped_work::hide_live_calls`).
+    /// The main chat's scopes set it; the subagent viewer, opened to read what the subagent does,
+    /// keeps its running calls.
+    pub hides_live_calls: bool,
     /// [`crate::session::working::quiet_finished_before`].
     pub quiet_finished_before: Option<i64>,
     /// [`TranscriptViewState::picture_digests`]: which pictures read from disk the user already
@@ -761,6 +766,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         grouped_work: view.grouped_work(),
         hidden_work: view.hidden_work(),
         hides_running: crate::session::working::hides_running_response(state),
+        hides_live_calls: true,
         quiet_finished_before: crate::session::working::quiet_finished_before(state),
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),
@@ -1252,7 +1258,7 @@ fn hidden_live<'p>(
     scope: &ProjectionScope,
     projection: &'p TranscriptProjection,
 ) -> std::collections::HashSet<&'p str> {
-    if scope.hidden_work && scope.working {
+    if scope.hidden_work && scope.working && (scope.hides_running || scope.hides_live_calls) {
         projection.live_ids.iter().map(String::as_str).collect()
     } else {
         Default::default()
