@@ -369,9 +369,21 @@ pub(crate) fn browse_project_directories(
     name only as the tiebreaker. A byte sort would file every capitalized folder
     ahead of every lowercase one.
     */
+    /*
+    CDXC:AddProject 2026-11-09 WHY:
+    Hidden folders sort after the visible ones, before the list is cut at `limit`. A trailing
+    separator lists hidden folders too, and a home folder with more than `limit` dot-folders
+    (364 on the user's Mac, against the default 200) answered `~/` with dot-folders only, which
+    Add Project hides unless the typed name starts with a dot: the folder browser showed `~/`
+    with nothing in it, in Local folder and the clone's destination alike.
+    */
     entries.sort_by(|left, right| {
         let key = |value: &Value| {
             (
+                value
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .is_some_and(|name| name.starts_with('.')),
                 value
                     .get("sortKey")
                     .and_then(Value::as_str)
