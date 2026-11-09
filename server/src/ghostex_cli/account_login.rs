@@ -215,16 +215,49 @@ fn login(args: &[String]) -> CliResult<Option<Value>> {
                 "The login belongs to a different organization than the selected account. No saved account was changed.",
             ));
         }
-    } else if latest_rows.iter().any(&matches_identity) {
-        return Err(failure(
-            "This account is already saved. Use its Reconnect action in Settings, or run login again with a different account. No saved account was changed.",
-        ));
     }
-    let status = profile
-        .command(&cswap)
-        .arg("add")
-        .status()
-        .map_err(|e| failure(format!("Could not save the login: {e}")))?;
+    // CDXC:AgentProviders 2026-11-09 WHY:
+    // Remove account in Settings forgets the account but leaves its Claude Swap slot, so adding it
+    // again ended with "This account is already saved. Use its Reconnect action", and a removed
+    // account has no Reconnect: only `cswap purge` or removing the slot by hand got out of it. The
+    // leftover slot is this login's account, so the new sign-in is saved into it (`cswap add`
+    // refreshes a slot that already has the signed-in identity). When that save fails and the
+    // slot's own login is broken, only that slot is removed and the save runs again from the same
+    // temporary profile, without a second browser sign-in. A slot whose login works is kept.
+    // SEE-ALSO: `repair_already_saved` in account_login_codex.rs does the same for Codex Swap.
+    let leftover = target
+        .is_none()
+        .then(|| latest_rows.iter().find(|row| matches_identity(row)))
+        .flatten();
+    if let Some(row) = leftover {
+        println!(
+            "This account is already saved in Claude Swap slot {}. Saving the new sign-in there.",
+            row["number"]
+        );
+    }
+    let add = || {
+        profile
+            .command(&cswap)
+            .arg("add")
+            .status()
+            .map_err(|e| failure(format!("Could not save the login: {e}")))
+    };
+    let mut status = add()?;
+    let mut slot = target.or(leftover).map(|row| &row["number"]);
+    if let Some(row) = leftover.filter(|row| !status.success() && login_broken(row)) {
+        println!(
+            "Claude Swap slot {} holds this account with a login that no longer works ({}). Removing that slot and saving again.",
+            row["number"],
+            row["usageStatus"].as_str().unwrap_or("unknown")
+        );
+        remove_slot(&home, &cswap, &row["number"].to_string())?;
+        slot = None;
+        status = add()?;
+    }
+    if let Some(row) = leftover.filter(|_| !status.success() && slot.is_some()) {
+        // The slot's own login works, so the account is usable without the newer copy.
+        println!("Kept the login already in slot {}.", row["number"]);
+    }
     // A new account is saved once cswap lists it, even when cswap then exits with an error;
     // a reconnect only refreshes an existing slot, so there the exit status is the only proof.
     if !status.success() && target.is_some() {
@@ -239,7 +272,7 @@ fn login(args: &[String]) -> CliResult<Option<Value>> {
     let saved = saved_row(
         latest_rows,
         saved_rows,
-        target.map(|target| &target["number"]),
+        slot,
         signed_in_email,
         organization,
     )
@@ -259,6 +292,40 @@ fn login(args: &[String]) -> CliResult<Option<Value>> {
         );
     }
     Ok(Some(report))
+}
+
+/// A `cswap list --json` row whose saved login cannot be used (helpers.rs reads the same statuses
+/// as "needs sign-in").
+fn login_broken(row: &Value) -> bool {
+    matches!(
+        row["usageStatus"].as_str(),
+        Some("relogin_required" | "no_credentials" | "token_expired" | "foreign_credential")
+    )
+}
+
+/// Removes one Claude Swap slot (its saved login and settings); every other slot stays.
+fn remove_slot(home: &Path, cswap: &Path, number: &str) -> CliResult<()> {
+    use std::io::Write as _;
+    let mut child = Command::new(cswap)
+        .args(["remove", number])
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| failure(format!("Could not start Claude Swap: {e}")))?;
+    // `cswap remove` asks to confirm on its terminal.
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(b"y\n");
+    }
+    let removed = child.wait().is_ok_and(|status| status.success());
+    let still_listed = helpers::json_command(home, "cswap", &["list", "--json"])
+        .ok()
+        .and_then(|roster| roster["accounts"].as_array().cloned())
+        .is_none_or(|rows| rows.iter().any(|row| row["number"].to_string() == number));
+    if !removed || still_listed {
+        return Err(failure(
+            "This Claude account is already saved in Claude Swap, and Ghostex couldn't repair that saved copy. Copy details has what Claude Swap said.",
+        ));
+    }
+    Ok(())
 }
 
 /// `cswap list --json` after the save. A list that times out or fails right after `cswap add` is
