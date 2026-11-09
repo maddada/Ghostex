@@ -48,6 +48,10 @@ pub(super) async fn route_sessions_http(
                     params.insert("cwd".to_string(), Value::String(folder));
                 }
                 let params = &params;
+                crate::gbots::refuse_bot_project_create(
+                    &repository.resolve_create_session_project(params)?,
+                    params,
+                )?;
                 let created_session = repository.create_session(params, false)?;
                 let session = apply_created_session_identity(repository, &created_session, params)?;
                 let project_id = value_text(&session, "projectId")?;
@@ -69,6 +73,10 @@ pub(super) async fn route_sessions_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
+                // `--path <folder>` is added as a project first (gbots/project.rs).
+                let mut placed = params.clone();
+                crate::gbots::add_create_project_path(&state, db, repository, &mut placed)?;
+                let params = &placed;
                 // A Claude cloud create goes to the repo's main checkout project (claude_cloud/create.rs).
                 let cloud_params = crate::claude_cloud::cloud_create_params(repository, params)?;
                 let params = cloud_params.as_ref().unwrap_or(params);
@@ -86,6 +94,7 @@ pub(super) async fn route_sessions_http(
                     }
                 }
                 let project = repository.resolve_create_session_project(params)?;
+                crate::gbots::refuse_bot_project_create(&project, params)?;
                 // A named account is checked against a current usage reading (launch.rs `requested_account`).
                 if params.contains_key("account") {
                     state.accounts.refresh(&state.paths.home_dir, false);

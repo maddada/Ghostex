@@ -3,7 +3,7 @@ Create, message, switch the account of, reload, and close agent sessions in Ghos
 USAGE
   ghostex agents whoami [--json]
   ghostex agents types [--json]
-  ghostex agents create <agent-id> [--title <name>] [--project-id <id>]
+  ghostex agents create <agent-id> [--title <name>] [--project-id <id> | --path <folder>]
                        [--task <text> | --body-file <path>] [--allow-hidden]
                        [--standalone] [--computer <name>]
   ghostex agents list [--all] [--json]
@@ -33,7 +33,10 @@ CHOOSE AND CREATE
   only when the user asked for that agent. A listed launcher does not prove its
   CLI is installed or signed in.
 
-  create starts a session in your project; --project-id selects another.
+  create starts a session in your project; --project-id selects another, and
+  --path <folder> adds that folder as a project (creating it if needed) and
+  starts the session there. From a GBot chat, pass one of them: a GBot's own
+  project holds only its chats.
   The agent uses configured model and approval settings. --task submits an
   initial message when input is ready; --body-file reads that task from disk.
   Without either, the agent starts waiting for a message. --title sets the
@@ -60,8 +63,9 @@ IDENTITY AND RECIPIENTS
   Use exact global references to avoid ambiguous IDs or titles.
 
   types, list --all, create, send, and close accept --server <profile>.
-  Remote create also requires --project-id. Global references route to their
-  server through configured connections; sender identity remains your own.
+  Remote create also requires --project-id or --path. Global references route
+  to their server through configured connections; sender identity remains
+  your own.
   create, send, and close return JSON; --json is also accepted for errors.
 
 OTHER COMPUTERS

@@ -17,6 +17,8 @@ pub(super) struct Arguments {
     pub task: Option<String>,
     pub title: Option<String>,
     pub project_id: Option<String>,
+    /// `--path <folder>`: create adds the folder as a project and starts the session there.
+    pub path: Option<String>,
     pub delivery: Delivery,
     /// `--request-id`: the send's id, reused by a caller that retries it.
     pub request_id: Option<String>,
@@ -42,6 +44,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         task: None,
         title: None,
         project_id: None,
+        path: None,
         delivery: Delivery::Normal,
         request_id: None,
         all: false,
@@ -79,7 +82,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                 };
             }
             "--body-file" | "--server" | "--computer" | "--task" | "--title" | "--project-id"
-            | "--request-id" | "--account" => {
+            | "--path" | "--request-id" | "--account" => {
                 let value = args
                     .next()
                     .filter(|value| !value.starts_with("--") && !value.is_empty())
@@ -89,6 +92,7 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                     "--task" => Some(&mut parsed.task),
                     "--title" => Some(&mut parsed.title),
                     "--project-id" => Some(&mut parsed.project_id),
+                    "--path" => Some(&mut parsed.path),
                     "--request-id" => Some(&mut parsed.request_id),
                     "--account" => Some(&mut parsed.account),
                     _ => None,
@@ -138,11 +142,12 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         && (parsed.task.is_some()
             || parsed.title.is_some()
             || parsed.project_id.is_some()
+            || parsed.path.is_some()
             || parsed.allow_hidden
             || parsed.standalone)
     {
         return Err(CliError::Other(
-            "--task, --title, --project-id, --allow-hidden, and --standalone are only available for create."
+            "--task, --title, --project-id, --path, --allow-hidden, and --standalone are only available for create."
                 .into(),
         ));
     }

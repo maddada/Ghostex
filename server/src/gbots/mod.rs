@@ -64,7 +64,9 @@ pub(crate) use presentation::{
     insert_gbots_project_presentation, insert_gbots_session_presentation,
 };
 pub(crate) use problems::start_gbots_problem_watch;
-pub(crate) use project::gbots_bot_id as gbots_project_bot_id;
+pub(crate) use project::{
+    add_create_project_path, gbots_bot_id as gbots_project_bot_id, refuse_bot_project_create,
+};
 pub(crate) use record::name_problem;
 pub(crate) use retire::retire_previous_gbots;
 pub(crate) use routine_runs::{

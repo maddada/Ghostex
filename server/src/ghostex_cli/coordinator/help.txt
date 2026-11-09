@@ -3,7 +3,7 @@ keeps track of them, and reports back. `ghostex orchestrator …` is an alias th
 the same commands, so older briefs and running sessions keep working.
 
 USAGE
-  ghostex coordinator create [--project-id <id>] [--agent <agent-id> [--allow-hidden]] [--title <name>]
+  ghostex coordinator create [--project-id <id> | --path <folder>] [--agent <agent-id> [--allow-hidden]] [--title <name>]
                               [--model <m>] [--effort <e>] [--goal <text>]
                               [--task <first message>] [--json]
   ghostex coordinator promote [<session-ref>] [--goal <text>] [--computer <name>] [--json]
@@ -13,7 +13,8 @@ USAGE
   ghostex coordinator start-thread --title <title> (--task <text> | --body-file <path>)
                               [--agent <agent-id> [--allow-hidden]] [--model <m>] [--effort <e>]
                               [--account <number|email>] [--worktree [--base-branch <branch>]]
-                              [--project-id <id>] [--computer <name>] [--coordinator <ref>] [--json]
+                              [--project-id <id> | --path <folder>] [--computer <name>]
+                              [--coordinator <ref>] [--json]
   ghostex coordinator link <session-ref> [--task <text>] [--coordinator <ref>]
   ghostex coordinator unlink <thread-ref> [--coordinator <ref>] [--json]
   ghostex coordinator rename-self "<title>" [--json]
@@ -71,7 +72,11 @@ WHAT A COORDINATOR IS
   user's playbook overrides.
 
 CREATE
-  create starts a coordinator in your project (--project-id picks another).
+  create starts a coordinator in your project (--project-id picks another;
+  --path <folder> adds that folder as a project, creating it if it doesn't
+  exist, and starts the coordinator there). Nothing but a GBot's own chats
+  starts in a GBot's project, so from a GBot chat pass --path or --project-id;
+  the same goes for start-thread and `ghostex agents create`.
   --agent takes an id from `ghostex agents types`; it must be a Claude, Codex,
   ZCode, Cursor, Grok, Copilot, Antigravity, Pi, OMP, OpenCode or DeepSeek
   Harness (dsh) agent, and
@@ -130,7 +135,8 @@ THREADS
   did not reach it.", and does the same for a follow-up that never arrives.
   --computer <name> starts the thread on another computer this one is
   connected to (`ghostex computers` lists them): in its project with the
-  coordinator's project name unless --project-id names one of its projects,
+  coordinator's project name unless --project-id names one of its projects
+  (or --path a folder there, added as a project),
   with its agents and models. It sits under the coordinator in the sidebar,
   and its turn-end and waiting reports arrive like a local thread's, with the
   computer's name after its title. Its ref names that computer, so agents

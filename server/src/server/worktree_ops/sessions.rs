@@ -83,7 +83,10 @@ pub(crate) async fn handle_worktree_session_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     let result = match endpoint_path.as_str() {
-        "/api/createWorktreeSession" => create_worktree_session(state, &params).await,
+        "/api/createWorktreeSession" => match place_worktree_session_create(state, params) {
+            Ok(params) => create_worktree_session(state, &params).await,
+            Err(error) => Err(error.into()),
+        },
         "/api/removeSessionWorktree" => remove_session_worktree(state, &params).await,
         _ => Err(DomainStateError::not_found(format!(
             "{endpoint_path} is not a gxserver worktree session endpoint."
@@ -98,6 +101,24 @@ pub(crate) async fn handle_worktree_session_http(
         ),
         Err(error) => project_worktree_operation_error_response(endpoint_path, request_id, error),
     }
+}
+
+/// `--path <folder>` added as a project, then the GBot-project rule (gbots/project.rs), before the
+/// checkout.
+fn place_worktree_session_create(
+    state: &AppState,
+    mut params: Map<String, Value>,
+) -> std::result::Result<Map<String, Value>, DomainStateError> {
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    crate::gbots::add_create_project_path(state, &db, &repository, &mut params)?;
+    if let Some(project) = repository.get_project(&read_project_id(&params)?)? {
+        crate::gbots::refuse_bot_project_create(&project, &params)?;
+    }
+    Ok(params)
 }
 
 pub(crate) async fn create_worktree_session(
@@ -127,6 +148,7 @@ pub(crate) async fn create_worktree_session(
     let prepared = prepare_worktree_session_checkout(state, &context, &request).await?;
     match start_worktree_session(state, &context, &request, &prepared).await {
         Ok(session_id) => Ok(json!({
+            "projectId": context.source_project_id,
             "branch": prepared.branch,
             "sessionId": session_id,
             "worktreePath": prepared.path,

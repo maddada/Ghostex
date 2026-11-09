@@ -187,8 +187,12 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
     // `--computer` runs the thread on a connected computer; the coordinator stays here.
     let local_flags = flags.clone();
     let (flags, remote_server_id) = thread_computer_flags(parsed, &local_flags)?;
+    // `--path <folder>`: gxserver adds the folder as a project (on the `--computer` one too) and
+    // starts the thread there (gbots/project.rs `add_create_project_path`).
+    let folder = flag_text(&parsed.flags, "path");
     let project_id = match (flag_text(&parsed.flags, "projectId"), &remote_server_id) {
         (Some(project_id), _) => project_id,
+        (None, _) if folder.is_some() => String::new(),
         (None, None) => agents::text(coordinator, "projectId").to_string(),
         (None, Some(_)) => remote_project_like(&coordinator_row, &flags)?,
     };
@@ -204,6 +208,11 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         "title": title,
         "markedHandovers": true,
     });
+    if project_id.is_empty() {
+        if let Some(folder) = &folder {
+            create["projectPath"] = json!(folder);
+        }
+    }
     if let Some(model) = flag_text(&parsed.flags, "model") {
         create["agentModel"] = json!(model);
     }
@@ -215,7 +224,7 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         create["account"] = json!(account);
     }
     let worktree = parsed.flags.truthy("worktree");
-    let (session_id, branch, worktree_path) = if worktree {
+    let (session_id, branch, worktree_path, created_project) = if worktree {
         if let Some(base) = flag_text(&parsed.flags, "baseBranch") {
             create["baseBranch"] = json!(base);
         }
@@ -237,6 +246,7 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
             agents::text(&created, "sessionId").to_string(),
             Some(agents::text(&created, "branch").to_string()),
             Some(agents::text(&created, "worktreePath").to_string()),
+            agents::text(&created, "projectId").to_string(),
         )
     } else {
         let created = call_gxserver_rpc("/api/createAgentSession", &create, &flags)?;
@@ -244,7 +254,14 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
             agents::text(&created["session"], "sessionId").to_string(),
             None,
             None,
+            agents::text(&created["session"], "projectId").to_string(),
         )
+    };
+    // The project gxserver added for `--path`.
+    let project_id = if project_id.is_empty() {
+        created_project
+    } else {
+        project_id
     };
     if session_id.is_empty() {
         return Err(CliError::Other(

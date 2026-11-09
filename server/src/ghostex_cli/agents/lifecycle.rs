@@ -61,6 +61,11 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     let agent_id = &args.positional[0];
     super::visibility::require_launchable_agent(agent_id, args.allow_hidden, &flags)?;
     let mut payload = json!({"projectId": project, "agentId": agent_id});
+    // `--path <folder>`: gxserver adds the folder as a project and starts the session there
+    // (gbots/project.rs `add_create_project_path`).
+    if let (None, Some(folder)) = (&args.project_id, &args.path) {
+        payload = json!({"projectPath": folder, "agentId": agent_id});
+    }
     if let Some(title) = &args.title {
         payload["title"] = json!(title);
     }

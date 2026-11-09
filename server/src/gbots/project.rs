@@ -92,3 +92,76 @@ pub(crate) fn remove_bot_project(
     crate::session_chat_queue::forget_session_chat_queue(db, project_id, None)?;
     schedule_presentation_project_delta(state, db, repository, project_id, "projectUpdated")
 }
+
+/// The one sentence a create that would land in a GBot's project is refused with.
+pub(crate) const BOT_PROJECT_REFUSAL: &str = "A GBot's own folder is only for its chats, so start this in a project the user can see: pass --path <folder> (Ghostex adds the folder as a project) or --project-id <id>.";
+
+/// A session create's `projectPath` (with no `projectId`) added as a project the way Add Project
+/// adds one (a folder that doesn't exist yet is created), so the session lands in a project the
+/// sidebar shows; `params` names that project from here on.
+///
+/// CDXC:GBots 2026-11-09 WHY:
+/// Issue #519: a bot asked to "create a project in a folder and a coordinator for it" ran `ghostex coordinator create` from its chat, the create defaulted to the chat's own project, and the coordinator was invisible in every sidebar and in `ghostex coordinator list`. `--path <folder>` on `coordinator create`, `coordinator start-thread` and `agents create` sends `projectPath`; adding it here (not in the CLI) keeps it working through `--computer`, where `/api/addProjectPath` is not open to the other computer.
+pub(crate) fn add_create_project_path(
+    state: &AppState,
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    params: &mut Map<String, Value>,
+) -> Result<(), DomainStateError> {
+    let named = params
+        .get("projectId")
+        .and_then(Value::as_str)
+        .is_some_and(|id| !id.trim().is_empty());
+    let Some(path) = params
+        .get("projectPath")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|path| !path.is_empty() && !named)
+        .map(str::to_string)
+    else {
+        return Ok(());
+    };
+    let path = normalize_project_root_path(Some(&Value::String(path)), "path", true)?;
+    let project = match repository.find_project_by_path(&path)? {
+        Some(project) => project,
+        None => {
+            let add = object_from_value(json!({ "path": path }));
+            let project = repository.add_project_path(&add)?;
+            let project = crate::workspaces::place_added_project(repository, db, project, &add)?;
+            if let Some(project_id) = project.get("projectId").and_then(Value::as_str) {
+                schedule_presentation_project_delta(
+                    state,
+                    db,
+                    repository,
+                    project_id,
+                    "projectAdded",
+                )?;
+            }
+            project
+        }
+    };
+    if let Some(project_id) = project.get("projectId").and_then(Value::as_str) {
+        params.insert("projectId".into(), json!(project_id));
+        params.remove("projectPath");
+    }
+    Ok(())
+}
+
+/// Refuses a create through the session routes into a GBot's project: only the bot's own chats
+/// live there, and they are opened through `/api/gbots` (session.rs `create_bot_chat_with`), never
+/// through these routes. Reopening one of its closed chats is the exception.
+///
+/// CDXC:GBots 2026-11-09 WHY:
+/// A GBot's project is hidden from every project list, so a coordinator, thread or session created in it by a call that defaulted to the calling chat's project (issue #519) showed nowhere but `ghostex sessions`. The rule sits on `/api/createSession`, `/api/createAgentSession` and `/api/createWorktreeSession`, so `ghostex coordinator create`, `agents create`, `coordinator start-thread`, `create-agent` and every app obey it alike; threads a bot hands to another bot through `ghostex gbots ask` are bot chats and are not affected.
+pub(crate) fn refuse_bot_project_create(
+    project: &Value,
+    params: &Map<String, Value>,
+) -> Result<(), DomainStateError> {
+    let reopening = ["restoredFromSessionId", "restoredFromHistoryId"]
+        .iter()
+        .any(|key| params.get(*key).is_some_and(|value| !value.is_null()));
+    if gbots_bot_id(project).is_some() && !reopening {
+        return Err(DomainStateError::bad_request(BOT_PROJECT_REFUSAL));
+    }
+    Ok(())
+}

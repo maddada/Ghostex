@@ -51,6 +51,13 @@ const GENERATED_NOTE: &str = "<!-- Written by Ghostex from this GBot's settings 
 /// length).
 const KEEPING_MEMORY: &str = "## Keeping your memory\n\n- Save a fact worth keeping between chats: `ghostex gbots memory add \"<fact>\"` (add `--until YYYY-MM-DD` when it stops being true then). Keep each note short; when MEMORY.md fills up, Ghostex moves the oldest notes to memory/archive.md.\n- Longer detail goes in a topic: `ghostex gbots memory add --topic <name> \"<text>\"`; read one with `ghostex gbots memory topic <name>`.\n- Remove a note that is no longer true: `ghostex gbots memory forget \"<words of it>\"`.\n- Never edit MEMORY.md, the topics or this file with your own file tools: Ghostex keeps a journal of every change so the user can undo it, and keeps keys and passwords out of these files.\n- What you did each day is in memory/log/ (Ghostex writes it): `ghostex gbots memory log --days 3`.\n\n";
 
+/// How a bot starts work outside its folder, in every brief (the `ghostex-gbots` skill says the
+/// same at more length).
+///
+/// CDXC:GBots 2026-11-09 WHY:
+/// Issue #519: asked to "create a project in a folder and a coordinator for it", a bot ran `ghostex coordinator create` with no project and the coordinator landed in the bot's hidden project. gxserver now refuses that (project.rs `refuse_bot_project_create`); this tells the bot the way that works before it tries.
+const WORKING_ELSEWHERE: &str = "## Starting work in another folder\n\nYour folder is only for your chats: a coordinator, thread or session can't start in it. When the user asks you to start work in a folder (a new project, a coordinator for it, a session there), name the folder and Ghostex adds it as a project the user sees in the sidebar, creating it if it doesn't exist yet:\n\n- A coordinator: `ghostex coordinator create --path <folder> --title \"<name>\" --task \"<what it should do>\"`.\n- A thread of yours that works there: `ghostex coordinator start-thread --path <folder> --title \"<3 to 6 words>\" --task \"<brief>\"`.\n- A plain session: `ghostex agents create <agent-id> --path <folder>`.\n- A project that already exists: `--project-id <id>` instead (`ghostex state` lists them). A thread or session on another computer: add `--computer <name>`.\n\n";
+
 /// The text that loads into `bot`; `team` is every bot and department on this computer.
 pub(crate) fn brief_text(paths: &GxserverPaths, bot: &Bot, team: &Team) -> String {
     let folder = bot_folder(paths, &bot.bot_id);
@@ -104,6 +111,7 @@ pub(crate) fn brief_text(paths: &GxserverPaths, bot: &Bot, team: &Team) -> Strin
         ));
     }
     out.push_str(KEEPING_MEMORY);
+    out.push_str(WORKING_ELSEWHERE);
     out.push_str(&roster(bot, team));
     out
 }

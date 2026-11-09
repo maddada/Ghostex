@@ -136,8 +136,13 @@ pub(super) fn read_view(session: &Value, flags: &Flags) -> CliResult<Value> {
 fn create(parsed: &ParsedArgs) -> CliResult<()> {
     let base = server_flags(&parsed.flags);
     let caller = agents::caller().ok();
+    // `--path <folder>`: gxserver adds the folder as a project and creates the coordinator there
+    // (gbots/project.rs `add_create_project_path`).
+    let folder = flag_text(&parsed.flags, "path")
+        .filter(|_| flag_text(&parsed.flags, "projectId").is_none());
     let project_id = match flag_text(&parsed.flags, "projectId") {
         Some(project_id) => project_id,
+        None if folder.is_some() => String::new(),
         None => caller
             .as_ref()
             .map(|caller| agents::text(caller, "projectId").to_string())
@@ -190,9 +195,8 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
             "ZCode agents take no effort choice; drop --effort.".into(),
         ));
     }
-    let created = call_gxserver_rpc(
-        "/api/createAgentSession",
-        &crate::coordinators::coordinator_create_params(crate::coordinators::CoordinatorLaunch {
+    let mut create =
+        crate::coordinators::coordinator_create_params(crate::coordinators::CoordinatorLaunch {
             agent_rows: &agent_rows,
             project_id: &project_id,
             agent_id: &agent_id,
@@ -201,9 +205,11 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
             task: task.clone(),
             model: flag_text(&parsed.flags, "model"),
             effort: flag_text(&parsed.flags, "effort"),
-        }),
-        &flags,
-    )?;
+        });
+    if let Some(folder) = &folder {
+        create["projectPath"] = json!(folder);
+    }
+    let created = call_gxserver_rpc("/api/createAgentSession", &create, &flags)?;
     let session = created
         .get("session")
         .cloned()
