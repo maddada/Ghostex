@@ -137,6 +137,9 @@ impl DeferredWalk {
             }
             if self.found_end {
                 if let Ok(message) = serde_json::from_value::<ChatMessage>(row.clone()) {
+                    // A message sent mid-turn is shown here as the main list shows it.
+                    let message =
+                        crate::session::appended_notes::shown_message(&message).unwrap_or(message);
                     self.messages.push(message);
                 }
             }

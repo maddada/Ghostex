@@ -14,6 +14,8 @@
 //! drift: a new note goes into [`APPENDED_NOTES`] and is matched on every client (desktop, web
 //! and the phone's WebAssembly core) with no other change.
 
+use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
+
 /// Under a coordinator's next message after a Ghostex update changed its shipped playbook.
 pub const PLAYBOOK_CHANGED_BY_UPDATE_NOTE: &str = "Ghostex was updated and your playbook changed: run `ghostex coordinator guide` now and follow it from here on.";
 
@@ -48,6 +50,80 @@ pub fn without_appended_notes(text: &str) -> &str {
             None => return rest,
         }
     }
+}
+
+/// The opening and closing words of the reminder `ghostex agents send` adds under a coordinator's
+/// message to one of its threads (server/src/coordinators/rename.rs `thread_title_reminder`),
+/// whose middle names the thread's current title.
+const THREAD_TITLE_REMINDER_START: &str = "Your title is \"";
+const THREAD_TITLE_REMINDER_END: &str = "If it answers that the user renamed you, keep that name.";
+/// The line that opens the sender block every message between agents carries.
+const AGENT_MESSAGE_OPENER: &str = "\n\nMessage from another agent\n";
+
+fn is_thread_title_reminder(paragraph: &str) -> bool {
+    !paragraph.contains('\n')
+        && paragraph.starts_with(THREAD_TITLE_REMINDER_START)
+        && paragraph.ends_with(THREAD_TITLE_REMINDER_END)
+        && paragraph.contains("rename-self")
+}
+
+/// `text` without the thread title reminder: the reminder is the body's last paragraph, so it
+/// ends the text or sits right above the sender block, and some text comes before it.
+fn without_thread_title_reminder(text: &str) -> Option<String> {
+    let (body, block) = match text.rfind(AGENT_MESSAGE_OPENER) {
+        Some(at) => text.split_at(at),
+        None => (text, ""),
+    };
+    let body = body.trim_end();
+    let (head, last) = body.rsplit_once("\n\n")?;
+    (is_thread_title_reminder(last) && !head.trim().is_empty())
+        .then(|| format!("{}{block}", head.trim_end()))
+}
+
+/// CDXC:SessionChat 2026-11-09 WHY:
+/// The user, on a coordinator's chat that showed "Hi" plus "Ghostex was updated and your
+/// playbook changed: run `ghostex coordinator guide` now ...": "please fam when you post the thing
+/// about ghostex being updated and need to read coordinator playbook again don't mention this in
+/// the ui of the chat view". The notes are for the agent, which still gets them (they are typed in
+/// and recorded), but every chat draws, copies, edits and searches a user row through the core's
+/// message list, so the core keeps each row there as the user (or the coordinator) wrote it: no
+/// playbook note and no thread title reminder, with nothing drawn in their place.
+///
+/// `message` as the chat shows it, or `None` when it carries no added note.
+pub fn shown_message(message: &ChatMessage) -> Option<ChatMessage> {
+    if message.role != ChatRole::User {
+        return None;
+    }
+    let mut changed = false;
+    let blocks = message
+        .blocks
+        .iter()
+        .map(|block| match block {
+            ChatBlock::Text { text } => {
+                let plain = without_appended_notes(text);
+                let plain = if plain.len() != text.trim_end().len() {
+                    plain.to_string()
+                } else {
+                    text.clone()
+                };
+                match without_thread_title_reminder(&plain) {
+                    Some(stripped) => {
+                        changed = true;
+                        ChatBlock::Text { text: stripped }
+                    }
+                    None => {
+                        changed |= plain != *text;
+                        ChatBlock::Text { text: plain }
+                    }
+                }
+            }
+            other => other.clone(),
+        })
+        .collect();
+    changed.then(|| ChatMessage {
+        blocks,
+        ..message.clone()
+    })
 }
 
 #[cfg(test)]

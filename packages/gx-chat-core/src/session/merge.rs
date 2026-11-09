@@ -13,8 +13,15 @@ use std::collections::BTreeMap;
 
 use ghostex_gx_protocol::ChatMessage;
 
+use crate::session::appended_notes::shown_message;
 use crate::session::assembler::{id_collides, shadowed_id, source_priority};
 use crate::state::{MessagesState, PushedSince};
+
+/// `raw` as the list keeps it: a user row without the notes added under it for the agent
+/// (`session/appended_notes.rs`), so every reader of the list sees what was written.
+fn shown(raw: &ChatMessage) -> ChatMessage {
+    shown_message(raw).unwrap_or_else(|| raw.clone())
+}
 
 /// Applies `incoming` to `list`, keeping `index_by_id` aligned. True when no row already in the
 /// list was replaced: every row was pushed at the end or left out.
@@ -25,7 +32,7 @@ fn apply_incoming(
 ) -> bool {
     let mut pushed_only = true;
     for raw in incoming {
-        let mut message = raw.clone();
+        let mut message = shown(raw);
         if let Some(at) = index_by_id.get(&message.id).copied() {
             if let Some(occupant) = list.get(at) {
                 if id_collides(occupant, &message) {
@@ -64,7 +71,7 @@ pub fn merge_messages_into(list: &mut Vec<ChatMessage>, incoming: &[ChatMessage]
         return;
     }
     for raw in incoming {
-        let mut message = raw.clone();
+        let mut message = shown(raw);
         let last = |list: &[ChatMessage], id: &str| list.iter().rposition(|entry| entry.id == id);
         if let Some(at) = last(list, &message.id) {
             if id_collides(&list[at], &message) {
@@ -133,7 +140,9 @@ impl MessagesState {
         };
         // The merger put the incoming OBJECT in the list wherever it replaced or appended, so a
         // row that landed carries a new `deferredWork`.
-        for message in incoming {
+        for raw in incoming {
+            let shown_row = shown_message(raw);
+            let message = shown_row.as_ref().unwrap_or(raw);
             let landed = self
                 .index_by_id
                 .get(&message.id)
