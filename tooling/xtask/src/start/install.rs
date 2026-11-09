@@ -7,7 +7,8 @@ use std::time::{Duration, Instant};
 
 use super::{windows, Start};
 use crate::bail;
-use crate::gxserver;
+use crate::gxserver::{self, Probe};
+use crate::http::NoAnswer;
 use crate::util::{self, home_dir, root, sleep_ms, Res, Summary};
 
 impl Start {
@@ -315,7 +316,7 @@ impl Start {
         if expected.is_none() {
             eprintln!("The built GPUI app has no bundled gxserver build identity; stopping any running control plane anyway.");
         }
-        let Some(token) = gxserver::read_token() else {
+        let Some((token, token_file)) = gxserver::read_token_file() else {
             self.log
                 .detail("No gxserver auth token found; nothing to stop.");
             return Ok(());
@@ -328,44 +329,109 @@ impl Start {
         if endpoints.is_empty() {
             self.log.detail("No running gxserver control plane found.");
         }
+        // A gxserver holds more than one loopback port (its API and the connected-computers port), so the Windows listener list names each process once per port: decide per process.
+        let mut processes: Vec<(Option<u64>, bool, Vec<String>)> = Vec::new();
         for (base_url, pid, keep_same_build) in endpoints {
+            match processes
+                .iter_mut()
+                .find(|(seen, _, _)| pid.is_some() && *seen == pid)
+            {
+                Some((_, _, urls)) => urls.push(base_url),
+                None => processes.push((pid, keep_same_build, vec![base_url])),
+            }
+        }
+        for (pid, keep_same_build, urls) in processes {
             let expected = expected.as_deref().filter(|_| keep_same_build);
-            self.stop_gxserver_endpoint(&base_url, pid, &token, expected)?;
+            self.stop_gxserver_process(&urls, pid, &token, &token_file, expected)?;
         }
         Ok(())
     }
 
-    fn stop_gxserver_endpoint(
+    fn stop_gxserver_process(
         &self,
-        base_url: &str,
+        urls: &[String],
         pid: Option<u64>,
         token: &str,
+        token_file: &Path,
         expected: Option<&str>,
     ) -> Res {
-        let health = gxserver::health(base_url, token, Duration::from_secs(1));
-        if let Some(pid) = pid {
-            match health
-                .as_ref()
-                .and_then(|h| h.get("pid"))
-                .and_then(|p| p.as_u64())
-            {
-                Some(answered) if answered == pid => {}
-                Some(_) => bail!(
-                    "Could not verify the gxserver listener owned by pid {pid} at {base_url}."
-                ),
-                // CDXC:ServerDaemon 2026-10-12 WHY: a gxserver whose listener is bound but not served (a slow startup, a hung shutdown) used to fail the start here or be launched beside; it is ended so the app starts its bundled daemon.
-                None => {
+        let probes: Vec<(&str, Probe)> = urls
+            .iter()
+            .map(|url| (url.as_str(), gxserver::probe_patiently(url, token)))
+            .collect();
+        let heard = |answered: bool| {
+            probes
+                .iter()
+                .filter(|(_, probe)| probe.answered() == answered)
+                .map(|(url, probe)| format!("{url} {}", probe.describe()))
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
+        let healthy = probes.iter().find_map(|(url, probe)| match probe {
+            Probe::Healthy(health) => Some((*url, health)),
+            _ => None,
+        });
+        let Some((base_url, health)) = healthy else {
+            let who = pid.map_or_else(
+                || "gxserver".to_string(),
+                |pid| format!("gxserver pid {pid}"),
+            );
+            if probes.iter().any(|(_, probe)| probe.answered()) {
+                // It answers, so it is not hung; it only refuses this token on every port it holds.
+                let message = format!(
+                    "{who} is running ({}), but none of its ports accepted the token in {}, so it was left running.",
+                    heard(true),
+                    token_file.display()
+                );
+                return match pid {
+                    Some(pid) => {
+                        bail!("{message} Quit Ghostex, or end pid {pid}, and start again.")
+                    }
+                    None => {
+                        self.log.detail(&message);
+                        Ok(())
+                    }
+                };
+            }
+            let Some(pid) = pid else {
+                if probes.iter().all(|(_, probe)| {
+                    matches!(
+                        probe,
+                        Probe::NoAnswer(NoAnswer::Refused | NoAnswer::ConnectTimedOut)
+                    )
+                }) {
+                    self.log.detail("No running gxserver control plane found.");
+                } else {
                     self.log.detail(&format!(
-                        "gxserver pid {pid} holds {base_url} but does not answer; ending it."
+                        "Something holds {} but did not answer for {} s; leaving it.",
+                        heard(false),
+                        gxserver::PATIENT_PROBE.as_secs()
                     ));
-                    return self.end_gxserver_process(pid);
                 }
+                return Ok(());
+            };
+            // CDXC:ServerDaemon 2026-10-12 WHY: a gxserver whose listener is bound but not served (a slow startup, a hung shutdown) used to fail the start here or be launched beside; it is ended so the app starts its bundled daemon. Only after every port it holds stayed silent for PATIENT_PROBE (2026-11-09).
+            self.log.detail(&format!(
+                "gxserver pid {pid} holds its ports but did not answer for {} s ({}); ending it.",
+                gxserver::PATIENT_PROBE.as_secs(),
+                heard(false)
+            ));
+            return self.end_gxserver_process(pid);
+        };
+        for (url, probe) in &probes {
+            if *url != base_url {
+                self.log.detail(&format!(
+                    "{url} {}: not the API port of this gxserver; checking {base_url}.",
+                    probe.describe()
+                ));
             }
         }
-        let Some(health) = health else {
-            self.log.detail("No running gxserver control plane found.");
-            return Ok(());
-        };
+        if let Some(pid) = pid {
+            if health.get("pid").and_then(|p| p.as_u64()) != Some(pid) {
+                bail!("Could not verify the gxserver listener owned by pid {pid} at {base_url}.");
+            }
+        }
+        let health = health.clone();
         let actual = gxserver::build_identity_of(&health);
         // CDXC:ServerDaemon 2026-09-23 WHY:
         // Every start used to stop the control plane even when the rebuilt app bundles the same gxserver, costing up to 5s plus a daemon cold start on launch. The build identity hashes the whole staged gxserver package, so a match means the running daemon already is the code this start would launch.

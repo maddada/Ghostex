@@ -7,6 +7,25 @@ use std::time::{Duration, Instant};
 /// gxserver's control-plane protocol version header.
 const PROTOCOL_VERSION: &str = "1";
 
+/// Why a request got no HTTP answer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoAnswer {
+    /// Nothing accepted the connection (refused or reset): no server serves the port.
+    Refused,
+    /// The connection was not accepted in time. Windows takes about 2 s to report a refused loopback connection, so a closed port there usually reads as this, as does a listener whose backlog is full.
+    ConnectTimedOut,
+    /// The connection was made but no answer came in time: something holds the port and stays silent.
+    TimedOut,
+    /// Any other failure (a malformed address, a garbled answer).
+    Failed,
+}
+
+/// An HTTP answer: its status code and its JSON body, when the body is JSON.
+pub struct Answer {
+    pub status: u16,
+    pub json: Option<serde_json::Value>,
+}
+
 /// Sends a request and returns the parsed JSON body of a 2xx response; None for any failure, as the old `fetch` wrapper did.
 pub fn request_json(
     base_url: &str,
@@ -15,39 +34,79 @@ pub fn request_json(
     token: &str,
     timeout: Duration,
 ) -> Option<serde_json::Value> {
+    let answer = request(base_url, method, path, token, timeout).ok()?;
+    (200..300).contains(&answer.status).then_some(answer.json?)
+}
+
+/// Sends a request and returns whatever the server answered, whatever its status, or why nothing answered.
+pub fn request(
+    base_url: &str,
+    method: &str,
+    path: &str,
+    token: &str,
+    timeout: Duration,
+) -> Result<Answer, NoAnswer> {
     let deadline = Instant::now() + timeout;
-    let host = base_url.strip_prefix("http://")?.trim_end_matches('/');
-    let address: SocketAddr = host.parse().ok()?;
-    let mut stream = TcpStream::connect_timeout(&address, timeout).ok()?;
-    stream.set_write_timeout(Some(remaining(deadline)?)).ok()?;
+    let host = base_url
+        .strip_prefix("http://")
+        .ok_or(NoAnswer::Failed)?
+        .trim_end_matches('/');
+    let address: SocketAddr = host.parse().map_err(|_| NoAnswer::Failed)?;
+    let mut stream =
+        TcpStream::connect_timeout(&address, timeout).map_err(|error| match no_answer(error) {
+            NoAnswer::TimedOut => NoAnswer::ConnectTimedOut,
+            other => other,
+        })?;
+    stream
+        .set_write_timeout(Some(remaining(deadline)?))
+        .map_err(no_answer)?;
     let request = format!(
         "{method} {path} HTTP/1.1\r\nHost: {host}\r\nAuthorization: Bearer {token}\r\nx-gxserver-protocol-version: {PROTOCOL_VERSION}\r\nAccept: application/json\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
     );
-    stream.write_all(request.as_bytes()).ok()?;
+    stream.write_all(request.as_bytes()).map_err(no_answer)?;
     let mut response = Vec::new();
     let mut buffer = [0u8; 8192];
     loop {
-        stream.set_read_timeout(Some(remaining(deadline)?)).ok()?;
+        stream
+            .set_read_timeout(Some(remaining(deadline)?))
+            .map_err(no_answer)?;
         match stream.read(&mut buffer) {
             Ok(0) => break,
             Ok(read) => response.extend_from_slice(&buffer[..read]),
-            Err(_) => return None,
+            Err(error) => return Err(no_answer(error)),
         }
-        if let Some(body) = complete_body(&response) {
-            return parse(body?);
+        if let Some(answer) = complete_answer(&response) {
+            return Ok(answer);
         }
     }
-    parse(
-        complete_body(&response)
-            .flatten()
-            .or_else(|| body_until_close(&response))?,
-    )
+    // The server closed the connection: whatever arrived is the whole answer.
+    let (head, rest) = split_head(&response).ok_or(NoAnswer::Refused)?;
+    Ok(Answer {
+        status: status_code(&head).ok_or(NoAnswer::Failed)?,
+        json: complete_answer(&response)
+            .and_then(|answer| answer.json)
+            .or_else(|| parse(rest.to_vec())),
+    })
 }
 
-fn remaining(deadline: Instant) -> Option<Duration> {
+fn no_answer(error: std::io::Error) -> NoAnswer {
+    use std::io::ErrorKind;
+    match error.kind() {
+        ErrorKind::TimedOut | ErrorKind::WouldBlock => NoAnswer::TimedOut,
+        ErrorKind::ConnectionRefused
+        | ErrorKind::ConnectionReset
+        | ErrorKind::ConnectionAborted
+        | ErrorKind::BrokenPipe
+        | ErrorKind::NotConnected => NoAnswer::Refused,
+        _ => NoAnswer::Failed,
+    }
+}
+
+fn remaining(deadline: Instant) -> Result<Duration, NoAnswer> {
     deadline
         .checked_duration_since(Instant::now())
         .filter(|left| !left.is_zero())
+        .ok_or(NoAnswer::TimedOut)
 }
 
 fn parse(body: Vec<u8>) -> Option<serde_json::Value> {
@@ -71,30 +130,29 @@ fn header<'a>(head: &'a str, name: &str) -> Option<&'a str> {
     })
 }
 
-fn status_ok(head: &str) -> bool {
-    head.lines()
-        .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .is_some_and(|code| code.starts_with('2'))
+fn status_code(head: &str) -> Option<u16> {
+    head.lines().next()?.split_whitespace().nth(1)?.parse().ok()
 }
 
-/// Some(Some(body)) when a complete 2xx body has arrived, Some(None) for a complete non-2xx response, None while incomplete.
-fn complete_body(response: &[u8]) -> Option<Option<Vec<u8>>> {
+/// The answer once its head and whole body (by content-length or chunked framing) have arrived; None while incomplete.
+fn complete_answer(response: &[u8]) -> Option<Answer> {
     let (head, rest) = split_head(response)?;
-    if !status_ok(&head) {
-        return Some(None);
-    }
-    if header(&head, "transfer-encoding").is_some_and(|value| value.eq_ignore_ascii_case("chunked"))
+    let status = status_code(&head)?;
+    let body = if header(&head, "transfer-encoding")
+        .is_some_and(|value| value.eq_ignore_ascii_case("chunked"))
     {
-        return decode_chunked(rest).map(Some);
-    }
-    let length: usize = header(&head, "content-length")?.parse().ok()?;
-    (rest.len() >= length).then(|| Some(rest[..length].to_vec()))
-}
-
-fn body_until_close(response: &[u8]) -> Option<Vec<u8>> {
-    let (head, rest) = split_head(response)?;
-    status_ok(&head).then(|| rest.to_vec())
+        decode_chunked(rest)?
+    } else {
+        let length: usize = header(&head, "content-length")?.parse().ok()?;
+        if rest.len() < length {
+            return None;
+        }
+        rest[..length].to_vec()
+    };
+    Some(Answer {
+        status,
+        json: parse(body),
+    })
 }
 
 fn decode_chunked(mut data: &[u8]) -> Option<Vec<u8>> {

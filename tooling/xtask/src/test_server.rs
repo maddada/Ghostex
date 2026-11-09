@@ -983,7 +983,16 @@ fn list() -> Res<i32> {
                 "running, pid {}",
                 health["pid"].as_u64().map_or("?".into(), |p| p.to_string())
             ),
-            None => "stopped".to_string(),
+            // A server that answers 401 or stays silent still runs; only a refused connection is stopped.
+            None => match server.token().map(|token| {
+                crate::gxserver::probe(&server.base_url(), &token, Duration::from_secs(2))
+            }) {
+                Some(probe) if probe.answered() => format!("running, but {}", probe.describe()),
+                Some(crate::gxserver::Probe::NoAnswer(
+                    crate::http::NoAnswer::TimedOut | crate::http::NoAnswer::Failed,
+                )) => "holds its port but does not answer".to_string(),
+                _ => "stopped".to_string(),
+            },
         };
         println!(
             "{:<20} port {}  {:<22} {}",

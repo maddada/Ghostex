@@ -6,6 +6,8 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 use crate::bail;
+use crate::gxserver::Probe;
+use crate::http::NoAnswer;
 use crate::util::{
     self, acquire_start_lock, env_trimmed, env_var, home_dir, output, root, sleep_ms, Res,
 };
@@ -104,10 +106,26 @@ pub fn run(args: &[String]) -> Res<i32> {
         bail!("the zmx source speaks wire generation {source_generation}, the installed zmx ({installed_zmx}) does not. A zmx change needs `cargo xtask start`.");
     }
 
-    let token = gxserver::read_token();
-    let before = token
-        .as_deref()
-        .and_then(|token| gxserver::health(BASE_URL, token, Duration::from_secs(1)));
+    let token = gxserver::read_token_file();
+    // A gxserver that answers anything but its health record (it refuses the token, or it stays silent for PATIENT_PROBE) still holds the port; installing beside it would leave the old build running, so say so instead of reading it as stopped.
+    let before = match &token {
+        None => None,
+        Some((token, token_file)) => match gxserver::probe_patiently(BASE_URL, token) {
+            Probe::Healthy(health) => Some(health),
+            Probe::NoAnswer(NoAnswer::Refused | NoAnswer::ConnectTimedOut) => None,
+            probe if probe.answered() => bail!(
+                "gxserver at {BASE_URL} {} to the token in {}, so it cannot be stopped from here. Restart it from the app instead.",
+                probe.describe(),
+                token_file.display()
+            ),
+            probe => bail!(
+                "gxserver at {BASE_URL} {} for {} s; it may still be busy. Try again in a moment, or restart it from the app.",
+                probe.describe(),
+                gxserver::PATIENT_PROBE.as_secs()
+            ),
+        },
+    };
+    let token = token.map(|(token, _)| token);
     if let Some(before) = &before {
         if gxserver::build_identity_of(before) == expected {
             step(&format!(
@@ -164,9 +182,12 @@ pub fn run(args: &[String]) -> Res<i32> {
         step(&format!("Stopping gxserver pid {}...", pid_of(before)));
         gxserver::request_stop(BASE_URL, token);
         let deadline = Instant::now() + Duration::from_secs(15);
+        // Stopped means the port refuses connections: a 401 or a silent port is still the old server.
         let still_running = || {
-            gxserver::health(BASE_URL, token, Duration::from_millis(500)).is_some()
-                || launchd_job(&launchd_target).pid.is_some()
+            !matches!(
+                gxserver::probe(BASE_URL, token, Duration::from_millis(500)),
+                Probe::NoAnswer(NoAnswer::Refused | NoAnswer::ConnectTimedOut)
+            ) || launchd_job(&launchd_target).pid.is_some()
         };
         while Instant::now() < deadline && still_running() {
             sleep_ms(200);

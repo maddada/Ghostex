@@ -206,7 +206,7 @@ pub fn run(args: &[String]) -> Res<i32> {
     println!(
         "gxserver: {}",
         match (&gxserver_before, &gxserver_after) {
-            (_, None) => "not answering".to_string(),
+            (_, None) => gxserver_missing(),
             (Some(before), Some(after)) if before.pid == after.pid => {
                 format!("kept running (pid {})", after.pid)
             }
@@ -503,8 +503,8 @@ struct GxserverRun {
     health: serde_json::Value,
 }
 
-/// The gxserver that runtime/server.json records, when it answers its health check.
-fn read_gxserver() -> Option<GxserverRun> {
+/// The pid and API address runtime/server.json records.
+fn recorded_gxserver() -> Option<(u64, String)> {
     let record = gxserver::ghostex_state_dir()
         .join("gxserver")
         .join("runtime")
@@ -512,13 +512,30 @@ fn read_gxserver() -> Option<GxserverRun> {
     let parsed: serde_json::Value = serde_json::from_str(&fs::read_to_string(record).ok()?).ok()?;
     let pid = parsed.get("pid")?.as_u64()?;
     let port = parsed.get("port").and_then(|p| p.as_u64()).unwrap_or(58744);
+    Some((pid, format!("http://127.0.0.1:{port}")))
+}
+
+/// The gxserver that runtime/server.json records, when it answers its health check.
+fn read_gxserver() -> Option<GxserverRun> {
+    let (pid, base_url) = recorded_gxserver()?;
     let token = gxserver::read_token()?;
-    let health = gxserver::health(
-        &format!("http://127.0.0.1:{port}"),
-        &token,
-        Duration::from_secs(2),
-    )?;
+    let health = gxserver::health(&base_url, &token, Duration::from_secs(2))?;
     Some(GxserverRun { pid, health })
+}
+
+/// Why no gxserver health came back: a 401 (it runs, but refuses the token) reads differently from silence.
+fn gxserver_missing() -> String {
+    let Some((_, base_url)) = recorded_gxserver() else {
+        return "not answering (no runtime/server.json)".into();
+    };
+    let Some(token) = gxserver::read_token() else {
+        return "not answering (no auth token)".into();
+    };
+    match gxserver::probe(&base_url, &token, Duration::from_secs(2)) {
+        gxserver::Probe::Healthy(_) => "answering now".into(),
+        probe if probe.answered() => format!("running, but {base_url} {}", probe.describe()),
+        probe => format!("not answering ({base_url} {})", probe.describe()),
+    }
 }
 
 fn wait_for_gxserver() -> Option<GxserverRun> {
@@ -535,7 +552,7 @@ fn wait_for_gxserver() -> Option<GxserverRun> {
 }
 
 fn describe_gxserver(run: Option<GxserverRun>) -> String {
-    run.map_or("not answering".into(), |run| format!("pid {}", run.pid))
+    run.map_or_else(gxserver_missing, |run| format!("pid {}", run.pid))
 }
 
 fn app_pid() -> Option<u32> {
