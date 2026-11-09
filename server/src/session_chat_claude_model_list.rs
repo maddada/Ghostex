@@ -35,6 +35,8 @@ const CLAUDE_CURSOR: char = '\u{276f}';
 const CLAUDE_SCROLL_HINTS: [char; 2] = ['\u{2191}', '\u{2193}'];
 /// `… +2 models` under the rows counts every row the window hides, above and below together.
 const CLAUDE_HIDDEN_ROWS_PREFIX: &str = "… +";
+/// The label of the row that runs the account's default model; its next column names that model.
+const CLAUDE_DEFAULT_ROW_PREFIX: &str = "Default (";
 /// Marks the model the session is on now, inside the label column.
 const CLAUDE_CURRENT_MARKER: char = '\u{2714}';
 /// The rail line of a model without effort levels: `○ Effort not supported for <model>`.
@@ -146,7 +148,21 @@ fn parse_claude_model_row(line: &str) -> Option<ClaudeModelRow> {
     let dot = rest.find(". ")?;
     let number = rest[..dot].parse::<u32>().ok()?;
     // Two-digit lists pad the single-digit numbers: `3.  Fable 5.1`.
-    let label = rest[dot + 1..].trim_start().split("  ").next()?.trim();
+    let mut columns = rest[dot + 1..]
+        .trim_start()
+        .split("  ")
+        .map(str::trim)
+        .filter(|column| !column.is_empty());
+    let label = columns.next()?;
+    // CDXC:AgentProviders 2026-11-09 WHY:
+    // Claude Code 2.1.319 lists Fable 5.1 only as `1.  Default (recommended)  Fable 5.1` (and under
+    // a collapsed "More models"), so the Default row is read by the model it names: otherwise a
+    // pick of `fable` found no row once Fable 5.2 became its own row.
+    let label = if label.starts_with(CLAUDE_DEFAULT_ROW_PREFIX) {
+        columns.next().unwrap_or(label)
+    } else {
+        label
+    };
     let label = label
         .strip_suffix(CLAUDE_CURRENT_MARKER)
         .map(str::trim_end)

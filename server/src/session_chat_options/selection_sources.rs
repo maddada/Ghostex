@@ -89,6 +89,7 @@ pub(crate) fn claude_transcript_model_choice(model: &str) -> Option<SessionChatD
         format!("{title} {}", version.join("."))
     };
     let id = claude_model_value(family, &version.join("."));
+    let id = id.as_str();
     let (value, label) = match variant {
         Some(variant) => (
             format!("{id}[{variant}]"),

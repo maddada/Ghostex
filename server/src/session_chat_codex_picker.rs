@@ -475,7 +475,9 @@ fn claude_model_label_matches(label: &str, value: &str) -> bool {
         .to_ascii_lowercase()
         .replace(" (1m context)", "[1m]")
         .replace(" (1m)", "[1m]")
-        .replace(' ', "-");
+        .replace([' ', '.'], "-");
+    // "Fable 5.2" reads as `fable-5-2`: a dotted version token stopped the version scan, so
+    // the row and Claude's "Set model to Fable 5.2" reply named the `fable` alias (Fable 5.1).
     target == value
         || crate::session_chat_options::claude_transcript_model_choice(&target)
             .is_some_and(|choice| choice.value == value)

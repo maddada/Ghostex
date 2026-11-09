@@ -46,7 +46,20 @@ fn is_model_version_suffix(rest: &str) -> bool {
 /// `claude-opus-5` and `claude-sonnet-5`. Each pair prints as "<Family>
 /// <version>", so the version digits are the only thing that keeps a session
 /// still on the older model from reading as the alias's row.
-pub(super) fn claude_model_value(family_value: &str, version: &str) -> &'static str {
+///
+/// CDXC:AgentProviders 2026-11-09 WHY:
+/// Claude Code 2.1.319 added Fable 5.2 as a row of its own (`claude-fable-5-2`)
+/// while the `fable` alias still runs Fable 5.1, so a statusline id of
+/// `claude-fable-5-2` read as the `fable` row and the pill showed Fable 5.1
+/// picked. A pinned id the live catalog lists by its full name is that row, so
+/// the next pinned model needs only a catalog edit.
+pub(super) fn claude_model_value(family_value: &str, version: &str) -> String {
+    if !version.is_empty() {
+        let pinned = format!("claude-{family_value}-{}", version.replace('.', "-"));
+        if crate::agent_model_catalog::catalog_model("claude", &pinned).is_some() {
+            return pinned;
+        }
+    }
     match (family_value, version) {
         ("opus", "5") => "claude-opus-5",
         ("sonnet", "5") => "claude-sonnet-5",
@@ -58,6 +71,7 @@ pub(super) fn claude_model_value(family_value: &str, version: &str) -> &'static 
             _ => "",
         },
     }
+    .to_string()
 }
 
 pub(super) fn match_claude_model(segment: &str) -> Option<SessionChatDetectedChoice> {
