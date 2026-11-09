@@ -107,6 +107,9 @@ impl NativeChatView {
         }
         self.config = config;
         self.runtime = Some(Self::start_runtime(&self.config, cx));
+        // The new session's chat core has heard none of this view's folds, which the working card
+        // reads (search.rs, `sync_search_folds`): send them again on the next frame.
+        self.search_folds_sent = None;
         cx.notify();
     }
 
