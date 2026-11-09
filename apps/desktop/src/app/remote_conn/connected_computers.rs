@@ -400,6 +400,20 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
     let Some(remote_server_id) = remote_server_id(&job.target) else {
         return outcome;
     };
+    /*
+    CDXC:RemoteMachines 2026-11-09 WHY:
+    The Windows PC's log had `/api/issueComputerGrant` answered 400 ("serverId must be another
+    computer's server id") every minute for a quarter of an hour: a saved machine that is this
+    computer itself, connected by an app that didn't know it, registered itself on every renewal,
+    and a refused grant reads as "unsupported", which the next renewal tries again. The connect
+    marks such a machine as this computer (connect.rs); this is the check where registering would
+    happen, so a machine that names this computer's own server id never registers.
+    */
+    if crate::app::helpers::gpui_local_gxserver_server_id().as_deref()
+        == Some(remote_server_id.as_str())
+    {
+        return outcome;
+    }
     if let Some(machine) = state().get_mut(&job.machine_id) {
         machine.server_id = Some(remote_server_id.clone());
     }

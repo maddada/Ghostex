@@ -938,7 +938,7 @@ pub(crate) fn gpui_remote_identity_server_id(stdout: &str) -> Option<String> {
 }
 
 /// This app's own gxserver's server id, from its health answer.
-fn gpui_local_gxserver_server_id() -> Option<String> {
+pub(crate) fn gpui_local_gxserver_server_id() -> Option<String> {
     gpui_gxserver_server_health(Duration::from_millis(1500))
         .ok()?
         .get("serverId")?
