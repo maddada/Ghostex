@@ -175,7 +175,7 @@ Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in 
 | Extensions | `installExtensionComponent` (target: the component, `collab` today) | `collab_shim/http.rs` | `/api/extensionComponents` `op: install`: a component that opens a way into this computer. Updating it, turning it off and uninstalling never ask. |
 | Pairing | `pairingShowCode`, `pairingApproveDevice` | Pairing thread | |
 | Easy Connect | `easyConnectEnable`, `easyConnectAllowList`, `easyConnectPorts`, `easyConnectRelay` | `security_gates.rs` | `/api/updateTailcatState`: turning it on, a new port, new devices on (or emptying) the allow-list (empty lets any device in), a relay change. Turning it off never asks. |
-| Connected computers | `computerGrant` (`computerRegister`, `computerChangeAccess` are no longer asked) | `security_gates.rs` | `/api/registerConnectedComputer`, `/api/issueComputerGrant` with Agent access on, for a computer not approved in the last 30 days: both routes ask one shared request per computer (any caller reuses and may spend it; it waits a day), and a call that meets it already waiting is answered `approvalPending` instead of `approvalRequired`, so no app prompts for it again. Renewals of an approved computer pass; either route with `agentAccess: false` never asks. The desktop's renewal never prompts: it shows one card and waits on the request (`remote_conn/connected_computers.rs`). |
+| Connected computers | `computerGrant` (`computerRegister`, `computerChangeAccess` are no longer asked) | `security_gates.rs` | `/api/registerConnectedComputer`, `/api/issueComputerGrant` with Agent access on, for a computer not approved in the last 30 days: both routes ask one shared request per computer (any caller reuses and may spend it; it waits a day), and a call that meets it already waiting is answered `approvalPending` instead of `approvalRequired`, so no app prompts for it again. Renewals of an approved computer pass; either route with `agentAccess: false` never asks, nor does registering a computer with `waitingOn: "here" | "there"` (the desktop's note that the pair still waits: no address, no token; `listConnectedComputers` answers `waitingForApproval` with what to approve and where, and the relay, `ghostex computers` and every `--computer` verb say it). The desktop's renewal never prompts: it shows one card and waits on the request (`remote_conn/connected_computers.rs`). |
 | Autopilot | `autopilotAnswerApprovals`, `autopilotLiftLimits` | `security_gates.rs` | `/api/autopilot` `op: "set"` with `answerApprovals: true`, or `limits`. |
 | GBots | `gbotsEnable`, `gbotsAddBot` | `security_gates.rs` | `updateSettingsPatch` turning `gbotsEnabled` on; `/api/gbots` `op: "create"`. |
 | GBot API | `gbotsApiKey` (target: the GBot's id) | `security_gates.rs` `gbots_api_key_action` | `/api/gbots` `op: "apiOn"`, `"apiNewKey"`, and `"apiShareMemory"` with `on: true`, from the owner's devices and the token file only (every agent, Chief included, is refused by `/api/gbots` without being asked). The detail names what the key reaches: messaging the GBot, its replies, what it knows (its memory only when shared) and its routines by name. The params bind the label and the SHA-256 of the caller's one-time `keyNonce`, so the key goes only to the call that asked: another program reading the pending request can't repeat it. `apiOff` and sharing off never ask. Each change is a security-log entry (`gbots.apiOn`, `gbots.apiNewKey`, `gbots.apiOff`, `gbots.apiShareMemory`). |
@@ -242,7 +242,7 @@ state.security.record_performed(grant.approval.action, grant.approval.target, &c
 | `/api/listApproverKeys` | none | owner's devices | `{ keys }` |
 | `/api/enrollApproverKey` | `{ key }` | owner's devices | `{ key }`: the first from the owner session, later ones after an approved `addApproverKey` |
 | `/api/removeApproverKey` | `{ keyId }` | owner's devices | `{ key }` |
-| `/api/enrollOwnerKey` | `{ key }` | any local caller (loopback only); the first key only from the token file (the Ghostex app here, or another computer's app through its SSH tunnel), never a session's token | `{ key }`: the first is trusted on first use (user decision 1A), the same again is a no-op, another needs `addApproverKey`. Any program running as this OS user can read the token file, so it can still enroll first. |
+| `/api/enrollOwnerKey` | `{ key, approverKey?, askOwner? }` | any local caller (loopback only); the first key only from the token file (the Ghostex app here, or another computer's app through its SSH tunnel), never a session's token | `{ key }`: the first is trusted on first use (user decision 1A), the same again is a no-op, another needs `addApproverKey`. Any program running as this OS user can read the token file, so it can still enroll first. |
 | `/api/ownerChallenge` | none | any local caller (loopback only) | `{ challenge, expiresAtMs }`, single use, 60 s |
 | `/api/openOwnerSession` | `{ keyId, challenge, signature }` | any local caller (loopback only) | `{ token, deviceId }` |
 | `/api/securityStatus` | none | any but guests | `{ serverId, caller, ownerKeys, approverKeys, pendingApprovals }` |
@@ -295,7 +295,21 @@ so, user decision 1A).
 
 Enrollment: the desktop enrolls its owner key on each gxserver it talks to the first time (this
 computer's, and each connected remote computer's through its tunnel), opens an owner session,
-and enrolls its approver key under that session the first time it approves something there. A
+and enrolls its approver key under that session the first time it approves something there.
+It sends its approver key with its owner key (`approverKey`): with the first owner key it
+goes in at once while no approver key is enrolled; on a computer that already has an owner, the
+one `addApproverKey` request ("Let <computer> (Ghostex app) act as the owner of Ghostex on this
+computer and answer its requests") enrolls both. A key the owner approves goes in the moment it
+is approved (`security::ApprovalEffect`), so the asking call coming back with `approvalId` (the
+desktop's, or the 11.2.1 phone's `ensureEnrolled`) finds it enrolled and gets it back; the
+request stays `approved` until it lapses, as before.
+
+The desktop shows a connected computer's request with Approve only where it can answer it (an
+owner session there and its approver key enrolled, or none enrolled yet,
+`owner_security::answerer`); elsewhere it shows a notice naming the devices that can approve it
+there, and asks that computer once to let it act as the owner there. A request made by another
+computer's app through its owner session (`requestedBy.kind: "owner"` with another `deviceId`)
+shows as a card; only the app's own requests don't. A
 phone's approver key (and any later key) needs an approved `addApproverKey` from a key already
 enrolled; the phone asks, the desktop's card approves it.
 

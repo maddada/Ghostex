@@ -86,6 +86,14 @@ pub(crate) async fn relay(
             request_id,
         );
     };
+    if let Some(message) = computer.waiting_message() {
+        return refusal(
+            StatusCode::FORBIDDEN,
+            "approvalPending",
+            message,
+            request_id,
+        );
+    }
     if !computer.agent_access {
         return refusal(
             StatusCode::FORBIDDEN,

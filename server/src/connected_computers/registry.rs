@@ -51,7 +51,22 @@ pub(crate) struct ConnectedComputer {
     /// The id this computer's desktop app keeps for it (Settings > Remote > Remote machines), so a
     /// message held for it (held_sends.rs) finds it even when the app only knew that id.
     pub(crate) machine_id: Option<String>,
+    /// Connected, but the owner hasn't yet let the two computers' agents reach each other.
+    pub(crate) waiting: Option<WaitingOn>,
     expires_at: Instant,
+}
+
+/*
+CDXC:RemoteMachines 2026-11-10 WHY:
+A Ghostex user's coordinator could see no connected computer while the user worked with all three in the sidebar: "what I get to use in the UI and what it has access to in the ghostex agents commands are different". The app reaches a computer through its own SSH tunnel with that computer's token file, while agents reach it only through this registry, which the app filled only after both computers' "Let the agents on … reach each other" approvals; until then the computer wasn't listed at all and the CLI said nothing is connected. The app now registers it as waiting, with no address or token, so `ghostex computers` lists it and every agent call to it says what to approve and where.
+*/
+/// Where the approval that lets the two computers' agents reach each other waits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum WaitingOn {
+    /// A card in Ghostex on this computer can answer it (`waitingOn: "here"`).
+    Here,
+    /// Only Ghostex on that computer (or a phone paired with it) can (`waitingOn: "there"`).
+    There,
 }
 
 /// Which computer's Agent access switch is off.
@@ -83,11 +98,29 @@ impl ConnectedComputer {
 
     /// What `listConnectedComputers` shows: never the token or the address it is reached at.
     pub(crate) fn public_view(&self) -> Value {
-        json!({
+        let mut view = json!({
             "serverId": self.server_id,
             "name": self.name,
             "direction": self.direction.as_str(),
             "agentAccess": self.agent_access,
+        });
+        if let Some(message) = self.waiting_message() {
+            view["waitingForApproval"] = json!(message);
+        }
+        view
+    }
+
+    /// Why agents can't reach it yet and what to approve where; `None` once they can.
+    pub(crate) fn waiting_message(&self) -> Option<String> {
+        let name = &self.name;
+        let this = super::this_computer_name();
+        Some(match self.waiting? {
+            WaitingOn::Here => format!(
+                "{name} is connected, but agents here can't reach it until you approve letting the agents on {this} and {name} reach each other. Ghostex on this computer ({this}) shows that approval as a card; approve it there, then try again."
+            ),
+            WaitingOn::There => format!(
+                "{name} is connected, but agents here can't reach it until you approve letting the agents on {this} and {name} reach each other, on {name}. Ghostex on {name} shows that approval as a card (a phone paired with {name} can approve it too); approve it there, then try again."
+            ),
         })
     }
 }
@@ -132,6 +165,8 @@ pub(crate) struct Registration {
     pub(crate) off_on_other_computer: bool,
     /// The desktop app's own id for the computer (`machineId`), when it sent one.
     pub(crate) machine_id: Option<String>,
+    /// `waitingOn`: registered while the owner's approval waits (no address, no token).
+    pub(crate) waiting: Option<WaitingOn>,
 }
 
 impl Registration {
@@ -160,12 +195,19 @@ impl Registration {
             Some("inbound") => Direction::Inbound,
             Some(_) => return Err("direction must be outbound or inbound.".to_string()),
         };
-        let agent_access = params
-            .get("agentAccess")
-            .and_then(Value::as_bool)
-            .unwrap_or(true);
-        // A computer with Agent access off is registered only so its refusals can name it: it
-        // has no address and no token.
+        let waiting = match text("waitingOn").as_deref() {
+            None => None,
+            Some("here") => Some(WaitingOn::Here),
+            Some("there") => Some(WaitingOn::There),
+            Some(_) => return Err("waitingOn must be here or there.".to_string()),
+        };
+        let agent_access = waiting.is_none()
+            && params
+                .get("agentAccess")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+        // A computer with Agent access off, or still waiting for the owner, is registered only so
+        // its refusals can name it: it has no address and no token.
         let (base_url, token) = if agent_access {
             let base_url = text("baseUrl").ok_or("baseUrl is required.")?;
             let base_url = loopback_base_url(&base_url)
@@ -196,6 +238,7 @@ impl Registration {
             owner: flag("owner"),
             off_on_other_computer: flag("offOnOtherComputer"),
             machine_id: text("machineId").map(|id| id.chars().take(MAX_NAME_CHARS).collect()),
+            waiting,
         })
     }
 }
@@ -235,8 +278,9 @@ pub(crate) fn register(registration: Registration) -> bool {
     prune(&mut registry, now);
     let denied_here = !registration.owner && registry.denied.contains_key(&registration.server_id);
     let agent_access = registration.agent_access && !denied_here;
+    let waiting = registration.waiting.filter(|_| !denied_here);
     let off_by = match (
-        agent_access,
+        agent_access || waiting.is_some(),
         registration.owner,
         registration.off_on_other_computer,
     ) {
@@ -264,6 +308,7 @@ pub(crate) fn register(registration: Registration) -> bool {
             agent_access,
             off_by,
             machine_id: registration.machine_id,
+            waiting,
             expires_at: now + registration.ttl,
         },
     );

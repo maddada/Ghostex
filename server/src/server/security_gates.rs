@@ -380,6 +380,10 @@ fn computer_gate(
     if params.get("agentAccess").and_then(Value::as_bool) == Some(false) {
         return None;
     }
+    // Neither does noting a computer that still waits for that approval (no address, no token).
+    if params.get("waitingOn").is_some() && endpoint_path == "/api/registerConnectedComputer" {
+        return None;
+    }
     let server_id = text(params, "serverId")?.to_string();
     // A computer is never asked about itself (a saved machine that points back at this one).
     if server_id.as_str() == &*state.security.server_id

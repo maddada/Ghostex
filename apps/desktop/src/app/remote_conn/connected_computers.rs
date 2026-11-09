@@ -335,7 +335,9 @@ fn grant_from(result: &Value) -> Option<Grant> {
 enum Grants {
     Issued(Grant, Grant),
     /// A side waits for the owner to let this pair connect.
-    Waiting,
+    Waiting(Side),
+    /// A side's owner denied it, or let it lapse: not asked again for now.
+    Declined,
     /// The machine's own Agent access switch is off for this computer.
     DeniedThere,
     /// One side's gxserver predates connected computers.
@@ -362,7 +364,8 @@ fn issue_grants(
             Some(local) => local,
             None => return Grants::Unsupported,
         },
-        Gated::Waiting => return Grants::Waiting,
+        Gated::Waiting => return Grants::Waiting(Side::Local),
+        Gated::Declined => return Grants::Declined,
     };
     let remote = match gated_post(
         job,
@@ -373,7 +376,8 @@ fn issue_grants(
     ) {
         Gated::Answered(Some(remote)) => remote,
         Gated::Answered(None) => return Grants::Unsupported,
-        Gated::Waiting => return Grants::Waiting,
+        Gated::Waiting => return Grants::Waiting(Side::Remote),
+        Gated::Declined => return Grants::Declined,
     };
     if remote.get("denied").and_then(Value::as_bool) == Some(true) {
         return Grants::DeniedThere;
@@ -459,7 +463,11 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
         match issue_grants(&job, &remote_server_id, job.rotate, &mut outcome) {
             Grants::Issued(local, remote) => (local, remote),
             // Nothing is torn down while the owner hasn't answered: the pair was never let in.
-            Grants::Waiting => return outcome,
+            Grants::Waiting(side) => {
+                register_waiting(&job, &remote_server_id, side);
+                return outcome;
+            }
+            Grants::Declined => return outcome,
             Grants::DeniedThere => {
                 off_on_other_computer(&remote_server_id, &job.name);
                 outcome.close_reverse = true;
@@ -491,7 +499,11 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
                 Grants::Issued(rotated_local, rotated_remote) => {
                     (local, remote) = (rotated_local, rotated_remote);
                 }
-                Grants::Waiting => return outcome,
+                Grants::Waiting(side) => {
+                    register_waiting(&job, &remote_server_id, side);
+                    return outcome;
+                }
+                Grants::Declined => return outcome,
                 Grants::DeniedThere => {
                     off_on_other_computer(&remote_server_id, &job.name);
                     outcome.close_reverse = true;
@@ -542,6 +554,32 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
     outcome
 }
 
+/// The pair waits for the owner's approval on `side`: this computer's gxserver lists the machine
+/// as waiting, with no address and no token, so agents here are told what to approve and where
+/// instead of finding no such computer (CDXC:RemoteMachines 2026-11-10 in
+/// server/src/connected_computers/registry.rs). "here" when a card in this app can answer it.
+fn register_waiting(job: &RegistrationJob, remote_server_id: &str, side: Side) {
+    use crate::app::owner_security::{Answerer, Transport, answerer};
+    let here = match side {
+        Side::Local => true,
+        Side::Remote => matches!(
+            answerer(&Transport::Remote(job.target.clone())),
+            Answerer::ThisApp
+        ),
+    };
+    let _ = post_local(
+        "/api/registerConnectedComputer",
+        json!({
+            "serverId": remote_server_id,
+            "name": job.name,
+            "waitingOn": if here { "here" } else { "there" },
+            "owner": true,
+            "ttlMs": REGISTRATION_TTL_MS,
+            "machineId": job.machine_id,
+        }),
+    );
+}
+
 /// The machine turned Agent access off for this computer, so the pair is off here too: drop the
 /// token this computer gave it (with no deny of this computer's own) and register it off, naming
 /// the machine's switch.
@@ -577,8 +615,10 @@ fn open_reverse_tunnel(
 enum Gated {
     /// gxserver answered (`None`: refused, failed or unreachable, as [`post_local`] reads it).
     Answered(Option<Value>),
-    /// The owner hasn't answered this side's request yet, or declined it: nothing was called.
+    /// The owner hasn't answered this side's request yet: nothing was called.
     Waiting,
+    /// The owner declined this side's request, or let it lapse: nothing was called.
+    Declined,
 }
 
 /*
@@ -612,7 +652,7 @@ fn gated_post(
         )
     };
     if declined {
-        return Gated::Waiting;
+        return Gated::Declined;
     }
     let forget = |declined: bool| {
         if let Some(machine) = state().get_mut(&job.machine_id) {
@@ -632,7 +672,7 @@ fn gated_post(
             RequestState::Unknown => return Gated::Waiting,
             RequestState::Declined => {
                 forget(true);
-                return Gated::Waiting;
+                return Gated::Declined;
             }
             RequestState::Approved => {
                 params = owner_security::with_approval_id(&params, &id).unwrap_or(params);
@@ -663,7 +703,7 @@ fn gated_post(
         .is_some_and(|code| code == "approvalDenied");
     if denied {
         forget(true);
-        return Gated::Waiting;
+        return Gated::Declined;
     }
     Gated::Answered(result_of(status, &body))
 }

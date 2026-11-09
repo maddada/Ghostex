@@ -102,6 +102,9 @@ pub(super) async fn other_computers(state: &Arc<AppState>) -> Elsewhere {
 }
 
 async fn listing(state: &Arc<AppState>, computer: &ConnectedComputer) -> Result<Listing, String> {
+    if let Some(waiting) = computer.waiting_message() {
+        return Err(waiting);
+    }
     if !computer.agent_access {
         return Err(crate::connected_computers::access_off_message(computer));
     }

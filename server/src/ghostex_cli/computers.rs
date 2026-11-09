@@ -27,6 +27,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                     "name": computer.name,
                     "serverId": computer.server_id,
                     "agentAccess": computer.agent_access,
+                    "waitingForApproval": computer.waiting,
                 }))
                 .collect::<Vec<_>>(),
         }));
@@ -42,8 +43,18 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             "{}\t{}\t{}",
             computer.name,
             computer.server_id,
-            if computer.agent_access { "on" } else { "off" }
+            match (&computer.waiting, computer.agent_access) {
+                (Some(_), _) => "waiting for your approval",
+                (None, true) => "on",
+                (None, false) => "off",
+            }
         );
+    }
+    for waiting in computers
+        .iter()
+        .filter_map(|computer| computer.waiting.as_deref())
+    {
+        println!("\n{waiting}");
     }
     Ok(())
 }
@@ -74,6 +85,9 @@ pub(crate) struct ConnectedComputer {
     pub(crate) server_id: String,
     pub(crate) name: String,
     pub(crate) agent_access: bool,
+    /// Connected, but the owner's approval that lets agents reach it still waits: what to approve
+    /// and where, in gxserver's words (CDXC:RemoteMachines 2026-11-10 in connected_computers/registry.rs).
+    pub(crate) waiting: Option<String>,
 }
 
 /// Every computer the local gxserver can relay to. An older gxserver without the endpoint has none.
@@ -103,6 +117,10 @@ pub(crate) fn connected_computers(local: &Target) -> Vec<ConnectedComputer> {
                     .get("agentAccess")
                     .and_then(Value::as_bool)
                     .unwrap_or(true),
+                waiting: computer
+                    .get("waitingForApproval")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
             })
         })
         .collect()
@@ -199,6 +217,9 @@ pub(crate) fn computer_flag_target(local: &Target, wanted: &str) -> CliResult<Op
 /// A computer whose Agent access switch is off is refused here, plainly, before a verb looks for
 /// a session there and finds none.
 fn require_agent_access(computer: &ConnectedComputer) -> CliResult<()> {
+    if let Some(waiting) = &computer.waiting {
+        return Err(CliError::Other(waiting.clone()));
+    }
     if computer.agent_access {
         return Ok(());
     }
@@ -288,16 +309,19 @@ mod tests {
                 server_id: "S4k".into(),
                 name: "Omarchy".into(),
                 agent_access: true,
+                waiting: None,
             },
             ConnectedComputer {
                 server_id: "S7a".into(),
                 name: "Windows PC".into(),
                 agent_access: true,
+                waiting: None,
             },
             ConnectedComputer {
                 server_id: "S2b".into(),
                 name: "Windows Laptop".into(),
                 agent_access: false,
+                waiting: None,
             },
         ]
     }
