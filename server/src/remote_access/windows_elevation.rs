@@ -54,15 +54,44 @@ pub(crate) fn run_elevated_powershell(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     crate::platform::process::NoConsoleWindow::no_console_window(&mut command);
-    let output = command
-        .output()
-        .map_err(|error| format!("Could not open the administrator prompt: {error}."))?;
+    /*
+    CDXC:RemoteAccess 2026-11-09 WHY:
+    GitHub #520 follow-up: this waited on the prompt with no limit, so a UAC prompt nobody answered
+    (the user away from the PC, as when it is controlled from elsewhere) held its request, and the
+    phone or computer asking again, for good. After `UAC_PROMPT_LIMIT` the launcher is stopped and
+    the caller gets a plain sentence for the app to show; the elevated script itself never started,
+    since it only starts once the prompt is accepted.
+    */
+    let limits = crate::platform::process::RunLimits {
+        timeout: UAC_PROMPT_LIMIT,
+        stdin: None,
+        stdout: crate::platform::process::Keep::Head(64 * 1024),
+        stderr: crate::platform::process::Keep::Head(64 * 1024),
+    };
+    let output = match crate::platform::process::run_bounded(command, limits) {
+        Ok(output) => output,
+        Err(crate::platform::process::Unfinished::TimedOut(_)) => {
+            return Err(PROMPT_NOT_ANSWERED.to_string())
+        }
+        Err(crate::platform::process::Unfinished::Start(error)) => {
+            return Err(format!("Could not open the administrator prompt: {error}."))
+        }
+        Err(crate::platform::process::Unfinished::TooLarge(_)) => {
+            return Err("Could not open the administrator prompt.".to_string())
+        }
+    };
     Ok(ElevatedRun {
         code: output.status.code(),
         log: files.read_log(),
         stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
     })
 }
+
+/// How long the UAC prompt may stay unanswered before Ghostex stops waiting on it.
+const UAC_PROMPT_LIMIT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
+/// What the app shows when the UAC prompt went unanswered for [`UAC_PROMPT_LIMIT`].
+const PROMPT_NOT_ANSWERED: &str = "The Windows administrator prompt wasn't answered within 5 minutes, so nothing was changed. If it is still open, close it, then try again and choose Yes.";
 
 struct TempFiles {
     launcher: PathBuf,
