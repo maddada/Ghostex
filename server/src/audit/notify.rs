@@ -82,7 +82,7 @@ const OTHER_ACTORS: &[&str] = &[
     "collabGuest",
 ];
 
-/// What Chief's head role does without an approval (`Principal::skips_approval`), logged with the
+/// What Chief's head role does without an approval (`SecurityState::skips_approval`), logged with the
 /// `allowed` outcome.
 const HEAD_STEERING_ACTIONS: &[&str] = &[
     "answerOtherSessionPrompt",

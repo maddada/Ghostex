@@ -129,7 +129,7 @@ impl Principal {
 
     /*
     CDXC:Security 2026-11-08 DECISION:
-    User (#495 follow-up): the token file (the CLI in the user's own terminal) keeps thread management (decision 3A), everything else of it is an agent's. Answering, typing into and interrupting other sessions ask nobody (CDXC:Security 2026-11-08 at `skips_approval`).
+    User (#495 follow-up): the token file (the CLI in the user's own terminal) keeps thread management (decision 3A), everything else of it is an agent's. Answering, typing into and interrupting other sessions ask nobody (CDXC:Security 2026-11-08 in security/policy.rs).
     */
     pub fn has(&self, capability: Capability) -> bool {
         use Capability::*;
@@ -162,24 +162,6 @@ impl Principal {
             // (`collab_shim::registry::GUEST_READ_ENDPOINTS`, the extension registry) and never ask.
             Self::Guest { .. } | Self::Extension { .. } | Self::Anonymous => false,
         }
-    }
-
-    /*
-    CDXC:Chief 2026-11-08 DECISION:
-    User (Q1749, Q1750): Chief gets "a head role granted once" with no Touch ID: it reads every session and types into, interrupts and messages any session freely, and answers other agents' approval prompts without asking ("prompts free"). "We already don't allow agents to manage stuff related to collab/access/pairing/security, agents should just point to the settings for these", so every other sensitive action still asks, for Chief exactly as for any agent. This is the one place that says which approvals a caller skips.
-    */
-    /*
-    CDXC:Security 2026-11-08 DECISION:
-    User, after 11.1.2: "please let agents manage other sessions like before. no need to limit this." Answering another session's permission prompt, typing into it and interrupting it ask nobody again, as before 11.1.x: agents here, the token file, and agents on a connected computer within what its grant allows. Chief's are still written to the security log as `allowed` (`security_gates::record_head_steering`).
-    */
-    /// Whether this caller may do `action` without the owner's approval: the three "steer
-    /// another session" actions, for everyone; every other sensitive action asks whoever calls.
-    pub fn skips_approval(&self, action: &ghostex_gx_protocol::approval::SensitiveAction) -> bool {
-        use ghostex_gx_protocol::approval::SensitiveAction::*;
-        matches!(
-            action,
-            AnswerOtherSessionPrompt | TypeIntoOtherSession | InterruptOtherSession
-        )
     }
 
     /// Whether this caller is Chief with its head role (settled for this request).

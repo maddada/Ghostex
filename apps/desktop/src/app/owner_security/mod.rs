@@ -68,9 +68,6 @@ struct OwnerSession {
     waiting_approval: Option<String>,
     /// That request was denied or lapsed: no more asking there until the app restarts.
     gave_up: bool,
-    /// That computer has another owner, so this key needs its approval: the background opener
-    /// stops there, and only the owner's own action on that computer asks (`askOwner`).
-    needs_ask: bool,
 }
 
 static SESSIONS: Mutex<Option<HashMap<String, OwnerSession>>> = Mutex::new(None);
@@ -180,7 +177,7 @@ fn cached_token(transport: &Transport) -> Option<String> {
     }
     let key = transport.key();
     let start = with_session(&key, |session| {
-        if session.token.is_some() || session.needs_ask {
+        if session.token.is_some() {
             return None;
         }
         let due = session
@@ -196,11 +193,11 @@ fn cached_token(transport: &Transport) -> Option<String> {
         let _ = std::thread::Builder::new()
             .name("ghostex-owner-session".into())
             .spawn(move || {
-                // A connected computer's owner key that needs approval there is asked for when the
-                // owner first acts there, never from here (CDXC:Security 2026-11-08 in
-                // server/src/server/security_http.rs, `ASK_OWNER_PARAM`).
-                let may_ask = matches!(transport, Transport::Local);
-                let opened = in_security_flow(|| open_owner_session(&transport, may_ask));
+                /*
+                CDXC:Security 2026-11-10 DECISION:
+                User (Q2099, "ask once per computer, earlier: ask at connect instead of when you first act there, so the Mac can answer from day one"): a connected computer that has its own owner is asked once, at connect, to let this app act as the owner there and answer its requests. The one request waits there (a day) and is read, never made again, while it waits (`enroll_owner_key`); once approved the keys are kept for good; denied or lapsed, it isn't asked again until the app restarts. This supersedes asking only when the owner first acts there (#508, CDXC:Security 2026-11-08 in server/src/server/security_http.rs, `ASK_OWNER_PARAM`).
+                */
+                let opened = in_security_flow(|| open_owner_session(&transport, true));
                 with_session(&transport.key(), |session| {
                     session.opening = false;
                     match opened {
@@ -579,11 +576,10 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
         .as_deref()
         == Some(OWNER_APPROVAL_NEEDED_ERROR)
     {
-        with_session(&key, |session| session.needs_ask = true);
-        return Err("This app isn't approved as an owner on that computer yet; it asks when you first act there.".to_string());
-    }
-    if (200..300).contains(&status) {
-        with_session(&key, |session| session.needs_ask = false);
+        return Err(
+            "This app isn't approved as an owner on that computer yet; it asks there once."
+                .to_string(),
+        );
     }
     if let Some(request) = waiting_request_in(status, &body) {
         with_session(&key, |session| {
@@ -624,10 +620,7 @@ fn quiet_owner_session(transport: &Transport) -> Option<String> {
         return None;
     }
     let token = in_security_flow(|| open_owner_session(transport, false)).ok()?;
-    with_session(&key, |session| {
-        session.token = Some(token.clone());
-        session.needs_ask = false;
-    });
+    with_session(&key, |session| session.token = Some(token.clone()));
     Some(token)
 }
 
@@ -635,7 +628,6 @@ fn quiet_owner_session(transport: &Transport) -> Option<String> {
 /// next call opens the owner session instead of waiting for the owner to act there first.
 pub(crate) fn note_owner_key_approved(transport: &Transport) {
     with_session(&transport.key(), |session| {
-        session.needs_ask = false;
         session.gave_up = false;
         session.waiting_approval = None;
         session.last_attempt = None;

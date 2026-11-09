@@ -25,6 +25,9 @@ pub enum PresenceOutcome {
 #[derive(Clone, Debug)]
 pub struct PresenceGrant {
     pub approval: ApprovalRequest,
+    /// Nobody was asked: the policy lets this caller do it (`SecurityState::skips_approval`).
+    /// `approval` then names the change only; its id was never a request.
+    pub by_policy: bool,
 }
 
 impl SecurityState {
@@ -48,6 +51,12 @@ impl SecurityState {
                 ),
             };
         }
+        if self.skips_approval(caller, &action) {
+            return PresenceOutcome::Granted(PresenceGrant {
+                approval: policy_approval(caller, requester_label, &action, now_ms),
+                by_policy: true,
+            });
+        }
         if let Some(id) = presented_approval_id.filter(|id| !id.trim().is_empty()) {
             match self.approvals.consume(id.trim(), caller, &action, now_ms) {
                 Ok(approval) => {
@@ -57,7 +66,10 @@ impl SecurityState {
                         approval_id: approval.id.clone(),
                         caller: caller.clone(),
                     });
-                    return PresenceOutcome::Granted(PresenceGrant { approval });
+                    return PresenceOutcome::Granted(PresenceGrant {
+                        approval,
+                        by_policy: false,
+                    });
                 }
                 Err(ApprovalError::StillPending) => {
                     if let Some(request) = self.approvals.read(id.trim(), caller, now_ms) {
@@ -85,6 +97,32 @@ impl SecurityState {
             });
         }
         PresenceOutcome::Pending(request)
+    }
+}
+
+/// What a change the policy lets through without asking is named as: never stored, never
+/// approvable, `consumed` at once.
+fn policy_approval(
+    caller: &Principal,
+    label: &str,
+    action: &ActionRequest,
+    now_ms: u64,
+) -> ApprovalRequest {
+    use ghostex_gx_protocol::approval::ApprovalStatus;
+    ApprovalRequest {
+        id: "allowed".to_string(),
+        action: action.action.clone(),
+        target: action.target.clone(),
+        summary: action.summary.clone(),
+        detail: action.detail.clone(),
+        params_digest: action.params_digest(),
+        nonce: String::new(),
+        requested_by: requester_for(caller, label),
+        created_at_ms: now_ms,
+        expires_at_ms: now_ms,
+        status: ApprovalStatus::Consumed,
+        decided_at_ms: Some(now_ms),
+        decided_by: Some("policy".to_string()),
     }
 }
 

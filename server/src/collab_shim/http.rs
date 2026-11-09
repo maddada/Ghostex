@@ -244,15 +244,18 @@ fn gate(
 
 /// After an approved change ran: the security log's entry and its notification.
 pub(crate) fn performed(state: &AppState, caller: &Principal, grant: &PresenceGrant, ok: bool) {
+    // Your own share's link again or its mode (Q2103) asked nobody: logged as allowed.
     crate::audit::record(
         crate::audit::Action::from_approval(&grant.approval),
         crate::audit::Actor::from(caller),
-        if ok {
-            crate::audit::Outcome::Approved
-        } else {
-            crate::audit::Outcome::Failed("The change did not go through.".to_string())
+        match (ok, grant.by_policy) {
+            (false, _) => {
+                crate::audit::Outcome::Failed("The change did not go through.".to_string())
+            }
+            (true, true) => crate::audit::Outcome::Allowed,
+            (true, false) => crate::audit::Outcome::Approved,
         },
-        Some(crate::audit::ApprovalRef::from(&grant.approval)),
+        (!grant.by_policy).then(|| crate::audit::ApprovalRef::from(&grant.approval)),
     );
     state.security.record_performed(
         grant.approval.action.clone(),

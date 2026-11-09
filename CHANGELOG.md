@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Connecting a computer you added yourself no longer asks for Touch ID:** connecting a computer in Settings > Remote lets the agents on both computers reach each other right away. Only an agent asking on its own still needs your approval, once per computer.
+- **Easy Connect and another computer's owner approval are asked once, then remembered:** turning on Easy Connect asks the first time only (if your Easy Connect was already set up, it counts as approved), and its ports, relay and allowed devices change without asking. A computer that has its own Ghostex app asks once, as soon as you connect it, to let this computer answer its approval cards too.
+- **Fewer settings ask for Touch ID:** only Accounts, Secrets, Connectors and Remote's ways in (SSH access, Easy Connect, pairing, Tailscale) ask before saving. Sync settings and the rest of the Remote page save right away, so turning on Sync on a computer without the app works.
+- **Your own GBots and Collab clicks don't ask for Touch ID any more:** turning GBots on, adding a GBot, giving it an API key or another computer, showing a Collab share's link again and switching its mode don't ask you any more. A new Collab share, each guest message in Approve mode, pairing a phone and letting another device approve still ask.
+- **Agents' bigger moves no longer wait for your approval:** starting an agent with approvals off, letting Autopilot answer approvals or changing its limits, starting a Cloud Box with your logins, and connecting a team backend go through and are listed in the security log as allowed.
+
 ## 11.2.2 - 2026-11-10
 
 **Ghostex 11.2.2 is out.** Phones and Easy Connect computers stay connected through restarts and slow links, iPhone voice calls work even when the call microphone keeps stopping, Dictate never loses a recording, messages between agents fold into "Worked for", approvals work across your connected computers, and Android gets push notifications.

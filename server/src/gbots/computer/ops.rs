@@ -175,7 +175,7 @@ fn show(
 
 /*
 CDXC:GBots 2026-11-09 DECISION:
-Coordinator brief for M12: "Only the user can give a GBot a computer (and starting a Cloud Box or letting it use agent logins already asks for approval: keep those gates)." So giving a GBot another computer, a Cloud Box or computer use is done from the owner's own devices only (GBot Settings > Computer in Ghostex on the computer), like raising its approval level; the `ghostex` CLI in a terminal (and so the phone, which reaches the computer through it over SSH) and Chief of Staff may only give it this computer back and turn computer use off, since turning things off never asks. Starting a chat on its Cloud Box still asks for your approval when anyone but you starts it (security_gates.rs `gbots_cloud_box_action`).
+Coordinator brief for M12: "Only the user can give a GBot a computer (and starting a Cloud Box or letting it use agent logins already asks for approval: keep those gates)." So giving a GBot another computer, a Cloud Box or computer use is done from the owner's own devices only (GBot Settings > Computer in Ghostex on the computer), like raising its approval level; the `ghostex` CLI in a terminal (and so the phone, which reaches the computer through it over SSH) and Chief of Staff may only give it this computer back and turn computer use off, since turning things off never asks. Since 2026-11-10 your own devices aren't asked for the widening itself (Q2105), and starting a chat on its Cloud Box no longer asks anyone (Q2104), both in security/policy.rs. Before that, starting a chat on its Cloud Box asked for your approval when anyone but you started it (security_gates.rs `gbots_cloud_box_action`).
 */
 fn set(
     state: &AppState,

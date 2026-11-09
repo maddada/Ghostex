@@ -168,8 +168,8 @@ fn create_reach(repository: &DomainRepository, params: &Map<String, Value>) -> O
 }
 
 /*
-CDXC:Security 2026-11-08 DECISION:
-User (#495 follow-up, Q1863): "forcing full access always asks". A create call forces it when it sends `launchSettings.acceptAllMode: "enabled"` and the owner's own setting would not start that agent with approvals off: neither "Agent approvals: accept all" nor the agent's own launcher setting is on. A call that only repeats the owner's setting changes nothing, so it doesn't ask (the page's option A: "unless it matches your own setting").
+CDXC:Security 2026-11-10 DECISION:
+User (Q2104, "drop"): starting an agent with approvals off no longer asks; it is written to the security log as allowed (security/policy.rs). This supersedes Q1863's "forcing full access always asks". A create call forces it when it sends `launchSettings.acceptAllMode: "enabled"` and the owner's own setting would not start that agent with approvals off: neither "Agent approvals: accept all" nor the agent's own launcher setting is on. A call that only repeats the owner's setting changes nothing, so it doesn't ask (the page's option A: "unless it matches your own setting").
 */
 fn forces_full_access(
     db: &rusqlite::Connection,

@@ -35,6 +35,10 @@ pub struct PersistedSecurity {
     /// Connected computers the owner approved, by server id, with when (ms).
     #[serde(default)]
     pub approved_computers: std::collections::BTreeMap<String, u64>,
+    /// Approvals kept for good once given ("ask once and remember", `security::policy`), by key,
+    /// with when (ms). Older gxservers ignore it.
+    #[serde(default)]
+    pub remembered_approvals: std::collections::BTreeMap<String, u64>,
     // 11.1.1 and 11.1.2 also saved `approvedProjectReach` (the retired "reach another project"
     // approvals); an old file still loads, the field is ignored, and the next save drops it.
 }

@@ -10,7 +10,7 @@ use crate::GhostexGpuiApp;
 use crate::app::model::GpuiAppModalKind;
 use crate::app::window::settings_modal::catalog::settings_catalog;
 use crate::app::window::settings_modal::{GpuiSettingsModalWindow, SettingsModalCommand};
-use ghostex_settings_catalog::security_relaxing::needs_owner_presence;
+use ghostex_settings_catalog::security_relaxing::own_save_needs_presence;
 
 /// The saved value of every setting in `changes` that loosens security and would change, keyed
 /// by setting: what to show again when the owner doesn't confirm.
@@ -19,7 +19,7 @@ fn held_back(changes: &Map<String, Value>) -> Map<String, Value> {
     let saved = snapshot.object();
     changes
         .iter()
-        .filter(|(key, value)| needs_owner_presence(key, value))
+        .filter(|(key, value)| own_save_needs_presence(key, value))
         .filter_map(|(key, value)| {
             let current = saved
                 .get(key)
@@ -94,7 +94,7 @@ fn reason(keys: &[&String]) -> String {
 impl GhostexGpuiApp {
     /*
     CDXC:Security 2026-11-08 DECISION:
-    User (#495 follow-up): the desktop's own Settings window must ask for the system prompt (Touch ID / Hello / polkit) when it saves a security-relaxing setting, same as the API path, because agents can drive the GUI. The rule is the API's (`ghostex_settings_catalog::security_relaxing`); a save the owner doesn't confirm is not written and the window shows the saved values again.
+    User (#495 follow-up): the desktop's own Settings window must ask for the system prompt (Touch ID / Hello / polkit) when it saves a security-relaxing setting, same as the API path, because agents can drive the GUI. The rule is the API's (`ghostex_settings_catalog::security_relaxing`); a save the owner doesn't confirm is not written and the window shows the saved values again. Since 2026-11-10 that rule asks only for settings that let someone in (Q2102), and turning GBots on from this window doesn't ask (Q2105, `own_save_needs_presence`).
     */
     /// `Some(command)` to save now; `None` when the save waits for the prompt (and is saved, or
     /// put back, once it is answered).

@@ -19,6 +19,7 @@ mod capability;
 mod events;
 mod owner;
 pub mod persist;
+mod policy;
 mod presence;
 mod session_tokens;
 
@@ -33,6 +34,7 @@ pub use capability::{route_access, Capability, Principal, RouteAccess, SessionRo
 pub use events::SecurityEvent;
 pub use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
 pub use owner::{OwnerChallenges, OwnerError, OWNER_CHALLENGE_TTL_MS};
+pub use policy::EASY_CONNECT_ENABLE;
 pub use presence::{requester_for, PresenceGrant, PresenceOutcome};
 pub use session_tokens::{
     SessionTokens, OWNER_TOKEN_PREFIX, SESSION_TOKEN_ENV, SESSION_TOKEN_PREFIX,
@@ -97,6 +99,8 @@ pub struct SecurityState {
     /// Connected computers the owner approved (server id → when, ms); see
     /// [`SecurityState::computer_approved`].
     approved_computers: Arc<std::sync::Mutex<std::collections::BTreeMap<String, u64>>>,
+    /// Approvals remembered for good (`policy::remember_key`), key → when (ms).
+    remembered: Arc<std::sync::Mutex<std::collections::BTreeMap<String, u64>>>,
     /// `gxserver/auth/security.json`; `None` in tests that need no disk.
     persist_path: Option<Arc<PathBuf>>,
     save_lock: Arc<std::sync::Mutex<()>>,
@@ -114,6 +118,7 @@ impl SecurityState {
             owner_challenges: OwnerChallenges::default(),
             session_tokens: SessionTokens::default(),
             approved_computers: Arc::default(),
+            remembered: Arc::default(),
             persist_path: None,
             save_lock: Arc::default(),
             events: broadcast::channel(256).0,
@@ -133,6 +138,10 @@ impl SecurityState {
             .approved_computers
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = saved.approved_computers;
+        *state
+            .remembered
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = saved.remembered_approvals;
         state.persist_path = Some(Arc::new(path));
         Ok(state)
     }
@@ -159,8 +168,30 @@ impl SecurityState {
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .clone(),
+                remembered_approvals: self
+                    .remembered
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .clone(),
             },
         )
+    }
+
+    /// Whether the owner approved `key` once already (`policy::remember_key`).
+    pub fn is_remembered(&self, key: &str) -> bool {
+        self.remembered
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .contains_key(key)
+    }
+
+    /// Keeps `key` approved for good, across restarts.
+    pub fn remember(&self, key: &str, now_ms: u64) {
+        self.remembered
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(key.to_string(), now_ms);
+        let _ = self.save();
     }
 
     /// Every security event from now on. A slow subscriber loses the oldest events

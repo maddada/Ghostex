@@ -1,4 +1,4 @@
-//! Which settings loosen security (GitHub #495): changing one needs the owner's presence,
+//! Which settings let someone in (GitHub #495, narrowed by Q2102): changing one needs the owner's presence,
 //! whether the change comes through gxserver's API (an approval request, server/src/server/
 //! security_gates.rs) or the desktop's own Settings window (the system prompt before the save,
 //! apps/desktop/src/app/owner_security/settings.rs). One rule for both.
@@ -8,20 +8,24 @@ use std::sync::OnceLock;
 
 use serde_json::Value;
 
-/// The pages whose settings open a way in or hand out access: Remote, Accounts, Secrets, Sync and
-/// Connectors. Collab's are gated by Collab's own approvals.
-const SECURITY_RELAXING_TABS: &[&str] = &["remote", "accounts", "secrets", "sync", "connectors"];
+/// The pages whose settings hand out access: Accounts, Secrets and Connectors. Collab's are gated
+/// by Collab's own approvals.
+const SECURITY_RELAXING_TABS: &[&str] = &["accounts", "secrets", "connectors"];
 
 /*
-CDXC:Security 2026-11-08 DECISION:
-User (Q1936, 11.1.2): the computers this one connects to are not a way in, so changing them never
-asks. The saved machines (`remoteMachines`, with their SSH passwords) are app state the catalog
-files outside the Remote page, so they never matched; this computer's 2-character name on the
-sidebar pills is on the Remote page but only renames a pill. Everything that lets someone in
-(Easy Connect, its relay, ports and allow-list, pairing, SSH access, Tailscale) still asks.
+CDXC:Security 2026-11-10 DECISION:
+User (Q2102, "ask only for settings that let someone in"): Accounts, Secrets and Connectors keep asking, and on the Remote page only its ways in do (SSH access, Easy Connect on, pairing and paired devices, Tailscale); Sync and the everyday Remote rows (names, saved computers, and the Easy Connect relay, ports and allow-list, which Q2101 lets follow without asking) don't. This supersedes Q1936 (11.1.2), which asked for every Remote row but the computer's short name, and every Sync row.
 */
-/// Remote-page settings that let no one in: changing them never asks.
-const LETS_NO_ONE_IN: &[&str] = &["localMachineShortName"];
+/// The Remote page's settings that let someone in: changing one asks.
+const REMOTE_WAYS_IN: &[&str] = &[
+    "sshAccess",
+    "easyConnectEnabled",
+    "pairingCode",
+    "pairedDevices",
+    "pairedDevicesOnly",
+    "tailscaleEnabled",
+    "remoteTailscaleEnabled",
+];
 
 fn security_relaxing_keys() -> &'static HashSet<String> {
     static KEYS: OnceLock<HashSet<String>> = OnceLock::new();
@@ -30,8 +34,8 @@ fn security_relaxing_keys() -> &'static HashSet<String> {
             .settings
             .into_iter()
             .filter(|entry| SECURITY_RELAXING_TABS.contains(&entry.tab.as_str()))
-            .filter(|entry| !LETS_NO_ONE_IN.contains(&entry.key.as_str()))
             .map(|entry| entry.key)
+            .chain(REMOTE_WAYS_IN.iter().map(|key| key.to_string()))
             .collect()
     })
 }
@@ -45,13 +49,19 @@ pub fn holds_secret(key: &str) -> bool {
 }
 
 /// Whether changing setting `key` to `value` needs the owner's presence. Turning GBots off never
-/// does.
+/// does; turning them on asks only from the terminal and agents (Q2105: gxserver's policy lets
+/// your own computer and phone through, and the Settings window uses [`own_save_needs_presence`]).
 pub fn needs_owner_presence(key: &str, value: &Value) -> bool {
     if key == "gbotsEnabled" {
         return value.as_bool() == Some(true);
     }
     // Shortening the home folder's deny list lets agents read what it kept them out of.
-    key == "homeSecretFolders"
-        || holds_secret(key)
-        || security_relaxing_keys().contains(key)
+    key == "homeSecretFolders" || holds_secret(key) || security_relaxing_keys().contains(key)
+}
+
+/// Whether the owner's own Settings window asks for the system prompt before saving `key`:
+/// [`needs_owner_presence`] without GBots, which your own clicks turn on without asking (Q2105,
+/// CDXC:Security 2026-11-10 in server/src/security/policy.rs).
+pub fn own_save_needs_presence(key: &str, value: &Value) -> bool {
+    key != "gbotsEnabled" && needs_owner_presence(key, value)
 }

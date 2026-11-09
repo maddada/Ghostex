@@ -3,16 +3,16 @@
 //!
 //! | Route | Asks when |
 //! | --- | --- |
-//! | `/api/updateTailcatState` | Easy Connect goes on, opens a new port, lets new devices in (or empties its allow-list), changes its relay |
-//! | `/api/registerConnectedComputer`, `/api/issueComputerGrant` | a computer not approved in the last 30 days, with Agent access on: one request per computer, whoever asks (registering a computer with Agent access off never asks) |
-//! | `/api/autopilot` `op: "set"` | `answerApprovals` goes on, `limits` change |
-//! | `/api/gbots` `op: "create"` | from your own computer, phone or terminal (Chief of Staff's adds don't ask; other agents are refused) |
-//! | `/api/gbots` `op: "dayWatchOn"` | when it adds Day Watcher: as `create` |
-//! | `/api/gbots` `op: "apiOn"`, `"apiNewKey"` | from your own computer, phone or terminal (agents are refused) |
-//! | `/api/gbots` `op: "teamImport"` | from your own computer, phone or terminal, once per file (no one else may import) |
-//! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a security-relaxing setting changes, or GBots goes on |
-//! | `/api/cloudBoxes` `create`, `setAgentLogin` (allowed), `projectSettings` (write) | anyone but the owner's devices: logins and project secrets go onto a box |
-//! | a create forcing full access | see security_full_access.rs |
+//! Since 2026-11-10 the user's answers decide which of these still ask (`SecurityState::skips_approval`,
+//! security/policy.rs):
+//!
+//! | Route | Asks when |
+//! | --- | --- |
+//! | `/api/updateTailcatState` | Easy Connect goes on for the first time (remembered); ports, relay and allow-list never |
+//! | `/api/registerConnectedComputer`, `/api/issueComputerGrant` | an agent's own token (never your app or phone), for a computer not approved in the last 30 days, with Agent access on |
+//! | `/api/gbots` `op: "create"`, `"dayWatchOn"`, `"teamImport"`, `"apiOn"`, `"apiNewKey"` | from your terminal (your computer and phone don't ask; Chief of Staff's adds don't ask; other agents are refused) |
+//! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a setting that lets someone in changes (`security_relaxing`), or GBots goes on from your terminal |
+//! | `/api/autopilot`, `/api/cloudBoxes`, `/api/connectTeamSync`, a create forcing full access | never: logged as allowed |
 //!
 //! What only the owner's devices may do at all, with no approval to ask for, is refused before
 //! these (`security_owner_only.rs`).
@@ -20,7 +20,7 @@
 //! Answering another session's prompt, typing into it and interrupting it
 //! (`/api/answerSessionChatPrompt`, `/api/sendSessionText`, `/api/sendSessionEnter`,
 //! `/api/sendSessionMessage`, `/api/interruptSessionChat`) never ask: every caller skips them
-//! (`Principal::skips_approval`, security/capability.rs), and only Chief's (the head role, settled
+//! (`SecurityState::skips_approval`, security/policy.rs), and only Chief's (the head role, settled
 //! per request by `crate::chief::settle_principal`) are still written to the security log.
 //!
 //! Pairing and Collab routes are gated by their own threads with the same
@@ -119,9 +119,10 @@ pub(crate) fn gate(
         Some((_, action)) => Some(action.clone()),
         None => sensitive_action(state, caller, endpoint_path, &params),
     }?;
-    if computer.is_none() && caller.skips_approval(&action.action) {
-        if caller.is_head() {
-            record_head_steering(caller, &action);
+    // What the user chose not to be asked about (CDXC:Security 2026-11-10 in security/policy.rs).
+    if state.security.skips_approval(caller, &action) {
+        if caller.is_head() || security::SecurityState::logs_when_skipped(&action.action) {
+            record_allowed(caller, &action);
         }
         return None;
     }
@@ -219,7 +220,7 @@ const SESSION_INPUT_ROUTES: &[&str] = &[
 
 /*
 CDXC:GBots 2026-11-09 WHY:
-Plan piece 14: a GBot API chat runs on text from outside Ghostex, "with no head answering for it". So what it waits on (an approval, a question), and anything typed, sent, queued or interrupted in it, is the owner's alone: every input route (security review finding 3: the three first covered missed sending a message, queueing, editing the queue and interrupting) is refused for every caller but your own computer and phone, the chat itself aside, agents (Chief of Staff included), the token file, other computers, extensions and Collab guests alike. It is checked before every other gate. The agents' general freedom to answer and type into other sessions (CDXC:Security at `Principal::skips_approval`) stays for every other chat.
+Plan piece 14: a GBot API chat runs on text from outside Ghostex, "with no head answering for it". So what it waits on (an approval, a question), and anything typed, sent, queued or interrupted in it, is the owner's alone: every input route (security review finding 3: the three first covered missed sending a message, queueing, editing the queue and interrupting) is refused for every caller but your own computer and phone, the chat itself aside, agents (Chief of Staff included), the token file, other computers, extensions and Collab guests alike. It is checked before every other gate. The agents' general freedom to answer and type into other sessions (CDXC:Security at `SecurityState::skips_approval`) stays for every other chat.
 */
 fn api_chat_refused(
     state: &AppState,
@@ -269,9 +270,10 @@ fn chief_turned_off_for(
         )
 }
 
-/// The security-log entry for what Chief's head role let through without an approval: kept in the
-/// log with the quiet `allowed` outcome, which the bell leaves out (audit/notify.rs).
-fn record_head_steering(caller: &Principal, request: &ActionRequest) {
+/// The security-log entry for what went through without an approval (Chief steering another
+/// session, the agents' bigger moves the user stopped being asked about): kept in the log with the
+/// quiet `allowed` outcome, which the bell leaves out (audit/notify.rs).
+fn record_allowed(caller: &Principal, request: &ActionRequest) {
     let mut action = crate::audit::Action::new(request.action.as_str(), request.summary.clone());
     if let Some(target) = &request.target {
         action = action.target(target.clone());
@@ -279,7 +281,7 @@ fn record_head_steering(caller: &Principal, request: &ActionRequest) {
     crate::audit::record(
         action,
         match crate::audit::Actor::from(caller) {
-            crate::audit::Actor::Session { session_id } => {
+            crate::audit::Actor::Session { session_id } if caller.is_head() => {
                 crate::audit::Actor::Chief { session_id }
             }
             other => other,
@@ -412,7 +414,7 @@ fn computer_gate(
 
 /*
 CDXC:GBots 2026-11-08 DECISION:
-User (Q2103 A): Chief of Staff adds a GBot on its own and tells you in one card, so its adds ask nobody, unless you turned off "Chief of Staff may add GBots on its own" (`gbotsChiefAddsOnItsOwn`, Settings > Agents), when each of its adds asks you first. Your own computer, phone and terminal still ask before a bot is added (the previous GBots' rule, kept by M0). Other agents may not add bots at all (Q-D A): `/api/gbots` refuses them with one sentence, so they are not asked for here; neither is anyone while GBots are off or for a name `/api/gbots` refuses, which it answers instead.
+User (Q2103 A): Chief of Staff adds a GBot on its own and tells you in one card, so its adds ask nobody, unless you turned off "Chief of Staff may add GBots on its own" (`gbotsChiefAddsOnItsOwn`, Settings > Agents), when each of its adds asks you first. Your terminal still asks before a bot is added; your own computer and phone don't since 2026-11-10 (Q2105, "drop them for your own clicks", security/policy.rs). Other agents may not add bots at all (Q-D A): `/api/gbots` refuses them with one sentence, so they are not asked for here; neither is anyone while GBots are off or for a name `/api/gbots` refuses, which it answers instead.
 */
 fn gbots_add_action(
     state: &AppState,
@@ -437,7 +439,7 @@ fn gbots_add_action(
 
 /*
 CDXC:GBots 2026-11-09 DECISION:
-Coordinator brief for M12: "starting a Cloud Box or letting it use agent logins already asks for approval: keep those gates." A chat with a GBot whose computer is a Cloud Box starts (or wakes) that box with your agent logins and the project's files, so `newChat` and `ask` for such a GBot ask you exactly when `/api/cloudBoxes` `create` would: whenever anyone but your own computer or phone starts it (Chief of Staff, other GBots, the terminal). Asked once per chat.
+Coordinator brief for M12: "starting a Cloud Box or letting it use agent logins already asks for approval: keep those gates." A chat with a GBot whose computer is a Cloud Box starts (or wakes) that box with your agent logins and the project's files, so `newChat` and `ask` for such a GBot asked you exactly when `/api/cloudBoxes` `create` would. Since 2026-11-10 (Q2104, "drop") neither asks: the box starts and the security log keeps it as allowed (security/policy.rs).
 */
 /// Letting a GBot do more where it works asks for the owner's signed approval, from the owner's
 /// own devices too (CDXC:GBots 2026-11-09 at gbots/computer/ops.rs `widening_approval`); everyone
@@ -543,7 +545,7 @@ fn gbots_day_watch_action(
 
 /*
 CDXC:GBots 2026-11-09 DECISION:
-Coordinator brief (M11), on the user's behalf: only the user turns a GBot's API on or gives it a new key, with "an owner-presence approval like other security-relaxing changes". So `apiOn`, `apiNewKey` and sharing the GBot's memory with apps (`apiShareMemory` on) ask from your own computer, phone or terminal, once per change, naming what the key reaches (its routines too, security review finding 5) and binding the request to the asking call's own nonce (finding 6); every agent (Chief of Staff included) is refused by `/api/gbots` with one sentence and never asked for here, nor is anyone while GBots are off or for a GBot that doesn't exist. Turning it off never asks.
+Coordinator brief (M11), on the user's behalf: only the user turns a GBot's API on or gives it a new key, with "an owner-presence approval like other security-relaxing changes". So `apiOn`, `apiNewKey` and sharing the GBot's memory with apps (`apiShareMemory` on) ask from your terminal, once per change (your own computer and phone don't since 2026-11-10, Q2105), naming what the key reaches (its routines too, security review finding 5) and binding the request to the asking call's own nonce (finding 6); every agent (Chief of Staff included) is refused by `/api/gbots` with one sentence and never asked for here, nor is anyone while GBots are off or for a GBot that doesn't exist. Turning it off never asks.
 */
 fn gbots_api_key_action(
     state: &AppState,
@@ -670,10 +672,23 @@ fn easy_connect_action(state: &AppState, params: &Map<String, Value>) -> Option<
     let exact = || Value::Object(params.clone());
     match &update {
         TailcatStateUpdate::SetEnabled { enabled: false } => None,
-        TailcatStateUpdate::SetEnabled { enabled: true } => Some(
-            ActionRequest::new(SensitiveAction::EasyConnectEnable, "Turn on Easy Connect")
-                .params(exact()),
-        ),
+        // Asked once and remembered (Q2101); a computer that already has paired devices on its
+        // allow-list was let in by an earlier approval, which keeps counting.
+        TailcatStateUpdate::SetEnabled { enabled: true } => {
+            if current
+                .as_ref()
+                .is_some_and(|state| !state.allowed_client_keys.is_empty())
+            {
+                state
+                    .security
+                    .remember(security::EASY_CONNECT_ENABLE, security::now_ms());
+                return None;
+            }
+            Some(
+                ActionRequest::new(SensitiveAction::EasyConnectEnable, "Turn on Easy Connect")
+                    .params(exact()),
+            )
+        }
         TailcatStateUpdate::SetPorts { ports } => {
             let open: HashSet<u16> = current
                 .as_ref()
@@ -781,7 +796,7 @@ fn autopilot_action(params: &Map<String, Value>) -> Option<ActionRequest> {
 
 /*
 CDXC:CloudBoxes 2026-11-08 DECISION:
-#495 follow-up (the audit's leftovers, "under the same rule"): `/api/cloudBoxes` `create`, `setAgentLogin` with `allowed: true`, and `projectSettings` with `settings` put the owner's agent logins and a project's secret files onto a box, so an agent's call asks the owner with Touch ID. The owner's own devices don't ask (the Cloud Boxes page and the phone are the owner choosing). Turning a login off and reading settings never ask; `connectInfo` is left as it is (the user is asked about it separately).
+#495 follow-up (the audit's leftovers, "under the same rule"): `/api/cloudBoxes` `create`, `setAgentLogin` with `allowed: true`, and `projectSettings` with `settings` put the owner's agent logins and a project's secret files onto a box, so an agent's call asked the owner with Touch ID; since 2026-11-10 (Q2104, "drop") nobody is asked and the security log keeps it as allowed (security/policy.rs). Turning a login off and reading settings never ask; `connectInfo` is left as it is (the user is asked about it separately).
 */
 fn cloud_box_action(
     state: &AppState,
@@ -848,7 +863,7 @@ fn cloud_box_action(
 
 /*
 CDXC:TeamSync 2026-11-08 DECISION:
-#495 follow-up (Q1865, "settings only"): joining a team, invites, the team's Linear keys and its Slack flow are the owner's devices' alone (security_owner_only.rs); linking a Slack user stays open, since it needs the one-time code Slack sends only that user. Connecting with a token made elsewhere is `ghostex team deploy`'s last step, and Settings > Workspaces sends the owner to a terminal for it (deploying needs their Convex CLI login), so it asks with Touch ID instead of being refused; the card names the backend's address, so a connection to a backend the owner didn't deploy is visible before it happens.
+#495 follow-up (Q1865, "settings only"): joining a team, invites, the team's Linear keys and its Slack flow are the owner's devices' alone (security_owner_only.rs); linking a Slack user stays open, since it needs the one-time code Slack sends only that user. Connecting with a token made elsewhere is `ghostex team deploy`'s last step, and Settings > Workspaces sends the owner to a terminal for it (deploying needs their Convex CLI login), so it isn't refused; since 2026-11-10 (Q2104, "drop") it no longer asks either, and the security log names the backend's address as allowed (security/policy.rs).
 */
 fn team_connect_action(caller: &Principal, params: &Map<String, Value>) -> Option<ActionRequest> {
     if caller.is_owner_device() {
@@ -928,7 +943,7 @@ fn settings_action(params: &Map<String, Value>) -> Option<ActionRequest> {
     )
 }
 
-/// Answering another session's prompt: never asks (`Principal::skips_approval`); the request
+/// Answering another session's prompt: never asks (`SecurityState::skips_approval`); the request
 /// only names it for Chief's security log entry.
 fn prompt_action(caller: &Principal, params: &Map<String, Value>) -> Option<ActionRequest> {
     let project_id = text(params, "projectId")?;
@@ -960,7 +975,7 @@ fn is_interrupt(text: &str) -> bool {
 
 /*
 CDXC:Security 2026-11-08 DECISION:
-User (#495 follow-up): raw terminal input (send-text / send-key) into another session, own threads included, and interrupting a session that is neither the caller's own nor one of its threads, were asked about from 11.1.0; since the user's "please let agents manage other sessions like before" (CDXC:Security at `Principal::skips_approval`) nobody is asked, and these requests only name the change for Chief's security log entry.
+User (#495 follow-up): raw terminal input (send-text / send-key) into another session, own threads included, and interrupting a session that is neither the caller's own nor one of its threads, were asked about from 11.1.0; since the user's "please let agents manage other sessions like before" (CDXC:Security at `SecurityState::skips_approval`) nobody is asked, and these requests only name the change for Chief's security log entry.
 */
 fn input_action(
     state: &AppState,

@@ -90,7 +90,7 @@ pub(crate) fn presence_outcome(
                 Some(crate::audit::ApprovalRef::from(request)),
             );
         }
-        PresenceOutcome::Granted(grant) => {
+        PresenceOutcome::Granted(grant) if !grant.by_policy => {
             crate::audit::note_approval(crate::audit::ApprovalRef::from(&grant.approval));
         }
         PresenceOutcome::Refused { message } => {
@@ -235,9 +235,10 @@ Ghostex on this computer" was asked 8 times in one day, never answered, because 
 enrolled its owner key on every connect (its owner session opener runs on the first call to a
 connected computer), and each restart of either side made a new request. That owner session only
 lets the owner's Stop, prompt answers and typing on this computer's sessions go without asking, so
-it is asked for when one of those first needs it, or (since 2026-11-10) when the app first shows a
-request of this computer it can't answer yet (desktop `owner_security::answerer`), never at
-connect: the opener sends
+it was asked for when one of those first needs it, never at connect. Since 2026-11-10 the user
+chose to be asked once at connect (Q2099, desktop `owner_security::cached_token`), which needs only
+that one request to be reused while it waits. Callers that only check (the app's quiet opener for
+listing requests, `owner_security::quiet_owner_session`) send
 `askOwner: false`, which enrolls a key that needs no approval and otherwise answers
 `ownerApprovalNeeded` without making a request. A call without the field asks, as before.
 */
@@ -546,6 +547,8 @@ fn handle(
                     security.approve_computer(server_id, now);
                 }
             }
+            // Asked once, kept for good (CDXC:Security 2026-11-10 in security/policy.rs).
+            security.remember_approved(&request, now);
             // A key the owner approved goes in now (CDXC:Security 2026-11-10 at
             // `security::ApprovalEffect`).
             if let Some(security::ApprovalEffect::EnrollKeys { owner, approver }) =

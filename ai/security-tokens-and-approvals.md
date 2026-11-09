@@ -80,10 +80,27 @@ extensions are refused; there is no approval to ask for. The other way round, on
 session itself (its own `gxs_` token) may create a secret request for its chat
 (`/api/createSecretRequest`) and wait for the answer (`/api/waitSecretRequest`).
 
-`Principal::skips_approval(action)` is the one rule for which sensitive actions a caller skips:
-`AnswerOtherSessionPrompt`, `TypeIntoOtherSession` and `InterruptOtherSession`, for every caller
-(user, after 11.1.2: "please let agents manage other sessions like before"; only Chief's are still
-written to the security log, as `allowed`), and nothing else for anyone.
+`SecurityState::skips_approval(caller, action)` (`server/src/security/policy.rs`) is the one rule
+for which sensitive actions a caller skips; both gates read it (the route gate in
+`security_gates.rs` and `require_owner_presence` for handlers that ask themselves). A skipped call
+gets a `PresenceGrant` with `by_policy: true` and a stand-in approval (id `allowed`, status
+`consumed`) that names the change and was never a request. The user's answers of 2026-11-10
+(Q2098 to Q2105):
+
+| Action(s) | Skipped for | Still asks |
+| --- | --- | --- |
+| `answerOtherSessionPrompt`, `typeIntoOtherSession`, `interruptOtherSession` | everyone (11.1.2; only Chief's are logged, as `allowed`) | nobody |
+| `computerGrant`, `computerRegister`, `computerChangeAccess` | the owner's devices and the token file (your app's owner session, or the token file its SSH login reads on the other computer) | a session's own token, once per computer for 30 days |
+| `easyConnectAllowList`, `easyConnectPorts`, `easyConnectRelay` | everyone | nobody |
+| `easyConnectEnable` | everyone once it was approved (remembered for good, `rememberedApprovals.easyConnectEnable`), or when the allow-list already holds a device (an earlier setup counts) | the first time |
+| `forceFullAccess`, `autopilotAnswerApprovals`, `autopilotLiftLimits`, `cloudBoxShareLogins`, `teamSyncConnect` | everyone; written to the security log as `allowed` | nobody |
+| `gbotsEnable`, `gbotsAddBot`, `gbotsApiKey`, `gbotsSetComputer` | the owner's devices | the token file and agents (where `/api/gbots` doesn't refuse them) |
+| `collabEnableSendMode`, `collabChangeShare`, `collabShareChat` showing an existing share's link again | the owner's devices | agents; a new share always asks |
+| `pairingApproveDevice`, `addApproverKey`, `settingsWeakenSecurity` (narrowed, see Settings below), `installExtensionComponent`, `collabApproveGuestMessage` | nobody | as before |
+
+Q2100 ("never ask for a phone that signs in over SSH") is not applied: any agent holding the token
+file could then pair itself as an owner device that approves. Q2099 is the desktop's: it asks a
+connected computer that has its own owner once, at connect (`owner_security::cached_token`).
 
 ### Settings only: `OwnerSetup` (11.1.1, #495 follow-up)
 
@@ -167,7 +184,8 @@ read-only profile writing only its folder, Claude's deny rules), never write mem
 
 ## Sensitive actions: `SensitiveAction`
 
-Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in camelCase):
+Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in camelCase). "Asks
+when" says when the request is made; whether the caller is asked at all is the policy above:
 
 | Group | Actions | Wired by | Asks when |
 | --- | --- | --- | --- |
@@ -180,7 +198,7 @@ Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in 
 | GBots | `gbotsEnable`, `gbotsAddBot` | `security_gates.rs` | `updateSettingsPatch` turning `gbotsEnabled` on; `/api/gbots` `op: "create"`. |
 | GBot API | `gbotsApiKey` (target: the GBot's id) | `security_gates.rs` `gbots_api_key_action` | `/api/gbots` `op: "apiOn"`, `"apiNewKey"`, and `"apiShareMemory"` with `on: true`, from the owner's devices and the token file only (every agent, Chief included, is refused by `/api/gbots` without being asked). The detail names what the key reaches: messaging the GBot, its replies, what it knows (its memory only when shared) and its routines by name. The params bind the label and the SHA-256 of the caller's one-time `keyNonce`, so the key goes only to the call that asked: another program reading the pending request can't repeat it. `apiOff` and sharing off never ask. Each change is a security-log entry (`gbots.apiOn`, `gbots.apiNewKey`, `gbots.apiOff`, `gbots.apiShareMemory`). |
 | GBot Cloud Box chats | `cloudBoxShareLogins` (target: the box) | `security_gates.rs` `gbots_cloud_box_action` | `/api/gbots` `op: "newChat"` or `"ask"` for a GBot that works on a Cloud Box, by anyone but the owner's devices: the box gets the agent logins and project files set up for boxes, and the GBot's instructions and memory. |
-| Settings | `settingsWeakenSecurity` (target: the keys) | `security_gates.rs`, desktop `owner_security/settings.rs` | One rule, `ghostex_settings_catalog::security_relaxing::needs_owner_presence`: a key on the Remote, Accounts, Secrets, Sync or Connectors page, or holding a token, password, secret, API key or credential. Through the API (`updateSettingsPatch`), a key the API may not write at all is refused by `settings_agent_writable.rs` before any approval; the rest (Sync's, GBots') ask. The desktop's own Settings window shows the system prompt (Touch ID / Windows Hello / polkit) before it saves such a change, and shows the saved values again when the prompt is declined. Collab's keys are left to the Collab routes. |
+| Settings | `settingsWeakenSecurity` (target: the keys) | `security_gates.rs`, desktop `owner_security/settings.rs` | One rule, `ghostex_settings_catalog::security_relaxing::needs_owner_presence`: a key on the Accounts, Secrets or Connectors page, one of the Remote page's ways in (`sshAccess`, `easyConnectEnabled`, `pairingCode`, `pairedDevices`, `pairedDevicesOnly`, `tailscaleEnabled`, `remoteTailscaleEnabled`), `homeSecretFolders`, or a key holding a token, password, secret, API key or credential (Q2102, 2026-11-10: Sync and the other Remote rows no longer ask). The desktop's Settings window uses `own_save_needs_presence`, the same rule without `gbotsEnabled` (Q2105). Through the API (`updateSettingsPatch`), a key the API may not write at all is refused by `settings_agent_writable.rs` before any approval; the rest (Sync's, GBots') ask. The desktop's own Settings window shows the system prompt (Touch ID / Windows Hello / polkit) before it saves such a change, and shows the saved values again when the prompt is declined. Collab's keys are left to the Collab routes. |
 | Approvers | `addApproverKey` | `security_http.rs` | A second owner key, or any approver key after the first. |
 | Full access | `forceFullAccess` | `security_full_access.rs` | A create with `launchSettings.acceptAllMode: "enabled"` when neither "Agent approvals: accept all" nor the agent's own launcher setting is on, in any project, whoever but the owner's devices calls (Chief included). Every time. The same for `/api/updateSession` turning a session's `acceptAllMode` on (a resume reads it); leaving it on or turning it off never asks. |
 | Teams | `teamSyncConnect` (target: the backend's address) | `security_gates.rs` | `/api/connectTeamSync` by anyone but the owner's devices. It is `ghostex team deploy`'s last step, which Settings > Workspaces sends the owner to a terminal for, so it asks instead of being refused; the rest of team setup is Settings only. |
@@ -318,7 +336,8 @@ enrolled; the phone asks, the desktop's card approves it.
 `gxserver/auth/security.json` (0600, written whole through a rename): `ownerKeys`,
 `approverKeys`, `sessionTokens` (whole tokens, so a restarted session gets the same one; the file
 is as readable to a same-user program as the token file), `ownerSessions` (hashes only),
-`approvedComputers` (server id → when), `approvedProjectReach` (`{ caller, target }`: an agent session and a project it may reach). An unreadable file is moved aside and gxserver starts with
+`approvedComputers` (server id → when), `rememberedApprovals` (key → when: approvals asked once
+and kept for good, today `easyConnectEnable`; older gxservers ignore it), `approvedProjectReach` (`{ caller, target }`: an agent session and a project it may reach). An unreadable file is moved aside and gxserver starts with
 none; the desktop then enrolls again on first use.
 
 ## The security log (`crate::audit`)
