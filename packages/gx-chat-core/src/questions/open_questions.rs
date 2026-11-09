@@ -176,9 +176,13 @@ fn filter_shows(filter: &str, kind: &str) -> bool {
     }
 }
 
-/// How many rows of the long group one page of the list shows (user, 2026-10-29: "show 12 here when
-/// first opened please"; the desktop panel is 380 px of 26 px rows, the phone's 520 pt of 40 pt).
-pub const LIST_PAGE: usize = 12;
+/// How many rows of the long group the list shows before "Show all" (user, 2026-10-29: "show 12 here
+/// when first opened please"; 2026-11-10: the newest 30 per group, then one quiet "Show all N" row that
+/// loads the rest, after a chat showed 867 resources).
+pub const LIST_PAGE: usize = 30;
+
+/// `pages` once "Show all" was asked: more than any list has rows, so nothing is left out.
+const ALL_PAGES: u32 = 1_000_000;
 
 /// The group whose rows are always all listed: what waits on the reader (waiting and For later),
 /// which is few, and which the cards and the phone's flags read whole.
@@ -199,7 +203,7 @@ pub fn page_sections(
 ) -> (Vec<QuestionListSection>, u32) {
     // Each paged group has its own budget, so a coordinator's Worker pages are on the first page
     // beside its Earlier list and not behind all of it.
-    let budget = (pages as usize + 1) * LIST_PAGE;
+    let budget = (pages as usize + 1).saturating_mul(LIST_PAGE);
     let mut left_out = 0usize;
     let paged = sections
         .into_iter()
@@ -216,9 +220,9 @@ pub fn page_sections(
     (paged, left_out as u32)
 }
 
-/// `questionListMore`: the list shows one more page.
+/// `questionListMore`: "Show all", the list shows every row.
 pub fn more(state: &mut ChatState) {
-    state.questions.open_questions.pages += 1;
+    state.questions.open_questions.pages = ALL_PAGES;
     state.core.request_publish();
 }
 
@@ -1666,21 +1670,20 @@ mod tests {
 
     #[test]
     fn the_list_shows_twelve_rows_then_a_page_per_click() {
-        assert_eq!(LIST_PAGE, 12, "user, 2026-10-29: show 12 when first opened");
-        let long = || vec![sized("unanswered", 3), sized("earlier", 40)];
+        assert_eq!(LIST_PAGE, 30, "user, 2026-11-10: the newest 30 per group");
+        let long = || vec![sized("unanswered", 3), sized("earlier", 100)];
         let (first, left) = page_sections(long(), 0);
         // Unanswered whole, the Earlier list fills the first page, counts stay full.
         let shown: Vec<(usize, u32)> = first.iter().map(|s| (s.rows.len(), s.count)).collect();
-        assert_eq!(shown, vec![(3, 3), (12, 40)]);
-        assert_eq!(left, 28);
-        // Each click adds one more page of 12.
+        assert_eq!(shown, vec![(3, 3), (30, 100)]);
+        assert_eq!(left, 70);
         let (second, left) = page_sections(long(), 1);
-        assert_eq!((second[1].rows.len(), left), (24, 16));
+        assert_eq!((second[1].rows.len(), left), (60, 40));
         let (third, left) = page_sections(long(), 2);
-        assert_eq!((third[1].rows.len(), left), (36, 4));
+        assert_eq!((third[1].rows.len(), left), (90, 10));
         // Enough pages shows everything and leaves nothing out.
         let (all, left) = page_sections(long(), 10);
-        assert_eq!((all[1].rows.len(), left), (40, 0));
+        assert_eq!((all[1].rows.len(), left), (100, 0));
     }
 
     #[test]
@@ -1701,7 +1704,7 @@ mod tests {
     #[test]
     fn more_reset_and_the_filter_move_the_page() {
         let mut state = ChatState::default();
-        for index in 0..40 {
+        for index in 0..80 {
             let mut done = asker(&format!("a{index}"), AskerKind::Form, Some(1_000 + index));
             done.answered = true;
             state.transcript_view.askers.push(done);
@@ -1709,15 +1712,13 @@ mod tests {
         let list = |state: &ChatState| project(state, &ChatContext::default());
         let pill = list(&state);
         assert_eq!(section(&pill, "earlier").len(), LIST_PAGE);
-        assert_eq!(pill.remaining as usize, 40 - LIST_PAGE);
-        assert_eq!(pill.total, 40, "the totals stay full");
-        assert_eq!(pill.sections[0].count, 40);
-        more(&mut state);
-        assert_eq!(section(&list(&state), "earlier").len(), 2 * LIST_PAGE);
-        more(&mut state);
+        assert_eq!(pill.remaining as usize, 80 - LIST_PAGE);
+        assert_eq!(pill.total, 80, "the totals stay full");
+        assert_eq!(pill.sections[0].count, 80);
+        // "Show all" loads the rest at once.
         more(&mut state);
         let pill = list(&state);
-        assert_eq!((section(&pill, "earlier").len(), pill.remaining), (40, 0));
+        assert_eq!((section(&pill, "earlier").len(), pill.remaining), (80, 0));
         // Reopening starts again from one page; so does a new filter.
         reset_pages(&mut state);
         assert_eq!(section(&list(&state), "earlier").len(), LIST_PAGE);
@@ -1941,8 +1942,8 @@ mod tests {
             413 - LIST_PAGE as u32,
             "the list-wide total is their sum"
         );
-        let (later, _) = page_sections(vec![sized("earlier", 30)], 1);
-        assert_eq!(later[0].remaining, 30 - 2 * LIST_PAGE as u32);
+        let (later, _) = page_sections(vec![sized("earlier", 100)], 1);
+        assert_eq!(later[0].remaining, 100 - 2 * LIST_PAGE as u32);
     }
 }
 

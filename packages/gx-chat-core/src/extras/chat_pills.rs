@@ -88,11 +88,16 @@ pub fn chat_pills(
             menu: Vec::new(),
             id: "resources".to_string(),
             label: "Resources".to_string(),
-            count: resources.total.to_string(),
+            // CDXC:SessionChat 2026-11-10 DECISION: User: "for the resources pill just say resources in the dropdown, and let's not list 867 (all resources)". The pill's number is the unanswered questions only (none: no number, just its icon and word), and its tooltip and its row in the "+N" list say just "Resources"; the totals live in the list's filter picker.
+            count: if resources.count > 0 {
+                resources.count.to_string()
+            } else {
+                String::new()
+            },
             waiting: String::new(),
             running: false,
-            aria_label: format!("Resources, {}", resources.summary),
-            meta: resources.summary.clone(),
+            aria_label: "Resources".to_string(),
+            meta: String::new(),
             dots: Vec::new(),
         });
     }
@@ -302,6 +307,7 @@ mod tests {
     fn resources_sit_between_the_question_pill_and_threads() {
         let resources = OpenQuestions {
             total: 4,
+            count: 2,
             summary: "2 unanswered".to_string(),
             ..OpenQuestions::default()
         };
@@ -329,9 +335,9 @@ mod tests {
         )[0];
         assert_eq!(
             (pill.label.as_str(), pill.count.as_str()),
-            ("Resources", "4")
+            ("Resources", "2")
         );
-        assert_eq!(pill.aria_label, "Resources, 2 unanswered");
+        assert_eq!(pill.aria_label, "Resources");
 
         let empty = chat_pills(
             &OpenQuestions::default(),

@@ -6,6 +6,9 @@
 //! "Autopilot off" while off; a click opens its small menu (native_chat/chat_pills.rs), whose rows
 //! are the pill's `menu`.
 //!
+//! CDXC:Autopilot 2026-11-10 DECISION:
+//! User: "just say 'Autopilot is on/off' for this tooltip for the pill above the composer". The pill's tooltip (its `ariaLabel`) is just "Autopilot is on" or "Autopilot is off"; a session's own switch says "Autopilot is on for this session" or "... off for this session", and the offline one "Autopilot is waiting for the network". No summary sentence, no "Opens its menu".
+//!
 //! CDXC:Autopilot 2026-11-07 DECISION:
 //! User: Autopilot lives "in the coordinator chat (a switch/pill there)", and "add the pills for all sessions when this feature is enabled so it can be disabled on a session". The switch flips at once; gxserver saves it (`/api/autopilot`), and a refusal flips it back with a toast. (The click that flipped it is superseded by the next decision.)
 //!
@@ -24,8 +27,7 @@ const LABEL: &str = "Autopilot";
 /// The pill's words while Autopilot is on and this computer is offline (gxserver's
 /// `network_status::OFFLINE_LABEL`, CDXC:OfflineHold).
 const OFFLINE_LABEL: &str = "Offline: waiting for the network";
-const OFFLINE_ARIA: &str =
-    "This computer is offline: Autopilot sends nothing until the network is back. Opens its menu.";
+const OFFLINE_ARIA: &str = "Autopilot is waiting for the network";
 /// The menu row that opens Settings > Autopilot: a renderer handles this command itself (the core
 /// has nothing to do for it).
 pub const OPEN_SETTINGS_COMMAND: &str = "openAutopilotSettings";
@@ -51,9 +53,9 @@ pub fn pill(state: &ChatState) -> Option<ChatPill> {
         (
             on,
             if on {
-                "Autopilot is on: it keeps every covered session going. Opens its menu."
+                "Autopilot is on"
             } else {
-                "Autopilot is off: it keeps sessions going while you are away. Opens its menu."
+                "Autopilot is off"
             },
             if on {
                 "Turn Autopilot off"
@@ -69,9 +71,9 @@ pub fn pill(state: &ChatState) -> Option<ChatPill> {
         (
             covered,
             if covered {
-                "Autopilot keeps this session going. Opens its menu."
+                "Autopilot is on for this session"
             } else {
-                "Autopilot leaves this session alone. Opens its menu."
+                "Autopilot is off for this session"
             },
             if covered {
                 "Turn Autopilot off for this session"

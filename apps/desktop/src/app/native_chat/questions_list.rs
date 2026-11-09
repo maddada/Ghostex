@@ -439,10 +439,11 @@ impl NativeChatView {
                 for row in section["rows"].as_array().into_iter().flatten() {
                     list = list.child(self.question_list_row(headed, row, p, cx));
                 }
-                // This group's own Show more, under its own rows.
+                // This group's own Show all, under its own rows.
                 let left = section["remaining"].as_u64().unwrap_or(0);
                 if left > 0 {
-                    list = list.child(self.question_show_more_row(&id, left, p, cx));
+                    let total = section["count"].as_u64().unwrap_or(left);
+                    list = list.child(self.question_show_more_row(&id, total, p, cx));
                 }
             }
         }
@@ -469,12 +470,13 @@ impl NativeChatView {
         max > px(0.0) && scroll.offset().y <= -(max - px(2.0))
     }
 
-    /// The list's last row while the core left rows out: a click adds a page, and from then on
-    /// scrolling to the bottom adds the next ones by itself.
+    /// The group's last row while the core left rows out (the newest 30 show first): "Show all N"
+    /// loads the rest (CDXC:SessionChat 2026-11-10 DECISION: User, of a chat with 867 resources: a
+    /// smaller number first, then one quiet row for the rest).
     fn question_show_more_row(
         &self,
         group: &str,
-        remaining: u64,
+        total: u64,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -484,7 +486,7 @@ impl NativeChatView {
                 "chat-questions-show-more:{group}"
             )))
             .role(gpui::Role::Button)
-            .aria_label(format!("Show more, {remaining} left"))
+            .aria_label(format!("Show all {total}"))
             .flex_shrink_0()
             .h(px(ROW_HEIGHT * s))
             .flex()
@@ -500,13 +502,7 @@ impl NativeChatView {
                     .bg(p.foreground.opacity(0.06))
                     .text_color(p.foreground)
             })
-            .child("Show more")
-            .child(
-                div()
-                    .text_color(p.muted)
-                    .font_features(FontFeatures(vec![("tnum".into(), 1)].into()))
-                    .child(remaining.to_string()),
-            )
+            .child(format!("Show all {total}"))
             .on_click(cx.listener(|this, _, _, cx| {
                 cx.stop_propagation();
                 this.question_list.auto_more.set(true);
