@@ -32,8 +32,9 @@ pub(crate) fn voice_agent_on(paths: &crate::paths::GxserverPaths) -> bool {
 /// What a client is told while the voice agent is off, with the one command that turns it on.
 pub(crate) fn voice_agent_off_message() -> String {
     format!(
-        "{} From a terminal: ghostex settings set voiceAgentHidden false",
-        built_in_extensions::turned_off_message(VOICE_AGENT)
+        "{}{}",
+        built_in_extensions::turned_off_message(VOICE_AGENT),
+        built_in_extensions::terminal_hint("voiceAgentHidden", false)
     )
 }
 

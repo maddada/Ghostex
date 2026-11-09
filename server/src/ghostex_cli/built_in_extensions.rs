@@ -39,10 +39,7 @@ pub(super) fn require_built_in_extension(id: &str) -> CliResult<()> {
     }
     let mut message = built_in_extensions::turned_off_message(id);
     if let Some((key, enables)) = built_in_extensions::switch_key(id) {
-        message.push_str(&format!(
-            " From a terminal: ghostex settings set {key} {}",
-            enables
-        ));
+        message.push_str(&built_in_extensions::terminal_hint(key, enables));
     }
     Err(CliError::Other(message))
 }

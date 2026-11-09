@@ -9,8 +9,9 @@ use serde_json::Value;
 /// What the CLI and the routes answer while Connectors is off: where its switch is.
 pub(crate) fn connectors_off_message_in(_settings: Option<&Value>) -> String {
     format!(
-        "{} From a terminal: ghostex settings set connectorsHidden false",
-        built_in_extensions::turned_off_message(CONNECTORS)
+        "{}{}",
+        built_in_extensions::turned_off_message(CONNECTORS),
+        built_in_extensions::terminal_hint("connectorsHidden", false)
     )
 }
 

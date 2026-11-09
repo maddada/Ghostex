@@ -312,3 +312,25 @@ pub fn turned_off_message(id: &str) -> String {
         title(id)
     )
 }
+
+/*
+CDXC:Extensions 2026-11-09 WHY:
+"Connectors is turned off … From a terminal: ghostex settings set connectorsHidden false" sent people
+to a command the CLI refuses: Connectors' switch is not agent-writable (only the owner turns it on, in
+the Settings window). A switch the CLI may write keeps the `set` command; any other points to
+`ghostex settings open <key>`, which opens its Settings page for the user to flip it there.
+*/
+/// " From a terminal: …" for turning `key` to `value`: `ghostex settings set` when agents and the
+/// CLI may write that setting, `ghostex settings open` (its page in the Settings window) when only
+/// the owner may.
+pub fn terminal_hint(key: &str, value: bool) -> String {
+    let writable = crate::help::catalog()
+        .settings
+        .into_iter()
+        .any(|entry| entry.key == key && entry.agent_writable);
+    if writable {
+        format!(" From a terminal: ghostex settings set {key} {value}")
+    } else {
+        format!(" From a terminal: ghostex settings open {key}")
+    }
+}
