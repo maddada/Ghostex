@@ -2,7 +2,10 @@
 //! Profile tab), `instructions` (the Instructions tab with the SOUL.md notice), `memory` (the
 //! Memory tab), `memory-full` (the Memory tab nearly full, with an undoable change), `memory-edit`
 //! (the memory editor whose save is refused because the GBot wrote meanwhile), `department` (the
-//! Department tab, Researcher leading Research), `failed` (Save answers with gxserver's refusal
+//! Department tab, Researcher leading Research), `computer` (the Computer tab: Researcher on the
+//! connected computer Studio, with a Cloud Box listed), `bot-api` (the Bot API tab, off; its switch
+//! turns it on with a demo key), `bot-api-key` (just turned on: the key shown once in the command),
+//! `bot-api-on` (on, used, the key no longer shown), `failed` (Save answers with gxserver's refusal
 //! after a second).
 use super::gbot_settings_modal::*;
 use gpui::{App, AppContext as _};
@@ -36,6 +39,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     let record = GbotSettingsRecord::from_show(&bot).expect("the demo bot");
     let fail = demo.state == "failed";
     let state = demo.state.clone();
+    let api_state = demo.state.clone();
     let host: Rc<dyn Fn(GbotSettingsModalCommand, &mut App)> = Rc::new(
         move |command, cx: &mut App| {
             match command {
@@ -81,6 +85,36 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 }
                 reply.finish(Ok(departments_fixture()), cx)
             }
+            GbotSettingsModalCommand::Computer { op, reply, .. } => {
+                if let Some(op) = op {
+                    eprintln!("computer {op}");
+                }
+                // Answered on the next tick, as gxserver's answer arrives, not inside the window's
+                // own update.
+                cx.spawn(async move |cx| {
+                    cx.update(|cx| reply.finish(Ok(computer_fixture()), cx));
+                })
+                .detach();
+            }
+            GbotSettingsModalCommand::BotApi { op, reply, .. } => {
+                let op = op.and_then(|op| op["op"].as_str().map(str::to_string));
+                if let Some(op) = &op {
+                    eprintln!("bot api {op}");
+                }
+                let answer = match op.as_deref() {
+                    Some("apiOn" | "apiNewKey") => api_fixture(true, false, true),
+                    Some("apiOff") => api_fixture(false, false, false),
+                    _ => match api_state.as_str() {
+                        "bot-api-key" => api_fixture(true, false, true),
+                        "bot-api-on" => api_fixture(true, true, false),
+                        _ => api_fixture(false, false, false),
+                    },
+                };
+                cx.spawn(async move |cx| {
+                    cx.update(|cx| reply.finish(Ok(answer), cx));
+                })
+                .detach();
+            }
             GbotSettingsModalCommand::Reveal { path } => eprintln!("reveal {path}"),
             GbotSettingsModalCommand::Cancel => {
                 eprintln!("cancel");
@@ -103,6 +137,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             "memory" | "memory-full" | "memory-edit" => GbotSettingsTab::Memory,
             "routines" => GbotSettingsTab::Routines,
             "department" => GbotSettingsTab::Department,
+            "computer" => GbotSettingsTab::Computer,
+            "bot-api" | "bot-api-key" | "bot-api-on" => GbotSettingsTab::BotApi,
             _ => GbotSettingsTab::Profile,
         },
     };
@@ -118,6 +154,30 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         move |window, cx| cx.new(|cx| GpuiGbotSettingsModalWindow::new(config, host, window, cx)),
         cx,
     );
+}
+
+/// A `computer` answer for the demo: Researcher on the connected computer Studio, with computer
+/// use on, one more computer whose Agent access is off, and a Cloud Box.
+fn computer_fixture() -> serde_json::Value {
+    json!({
+        "computer": {
+            "kind": "computer", "computer": "computer:S42", "name": "Studio",
+            "folder": "~/GBots/Researcher", "computerUse": true, "available": true,
+        },
+        "thisComputer": "MacBook",
+        "choices": {
+            "computers": [
+                { "serverId": "S42", "name": "Studio", "agentAccess": true, "computer": "computer:S42" },
+                { "serverId": "S43", "name": "Build box", "agentAccess": false, "computer": "computer:S43" },
+            ],
+            "cloudBoxes": [
+                { "boxId": "gx_c31", "name": "box-c31", "state": "stopped", "provider": "Instabox",
+                  "projectName": "Ghostex", "monthUsd": 1.42, "computer": "cloudbox:gx_c31" },
+            ],
+        },
+        "cloudSpend": { "totalUsd": 1.42, "capUsd": 20.0 },
+        "remoteChats": [ { "globalRef": "S42:P1:G1", "title": "Compare flights" } ],
+    })
 }
 
 /// A `routines` answer for the demo: a watcher with a check, a monthly report sent to Chief of
@@ -220,4 +280,35 @@ fn departments_fixture() -> serde_json::Value {
         ]},
         "bot": { "botId": "bot-demo", "departmentId": "d_research", "isLead": true },
     })
+}
+
+/// An `api` answer for the demo: off, or on (`used` with a last use), with the key just made when
+/// `key` (the answer of Turn on and New key).
+fn api_fixture(on: bool, used: bool, key: bool) -> serde_json::Value {
+    let url = "http://127.0.0.1:58744/hooks/gbots/bots/bot-demo/messages";
+    let shown = "gxb_q3Vd8sLmT0aYpWnR4eXcJ7uK2hB9fGzN1oPiQ6wEr5A";
+    let command = format!(
+        "curl -s {url} \\\n  -H 'Authorization: Bearer {}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{{\"message\": \"Hello\"}}'",
+        if key { shown } else { "<your GBot API key>" }
+    );
+    let mut answer = json!({
+        "bot": { "botId": "bot-demo", "name": "Researcher" },
+        "api": {
+            "on": on,
+            "key": on.then(|| json!({
+                "keyId": "k_demo",
+                "label": "Home script",
+                "createdAt": "2026-11-09T08:12:40.000Z",
+                "lastUsedAt": used.then_some("2026-11-09T09:41:05.000Z"),
+                "uses": if used { 14 } else { 0 },
+            })),
+            "url": url,
+            "command": command,
+            "reach": "Apps and scripts on this computer, and devices that already reach it over SSH (a paired phone, another computer of yours). Ghostex opens no port for it.",
+        },
+    });
+    if key {
+        answer["key"] = json!(shown);
+    }
+    answer
 }

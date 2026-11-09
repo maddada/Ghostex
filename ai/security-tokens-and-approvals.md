@@ -149,6 +149,22 @@ device, session and token-file callers before any route handler runs:
 A route that is only partly sensitive is gated in `security_gates.rs` for that part, or from its
 handler with `require_owner_presence` (that is how the pairing and Collab routes do it).
 
+Routes answered before the token gate (`route_http/dispatch.rs`), each trusting only its own
+check: the Composio sign-in redirect (its OAuth `state`), visual pages, file links, and the GBot
+API, `/hooks/gbots/…` (`server/src/gbots/api/inbound.rs`). The GBot API is opened only by that
+GBot's own `gxb_` key (32 random bytes, stored as its SHA-256 in `gbots_bot_keys`, one live key per
+GBot), which is checked there and accepted nowhere else, so it never passes the gate as another
+caller. It answers on the local listener only (127.0.0.1 and `::1`; devices reach it only over an
+SSH path they already have), with 10 calls a minute per key, 200 messages and 20 new chats a day,
+at most 3 open chats and one new chat a minute. Its chats (`runtimeSettings.gbot.openedBy:
+"api:<keyId>"`) start in their own folder (`<app data>/gbots/api/<botId>/`, outside the GBot's
+folder) with a brief that leaves out memory and preferences unless the owner shares them, are
+always held to the secret folders plus gxserver's own files (`with_api_chat_sandbox`: Codex in a
+read-only profile writing only its folder, Claude's deny rules), never write memory, and take input
+(answers, typing, messages, queue edits, interrupts) from the owner's devices only
+(`api_chat_refused`, checked before every other gate). `/api/updateSession` keeps the `gbot` and
+`gbotHome` marks and an API chat's folder as stored (`gbots/markers.rs`).
+
 ## Sensitive actions: `SensitiveAction`
 
 Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in camelCase):
@@ -162,9 +178,11 @@ Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in 
 | Connected computers | `computerGrant` (`computerRegister`, `computerChangeAccess` are no longer asked) | `security_gates.rs` | `/api/registerConnectedComputer`, `/api/issueComputerGrant` with Agent access on, for a computer not approved in the last 30 days: both routes ask one shared request per computer (any caller reuses and may spend it; it waits a day), and a call that meets it already waiting is answered `approvalPending` instead of `approvalRequired`, so no app prompts for it again. Renewals of an approved computer pass; either route with `agentAccess: false` never asks. The desktop's renewal never prompts: it shows one card and waits on the request (`remote_conn/connected_computers.rs`). |
 | Autopilot | `autopilotAnswerApprovals`, `autopilotLiftLimits` | `security_gates.rs` | `/api/autopilot` `op: "set"` with `answerApprovals: true`, or `limits`. |
 | GBots | `gbotsEnable`, `gbotsAddBot` | `security_gates.rs` | `updateSettingsPatch` turning `gbotsEnabled` on; `/api/gbots` `op: "create"`. |
+| GBot API | `gbotsApiKey` (target: the GBot's id) | `security_gates.rs` `gbots_api_key_action` | `/api/gbots` `op: "apiOn"`, `"apiNewKey"`, and `"apiShareMemory"` with `on: true`, from the owner's devices and the token file only (every agent, Chief included, is refused by `/api/gbots` without being asked). The detail names what the key reaches: messaging the GBot, its replies, what it knows (its memory only when shared) and its routines by name. The params bind the label and the SHA-256 of the caller's one-time `keyNonce`, so the key goes only to the call that asked: another program reading the pending request can't repeat it. `apiOff` and sharing off never ask. Each change is a security-log entry (`gbots.apiOn`, `gbots.apiNewKey`, `gbots.apiOff`, `gbots.apiShareMemory`). |
+| GBot Cloud Box chats | `cloudBoxShareLogins` (target: the box) | `security_gates.rs` `gbots_cloud_box_action` | `/api/gbots` `op: "newChat"` or `"ask"` for a GBot that works on a Cloud Box, by anyone but the owner's devices: the box gets the agent logins and project files set up for boxes, and the GBot's instructions and memory. |
 | Settings | `settingsWeakenSecurity` (target: the keys) | `security_gates.rs`, desktop `owner_security/settings.rs` | One rule, `ghostex_settings_catalog::security_relaxing::needs_owner_presence`: a key on the Remote, Accounts, Secrets, Sync or Connectors page, or holding a token, password, secret, API key or credential. Through the API (`updateSettingsPatch`), a key the API may not write at all is refused by `settings_agent_writable.rs` before any approval; the rest (Sync's, GBots') ask. The desktop's own Settings window shows the system prompt (Touch ID / Windows Hello / polkit) before it saves such a change, and shows the saved values again when the prompt is declined. Collab's keys are left to the Collab routes. |
 | Approvers | `addApproverKey` | `security_http.rs` | A second owner key, or any approver key after the first. |
-| Full access | `forceFullAccess` | `security_full_access.rs` | A create with `launchSettings.acceptAllMode: "enabled"` when neither "Agent approvals: accept all" nor the agent's own launcher setting is on, in any project, whoever but the owner's devices calls (Chief included). Every time. |
+| Full access | `forceFullAccess` | `security_full_access.rs` | A create with `launchSettings.acceptAllMode: "enabled"` when neither "Agent approvals: accept all" nor the agent's own launcher setting is on, in any project, whoever but the owner's devices calls (Chief included). Every time. The same for `/api/updateSession` turning a session's `acceptAllMode` on (a resume reads it); leaving it on or turning it off never asks. |
 | Teams | `teamSyncConnect` (target: the backend's address) | `security_gates.rs` | `/api/connectTeamSync` by anyone but the owner's devices. It is `ghostex team deploy`'s last step, which Settings > Workspaces sends the owner to a terminal for, so it asks instead of being refused; the rest of team setup is Settings only. |
 | Cloud Boxes | `cloudBoxShareLogins` | `security_gates.rs` | `/api/cloudBoxes` `create`, `setAgentLogin` with `allowed: true`, `projectSettings` with `settings`, by anyone but the owner's devices: they put the owner's agent logins and a project's secret files onto a box. Turning a login off and reading never ask. `connectInfo` is unchanged. |
 

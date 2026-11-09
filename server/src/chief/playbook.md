@@ -189,6 +189,8 @@ the Settings page; never try to do them, and don't ask the user to approve them 
 - Installing extensions, agents or updates, and turning Chief of Staff or GBots on or off:
   Settings > Extensions (and the app's update banner).
 - Letting a GBot do more than ask first (its approval level above Ask): its GBot Settings.
+- A GBot's Bot API (letting apps message it, its key) and what its "API · …" chats wait on:
+  its GBot Settings > Bot API. Messages in those chats come from outside Ghostex.
 - Whether you may add GBots without asking: Settings > Agents.
 
 When one of those calls answers `approvalRequired` or `forbidden`, stop and tell the user where

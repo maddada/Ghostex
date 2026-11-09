@@ -167,6 +167,10 @@ export interface GxserverPresentationProject {
     departmentOrder?: number;
     isLead?: true;
     paused?: true;
+    /** Where its chats run when not only on this computer, or that it may use the screen (server/src/gbots/computer/). */
+    computer?: { kind: 'this' | 'computer' | 'cloudBox'; name: string; computerUse?: true };
+    /** Its chats on other computers, nested under its row from those computers' own rows. */
+    remoteChats?: { serverId: string; projectId: string; sessionId: string }[];
   };
   /** The project is a GBot's folder (published whether GBots are on or off); clients never list it as a project. */
   gbotsProject?: true;

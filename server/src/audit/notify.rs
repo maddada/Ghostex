@@ -64,6 +64,10 @@ const OPENING_ACTIONS: &[&str] = &[
     "gbotsEnable",
     "gbotsAddBot",
     "gbots.create",
+    "gbotsApiKey",
+    "gbots.apiOn",
+    "gbots.apiNewKey",
+    "gbotsSetComputer",
     // Installing Collab: downloads a component and runs it
     "installExtensionComponent",
 ];

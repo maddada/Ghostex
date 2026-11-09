@@ -66,6 +66,69 @@ pub(crate) fn full_access_action(
     )
 }
 
+/*
+CDXC:Security 2026-11-09 WHY:
+Security review of the GBot API (finding 9): `/api/updateSession` can set a session's `launchSettings.acceptAllMode: "enabled"`, and a resume reads it, so an agent could turn a session's approvals off without the question a create asks. An update that turns it on asks exactly when a create would (against the owner's own setting, for agents and the token file); turning it off or leaving it as it is never asks.
+*/
+/// The approval an `/api/updateSession` needs: when it turns a session's approvals off
+/// (`launchSettings.acceptAllMode: "enabled"` where it isn't yet) against the owner's setting.
+pub(crate) fn update_full_access_action(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Option<ActionRequest> {
+    if !matches!(caller, Principal::Session { .. } | Principal::LocalAgent) {
+        return None;
+    }
+    let requested = params
+        .get("launchSettings")
+        .and_then(|settings| settings.get("acceptAllMode"))
+        .and_then(Value::as_str)
+        .is_some_and(|mode| mode.trim().eq_ignore_ascii_case("enabled"));
+    if !requested {
+        return None;
+    }
+    let project_id = text(params, "projectId")?;
+    let session_id = text(params, "sessionId")?;
+    let db = crate::storage::open_gxserver_database(&state.paths).ok()?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let session = repository
+        .get_session(project_id, session_id)
+        .ok()
+        .flatten()?;
+    let already = session
+        .pointer("/launchSettings/acceptAllMode")
+        .and_then(Value::as_str)
+        .is_some_and(|mode| mode.trim().eq_ignore_ascii_case("enabled"));
+    if already {
+        return None;
+    }
+    let project = repository.get_project(project_id).ok().flatten()?;
+    let reach = Reach::Project {
+        id: project_id.to_string(),
+        name: project_name(&project, project_id),
+    };
+    let mut asked = params.clone();
+    if let Some(agent_id) = text_value(&session, "agentId") {
+        asked
+            .entry("agentId".to_string())
+            .or_insert_with(|| json!(agent_id));
+    }
+    if !forces_full_access(&db, &repository, &reach, &asked) {
+        return None;
+    }
+    let (target, place) = describe(&reach);
+    Some(
+        ActionRequest::new(
+            SensitiveAction::ForceFullAccess,
+            format!("Let a session in {place} run with approvals off"),
+        )
+        .target(target)
+        .params(Value::Object(params.clone()))
+        .detail("Once it restarts, it runs every command without asking you first."),
+    )
+}
+
 /// The request's target and how the card names the place.
 fn describe(reach: &Reach) -> (String, String) {
     match reach {

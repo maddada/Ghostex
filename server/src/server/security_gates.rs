@@ -8,6 +8,7 @@
 //! | `/api/autopilot` `op: "set"` | `answerApprovals` goes on, `limits` change |
 //! | `/api/gbots` `op: "create"` | from your own computer, phone or terminal (Chief of Staff's adds don't ask; other agents are refused) |
 //! | `/api/gbots` `op: "dayWatchOn"` | when it adds Day Watcher: as `create` |
+//! | `/api/gbots` `op: "apiOn"`, `"apiNewKey"` | from your own computer, phone or terminal (agents are refused) |
 //! | `/api/gbots` `op: "teamImport"` | from your own computer, phone or terminal, once per file (no one else may import) |
 //! | `/api/dispatchRendererCommand` `updateSettingsPatch` | a security-relaxing setting changes, or GBots goes on |
 //! | `/api/cloudBoxes` `create`, `setAgentLogin` (allowed), `projectSettings` (write) | anyone but the owner's devices: logins and project secrets go onto a box |
@@ -49,6 +50,18 @@ pub(crate) fn gate(
     request_id: &str,
     body: &Value,
 ) -> Option<RoutedResponse> {
+    // A GBot API chat takes input from the owner's devices only (`api_chat_refused`), whoever asks.
+    if SESSION_INPUT_ROUTES.contains(&endpoint_path) {
+        if let Ok(params) = read_domain_rpc_params(body) {
+            if api_chat_refused(state, caller, endpoint_path, &params) {
+                return Some(forbidden(
+                    endpoint_path,
+                    request_id,
+                    "This chat takes messages from an app through the GBot API, so only you, from Ghostex on your computer or phone, answer what it waits on or send it anything.",
+                ));
+            }
+        }
+    }
     // Guests and extensions keep their own endpoint allow-lists, checked at the auth gate; agents
     // on a connected computer keep theirs too, but answering a prompt or typing into a session
     // here asks like it does for an agent here.
@@ -189,6 +202,48 @@ fn computer_presence(
             ))
         }
         outcome => presence_outcome_response(outcome, endpoint_path, request_id),
+    }
+}
+
+/// Every route that types, sends, queues, answers or interrupts in a session.
+const SESSION_INPUT_ROUTES: &[&str] = &[
+    "/api/answerSessionChatPrompt",
+    "/api/sendSessionText",
+    "/api/sendSessionEnter",
+    "/api/sendSessionMessage",
+    "/api/sendSessionChatMessage",
+    "/api/queueSessionChatPrompt",
+    "/api/updateSessionChatQueuedPrompt",
+    "/api/interruptSessionChat",
+];
+
+/*
+CDXC:GBots 2026-11-09 WHY:
+Plan piece 14: a GBot API chat runs on text from outside Ghostex, "with no head answering for it". So what it waits on (an approval, a question), and anything typed, sent, queued or interrupted in it, is the owner's alone: every input route (security review finding 3: the three first covered missed sending a message, queueing, editing the queue and interrupting) is refused for every caller but your own computer and phone, the chat itself aside, agents (Chief of Staff included), the token file, other computers, extensions and Collab guests alike. It is checked before every other gate. The agents' general freedom to answer and type into other sessions (CDXC:Security at `Principal::skips_approval`) stays for every other chat.
+*/
+fn api_chat_refused(
+    state: &AppState,
+    caller: &Principal,
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+) -> bool {
+    if !SESSION_INPUT_ROUTES.contains(&endpoint_path) {
+        return false;
+    }
+    let Some(session_id) = text(params, "sessionId") else {
+        return false;
+    };
+    let project_id = text(params, "projectId").unwrap_or_default();
+    match caller {
+        Principal::Owner { .. } | Principal::Device { .. } => false,
+        Principal::Session {
+            project_id: own_project,
+            session_id: own_session,
+            ..
+        } if own_session == session_id && (project_id.is_empty() || own_project == project_id) => {
+            false
+        }
+        _ => crate::gbots::is_api_chat_session(state, project_id, session_id),
     }
 }
 
@@ -378,6 +433,48 @@ fn gbots_add_action(
 
 /*
 CDXC:GBots 2026-11-09 DECISION:
+Coordinator brief for M12: "starting a Cloud Box or letting it use agent logins already asks for approval: keep those gates." A chat with a GBot whose computer is a Cloud Box starts (or wakes) that box with your agent logins and the project's files, so `newChat` and `ask` for such a GBot ask you exactly when `/api/cloudBoxes` `create` would: whenever anyone but your own computer or phone starts it (Chief of Staff, other GBots, the terminal). Asked once per chat.
+*/
+/// Letting a GBot do more where it works asks for the owner's signed approval, from the owner's
+/// own devices too (CDXC:GBots 2026-11-09 at gbots/computer/ops.rs `widening_approval`); everyone
+/// else is refused by the handler, so is not asked here.
+fn gbots_computer_action(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Option<ActionRequest> {
+    if !caller.is_owner_device() || !crate::gbots::gbots_on(&state.paths) {
+        return None;
+    }
+    let (summary, bot_id) = crate::gbots::gbots_computer_widening_approval(state, params)?;
+    Some(
+        ActionRequest::new(SensitiveAction::GbotsSetComputer, summary)
+            .target(bot_id)
+            .params(Value::Object(params.clone()))
+            .detail("Its new chats there run on that computer's agent login and read its instructions and memory; computer use lets them drive apps on that screen."),
+    )
+}
+
+fn gbots_cloud_box_action(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Option<ActionRequest> {
+    if caller.is_owner_device() || !crate::gbots::gbots_on(&state.paths) {
+        return None;
+    }
+    let (summary, box_id) =
+        crate::gbots::gbots_cloud_box_chat_approval(state, text(params, "bot")?)?;
+    Some(
+        ActionRequest::new(SensitiveAction::CloudBoxShareLogins, summary)
+            .target(box_id)
+            .params(Value::Object(params.clone()))
+            .detail("The box gets the agent logins and project files you set up for Cloud Boxes, and the GBot's instructions and memory; it runs (and bills) while the chat works."),
+    )
+}
+
+/*
+CDXC:GBots 2026-11-09 DECISION:
 Importing a team file adds GBots, so it asks for your approval the way adding one GBot does, once for the whole file: the request names the team and its GBots and carries the file's digest, so the approval is spent only on that file. Only your computer, phone and terminal import (`/api/gbots` refuses everyone else with one sentence, so they are not asked for here); a file that can't be read is refused there too, without asking.
 */
 fn gbots_team_import_action(
@@ -438,6 +535,70 @@ fn gbots_day_watch_action(
     )
 }
 
+/*
+CDXC:GBots 2026-11-09 DECISION:
+Coordinator brief (M11), on the user's behalf: only the user turns a GBot's API on or gives it a new key, with "an owner-presence approval like other security-relaxing changes". So `apiOn`, `apiNewKey` and sharing the GBot's memory with apps (`apiShareMemory` on) ask from your own computer, phone or terminal, once per change, naming what the key reaches (its routines too, security review finding 5) and binding the request to the asking call's own nonce (finding 6); every agent (Chief of Staff included) is refused by `/api/gbots` with one sentence and never asked for here, nor is anyone while GBots are off or for a GBot that doesn't exist. Turning it off never asks.
+*/
+fn gbots_api_key_action(
+    state: &AppState,
+    caller: &Principal,
+    params: &Map<String, Value>,
+) -> Option<ActionRequest> {
+    let user = matches!(
+        caller,
+        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent
+    );
+    if !user || !crate::gbots::gbots_on(&state.paths) {
+        return None;
+    }
+    let subject = crate::gbots::api_approval_subject(state, params)?;
+    let name = &subject.name;
+    let op = text(params, "op").unwrap_or_default();
+    let share_on = params.get("on").and_then(Value::as_bool) == Some(true);
+    // Sharing off never asks; a key call without its nonce is refused by `/api/gbots` unasked.
+    if (op == "apiShareMemory" && !share_on)
+        || (op != "apiShareMemory" && text(params, "keyNonce").is_none())
+    {
+        return None;
+    }
+    let summary = match op {
+        "apiNewKey" => format!("Give the GBot {name} a new API key"),
+        "apiShareMemory" => format!("Let apps messaging the GBot {name} read its memory"),
+        _ => format!("Let apps message the GBot {name} with a key"),
+    };
+    let knows = if subject.shares_memory || op == "apiShareMemory" {
+        "what it knows, its memory and your shared preferences included"
+    } else {
+        "what it knows (its instructions; its memory stays private)"
+    };
+    let routines = match subject.routines.as_slice() {
+        [] => String::new(),
+        names => format!(", and start its routines ({})", names.join(", ")),
+    };
+    let detail = format!(
+        "Whoever holds the key can message {name}, read its replies and {knows}{routines}."
+    );
+    // The key is shown only to the call that asked: that call's one-time `keyNonce` is bound into
+    // the request (as its hash, so another program that reads the pending request can't repeat
+    // it), and so is the label.
+    let nonce = text(params, "keyNonce").map(|nonce| {
+        use sha2::Digest as _;
+        hex::encode(sha2::Sha256::digest(nonce.as_bytes()))
+    });
+    Some(
+        ActionRequest::new(SensitiveAction::GbotsApiKey, summary)
+            .target(subject.bot_id.clone())
+            .params(json!({
+                "op": op,
+                "bot": subject.bot_id,
+                "label": text(params, "label").unwrap_or_default(),
+                "on": share_on,
+                "keyNonce": nonce,
+            }))
+            .detail(detail),
+    )
+}
+
 fn sensitive_action(
     state: &AppState,
     caller: &Principal,
@@ -453,8 +614,17 @@ fn sensitive_action(
         "/api/gbots" if text(params, "op") == Some("teamImport") => {
             gbots_team_import_action(state, caller, params)
         }
+        "/api/gbots" if matches!(text(params, "op"), Some("newChat" | "ask")) => {
+            gbots_cloud_box_action(state, caller, params)
+        }
+        "/api/gbots" if text(params, "op") == Some("computerSet") => {
+            gbots_computer_action(state, caller, params)
+        }
         "/api/gbots" if text(params, "op") == Some("dayWatchOn") => {
             gbots_day_watch_action(state, caller, params)
+        }
+        "/api/gbots" if text(params, "op").is_some_and(crate::gbots::opens_api) => {
+            gbots_api_key_action(state, caller, params)
         }
         "/api/dispatchRendererCommand" if text(params, "action") == Some("updateSettingsPatch") => {
             settings_action(params)
@@ -466,6 +636,9 @@ fn sensitive_action(
         "/api/interruptSessionChat" => interrupt_action(state, caller, params),
         "/api/cloudBoxes" => cloud_box_action(state, caller, params),
         "/api/connectTeamSync" => team_connect_action(caller, params),
+        "/api/updateSession" => {
+            super::security_full_access::update_full_access_action(state, caller, params)
+        }
         path if super::security_full_access::is_full_access_route(path) => {
             super::security_full_access::full_access_action(state, caller, params)
         }

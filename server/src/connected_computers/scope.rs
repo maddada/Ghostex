@@ -62,6 +62,9 @@ pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     // `ghostex chief send --computer <name>` reads that computer's Chief here (`status`); the
     // handler refuses a peer anything but `status` and `guide` (chief/endpoint.rs).
     "/api/chief",
+    // A GBot's chat there reading its brief and keeping its memory here (gbots/computer/home.rs).
+    // Only gxserver itself sends it: the relay never forwards it (relay.rs `relay_forwards`).
+    "/api/gbotsRemote",
     // Settings sync: one exchange trades both computers' synced settings (server/src/settings_sync/).
     "/api/settingsSyncExchange",
 ];

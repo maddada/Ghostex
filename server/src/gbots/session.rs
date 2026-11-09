@@ -71,7 +71,7 @@ pub(crate) fn check_agent(rows: &[Value], agent_id: &str) -> Result<(), DomainSt
 }
 
 /// The first message of every chat of `bot`, in the agent's own skill spelling, then the task.
-fn first_message(bot: &Bot, family: &str, task: Option<&str>) -> String {
+pub(super) fn first_message(bot: &Bot, family: &str, task: Option<&str>) -> String {
     let skill = ghostex_gx_chat_core::composer::skill_invocation::skill_invocation(
         GBOTS_SKILL,
         Some(family),
@@ -97,7 +97,7 @@ fn first_message(bot: &Bot, family: &str, task: Option<&str>) -> String {
 /// A chat's title: the first line of its task (cut to 60 characters), else the bot's name. Kept
 /// like a coordinator's given title (coordinators/title.rs), so the rows under a bot say what each
 /// chat is for rather than the agent's default "Claude Session".
-fn chat_title(bot: &Bot, task: Option<&str>) -> String {
+pub(super) fn chat_title(bot: &Bot, task: Option<&str>) -> String {
     let Some(line) =
         task.and_then(|task| task.lines().map(str::trim).find(|line| !line.is_empty()))
     else {
@@ -219,6 +219,12 @@ pub(crate) struct ChatOpening<'a> {
     /// Linked as this coordinator's thread (its project and session ids) with this task before its
     /// agent starts, so the supervisor sees its first turn from the beginning.
     pub link: Option<(&'a str, &'a str, &'a str)>,
+    /// The approval level this chat runs at instead of the GBot's own (the GBot API's chats run at
+    /// `ask`, api/chat.rs).
+    pub approval: Option<&'a str>,
+    /// The folder the chat starts in instead of the GBot's own (the GBot API's chats start in
+    /// their own folder, api/chat.rs).
+    pub cwd: Option<&'a str>,
 }
 
 /// [`create_bot_chat`] with every option.
@@ -230,6 +236,10 @@ pub(crate) fn create_bot_chat_with(
     opening: &ChatOpening<'_>,
 ) -> Result<(Value, bool), DomainStateError> {
     let (opened_by, task) = (opening.opened_by, opening.task);
+    // A GBot given a connected computer opens its chats there (computer/).
+    if let Some(opened) = super::computer::start_elsewhere(state, db, repository, bot, opening)? {
+        return Ok(opened);
+    }
     let agent_rows = bot_agent_rows(repository)?;
     check_agent(&agent_rows, &bot.agent_id)?;
     let project = super::project::bot_project(repository, bot)?.ok_or_else(|| {
@@ -280,6 +290,9 @@ pub(crate) fn create_bot_chat_with(
         );
     }
     params.insert("surface".into(), json!("workspace"));
+    if let Some(cwd) = opening.cwd {
+        params.insert("cwd".into(), json!(cwd));
+    }
     params.insert("requireLaunchCommand".into(), json!(true));
     if let Some(runtime) = params
         .get_mut("runtimeSettings")
@@ -298,9 +311,15 @@ pub(crate) fn create_bot_chat_with(
         if opening.standing {
             record["standing"] = json!(true);
         }
+        // Whether its launch keeps the screen tools (agents/gbot_computer_use.rs).
+        record["computerUse"] = json!(super::computer::computer_use(db, &bot.bot_id));
         runtime.insert(CHAT_KEY.to_string(), record);
     }
-    apply_approval(&mut params, &bot.approval, family);
+    apply_approval(
+        &mut params,
+        opening.approval.unwrap_or(&bot.approval),
+        family,
+    );
     let params = prepare_coordinator_create_params(&params)?;
     let create_params = create_agent_session_params_for_project(db, &project, &params)?;
     let created = repository.create_session(&create_params, false)?;
@@ -320,6 +339,20 @@ pub(crate) fn create_bot_chat_with(
             coordinator_session,
             thread_task,
         )?;
+    }
+    // A GBot given a Cloud Box: the chat made here is handed to the box and never starts here.
+    if super::computer::box_for_chat(db, bot, opening) {
+        restore_parked_project_for_new_session(state, db, repository, &project_id)?;
+        schedule_presentation_session_delta(state, db, repository, &project_id, &session_id)?;
+        return super::computer::hand_to_box(
+            state,
+            db,
+            repository,
+            bot,
+            &project_id,
+            &session_id,
+            task,
+        );
     }
     if let Some(family) = family {
         // The session exists: a skill that would not install or a message that would not queue is
@@ -358,10 +391,15 @@ pub(crate) fn chat_summary(server_id: &str, session: &Value) -> Value {
             .to_string()
     };
     let (project_id, session_id) = (text("projectId"), text("sessionId"));
+    // A chat on another computer (computer/remote_chat.rs) names that computer.
+    let chat_server = session
+        .get("serverId")
+        .and_then(Value::as_str)
+        .unwrap_or(server_id);
     json!({
         "projectId": project_id,
         "sessionId": session_id,
-        "globalRef": crate::ids::create_global_session_ref(server_id, &project_id, &session_id),
+        "globalRef": crate::ids::create_global_session_ref(chat_server, &project_id, &session_id),
         "title": text("title"),
         "openedBy": chat_of(session).map(|(_, by)| by).unwrap_or("user"),
         "state": crate::presentation::session_attributes::effective_lifecycle_state(session),

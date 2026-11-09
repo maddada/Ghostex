@@ -56,6 +56,8 @@ mod identity;
 mod locale;
 mod outbox;
 mod platform;
+// Random bytes from the platform's source (the GBot API key's one-time nonce, window/gbot_settings_modal/bot_api.rs).
+pub(crate) use platform::random_bytes;
 mod queries;
 mod read_aloud;
 mod refusals;

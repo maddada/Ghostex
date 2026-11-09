@@ -23,6 +23,8 @@
 //! | `problems` (`all?`), `problemRetry`, `problemRebrief` (`text`), `problemClose` (`handed?`) | `problem` | you, Chief of Staff (problems/ops.rs) |
 //! | `flag` | `text` | a GBot's own chat |
 //! | `dayWatch`; `dayWatchOn` (`briefTime?`, `timezone?`), `dayWatchOff` | day_watch/ops.rs | anyone here; you, Chief of Staff |
+//! | `api`; `apiOn` (`label?`), `apiNewKey` (`label?`), `apiOff` | `bot` (api/ops.rs) | anyone here; you alone, and on and New key ask your approval |
+//! | `computer`; `computerSet` (`computer`: `this`, a connected computer or a Cloud Box; `folder?`, `computerUse?`) | `bot` (computer/ops.rs) | anyone here; you alone from Ghostex on your computer, except giving it this computer back |
 //! | `teamExport`, `teamPreview`, `teamImport`, `presets`, `preset`, `presetSave`, `presetRemove`, `presetExport` | team_file/mod.rs | team_file/mod.rs; importing is yours alone |
 //!
 //! `create` also takes `preset` (a preset's id or name): what it leaves out comes from the preset.
@@ -114,6 +116,14 @@ pub(crate) async fn handle_gbots_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    // A GBot chat on this computer whose GBot lives on another one reads its brief and keeps its
+    // memory there (computer/home.rs), whether GBots are on here or not.
+    super::computer::remember_state(&state);
+    if let Some(answer) =
+        super::computer::forward_home(&state, &caller, &endpoint_path, &request_id, &params).await
+    {
+        return answer;
+    }
     if !super::gbots_on(&state.paths) {
         return error_response(
             endpoint_path,
@@ -349,6 +359,22 @@ fn run(
             )
         }
         op if super::memory::handles(op) => {
+            let writes = !matches!(
+                op,
+                "memoryShow" | "memoryTopics" | "memoryTopic" | "memoryLog" | "memoryJournal" | "prefsShow"
+            );
+            if let Some(key) = api_chat_key(&db, &repository, caller) {
+                if writes {
+                    return Err(forbidden(
+                        "A chat of the GBot API doesn't save memory: its messages come from outside Ghostex. Tell the user what's worth keeping instead.",
+                    ));
+                }
+                if !key.is_some_and(|key| key.share_memory) {
+                    return Err(forbidden(
+                        "This GBot's memory isn't shared with apps: a chat of the GBot API can't read it. The user can turn on Share memory with apps in GBot Settings > Bot API.",
+                    ));
+                }
+            }
             let memory_caller = super::memory::MemoryCaller {
                 own_bot: own_bot(&db, caller)?,
                 may_manage: asker.may_manage(),
@@ -389,6 +415,20 @@ fn run(
             &mut |fields, created_by| create(state, &db, &repository, asker, fields, created_by),
             &mut |bot_id| remove(state, &db, &repository, asker, bot_id),
         ),
+        // The GBot API: is it on, turn it on or off, a new key (api/ops.rs).
+        op if super::api::handles(op) => super::api::run(state, &db, caller, asker.is_user(), op, params),
+        // Where its chats run (computer/).
+        op if super::computer::handles(op) => super::computer::run(
+            state,
+            &db,
+            &repository,
+            super::computer::ComputerCaller {
+                owner_device: asker == Asker::OwnerDevice,
+                may_manage: asker.may_manage(),
+            },
+            op,
+            params,
+        ),
         // "Keep an eye on my day" (day_watch/).
         op if super::day_watch::handles(op) => super::day_watch::run(state, &db, &repository, asker, op, params),
         // A GBot's routines (routines.rs).
@@ -417,9 +457,15 @@ fn list(
                     .find(|department| department.department_id == id))
                 .map(|department| department.name.clone()));
             summary["folder"] = json!(super::folder::bot_folder(&state.paths, &bot.bot_id));
-            summary["openChats"] = json!(super::session::bot_chats(repository, bot)
-                .map(|chats| chats.len())
-                .unwrap_or(0));
+            summary["openChats"] = json!(
+                super::session::bot_chats(repository, bot)
+                    .map(|chats| chats.len())
+                    .unwrap_or(0)
+                    + super::computer::list_remote_chats(db, Some(&bot.bot_id))
+                        .map(|chats| chats.len())
+                        .unwrap_or(0)
+            );
+            summary["computerInfo"] = super::computer::computer_status(state, db, &bot.bot_id);
             summary
         })
         .collect::<Vec<_>>();
@@ -459,6 +505,11 @@ fn show(
         ));
     }
     summary["chats"] = chats(state, repository, &bot)?["chats"].take();
+    summary["computerInfo"] = super::computer::computer_status(state, db, &bot.bot_id);
+    summary["remoteChats"] = json!(super::computer::list_remote_chats(db, Some(&bot.bot_id))?
+        .iter()
+        .map(super::computer::remote_chat_summary)
+        .collect::<Vec<_>>());
     Ok(json!({ "bot": summary }))
 }
 
@@ -498,6 +549,20 @@ fn require_change(
 }
 
 /// The bot a caller's own session is a chat of.
+/// When the caller is one of the GBot API's chats (api/chat.rs): `Some` with its key (`None`
+/// inside when the key is gone); `None` for any other caller.
+fn api_chat_key(
+    db: &Connection,
+    repository: &DomainRepository<'_>,
+    caller: &Principal,
+) -> Option<Option<super::api::BotKey>> {
+    let session = caller_session(caller)
+        .and_then(|(project, session)| repository.get_session(project, session).ok().flatten())?;
+    let (_, opened_by) = super::session::chat_of(&session)?;
+    let key_id = opened_by.strip_prefix("api:")?;
+    Some(super::api::key_by_id(db, key_id))
+}
+
 pub(super) fn own_bot(
     db: &Connection,
     caller: &Principal,
@@ -540,9 +605,20 @@ fn brief(
         }
     };
     let team = super::brief::Team::load(db)?;
+    let repository = DomainRepository::new(db, &state.metadata.server_id);
+    // A GBot API chat reads the API brief: no memory or preferences unless shared (brief.rs).
+    let brief = match api_chat_key(db, &repository, caller) {
+        Some(key) => super::brief::api_brief_text(
+            &state.paths,
+            &bot,
+            &team,
+            key.is_some_and(|key| key.share_memory),
+        ),
+        None => super::brief::brief_text(&state.paths, &bot, &team),
+    };
     Ok(json!({
         "bot": bot_summary(&bot),
-        "brief": super::brief::brief_text(&state.paths, &bot, &team),
+        "brief": brief,
     }))
 }
 
@@ -759,6 +835,8 @@ fn remove(
         };
         super::session::close_chat(state, &text("projectId"), &text("sessionId"))?;
     }
+    // Its chats on another computer close there too, when it is connected.
+    let closed_elsewhere = super::computer::close_remote_chats(db, &bot.bot_id);
     if let Some(project) = super::project::bot_project(repository, &bot)? {
         if let Some(project_id) = project.get("projectId").and_then(Value::as_str) {
             super::project::remove_bot_project(state, db, repository, project_id)?;
@@ -788,7 +866,7 @@ fn remove(
     };
     Ok(json!({
         "removed": bot_summary(&bot),
-        "closedChats": chats.len(),
+        "closedChats": chats.len() + closed_elsewhere,
         "changeId": change_id,
         "folderInTrash": trashed.is_ok() && !folder.exists(),
         "folderError": trashed.err(),

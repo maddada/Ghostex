@@ -1,5 +1,5 @@
-//! The GBot Settings window: a GBot's Profile, Instructions and Memory on a Settings-style tab
-//! rail, opened from the bot's row.
+//! The GBot Settings window: a GBot's Profile, Instructions, Department, Memory, Routines and
+//! Computer on a Settings-style tab rail, opened from the bot's row.
 //!
 //! CDXC:GBots 2026-11-09 DECISION:
 //! User (Q2104 A): a GBot's settings open in "its own window, from the bot's row", and "the window has the same look as Settings": Settings' palette and font, a left tab rail headed by the bot's icon in its colour and its name, and Settings' page titles and grouped rows.
@@ -33,15 +33,19 @@ pub(crate) enum GbotSettingsTab {
     Department,
     Memory,
     Routines,
+    Computer,
+    BotApi,
 }
 
 impl GbotSettingsTab {
-    pub(crate) const ALL: [Self; 5] = [
+    pub(crate) const ALL: [Self; 7] = [
         Self::Profile,
         Self::Instructions,
         Self::Department,
         Self::Memory,
         Self::Routines,
+        Self::Computer,
+        Self::BotApi,
     ];
 
     pub(crate) fn title(self) -> &'static str {
@@ -51,6 +55,8 @@ impl GbotSettingsTab {
             Self::Department => "Department",
             Self::Memory => "Memory",
             Self::Routines => "Routines",
+            Self::Computer => "Computer",
+            Self::BotApi => "Bot API",
         }
     }
 
@@ -61,6 +67,8 @@ impl GbotSettingsTab {
             Self::Department => "titlebar/users.svg",
             Self::Memory => "titlebar/brain.svg",
             Self::Routines => "titlebar/clock.svg",
+            Self::Computer => "titlebar/device-laptop.svg",
+            Self::BotApi => "titlebar/key.svg",
         }
     }
 }
@@ -123,6 +131,20 @@ pub(crate) enum GbotSettingsModalCommand {
         ops: Vec<Value>,
         reply: super::department::GbotDepartmentReply,
     },
+    /// The Computer tab (computer.rs): `op` (none for a plain read), then `computer` as it is
+    /// afterwards, or gxserver's refusal.
+    Computer {
+        bot_id: String,
+        op: Option<Value>,
+        reply: super::computer::GbotComputerReply,
+    },
+    /// The Bot API tab (bot_api.rs): `op` (none for a plain read), then the API's state as gxserver
+    /// answers it (the key in it when one was just made), or gxserver's refusal.
+    BotApi {
+        bot_id: String,
+        op: Option<Value>,
+        reply: super::bot_api::GbotApiReply,
+    },
     /// Shows a memory file in Finder.
     Reveal {
         path: String,
@@ -169,6 +191,8 @@ pub(crate) struct GpuiGbotSettingsModalWindow {
     pub(super) pending_memory_op: Option<MemoryOpTag>,
     pub(super) routines: super::routines::GbotRoutinesTab,
     pub(super) department: super::department::GbotDepartmentTab,
+    pub(super) computer: super::computer::GbotComputerTab,
+    pub(super) bot_api: super::bot_api::GbotApiTab,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
 }
@@ -299,6 +323,16 @@ impl GpuiGbotSettingsModalWindow {
                 this.ensure_routines(window, cx)
             });
         }
+        if config.tab == GbotSettingsTab::Computer {
+            cx.defer_in(window, |this: &mut Self, window, cx| {
+                this.ensure_computer(window, cx)
+            });
+        }
+        if config.tab == GbotSettingsTab::BotApi {
+            cx.defer_in(window, |this: &mut Self, window, cx| {
+                this.ensure_bot_api(window, cx)
+            });
+        }
         let focus_handle = cx.focus_handle();
         focus_handle.focus(window, cx);
         Self {
@@ -322,6 +356,8 @@ impl GpuiGbotSettingsModalWindow {
             pending_memory_op: None,
             routines: Default::default(),
             department,
+            computer: Default::default(),
+            bot_api: Default::default(),
             focus_handle,
             _subscriptions: subscriptions,
         }
@@ -361,6 +397,12 @@ impl GpuiGbotSettingsModalWindow {
         }
         if tab == GbotSettingsTab::Routines {
             self.ensure_routines(window, cx);
+        }
+        if tab == GbotSettingsTab::Computer {
+            self.ensure_computer(window, cx);
+        }
+        if tab == GbotSettingsTab::BotApi {
+            self.ensure_bot_api(window, cx);
         }
         if tab == GbotSettingsTab::Department {
             self.ensure_department(window, cx);
@@ -553,6 +595,8 @@ impl Render for GpuiGbotSettingsModalWindow {
             GbotSettingsTab::Department => self.render_department(window, cx),
             GbotSettingsTab::Memory => self.render_memory(window, cx),
             GbotSettingsTab::Routines => self.render_routines(cx),
+            GbotSettingsTab::Computer => self.render_computer(cx),
+            GbotSettingsTab::BotApi => self.render_bot_api(cx),
         };
         let footer = self.render_footer(cx);
         let menu = self.render_agent_menu(window, cx);

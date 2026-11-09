@@ -12,6 +12,7 @@ mod create;
 mod docker;
 pub(crate) mod endpoint;
 mod events;
+pub(crate) mod for_gbots;
 mod http;
 mod kit;
 mod lifecycle;

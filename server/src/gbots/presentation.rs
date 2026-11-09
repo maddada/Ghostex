@@ -26,7 +26,7 @@ pub(crate) fn refresh_presented_bots(db: &Connection) {
         return;
     };
     let departments = super::departments::list_departments(db).unwrap_or_default();
-    let map = bots
+    let mut map: HashMap<String, Value> = bots
         .into_iter()
         .map(|bot| {
             let mut look = json!({
@@ -63,6 +63,8 @@ pub(crate) fn refresh_presented_bots(db: &Connection) {
             (bot.bot_id, look)
         })
         .collect();
+    // Where each one's chats run, and its chats on other computers (computer/).
+    super::computer::decorate_presented_bots(db, &mut map);
     *BOTS
         .write()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(map);

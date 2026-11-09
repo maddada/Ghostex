@@ -55,10 +55,15 @@ fn folders_in<'a>(entries: impl Iterator<Item = &'a str>) -> Vec<String> {
     folders
 }
 
-/// Whether `runtime_settings` mark a GBot chat (`runtimeSettings.gbot`, server/src/gbots/session.rs
-/// `CHAT_KEY`).
+/// Whether `runtime_settings` mark a GBot chat: `runtimeSettings.gbot` (server/src/gbots/session.rs
+/// `CHAT_KEY`) on the GBot's own computer, or `runtimeSettings.gbotHome` on a computer it was given
+/// (server/src/gbots/computer/remote_chat.rs `HOME_KEY`), which knows nothing else of the GBot.
 pub(crate) fn is_gbot_chat(runtime_settings: Option<&Map<String, Value>>) -> bool {
-    runtime_settings.is_some_and(|runtime| runtime.get("gbot").is_some_and(Value::is_object))
+    runtime_settings.is_some_and(|runtime| {
+        ["gbot", "gbotHome"]
+            .iter()
+            .any(|key| runtime.get(*key).is_some_and(Value::is_object))
+    })
 }
 
 /*
@@ -76,10 +81,12 @@ pub(crate) fn with_home_secret_folders_denied(
     if cfg!(test) || command.trim().is_empty() {
         return command.to_string();
     }
-    // Part of the Main Hub beta extension: off, launches at the home folder are as before.
-    let applies = cwd.is_some_and(crate::chief::is_home_folder)
-        || (gbot_chat && family == Some("codex") && codex_bypass(command));
-    if !applies || !crate::chief::chief_shown() {
+    // Part of the Main Hub beta extension: off, launches at the home folder are as before. A GBot
+    // chat is held to the list whatever Main Hub is: on a computer a GBot was given, Main Hub may be
+    // off (the security review of M12, finding 2).
+    let at_home = cwd.is_some_and(crate::chief::is_home_folder) && crate::chief::chief_shown();
+    let gbot_at_full = gbot_chat && family == Some("codex") && codex_bypass(command);
+    if !at_home && !gbot_at_full {
         return command.to_string();
     }
     let folders = home_secret_folders();
@@ -125,7 +132,12 @@ fn claude_rules(folders: &[String]) -> Vec<Value> {
 /// `--settings`, and the Connectors and Bypass steps put theirs there), or appends one. `None` when
 /// the command names a `--settings` that isn't inline JSON (a file of the user's).
 fn with_claude_denies(command: &str, folders: &[String]) -> Option<String> {
-    let rules = claude_rules(folders);
+    with_claude_deny_rules(command, claude_rules(folders))
+}
+
+/// Adds Claude deny `rules` to the command's one `--settings` JSON, or appends one (as
+/// [`with_claude_denies`] does for the folders; gbot_computer_use.rs adds its tools the same way).
+pub(super) fn with_claude_deny_rules(command: &str, rules: Vec<Value>) -> Option<String> {
     let command = command.trim_end();
     let Some(start) = command.rfind("--settings ") else {
         let settings = json!({ "permissions": { "deny": rules } });
@@ -264,3 +276,94 @@ fn without_flag(command: &str, flag: &str) -> String {
     out.push_str(rest);
     out
 }
+
+/// Whether `runtime_settings` mark a GBot API chat (`runtimeSettings.gbot.openedBy` is
+/// `api:<keyId>`, server/src/gbots/api/chat.rs).
+pub(crate) fn is_gbot_api_chat(runtime_settings: Option<&Map<String, Value>>) -> bool {
+    runtime_settings
+        .and_then(|runtime| runtime.get("gbot"))
+        .and_then(|gbot| gbot.get("openedBy"))
+        .and_then(Value::as_str)
+        .is_some_and(|by| by.starts_with("api:"))
+}
+
+/// gxserver's own files an API chat is kept out of on top of the secret folders: its auth folder
+/// (the token file and `security.json`), its database and logs, every GBot's folder (memory,
+/// instructions), the memory journal, shared preferences and presets.
+fn gxserver_private_paths() -> Vec<String> {
+    let paths = crate::paths::get_gxserver_paths(None);
+    let gbots = crate::gbots::gbots_folder(&paths);
+    let mut out = vec![
+        paths.auth_dir.clone(),
+        paths.state_db_file.clone(),
+        paths.logs_dir.clone(),
+        gbots.join("bots"),
+        gbots.join("journal"),
+        gbots.join("PREFERENCES.md"),
+        gbots.join("presets.json"),
+        gbots.join("rooms"),
+    ];
+    let db = paths.state_db_file.to_string_lossy().to_string();
+    out.push(format!("{db}-wal").into());
+    out.push(format!("{db}-shm").into());
+    out.into_iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect()
+}
+
+/*
+CDXC:GBots 2026-11-09 WHY:
+Security review of the GBot API (finding 1): "Ask" alone kept an API chat from editing without asking but not from reading. Codex's sandbox below Full reads the whole disk and runs plain reads (`cat`, `ls`) without asking, and the secret-folder list applied only at the home folder or to Codex at Full, so a message relayed from outside could have the reply carry ~/.ssh or the GBot's memory back out. So every API chat starts held to the list whatever its folder and whether Main Hub is on, with gxserver's own files added: Codex in a profile that reads everywhere but the denied paths, writes only its own folder, reaches the network (so `ghostex` reaches gxserver) and never asks, so text from outside can't raise it; Claude with its deny rules (its file tools; a shell `cat` still asks first, and only the user answers an API chat). Other agents can't be held to the list, so the Bot API is for Claude and Codex GBots only (gbots/api/chat.rs).
+*/
+/// `command` for a GBot API chat (`cwd` its own folder): held to the secret folders and gxserver's
+/// own files. `None` when this agent can't be held to them.
+pub(crate) fn with_api_chat_sandbox(
+    family: Option<&str>,
+    cwd: Option<&str>,
+    command: &str,
+) -> Option<String> {
+    if cfg!(test) {
+        return Some(command.to_string());
+    }
+    let mut folders = home_secret_folders();
+    for path in gxserver_private_paths() {
+        if !folders.contains(&path) {
+            folders.push(path);
+        }
+    }
+    match family {
+        Some("claude") => with_claude_denies(command, &folders),
+        Some("codex") if !cfg!(windows) => {
+            let mut base = command.trim_end().to_string();
+            for flag in [
+                "--dangerously-bypass-approvals-and-sandbox",
+                "--yolo",
+                "--full-auto",
+            ] {
+                base = without_flag(&base, flag);
+            }
+            let mut filesystem = vec!["\"/\"=\"read\"".to_string()];
+            if let Some(cwd) = cwd.filter(|cwd| !cwd.trim().is_empty()) {
+                filesystem.push(format!("{}=\"write\"", toml_string(cwd)));
+            }
+            filesystem.extend(
+                folders
+                    .iter()
+                    .map(|folder| format!("{}=\"deny\"", toml_string(folder))),
+            );
+            let profile = format!(
+                "{{filesystem={{{}}}, network={{enabled=true}}}}",
+                filesystem.join(", ")
+            );
+            Some(format!(
+                "{base} --ask-for-approval never -c {} -c {}",
+                quote_shell_arg(&format!("permissions.{CODEX_API_PROFILE}={profile}")),
+                quote_shell_arg(&format!("default_permissions=\"{CODEX_API_PROFILE}\""))
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// The Codex permission profile a GBot API chat runs in.
+const CODEX_API_PROFILE: &str = "ghostex-gbot-api";

@@ -17,7 +17,7 @@ pub(super) fn utc_offset_minutes() -> i32 {
 }
 
 /// Sixteen bytes from the OS random source a v4 UUID uses.
-pub(super) fn random_bytes() -> [u8; 16] {
+pub(crate) fn random_bytes() -> [u8; 16] {
     uuid::Uuid::new_v4().into_bytes()
 }
 

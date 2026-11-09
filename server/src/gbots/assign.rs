@@ -502,6 +502,8 @@ pub(super) fn ask(
                     standing: !consult && chat == "standing",
                     link,
                     title: None,
+                    approval: None,
+                    cwd: None,
                 },
             )?;
             let (project, session_id) = (

@@ -347,15 +347,31 @@ pub(crate) fn to_agent_resume_input(
         );
         // Claude's Bypass Permissions warning, consented to for a bypass resume (bypass_consent.rs).
         let command = super::with_claude_bypass_consent(agent_id.as_deref(), &command);
-        // The home folder's secret folders (home_secret_folders.rs).
-        super::with_home_secret_folders_denied(
+        // The home folder's secret folders (home_secret_folders.rs), and a GBot's screen tools
+        // when it may not use them (gbot_computer_use.rs).
+        let command = super::with_home_secret_folders_denied(
             agent_id.as_deref(),
             read_text_value(session, "cwd")
                 .or_else(|| read_text_value(project, "path"))
                 .as_deref(),
             super::is_gbot_chat(session.get("runtimeSettings").and_then(Value::as_object)),
             &command,
+        );
+        super::with_gbot_computer_use(
+            agent_id.as_deref(),
+            session.get("runtimeSettings").and_then(Value::as_object),
+            &command,
         )
+    });
+    // A GBot API chat is always held to the secret folders and gxserver's own files
+    // (home_secret_folders.rs `with_api_chat_sandbox`).
+    let runtime_command = runtime_command.map(|command| {
+        if !super::is_gbot_api_chat(session.get("runtimeSettings").and_then(Value::as_object)) {
+            return command;
+        }
+        let cwd = read_text_value(session, "cwd").or_else(|| read_text_value(project, "path"));
+        super::with_api_chat_sandbox(agent_id.as_deref(), cwd.as_deref(), &command)
+            .unwrap_or(command)
     });
     let runtime_command = match agent_id.as_deref() {
         Some("dsh") => runtime_command.map(|command| with_dsh_launch_env(&command)),

@@ -35,8 +35,13 @@ pub(crate) fn parse_relay_path(path: &str) -> Option<(&str, &str)> {
 
 /// Whether the relay forwards `forwarded`: only the endpoints another computer's agents may use,
 /// and never another relay, so a request never chains from A through B to C.
+///
+/// `/api/gbotsRemote` names the session asking by its ids, which only this computer's gxserver
+/// may vouch for, so it is sent by gxserver itself (gbots/computer/home.rs) and never relayed.
 pub(crate) fn relay_forwards(forwarded: &str) -> bool {
-    !forwarded.starts_with(RELAY_ROUTE_PREFIX) && super::scope::is_peer_allowed(forwarded)
+    !forwarded.starts_with(RELAY_ROUTE_PREFIX)
+        && forwarded != crate::gbots::GBOTS_REMOTE_ENDPOINT
+        && super::scope::is_peer_allowed(forwarded)
 }
 
 /// The relay base a CLI sends every request of that computer to.

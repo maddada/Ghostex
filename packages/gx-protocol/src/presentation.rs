@@ -171,6 +171,29 @@ pub struct PresentationGbotsBot {
     pub is_lead: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub paused: bool,
+    /// Where its chats run when not only on its own computer, or that it may use the screen
+    /// (server/src/gbots/computer/); absent for a GBot on its own computer without computer use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub computer: Option<PresentationGbotsComputer>,
+    /// Its chats on other computers, nested under its row from those computers' own rows (like
+    /// `coordinator_remote_threads`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remote_chats: Vec<PresentationRemoteThread>,
+}
+
+/// Where a GBot's chats run (`gbotsBot.computer`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationGbotsComputer {
+    /// `this`, `computer` (a connected computer) or `cloudBox`.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub kind: String,
+    /// The computer's or box's name ("This computer" for `this`).
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub name: String,
+    /// It may use that computer's screen and apps.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub computer_use: bool,
 }
 
 /// Who opened a GBot chat (`gbotsChat` on its session row).

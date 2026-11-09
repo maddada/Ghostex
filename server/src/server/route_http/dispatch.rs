@@ -112,6 +112,14 @@ pub(in crate::server) async fn route_http(
         return crate::connectors::serve_oauth_redirect(state.clone(), query).await;
     }
 
+    // The GBot API (server/src/gbots/api/): opened only by a GBot's own key, which this handler
+    // checks itself, so the key never passes the token gate below as any other caller.
+    if path.starts_with(crate::gbots::BOT_API_ROUTE_PREFIX) {
+        let query = parts.uri.query().map(str::to_string);
+        return crate::gbots::serve_bot_api(state.clone(), method, path, query, parts.headers, body)
+            .await;
+    }
+
     if path.starts_with(crate::connected_computers::RELAY_ROUTE_PREFIX) {
         /*
         CDXC:SessionLinks 2026-11-08 FIX:

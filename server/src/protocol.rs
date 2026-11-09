@@ -1113,6 +1113,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/draftFeedback" | "/api/sendFeedback" | "/api/startFeedbackAgent" => full_local(path),
         // CDXC:Chief 2026-11-08 WHY: another computer's Chief finds this computer's Chief through `status` (`ghostex chief send --computer`), and the desktop reaches a connected computer's Chief through its tunnel. Creating or moving Chief stays with this computer's own app, phone and terminal: the handler refuses peers and sessions (chief/endpoint.rs `may_change_chief`).
         crate::chief::CHIEF_ENDPOINT => remote_allowed(path),
+        // CDXC:GBots 2026-11-09 WHY: a GBot's chat on a connected computer reads its brief and keeps its memory on the GBot's home computer; that computer's gxserver sends the call (never its relay, relay.rs), and the handler answers only a peer, for a session it started there as that GBot's chat (gbots/computer/home.rs).
+        crate::gbots::GBOTS_REMOTE_ENDPOINT => remote_allowed(path),
         /*
         CDXC:ServerApi 2026-10-06 WHY:
         `ghostex show` publishes a page an agent on this computer wrote, so only the loopback listener accepts it; the remote listener must not let another machine store pages that this gxserver then serves.

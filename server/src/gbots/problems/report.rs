@@ -118,6 +118,7 @@ fn opener_phrase(db: &Connection, opened_by: &str) -> String {
             .flatten()
             .map(|bot| bot.name)
             .unwrap_or_else(|| "another GBot".to_string()),
+        Some(("api", _)) => "an app through the GBot API".to_string(),
         _ => "another coordinator".to_string(),
     }
 }

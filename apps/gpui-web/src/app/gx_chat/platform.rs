@@ -14,7 +14,7 @@ pub(super) fn utc_offset_minutes() -> i32 {
 }
 
 /// Sixteen bytes from `crypto.getRandomValues`.
-pub(super) fn random_bytes() -> [u8; 16] {
+pub(crate) fn random_bytes() -> [u8; 16] {
     let mut bytes = [0u8; 16];
     if let Some(crypto) = web_sys::window().and_then(|window| window.crypto().ok()) {
         let _ = crypto.get_random_values_with_u8_array(&mut bytes);

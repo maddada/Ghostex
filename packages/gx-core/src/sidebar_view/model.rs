@@ -650,6 +650,25 @@ impl SidebarViewModel {
             let remote_threads =
                 remote_thread_rows(&mut state, store, &rows, effective, &row_context);
             rows.extend(remote_threads);
+            // A GBot's chats on other computers, after its own.
+            if meta.is_gbot(project_id) {
+                let chats = store
+                    .project(&project_key)
+                    .and_then(|project| project.gbots_bot.as_ref())
+                    .map(|bot| bot.remote_chats.clone())
+                    .unwrap_or_default();
+                if !chats.is_empty() {
+                    let chat_rows = gbot_remote_chat_rows(
+                        &mut state,
+                        store,
+                        &machine,
+                        &chats,
+                        effective,
+                        &row_context,
+                    );
+                    rows.extend(chat_rows);
+                }
+            }
             // A project's facts are kept until the project row, the overlays, or the host's git
             // numbers move.
             let project_dirty = meta_dirty
@@ -1043,78 +1062,112 @@ fn remote_thread_rows(
             continue;
         };
         for thread in &coordinator.row.coordinator_remote_threads {
-            let Some(machine) = store
-                .machine_for_server_session(
-                    &thread.server_id,
-                    &thread.project_id,
-                    &thread.session_id,
-                )
-                .filter(|machine| *machine != parent.machine)
-            else {
-                continue;
-            };
-            let key = SessionKey {
-                machine,
-                project_id: thread.project_id.clone(),
-                session_id: thread.session_id.clone(),
-            };
-            // The machine's tab names it; this computer's tab when the coordinator is elsewhere.
-            let machine_id = key.machine.remote_id().unwrap_or(super::LOCAL_MACHINE_ID);
-            let computer_name = inputs
-                .host
-                .machine(machine_id)
-                .map(|tab| tab.label.trim())
-                .filter(|label| !label.is_empty())
-                .unwrap_or(if key.machine.is_local() {
-                    "This computer"
-                } else {
-                    machine_id
-                })
-                .to_string();
-            // Its pill (`machine_short_names.rs`), which the badge draws.
-            let short_name = inputs
-                .host
-                .machine(machine_id)
-                .map(|tab| tab.short_name.trim().to_string())
-                .filter(|short| !short.is_empty());
-            if let Some(row) = state.box_rows.get(&key).filter(|row| {
-                row.row.coordinator_parent.as_ref() == Some(&parent)
-                    && row.row.thread_state == thread.thread_state
-                    && row.row.computer_name.as_deref() == Some(computer_name.as_str())
-                    && row.row.machine_short_name == short_name
-            }) {
-                threads.push(row.clone());
-                continue;
-            }
-            let Some(session) = store
-                .machine(&key.machine)
-                .and_then(|entry| entry.effective_session(&key.project_id, &key.session_id))
-            else {
-                continue;
-            };
-            let sidebar_id = key.to_sidebar_session_id();
-            let mut row = session_row(
-                key.clone(),
-                &session,
-                super::inputs::CloseAfterDoneInput::from_session(&session).as_ref(),
-                inputs.host.local_delayed_sends.get(&sidebar_id),
+            if let Some(row) = foreign_session_row(
+                state,
+                store,
+                &parent.machine,
+                Some(&parent),
+                thread,
+                inputs,
                 context,
-            );
-            row.coordinator_parent = Some(parent.clone());
-            row.thread_state = thread.thread_state.clone();
-            row.computer_name = Some(computer_name.clone());
-            row.machine_short_name = short_name;
-            state.next_row_id += 1;
-            state.work.rows_built += 1;
-            let row = RowRef {
-                id: state.next_row_id,
-                row: Arc::new(row),
-            };
-            state.box_rows.insert(key, row.clone());
-            threads.push(row);
+            ) {
+                threads.push(row);
+            }
         }
     }
     threads
+}
+
+/// A GBot's chats on other computers (`gbotsBot.remoteChats`), drawn in its group after its own
+/// chats, each from that computer's own row with that computer's badge. A computer whose rows are
+/// not in the store (not connected from this app) shows none.
+///
+/// CDXC:GBots 2026-11-09 WHY:
+/// The computer a GBot chat runs on does not know whose chat it is (its GBot lives on the home computer, which may be this one or not), so, as for a coordinator's threads elsewhere, the GBot's row carries its chats there and each is taken from that machine's store with the same row cache.
+/// SEE-ALSO: server/src/gbots/computer/mod.rs (`decorate_presented_bots`), remote_thread_rows above.
+fn gbot_remote_chat_rows(
+    state: &mut CacheState,
+    store: &PresentationStore,
+    machine: &MachineId,
+    chats: &[ghostex_gx_protocol::presentation::PresentationRemoteThread],
+    inputs: &SidebarInputs,
+    context: &RowContext<'_>,
+) -> Vec<RowRef> {
+    chats
+        .iter()
+        .filter_map(|chat| foreign_session_row(state, store, machine, None, chat, inputs, context))
+        .collect()
+}
+
+/// The row of a session another computer runs, built from that computer's own session: marked as
+/// `parent`'s thread when it is one, with that computer's name for its badge.
+fn foreign_session_row(
+    state: &mut CacheState,
+    store: &PresentationStore,
+    own_machine: &MachineId,
+    parent: Option<&SessionKey>,
+    thread: &ghostex_gx_protocol::presentation::PresentationRemoteThread,
+    inputs: &SidebarInputs,
+    context: &RowContext<'_>,
+) -> Option<RowRef> {
+    let machine = store
+        .machine_for_server_session(&thread.server_id, &thread.project_id, &thread.session_id)
+        .filter(|machine| machine != own_machine)?;
+    let key = SessionKey {
+        machine,
+        project_id: thread.project_id.clone(),
+        session_id: thread.session_id.clone(),
+    };
+    // The machine's tab names it; this computer's tab when the coordinator is elsewhere.
+    let machine_id = key.machine.remote_id().unwrap_or(super::LOCAL_MACHINE_ID);
+    let computer_name = inputs
+        .host
+        .machine(machine_id)
+        .map(|tab| tab.label.trim())
+        .filter(|label| !label.is_empty())
+        .unwrap_or(if key.machine.is_local() {
+            "This computer"
+        } else {
+            machine_id
+        })
+        .to_string();
+    // Its pill (`machine_short_names.rs`), which the badge draws.
+    let short_name = inputs
+        .host
+        .machine(machine_id)
+        .map(|tab| tab.short_name.trim().to_string())
+        .filter(|short| !short.is_empty());
+    if let Some(row) = state.box_rows.get(&key).filter(|row| {
+        row.row.coordinator_parent.as_ref() == parent
+            && row.row.thread_state == thread.thread_state
+            && row.row.computer_name.as_deref() == Some(computer_name.as_str())
+            && row.row.machine_short_name == short_name
+    }) {
+        return Some(row.clone());
+    }
+    let session = store
+        .machine(&key.machine)
+        .and_then(|entry| entry.effective_session(&key.project_id, &key.session_id))?;
+    let sidebar_id = key.to_sidebar_session_id();
+    let mut row = session_row(
+        key.clone(),
+        &session,
+        super::inputs::CloseAfterDoneInput::from_session(&session).as_ref(),
+        inputs.host.local_delayed_sends.get(&sidebar_id),
+        context,
+    );
+    row.coordinator_parent = parent.cloned();
+    row.thread_state = thread.thread_state.clone();
+    row.computer_name = Some(computer_name);
+    row.machine_short_name = short_name;
+    state.next_row_id += 1;
+    state.work.rows_built += 1;
+    let row = RowRef {
+        id: state.next_row_id,
+        row: Arc::new(row),
+    };
+    state.box_rows.insert(key, row.clone());
+    Some(row)
 }
 
 /// A Cloud Box session's row in its home project: built like any row from the box machine's

@@ -31,6 +31,11 @@ pub(crate) struct GbotLook {
     pub(crate) paused: bool,
     /// It leads its department (a small crown after its name).
     pub(crate) is_lead: bool,
+    /// Where its chats run when not here: `computer` or `cloudBox`, and its name (a chip after
+    /// its name, gbots/computer/).
+    pub(crate) computer: Option<(String, String)>,
+    /// It may use that computer's screen and apps.
+    pub(crate) computer_use: bool,
 }
 
 impl NativeSidebarGroup {
@@ -50,6 +55,23 @@ impl NativeSidebarGroup {
             color,
             paused: gbot.get("paused").and_then(Value::as_bool) == Some(true),
             is_lead: gbot.get("isLead").and_then(Value::as_bool) == Some(true),
+            computer: gbot
+                .get("computer")
+                .map(|computer| {
+                    let field = |key: &str| {
+                        computer
+                            .get(key)
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_string()
+                    };
+                    (field("kind"), field("name"))
+                })
+                .filter(|(kind, name)| kind != "this" && !name.is_empty()),
+            computer_use: gbot
+                .pointer("/computer/computerUse")
+                .and_then(Value::as_bool)
+                == Some(true),
         })
     }
 
@@ -153,6 +175,7 @@ fn gbot_menu(look: &GbotLook, machine_id: &str) -> Value {
         { "label": "GBot Settings…", "icon": "settings", "command": gbots_command("settings", target.clone()) },
         { "label": "Memory…", "icon": "brain", "command": gbots_command("memory", target.clone()) },
         { "label": "Department…", "icon": "users", "command": gbots_command("department", target.clone()) },
+        { "label": "Computer…", "icon": "device-laptop", "command": gbots_command("computer", target.clone()) },
         { "separator": true },
         { "label": "Remove GBot…", "icon": "trash", "command": gbots_command("remove", target) },
     ])
@@ -434,6 +457,10 @@ impl GhostexGpuiApp {
         if look.is_lead {
             tooltip.push_str(" · Leads its department");
         }
+        if look.computer_use {
+            tooltip.push_str(" · May use the screen and apps");
+        }
+        let computer_chip = look.computer.clone();
         let owner = super::menus::MenuOwner::default();
         let menu_owner = owner.clone();
         h_flex()
@@ -489,6 +516,31 @@ impl GhostexGpuiApp {
                 )
             })
             .child(div().flex_1())
+            // Where its chats run when that isn't this computer: the computer's or box's name.
+            .when_some(computer_chip, |row, (kind, name)| {
+                row.child(
+                    h_flex()
+                        .flex_shrink_1()
+                        .min_w_0()
+                        .max_w(px(96.0 * scale))
+                        .gap(px(3.0 * scale))
+                        .items_center()
+                        .text_size(px(11.0 * scale))
+                        .text_color(appearance.muted)
+                        .child(
+                            svg()
+                                .flex_shrink_0()
+                                .size(px(11.0 * scale))
+                                .path(if kind == "cloudBox" {
+                                    "titlebar/cloud.svg"
+                                } else {
+                                    "titlebar/device-laptop.svg"
+                                })
+                                .text_color(appearance.muted),
+                        )
+                        .child(div().min_w_0().truncate().child(name)),
+                )
+            })
             .when(look.paused, |row| {
                 row.child(
                     div()
@@ -591,6 +643,12 @@ impl GhostexGpuiApp {
                 bot_id,
                 machine,
                 crate::app::window::GbotSettingsTab::Department,
+                cx,
+            ),
+            "computer" => self.open_gpui_gbot_settings_modal_on(
+                bot_id,
+                machine,
+                crate::app::window::GbotSettingsTab::Computer,
                 cx,
             ),
             "removeDepartment" => self.remove_native_sidebar_gbots_department(

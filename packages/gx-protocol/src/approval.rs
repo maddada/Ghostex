@@ -71,6 +71,12 @@ open_string_enum! {
         GbotsEnable => "gbotsEnable",
         /// Add a bot.
         GbotsAddBot => "gbotsAddBot",
+        /// Turn on a GBot's API, or give it a new key (the target is the GBot's id): an app or
+        /// script holding the key can message it.
+        GbotsApiKey => "gbotsApiKey",
+        /// Let a GBot run its chats on another computer or a Cloud Box, in a new folder there, or
+        /// use the screen and apps (the target is the GBot's id).
+        GbotsSetComputer => "gbotsSetComputer",
         // Settings
         /// Change a setting marked security-relaxing (the target is the setting key).
         SettingsWeakenSecurity => "settingsWeakenSecurity",

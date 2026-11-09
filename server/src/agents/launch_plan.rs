@@ -379,15 +379,37 @@ pub(crate) fn create_agent_session_params_for_project(
                     .map(|command| {
                         (
                             command.to_string(),
-                            with_home_secret_folders_denied(
+                            // A GBot that may not use the screen is started without its
+                            // tools (gbot_computer_use.rs).
+                            super::with_gbot_computer_use(
                                 family.as_deref(),
-                                launch_cwd.as_deref(),
-                                is_gbot_chat(Some(&runtime_settings)),
-                                command,
+                                Some(&runtime_settings),
+                                &with_home_secret_folders_denied(
+                                    family.as_deref(),
+                                    launch_cwd.as_deref(),
+                                    is_gbot_chat(Some(&runtime_settings)),
+                                    command,
+                                ),
                             ),
                         )
                     })
                     .and_then(|(before, after)| (after != before).then_some(after))
+                {
+                    plan.insert(
+                        "startupText".to_string(),
+                        Value::String(as_atuin_ignored_shell_input(&command)),
+                    );
+                    plan.insert("command".to_string(), Value::String(command));
+                }
+                // A GBot API chat is always held to the secret folders and gxserver's own files
+                // (home_secret_folders.rs `with_api_chat_sandbox`).
+                if let Some(command) = plan
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .filter(|_| is_gbot_api_chat(Some(&runtime_settings)))
+                    .and_then(|command| {
+                        with_api_chat_sandbox(family.as_deref(), launch_cwd.as_deref(), command)
+                    })
                 {
                     plan.insert(
                         "startupText".to_string(),

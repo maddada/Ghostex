@@ -366,8 +366,10 @@ fn tick(state: &AppState, memory: &Mutex<WatchMemory>) -> Vec<Restart> {
                 }
                 continue;
             }
-            // A chat the user opened is theirs to answer; any other waits on Chief of Staff.
-            match waits_on(&session, &now_iso).filter(|_| opened_by != "user") {
+            // A chat the user opened is theirs to answer, and so is an API chat (its prompts come
+            // from outside text, api/chat.rs); any other waits on Chief of Staff.
+            let users_to_answer = opened_by == "user" || opened_by.starts_with("api:");
+            match waits_on(&session, &now_iso).filter(|_| !users_to_answer) {
                 Some((prompt_key, summary)) => {
                     let since = match memory.waiting.get(&key) {
                         Some((known, since)) if *known == prompt_key => *since,

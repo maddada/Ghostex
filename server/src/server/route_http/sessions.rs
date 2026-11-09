@@ -275,6 +275,8 @@ pub(super) async fn route_sessions_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
+                // gxserver's own GBot marks stay as they are (gbots/markers.rs).
+                let params = &crate::gbots::keep_gbot_marks(db, repository, params);
                 let session = repository.update_session(params)?;
                 let project_id = value_text(&session, "projectId")?;
                 let session_id = value_text(&session, "sessionId")?;
