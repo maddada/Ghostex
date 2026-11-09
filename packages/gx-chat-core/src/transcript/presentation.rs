@@ -1093,6 +1093,7 @@ pub fn build_scope(
         scope.working,
         &[],
         scope.live_side_question.as_deref(),
+        scope.grouped_work && !scope.summary,
     );
     let summary = scope.summary;
     let worked_turn = latest_worked_turn(&projection.items, scope.working);
@@ -1214,6 +1215,7 @@ pub(crate) fn build_items(
     // before its turn's fold, and a running turn's rows fold nothing, so no run of finished turns
     // spans two chunks: grouping each chunk's rows alone groups the whole list.
     if builder.scope.grouped_work && !builder.scope.summary {
+        crate::transcript::grouped_work::calls_as_lines(&mut items);
         let hidden = builder.scope.hidden_work;
         items = crate::transcript::grouped_work::group_work(
             items,
@@ -1232,23 +1234,32 @@ pub(crate) fn hide_running_work(
     projection: &TranscriptProjection,
 ) {
     let live = hidden_live(scope, projection);
-    if !live.is_empty() {
+    if live.is_empty() {
+        return;
+    }
+    if scope.hides_running {
         crate::transcript::grouped_work::hide_work(items, &live, scope.quiet_finished_before);
+    } else {
+        crate::transcript::grouped_work::hide_live_calls(items, &live);
     }
 }
 
-/// The rows [`hide_running_work`] judges: the running response's, while Quiet hides it.
+/// The rows [`hide_running_work`] judges: the running response's, while Quiet hides it (all of
+/// it, or only its calls when a working signal doubts the agent is mid-response).
 fn hidden_live<'p>(
     scope: &ProjectionScope,
     projection: &'p TranscriptProjection,
 ) -> std::collections::HashSet<&'p str> {
-    if scope.hides_running && scope.working && !scope.summary {
+    if scope.hidden_work && scope.working {
         projection.live_ids.iter().map(String::as_str).collect()
     } else {
         Default::default()
     }
 }
 
+/// The rows for `projection`: its summary turns in the Summary view, else its render items.
+///
+/// CDXC:SessionChat 2026-11-09 WHY: the Summary view's running turn opens its "Active work" and its newest row's calls (the 2026-10-13 decision on `summary_mode_turns`), but under Agent work Reduced and Quiet the work stays shut there too, and Quiet leaves the running rows out as it does outside the Summary view (`grouped_work::hide_work`): Sebastian filed the Summary view ignoring them as a bug, and Quiet's own decision is that only the status line shows while the agent runs (`chat_look.rs`). Default keeps the 2026-10-13 behaviour.
 fn turn_items(
     builder: &mut Builder,
     projection: &TranscriptProjection,
@@ -1262,6 +1273,8 @@ fn turn_items(
         .then(|| crate::transcript::tool_card::live_card_id(scope.messages, scope.working))
         .flatten();
     if scope.summary {
+        // Agent work Quiet reads the running turn's rows themselves (`grouped_work::hide_work`).
+        let hidden_live = hidden_live(scope, projection);
         projection
             .summary_turns
             .iter()
@@ -1270,6 +1283,9 @@ fn turn_items(
                 let index = first + index;
                 builder.current = index;
                 let eager = builder.eager(index);
+                // Agent work Reduced and Quiet: the running turn's work starts shut, as their
+                // lines do (`grouped_work::hide_work`).
+                let opens_running = !scope.grouped_work;
                 TranscriptItem::Summary {
                     id: turn.user.id.clone(),
                     user: builder.message_or_placeholder(&turn.user, eager, Draw::Row),
@@ -1283,16 +1299,18 @@ fn turn_items(
                         .map(|message| builder.message_or_placeholder(message, eager, Draw::Row))
                         .collect(),
                     active: turn.active,
-                    work_open: turn.active && turn.final_message.is_none(),
+                    work_open: opens_running && turn.active && turn.final_message.is_none(),
                     // The running row's tool calls start open, so the call that is running shows.
                     work: turn
                         .active_work
                         .iter()
                         .map(|message| {
+                            let eager = eager || hidden_live.contains(message.id.as_str());
                             let mut row =
                                 builder.message_or_placeholder(message, eager, Draw::InWorkFold);
                             running_thinking.mark(message, &mut row);
-                            if turn.running_row.as_deref() == Some(message.id.as_str())
+                            if opens_running
+                                && turn.running_row.as_deref() == Some(message.id.as_str())
                                 && row.is_object()
                             {
                                 if let Value::Object(fields) = Arc::make_mut(&mut row) {
@@ -1349,7 +1367,7 @@ fn turn_items(
                         .and_then(|section| scope.deferred.get(&section.start_id))
                 });
                 let work = completed_chat_work(turn, section.map(Vec::as_slice));
-                let (visible_artifacts, collapsed_work) = partition_completed_work(&work);
+                let (visible_artifacts, collapsed_work) = partition_completed_work(&work, scope.grouped_work);
                 /*
                 A finished turn's writes leave their rows and collect under one "N files changed"
                 fold. The rows come back through the per-message projection so an unchanged turn

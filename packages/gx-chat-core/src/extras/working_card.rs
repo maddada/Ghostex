@@ -78,6 +78,8 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         )
     } else if let Some(label) = running {
         (Some(label), "tool")
+    } else if working && reads_subagent_report(state) {
+        (Some("Reading the subagent's report".to_string()), "word")
     } else if let Some(word) = &strip.label {
         (Some(word.clone()), "word")
     } else if working {
@@ -137,6 +139,20 @@ fn transcript_draws_running_call(state: &ChatState) -> bool {
     let view = &state.transcript_view;
     view.tool_cards
         || crate::transcript::view_level::view_level(view) != crate::transcript::view_level::NORMAL
+}
+
+/// Agent work Quiet hides a subagent's report as the agent's work, so while the agent has not gone
+/// on from it the line says what it does (`turns::report_lands_mid_response`).
+fn reads_subagent_report(state: &ChatState) -> bool {
+    use crate::transcript::turns::{is_subagent_report, passed_over_before_wake};
+    state.transcript_view.hidden_work()
+        && state
+            .messages
+            .list
+            .iter()
+            .rev()
+            .find(|row| !passed_over_before_wake(row))
+            .is_some_and(is_subagent_report)
 }
 
 /// The two labels name the same call: equal once their spacing and case are set aside.

@@ -170,7 +170,7 @@ fn ids(rows: &[ChatMessage]) -> Vec<&str> {
 
 /// The verbose transcript's items: `message:<id>` or `work:<opener>-><final or none>`.
 fn shape(messages: &[ChatMessage], working: bool) -> Vec<String> {
-    project_chat_transcript(messages, working, &[], None)
+    project_chat_transcript(messages, working, &[], None, false)
         .items
         .iter()
         .map(|item| match item {
@@ -188,7 +188,7 @@ fn shape(messages: &[ChatMessage], working: bool) -> Vec<String> {
 
 /// The work folded under the turn `opener` opened.
 fn folded(messages: &[ChatMessage], opener: &str) -> Vec<String> {
-    project_chat_transcript(messages, false, &[], None)
+    project_chat_transcript(messages, false, &[], None, false)
         .items
         .iter()
         .find_map(|item| match item {
@@ -571,7 +571,7 @@ fn an_omp_wake_up_after_the_reply_opens_its_own_turn() {
             messages[4].custom_message.as_ref().unwrap().custom_type
         );
         assert_eq!(
-            project_chat_transcript(&messages, false, &[], None).final_ids,
+            project_chat_transcript(&messages, false, &[], None, false).final_ids,
             ["a1", "a2"]
         );
         // The rows before the wake-up stay in the first turn's fold; the wake-up folds with its own.
@@ -636,7 +636,7 @@ fn summary_mode_keeps_the_reply_before_an_omp_wake_up() {
             T0 + 6 * MINUTE,
         ),
     ];
-    let turns = project_chat_transcript(&messages, false, &[], None).summary_turns;
+    let turns = project_chat_transcript(&messages, false, &[], None, false).summary_turns;
     assert_eq!(turns.len(), 1, "a wake-up opens no summary turn of its own");
     assert_eq!(
         turns[0].final_message.as_ref().map(|row| row.id.as_str()),

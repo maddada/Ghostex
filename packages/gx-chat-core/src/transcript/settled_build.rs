@@ -107,6 +107,7 @@ fn build_after(
     let composed = &state.messages.composed;
     let working = is_working(state);
     let summary = settled.key.summary;
+    let grouped = settled.key.grouped_work && !summary;
     // The side-question card above the composer hides the newest row asking its question; while
     // it is open nothing joins the prefix, so that row is in the stretch or already settled.
     let live_side_question = crate::transcript::side_question::live_side_question(state);
@@ -144,14 +145,14 @@ fn build_after(
         }
     }
     // A turn closed after the running turn's chunks: they go, and the turn joins whole below.
-    if settled.has_active() && !seams(&stretch, summary).is_empty() {
+    if settled.has_active() && !seams(&stretch, summary, grouped).is_empty() {
         settled.drop_active();
         stretch = rows_after(settled);
         if !settled.can_follow(&stretch) {
             return None;
         }
     }
-    let mut tail = project_chat_segment(&stretch, working, &settled.redone);
+    let mut tail = project_chat_segment(&stretch, working, &settled.redone, grouped);
     // A prompt or a wake after them restarts the response, which folds what came before it.
     if settled.has_active() && restarts_response(&tail.0) {
         settled.drop_active();
@@ -159,7 +160,7 @@ fn build_after(
         if !settled.can_follow(&stretch) {
             return None;
         }
-        tail = project_chat_segment(&stretch, working, &settled.redone);
+        tail = project_chat_segment(&stretch, working, &settled.redone, grouped);
     }
     let later = settled.later_scans(order, &stretch);
     let scans = later.as_ref().unwrap_or(&settled.prefix_scans);
@@ -195,13 +196,13 @@ fn build_after(
     // Turns a newer accepted prompt has closed since the prefix was settled join it, one chunk
     // each, so the stretch built below is only the newest turn.
     let mut fresh: Vec<Unresolved> = Vec::new();
-    while let Some(&next) = seams(&stretch, summary)
+    while let Some(&next) = seams(&stretch, summary, grouped)
         .first()
         .filter(|_| live_side_question.is_none())
     {
-        let rest = project_chat_segment(&stretch[next..], working, &settled.redone);
+        let rest = project_chat_segment(&stretch[next..], working, &settled.redone, grouped);
         let (projection, own_redone) =
-            project_chat_segment(&stretch[..next], false, &settled.redone);
+            project_chat_segment(&stretch[..next], false, &settled.redone, grouped);
         if !own_redone.is_empty() {
             break;
         }
@@ -273,7 +274,7 @@ fn build_after(
             .find(|cut| **cut <= keep)
         {
             let (projection, own_redone) =
-                project_chat_segment(&stretch[..cut], true, &settled.redone);
+                project_chat_segment(&stretch[..cut], true, &settled.redone, grouped);
             if own_redone.is_empty() && !asks_resend(&stretch[..cut]) {
                 let start = settled.messages.len();
                 let eager_from = (settled.render_count() + render_len(&tail.0, summary))
@@ -299,7 +300,7 @@ fn build_after(
                     if !settled.can_follow(&stretch) {
                         return None;
                     }
-                    tail = project_chat_segment(&stretch, working, &settled.redone);
+                    tail = project_chat_segment(&stretch, working, &settled.redone, grouped);
                 }
             }
         }
@@ -311,7 +312,13 @@ fn build_after(
         None => tail,
         Some(question) => {
             let (projection, own_redone, hid) =
-                project_chat_segment_with(&stretch, working, &settled.redone, Some(question));
+                project_chat_segment_with(
+                    &stretch,
+                    working,
+                    &settled.redone,
+                    Some(question),
+                    grouped,
+                );
             let settled_asks = settled.chunks.iter().any(|chunk| {
                 chunk
                     .side_rows

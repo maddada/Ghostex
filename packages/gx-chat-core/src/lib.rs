@@ -21,7 +21,7 @@
 //!   and `messageLayout` is the effective layout (Left whenever `userStyle` is Band).
 //! - With `agentWork` Reduced or Quiet, the transcript carries `grouped-work` items
 //!   (`transcript/grouped_work.rs`) where it carried `completed-work`:
-//!   `{"kind":"grouped-work","id":"grouped:<first turn id>","label","stats"?,"filesCard","files","filesLabel","simpleFilesLabel","expandable","work","turns","readImages"?,"workButton","workCarrier"?}`.
+//!   `{"kind":"grouped-work","id":"<first turn id>","label","stats"?,"filesCard","files","filesLabel","simpleFilesLabel","expandable","work","turns","readImages"?,"workButton","workCarrier"?}`.
 //!   The counts, files and work are the merged turns' added up; each `turns` entry is one turn's
 //!   tail `{"id","deferred"?,"questions","sentMessages"?,"gbotCards"?,"workflows"?,"artifacts",
 //!   "final"?}`, in turn order, shaped like the same-named `completed-work` fields. Opening the line sends one

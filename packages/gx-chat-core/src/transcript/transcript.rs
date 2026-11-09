@@ -132,19 +132,27 @@ pub struct TranscriptProjection {
 /// The one pass every renderer starts from.
 ///
 /// `interacted_message_ids` is the inline-diff opt-out React passed; the native projection always
-/// hands it an empty list, exactly as the TypeScript default did.
+/// hands it an empty list, exactly as the TypeScript default did. `grouped` is Agent work Reduced
+/// or Quiet outside the Summary view (`completed_work_render_items`).
 pub fn project_chat_transcript(
     messages: &[ChatMessage],
     working: bool,
     interacted_message_ids: &[String],
     live_side_question: Option<&str>,
+    grouped: bool,
 ) -> TranscriptProjection {
     let mut normalized = normalize_chat_transcript(messages);
     let hidden_rows = crate::transcript::question_forms::hide_redone_forms(&mut normalized);
     if let Some(question) = live_side_question {
         crate::transcript::side_question::hide_live_side_question(&mut normalized, question);
     }
-    project_normalized(normalized, hidden_rows, working, interacted_message_ids)
+    project_normalized(
+        normalized,
+        hidden_rows,
+        working,
+        interacted_message_ids,
+        grouped,
+    )
 }
 
 /// [`project_chat_transcript`] for one stretch of the list after a settled prefix
@@ -155,8 +163,10 @@ pub(crate) fn project_chat_segment(
     messages: &[ChatMessage],
     working: bool,
     prior_redone: &[(String, String)],
+    grouped: bool,
 ) -> (TranscriptProjection, Vec<(String, String)>) {
-    let (projection, own, _) = project_chat_segment_with(messages, working, prior_redone, None);
+    let (projection, own, _) =
+        project_chat_segment_with(messages, working, prior_redone, None, grouped);
     (projection, own)
 }
 
@@ -167,6 +177,7 @@ pub(crate) fn project_chat_segment_with(
     working: bool,
     prior_redone: &[(String, String)],
     live_side_question: Option<&str>,
+    grouped: bool,
 ) -> (TranscriptProjection, Vec<(String, String)>, bool) {
     use crate::transcript::question_forms::{redone_forms, strip_redone_forms};
     let mut normalized = normalize_chat_transcript(messages);
@@ -179,7 +190,7 @@ pub(crate) fn project_chat_segment_with(
         crate::transcript::side_question::hide_newest_side_question(&mut normalized, question)
     });
     (
-        project_normalized(normalized, hidden_rows, working, &[]),
+        project_normalized(normalized, hidden_rows, working, &[], grouped),
         own,
         hid,
     )
@@ -190,9 +201,18 @@ fn project_normalized(
     hidden_rows: Vec<String>,
     working: bool,
     interacted_message_ids: &[String],
+    grouped: bool,
 ) -> TranscriptProjection {
     let rendered = fold_chat_transcript(&normalized);
-    let final_ids = final_assistant_message_ids(&rendered, working);
+    let mut final_ids = final_assistant_message_ids(&rendered, working);
+    let (items, demoted) = completed_work_render_items(
+        &rendered,
+        working,
+        interacted_message_ids,
+        &normalized,
+        grouped,
+    );
+    final_ids.retain(|id| !demoted.contains(id));
     let live_ids = if working {
         rendered[crate::transcript::turns::active_response_start_index(&rendered)..]
             .iter()
@@ -203,7 +223,7 @@ fn project_normalized(
     };
     TranscriptProjection {
         live_ids,
-        items: completed_work_render_items(&rendered, working, interacted_message_ids, &normalized),
+        items,
         summary_turns: summary_mode_turns(&rendered, &final_ids, working),
         final_ids,
         normalized,

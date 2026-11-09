@@ -124,7 +124,7 @@ pub enum TranscriptItem {
     /// added up over every merged turn; what each turn keeps out of the fold is in `turns`.
     #[serde(rename = "grouped-work", rename_all = "camelCase")]
     GroupedWork {
-        /// `grouped:` plus the first merged turn's id.
+        /// The first merged turn's id, as its `completed-work` row had it.
         id: String,
         /// "Worked for 1m 16s": the merged turns' times added up.
         label: String,
