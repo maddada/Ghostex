@@ -325,8 +325,9 @@ async fn run_heal(state: &Arc<AppState>, due: &HealDue) -> HealOutcome {
     let answer = serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null);
     crate::session_chat_options::forget_session_chat_options(state, &key.0, &key.1);
     if !ok {
+        // An error answer carries its reason at the top level (`domain_error_response`), beside the `error` code.
         let message = answer
-            .pointer("/error/message")
+            .get("message")
             .and_then(Value::as_str)
             .unwrap_or("the session could not be started again")
             .chars()
