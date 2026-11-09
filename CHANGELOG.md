@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **`.tsx` and `.jsx` files are coloured in Files:** imports, strings, comments, `const`, JSX tags and attributes now get colours like `.ts` files do (a `.tsx` file used to colour only types, capitalised names and a few keywords).
 - **Quieter Autopilot and Resources pills:** the Autopilot pill's tooltip says just "Autopilot is on" or "Autopilot is off"; the Resources pill says just "Resources" with a number only while a question is unanswered (it used to count every form, page and visual ever made, 867 in a long chat), and its list shows the newest 30 per group with one "Show all N" row for the rest. On computer, web and phone.
 - **A phone that signs in over Tailscale, your network or SSH works right away:** reading, replying, Stop and typing go through from the first sign-in; only approving requests and answering secret requests from that phone wait for the one-time "Approve this phone?" on the computer. The phone shows that as one small line you can hide instead of a card (with the phone app update); older phone apps keep showing their card, and replying already works there too.
 - **Computers you control over Easy Connect stay connected to each other:** a computer you already paired now gets connection keys of its own for each computer it reaches, by itself, with nothing to approve and no need to pair again, so the app's connection, Ghostex's own connection and a connection to a second computer no longer get in each other's way. Computers and phones on older Ghostex versions keep connecting as before.
