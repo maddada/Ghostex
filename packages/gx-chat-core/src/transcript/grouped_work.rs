@@ -392,7 +392,9 @@ pub fn hide_live_calls(items: &mut Vec<TranscriptItem>, live: &std::collections:
 /// starts shut: every row of it that needs the user (`chat_look::needs_the_user`: a question, an
 /// approval, a picture, a card) joins the rows drawn in full under the prompt (`cards`, which the
 /// fold leaves out), in the order they came, with its calls as one quiet line. Runs once the
-/// waiting call is marked and Quiet has hidden the rest.
+/// waiting call is marked and Quiet has hidden the rest. Marking a waiting call opens the fold
+/// around it (`approval_wait::mark_waiting_call`); once its row is drawn here the fold goes back
+/// to shut, so an approval never opens the earlier work beside it.
 ///
 /// CDXC:SessionChat 2026-11-09 WHY: the summary turn only hoisted fenced forms, pages and charts (`turns::content_rows`), which was enough while the running fold started open; shut, it also hid one-click answers in a sentence, shared pictures and approvals, which must surface at once (the 2026-11-08 decision on `chat_look::needs_the_user`).
 pub fn keep_in_view_while_shut(items: &mut [TranscriptItem]) {
@@ -400,12 +402,16 @@ pub fn keep_in_view_while_shut(items: &mut [TranscriptItem]) {
         let TranscriptItem::Summary {
             active: true,
             work,
+            work_open,
             cards,
             ..
         } = item
         else {
             continue;
         };
+        if work.iter().any(|row| waits_on_approval(row)) {
+            *work_open = false;
+        }
         let id = |row: &crate::document::ProjectedMessage| row["id"].as_str().map(str::to_string);
         let carded: Vec<Option<String>> = cards.iter().map(id).collect();
         let mut kept: Vec<crate::document::ProjectedMessage> = work

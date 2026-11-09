@@ -26,7 +26,9 @@ pub struct TranscriptMatch {
     pub label: Option<String>,
 }
 
-/// The renderer's fold state, which decides what a reader can see.
+/// The renderer's fold state, which decides what a reader can see. Find searches only what it
+/// leaves open, and the working card names the running call only when it leaves the call shut
+/// (`extras::working_card`), so the renderers report it whenever it changes.
 ///
 /// The keys are the renderer's own (`work:<id>`, `tools:<id>`, `reasoning:<id>`, `tool-run:<id>`,
 /// `prompt:<id>`, …), the same on desktop (`native_chat/state.rs` `expanded` / `collapsed`) and the
@@ -74,7 +76,7 @@ impl SearchFolds {
     }
 
     /// The renderers' `is_expanded(key, default)`.
-    fn open(&self, key: &str, default: bool) -> bool {
+    pub(crate) fn open(&self, key: &str, default: bool) -> bool {
         self.expanded.contains(key) || default && !self.collapsed.contains(key)
     }
 }

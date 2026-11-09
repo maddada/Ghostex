@@ -245,7 +245,7 @@ pub(crate) struct NativeChatView {
     /// The same find for the row's one-line labels (tool rows, thinking headlines), which are not
     /// text views (search.rs, `label_highlights`).
     pub(super) row_label_find: Option<super::search::RowLabelFind>,
-    /// The fold state last reported to the core while the find bar is open (search.rs, `sync_search_folds`).
+    /// The fold state last reported to the core (search.rs, `sync_search_folds`).
     pub(super) search_folds_sent: Option<serde_json::Value>,
     /// Where the transcript's `#123` references link to: the project's GitHub issues URL, or `None`
     /// when its `origin` is not on GitHub (markdown_links.rs).

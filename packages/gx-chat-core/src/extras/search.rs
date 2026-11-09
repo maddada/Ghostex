@@ -53,7 +53,7 @@ pub fn move_by(search: &mut SearchState, offset: i64) {
 }
 
 /// `searchFolds`: the renderer's open and closed folds and the two modes their defaults follow.
-/// Sent while the field is open, whenever one of them changes.
+/// Sent whenever one of them changes, find bar open or not: the working card reads them too.
 pub fn set_folds(search: &mut SearchState, params: &serde_json::Map<String, Value>) {
     search.folds = SearchFolds::from_action(params);
 }

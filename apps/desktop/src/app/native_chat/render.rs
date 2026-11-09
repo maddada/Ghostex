@@ -144,6 +144,7 @@ impl Render for NativeChatView {
         // Under glass the subagent viewer sits straight on the pane's glass, so the chat behind it
         // is not painted (subagent_view.rs, `render_subagent_viewer`).
         let covered = maximized || (glass && self.snapshot["subagent"].is_object());
+        self.sync_search_folds(&p, cx);
         let search_bar = if covered {
             None
         } else {

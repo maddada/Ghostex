@@ -365,3 +365,122 @@ fn the_subagent_viewer_reads_in_the_main_chat_s_look() {
     assert_eq!(subagent_chat(Some("reduced")), ["message", "grouped-work"]);
     assert_eq!(subagent_chat(Some("quiet")), ["message", "grouped-work"]);
 }
+
+/// A Reduced chat running a described Bash call after some earlier words and calls.
+fn reduced_running(summary: bool, detailed: bool) -> ChatState {
+    let mut rows = turn();
+    rows.push(words("w2", T0 + 5_000, "Building now."));
+    rows.push(call(
+        "c3",
+        T0 + 6_000,
+        "Bash",
+        json!({ "command": "cargo build", "description": "Build the project" }),
+    ));
+    let mut state = quiet_chat(rows);
+    look(&mut state, "reduced");
+    state.transcript_view.summary_mode = summary;
+    state.transcript_view.simple_override = Some(!detailed);
+    state
+}
+
+/// The summary turn's id and the id of the row running a call, wherever the list draws it.
+fn running_row(items: &[Value]) -> (Option<String>, String) {
+    let runs = |row: &Value| {
+        row["tools"]
+            .as_array()
+            .is_some_and(|tools| tools.iter().any(|tool| tool["status"] == "running"))
+    };
+    let id = |row: &Value| row["id"].as_str().unwrap_or_default().to_string();
+    for item in items.iter().rev() {
+        match item["kind"].as_str() {
+            Some("message") if runs(&item["message"]) => return (None, id(&item["message"])),
+            Some("summary") => {
+                let rows = ["cards", "work"]
+                    .iter()
+                    .flat_map(|key| item[*key].as_array().into_iter().flatten());
+                for row in rows {
+                    if runs(row) {
+                        return (Some(id(item)), id(row));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("no running row: {items:#?}")
+}
+
+fn status_bar(state: &ChatState) -> Option<String> {
+    ghostex_gx_chat_core::extras::working_card::working_card(
+        state,
+        &ghostex_gx_chat_core::WorkingStrip::default(),
+        &[],
+    )
+    .label
+}
+
+fn report_folds(state: &mut ChatState, expanded: &[String], collapsed: &[String]) {
+    let folds = &mut state.extras.search.folds;
+    folds.expanded = expanded.iter().cloned().collect();
+    folds.collapsed = collapsed.iter().cloned().collect();
+}
+
+/// The status bar names the running call exactly when the reader's folds leave its words shut.
+#[test]
+fn the_status_bar_follows_the_folds_the_reader_opened_or_closed_under_reduced() {
+    // Summary view: Active work and the row's line start shut, so the bar names the call.
+    let mut state = reduced_running(true, false);
+    let list = items(&mut state, T0 + 6_500);
+    assert_eq!(status_bar(&state).as_deref(), Some("Build the project"));
+    // The reader opens Active work, then the row's line: the call's words are in the chat now.
+    let (summary, row) = running_row(&list);
+    let summary = summary.expect("the running row sits in the summary turn");
+    report_folds(
+        &mut state,
+        &[format!("active-work:{summary}"), format!("tools:{row}")],
+        &[],
+    );
+    assert_ne!(
+        status_bar(&state).as_deref(),
+        Some("Build the project"),
+        "the words show once"
+    );
+    // Detailed view: the line starts open, so the bar leaves the call out until the reader closes it.
+    let mut state = reduced_running(false, true);
+    let list = items(&mut state, T0 + 6_500);
+    assert_ne!(status_bar(&state).as_deref(), Some("Build the project"));
+    let (_, row) = running_row(&list);
+    report_folds(&mut state, &[], &[format!("tools:{row}")]);
+    assert_eq!(
+        status_bar(&state).as_deref(),
+        Some("Build the project"),
+        "a closed line leaves the words to the bar"
+    );
+}
+
+/// Reduced, Summary view: a new approval shows outside the shut Active work fold, and the fold
+/// stays shut over the earlier, unrelated work.
+#[test]
+fn an_approval_keeps_the_summary_work_shut_under_reduced() {
+    let mut state = reduced_running(true, false);
+    state.session.prompt = Some(json!({
+        "kind": "approval", "tool": "Bash", "summary": "cargo build", "toolUseId": "c3",
+    }));
+    let list = items(&mut state, T0 + 6_500);
+    let summary = list
+        .iter()
+        .rev()
+        .find(|item| item["kind"] == "summary")
+        .expect("a summary turn");
+    let carded: Vec<&str> = summary["cards"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|row| row["id"].as_str())
+        .collect();
+    assert!(!carded.is_empty(), "the waiting row shows: {summary:#?}");
+    assert_ne!(
+        summary["workOpen"], true,
+        "Active work stays shut: {summary:#?}"
+    );
+}
