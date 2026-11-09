@@ -78,6 +78,10 @@ on:
         required: false
       SIGNPATH_API_TOKEN:
         required: false
+      CERTUM_SIMPLYSIGN_EMAIL:
+        required: false
+      CERTUM_SIMPLYSIGN_TOTP:
+        required: false
   workflow_dispatch:
     inputs:
       version:
@@ -90,6 +94,11 @@ on:
         default: x64
         type: choice
         options: [x64, arm64]
+      sign:
+        description: Authenticode-sign the packages (Certum when its secrets exist, else SignPath)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -139,7 +148,9 @@ jobs:
     # silence watchdog still catches wedges, so the budget only has to cover
     # real work.
     # A SignPath-signed build adds a second `vpk pack` and three signing round
-    # trips to the packaging phase, hence the extra 30 minutes.
+    # trips to the packaging phase, hence the extra 30 minutes (Certum signing
+    # needs far less, the SimplySign install and login plus one signtool call
+    # per file, and fits the same budget).
     timeout-minutes: ${{ inputs.arch == 'arm64' && (inputs.sign && 180 || 150) || (inputs.sign && 130 || 100) }}
     env:
       GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
@@ -157,6 +168,8 @@ jobs:
       SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'test-signing' }}
       SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG || 'initial' }}
       SIGNPATH_ROOT: build/release-gpui/${{ inputs.version }}/windows-${{ inputs.arch }}-signpath
+      # CDXC:Release 2026-11-09 DECISION: the user's Certum "Open Source Code Signing in the Cloud" certificate (CN "Open Source Developer Mohamad Yahia Youssef", serial 0436c352e3cb5e9769206a31b40ce463, valid 2026-11-09 to 2027-11-09) signs Windows whenever its two secrets exist; SignPath stays as the fallback. Its SHA-1 thumbprint; the CERTUM_CERT_SHA1 repository variable overrides it after a renewal. Setup steps: docs/code-signing.md.
+      GHOSTEX_CERTUM_CERT_SHA1: ${{ vars.CERTUM_CERT_SHA1 || 'E81BEDC91DEA38C8BB2DA3651E161ADA280B6734' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -165,22 +178,30 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
-      - name: Decide whether SignPath signs this build
-        id: signpath
+      # signer: certum (both CERTUM_SIMPLYSIGN_* secrets set), else signpath
+      # (SIGNPATH_API_TOKEN set), else none. The SignPath steps below run only
+      # for signpath; Certum signs inside the single package step.
+      - name: Decide who signs this build
+        id: signing
         shell: bash
         env:
           SIGN_REQUESTED: ${{ inputs.sign }}
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          CERTUM_SIMPLYSIGN_EMAIL: ${{ secrets.CERTUM_SIMPLYSIGN_EMAIL }}
+          CERTUM_SIMPLYSIGN_TOTP: ${{ secrets.CERTUM_SIMPLYSIGN_TOTP }}
         run: |
           if [[ "$SIGN_REQUESTED" != "true" ]]; then
             echo "Windows code signing was not requested for this build; packaging it unsigned."
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-          elif [[ -z "$SIGNPATH_API_TOKEN" ]]; then
-            echo "::notice title=Windows build is unsigned::The SIGNPATH_API_TOKEN secret is not configured (a fork, or SignPath setup is unfinished), so the Windows ${{ inputs.arch }} build is packaged unsigned. See docs/code-signing.md."
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-          else
+            echo "signer=none" >> "$GITHUB_OUTPUT"
+          elif [[ -n "$CERTUM_SIMPLYSIGN_EMAIL" && -n "$CERTUM_SIMPLYSIGN_TOTP" ]]; then
+            echo "Certum signs the Windows ${{ inputs.arch }} build with certificate $GHOSTEX_CERTUM_CERT_SHA1 through SimplySign Desktop."
+            echo "signer=certum" >> "$GITHUB_OUTPUT"
+          elif [[ -n "$SIGNPATH_API_TOKEN" ]]; then
             echo "SignPath signs the Windows ${{ inputs.arch }} build: organization $SIGNPATH_ORGANIZATION_ID, project $SIGNPATH_PROJECT_SLUG, policy $SIGNPATH_SIGNING_POLICY_SLUG, artifact configuration $SIGNPATH_ARTIFACT_CONFIGURATION_SLUG."
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "signer=signpath" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Windows build is unsigned::Neither the CERTUM_SIMPLYSIGN_EMAIL and CERTUM_SIMPLYSIGN_TOTP secrets nor SIGNPATH_API_TOKEN are configured (a fork, or signing setup is unfinished), so the Windows ${{ inputs.arch }} build is packaged unsigned. See docs/code-signing.md."
+            echo "signer=none" >> "$GITHUB_OUTPUT"
           fi
       # Component tags are published to a separate repository that
       # github.token cannot write; fail before any build work when the PAT is
@@ -479,14 +500,35 @@ jobs:
           done
           sha256sum server/target/release/gxserver.exe server/target/release/ghostex.exe \
             .dependencies/wmx/target/release/wmx.exe apps/editor/desktop/target/release/ghostex-editor.exe
+      # Certum's private key stays in its cloud; SimplySign Desktop mounts it
+      # as a virtual smart card once logged in with the account e-mail and a
+      # one-time code computed from the activation seed
+      # (tooling/release-gpui/certum-simplysign-login.ps1). Logged in right
+      # before packaging: a SimplySign session lasts about 2 hours, and the
+      # package step is the only one that signs. The two architectures log in
+      # on alternate 30-second codes because Certum accepts each code once.
+      - name: Install SimplySign Desktop for Certum signing
+        if: ${{ steps.signing.outputs.signer == 'certum' }}
+        shell: pwsh
+        run: tooling/release-gpui/certum-simplysign-login.ps1 -Install
+      - name: Log in to SimplySign for Certum signing
+        if: ${{ steps.signing.outputs.signer == 'certum' }}
+        shell: pwsh
+        env:
+          CERTUM_SIMPLYSIGN_EMAIL: ${{ secrets.CERTUM_SIMPLYSIGN_EMAIL }}
+          CERTUM_SIMPLYSIGN_TOTP: ${{ secrets.CERTUM_SIMPLYSIGN_TOTP }}
+          GHOSTEX_CERTUM_LOGIN_SLOT: ${{ inputs.arch == 'arm64' && 'odd' || 'even' }}
+        run: tooling/release-gpui/certum-simplysign-login.ps1 -Login
       # Phase 2 of windows.ps1: stage the app directory from the compiled
       # binaries, seal the CEF / code-server components, verify the staged
       # tree, vpk pack, bundle the launcher, and write manifest.json. Same env
-      # as phase 1. Unsigned builds run it as the single `package` phase.
-      - name: Stage and package the unsigned installer and update packages
-        if: ${{ steps.signpath.outputs.enabled != 'true' }}
+      # as phase 1. Unsigned and Certum-signed builds run it as the single
+      # `package` phase (GHOSTEX_WINDOWS_SIGNER=certum signs in place).
+      - name: Stage and package the installer and update packages
+        if: ${{ steps.signing.outputs.signer != 'signpath' }}
         shell: pwsh
         env:
+          GHOSTEX_WINDOWS_SIGNER: ${{ steps.signing.outputs.signer }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
           COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
@@ -508,7 +550,7 @@ jobs:
       # One artifact configuration (.signpath/artifact-configuration.xml)
       # covers all three uploads.
       - name: Stage the app and collect its binaries for SignPath
-        if: ${{ steps.signpath.outputs.enabled == 'true' }}
+        if: ${{ steps.signing.outputs.signer == 'signpath' }}
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -524,7 +566,7 @@ jobs:
           & (Join-Path $env:GITHUB_WORKSPACE 'tooling/release-gpui/windows-build-watchdog.ps1') -Phase package-collect -Version '${{ inputs.version }}' -Arch '${{ inputs.arch }}'
       - name: Upload the unsigned binaries for SignPath
         id: signpath_binaries_upload
-        if: ${{ steps.signpath.outputs.enabled == 'true' }}
+        if: ${{ steps.signing.outputs.signer == 'signpath' }}
         uses: actions/upload-artifact@v7
         with:
           name: signpath-windows-${{ inputs.arch }}-binaries
@@ -532,7 +574,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Sign the binaries with SignPath
-        if: ${{ steps.signpath.outputs.enabled == 'true' }}
+        if: ${{ steps.signing.outputs.signer == 'signpath' }}
         uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -545,7 +587,7 @@ jobs:
           wait-for-completion-timeout-in-seconds: 1800
           output-artifact-directory: ${{ env.SIGNPATH_ROOT }}/collect-signed
       - name: Package the signed binaries with Velopack
-        if: ${{ steps.signpath.outputs.enabled == 'true' }}
+        if: ${{ steps.signing.outputs.signer == 'signpath' }}
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -556,7 +598,7 @@ jobs:
           & (Join-Path $env:GITHUB_WORKSPACE 'tooling/release-gpui/windows-build-watchdog.ps1') -Phase package-pack -Version '${{ inputs.version }}' -Arch '${{ inputs.arch }}'
       - name: Upload the unsigned Velopack setup for SignPath
         id: signpath_setup_upload
-        if: ${{ steps.signpath.outputs.enabled == 'true' }}
+        if: ${{ steps.signing.outputs.signer == 'signpath' }}
         uses: actions/upload-artifact@v7
         with:
           name: signpath-windows-${{ inputs.arch }}-velopack-setup
@@ -564,7 +606,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Sign the Velopack setup with SignPath
-        if: ${{ steps.signpath.outputs.enabled == 'true' }}
+        if: ${{ steps.signing.outputs.signer == 'signpath' }}
         uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -577,7 +619,7 @@ jobs:
           wait-for-completion-timeout-in-seconds: 1800
           output-artifact-directory: ${{ env.SIGNPATH_ROOT }}/setup-signed
       - name: Bundle the signed setup behind the Ghostex installer launcher
-        if: ${{ steps.signpath.outputs.enabled == 'true' }}
+        if: ${{ steps.signing.outputs.signer == 'signpath' }}
         shell: pwsh
         env:
           GHOSTEX_WINDOWS_SIGNING_POLICY: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
@@ -586,7 +628,7 @@ jobs:
           & (Join-Path $env:GITHUB_WORKSPACE 'tooling/release-gpui/windows-build-watchdog.ps1') -Phase package-bundle -Version '${{ inputs.version }}' -Arch '${{ inputs.arch }}'
       - name: Upload the unsigned installer for SignPath
         id: signpath_installer_upload
-        if: ${{ steps.signpath.outputs.enabled == 'true' }}
+        if: ${{ steps.signing.outputs.signer == 'signpath' }}
         uses: actions/upload-artifact@v7
         with:
           name: signpath-windows-${{ inputs.arch }}-installer
@@ -594,7 +636,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Sign the installer with SignPath
-        if: ${{ steps.signpath.outputs.enabled == 'true' }}
+        if: ${{ steps.signing.outputs.signer == 'signpath' }}
         uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -607,13 +649,17 @@ jobs:
           wait-for-completion-timeout-in-seconds: 1800
           output-artifact-directory: ${{ env.SIGNPATH_ROOT }}/installer-signed
       - name: Finalize the signed installer and the release manifest
-        if: ${{ steps.signpath.outputs.enabled == 'true' }}
+        if: ${{ steps.signing.outputs.signer == 'signpath' }}
         shell: pwsh
         env:
           GHOSTEX_WINDOWS_SIGNING_POLICY: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
           GHOSTEX_WINDOWS_BUILD_SILENCE_SECONDS: '900'
         run: |
           & (Join-Path $env:GITHUB_WORKSPACE 'tooling/release-gpui/windows-build-watchdog.ps1') -Phase package-finalize -Version '${{ inputs.version }}' -Arch '${{ inputs.arch }}'
+      - name: Log out of SimplySign
+        if: ${{ always() && steps.signing.outputs.signer == 'certum' }}
+        shell: pwsh
+        run: tooling/release-gpui/certum-simplysign-login.ps1 -Logout
       - name: Write release provenance
         if: ${{ inputs.plan != '' }}
         shell: bash

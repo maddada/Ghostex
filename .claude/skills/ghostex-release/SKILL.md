@@ -275,14 +275,18 @@ everything in step 2, verifies the GPUI reference contract and the Ghostty Zig
 pin, runs `bun run release:test` (about 11 seconds), checks the repository
 secrets, and previews the change-aware plan (build, reuse or skip per product).
 A normal release (10.9.1) uses **no flags**: every platform is in scope,
-Sparkle is on, and Windows signing is `auto`: **off until SignPath imports the
-production certificate** (user decision 2026-10-19, "Turn signing off for now").
-`auto` signs only when the `SIGNPATH_API_TOKEN` secret exists and the repository
-variable `SIGNPATH_SIGNING_POLICY_SLUG` is `release-signing`; with the variable
-unset, the dispatch prints `Windows signing: disabled` and Windows ships
-unsigned. `gh variable set SIGNPATH_SIGNING_POLICY_SLUG -R maddada/Ghostex --body release-signing`
-turns it back on for every later release; `--windows-signing required`
-test-signs one dispatch, only on the user's instruction (`docs/code-signing.md`).
+Sparkle is on, and Windows signing is `auto`. `auto` signs with the user's
+**Certum** certificate whenever the `CERTUM_SIMPLYSIGN_EMAIL` and
+`CERTUM_SIMPLYSIGN_TOTP` secrets exist (the dispatch prints
+`Windows signing: enabled (Certum): ...`). Without them it falls back to the
+SignPath rule: off until SignPath imports its production certificate (user
+decision 2026-10-19, "Turn signing off for now"), i.e. it signs only when
+`SIGNPATH_API_TOKEN` exists and the repository variable
+`SIGNPATH_SIGNING_POLICY_SLUG` is `release-signing`, and otherwise prints
+`Windows signing: disabled: <reason>` and Windows ships unsigned.
+`--windows-signing required` fails the dispatch when no signer is configured
+(with only SignPath it test-signs one dispatch), and `--windows-signing off`
+never signs; use either only on the user's instruction (`docs/code-signing.md`).
 
 Scope flags, only on the user's instruction: `--skip-macos --skip-sparkle`,
 `--skip-linux` (both architectures), `--skip-linux-x64`, `--skip-linux-arm64`, `--skip-linux-appimage`, `--skip-linux-appimage-arm64`,
@@ -334,10 +338,14 @@ the release after 10.14.0; watch that one closely):
   job restores the pinned Zig from the Actions cache ("Restore the pinned Zig
   toolchain"; the first run after a change to `prepare-zig.ps1` misses and
   downloads it) and skips the VS Code source clone in its compile step. With
-  signing off, the build job runs the single "Stage and package the unsigned
-  installer" step and every SignPath step is skipped. A `--reuse-from-run` of
-  a run that was still signed rebuilds both Windows platforms, because the
-  signing mode is part of their fingerprint.
+  signing off or with Certum, the build job runs the single "Stage and package
+  the installer and update packages" step and every SignPath step is skipped;
+  Certum adds "Install SimplySign Desktop" and "Log in to SimplySign" right
+  before it and "Log out of SimplySign" at the end. A failed SimplySign login
+  fails the job (it never ships unsigned while Certum is configured): re-run
+  the job, and read the step log, which lists the certificates it saw. A
+  `--reuse-from-run` of a run with a different signing mode rebuilds both
+  Windows platforms, because the signing mode is part of their fingerprint.
 - Each Windows build job also reuses the libghostty-vt terminal library
   between releases ("Restore the libghostty-vt build output" before the
   compile, "Save the libghostty-vt build output" right after it on a miss; the

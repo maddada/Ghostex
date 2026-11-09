@@ -102,7 +102,7 @@ on:
         default: true
         type: boolean
       sign_windows:
-        description: Authenticode-sign Windows packages through SignPath (skipped when SIGNPATH_API_TOKEN is not set)
+        description: Authenticode-sign Windows packages (Certum when CERTUM_SIMPLYSIGN_EMAIL and CERTUM_SIMPLYSIGN_TOTP are set, else SignPath when SIGNPATH_API_TOKEN is; unsigned otherwise)
         required: true
         default: false
         type: boolean
@@ -250,6 +250,8 @@ jobs:
           ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
           GHOSTEX_MOBILE_DEPLOY_KEY: ${{ secrets.GHOSTEX_MOBILE_DEPLOY_KEY }}
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          CERTUM_SIMPLYSIGN_EMAIL: ${{ secrets.CERTUM_SIMPLYSIGN_EMAIL }}
+          CERTUM_SIMPLYSIGN_TOTP: ${{ secrets.CERTUM_SIMPLYSIGN_TOTP }}
           COMPONENTS_GITHUB_TOKEN: ${{ secrets.COMPONENTS_GITHUB_TOKEN }}
         run: node tooling/release-gpui/preflight.mjs "${{ inputs.version }}"
       - name: Verify clean GPUI release reference contract
