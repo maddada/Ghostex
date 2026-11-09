@@ -39,7 +39,7 @@ use crate::keys::ProjectKey;
 use crate::sidebar_view::{SidebarView, LOCAL_MACHINE_ID};
 
 use super::plan::{ActionEffect, SidebarActionPlan};
-use super::resolve::text_field;
+use super::resolve::{action_project, text_field};
 use super::sort::plan_sort_action;
 
 /// Every renderer command type this file answers. `sidebarAction` is here even though four of its
@@ -257,9 +257,9 @@ pub fn new_coordinator_modal_payload(group_id: &str, project_name: &str) -> Valu
     })
 }
 
-/// Add Worktree and History on a project header. Both read the DRAWN group, which is the same
-/// early return the TypeScript has: `if (!group || !project) return`, an answer of nothing rather
-/// than a hand-off, because a row that is not drawn cannot have been clicked.
+/// Add Worktree, History, Create Linear Ticket and New Coordinator on a project header. Each reads
+/// the drawn group or the merged copy its entry acts on (`action_project`); any other id is the
+/// TypeScript's `if (!group || !project) return`, an answer of nothing rather than a hand-off.
 fn plan_project_action(view: &SidebarView, command: &Value) -> Option<SidebarActionPlan> {
     let action = text_field(command, "action")?;
     // The agent launcher's run is `agent_run.rs`'s, which the host asks first.
@@ -267,33 +267,11 @@ fn plan_project_action(view: &SidebarView, command: &Value) -> Option<SidebarAct
         return None;
     }
     let group_id = text_field(command, "groupId")?;
-    // A merged entry's launcher names the copy a session last started in (`action_target`), which
-    // has no drawn group of its own; the dialog needs only that id and the entry's name.
-    if action == "coordinator" {
-        let group = view.group(group_id).or_else(|| {
-            view.groups.iter().find(|group| {
-                group
-                    .core
-                    .action_target
-                    .as_ref()
-                    .is_some_and(|target| target.group_id == group_id)
-            })
-        });
-        return Some(
-            match group.filter(|group| group.core.project_context.is_some()) {
-                Some(group) => SidebarActionPlan::one(ActionEffect::OpenAppModal {
-                    payload: new_coordinator_modal_payload(group_id, &group.core.title),
-                }),
-                None => SidebarActionPlan::nothing(),
-            },
-        );
-    }
-    let Some(group) = view.group(group_id) else {
+    // A merged entry's header actions name the copy a session last started in (`action_project`).
+    let Some(target) = action_project(view, group_id) else {
         return Some(SidebarActionPlan::nothing());
     };
-    let Some(project) = group.core.project_context.as_ref() else {
-        return Some(SidebarActionPlan::nothing());
-    };
+    let project = target.project;
     // `projectContext.editor.projectId` is the WORKSPACE project id, which is the raw id on this
     // computer and `remote:<machine>:project:<id>` on another. `ProjectContextView::project_id` is
     // the RAW one on both, so it is the group id that carries the right string, and taking the
@@ -314,14 +292,14 @@ fn plan_project_action(view: &SidebarView, command: &Value) -> Option<SidebarAct
             );
             open.insert(
                 "projectName".to_string(),
-                Value::String(group.core.title.clone()),
+                Value::String(target.title.to_string()),
             );
             open.insert(
                 "projectPath".to_string(),
                 Value::String(project.path.clone()),
             );
             // Both ride only when the group has a machine, because `undefined` is an absent key.
-            if let Some(machine) = group.core.remote_machine.as_ref() {
+            if let Some(machine) = target.remote_machine {
                 open.insert(
                     "remoteMachineId".to_string(),
                     Value::String(machine.machine_id.clone()),
@@ -354,12 +332,15 @@ fn plan_project_action(view: &SidebarView, command: &Value) -> Option<SidebarAct
             );
             open.insert(
                 "projectName".to_string(),
-                Value::String(group.core.title.clone()),
+                Value::String(target.title.to_string()),
             );
             Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
                 payload: Value::Object(open),
             }))
         }
+        "coordinator" => Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
+            payload: new_coordinator_modal_payload(group_id, target.title),
+        })),
         "history" => Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
             payload: quick_access_sessions(Some(workspace_project_id.as_str()), "closed"),
         })),

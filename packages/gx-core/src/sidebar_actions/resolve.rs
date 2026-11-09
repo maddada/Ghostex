@@ -10,7 +10,7 @@ use crate::core::Core;
 use crate::keys::{MachineId, ProjectKey};
 use crate::sidebar_view::projects::build_project_meta;
 use crate::sidebar_view::text::js_trim;
-use crate::sidebar_view::view::{SessionRow, SidebarView};
+use crate::sidebar_view::view::{ProjectContextView, RemoteMachineView, SessionRow, SidebarView};
 use crate::sidebar_view::SidebarInputs;
 
 use super::plan::ActionEffect;
@@ -98,4 +98,43 @@ pub(super) fn drawn_row<'a>(
         .flat_map(|group| group.core.sessions.iter())
         .find(|session| session.row.sidebar_session_id == sidebar_session_id)
         .map(|session| session.row.as_ref())
+}
+
+/// The project a header action names, as `plan_project_action` and `plan_agent_run` read it.
+pub(super) struct ActionProject<'a> {
+    /// The drawn entry's name.
+    pub(super) title: &'a str,
+    pub(super) project: &'a ProjectContextView,
+    pub(super) remote_machine: Option<&'a RemoteMachineView>,
+}
+
+/// The project `group_id` names: its drawn group, or else the copy a merged entry's header actions
+/// go to (`GroupCore::action_target`), which has no drawn group of its own. `None` for any other id,
+/// or a drawn group with no project, which is the TypeScript's `if (!group || !project) return`.
+///
+/// CDXC:RemoteMachines 2026-11-09 WHY:
+/// The one list merges copies of a project (another computer's, or a second clone here) into one entry whose New Terminal, Create Agent and ⋯ actions go to the copy a session last started in (Q1353). That copy is not drawn, so a lookup of the drawn group alone answered nothing and Add Worktree, History, Create Agent, the launcher's agents and Configure did nothing on such an entry.
+pub(super) fn action_project<'a>(
+    view: &'a SidebarView,
+    group_id: &str,
+) -> Option<ActionProject<'a>> {
+    if let Some(group) = view.group(group_id) {
+        return Some(ActionProject {
+            title: &group.core.title,
+            project: group.core.project_context.as_ref()?,
+            remote_machine: group.core.remote_machine.as_ref(),
+        });
+    }
+    view.groups.iter().find_map(|group| {
+        let target = group
+            .core
+            .action_target
+            .as_ref()
+            .filter(|target| target.group_id == group_id)?;
+        Some(ActionProject {
+            title: &group.core.title,
+            project: &target.project_context,
+            remote_machine: target.remote_machine.as_ref(),
+        })
+    })
 }
