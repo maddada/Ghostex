@@ -95,6 +95,14 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
         state.extras.subagent.view.fold_settled_at = None;
         state.extras.subagent.view.invalidate();
     }
+    // The viewer reads in the main chat's look (`transcript/chat_look.rs`): the renderers draw its
+    // rows with the main document's `chatLook`, so a look of its own would mix Default cards with
+    // Reduced or Quiet lines.
+    let look = state.transcript_view.chat_look;
+    if state.extras.subagent.view.chat_look != look {
+        state.extras.subagent.view.chat_look = look;
+        state.extras.subagent.view.invalidate();
+    }
     let directory = state.transcript_view.working_directory.clone();
     if state.extras.subagent.view.working_directory != directory {
         state.extras.subagent.view.working_directory = directory;
