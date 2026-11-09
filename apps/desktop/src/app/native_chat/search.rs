@@ -263,6 +263,16 @@ impl NativeChatView {
     /// the reader can see (gx-chat-core `transcript_search.rs`, `visible_segments`) and the working
     /// card names a running call only while its words are shut (`extras/working_card.rs`).
     pub(super) fn sync_search_folds(&mut self, p: &ChatAppearance, cx: &mut Context<Self>) {
+        let signature = (
+            self.expanded.revision(),
+            self.collapsed.revision(),
+            p.simple,
+            p.work_open,
+        );
+        if self.search_folds_sent == Some(signature) {
+            return;
+        }
+        self.search_folds_sent = Some(signature);
         let mut expanded: Vec<&String> = self.expanded.iter().collect();
         let mut collapsed: Vec<&String> = self.collapsed.iter().collect();
         expanded.sort();
@@ -274,10 +284,6 @@ impl NativeChatView {
             "simple": p.simple,
             "workOpen": p.work_open,
         });
-        if self.search_folds_sent.as_ref() == Some(&folds) {
-            return;
-        }
-        self.search_folds_sent = Some(folds.clone());
         self.invoke(folds, cx);
     }
 

@@ -484,3 +484,88 @@ fn an_approval_keeps_the_summary_work_shut_under_reduced() {
         "Active work stays shut: {summary:#?}"
     );
 }
+
+/// The summary turn's id, and where it draws the row running the call described as
+/// `description`: `cards` (in full under the prompt, with its calls on a line) or `work`.
+fn summary_running_row(items: &[Value], description: &str) -> (String, String, &'static str) {
+    for item in items.iter().rev() {
+        if item["kind"] != "summary" {
+            continue;
+        }
+        for key in ["cards", "work"] {
+            for row in item[key].as_array().into_iter().flatten() {
+                let holds = row["tools"].as_array().is_some_and(|tools| {
+                    tools.iter().any(|tool| {
+                        tool["status"] == "running" && tool["description"] == description
+                    })
+                });
+                if holds {
+                    return (
+                        item["id"].as_str().unwrap_or_default().to_string(),
+                        row["id"].as_str().unwrap_or_default().to_string(),
+                        key,
+                    );
+                }
+            }
+        }
+    }
+    panic!("no running row for {description:?}: {items:#?}")
+}
+
+/// Two calls still out in separate rows of the Summary view's running turn: an older one under a
+/// one-click question, drawn under the prompt with its calls on a line, and the newest in the shut
+/// Active work. The status bar names the newest call, so it follows that call's folds, never the
+/// older row's line.
+#[test]
+fn the_status_bar_follows_the_folds_of_the_call_it_names() {
+    let rows = vec![
+        row("u1", "user", T0, json!([{ "type": "text", "text": "go" }])),
+        words(
+            "w1",
+            T0 + 500,
+            "Keep the lockfile? [Yes](ghostex-answer:Q1) [No](ghostex-answer:Q1)",
+        ),
+        call(
+            "c1",
+            T0 + 1_000,
+            "Bash",
+            json!({ "command": "npm install", "description": "Install the deps" }),
+        ),
+        words("w2", T0 + 5_000, "Building now."),
+        call(
+            "c2",
+            T0 + 6_000,
+            "Bash",
+            json!({ "command": "cargo build", "description": "Build the project" }),
+        ),
+    ];
+    let mut state = quiet_chat(rows);
+    look(&mut state, "reduced");
+    state.transcript_view.summary_mode = true;
+    let list = items(&mut state, T0 + 6_500);
+    assert_eq!(status_bar(&state).as_deref(), Some("Build the project"));
+    let (summary, older, older_in) = summary_running_row(&list, "Install the deps");
+    let (_, newer, newer_in) = summary_running_row(&list, "Build the project");
+    assert_eq!(
+        (older_in, newer_in),
+        ("cards", "work"),
+        "the question's row shows, the newest work stays in the fold: {list:#?}"
+    );
+    assert_ne!(older, newer);
+    let work = format!("active-work:{summary}");
+    let older_line = format!("tools:{older}");
+    // The older row's line open, Active work shut: the newest call's words are still hidden.
+    report_folds(&mut state, &[older_line.clone()], &[]);
+    assert_eq!(
+        status_bar(&state).as_deref(),
+        Some("Build the project"),
+        "the bar keeps naming the call it names"
+    );
+    // Active work open, the older row's line shut: the newest call's words are in the chat.
+    report_folds(&mut state, &[work], &[older_line]);
+    assert_ne!(
+        status_bar(&state).as_deref(),
+        Some("Build the project"),
+        "the words show once"
+    );
+}

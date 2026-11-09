@@ -179,7 +179,9 @@ fn reduced_shows_running_call(state: &ChatState) -> bool {
             .is_some_and(|tools| tools.iter().any(|tool| tool["awaitingApproval"] == true));
         folds.open(&key, awaiting || detailed)
     };
-    // The newest row running a call decides; the list only iterates forwards.
+    // The row of the call the card names ([`running_call_label`], the newest one still out)
+    // decides: the last running row in the list's order, where a summary turn's `work` holds its
+    // rows in the order they came and `cards` the copies drawn outside its fold.
     view.items
         .iter()
         .filter_map(|item| match item {
@@ -190,15 +192,12 @@ fn reduced_shows_running_call(state: &ChatState) -> bool {
                 work_open,
                 cards,
                 ..
-            } => cards
-                .iter()
-                .find(runs)
-                .map(|row| line_open(row))
-                .or_else(|| {
-                    work.iter().find(runs).map(|row| {
-                        folds.open(&format!("active-work:{id}"), *work_open) && line_open(row)
-                    })
-                }),
+            } => work.iter().filter(runs).last().map(|row| {
+                match cards.iter().find(|card| card["id"] == row["id"]) {
+                    Some(card) => line_open(card),
+                    None => folds.open(&format!("active-work:{id}"), *work_open) && line_open(row),
+                }
+            }),
             _ => None,
         })
         .last()

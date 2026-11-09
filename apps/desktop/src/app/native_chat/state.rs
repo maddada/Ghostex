@@ -12,6 +12,54 @@ use std::{
     time::Duration,
 };
 
+/// The keys of the folds the reader opened (`expanded`) or closed (`collapsed`). Reads go to the
+/// set; every change bumps `revision`, so the fold report to the core (search.rs,
+/// `sync_search_folds`) is rebuilt only when a fold moved, not on every frame.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct FoldKeys {
+    keys: HashSet<String>,
+    revision: u64,
+}
+
+impl std::ops::Deref for FoldKeys {
+    type Target = HashSet<String>;
+
+    fn deref(&self) -> &HashSet<String> {
+        &self.keys
+    }
+}
+
+impl FoldKeys {
+    pub(crate) fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    pub(crate) fn insert(&mut self, key: String) -> bool {
+        let changed = self.keys.insert(key);
+        self.revision += u64::from(changed);
+        changed
+    }
+
+    pub(crate) fn remove(&mut self, key: &str) -> bool {
+        let changed = self.keys.remove(key);
+        self.revision += u64::from(changed);
+        changed
+    }
+
+    pub(crate) fn clear(&mut self) {
+        if !self.keys.is_empty() {
+            self.keys.clear();
+            self.revision += 1;
+        }
+    }
+
+    pub(crate) fn retain(&mut self, keep: impl FnMut(&String) -> bool) {
+        let before = self.keys.len();
+        self.keys.retain(keep);
+        self.revision += u64::from(self.keys.len() != before);
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct NativeChatConfig {
     /// `"local"` for a chat on this computer, the saved machine's settings id otherwise. The Rust
@@ -245,8 +293,9 @@ pub(crate) struct NativeChatView {
     /// The same find for the row's one-line labels (tool rows, thinking headlines), which are not
     /// text views (search.rs, `label_highlights`).
     pub(super) row_label_find: Option<super::search::RowLabelFind>,
-    /// The fold state last reported to the core (search.rs, `sync_search_folds`).
-    pub(super) search_folds_sent: Option<serde_json::Value>,
+    /// What the fold state last reported to the core was built from: both sets' revisions, then
+    /// `simple` and `work_open` (search.rs, `sync_search_folds`).
+    pub(super) search_folds_sent: Option<(u64, u64, bool, bool)>,
     /// Where the transcript's `#123` references link to: the project's GitHub issues URL, or `None`
     /// when its `origin` is not on GitHub (markdown_links.rs).
     pub(super) issue_link_base: Option<gpui::SharedString>,
@@ -272,7 +321,7 @@ pub(crate) struct NativeChatView {
     /// later sends behind it), so only summaries read it.
     pub(crate) pending_send: bool,
     pub(crate) composer_ready: bool,
-    pub(crate) expanded: HashSet<String>,
+    pub(crate) expanded: FoldKeys,
     /// Scroll offsets of the capped boxes inside transcript rows (nested_scroll.rs).
     pub(super) nested_scrolls: super::nested_scroll::NestedScrolls,
     /// The detail of each row drawn open, keyed like the row (row_details.rs).
@@ -285,7 +334,7 @@ pub(crate) struct NativeChatView {
     pub(super) detail_sync_scheduled: bool,
     /// Armed Delayed Send / Close After Done labels drawn on the working card, set by the app (session_chat_armed_actions.rs).
     pub(crate) armed_actions: Value,
-    pub(crate) collapsed: HashSet<String>,
+    pub(crate) collapsed: FoldKeys,
     /// How each fenced block the reader has touched wraps; the rest follow `code_wrap_default`.
     pub(super) code_wrap: HashMap<String, bool>,
     /// React's remembered last choice (session-chat-code-wrap.ts (deleted 2026-10-01)): the blocks that
@@ -563,7 +612,7 @@ impl NativeChatView {
             draft_revision: 0,
             pending_send: false,
             composer_ready: false,
-            expanded: HashSet::new(),
+            expanded: FoldKeys::default(),
             nested_scrolls: Default::default(),
             row_details: Value::Null,
             detail_demand: Default::default(),
@@ -571,7 +620,7 @@ impl NativeChatView {
             detail_rows: Default::default(),
             detail_sync_scheduled: false,
             armed_actions: Value::Array(Vec::new()),
-            collapsed: HashSet::new(),
+            collapsed: FoldKeys::default(),
             code_wrap: HashMap::new(),
             code_wrap_default: false,
             code_expanded: HashSet::new(),
