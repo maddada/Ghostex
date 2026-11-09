@@ -36,6 +36,23 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
     let running = (working && tool.is_none())
         .then(|| running_call_label(state))
         .flatten();
+    // The transcript already says what the running call is doing (a card's or a line's live words,
+    // a running row's shimmer): the card says something else rather than the same words twice.
+    let (tool, running) = if working && transcript_draws_running_call(state) {
+        let recorded = running_call_label(state);
+        let same_call = |tool: &Value| {
+            let label = tool
+                .get("label")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            recorded
+                .as_deref()
+                .is_some_and(|recorded| same_words(label, recorded))
+        };
+        (tool.filter(|tool| !same_call(tool)), None)
+    } else {
+        (tool, running)
+    };
     let activity = strip.presentation.clone().filter(Value::is_object);
     // Status line in the chat: the finished turn's time stays on its fold, so the card never
     // shows the worked line (`transcript/chat_look.rs`); nothing changes while the agent works.
@@ -63,6 +80,8 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         (Some(label), "tool")
     } else if let Some(word) = &strip.label {
         (Some(word.clone()), "word")
+    } else if working {
+        (Some("Working".to_string()), "word")
     } else {
         (worked.clone(), "worked")
     };
@@ -105,6 +124,29 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         aria_label,
         label_parts,
     }
+}
+
+/// Whether the transcript draws the running call's own words where the reader sees them: a tool
+/// call card's or Tool call lines' header always does, and the tool rows do when the running
+/// turn's calls start open (Detailed view, and the Summary view's running row). In Normal view the
+/// rows sit shut behind their sentence, so the card is where the words show.
+///
+/// CDXC:SessionChat 2026-11-09 DECISION:
+/// User, with Tool call cards on, of the card's live line and this card both reading "Type-check the phone and check Help on the rebased branch": "i still see the same text twice in the chat transcript man … we agreed to solve this". While the transcript shows the running call's words, this card shows the agent's own activity, else the working word and its clock, else "Working"; it names the call only when the transcript does not (a Normal-view row shut behind its sentence, or a call read off the screen that the transcript has not recorded yet). Every chat look (`transcript/chat_look.rs`) draws the running turn's calls the same way, so they change nothing here.
+fn transcript_draws_running_call(state: &ChatState) -> bool {
+    let view = &state.transcript_view;
+    view.tool_cards
+        || crate::transcript::view_level::view_level(view) != crate::transcript::view_level::NORMAL
+}
+
+/// The two labels name the same call: equal once their spacing and case are set aside.
+fn same_words(a: &str, b: &str) -> bool {
+    let words = |text: &str| {
+        text.split_whitespace()
+            .map(str::to_lowercase)
+            .collect::<Vec<_>>()
+    };
+    !a.trim().is_empty() && words(a) == words(b)
 }
 
 /// The label of the call the transcript records as still running in the current turn: its
