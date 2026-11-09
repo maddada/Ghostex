@@ -459,6 +459,8 @@ pub async fn run_gxserver_foreground(
     */
     startup_gate.step("starting remote access");
     start_tailcat_from_persisted_state(&paths, &state.tailcat_runtime);
+    // What gxserver was doing if it ever stops answering (server/stall_watch.rs).
+    super::stall_watch::start(paths.logs_dir.clone());
     startup_gate.step("watching sessions");
     crate::program_status::init_program_status_logger(state.logger.clone(), &metadata.server_id);
     sync_zmx_title_observers_for_all_sessions(&state, "server-start");

@@ -19,6 +19,7 @@ pub(super) async fn handle_http_request(
     request: Request<Body>,
 ) -> std::result::Result<Response<Body>, Infallible> {
     let started_at = Instant::now();
+    let _in_flight = super::stall_watch::request_started(request.uri().path());
     let client = request
         .extensions()
         .get::<SocketAddr>()

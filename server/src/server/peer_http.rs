@@ -26,6 +26,7 @@ pub(super) async fn handle_peer_http_request(
 ) -> std::result::Result<Response<Body>, Infallible> {
     let request_id = request_id(request.headers());
     let path = request.uri().path().to_string();
+    let _in_flight = super::stall_watch::request_started(&format!("peer {path}"));
     let method = request.method().clone();
     let refuse = |status: StatusCode, error: &str, message: String| {
         json_response(status, rpc_error(error, message, Some(request_id.clone())))
