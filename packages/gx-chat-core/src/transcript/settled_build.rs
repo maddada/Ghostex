@@ -311,14 +311,13 @@ fn build_after(
     let (projection, own_redone) = match &live_side_question {
         None => tail,
         Some(question) => {
-            let (projection, own_redone, hid) =
-                project_chat_segment_with(
-                    &stretch,
-                    working,
-                    &settled.redone,
-                    Some(question),
-                    grouped,
-                );
+            let (projection, own_redone, hid) = project_chat_segment_with(
+                &stretch,
+                working,
+                &settled.redone,
+                Some(question),
+                grouped,
+            );
             let settled_asks = settled.chunks.iter().any(|chunk| {
                 chunk
                     .side_rows

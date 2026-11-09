@@ -539,8 +539,7 @@ impl SettledPrefix {
                 first,
                 self.key.summary,
                 self.key.grouped_work && !self.key.summary,
-            )
-                && !(self.last_opener_deferred && first.byte_offset.is_none())
+            ) && !(self.last_opener_deferred && first.byte_offset.is_none())
         };
         if order_key(first) <= self.order_max || !opens {
             return false;
