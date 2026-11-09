@@ -232,6 +232,7 @@ impl ExtensionsTab {
                 editing: false,
                 enabled: installed,
                 dragging: false,
+                open: None,
             },
         );
         Some(card_group(

@@ -10,8 +10,9 @@ use super::super::super::fields::{
 use super::super::super::palette::SettingsPalette;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px, svg,
+    AnyElement, App, ClickEvent, Context, InteractiveElement as _, IntoElement, MouseButton,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
+    px, svg,
 };
 use gpui_component::{h_flex, v_flex};
 use std::sync::Arc;
@@ -221,6 +222,28 @@ pub(crate) struct GridCardSpec {
     pub(crate) enabled: bool,
     /// The card is being dragged (`.extension-grid-card-sortable[data-dragging='true']`).
     pub(crate) dragging: bool,
+    /// Opens the extension's own page (its details, permissions, settings, version, remove) when
+    /// the tile is clicked anywhere but its switch, its buttons and its (i).
+    pub(crate) open: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
+}
+
+/// `keep_press` around an element that is already built (the grip, the option row under the line).
+fn guard_element(element: AnyElement, wrapper: gpui::Div, guard: bool) -> AnyElement {
+    if guard {
+        keep_press(wrapper, true).child(element).into_any_element()
+    } else {
+        element
+    }
+}
+
+/// Keeps a press on a tile's own controls from also opening the tile's page: the tile's click
+/// listens on the mouse-down that bubbles up from them.
+fn keep_press<E: gpui::InteractiveElement>(element: E, guard: bool) -> E {
+    if guard {
+        element.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+    } else {
+        element
+    }
 }
 
 /// CDXC:Extensions 2026-09-24 DECISION:
@@ -235,14 +258,20 @@ pub(crate) struct GridCardSpec {
 /// title line (badge, scope label and the (i) that appears on hover, whose tooltip has the whole
 /// description and the type or author), one line of description (or the status that matters now),
 /// then the actions that appear on hover and the switch.
+/// CDXC:Extensions 2026-11-09 DECISION:
+/// User, on the Installed tab's tiles: "can't click on this to see the inner page??". A tile with a
+/// page of its own (an installed extension, a Community entry) opens that page when clicked
+/// anywhere but its switch, its buttons and its (i), with the pointer cursor over it; Back returns
+/// to the same tab and scroll. The hover Details button it replaces is gone.
 pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
     let group: SharedString = format!("extension-card-{}", spec.id).into();
+    let opens = spec.open.is_some();
     let hover_surface = p.raised_hover;
     let ring = p.ring;
     let editing = spec.editing;
     let enabled = spec.enabled;
     let actions = (!spec.actions.is_empty()).then(|| {
-        h_flex()
+        keep_press(h_flex(), opens)
             .flex_shrink_0()
             .items_center()
             .gap(px(2.0))
@@ -321,7 +350,7 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
         }))
         .when(!tooltip.is_empty(), |this| {
             this.child(
-                div()
+                keep_press(div(), opens)
                     .id(SharedString::from(format!(
                         "extension-card-description-{}",
                         spec.id
@@ -363,13 +392,17 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
         })
         .when(spec.dragging, |this| this.opacity(0.6))
         .hover(move |this| this.bg(hsla(hover_surface)))
+        .when_some(spec.open, |this, open| this.cursor_pointer().on_click(open))
         .child(
             h_flex()
                 .w_full()
                 .min_w_0()
                 .items_center()
                 .gap(px(10.0))
-                .children(spec.leading)
+                .children(
+                    spec.leading
+                        .map(|leading| guard_element(leading, div().flex_shrink_0(), opens)),
+                )
                 .child(
                     div()
                         .flex_shrink_0()
@@ -386,14 +419,17 @@ pub(crate) fn grid_card(p: &SettingsPalette, spec: GridCardSpec) -> AnyElement {
                 )
                 .children(actions)
                 .children(spec.control.map(|control| {
-                    h_flex()
+                    keep_press(h_flex(), opens)
                         .flex_shrink_0()
                         .items_center()
                         .gap(px(6.0))
                         .child(control)
                 })),
         )
-        .children(spec.extra)
+        .children(
+            spec.extra
+                .map(|extra| guard_element(extra, div().w_full(), opens)),
+        )
         .into_any_element()
 }
 

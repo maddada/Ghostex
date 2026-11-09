@@ -330,6 +330,7 @@ impl ExtensionsTab {
                         editing,
                         enabled,
                         dragging: false,
+                        open: None,
                     },
                 );
                 let wide = if scoped {
@@ -634,25 +635,6 @@ impl ExtensionsTab {
         let has_source = self.has_transport(cx) && !extension.icon().is_empty();
         let mut actions = Vec::new();
         {
-            let id = id.clone();
-            actions.push(settings_sized_button(
-                p,
-                SharedString::from(format!("installed-{id}-details")),
-                "Details",
-                None,
-                None,
-                SizedButtonVariant::Outline,
-                SizedButtonSize::Xs,
-                pending,
-                None,
-                move |page: &mut Self, _window, cx| {
-                    page.browser.selected_installed = Some(id.clone());
-                    cx.notify();
-                },
-                cx,
-            ));
-        }
-        {
             let key = key.clone();
             let title = title.clone();
             actions.push(self.pencil_button(
@@ -725,6 +707,7 @@ impl ExtensionsTab {
             .scope_editor
             .as_ref()
             .is_some_and(|editor| editor.key == key);
+        let open_id = id.clone();
         grid_card(
             p,
             GridCardSpec {
@@ -749,6 +732,12 @@ impl ExtensionsTab {
                 editing,
                 enabled: extension.enabled(),
                 dragging: false,
+                open: Some(Box::new(cx.listener(
+                    move |page, _: &ClickEvent, _window, cx| {
+                        page.browser.selected_installed = Some(open_id.clone());
+                        cx.notify();
+                    },
+                ))),
             },
         )
     }
@@ -802,24 +791,9 @@ impl ExtensionsTab {
                 )
             }
         };
-        let details = {
-            let name = name.clone();
-            settings_sized_button(
-                p,
-                SharedString::from(format!("store-{name}-details")),
-                "Details",
-                None,
-                Some("modals/settings/arrow-up-right.svg"),
-                SizedButtonVariant::Outline,
-                SizedButtonSize::Xs,
-                false,
-                None,
-                move |page: &mut Self, _window, cx| page.select_store_entry(Some(name.clone()), cx),
-                cx,
-            )
-        };
         let mut meta = vec![entry.author(), format!("v{}", entry.version())];
         meta.extend(entry.categories().into_iter().take(1));
+        let open_name = name.clone();
         grid_card(
             p,
             GridCardSpec {
@@ -834,10 +808,15 @@ impl ExtensionsTab {
                 scope_summary: None,
                 meta: meta.join(" · ").into(),
                 status: None,
-                actions: vec![details],
+                actions: Vec::new(),
                 editing: false,
                 enabled: true,
                 dragging: false,
+                open: Some(Box::new(cx.listener(
+                    move |page, _: &ClickEvent, _window, cx| {
+                        page.select_store_entry(Some(open_name.clone()), cx);
+                    },
+                ))),
             },
         )
     }
@@ -1049,6 +1028,7 @@ impl ExtensionsTab {
                     .is_some_and(|editor| editor.id.as_deref() == Some(id.as_str())),
                 enabled: view.enabled(),
                 dragging,
+                open: None,
             },
         );
         let row = div().w_full().flex().child(card).into_any_element();

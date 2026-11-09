@@ -13,7 +13,8 @@ Environment:
     GHOSTEX_NATIVE_MODAL_DEMO_BACKGROUND=1                    (open without taking focus, for screenshots)
     GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT=<png>                  (any preview, built with
         --features modal-demo-snapshot: draw offscreen to <png> and quit;
-        GHOSTEX_NATIVE_MODAL_DEMO_HOVER=<x>,<y> points at that spot first, for a tooltip)
+        GHOSTEX_NATIVE_MODAL_DEMO_HOVER=<x>,<y> points at that spot first, for a tooltip;
+        GHOSTEX_NATIVE_MODAL_DEMO_CLICKS=<x>,<y>;<x>,<y> clicks each spot in turn, for a click-through)
     GHOSTEX_EXPORT_MODAL_DEMO_MODE=handoff|export             (Handoff / Export only)
     GHOSTEX_EXPORT_MODAL_DEMO_PREFS=<file>                    (Handoff / Export's saved choices)
 Hosts simulate the daemon: a primary action answers after one second with a
@@ -355,6 +356,56 @@ fn snapshot_after_wait(window: WindowHandle<Root>, path: String, cx: &mut App) {
             });
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(1500))
+                .await;
+        }
+        // GHOSTEX_NATIVE_MODAL_DEMO_CLICKS=<x>,<y>;<x>,<y>…: left-click each point in turn (a
+        // second apart) before drawing, for a click-through check (a tile, then Back).
+        let clicks: Vec<gpui::Point<gpui::Pixels>> =
+            std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_CLICKS")
+                .unwrap_or_default()
+                .split(';')
+                .filter_map(|spot| {
+                    let (x, y) = spot.split_once(',')?;
+                    Some(point(
+                        px(x.trim().parse().ok()?),
+                        px(y.trim().parse().ok()?),
+                    ))
+                })
+                .collect();
+        for position in clicks {
+            let _ = cx.update_window(window.into(), |_, window, cx| {
+                let modifiers = gpui::Modifiers::default();
+                window.dispatch_event(
+                    gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent {
+                        position,
+                        pressed_button: None,
+                        modifiers,
+                    }),
+                    cx,
+                );
+                window.dispatch_event(
+                    gpui::PlatformInput::MouseDown(gpui::MouseDownEvent {
+                        button: gpui::MouseButton::Left,
+                        position,
+                        modifiers,
+                        click_count: 1,
+                        first_mouse: false,
+                    }),
+                    cx,
+                );
+                window.dispatch_event(
+                    gpui::PlatformInput::MouseUp(gpui::MouseUpEvent {
+                        button: gpui::MouseButton::Left,
+                        position,
+                        modifiers,
+                        click_count: 1,
+                    }),
+                    cx,
+                );
+                window.refresh();
+            });
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(1000))
                 .await;
         }
         let _ = window.update(cx, |_, window, _| window.refresh());
