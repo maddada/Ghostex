@@ -109,6 +109,11 @@ pub enum TranscriptItem {
         /// (`transcript/read_images.rs`).
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         read_images: Vec<Value>,
+        /// The turn's messages between agents and answers fold into it (`transcript/folded_cards.rs`):
+        /// the `artifacts` marked `foldedIntoWork`, then `questions`, then `sentMessages` are drawn
+        /// at the top of the opened row instead of after it.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        cards_in_fold: bool,
         /// What a Reduced line adds up when it folds this turn in (`transcript/grouped_work.rs`).
         /// Never on the wire; boxed so the row stays no bigger than the others need.
         #[serde(skip)]
@@ -148,6 +153,11 @@ pub enum TranscriptItem {
         /// its own row after the tails) and under Reduced.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         work_carrier: Option<String>,
+        /// As on `completed-work`, for every merged turn: each turn's `artifacts` marked
+        /// `foldedIntoWork`, its `questions` and its `sentMessages` are drawn at the top of the
+        /// opened line instead of in its tail (`transcript/folded_cards.rs`).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        cards_in_fold: bool,
     },
     /// A kind this build does not know, kept verbatim so one new row cannot drop the list.
     #[serde(untagged)]
@@ -190,6 +200,9 @@ pub struct WorkTally {
     pub tool_calls: usize,
     /// The paths its "N files changed" counts, the held-back ones included.
     pub changed: Vec<String>,
+    /// The messages between agents and the answers folded into it (`transcript/folded_cards.rs`).
+    pub messages: usize,
+    pub answers: usize,
 }
 
 // A host may hand the rows to another thread, so a row stays `Send + Sync`, and cloning one shares

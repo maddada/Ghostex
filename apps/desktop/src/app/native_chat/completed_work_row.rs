@@ -59,6 +59,53 @@ pub(super) struct WorkTail<'a> {
     pub final_message: Option<&'a Value>,
 }
 
+/// A finished turn's messages and answers that fold into its row (gx-chat-core `folded_cards.rs`),
+/// split from what stays after it: `rows` (the folded `artifacts`), `questions` and `sent` are drawn
+/// at the top of the opened row; `kept` and the `tail_` lists are the tail's.
+pub(super) struct FoldedCards<'a> {
+    pub rows: Vec<&'a ProjectedMessage>,
+    pub questions: &'a [Value],
+    pub sent: &'a [Value],
+    pub kept: Vec<ProjectedMessage>,
+    pub tail_questions: &'a [Value],
+    pub tail_sent: &'a [Value],
+}
+
+impl<'a> FoldedCards<'a> {
+    pub(super) fn of(
+        in_fold: bool,
+        artifacts: &'a [ProjectedMessage],
+        questions: &'a [Value],
+        sent: &'a [Value],
+    ) -> Self {
+        if !in_fold {
+            return Self {
+                rows: Vec::new(),
+                questions: &[],
+                sent: &[],
+                kept: artifacts.to_vec(),
+                tail_questions: questions,
+                tail_sent: sent,
+            };
+        }
+        let (rows, kept): (Vec<&ProjectedMessage>, Vec<&ProjectedMessage>) = artifacts
+            .iter()
+            .partition(|row| row["foldedIntoWork"] == true);
+        Self {
+            rows,
+            questions,
+            sent,
+            kept: kept.into_iter().cloned().collect(),
+            tail_questions: &[],
+            tail_sent: &[],
+        }
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.rows.is_empty() && self.questions.is_empty() && self.sent.is_empty()
+    }
+}
+
 /// Each tail part with the space above it. The heading is a one-line card unless `above_is_card`
 /// says otherwise, so a stack of cards right under it (or under another stack) sits a row gap away
 /// (`SINGLE_LINE_CARD.gap_above`); `first_text_gap`, when given, is the space above a first part
@@ -103,6 +150,7 @@ impl NativeChatView {
             artifacts,
             final_message,
             read_images,
+            cards_in_fold,
             ..
         } = item
         else {
@@ -110,6 +158,10 @@ impl NativeChatView {
         };
         let s = p.scale;
         let id = format!("work:{turn}");
+        // The turn's messages between agents and answers, folded into the row (gx-chat-core
+        // `folded_cards.rs`, where the user's decision is): drawn at the top of the opened row and
+        // never after it.
+        let folded = FoldedCards::of(*cards_in_fold, artifacts, questions, sent_messages);
         let expanded = self.is_expanded(&id, p.work_open);
         self.disclosure_motion
             .borrow_mut()
@@ -133,6 +185,9 @@ impl NativeChatView {
         let folding = motion.is_some_and(|frame| frame.kind == FoldMotionKind::Fold);
         let log = if folding {
             let mut rows: Vec<AnyElement> = Vec::new();
+            for message in folded.rows.iter().copied() {
+                rows.push(self.message_row(message, p, window, cx));
+            }
             for message in work {
                 rows.push(self.message_row(message, p, window, cx));
             }
@@ -141,6 +196,9 @@ impl NativeChatView {
             // The files fold leads the opened turn, collapsed, then the log; both ease in and out
             // together with the turn.
             let mut parts: Vec<AnyElement> = Vec::new();
+            if let Some(cards) = self.folded_cards(&id, &folded, p, window, cx) {
+                parts.push(cards);
+            }
             if let Some(files) = self.completed_files_fold(item, true, p, cx) {
                 parts.push(files);
             }
@@ -189,9 +247,9 @@ impl NativeChatView {
         let tail = self.work_tail_parts(
             WorkTail {
                 key: &id,
-                artifacts,
-                questions,
-                sent_messages,
+                artifacts: &folded.kept,
+                questions: folded.tail_questions,
+                sent_messages: folded.tail_sent,
                 gbot_cards,
                 workflows,
                 final_message: final_message.as_deref(),
@@ -214,6 +272,45 @@ impl NativeChatView {
                 .into_any_element();
         };
         self.moving_completed_work_row(&id, frame, heading, log, tail, p)
+    }
+
+    /// The folded messages and answers at the top of an opened row, one card under another:
+    /// the folded rows as they are drawn in the transcript, then the answered questions, then the
+    /// messages the work sent (gx-chat-core `folded_cards.rs`).
+    pub(super) fn folded_cards(
+        &mut self,
+        key: &str,
+        folded: &FoldedCards<'_>,
+        p: &ChatAppearance,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        if folded.is_empty() {
+            return None;
+        }
+        let s = p.scale;
+        let mut parts: Vec<AnyElement> = Vec::new();
+        for message in folded.rows.iter().copied() {
+            parts.push(self.message_row(message, p, window, cx));
+        }
+        parts.extend(self.question_exchange_cards(key, folded.questions, p, cx));
+        parts.extend(self.sent_agent_message_cards(folded.sent, p, cx));
+        let mut first = true;
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .w_full()
+                .children(parts.into_iter().map(|part| {
+                    let gap = if std::mem::take(&mut first) {
+                        0.0
+                    } else {
+                        SINGLE_LINE_CARD.gap_above(true, true, PART_GAP, p)
+                    };
+                    div().pt(px(gap * s)).child(part)
+                }))
+                .into_any_element(),
+        )
     }
 
     /// The parts of a finished turn after its fold, in order: its artifacts, its answered
@@ -297,6 +394,8 @@ impl NativeChatView {
             let icon = match kind {
                 "files" => "titlebar/pencil.svg",
                 "images" => "titlebar/photo.svg",
+                "messages" => "titlebar/messages.svg",
+                "answers" => "titlebar/chat-card-question.svg",
                 "failed" | "recovered" => "titlebar/alert-triangle.svg",
                 _ => "titlebar/tool.svg",
             };

@@ -123,11 +123,15 @@ pub fn visible_segments(item: &Value, folds: &SearchFolds) -> Vec<Segment> {
         Some("completed-work") => {
             let id = str_of(item, "id");
             if folds.open(&format!("work:{id}"), folds.work_open) {
+                // Its folded messages and answers lead the opened row (`folded_cards.rs`).
+                for message in array(item, "artifacts").iter().filter(|row| folded(row)) {
+                    message_segments(message, folds, false, &mut out);
+                }
                 for message in array(item, "work") {
                     message_segments(message, folds, true, &mut out);
                 }
             }
-            for message in array(item, "artifacts") {
+            for message in array(item, "artifacts").iter().filter(|row| !folded(row)) {
                 message_segments(message, folds, false, &mut out);
             }
             if item["final"].is_object() {
@@ -164,12 +168,17 @@ pub fn visible_segments(item: &Value, folds: &SearchFolds) -> Vec<Segment> {
         Some("grouped-work") => {
             let id = str_of(item, "id");
             if folds.open(&format!("work:{id}"), folds.work_open) {
+                for turn in array(item, "turns") {
+                    for message in array(turn, "artifacts").iter().filter(|row| folded(row)) {
+                        message_segments(message, folds, false, &mut out);
+                    }
+                }
                 for message in array(item, "work") {
                     message_segments(message, folds, true, &mut out);
                 }
             }
             for turn in array(item, "turns") {
-                for message in array(turn, "artifacts") {
+                for message in array(turn, "artifacts").iter().filter(|row| !folded(row)) {
                     message_segments(message, folds, false, &mut out);
                 }
                 if turn["final"].is_object() {
@@ -181,6 +190,11 @@ pub fn visible_segments(item: &Value, folds: &SearchFolds) -> Vec<Segment> {
     }
     out.retain(|segment| !segment.text.is_empty());
     out
+}
+
+/// A row folded into its turn's "Worked for" row (`folded_cards.rs`), drawn only while it is open.
+fn folded(row: &Value) -> bool {
+    row[crate::transcript::folded_cards::FOLDED_INTO_WORK] == true
 }
 
 /// `message_row`'s visible text. `in_work_fold` is a finished turn's opened log, where answered

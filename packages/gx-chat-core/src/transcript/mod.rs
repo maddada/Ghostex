@@ -20,6 +20,7 @@ pub mod file_changes;
 pub mod file_paths;
 pub mod file_position;
 pub mod files_links;
+pub mod folded_cards;
 pub mod foreign;
 pub mod gbot_cards;
 pub mod grouped_work;

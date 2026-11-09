@@ -294,6 +294,7 @@ mod tests {
                 final_message: Some(message("f", vec![], "done")),
                 // The folded work's pictures and one only the server's held-back rows name.
                 read_images: vec![file("/read-1.png"), file("/read-2.png"), file("/held.png")],
+                cards_in_fold: false,
                 tally: Default::default(),
             },
         ];

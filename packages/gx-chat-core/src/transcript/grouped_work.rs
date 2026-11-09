@@ -19,6 +19,7 @@ use crate::transcript::chat_look::{
     asks_in_words, holds_only_answered_cards, needs_the_user, waits_on_approval,
 };
 use crate::transcript::file_change_rows::file_change_card;
+use crate::transcript::folded_cards::card_stats;
 use crate::transcript::read_images::{images_stat, push_once};
 use crate::transcript::simple::{edit_label, edited_and_failed_paths, tool_count_label};
 use crate::transcript::turns::worked_duration_label;
@@ -59,6 +60,7 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
     let mut work = Vec::new();
     let mut read_images: Vec<Value> = Vec::new();
     let mut turns = Vec::with_capacity(run.len());
+    let (mut messages, mut answers, mut cards_in_fold) = (0, 0, false);
     for item in run {
         let TranscriptItem::CompletedWork {
             id: turn_id,
@@ -74,6 +76,7 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
             mut final_message,
             read_images: turn_images,
             tally,
+            cards_in_fold: turn_folds,
             ..
         } = item
         else {
@@ -87,6 +90,9 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
             ended = ended.max(tally.extends_to_ms);
         }
         tool_calls += tally.tool_calls;
+        messages += tally.messages;
+        answers += tally.answers;
+        cards_in_fold |= turn_folds;
         for path in tally.changed {
             if !changed.contains(&path) {
                 changed.push(path);
@@ -143,6 +149,8 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
     if !read_images.is_empty() {
         stats.insert(0, images_stat(read_images.len()));
     }
+    // The messages and answers folded into its turns (`folded_cards.rs`) follow the work's counts.
+    stats.extend(card_stats(messages, answers));
     TranscriptItem::GroupedWork {
         id,
         label,
@@ -160,6 +168,7 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
         read_images,
         work_button,
         work_carrier,
+        cards_in_fold,
     }
 }
 

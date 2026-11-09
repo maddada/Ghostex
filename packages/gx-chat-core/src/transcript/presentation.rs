@@ -1202,6 +1202,14 @@ pub(crate) fn build_items(
 ) -> Vec<TranscriptItem> {
     let mut items = turn_items(builder, projection, running_thinking, first, latest_reply);
     crate::transcript::read_images::bubble_read_images(&mut items, builder.scope.seen_pictures());
+    // Where the work is grouped, a finished turn's messages and answers fold into its row
+    // (`folded_cards.rs`); Quiet draws no row and Summary no turn rows, so they keep their cards.
+    if (builder.scope.tool_cards || builder.scope.grouped_work)
+        && !builder.scope.hidden_work
+        && !builder.scope.summary
+    {
+        items = crate::transcript::folded_cards::fold_cards(items);
+    }
     // A settled chunk starts at a prompt the user sent (`settled::opens_turn`), whose row comes
     // before its turn's fold, and a running turn's rows fold nothing, so no run of finished turns
     // spans two chunks: grouping each chunk's rows alone groups the whole list.
@@ -1484,12 +1492,14 @@ fn turn_items(
                         .as_ref()
                         .map(|message| builder.message_or_placeholder(message, eager, Draw::Row)),
                     read_images: Vec::new(),
+                    cards_in_fold: false,
                     tally: Box::new(WorkTally {
                         started_ms,
                         ended_ms,
                         extends_to_ms,
                         tool_calls,
                         changed,
+                        ..WorkTally::default()
                     }),
                 }
             })

@@ -5,7 +5,7 @@
 //! migrate.ts, staging.yml") and, once a line is opened, its steps on a thin rail, one per call.
 //! At Default nothing here runs.
 
-use super::completed_work_row::{WorkTail, spaced_tail};
+use super::completed_work_row::{FoldedCards, WorkTail, spaced_tail};
 use super::file_actions::FileMenuExt as _;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::helpers::ThrottledAnimationExt as _;
@@ -478,6 +478,7 @@ impl NativeChatView {
             work,
             turns,
             read_images,
+            cards_in_fold,
             ..
         } = item
         else {
@@ -485,6 +486,19 @@ impl NativeChatView {
         };
         let s = p.scale;
         let key = format!("work:{id}");
+        // Each merged turn's messages between agents and answers, folded into the line (gx-chat-core
+        // `folded_cards.rs`): drawn at the top of its opened steps and never in the tails.
+        let folded: Vec<FoldedCards<'_>> = turns
+            .iter()
+            .map(|turn| {
+                FoldedCards::of(
+                    *cards_in_fold,
+                    &turn.artifacts,
+                    &turn.questions,
+                    &turn.sent_messages,
+                )
+            })
+            .collect();
         let expanded = self.is_expanded(&key, p.work_open);
         // One read per section still on the server: several wake-up turns can share their
         // prompt's section, which is read once, through the turn that first holds it.
@@ -536,6 +550,12 @@ impl NativeChatView {
         self.hide_file_changes = true;
         if expanded {
             let mut steps: Vec<AnyElement> = Vec::new();
+            for (turn, cards) in turns.iter().zip(&folded) {
+                let turn_key = format!("work:{}", turn.id);
+                if let Some(cards) = self.folded_cards(&turn_key, cards, p, window, cx) {
+                    steps.push(div().py(px(2.0 * s)).child(cards).into_any_element());
+                }
+            }
             for (owner, section) in &sections {
                 if let Some(notice) = self.deferred_work_notice_for(owner, Some(section), p, cx) {
                     steps.push(notice);
@@ -573,14 +593,14 @@ impl NativeChatView {
             row = row.child(div().pt(px(4.0 * s)).child(strip));
         }
         let mut parts: Vec<(AnyElement, bool)> = Vec::new();
-        for turn in turns {
+        for (turn, cards) in turns.iter().zip(&folded) {
             let turn_key = format!("work:{}", turn.id);
             parts.extend(self.work_tail_parts(
                 WorkTail {
                     key: &turn_key,
-                    artifacts: &turn.artifacts,
-                    questions: &turn.questions,
-                    sent_messages: &turn.sent_messages,
+                    artifacts: &cards.kept,
+                    questions: cards.tail_questions,
+                    sent_messages: cards.tail_sent,
                     gbot_cards: &turn.gbot_cards,
                     workflows: &turn.workflows,
                     final_message: turn.final_message.as_deref(),
