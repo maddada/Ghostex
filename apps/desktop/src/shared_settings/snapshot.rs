@@ -17,6 +17,9 @@ pub struct SharedSidebarSettingsSnapshot {
 pub enum TerminalContentWidth {
     MaxWidth(f32),
     Percent(f32),
+    /// At most this percentage of the window: the chat transcript's custom width
+    /// (native_chat/transcript.rs `transcript_column_cap`), which Match chat width follows.
+    WindowPercent(f32),
 }
 
 impl SharedSidebarSettingsSnapshot {
@@ -587,7 +590,7 @@ impl SharedSidebarSettingsSnapshot {
                     if strict_bool_field(&self.object, "sessionChatCustomTranscriptWidthEnabled")
                         .unwrap_or(false)
                     {
-                        Some(TerminalContentWidth::Percent(
+                        Some(TerminalContentWidth::WindowPercent(
                             read_finite_number_field(
                                 &self.object,
                                 "sessionChatTranscriptWidthPercent",
