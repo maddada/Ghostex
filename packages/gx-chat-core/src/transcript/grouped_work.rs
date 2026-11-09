@@ -308,14 +308,36 @@ pub fn hide_work(
     live: &std::collections::HashSet<&str>,
     finished_before: Option<i64>,
 ) {
-    items.retain_mut(|item| match item {
-        TranscriptItem::Message { message } => keeps_live_row(message, live, finished_before),
-        // The Summary view's running turn: its "Active work" fold holds the same rows.
-        TranscriptItem::Summary { work, .. } => {
-            work.retain_mut(|message| keeps_live_row(message, live, finished_before));
-            true
+    let messages: Vec<Option<&Value>> = items
+        .iter()
+        .map(|item| match item {
+            TranscriptItem::Message { message } => Some(&**message),
+            _ => None,
+        })
+        .collect();
+    let before = before_question(&messages, live);
+    let mut place = 0usize;
+    items.retain_mut(|item| {
+        let at = place;
+        place += 1;
+        match item {
+            TranscriptItem::Message { message } => {
+                keeps_live_row(message, live, finished_before, before.contains(&at))
+            }
+            // The Summary view's running turn: its "Active work" fold holds the same rows.
+            TranscriptItem::Summary { work, .. } => {
+                let rows: Vec<Option<&Value>> = work.iter().map(|row| Some(&**row)).collect();
+                let before = before_question(&rows, live);
+                let mut place = 0usize;
+                work.retain_mut(|message| {
+                    let at = place;
+                    place += 1;
+                    keeps_live_row(message, live, finished_before, before.contains(&at))
+                });
+                true
+            }
+            _ => true,
         }
-        _ => true,
     });
 }
 
@@ -408,6 +430,7 @@ fn keeps_live_row(
     message: &mut crate::document::ProjectedMessage,
     live: &std::collections::HashSet<&str>,
     finished_before: Option<i64>,
+    before_question: bool,
 ) -> bool {
     if !live.contains(message["id"].as_str().unwrap_or_default()) {
         return true;
@@ -421,10 +444,15 @@ fn keeps_live_row(
     if !matches!(role, "assistant" | "reasoning") || message["pending"] == true {
         return true;
     }
+    // A row that ends in a call or a call's result owes more, and one a question follows
+    // introduces it, so neither is a run's reply: a question's sentence stays hidden once the
+    // answer starts a new run.
     let finished_reply = role == "assistant"
         && message["text"]
             .as_str()
             .is_some_and(|text| !text.is_empty())
+        && !ends_in_call(message)
+        && !before_question
         && message["timestamp"]
             .as_i64()
             .zip(finished_before)
@@ -448,6 +476,34 @@ fn keeps_live_row(
     shows
 }
 
+/// The places in `rows` of the live rows a question follows at once: their words introduce it,
+/// they are not a run's reply. `None` stands for an item that is not a message.
+fn before_question(
+    rows: &[Option<&Value>],
+    live: &std::collections::HashSet<&str>,
+) -> std::collections::HashSet<usize> {
+    rows.windows(2)
+        .enumerate()
+        .filter_map(|(at, pair)| {
+            let (Some(row), Some(next)) = (pair[0], pair[1]) else {
+                return None;
+            };
+            let asks = next["questions"]
+                .as_array()
+                .is_some_and(|list| !list.is_empty());
+            (asks && live.contains(row["id"].as_str().unwrap_or_default())).then_some(at)
+        })
+        .collect()
+}
+
+/// Whether a row's last block is a call or a call's result.
+fn ends_in_call(row: &Value) -> bool {
+    row["blocks"]
+        .as_array()
+        .and_then(|blocks| blocks.last())
+        .is_some_and(|block| matches!(block["type"].as_str(), Some("tool-call" | "tool-result")))
+}
+
 /// `row` showing only its calls and edits that wait on an approval: the rest of its calls keep
 /// their places, since the disclosure keys and details count by place, and draw no row, as a call
 /// with a card of its own does. A waiting edit carries its place as `disclosureIndex`, since the
@@ -461,6 +517,12 @@ fn only_what_waits(row: &mut crate::document::ProjectedMessage, keep_words: bool
     let Value::Object(fields) = std::sync::Arc::make_mut(row) else {
         return;
     };
+    // Kept words head the run's own chevron (`tools:<id>`), and the quiet line of the waiting
+    // call drawn under them needs a key of its own, or closing one would close the other.
+    if keep_words && fields.get("role") != Some(&Value::from("reasoning")) {
+        let id = fields.get("id").and_then(Value::as_str).unwrap_or_default();
+        fields.insert("toolsLineKey".into(), format!("tools-line:{id}").into());
+    }
     let mut waiting = 0;
     if let Some(Value::Array(tools)) = fields.get_mut("tools") {
         for tool in tools.iter_mut() {

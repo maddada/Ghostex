@@ -113,7 +113,11 @@ impl NativeChatView {
         // Detailed (quiet_work.rs).
         let quiet = p.quiet_style();
         if (p.simple || quiet) && !show_all {
-            let key = format!("tools:{id}");
+            // Under kept words the line has a key of its own, apart from their chevron's
+            // (gx-chat-core `grouped_work::only_what_waits`).
+            let key = message["toolsLineKey"]
+                .as_str()
+                .map_or_else(|| format!("tools:{id}"), str::to_string);
             // The run disclosure opens on demand and is never opened by verbose mode, as React's was;
             // only a call waiting on an approval opens it (gx-chat-core `approval_wait.rs`).
             let awaiting = tools.iter().any(|tool| tool["awaitingApproval"] == true);

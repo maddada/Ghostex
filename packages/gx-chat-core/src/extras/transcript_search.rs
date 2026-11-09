@@ -330,10 +330,11 @@ fn tool_segments(message: &Value, folds: &SearchFolds, in_work_fold: bool, out: 
         visible
     } else if (folds.simple || folds.quiet_style) && !show_all {
         let awaiting = tools.iter().any(|tool| tool["awaitingApproval"] == true);
-        if folds.open(
-            &format!("tools:{id}"),
-            awaiting || (folds.quiet_style && folds.work_open),
-        ) {
+        // Under kept words the line has a key of its own (`grouped_work::only_what_waits`).
+        let key = message["toolsLineKey"]
+            .as_str()
+            .map_or_else(|| format!("tools:{id}"), str::to_string);
+        if folds.open(&key, awaiting || (folds.quiet_style && folds.work_open)) {
             visible
         } else {
             Vec::new()
