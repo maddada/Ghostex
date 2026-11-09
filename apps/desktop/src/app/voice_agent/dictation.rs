@@ -1,7 +1,7 @@
 //! Dictate for the chat box and the terminal bar: record first (`recorder.rs`, a WAV file this app
 //! keeps until gxserver has it), transcribe second (gxserver's `/api/transcribeDictation`, with the
 //! engine picked in Settings › Dictation: Hex on that computer, or OpenAI's or xAI's speech-to-text
-//! with the key kept on this computer), then gxserver's clean-up (dictionary and filler removal).
+//! with the key kept on this computer); the text is typed in as the engine wrote it.
 //! The two steps are independent: whatever goes
 //! wrong while transcribing, the recording stays and Transcribe again or Transcribe previous sends
 //! it once more.
