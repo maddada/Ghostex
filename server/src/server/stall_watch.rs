@@ -29,8 +29,71 @@ const RUNTIME_STALLED_AFTER: Duration = Duration::from_secs(30);
 const REQUEST_SLOW_AFTER: Duration = Duration::from_secs(60);
 /// While the same trouble lasts, it is written again at most this often.
 const REPEAT_EVERY: Duration = Duration::from_secs(300);
-/// The file stops growing past this size (a hang that lasts days must not fill the disk).
+/// Past this size the file moves to `stall.log.1` (replacing the one before) and starts again, so a
+/// hang that lasts days can't fill the disk and a later one is still written.
 const MAX_LOG_BYTES: u64 = 4 * 1024 * 1024;
+
+/*
+CDXC:ServerDaemon 2026-11-09 DECISION:
+The coordinator, for the user: `slowRequests` names only real trouble. These routes run past a minute
+by design, so they never count as slow (each with the client limit or wait that says so):
+- the owner at another device or prompt: `/api/pairComputer` and `/api/computerPairingStatus` (the
+  other computer's approval, 190 s), `/api/removePairedDevice` and `/api/enableSshAccess` (a
+  Windows administrator prompt, 300 s), `/api/callConnectorAgentTool` (a connector's approval card,
+  up to 30 min);
+- long polls: `/api/waitConnectorAgentTools` (4 min);
+- installs and downloads: `/api/installTailcat` (900 s), `/api/installExtension` and
+  `/api/uninstallExtension` (600 s), `/api/updates` (90 s);
+- other services doing the work: `/api/agentbox`, `/api/cloudBoxes`, `/api/claudeCloud`,
+  `/api/startCloudWork`, `/api/startWorkOnTicket`, `/api/sendFeedback`, `/api/draftFeedback`,
+  `/api/startFeedbackAgent`, `/api/transcribeDictation`, `/api/setVoiceAgentKey`,
+  `/api/agentAccounts`, and the connectors' sign-ins and catalog (Composio, Executor, connector CLIs);
+- a call relayed to another computer (`/api/computers/<id>/relay/...`), which lasts as long as that
+  computer's route.
+Event streams and websockets end their request when the stream starts, and `/api/waitSecretRequest`
+(25 s) and `/api/agentChatChannel` (20 s) stay well under a minute, so they need no entry.
+*/
+/// Routes, by prefix, that run past a minute by design (the note above).
+const LONG_BY_DESIGN: &[&str] = &[
+    "/api/pairComputer",
+    "/api/computerPairingStatus",
+    "/api/removePairedDevice",
+    "/api/enableSshAccess",
+    "/api/callConnectorAgentTool",
+    "/api/waitConnectorAgentTools",
+    "/api/installTailcat",
+    "/api/installExtension",
+    "/api/uninstallExtension",
+    "/api/updates",
+    "/api/agentbox",
+    "/api/cloudBoxes",
+    "/api/claudeCloud",
+    "/api/startCloudWork",
+    "/api/startWorkOnTicket",
+    "/api/sendFeedback",
+    "/api/draftFeedback",
+    "/api/startFeedbackAgent",
+    "/api/transcribeDictation",
+    "/api/setVoiceAgentKey",
+    "/api/agentAccounts",
+    "/api/connectComposioApp",
+    "/api/signInComposio",
+    "/api/refreshComposio",
+    "/api/signInConnectorCli",
+    "/api/connectExecutorApp",
+    "/api/addExecutorApp",
+    "/api/addExecutorMcpServer",
+    "/api/enableExecutor",
+    "/api/searchExecutorCatalog",
+    "/api/computers/",
+];
+
+/// Whether a request to `route` may run past a minute without anything being wrong.
+fn long_by_design(route: &str) -> bool {
+    LONG_BY_DESIGN
+        .iter()
+        .any(|prefix| route.starts_with(prefix))
+}
 
 struct InFlight {
     route: String,
@@ -107,6 +170,7 @@ fn watch(log: PathBuf) {
             Ok(requests) => requests
                 .values()
                 .filter(|request| request.started.elapsed() >= REQUEST_SLOW_AFTER)
+                .filter(|request| !long_by_design(&request.route))
                 .map(|request| (request.route.clone(), request.started.elapsed().as_secs()))
                 .collect(),
             // The registry itself is held: say so rather than wait on it.
@@ -149,7 +213,7 @@ fn watch(log: PathBuf) {
 
 fn append(log: &PathBuf, line: &str) -> bool {
     if std::fs::metadata(log).is_ok_and(|metadata| metadata.len() >= MAX_LOG_BYTES) {
-        return false;
+        let _ = std::fs::rename(log, log.with_extension("log.1"));
     }
     if let Some(folder) = log.parent() {
         let _ = std::fs::create_dir_all(folder);
