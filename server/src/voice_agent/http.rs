@@ -69,6 +69,8 @@ pub(crate) async fn handle_read_voice_agent_http(
         "focusedCalls": true,
         // Calls with a GBot (`gbot=` or `focus=gbot:<botId>`, `gbot_call/`) are understood here.
         "gbotCalls": true,
+        // `/api/voiceAgentClip` takes a recorded turn for a call whose client can't stream (`clip.rs`).
+        "clipTurns": true,
         "idleHangupMs": super::conversation::IDLE_HANGUP.as_millis() as u64,
         "speed": keys::selected_speed(paths),
         "callMode": if keys::push_to_talk_calls(paths) { "pushToTalk" } else { "regular" },

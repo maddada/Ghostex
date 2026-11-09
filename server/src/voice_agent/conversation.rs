@@ -77,6 +77,9 @@ pub(super) enum Input {
         attach_id: u64,
     },
     Audio(Bytes),
+    /// A whole recorded turn (`clip.rs`): a client that could not stream its microphone sends what
+    /// was said while Talk was held, after the release.
+    ClipTurn(Bytes),
     Text(String),
     Interrupt,
     Playback {
@@ -255,6 +258,13 @@ pub(super) struct Conversation {
     /// What the log says about the call (`client_trouble` and `finish`).
     diagnostics: CallDiagnostics,
 }
+
+/// A recorded turn shorter than this (a quarter second) holds no speech.
+const MIN_CLIP_BYTES: usize = 250 * BYTES_PER_MS;
+/// A recorded turn goes to the provider in half-second appends.
+const CLIP_PIECE_BYTES: usize = 500 * BYTES_PER_MS;
+/// The quiet after a recorded turn in a Regular call, so the provider's turn detection hears it end.
+const CLIP_TAIL_SILENCE_MS: usize = 1_200;
 
 /// How long an attached client that should be streaming its microphone may send nothing before
 /// the log says so.
@@ -572,6 +582,7 @@ impl Conversation {
                     .await?;
                 }
             }
+            Input::ClipTurn(audio) => self.clip_turn(audio).await?,
             Input::Text(text) => {
                 let text = text.trim().to_string();
                 if !text.is_empty() {
@@ -1609,6 +1620,46 @@ impl Conversation {
                 self.create_response_now().await
             }
         }
+    }
+
+    /// A recorded turn (`clip.rs`): it cuts a reply the agent is speaking, as Talk does, and is
+    /// answered as soon as it is in. A push-to-talk call commits it; a Regular call's turn detection
+    /// hears it end in the moment of silence after it. Mute wins, as for a hold.
+    async fn clip_turn(&mut self, audio: Bytes) -> Result<(), Ended> {
+        if self.talk.muted() {
+            self.to_client(json!({"type": "talk", "event": "refused", "reason": "muted"}));
+            return Ok(());
+        }
+        if audio.len() < MIN_CLIP_BYTES {
+            self.to_client(json!({"type": "talk", "event": "tooShort"}));
+            return Ok(());
+        }
+        if self.response_active {
+            self.provider_send(json!({"type": "response.cancel"}))
+                .await?;
+        }
+        self.stop_playback(true).await?;
+        if self.create_at.take().is_some() {
+            self.outputs_waiting = false;
+        }
+        self.provider_send(json!({"type": "input_audio_buffer.clear"}))
+            .await?;
+        self.last_talk = Instant::now();
+        for piece in audio.chunks(CLIP_PIECE_BYTES) {
+            let audio = base64::engine::general_purpose::STANDARD.encode(piece);
+            self.provider_send(json!({"type": "input_audio_buffer.append", "audio": audio}))
+                .await?;
+        }
+        if self.push_to_talk {
+            self.user_speaking = false;
+            self.provider_send(json!({"type": "input_audio_buffer.commit"}))
+                .await?;
+            return self.create_response_now().await;
+        }
+        let silence = vec![0u8; CLIP_TAIL_SILENCE_MS * BYTES_PER_MS];
+        let audio = base64::engine::general_purpose::STANDARD.encode(silence);
+        self.provider_send(json!({"type": "input_audio_buffer.append", "audio": audio}))
+            .await
     }
 
     /// The user slid off the hold button: nothing they said is sent.

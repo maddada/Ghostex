@@ -892,6 +892,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/readVoiceAgent" | "/api/forgetVoiceAgentMemory" | "/api/setVoiceAgentSettings" => {
             remote_allowed(path)
         }
+        // A recorded turn for a call the client opened (`voice_agent/clip.rs`): any client that may call.
+        "/api/voiceAgentClip" => remote_allowed(path),
         "/api/setVoiceAgentKey" => full_local(path),
         /*
         CDXC:Secrets 2026-11-02 WHY:
