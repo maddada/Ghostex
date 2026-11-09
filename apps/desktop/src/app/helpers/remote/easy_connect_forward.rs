@@ -6,16 +6,16 @@
 use std::{
     collections::HashMap,
     env, fs,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
     path::{Path, PathBuf},
-    process::{Child, Stdio},
+    process::Stdio,
     sync::{
-        Arc, Mutex,
+        Arc, Condvar, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::app::helpers::*;
@@ -27,10 +27,9 @@ use ghostex_paths::tailcat::{
 /*
 CDXC:RemotePairing 2026-09-03:
 An Easy Connect machine has no reachable SSH host. Its pairing code carries a
-tailcat address blob, and the tailcat client is a one-connection stdio pipe
-(`tailcat <address-blob> <port>`), so this module runs one loopback listener
-per machine and spawns one tailcat child per accepted connection with its
-stdio pumped to the socket. Everything else in `helpers/remote/` then dials a
+tailcat address blob, so this module runs one loopback listener per machine
+and relays every accepted connection to that machine's one tailcat client
+(`tailcat forward`, CDXC:RemotePairing 2026-11-10 below). Everything else in `helpers/remote/` then dials a
 plain `127.0.0.1:<port>` exactly as it would dial an SSH host: the config
 builder reads the port from the registry here, so the SSH tunnel, command
 runner, terminal attach, and VS Code launch all go through the same forwarder.
@@ -51,36 +50,54 @@ pub(crate) const GPUI_EASY_CONNECT_DEFAULT_SSH_PORT: u16 = 22;
 /// the worst-case delay before the listener is released after a stop.
 const ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const PIPE_BUFFER_BYTES: usize = 32 * 1024;
+/// How long an accepted connection waits for the machine's tailcat client to be listening.
+const FORWARD_READY_TIMEOUT: Duration = Duration::from_secs(30);
+/// How often the supervisor looks at its tailcat client and the stop flag.
+const FORWARD_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const FORWARD_RESTART_MIN: Duration = Duration::from_millis(500);
+const FORWARD_RESTART_MAX: Duration = Duration::from_secs(10);
+/// A tailcat client that ran this long was healthy: its next restart starts the backoff over.
+const FORWARD_STABLE_AFTER: Duration = Duration::from_secs(30);
+/// The forwarded port is SSH, whose server speaks first: a fresh connection that hears nothing
+/// this long went through a tailcat client that carries nothing, which is started again.
+const FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Both sockets of one relayed connection, so `stop` can end it.
 struct LiveConnection {
-    stream: TcpStream,
-    child: Child,
+    client: TcpStream,
+    upstream: TcpStream,
 }
 
 type SharedConnections = Arc<Mutex<HashMap<u64, LiveConnection>>>;
+
+/// The machine's tailcat client: the loopback port `tailcat forward` listens on while it runs,
+/// and a restart a connection asked for.
+#[derive(Default)]
+struct TailcatClientState {
+    port: Option<u16>,
+    restart: bool,
+}
+
+type SharedTailcatClient = Arc<(Mutex<TailcatClientState>, Condvar)>;
 
 struct EasyConnectForward {
     local_port: u16,
     shutdown: Arc<AtomicBool>,
     connections: SharedConnections,
+    client: SharedTailcatClient,
     accept_thread: JoinHandle<()>,
+    supervisor_thread: JoinHandle<()>,
 }
 
 impl EasyConnectForward {
     fn stop(self) {
         self.shutdown.store(true, Ordering::SeqCst);
-        /*
-        The children are killed here, synchronously: a tailcat child does not
-        exit on stdin EOF while its idle tunnel link stays up, and when this
-        runs during app quit the pump threads never get scheduled again to
-        reap it. The socket shutdown unblocks both pumps of every in-flight
-        connection so their threads can finish.
-        */
+        self.client.1.notify_all();
+        // Unblocks both pumps of every in-flight connection so their threads can finish.
         if let Ok(mut connections) = self.connections.lock() {
-            for (_, mut connection) in connections.drain() {
-                let _ = connection.child.kill();
-                let _ = connection.child.wait();
-                let _ = connection.stream.shutdown(Shutdown::Both);
+            for (_, connection) in connections.drain() {
+                let _ = connection.client.shutdown(Shutdown::Both);
+                let _ = connection.upstream.shutdown(Shutdown::Both);
             }
         }
         /*
@@ -88,9 +105,13 @@ impl EasyConnectForward {
         thread returns (within one ACCEPT_POLL_INTERVAL of the flag). Joining
         here makes the port free by the time `stop` returns, so an immediate
         reconnect can bind the same preferred port instead of moving to a new
-        one and stranding attach terminals that poll the old one.
+        one and stranding attach terminals that poll the old one. The
+        supervisor kills the tailcat client within one FORWARD_POLL_INTERVAL,
+        so none outlives the app (a tailcat client does not exit by itself
+        while its tunnel link stays up).
         */
         let _ = self.accept_thread.join();
+        let _ = self.supervisor_thread.join();
     }
 }
 
@@ -168,21 +189,30 @@ pub(crate) fn gpui_start_easy_connect_forward(
         .map_err(|_| "Could not start the Easy Connect forwarder.".to_string())?;
     let shutdown = Arc::new(AtomicBool::new(false));
     let connections: SharedConnections = Arc::new(Mutex::new(HashMap::new()));
+    let client: SharedTailcatClient = Arc::new((Mutex::default(), Condvar::new()));
     let spec = EasyConnectConnectionSpec {
         address_blob: address_blob.to_string(),
         binary_path,
         remote_port: remote_ssh_port,
     };
+    let supervisor_thread = {
+        let shutdown = Arc::clone(&shutdown);
+        let client = Arc::clone(&client);
+        thread::spawn(move || supervise_tailcat_client(spec, shutdown, client))
+    };
     let accept_thread = {
         let shutdown = Arc::clone(&shutdown);
         let connections = Arc::clone(&connections);
-        thread::spawn(move || accept_loop(listener, shutdown, connections, spec))
+        let client = Arc::clone(&client);
+        thread::spawn(move || accept_loop(listener, shutdown, connections, client))
     };
     let forward = EasyConnectForward {
         local_port,
         shutdown,
         connections,
+        client,
         accept_thread,
+        supervisor_thread,
     };
     with_registry(|registry| {
         registry
@@ -195,7 +225,7 @@ pub(crate) fn gpui_start_easy_connect_forward(
     Ok(local_port)
 }
 
-/// Stops the machine's forwarder and every tailcat child it spawned.
+/// Stops the machine's forwarder and its tailcat client.
 pub(crate) fn gpui_stop_easy_connect_forward(remote_machine_id: &str) {
     if let Some(forward) = with_registry(|registry| registry.running.remove(remote_machine_id)) {
         forward.stop();
@@ -419,9 +449,14 @@ fn is_executable_file(path: &Path) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Accept loop and per-connection pumps.
+// The machine's one tailcat client, and the relay from each accepted connection.
 // ---------------------------------------------------------------------------
 
+/*
+CDXC:RemotePairing 2026-11-10 WHY:
+GitHub #526: a MacBook's Easy Connect remote machine kept dropping and its terminals reattaching. This forwarder spawned one `tailcat <address> <port>` client per accepted connection (the gxserver tunnel, every terminal attach, every command), and since computer pairing (11.1.0) every one of them dials with tailcat's one `client-default` key. Two tailcat clients with one key to one server stall each other: when a new one starts the older one stops receiving and its connection is never closed (#526's reproduction, and measured again on 2026-11-10 on Ghostex's relay). Each machine now has one long-lived `tailcat forward` client on a loopback port of its own that carries every connection, so a machine's connections never compete for its key. The key stays `client-default`, the one every computer already has on its allow-list, so a remote on any version accepts it exactly as before.
+SEE-ALSO: server/src/ghostex_cli/tailcat_tunnel.rs (gxserver's own tunnels to connected computers follow the same rule).
+*/
 #[derive(Clone)]
 struct EasyConnectConnectionSpec {
     address_blob: String,
@@ -429,11 +464,141 @@ struct EasyConnectConnectionSpec {
     remote_port: u16,
 }
 
+/// Runs the machine's `tailcat forward` until the forwarder stops, starting it again (after a
+/// backoff) whenever it exits or a connection found it carrying nothing.
+fn supervise_tailcat_client(
+    spec: EasyConnectConnectionSpec,
+    shutdown: Arc<AtomicBool>,
+    client: SharedTailcatClient,
+) {
+    let mut backoff = FORWARD_RESTART_MIN;
+    while !shutdown.load(Ordering::SeqCst) {
+        let started = Instant::now();
+        run_tailcat_client_once(&spec, &shutdown, &client);
+        set_tailcat_client_port(&client, None);
+        if started.elapsed() >= FORWARD_STABLE_AFTER {
+            backoff = FORWARD_RESTART_MIN;
+        }
+        let deadline = Instant::now() + backoff;
+        while Instant::now() < deadline && !shutdown.load(Ordering::SeqCst) {
+            thread::sleep(FORWARD_POLL_INTERVAL);
+        }
+        backoff = (backoff * 2).min(FORWARD_RESTART_MAX);
+    }
+}
+
+/// One run of `tailcat forward --bind=127.0.0.1 <address> 0:<port>`: its loopback port is
+/// published once it prints it, and the run ends when it exits, the forwarder stops, or a
+/// connection asks for a restart.
+fn run_tailcat_client_once(
+    spec: &EasyConnectConnectionSpec,
+    shutdown: &Arc<AtomicBool>,
+    client: &SharedTailcatClient,
+) {
+    let child = gpui_background_command(&spec.binary_path)
+        .arg("forward")
+        .arg(format!("--bind={GPUI_EASY_CONNECT_FORWARD_HOST}"))
+        .arg(&spec.address_blob)
+        .arg(format!("0:{}", spec.remote_port))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn();
+    let Ok(mut child) = child else {
+        return;
+    };
+    // tailcat prints "forwarding 127.0.0.1:<port> -> remote …" once it listens, then its log;
+    // the reader keeps draining it so the pipe never fills.
+    let reader = child.stderr.take().map(|stderr| {
+        let client = Arc::clone(client);
+        thread::spawn(move || {
+            for line in BufReader::new(stderr).lines() {
+                let Ok(line) = line else { return };
+                if let Some(port) = tailcat_forward_listen_port(&line) {
+                    set_tailcat_client_port(&client, Some(port));
+                }
+            }
+        })
+    });
+    loop {
+        if shutdown.load(Ordering::SeqCst) || take_tailcat_client_restart(client) {
+            let _ = child.kill();
+            let _ = child.wait();
+            break;
+        }
+        if matches!(child.try_wait(), Ok(Some(_)) | Err(_)) {
+            break;
+        }
+        thread::sleep(FORWARD_POLL_INTERVAL);
+    }
+    if let Some(reader) = reader {
+        let _ = reader.join();
+    }
+}
+
+/// The loopback port in tailcat forward's "forwarding 127.0.0.1:<port> -> …" line.
+fn tailcat_forward_listen_port(line: &str) -> Option<u16> {
+    let rest = line.split("forwarding ").nth(1)?;
+    let address = rest.split_whitespace().next()?;
+    address.rsplit(':').next()?.parse().ok()
+}
+
+fn set_tailcat_client_port(client: &SharedTailcatClient, port: Option<u16>) {
+    let (state, ready) = &**client;
+    let mut state = state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    state.port = port;
+    ready.notify_all();
+}
+
+fn take_tailcat_client_restart(client: &SharedTailcatClient) -> bool {
+    let mut state = client
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    std::mem::take(&mut state.restart)
+}
+
+fn request_tailcat_client_restart(client: &SharedTailcatClient) {
+    let mut state = client
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    state.restart = true;
+}
+
+/// The tailcat client's loopback port, waiting up to `FORWARD_READY_TIMEOUT` for it to listen.
+fn wait_for_tailcat_client(client: &SharedTailcatClient, shutdown: &AtomicBool) -> Option<u16> {
+    let deadline = Instant::now() + FORWARD_READY_TIMEOUT;
+    let (state, ready) = &**client;
+    let mut state = state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    loop {
+        if shutdown.load(Ordering::SeqCst) {
+            return None;
+        }
+        if let Some(port) = state.port {
+            return Some(port);
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            return None;
+        }
+        let wait = (deadline - now).min(Duration::from_millis(200));
+        state = ready
+            .wait_timeout(state, wait)
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .0;
+    }
+}
+
 fn accept_loop(
     listener: TcpListener,
     shutdown: Arc<AtomicBool>,
     connections: SharedConnections,
-    spec: EasyConnectConnectionSpec,
+    client: SharedTailcatClient,
 ) {
     let mut next_id: u64 = 0;
     loop {
@@ -446,8 +611,8 @@ fn accept_loop(
                 next_id = next_id.wrapping_add(1);
                 let shutdown = Arc::clone(&shutdown);
                 let connections = Arc::clone(&connections);
-                let spec = spec.clone();
-                thread::spawn(move || serve_connection(id, stream, shutdown, connections, spec));
+                let client = Arc::clone(&client);
+                thread::spawn(move || serve_connection(id, stream, shutdown, connections, client));
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 thread::sleep(ACCEPT_POLL_INTERVAL);
@@ -463,103 +628,123 @@ fn serve_connection(
     stream: TcpStream,
     shutdown: Arc<AtomicBool>,
     connections: SharedConnections,
-    spec: EasyConnectConnectionSpec,
+    client: SharedTailcatClient,
 ) {
     // Accepted sockets inherit the listener's non-blocking mode on macOS, so
     // the pumps must put this one back into blocking mode before reading.
     if stream.set_nonblocking(false).is_err() {
         return;
     }
-    let child = gpui_background_command(&spec.binary_path)
-        .arg(&spec.address_blob)
-        .arg(spec.remote_port.to_string())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn();
-    let Ok(mut child) = child else {
+    let Some(port) = wait_for_tailcat_client(&client, &shutdown) else {
         let _ = stream.shutdown(Shutdown::Both);
         return;
     };
-    let (Some(child_stdin), Some(child_stdout)) = (child.stdin.take(), child.stdout.take()) else {
-        let _ = child.kill();
-        let _ = child.wait();
+    let Ok(upstream) = TcpStream::connect((GPUI_EASY_CONNECT_FORWARD_HOST, port)) else {
+        // The client went away between printing its port and this connect; the supervisor starts
+        // it again.
         let _ = stream.shutdown(Shutdown::Both);
         return;
     };
-    let registered = match stream.try_clone() {
-        Ok(registered) => registered,
-        Err(_) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = stream.shutdown(Shutdown::Both);
-            return;
-        }
+    let (Ok(registered_client), Ok(registered_upstream)) =
+        (stream.try_clone(), upstream.try_clone())
+    else {
+        let _ = stream.shutdown(Shutdown::Both);
+        let _ = upstream.shutdown(Shutdown::Both);
+        return;
     };
-    // Register even through a poisoned lock: an unregistered child would
-    // outlive `stop`, which only kills what the registry knows about.
     connections
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .insert(
             id,
             LiveConnection {
-                stream: registered,
-                child,
+                client: registered_client,
+                upstream: registered_upstream,
             },
         );
     // `stop` sets the flag before draining the registry, so a connection that
     // registered after the drain sees the flag here and tears itself down.
     if shutdown.load(Ordering::SeqCst) {
         reap_connection(&connections, id);
-        let _ = stream.shutdown(Shutdown::Both);
         return;
     }
-    pump_connection(stream, child_stdin, child_stdout);
+    if !pump_connection(stream, upstream) {
+        request_tailcat_client_restart(&client);
+    }
     reap_connection(&connections, id);
 }
 
 fn reap_connection(connections: &SharedConnections, id: u64) {
-    /*
-    Once either direction is done the connection is over, but tailcat does not
-    exit on its own while its idle tunnel link stays up, so waiting for a
-    natural exit would leak a live child. Kill and reap; when `stop` already
-    drained this entry the child is gone and there is nothing to do.
-    */
     let removed = connections
         .lock()
         .ok()
         .and_then(|mut live| live.remove(&id));
-    if let Some(mut connection) = removed {
-        let _ = connection.child.kill();
-        let _ = connection.child.wait();
-        let _ = connection.stream.shutdown(Shutdown::Both);
+    if let Some(connection) = removed {
+        let _ = connection.client.shutdown(Shutdown::Both);
+        let _ = connection.upstream.shutdown(Shutdown::Both);
     }
 }
 
-fn pump_connection(
-    stream: TcpStream,
-    mut child_stdin: std::process::ChildStdin,
-    mut child_stdout: std::process::ChildStdout,
-) {
-    let Ok(mut upstream) = stream.try_clone() else {
+/// Relays one connection both ways until either side ends. Returns false when the remote said
+/// nothing within `FIRST_BYTE_TIMEOUT` of a fresh connection (a tailcat client carrying nothing).
+fn pump_connection(stream: TcpStream, upstream: TcpStream) -> bool {
+    let (Ok(mut client_reader), Ok(mut upstream_writer)) =
+        (stream.try_clone(), upstream.try_clone())
+    else {
         let _ = stream.shutdown(Shutdown::Both);
-        return;
+        let _ = upstream.shutdown(Shutdown::Both);
+        return true;
     };
     let uploader = thread::spawn(move || {
-        copy_stream(&mut upstream, &mut child_stdin);
-        // Half close: the client is done sending, so tailcat's stdin closes
-        // and the far side sees the same end-of-request it would have seen
-        // on a direct socket.
-        drop(child_stdin);
+        copy_stream(&mut client_reader, &mut upstream_writer);
+        // Half close: the client is done sending, and the far side sees the
+        // same end-of-request it would have seen on a direct socket.
+        let _ = upstream_writer.shutdown(Shutdown::Write);
     });
+    let mut upstream_reader = upstream;
     let mut downstream = stream;
-    copy_stream(&mut child_stdout, &mut downstream);
+    let carried = relay_first_bytes(&mut upstream_reader, &mut downstream);
+    if carried {
+        copy_stream(&mut upstream_reader, &mut downstream);
+    }
     let _ = downstream.shutdown(Shutdown::Write);
-    // Nothing more can travel in either direction; closing the read half
+    // Nothing more can travel in either direction; closing both read halves
     // releases the uploader if it is still parked on `read`.
     let _ = downstream.shutdown(Shutdown::Both);
+    let _ = upstream_reader.shutdown(Shutdown::Both);
     let _ = uploader.join();
+    carried
+}
+
+/// Waits up to `FIRST_BYTE_TIMEOUT` for the remote's first bytes and relays them. False when
+/// none came in time; true otherwise, including a remote that closed at once (what the tailcat
+/// client does for a machine it cannot reach, which is no reason to start it again).
+fn relay_first_bytes(upstream: &mut TcpStream, downstream: &mut TcpStream) -> bool {
+    if upstream.set_read_timeout(Some(FIRST_BYTE_TIMEOUT)).is_err() {
+        return true;
+    }
+    let mut buffer = vec![0u8; PIPE_BUFFER_BYTES];
+    let carried = loop {
+        match upstream.read(&mut buffer) {
+            Ok(0) => break true,
+            Ok(count) => {
+                let _ = downstream.write_all(&buffer[..count]);
+                break true;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                break false;
+            }
+            Err(_) => break true,
+        }
+    };
+    let _ = upstream.set_read_timeout(None);
+    carried
 }
 
 fn copy_stream(reader: &mut impl Read, writer: &mut impl Write) {

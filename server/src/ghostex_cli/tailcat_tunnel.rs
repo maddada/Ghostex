@@ -1,15 +1,15 @@
 use std::{
     collections::HashMap,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::Stdio,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        Arc, Condvar, Mutex,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use serde_json::Value;
@@ -18,11 +18,10 @@ use crate::ghostex_cli::rpc::{CliError, CliResult, GXSERVER_LOCAL_API_HOST};
 
 /*
 CDXC:RemotePairing 2026-09-01:
-The CLI's ssh transport forwards a port with `ssh -N -L`. tailcat has no
-equivalent listener mode — its client is a one-connection stdio pipe
-(`tailcat <address-blob> <port>`) — so the forwarder is owned here: one
-loopback listener, and one tailcat child per accepted connection with its
-stdio pumped to the socket. That keeps the rest of the RPC layer talking to a
+The CLI's ssh transport forwards a port with `ssh -N -L`. The forwarder here
+is the tailcat equivalent: one loopback listener on the plan's port, relaying
+every accepted connection to the tunnel's one `tailcat forward` client
+(CDXC:RemotePairing 2026-11-10 below). That keeps the rest of the RPC layer talking to a
 plain `http://127.0.0.1:<port>` base URL exactly like the ssh arm does.
 */
 
@@ -68,12 +67,32 @@ pub fn create_cli_tailcat_forward_plan(
     })
 }
 
+/// How long an accepted connection waits for the tunnel's tailcat client to be listening.
+const CLIENT_READY_TIMEOUT: Duration = Duration::from_secs(30);
+/// How often the supervisor looks at its tailcat client and the stop flag.
+const CLIENT_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const CLIENT_RESTART_MIN: Duration = Duration::from_millis(500);
+const CLIENT_RESTART_MAX: Duration = Duration::from_secs(10);
+/// A tailcat client that ran this long was healthy: its next restart starts the backoff over.
+const CLIENT_STABLE_AFTER: Duration = Duration::from_secs(30);
+
+/// Both sockets of one relayed connection, so `stop` can end it.
 struct LiveConnection {
-    stream: TcpStream,
-    child_pid: u32,
+    client: TcpStream,
+    upstream: TcpStream,
 }
 
 type SharedConnections = Arc<Mutex<HashMap<u64, LiveConnection>>>;
+
+/// The tunnel's tailcat client: the loopback port `tailcat forward` listens on while it runs,
+/// and its pid, so `stop` can end it at once.
+#[derive(Default)]
+struct TailcatClientState {
+    port: Option<u16>,
+    pid: Option<u32>,
+}
+
+type SharedTailcatClient = Arc<(Mutex<TailcatClientState>, Condvar)>;
 
 /// Handle for a running loopback forwarder. Dropping it does nothing: the
 /// tunnel registry in `rpc` owns the lifetime and calls `stop` from the same
@@ -81,23 +100,33 @@ type SharedConnections = Arc<Mutex<HashMap<u64, LiveConnection>>>;
 pub struct TailcatTunnel {
     shutdown: Arc<AtomicBool>,
     connections: SharedConnections,
+    client: SharedTailcatClient,
 }
 
 impl TailcatTunnel {
     pub fn stop(&self) {
         self.shutdown.store(true, Ordering::SeqCst);
         /*
-        The children must be killed here, synchronously: a tailcat child does
-        not exit on stdin EOF while its idle tunnel link stays up, and when
-        `stop` runs during process exit the pump threads never get scheduled
-        again to reap it, which orphans a live tailcat process per connection.
-        The socket shutdown then unblocks both pump threads of every in-flight
-        connection so the owning thread can reap the corpse.
+        The tailcat client is killed here, synchronously: it does not exit by
+        itself while its tunnel link stays up, and when `stop` runs during
+        process exit the supervisor thread never gets scheduled again to reap
+        it, which would orphan a live tailcat process. The socket shutdowns
+        then unblock both pumps of every in-flight connection.
         */
+        {
+            let (state, ready) = &*self.client;
+            let mut state = state
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(pid) = state.pid.take() {
+                kill_child_pid(pid);
+            }
+            ready.notify_all();
+        }
         if let Ok(mut connections) = self.connections.lock() {
             for (_, connection) in connections.drain() {
-                kill_child_pid(connection.child_pid);
-                let _ = connection.stream.shutdown(Shutdown::Both);
+                let _ = connection.client.shutdown(Shutdown::Both);
+                let _ = connection.upstream.shutdown(Shutdown::Both);
             }
         }
     }
@@ -130,19 +159,31 @@ pub fn start_tailcat_tunnel(
     listener.set_nonblocking(true)?;
     let shutdown = Arc::new(AtomicBool::new(false));
     let connections: SharedConnections = Arc::new(Mutex::new(HashMap::new()));
+    let client: SharedTailcatClient = Arc::new((Mutex::default(), Condvar::new()));
     let tunnel = TailcatTunnel {
         shutdown: Arc::clone(&shutdown),
         connections: Arc::clone(&connections),
+        client: Arc::clone(&client),
     };
-    let connection = TailcatConnectionSpec {
+    let spec = TailcatConnectionSpec {
         address_blob: plan.address_blob.clone(),
         binary_path: binary_path.to_path_buf(),
         remote_port: plan.remote_port,
     };
-    thread::spawn(move || accept_loop(listener, shutdown, connections, connection));
+    {
+        let shutdown = Arc::clone(&shutdown);
+        let client = Arc::clone(&client);
+        thread::spawn(move || supervise_tailcat_client(spec, shutdown, client));
+    }
+    thread::spawn(move || accept_loop(listener, shutdown, connections, client));
     Ok(tunnel)
 }
 
+/*
+CDXC:RemotePairing 2026-11-10 WHY:
+GitHub #526: one `tailcat <address> <port>` client per accepted connection, all dialing with tailcat's one `client-default` key, stall each other (a new one starves the older ones, whose connections never close). Each tunnel now runs one long-lived `tailcat forward` client that carries every connection; the key is unchanged, so a remote on any version accepts it as before, and a warm request no longer pays a fresh client's rendezvous.
+SEE-ALSO: apps/desktop/src/app/helpers/remote/easy_connect_forward.rs (the desktop's forwarder, the same rule).
+*/
 #[derive(Clone)]
 struct TailcatConnectionSpec {
     address_blob: String,
@@ -150,11 +191,141 @@ struct TailcatConnectionSpec {
     remote_port: u16,
 }
 
+/// Runs the tunnel's `tailcat forward` until the tunnel stops, starting it again (after a
+/// backoff) whenever it exits.
+fn supervise_tailcat_client(
+    spec: TailcatConnectionSpec,
+    shutdown: Arc<AtomicBool>,
+    client: SharedTailcatClient,
+) {
+    let mut backoff = CLIENT_RESTART_MIN;
+    while !shutdown.load(Ordering::SeqCst) {
+        let started = Instant::now();
+        run_tailcat_client_once(&spec, &shutdown, &client);
+        if started.elapsed() >= CLIENT_STABLE_AFTER {
+            backoff = CLIENT_RESTART_MIN;
+        }
+        let deadline = Instant::now() + backoff;
+        while Instant::now() < deadline && !shutdown.load(Ordering::SeqCst) {
+            thread::sleep(CLIENT_POLL_INTERVAL);
+        }
+        backoff = (backoff * 2).min(CLIENT_RESTART_MAX);
+    }
+}
+
+/// One run of `tailcat forward --bind=127.0.0.1 <address> 0:<port>`; its loopback port is
+/// published once it prints it.
+fn run_tailcat_client_once(
+    spec: &TailcatConnectionSpec,
+    shutdown: &Arc<AtomicBool>,
+    client: &SharedTailcatClient,
+) {
+    let child = crate::platform::process::background_command(&spec.binary_path)
+        .arg("forward")
+        .arg(format!("--bind={GXSERVER_LOCAL_API_HOST}"))
+        .arg(&spec.address_blob)
+        .arg(format!("0:{}", spec.remote_port))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn();
+    let Ok(mut child) = child else {
+        return;
+    };
+    {
+        let mut state = client
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        // `stop` ran while this client started: it never saw the pid, so it goes now.
+        if shutdown.load(Ordering::SeqCst) {
+            drop(state);
+            let _ = child.kill();
+            let _ = child.wait();
+            return;
+        }
+        state.pid = Some(child.id());
+    }
+    // tailcat prints "forwarding 127.0.0.1:<port> -> remote …" once it listens, then its log;
+    // the reader keeps draining it so the pipe never fills.
+    let reader = child.stderr.take().map(|stderr| {
+        let client = Arc::clone(client);
+        thread::spawn(move || {
+            for line in BufReader::new(stderr).lines() {
+                let Ok(line) = line else { return };
+                if let Some(port) = tailcat_forward_listen_port(&line) {
+                    let (state, ready) = &*client;
+                    state
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .port = Some(port);
+                    ready.notify_all();
+                }
+            }
+        })
+    });
+    loop {
+        if shutdown.load(Ordering::SeqCst) {
+            let _ = child.kill();
+            let _ = child.wait();
+            break;
+        }
+        if matches!(child.try_wait(), Ok(Some(_)) | Err(_)) {
+            break;
+        }
+        thread::sleep(CLIENT_POLL_INTERVAL);
+    }
+    {
+        let mut state = client
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        state.port = None;
+        state.pid = None;
+    }
+    if let Some(reader) = reader {
+        let _ = reader.join();
+    }
+}
+
+/// The loopback port in tailcat forward's "forwarding 127.0.0.1:<port> -> …" line.
+fn tailcat_forward_listen_port(line: &str) -> Option<u16> {
+    let rest = line.split("forwarding ").nth(1)?;
+    let address = rest.split_whitespace().next()?;
+    address.rsplit(':').next()?.parse().ok()
+}
+
+/// The tailcat client's loopback port, waiting up to `CLIENT_READY_TIMEOUT` for it to listen.
+fn wait_for_tailcat_client(client: &SharedTailcatClient, shutdown: &AtomicBool) -> Option<u16> {
+    let deadline = Instant::now() + CLIENT_READY_TIMEOUT;
+    let (state, ready) = &**client;
+    let mut state = state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    loop {
+        if shutdown.load(Ordering::SeqCst) {
+            return None;
+        }
+        if let Some(port) = state.port {
+            return Some(port);
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            return None;
+        }
+        let wait = (deadline - now).min(Duration::from_millis(200));
+        state = ready
+            .wait_timeout(state, wait)
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .0;
+    }
+}
+
 fn accept_loop(
     listener: TcpListener,
     shutdown: Arc<AtomicBool>,
     connections: SharedConnections,
-    connection: TailcatConnectionSpec,
+    client: SharedTailcatClient,
 ) {
     let mut next_id: u64 = 0;
     loop {
@@ -167,10 +338,8 @@ fn accept_loop(
                 next_id = next_id.wrapping_add(1);
                 let shutdown = Arc::clone(&shutdown);
                 let connections = Arc::clone(&connections);
-                let connection = connection.clone();
-                thread::spawn(move || {
-                    serve_connection(id, stream, shutdown, connections, connection)
-                });
+                let client = Arc::clone(&client);
+                thread::spawn(move || serve_connection(id, stream, shutdown, connections, client));
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 thread::sleep(ACCEPT_POLL_INTERVAL);
@@ -186,95 +355,74 @@ fn serve_connection(
     stream: TcpStream,
     shutdown: Arc<AtomicBool>,
     connections: SharedConnections,
-    connection: TailcatConnectionSpec,
+    client: SharedTailcatClient,
 ) {
     // Accepted sockets inherit the listener's non-blocking mode on macOS, so
     // the pumps must put this one back into blocking mode before reading.
     if stream.set_nonblocking(false).is_err() {
         return;
     }
-    let child = crate::platform::process::background_command(&connection.binary_path)
-        .arg(&connection.address_blob)
-        .arg(connection.remote_port.to_string())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn();
-    let Ok(mut child) = child else {
+    let Some(port) = wait_for_tailcat_client(&client, &shutdown) else {
         let _ = stream.shutdown(Shutdown::Both);
         return;
     };
-    let registered = match stream.try_clone() {
-        Ok(registered) => registered,
-        Err(_) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = stream.shutdown(Shutdown::Both);
-            return;
-        }
+    let Ok(upstream) = TcpStream::connect((GXSERVER_LOCAL_API_HOST, port)) else {
+        let _ = stream.shutdown(Shutdown::Both);
+        return;
+    };
+    let (Ok(registered_client), Ok(registered_upstream)) =
+        (stream.try_clone(), upstream.try_clone())
+    else {
+        let _ = stream.shutdown(Shutdown::Both);
+        let _ = upstream.shutdown(Shutdown::Both);
+        return;
     };
     if let Ok(mut live) = connections.lock() {
         live.insert(
             id,
             LiveConnection {
-                stream: registered,
-                child_pid: child.id(),
+                client: registered_client,
+                upstream: registered_upstream,
             },
         );
     }
     // `stop` sets the flag before draining the registry, so a connection that
     // registered after the drain sees the flag here and tears itself down.
-    if shutdown.load(Ordering::SeqCst) {
-        let _ = child.kill();
-        let _ = child.wait();
-        let _ = stream.shutdown(Shutdown::Both);
-        if let Ok(mut live) = connections.lock() {
-            live.remove(&id);
-        }
-        return;
+    if !shutdown.load(Ordering::SeqCst) {
+        pump_connection(&stream, &upstream);
     }
-    pump_connection(stream, child);
+    let _ = stream.shutdown(Shutdown::Both);
+    let _ = upstream.shutdown(Shutdown::Both);
     if let Ok(mut live) = connections.lock() {
         live.remove(&id);
     }
 }
 
-fn pump_connection(stream: TcpStream, mut child: std::process::Child) {
-    let (Some(mut child_stdin), Some(mut child_stdout)) = (child.stdin.take(), child.stdout.take())
+/// Relays one connection both ways until either side ends.
+fn pump_connection(stream: &TcpStream, upstream: &TcpStream) {
+    let (Ok(mut client_reader), Ok(mut upstream_writer)) =
+        (stream.try_clone(), upstream.try_clone())
     else {
-        let _ = child.kill();
-        let _ = child.wait();
-        let _ = stream.shutdown(Shutdown::Both);
-        return;
-    };
-    let Ok(mut upstream) = stream.try_clone() else {
-        let _ = child.kill();
-        let _ = child.wait();
-        let _ = stream.shutdown(Shutdown::Both);
         return;
     };
     let uploader = thread::spawn(move || {
-        copy_stream(&mut upstream, &mut child_stdin);
-        // Half close: the client is done sending, so tailcat's stdin closes
-        // and the remote side sees the same end-of-request it would have seen
-        // on a direct socket.
-        drop(child_stdin);
+        copy_stream(&mut client_reader, &mut upstream_writer);
+        // Half close: the client is done sending, and the remote side sees the
+        // same end-of-request it would have seen on a direct socket.
+        let _ = upstream_writer.shutdown(Shutdown::Write);
     });
-    let mut downstream = stream;
-    copy_stream(&mut child_stdout, &mut downstream);
+    let (Ok(mut upstream_reader), Ok(mut downstream)) = (upstream.try_clone(), stream.try_clone())
+    else {
+        let _ = stream.shutdown(Shutdown::Both);
+        let _ = uploader.join();
+        return;
+    };
+    copy_stream(&mut upstream_reader, &mut downstream);
     let _ = downstream.shutdown(Shutdown::Write);
-    /*
-    Once either direction is done the connection is over, but tailcat does not
-    exit on its own while its idle tunnel link stays up, so waiting for a
-    natural exit here parks this thread and leaks a live child if the process
-    exits first. Kill and reap. When the child already exited the kill is a
-    no-op.
-    */
-    let _ = child.kill();
-    let _ = child.wait();
-    // Nothing more can travel in either direction; closing the read half
+    // Nothing more can travel in either direction; closing both read halves
     // releases the uploader if it is still parked on `read`.
     let _ = downstream.shutdown(Shutdown::Both);
+    let _ = upstream_reader.shutdown(Shutdown::Both);
     let _ = uploader.join();
 }
 
