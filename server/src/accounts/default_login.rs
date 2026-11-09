@@ -24,6 +24,11 @@ pub(crate) fn route_around_signed_out_default(text: &str) -> String {
     let Ok(home) = super::launch::home() else {
         return text.to_string();
     };
+    route_posix_with(text, |slot| signed_out_default_profile(&home, slot))
+}
+
+/// `route_around_signed_out_default` off Windows, with the profile each slot routes to (`None`: none).
+fn route_posix_with(text: &str, mut profile_of: impl FnMut(&str) -> Option<String>) -> String {
     let mut profiles: HashMap<String, Option<String>> = HashMap::new();
     let mut inserts = Vec::new();
     for (found, _) in text.match_indices("cswap") {
@@ -40,15 +45,16 @@ pub(crate) fn route_around_signed_out_default(text: &str) -> String {
         };
         if let Some(profile) = profiles
             .entry(slot.clone())
-            .or_insert_with(|| signed_out_default_profile(&home, &slot))
+            .or_insert_with(|| profile_of(&slot))
         {
-            inserts.push((
-                start,
-                format!(
-                    "CLAUDE_CONFIG_DIR={} ",
-                    crate::agents::quote_shell_arg(profile)
-                ),
-            ));
+            let prefix = format!(
+                "CLAUDE_CONFIG_DIR={} ",
+                crate::agents::quote_shell_arg(profile)
+            );
+            // Already routed: a wake routes the account command it was handed again.
+            if !text[..start].ends_with(&prefix) {
+                inserts.push((start, prefix));
+            }
         }
     }
     inserts.dedup_by(|a, b| a.0 == b.0);
@@ -65,6 +71,11 @@ fn route_around_signed_out_default_powershell(text: &str) -> String {
     let Ok(home) = super::launch::home() else {
         return text.to_string();
     };
+    route_powershell_with(text, |slot| signed_out_default_profile(&home, slot))
+}
+
+/// `route_around_signed_out_default_powershell` with the profile each slot routes to (`None`: none).
+fn route_powershell_with(text: &str, mut profile_of: impl FnMut(&str) -> Option<String>) -> String {
     let mut profiles: HashMap<String, Option<String>> = HashMap::new();
     let mut wraps = Vec::new();
     for (found, _) in text.match_indices("cswap.exe'") {
@@ -81,21 +92,33 @@ fn route_around_signed_out_default_powershell(text: &str) -> String {
         };
         if let Some(profile) = profiles
             .entry(slot.clone())
-            .or_insert_with(|| signed_out_default_profile(&home, &slot))
+            .or_insert_with(|| profile_of(&slot))
         {
-            wraps.push((start, powershell_command_end(text, after), profile.clone()));
+            if !text[..start].ends_with(&powershell_profile_block_start(profile)) {
+                wraps.push((start, powershell_command_end(text, after), profile.clone()));
+            }
         }
     }
     let mut routed = text.to_string();
     for (start, end, profile) in wraps.into_iter().rev() {
         let wrapped = format!(
-            "& {{ $env:CLAUDE_CONFIG_DIR = {}; try {{ {} }} finally {{ Remove-Item Env:CLAUDE_CONFIG_DIR -ErrorAction Ignore }} }}",
-            crate::agents::quote_shell_arg(&profile),
+            "& {{ {}{} }} finally {{ Remove-Item Env:CLAUDE_CONFIG_DIR -ErrorAction Ignore }} }}",
+            powershell_profile_block_start(&profile),
             &text[start..end]
         );
         routed.replace_range(start..end, &wrapped);
     }
     routed
+}
+
+/// CDXC:AgentProviders 2026-11-09 WHY:
+/// GitHub #521: a Windows restore ran its `cswap run` inside two copies of this block, because the account command a wake is handed was routed once already and the wake's startup text is routed again (zmx/provider.rs). A command already inside the block for its own profile is left as it is, so routing twice is routing once; the same holds for the `CLAUDE_CONFIG_DIR=… ` prefix off Windows.
+/// The opening of the block that runs a command with `CLAUDE_CONFIG_DIR` set to `profile`, up to the command.
+fn powershell_profile_block_start(profile: &str) -> String {
+    format!(
+        "$env:CLAUDE_CONFIG_DIR = {}; try {{ ",
+        crate::agents::quote_shell_arg(profile)
+    )
 }
 
 /// Whether PowerShell expects a command right after `before`.
