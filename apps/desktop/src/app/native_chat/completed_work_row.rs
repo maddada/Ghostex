@@ -567,7 +567,7 @@ impl NativeChatView {
     /// work log, which ease together.
     ///
     /// CDXC:SessionChat 2026-11-08 WHY:
-    /// Folding rows sit one row gap above the tail, whose first part brings its own part gap (`part_gap`). When the row gap is smaller than the part gap, the log's clip measures the padding too, so making up the difference with negative padding clipped the bottom of the last row (a tool card's border). The first tail part's own gap gives the difference back instead, eased with the log so it lands on the part gap. Since 2026-11-09 Compact shrinks the part gap with the row gap (8px row gap, 5px part gap), so there the log pads its own bottom up to the part gap's place instead; at Default the row gap (16px) is the larger one too.
+    /// Folding rows sit one row gap above the tail, whose first part brings its own part gap (`part_gap`). When the row gap is smaller than the part gap, the log's clip measures the padding too, so making up the difference with negative padding clipped the bottom of the last row (a tool card's border). The first tail part's own gap gives the difference back instead, eased with the log so it lands on the part gap. Compact halves the part gap with the row gap (CDXC:SessionChat 2026-11-09 DECISION at `inner_gap`, message_spacing.rs), so the row gap is the larger one at every spacing and the log pads its own bottom instead.
     fn moving_completed_work_row(
         &mut self,
         id: &str,
