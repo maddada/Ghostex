@@ -28,6 +28,8 @@ pub struct ProjectMenuInput<'a> {
     /// This computer's workspaces and the one the project is in; `None` for a remote machine's
     /// project or a daemon without workspaces.
     pub workspace: Option<(&'a ghostex_gx_protocol::SidebarWorkspacesState, &'a str)>,
+    /// Clone on… (`clone_on.rs`), when some known machine lacks the project.
+    pub clone_on: Option<MenuItem>,
 }
 
 /// `createNativeProjectMenu`.
@@ -144,6 +146,9 @@ pub fn project_menu(input: &ProjectMenuInput<'_>) -> Vec<MenuItem> {
             "link",
             MenuCommand::command(message::copy_project_remote_url(remote_url)),
         ));
+    }
+    if project.bot_profile.is_none() {
+        menu.extend(input.clone_on.clone());
     }
     if project.bot_profile.is_none() {
         menu.extend(project_membership_menu(

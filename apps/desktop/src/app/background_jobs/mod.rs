@@ -6,6 +6,7 @@
 //! a new kind of job adds a [`JobWork`] arm and its own runner file.
 
 pub(crate) mod clone;
+pub(crate) mod clone_on;
 
 pub(crate) use clone::CloneSpec;
 

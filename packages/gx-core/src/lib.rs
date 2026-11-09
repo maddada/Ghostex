@@ -225,7 +225,7 @@ pub use crate::sidebar_menu::{
     unified_hover_buttons, workspace_menu, workspace_switch_target, HeaderCommand, HoverAction,
     HoverSlot, HoverStrip, LauncherAgent, MenuCommand, MenuGroup, MenuHost, MenuItem,
     MenuOpenTarget, MenuSecondary, MenuSplit, SessionActions, SidebarMenus,
-    UNIFIED_TOGGLE_GROUPS_ACTION,
+    CLONE_PROJECT_ON_MACHINE, UNIFIED_TOGGLE_GROUPS_ACTION,
 };
 pub use crate::sidebar_menu::{
     AgentChoicePlace, AgentChoiceScope, AgentChoices, AGENT_CHOICES_STORAGE_KEY,

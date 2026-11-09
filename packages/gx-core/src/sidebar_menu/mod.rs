@@ -18,6 +18,7 @@ mod agent_logos;
 mod bulk;
 mod capabilities;
 mod clipboard;
+mod clone_on;
 mod collection;
 mod commands;
 mod copy;
@@ -46,6 +47,7 @@ pub use agent_choice::{
     AGENT_CHOICE_SCOPE_SETTING_KEY,
 };
 pub use agent_logos::{agent_logo_icons, agent_logo_svg, colored_agent_logo};
+pub use clone_on::CLONE_PROJECT_ON_MACHINE;
 pub use commands::MenuCommand;
 pub use group::MenuGroup;
 pub(crate) use header::account_provider;
@@ -59,8 +61,8 @@ pub use hover::{
 };
 pub use item::{menu_to_json, MenuItem, MenuSecondary, MenuSplit};
 pub use menus::SidebarMenus;
-pub use project::unified_delete_worktree_menu;
 pub use navigation::UNIFIED_TOGGLE_GROUPS_ACTION;
+pub use project::unified_delete_worktree_menu;
 pub(crate) use run_in_box::{run_in_box_agents_page, run_in_box_locations_page};
 pub use session::SessionActions;
 pub use workspace::{machine_workspace_menu, workspace_menu, workspace_switch_target};

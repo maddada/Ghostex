@@ -594,6 +594,9 @@ pub enum NeedsYou {
 pub struct MachineChip {
     pub name: String,
     pub short_name: String,
+    /// [`super::inputs::LOCAL_MACHINE_ID`] or the saved remote machine's id: the project menu's
+    /// Clone on… offers the machines whose chips a project lacks.
+    pub machine_id: String,
 }
 
 /// One session (or browser tab) as a sidebar row.

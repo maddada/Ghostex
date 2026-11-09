@@ -570,7 +570,11 @@ fn machine_chip(inputs: &SidebarInputs, machine_id: &str) -> MachineChip {
             ])
             .remove(0)
         });
-    MachineChip { name, short_name }
+    MachineChip {
+        name,
+        short_name,
+        machine_id: machine_id.to_string(),
+    }
 }
 
 /// A machine's name as its tab spells it.

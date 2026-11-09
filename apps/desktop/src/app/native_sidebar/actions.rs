@@ -167,6 +167,11 @@ impl GhostexGpuiApp {
         if self.gx_store_run_unified_sidebar_command(&command, cx) {
             return;
         }
+        // A project menu's Clone on… row (background_jobs/clone_on.rs).
+        if command["type"] == ghostex_gx_core::CLONE_PROJECT_ON_MACHINE {
+            self.clone_project_on_machine(&command, cx);
+            return;
+        }
         // A machine tab's Update item (remote_conn/app_update.rs).
         if command["type"] == "remoteAppUpdate" {
             if let Some(command) = command.as_object() {

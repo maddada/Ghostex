@@ -415,6 +415,7 @@ impl<'a> SidebarMenus<'a> {
                 .iter()
                 .any(|group_id| *group_id == group.core.group_id),
             open_targets: &self.host.open_targets,
+            clone_on: super::clone_on::clone_on_menu(group, self.inputs),
             workspace: self.workspaces.as_ref().and_then(|workspaces| {
                 let project_id = group.core.project_context.as_ref()?.project_id.as_str();
                 Some((

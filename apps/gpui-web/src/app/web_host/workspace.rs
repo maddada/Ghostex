@@ -95,6 +95,17 @@ impl GhostexGpuiApp {
     ) {
     }
 
+    /// A project menu's Clone on…: the page draws only the computer that serves it, so the menu
+    /// never offers another one; a stale row answers here.
+    pub(crate) fn clone_project_on_machine(&mut self, _command: &Value, cx: &mut Context<Self>) {
+        self.dispatch_gpui_workspace_action_toast(
+            "info",
+            "Not available in the browser",
+            "Cloning onto another computer needs the Ghostex app.",
+            cx,
+        );
+    }
+
     /// Attaching images from disk to a worktree's first prompt needs a file picker the page does not have.
     pub(crate) fn handle_gpui_pick_worktree_images_message(&mut self, cx: &mut Context<Self>) {
         self.dispatch_gpui_workspace_action_toast(
