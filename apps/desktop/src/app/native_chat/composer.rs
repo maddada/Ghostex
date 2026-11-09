@@ -368,8 +368,9 @@ impl NativeChatView {
             .when(maximized, |this| this.p_0().max_w_full().h_full().min_h_0());
         // First in the stack, right above whatever else waits on the user (working_card.rs). With
         // Status line in the chat on, the line is the transcript's last row instead
-        // (status_tail.rs), and the box keeps the lead-in it has with no card above it.
-        let working_card = if maximized || p.chat_look.status_in_transcript {
+        // (status_tail.rs), and the box keeps the lead-in it has with no card above it; an empty
+        // chat has no row to end with and keeps the card (gx-chat-core `inTranscript`).
+        let working_card = if maximized || self.snapshot["workingCard"]["inTranscript"] == true {
             None
         } else {
             self.render_working_card(p, cx)

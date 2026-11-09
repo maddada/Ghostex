@@ -18,13 +18,14 @@ use serde_json::Value;
 use std::{cell::Cell, rc::Rc};
 
 impl NativeChatView {
-    /// Whether the transcript ends with the status row: Status line in the chat is on, the
-    /// transcript has rows and the working card would show with a label (the core never sends its
+    /// Whether the transcript ends with the status row: the core draws the line in the transcript
+    /// (`inTranscript`: Status line in the chat is on and the transcript has rows), the list has
+    /// the rows it means, and the working card would show with a label (the core never sends its
     /// worked phase then, so the row goes when the turn ends and that reply's own Worked line keeps
     /// the time). The phone's `statusTailShown` asks the same.
-    fn status_tail_wanted(&self, p: &ChatAppearance) -> bool {
+    fn status_tail_wanted(&self, _p: &ChatAppearance) -> bool {
         let card = &self.snapshot["workingCard"];
-        p.chat_look.status_in_transcript
+        card["inTranscript"] == true
             && !self.items.is_empty()
             && card["visible"] == true
             && !card["label"].is_null()

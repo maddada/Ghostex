@@ -125,6 +125,8 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         pills: pill_ids,
         aria_label,
         label_parts,
+        in_transcript: state.transcript_view.chat_look.status_in_transcript
+            && !state.transcript_view.items.is_empty(),
     }
 }
 
