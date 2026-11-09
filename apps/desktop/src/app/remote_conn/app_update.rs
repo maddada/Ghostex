@@ -19,6 +19,8 @@ const FOLLOW_POLL: Duration = Duration::from_secs(2);
 const FOLLOW_LIMIT: Duration = Duration::from_secs(20 * 60);
 /// How often a connected machine's version and update are read again.
 const REFRESH_INTERVAL: Duration = Duration::from_secs(30 * 60);
+/// A read that failed (the machine was restarting, its tunnel was replaced) is tried again after this long, not after `REFRESH_INTERVAL`, so the version shown never outlives the next answer by half an hour.
+const ERROR_RETRY: Duration = Duration::from_secs(45);
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct RemoteAppUpdate {
@@ -61,11 +63,32 @@ fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
         .filter(|text| !text.is_empty())
 }
 
-/// What the machine's row shows: `{ versionText, detail, tone, action, busy, progress, autoUpdate, updateAvailable }`.
+/// The version that machine's Ghostex is running, the one its About screen shows: the app's own (`appVersion`, sent while the app is open there), else its gxserver's. A gxserver of an older build can keep running beside a newer app, so `version` alone read as the old number (the reported "Ghostex 10.45.0" beside an About of 11.2.1).
+pub(crate) fn remote_running_version(status: &Value) -> Option<&str> {
+    text(status, "appVersion").or_else(|| text(status, "version"))
+}
+
+/// The machine's background service (gxserver) when it runs another build than its app, as `(short, plain sentence)`.
+fn remote_service_mismatch(status: &Value) -> Option<(String, String)> {
+    let app = text(status, "appVersion")?;
+    let service = text(status, "version")?;
+    (app != service).then(|| {
+        (
+            format!("background service {service}"),
+            format!(
+                "Its background service still runs {service}, not {app}. Quit and reopen Ghostex there to bring it up to date."
+            ),
+        )
+    })
+}
+
+/// What the machine's row shows: `{ versionText, serviceVersionText, serviceNote, detail, tone, action, busy, progress, autoUpdate, updateAvailable }`.
 pub(crate) fn remote_app_update_view(update: &RemoteAppUpdate) -> Value {
     let Some(status) = update.status.as_ref() else {
         return json!({
             "versionText": null,
+            "serviceVersionText": null,
+            "serviceNote": null,
             "detail": update.error,
             "tone": "warning",
             "action": update.error.as_ref().map(|_| json!({ "label": "Retry", "op": "refresh", "enabled": !update.busy })),
@@ -75,7 +98,8 @@ pub(crate) fn remote_app_update_view(update: &RemoteAppUpdate) -> Value {
             "updateAvailable": false,
         });
     };
-    let version = text(status, "version");
+    let version = remote_running_version(status);
+    let service_mismatch = remote_service_mismatch(status);
     let available = text(status, "availableVersion");
     let mut phase = text(status, "phase").unwrap_or("idle");
     // A Linux server runs gxserver without the app; its package is updated from Settings > Remote's Update gxserver instead.
@@ -159,6 +183,8 @@ pub(crate) fn remote_app_update_view(update: &RemoteAppUpdate) -> Value {
     };
     json!({
         "versionText": version.map(|version| format!("Ghostex {version}")),
+        "serviceVersionText": service_mismatch.as_ref().map(|(short, _)| short),
+        "serviceNote": service_mismatch.as_ref().map(|(_, note)| note),
         "detail": detail,
         "tone": tone,
         "action": action,
@@ -379,7 +405,12 @@ impl GhostexGpuiApp {
                         entry.status = Some(status);
                         entry.error = None;
                     }
-                    Err(error) => entry.error = Some(error),
+                    Err(error) => {
+                        entry.error = Some(error);
+                        // The version kept from before this failed read is only a guess; read again soon.
+                        entry.refreshed_at =
+                            Instant::now().checked_sub(REFRESH_INTERVAL - ERROR_RETRY);
+                    }
                 }
                 if follow {
                     entry.following = true;
@@ -405,7 +436,7 @@ impl GhostexGpuiApp {
         let started = Instant::now();
         let from_version = remote_app_update(&machine_id)
             .and_then(|update| update.status)
-            .and_then(|status| text(&status, "version").map(str::to_string));
+            .and_then(|status| remote_running_version(&status).map(str::to_string));
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             loop {
@@ -490,7 +521,7 @@ impl GhostexGpuiApp {
     ) {
         let name = remote_machine_name(machine_id);
         let result = status.get("lastResult").filter(|result| !result.is_null());
-        let version = text(status, "version");
+        let version = remote_running_version(status);
         let installed = result.is_some_and(|result| text(result, "outcome") == Some("installed"))
             || (from_version.is_some() && version != from_version);
         if installed {

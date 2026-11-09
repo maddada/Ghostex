@@ -57,7 +57,15 @@ fn view_text<'a>(view: &'a Value, key: &str) -> Option<&'a str> {
 /// The tile's second line: the version, then what is happening or available.
 pub(super) fn tile_update_line(tab: &RemoteTab, machine_id: &str) -> Option<String> {
     let view = tab.app_updates.get(machine_id)?;
-    let version = view_text(view, "versionText");
+    // A background service older than the app is said beside the version, where the old number would otherwise pass for the computer's own.
+    let version = match (
+        view_text(view, "versionText"),
+        view_text(view, "serviceVersionText"),
+    ) {
+        (Some(version), Some(service)) => Some(format!("{version} · {service}")),
+        (version, _) => version.map(str::to_string),
+    };
+    let version = version.as_deref();
     let state = if view.get("updateAvailable").and_then(Value::as_bool) == Some(true)
         || view.get("busy").and_then(Value::as_bool) == Some(true)
     {
@@ -127,14 +135,19 @@ pub(super) fn dialog_update_section(
     let tone = match view_text(&view, "tone") {
         Some("warning") => t.warn,
         Some("success") => t.success,
+        _ if view_text(&view, "serviceNote").is_some() => t.warn,
         _ => t.muted,
     };
     let busy = view.get("busy").and_then(Value::as_bool) == Some(true);
-    let text = [view_text(&view, "versionText"), view_text(&view, "detail")]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-        .join(" · ");
+    let text = [
+        view_text(&view, "versionText"),
+        view_text(&view, "serviceNote"),
+        view_text(&view, "detail"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" · ");
     let action = view
         .get("action")
         .filter(|action| !action.is_null())
