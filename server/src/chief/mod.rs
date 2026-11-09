@@ -38,8 +38,28 @@ pub(crate) use record::{chief_key, read_record};
 pub(crate) use session::{chief_agent_rows, start_provider};
 pub(crate) use sweep::start_chief_sweep;
 
-/// The playbook Chief follows, printed by `ghostex chief guide` (and `/api/chief` `guide`).
-pub(crate) const CHIEF_PLAYBOOK: &str = include_str!("playbook.md");
+/// The playbook Chief follows, printed by `ghostex chief guide` (and `/api/chief` `guide`) through
+/// [`chief_playbook`].
+const CHIEF_PLAYBOOK: &str = include_str!("playbook.md");
+
+/// The playbook as Chief reads it: the parts between `<!-- gbots -->` and `<!-- /gbots -->` only
+/// while GBots are on, and never the marker lines themselves.
+///
+/// CDXC:GBots 2026-11-09 DECISION:
+/// User: "pls fully hide gbots if disabled in experimental under extensions". While GBots are off Chief of Staff's playbook says nothing about leading GBots, their problems, Day Watcher or their settings; it keeps only the line that turning GBots on is the user's, in Settings > Extensions.
+pub(crate) fn chief_playbook(gbots_on: bool) -> String {
+    let mut out = String::with_capacity(CHIEF_PLAYBOOK.len());
+    let mut in_gbots = false;
+    for line in CHIEF_PLAYBOOK.split_inclusive('\n') {
+        match line.trim_end() {
+            "<!-- gbots -->" => in_gbots = true,
+            "<!-- /gbots -->" => in_gbots = false,
+            _ if in_gbots && !gbots_on => {}
+            _ => out.push_str(line),
+        }
+    }
+    out
+}
 
 /// Chief's name in the sidebar, the breadcrumb and its session title: the one place gxserver
 /// spells it (the desktop's is `CHIEF_LABEL` in

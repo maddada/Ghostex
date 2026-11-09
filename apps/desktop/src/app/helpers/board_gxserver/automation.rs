@@ -234,8 +234,11 @@ pub(crate) fn gpui_automation_all_projects_state(
     seeds from), and per-project read failures skip that project like the
     macOS `Promise.allSettled` walk.
     */
+    // CDXC:GBots 2026-11-09 DECISION: User: "pls fully hide gbots if disabled in experimental under extensions". While GBots are off their routines stay out of All projects; a GBot's folder is marked `launchSettings.gbotsBotId` (server/src/gbots/project.rs).
+    let gbots_on = crate::app::native_sidebar::gbots_rows::gbots_on();
     let target_projects: Vec<(String, String)> = gpui_list_gxserver_domain_projects()?
         .iter()
+        .filter(|project| gbots_on || !project["launchSettings"]["gbotsBotId"].is_string())
         .filter(|project| {
             let project_id = project
                 .get("projectId")

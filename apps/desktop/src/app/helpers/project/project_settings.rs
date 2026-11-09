@@ -223,6 +223,11 @@ pub(crate) fn gpui_open_projects_from_presentation_snapshot(
         .iter()
         .filter_map(|project| {
             let project = project.as_object()?;
+            // A GBot's folder, on or off, is never one of the user's projects (gxserver's
+            // `gbotsProject`; CDXC:GBots 2026-11-09 in gx-core sidebar_view/projects.rs).
+            if project.get("gbotsProject") == Some(&serde_json::Value::Bool(true)) {
+                return None;
+            }
             let raw_project_id = gpui_trimmed_json_string_field(project, "projectId")?;
             if machine_id.is_some() && !gpui_remote_sidebar_project_id_allowed(raw_project_id) {
                 return None;

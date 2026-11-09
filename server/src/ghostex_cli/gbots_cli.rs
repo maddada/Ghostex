@@ -130,6 +130,12 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
     let flags = parsed.flags.clone();
     let rest = &parsed.rest;
     if flags.contains("help") || flags.contains("h") || rest.is_empty() {
+        // CDXC:GBots 2026-11-09 DECISION: User: "pls fully hide gbots if disabled in experimental under extensions". While GBots are off here the help is one line, that they are off and where to turn them on; with --computer the other computer's own switch decides, so the whole help shows.
+        let paths = crate::paths::get_gxserver_paths(None);
+        if !flags.contains("computer") && !crate::gbots::gbots_on(&paths) {
+            println!("{}", crate::gbots::gbots_off_message(&paths));
+            return Ok(());
+        }
         print!("{}", help());
         return Ok(());
     }

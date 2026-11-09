@@ -154,6 +154,8 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("settingsKey", J::Str("gbotsEnabled")),
         ("settingsKeyEnables", J::Bool(true)),
         ("title", J::Str("GBots")),
+        // CDXC:GBots 2026-11-09 DECISION: User: "pls fully hide gbots if disabled in experimental under extensions". Its one row on another page leaves Settings and its search while GBots are off; Main Hub's entry lists it too, since GBots need Main Hub.
+        ("settingKeys", J::Arr(&[J::Str("gbotsChiefAddsOnItsOwn")])),
     ]),
     J::Obj(&[
         ("description", J::Str("Browse your project’s notes, plans, and reference files together in one focused reading space.")),
@@ -321,7 +323,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("appWide", J::Bool(true)),
         ("badge", J::Str("Beta")),
         ("title", J::Str("Main Hub")),
-        ("settingKeys", J::Arr(&[J::Str("chiefShowOnAllSpaces"), J::Str("chiefConfirmNewChat"), J::Str("homeSecretFolders")])),
+        ("settingKeys", J::Arr(&[J::Str("chiefShowOnAllSpaces"), J::Str("chiefConfirmNewChat"), J::Str("homeSecretFolders"), J::Str("gbotsChiefAddsOnItsOwn")])),
     ]),
     // CDXC:VoiceMode 2026-10-21 DECISION:
     // User: Read aloud ships as a Ghostex extension, disabled by default (2026-10-20), and (Q23) as a built-in extension, not a Store extension: a Store extension cannot reach the chat composer, a message's actions or the phone. A whole-feature entry like Workspaces, with a new key (`readAloudHidden`, default on = hidden) because the settings file stores every default; off hides the reply action, the ⋯ menu rows, the Voice and Speed rows and the two hotkeys, and keeps their saved values. No `platforms` list: the switch also governs the phone and Ghostex in a browser that talk to this computer, so it exists on Linux too, where the desktop draws no controls (Q25; `readAloudUnavailable` says why).

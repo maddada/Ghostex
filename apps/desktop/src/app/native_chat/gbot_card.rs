@@ -38,6 +38,11 @@ impl NativeChatView {
         let cards: Vec<AnyElement> = cards
             .iter()
             .filter(|card| !text(card, "changeId").is_empty())
+            // Not drawn while GBots are off (CDXC:GBots 2026-11-09 in gx-chat-core gbot_cards.rs).
+            .filter(|card| {
+                self.snapshot["gbotCardStates"][text(card, "changeId").as_str()]["off"]
+                    != Value::Bool(true)
+            })
             .map(|card| self.gbot_card(card, p, cx))
             .collect();
         (!cards.is_empty()).then(|| {

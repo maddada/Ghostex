@@ -108,7 +108,9 @@ fn run(state: &AppState, op: &str, params: &Map<String, Value>) -> Result<Value,
     let agent_id = params.get("agentId").and_then(Value::as_str);
     match op {
         "status" => status(state),
-        "guide" => Ok(json!({ "guide": super::CHIEF_PLAYBOOK })),
+        "guide" => Ok(json!({
+            "guide": super::chief_playbook(crate::gbots::gbots_on(&state.paths))
+        })),
         "open" => open_chief(state, agent_id),
         "newChat" => replace_chief(state, None),
         "setAgent" => {

@@ -73,8 +73,11 @@ pub fn gbot_cards(pair: &ToolPair<'_>) -> Vec<Value> {
 }
 
 /// What `gbotCardStates` says of one card: `{ loading, undone, note, undoLabel, undoEnabled,
-/// settingsEnabled, error }`.
+/// settingsEnabled, error }`, or `{ off: true }` while GBots are off.
 fn card_state(entry: &GbotCardEntry) -> Value {
+    if entry.off {
+        return json!({ "off": true });
+    }
     let change = entry.change.as_ref();
     if change.is_some_and(|change| str_of(change, "kind").starts_with("routine")) {
         return crate::transcript::routine_cards::card_state(entry);
@@ -115,6 +118,12 @@ pub struct GbotCardEntry {
     pub pausing: bool,
     /// Why the last Undo or read failed.
     pub error: String,
+    /// gxserver answered that GBots are off (`turnedOff`): the card is not drawn.
+    ///
+    /// CDXC:GBots 2026-11-09 DECISION:
+    /// User: "pls fully hide gbots if disabled in experimental under extensions". While GBots are off (their switch or Main Hub's) a "GBot added" or "Routine set" card in an earlier chat is hidden rather than drawn inert, since its Undo, Open settings, Pause and Edit would all be refused. The chat learns it from the card's own read, so it shows again the next time the chat is opened after GBots are back on.
+    /// SEE-ALSO: apps/desktop/src/app/native_chat/gbot_card.rs, apps/mobile/app/src/chat/native/transcript/GbotCard.tsx (both skip a card whose state says `off`).
+    pub off: bool,
 }
 
 /// The document's `gbotCardStates`.
@@ -239,6 +248,11 @@ pub fn settle_rpc(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) 
             }
         }
         RpcOutcome::Err { code, message, .. } => {
+            if code.as_deref() == Some("turnedOff") {
+                entry.off = true;
+                entry.error.clear();
+                return true;
+            }
             if undoing && code.as_deref() == Some("alreadyUndone") {
                 // Undone elsewhere meanwhile (another computer, the phone): the card says so.
                 let mut change = entry.change.clone().unwrap_or_else(|| json!({}));
