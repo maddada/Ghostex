@@ -292,6 +292,14 @@ export const storageCatalog = Object.freeze({
     textCodec,
     { policy: 'protected' }
   ),
+  statusLineDefault: define(
+    'statusLineDefault',
+    'Chat status line default moved',
+    desktop + 'src/app/gx_chat/boot.rs',
+    'ghostex.chat.statusLineDefault.v1',
+    textCodec,
+    { policy: 'protected' }
+  ),
   returnedPrompts: define(
     'returnedPrompts',
     'Returned prompt receipts',

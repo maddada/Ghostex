@@ -11,7 +11,7 @@ use crate::menus::context::editor::{
     editor_row, reorder_context_details, toggle_context_detail_star, ContextEditorState,
 };
 use crate::menus::context::preferences::{
-    context_preferences_key, normalize_preferences, serialize_preferences,
+    context_preferences_key, normalize_preferences, recommended_preferences, serialize_preferences,
 };
 use crate::menus::context::rows::GroupId;
 use crate::menus::context::status::ContextDetailsAgent;
@@ -97,7 +97,7 @@ fn editor_command(
             }
         }
         ActionKind::ContextReset => {
-            editor.draft = normalize_preferences(None, editor.agent);
+            editor.draft = recommended_preferences(editor.agent);
         }
         ActionKind::ContextSave => {
             editor.saving = true;

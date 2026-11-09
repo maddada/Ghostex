@@ -9,6 +9,10 @@
 use ghostex_gx_chat_core::composer::storage::{
     StoredDraftRecord, decode_stored_draft, decode_summary, decode_verbose,
 };
+use ghostex_gx_chat_core::menus::context::preferences::{
+    context_preferences_key, recommended_preferences, serialize_preferences,
+};
+use ghostex_gx_chat_core::menus::context::status::ContextDetailsAgent;
 use ghostex_gx_chat_core::{ChatSettings, ComposerBootRead, StorageKey};
 use serde_json::{Map, Value, json};
 
@@ -52,6 +56,7 @@ impl BootReads {
 /// Every read that fails is treated as "nothing stored", which is what the TypeScript's `catch`
 /// around each accessor did; the caller counts the refusals and tests [`BootReads::all_refused`].
 pub(super) fn read(session_key: &str, now_ms: i64, errors: &mut BootReads) -> ComposerBootRead {
+    keep_status_line_for_existing_users(now_ms, errors);
     let client_id = client_id(now_ms, errors);
     let stored = load("drafts", session_key, now_ms, errors).map(|raw| decode_stored_draft(&raw));
     let entry = entry_with_version(stored.as_ref());
@@ -211,6 +216,50 @@ pub(super) fn client_id(now_ms: i64, errors: &mut BootReads) -> String {
         errors.refused();
     }
     created
+}
+
+/// Writes each agent's recommended status line into a record that was never saved, once, for a
+/// person who already used the chat, so the default that pins nothing never takes their line away.
+///
+/// CDXC:SessionChatDetectedOptions 2026-11-09 DECISION:
+/// User: "let's please disable showing the status line below the chat composer for claude/codex/etc by default for new users (nothing pinned there in statusline config). keep people's configs as they are tho". An unsaved record used to mean the recommended pins, so everyone who never opened the editor sees that line today and would lose it when the default became empty. Someone who used the chat before has this computer's chat client id (it is minted on a chat's first boot, before this change existed); a new install has none yet, so it gets the empty default. The `statusLineDefault` record says this ran, so a new user who pins something later, or clears everything, is never mistaken for an old one. It lives in client storage with the records it protects: the desktop's database, the web page's own storage and (the phone's twin, `src/chat/rust/boot.ts`) the phone's, so each keeps its own people's lines and no computer's choice reaches another. A refused read or write leaves the marker unwritten and the next chat boot tries again; a record the person already saved is never overwritten.
+fn keep_status_line_for_existing_users(now_ms: i64, errors: &mut BootReads) {
+    if load("statusLineDefault", "", now_ms, errors).is_some() {
+        return;
+    }
+    let existing = load("chatClient", "", now_ms, errors).is_some();
+    let mut complete = true;
+    if existing {
+        for agent in ContextDetailsAgent::ALL {
+            let key = context_preferences_key(agent);
+            let Some(absent) = (match storage::read(&key, now_ms) {
+                Ok(stored) => Some(stored.is_none_or(|raw| raw.is_empty())),
+                Err(_) => None,
+            }) else {
+                complete = false;
+                continue;
+            };
+            if absent
+                && storage::write(
+                    &key,
+                    Some(&serialize_preferences(&recommended_preferences(agent))),
+                    now_ms,
+                )
+                .is_err()
+            {
+                complete = false;
+            }
+        }
+    }
+    if complete {
+        let marker = StorageKey {
+            store: "statusLineDefault".to_string(),
+            suffix: String::new(),
+        };
+        if storage::write(&marker, Some(if existing { "kept" } else { "new" }), now_ms).is_err() {
+            errors.refused();
+        }
+    }
 }
 
 /// `Number.prototype.toString(36)`: lower-case digits, most significant first.

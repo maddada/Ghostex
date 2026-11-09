@@ -230,6 +230,12 @@ pub const CATALOG: &[CatalogStore] = &[
     ),
     store("chatClient", "ghostex.sessionChat.clientId", false, Local),
     store(
+        "statusLineDefault",
+        "ghostex.chat.statusLineDefault.v1",
+        false,
+        Local,
+    ),
+    store(
         "returnedPrompts",
         "ghostex.sessionChat.returnedPrompts.applied",
         false,

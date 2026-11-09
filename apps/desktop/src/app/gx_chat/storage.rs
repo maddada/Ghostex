@@ -220,6 +220,12 @@ const STORES: &[ChatStore] = &[
         backend: Backend::Local,
     },
     ChatStore {
+        id: "statusLineDefault",
+        prefix: "ghostex.chat.statusLineDefault.v1",
+        collection: false,
+        backend: Backend::Local,
+    },
+    ChatStore {
         id: "returnedPrompts",
         prefix: "ghostex.sessionChat.returnedPrompts.applied",
         collection: false,

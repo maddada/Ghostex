@@ -165,8 +165,14 @@ impl NativeChatView {
     /// Whether the status line holds its row of space, by the core's rule
     /// (`status_line_reserved` in `menus/context/meter.rs`). The core
     /// answers it; until it has, the last answer for this session stands.
+    ///
+    /// CDXC:SessionChat 2026-11-09 DECISION:
+    /// User: nothing is pinned to the status line by default for a new user. The row is held only
+    /// while the last answer for this session (or, before any, for any session) said items are
+    /// pinned: waiting for the chat to load used to hold it for everyone, which drew an empty
+    /// skeleton bar and a gap under the chat box for a user who pinned nothing.
     pub(super) fn status_line_reserved(&self) -> bool {
-        self.status_line_reserved || self.status_line_loading()
+        self.status_line_reserved
     }
 
     fn status_line_loading(&self) -> bool {
@@ -190,7 +196,12 @@ impl NativeChatView {
         self.status_line_reserved = reserved;
         let session = self.config.session_id.clone();
         REMEMBERED_STATUS_LINES.with_borrow_mut(|sessions| sessions.insert(session, reserved));
-        remember_last_status_line_reservation(reserved);
+        // Only an agent that has a status line speaks for the next chat's first paint; an agent
+        // without one (no context details) would otherwise tell a person who pins items that the
+        // row is not needed.
+        if context["details"].is_array() {
+            remember_last_status_line_reservation(reserved);
+        }
     }
 
     pub(super) fn context_menu_rows(&self) -> Vec<Value> {

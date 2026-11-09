@@ -172,8 +172,21 @@ fn normalize_order(
     order
 }
 
-/// `defaultSessionChatContextDetailsPreferences`: what an agent uses before anything is saved,
-/// and what Reset to recommended restores.
+/// `defaultSessionChatContextDetailsPreferences`: what an agent uses before anything is saved. The
+/// recommended popover rows, and nothing pinned to the status line under the chat box.
+///
+/// CDXC:SessionChatDetectedOptions 2026-11-09 DECISION:
+/// User: "let's please disable showing the status line below the chat composer for claude/codex/etc by default for new users (nothing pinned there in statusline config). keep people's configs as they are tho". A record that was never saved pins nothing, for every agent, so no bar shows under the chat box until the person pins something. Everyone who already had Ghostex keeps the line they saw: the chat host writes [`recommended_preferences`] into each agent's record once (`gx_chat/status_line_default.rs`). This supersedes the 2026-09-23 default below.
+pub fn default_preferences(agent: ContextDetailsAgent) -> ContextDetailsPreferences {
+    ContextDetailsPreferences {
+        starred: BTreeMap::new(),
+        starred_order: Vec::new(),
+        ..recommended_preferences(agent)
+    }
+}
+
+/// The maintainer's own setup per agent: what Reset to recommended restores, and what every
+/// existing user's never-saved record was before 2026-11-09 (which the one-time write keeps).
 ///
 /// CDXC:SessionChatDetectedOptions 2026-09-23 DECISION:
 /// User: a new install starts with the maintainer's own "More details" and status-line setup for
@@ -190,7 +203,7 @@ fn normalize_order(
 ///
 /// CDXC:AgentProviders 2026-10-06 DECISION:
 /// User: Pi's status line shows "model, usage, context, like Claude's": model, context used, cost and tokens.
-pub fn default_preferences(agent: ContextDetailsAgent) -> ContextDetailsPreferences {
+pub fn recommended_preferences(agent: ContextDetailsAgent) -> ContextDetailsPreferences {
     let (shown, starred): (&[(&str, bool)], &[&str]) = match agent {
         ContextDetailsAgent::Claude => (
             &[("fiveHourReset", false)],
