@@ -1336,4 +1336,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0071_gbots_voice",
         sql: include_str!("migrations/0071_gbots_voice.sql"),
     },
+    Migration {
+        id: "0072_paired_device_link_keys",
+        sql: include_str!("migrations/0072_paired_device_link_keys.sql"),
+    },
 ];

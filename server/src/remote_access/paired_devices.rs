@@ -195,8 +195,12 @@ pub(crate) fn remove_paired_device_using(
     }
     drop(push_registrations);
     reload_device_api_tokens(db, device_tokens)?;
+    let link_key = repository.remove_device_link_key(&device.id)?;
     if let Some(client_key) = device.tailcat_client_key.as_deref() {
         remove_tailcat_client_key(paths, db, tailcat_runtime, client_key)?;
+    }
+    if let Some(link_key) = link_key.as_deref() {
+        remove_tailcat_client_key(paths, db, tailcat_runtime, link_key)?;
     }
     Ok(Some(device))
 }
@@ -238,6 +242,13 @@ pub fn replace_earlier_pairings_of_same_phone(
         if let Err(error) = remove_device_push_registrations(&push_registrations, &device.id) {
             on_kept(&device, &error.into());
             continue;
+        }
+        // The phone keeps dialing this computer with the link key it registered
+        // (`register_device_link_key`), so its new entry takes it over instead of losing it.
+        if let Some(link_key) = repository.remove_device_link_key(&device.id)? {
+            if repository.device_link_key(new_device_id)?.is_none() {
+                repository.set_device_link_key(new_device_id, &link_key)?;
+            }
         }
         if let Some(removed) = repository.remove_device(&device.id)? {
             replaced.push(removed);
@@ -308,6 +319,65 @@ pub fn add_tailcat_client_key_when_allow_listed(
     Ok(true)
 }
 
+/// Where a paired device registers its own Easy Connect key for this computer.
+pub const EASY_CONNECT_CLIENT_KEY_ENDPOINT: &str = "/api/registerEasyConnectClientKey";
+
+/// Why a link key was refused.
+#[derive(Debug, PartialEq, Eq)]
+pub enum LinkKeyError {
+    /// Not a `nodekey:` public key.
+    BadKey,
+    /// The caller is no paired (v2) device here.
+    NotPaired,
+}
+
+/*
+CDXC:RemotePairing 2026-11-10 WHY:
+A phone or computer with several Easy Connect computers dialed all of them with its one tailcat
+client key, and a relay delivers a key's traffic only to that key's newest connection, so each new
+tunnel starved the others for 15 to 30 s (measured on Ghostex's relay, where every computer meets
+its phones since 10.49.0). A paired device now registers a key of its own for this computer; it goes
+on the allow-list beside the key it paired with, which stays valid (an older app keeps dialing with
+it), and leaves with the device's row. Registering again replaces it. The device only ever names
+its own row: the caller is the device token's own device.
+SEE-ALSO: apps/mobile/app/src/machines/easyConnectLinkKey.ts, apps/mobile/tailcat-bridge/bridge.go (`UseMachineClientKeyFile`).
+*/
+/// Registers `client_key` as `device_id`'s link key for this computer. Returns whether anything
+/// changed (the allow-list then restarts the Easy Connect helpers once).
+pub fn register_device_link_key(
+    paths: &GxserverPaths,
+    db: &Connection,
+    tailcat_runtime: &TailcatRuntime,
+    device_id: &str,
+    client_key: &str,
+) -> Result<std::result::Result<bool, LinkKeyError>> {
+    let client_key = client_key.trim();
+    if !super::pair_device::is_tailcat_client_public_key(client_key) {
+        return Ok(Err(LinkKeyError::BadKey));
+    }
+    let repository = RemotePairingRepository::new(db);
+    let Some(device) = repository.find_device(device_id)? else {
+        return Ok(Err(LinkKeyError::NotPaired));
+    };
+    if device.status != PairedDeviceStatus::Paired {
+        return Ok(Err(LinkKeyError::NotPaired));
+    }
+    let previous = repository.device_link_key(device_id)?;
+    let listed = read_tailcat_status_payload(paths, db, tailcat_runtime)
+        .allowed_client_keys
+        .iter()
+        .any(|key| key == client_key);
+    if previous.as_deref() == Some(client_key) && listed {
+        return Ok(Ok(false));
+    }
+    repository.set_device_link_key(device_id, client_key)?;
+    add_tailcat_client_key_when_allow_listed(paths, db, tailcat_runtime, client_key)?;
+    if let Some(previous) = previous.filter(|previous| previous != client_key) {
+        remove_tailcat_client_key(paths, db, tailcat_runtime, &previous)?;
+    }
+    Ok(Ok(true))
+}
+
 /// The allow-list with `client_key` added (and `none` dropped), or `None` when it is listed already.
 fn allow_list_with_client_key(allowed: Vec<String>, client_key: &str) -> Option<Vec<String>> {
     if allowed.iter().any(|key| key == client_key) {
@@ -328,10 +398,12 @@ CDXC:RemotePairing 2026-11-05 WHY:
 A phone that pairs twice keeps one tailcat client key but gets two device rows (each with its own SSH key and API token). Removing the old row used to drop that shared key from the allow-list and lock the phone out although its newer row still needed it, so the key now leaves the list only when no remaining paired device uses it. The caller has already deleted the row being removed, so "remaining" is simply every row left in the table. Since the same date a new pairing replaces the phone's earlier rows (`replace_earlier_pairings_of_same_phone`), so this guard now covers a list saved before that and any row whose key line could not be removed.
 */
 fn tailcat_client_key_in_use(db: &Connection, client_key: &str) -> Result<bool> {
-    Ok(RemotePairingRepository::new(db)
+    let repository = RemotePairingRepository::new(db);
+    Ok(repository
         .list_devices()?
         .iter()
-        .any(|device| device.tailcat_client_key.as_deref() == Some(client_key)))
+        .any(|device| device.tailcat_client_key.as_deref() == Some(client_key))
+        || repository.link_key_in_use(client_key)?)
 }
 
 /// The allow-list after `client_key` is dropped, or `None` when it is not listed.
@@ -406,6 +478,10 @@ mod tests {
             "../storage/migrations/0062_pairing_v2_device_keys.sql"
         ))
         .expect("pairing v2 columns");
+        db.execute_batch(include_str!(
+            "../storage/migrations/0072_paired_device_link_keys.sql"
+        ))
+        .expect("link keys table");
         db
     }
 

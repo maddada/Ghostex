@@ -261,7 +261,7 @@ fn validate_device_key(key: &DeviceKey) -> Result<Vec<u8>, PairDeviceError> {
 }
 
 /// `nodekey:` and 64 lowercase hex digits, the form tailcat prints and reads.
-fn is_tailcat_client_public_key(key: &str) -> bool {
+pub(crate) fn is_tailcat_client_public_key(key: &str) -> bool {
     key.strip_prefix("nodekey:").is_some_and(|hex| {
         hex.len() == 64
             && hex

@@ -315,6 +315,60 @@ impl<'a> RemotePairingRepository<'a> {
         Ok(())
     }
 
+    /// The second Easy Connect key a paired device registered for this computer, if any
+    /// (`remote_paired_device_link_keys`, migration 0072).
+    pub fn device_link_key(&self, device_id: &str) -> Result<Option<String>> {
+        self.db
+            .query_row(
+                "SELECT clientKey FROM remote_paired_device_link_keys WHERE deviceId = ?1",
+                params![device_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .with_context(|| "read paired device link key")
+    }
+
+    /// Sets a paired device's link key, replacing the one it had.
+    pub fn set_device_link_key(&self, device_id: &str, client_key: &str) -> Result<()> {
+        self.db
+            .execute(
+                "INSERT INTO remote_paired_device_link_keys (deviceId, clientKey, updatedAt)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(deviceId) DO UPDATE SET clientKey = excluded.clientKey,
+                   updatedAt = excluded.updatedAt",
+                params![device_id, client_key, now_iso()],
+            )
+            .with_context(|| "save paired device link key")?;
+        Ok(())
+    }
+
+    /// Drops a device's link key and returns it.
+    pub fn remove_device_link_key(&self, device_id: &str) -> Result<Option<String>> {
+        let key = self.device_link_key(device_id)?;
+        self.db
+            .execute(
+                "DELETE FROM remote_paired_device_link_keys WHERE deviceId = ?1",
+                params![device_id],
+            )
+            .with_context(|| "remove paired device link key")?;
+        Ok(key)
+    }
+
+    /// Whether any remaining device's link key is `client_key`.
+    pub fn link_key_in_use(&self, client_key: &str) -> Result<bool> {
+        let count: i64 = self
+            .db
+            .query_row(
+                "SELECT COUNT(*) FROM remote_paired_device_link_keys l
+                 JOIN remote_paired_devices d ON d.id = l.deviceId
+                 WHERE l.clientKey = ?1",
+                params![client_key],
+                |row| row.get(0),
+            )
+            .with_context(|| "count paired device link keys")?;
+        Ok(count > 0)
+    }
+
     pub fn touch_device_seen(&self, id: &str) -> Result<Option<RemotePairedDeviceRecord>> {
         self.db
             .execute(

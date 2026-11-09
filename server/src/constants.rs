@@ -107,6 +107,10 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     string keeps /api/health/server's inventory in step for diagnostics.
     */
     "spaces",
+    // A paired phone or computer may register its own Easy Connect key here
+    // (`/api/registerEasyConnectClientKey`, CDXC:RemotePairing 2026-11-10 in
+    // remote_access/paired_devices.rs); older daemons have no such route.
+    "easyConnectClientKeys",
 ];
 
 pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
@@ -181,4 +185,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0069_gbots_bot_keys",
     "0070_gbots_computer",
     "0071_gbots_voice",
+    "0072_paired_device_link_keys",
 ];

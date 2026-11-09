@@ -1105,6 +1105,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         A paired phone asks for this computer's Easy Connect addresses with its device token, through the tunnel, which lands on the local listener; the addresses dial this computer, so like the tailcat status they never reach the remote listener.
         */
         | "/api/easyConnectAddresses"
+        // CDXC:RemotePairing 2026-11-10 WHY: a paired device registers its own Easy Connect key through the tunnel, which lands on the local listener; it edits the allow-list, so like the pairing routes it never answers on the remote listener.
+        | crate::remote_access::EASY_CONNECT_CLIENT_KEY_ENDPOINT
         | "/api/queryLogs" => full_local(path),
         /*
         CDXC:Feedback 2026-10-04 WHY:

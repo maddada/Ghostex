@@ -280,6 +280,53 @@ pub(crate) async fn handle_remote_access_http(
             })
             .await
         }
+        // A paired phone or computer names a key of its own for this computer (CDXC:RemotePairing
+        // 2026-11-10 in paired_devices.rs). Only for its own row: the device token says which.
+        EASY_CONNECT_CLIENT_KEY_ENDPOINT => {
+            let Principal::Device { device_id } = caller.clone() else {
+                return RemoteAccessHttpError {
+                    status: StatusCode::FORBIDDEN,
+                    code: "notPairedDevice",
+                    message:
+                        "Only a paired phone or computer can register its own Easy Connect key."
+                            .to_string(),
+                }
+                .into_response(endpoint_path, request_id);
+            };
+            let Some(client_key) = params
+                .get("clientKey")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+            else {
+                return RemoteAccessHttpError::bad_request("clientKey is required.")
+                    .into_response(endpoint_path, request_id);
+            };
+            tokio::task::spawn_blocking(move || {
+                let db = open_gxserver_database(&paths)?;
+                match register_device_link_key(&paths, &db, &tailcat_runtime, &device_id, &client_key)? {
+                    Ok(changed) => {
+                        if changed {
+                            crate::audit::record(
+                                crate::audit::Action::new(
+                                    "pairing.linkKey",
+                                    "A paired device gave its own Easy Connect key for this computer",
+                                )
+                                .target(device_id.clone()),
+                                actor,
+                                crate::audit::Outcome::Done,
+                                None,
+                            );
+                        }
+                        Ok(json!({ "clientKey": client_key.trim(), "changed": changed }))
+                    }
+                    Err(LinkKeyError::BadKey) => Err(RemoteAccessHttpError::bad_request(
+                        "clientKey must be a nodekey: public key.",
+                    )),
+                    Err(LinkKeyError::NotPaired) => Err(RemoteAccessHttpError::unknown_device(&device_id)),
+                }
+            })
+            .await
+        }
         "/api/pairDevice" => {
             let params = match parse_pair_device_params(&params) {
                 Ok(params) => params,
