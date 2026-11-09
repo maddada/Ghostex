@@ -409,22 +409,41 @@ impl GpuiAddProjectModalWindow {
         if !self.can_clone() {
             return;
         }
-        self.set_busy(Some(Busy::Clone), cx);
         self.error = None;
         let options = self.clone_options.clone();
-        self.request(
-            "startClone",
-            &machine_id,
-            serde_json::json!({
-                "branchName": options.branch_name,
-                "cloneMainOnly": options.clone_main_only,
-                "destinationPath": self.clone_destination_path,
-                "remoteUrl": flow.remote_url,
-                "shallowClone": options.shallow_clone,
-            }),
-            Pending::StartClone,
-            cx,
-        );
+        let params = serde_json::json!({
+            "branchName": options.branch_name,
+            "cloneMainOnly": options.clone_main_only,
+            "destinationPath": self.clone_destination_path,
+            "remoteUrl": flow.remote_url,
+            "shallowClone": options.shallow_clone,
+        });
+        // CDXC:BackgroundJobs 2026-11-09 DECISION: User: the clone's progress must not hold the dialog open; Clone closes it and the clone shows in the header's jobs button (window/jobs_popover_view.rs).
+        if self.background_clone {
+            let repository = flow
+                .repository
+                .as_ref()
+                .map(|repository| repository.name_with_owner.clone())
+                .unwrap_or_else(|| flow.remote_url.clone());
+            let destination = self
+                .clone_preview
+                .as_ref()
+                .map(|preview| preview.destination_path.clone())
+                .unwrap_or_else(|| self.clone_destination_path.clone());
+            (self.host)(
+                AddProjectModalCommand::StartBackgroundClone {
+                    machine_id,
+                    params,
+                    repository,
+                    destination,
+                },
+                cx,
+            );
+            self.close(window, cx);
+            return;
+        }
+        self.set_busy(Some(Busy::Clone), cx);
+        self.request("startClone", &machine_id, params, Pending::StartClone, cx);
         self.settle(window, cx);
     }
 

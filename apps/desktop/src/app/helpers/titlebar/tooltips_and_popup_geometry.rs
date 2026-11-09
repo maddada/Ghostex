@@ -62,6 +62,7 @@ pub(crate) fn titlebar_popup_menu_width(kind: GpuiTitlebarPopupKind) -> f32 {
         GpuiTitlebarPopupKind::CollabShare => {
             crate::app::window::collab_share::COLLAB_SHARE_POPUP_WIDTH
         }
+        GpuiTitlebarPopupKind::Jobs => crate::app::window::jobs_popover_view::JOBS_POPOVER_WIDTH,
         GpuiTitlebarPopupKind::SessionLinks => {
             crate::app::native_sidebar::links_list::SESSION_LINKS_LIST_WIDTH
         }
@@ -130,6 +131,7 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
         GpuiTitlebarPopupKind::CollabShare => {
             crate::app::window::collab_share::COLLAB_SHARE_POPUP_HEIGHT
         }
+        GpuiTitlebarPopupKind::Jobs => crate::app::window::jobs_popover::JOBS_POPOVER_MAX_HEIGHT,
         GpuiTitlebarPopupKind::Resources
         | GpuiTitlebarPopupKind::Tips
         | GpuiTitlebarPopupKind::RemoteSites => TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT,

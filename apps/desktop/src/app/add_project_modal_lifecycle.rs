@@ -29,6 +29,9 @@ impl GhostexGpuiApp {
             palette: self.gpui_native_dialog_palette(),
             clone_job_poll_interval: AddProjectModalConfig::CLONE_JOB_POLL_INTERVAL,
             slow_operation_notice: AddProjectModalConfig::SLOW_OPERATION_NOTICE,
+            // A handoff waits on the cloned project before it goes on, so its clone stays in the
+            // dialog; every other clone runs behind the header's jobs button.
+            background_clone: !self.git_export_add_project_waiting(),
             // A handoff's clone of the session's repository (gx_store/git/export_handoff_remote.rs).
             initial_clone_url: message
                 .get("cloneUrl")
@@ -155,6 +158,22 @@ impl GhostexGpuiApp {
                                 modal.receive_response(request_id, result, window, cx);
                             },
                         );
+                    },
+                    cx,
+                );
+            }
+            AddProjectModalCommand::StartBackgroundClone {
+                machine_id,
+                params,
+                repository,
+                destination,
+            } => {
+                self.start_background_clone(
+                    crate::app::background_jobs::CloneSpec {
+                        machine_id,
+                        params,
+                        repository,
+                        destination,
                     },
                     cx,
                 );

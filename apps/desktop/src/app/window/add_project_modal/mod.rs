@@ -33,6 +33,12 @@ pub(crate) use window::{
 // The app reads the machine list from JSON; the preview binary builds machines and a host itself.
 #[allow(unused_imports)]
 pub(crate) use model::{AddProjectMachineOption, parse_add_project_machine_options};
+// The background clone (app/background_jobs/) reads gxserver's clone answers the dialog's way.
+#[allow(unused_imports)]
+pub(crate) use model::{
+    AddProjectCloneJob, AddProjectCloneJobState, describe_add_project_error,
+    read_add_project_clone_handle, read_add_project_clone_job,
+};
 #[allow(unused_imports)]
 pub(crate) use new_project::{
     AddProjectNewProjectConfig, AddProjectPlaceChoice, AddProjectPlacementOptions, AddProjectStart,

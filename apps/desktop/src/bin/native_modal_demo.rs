@@ -157,6 +157,11 @@ mod settings_modal;
 mod share_popover_demo;
 #[path = "../app/window/share_popover_view.rs"]
 mod share_popover_view;
+// The work area header's jobs button and popover, drawn from the app's own view.
+#[path = "native_modal_demo/jobs_popover.rs"]
+mod jobs_popover_demo;
+#[path = "../app/window/jobs_popover_view.rs"]
+mod jobs_popover_view;
 #[path = "native_modal_demo/space_editor.rs"]
 mod space_editor_demo;
 #[path = "../app/window/space_editor_modal.rs"]
@@ -673,6 +678,7 @@ fn main() {
                 "notice-modal" => notice_modal_demo::open(&demo, cx),
                 "updates-menu" => updates_menu_demo::open(&demo, cx),
                 "share-popover" => share_popover_demo::open(&demo, cx),
+                "jobs-popover" => jobs_popover_demo::open(&demo, cx),
                 "start-menu" => start_menu_demo::open(&demo, cx),
                 "start-menu-click" => start_menu_click_demo::open(&demo, cx),
                 "remote-setup" => remote_setup_demo::open(&demo, cx),

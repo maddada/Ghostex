@@ -351,6 +351,8 @@ impl GhostexGpuiApp {
                 }
                 this
             })
+            // A clone or other long job in progress (CDXC:BackgroundJobs in window/jobs_popover_view.rs).
+            .children(self.render_workarea_header_jobs_button(cx))
             // The Voice button leads the split buttons (CDXC:VoiceMode in voice_agent/header_button.rs).
             .when(
                 crate::app::voice_agent::voice_agent_on() && shown(HeaderControl::Voice),

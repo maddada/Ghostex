@@ -26,6 +26,8 @@ pub(crate) mod find_prompts;
 pub(crate) mod frosted_host;
 pub(crate) mod gbot_settings_modal;
 pub(crate) mod gbot_team_modal;
+pub(crate) mod jobs_popover;
+pub(crate) mod jobs_popover_view;
 pub(crate) mod main_hub_card;
 pub(crate) mod markdown_table_modal;
 pub(crate) mod mermaid_diagram_modal;

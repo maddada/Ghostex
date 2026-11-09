@@ -33,6 +33,7 @@ pub(crate) mod agent_hooks_required_modal_lifecycle;
 pub(crate) mod agents_hub_modal_lifecycle;
 pub(crate) mod app_modal_hydrate;
 pub(crate) mod app_new;
+pub(crate) mod background_jobs;
 pub(crate) mod browser_agent_pages;
 pub(crate) mod browser_history;
 pub(crate) mod browser_history_modal_lifecycle;

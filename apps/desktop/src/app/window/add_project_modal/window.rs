@@ -33,6 +33,17 @@ pub(crate) enum AddProjectModalCommand {
         machine_id: String,
         params: serde_json::Value,
     },
+    /// Clone was pressed: the app runs the clone in the background, behind the header's jobs
+    /// button (app/background_jobs/), and the dialog closes right after sending this.
+    StartBackgroundClone {
+        machine_id: String,
+        /// The `startClone` parameters, as the dialog would have sent them.
+        params: serde_json::Value,
+        /// What is cloned, as the review step named it (`owner/name`, else the URL).
+        repository: String,
+        /// The folder the review step resolved.
+        destination: String,
+    },
     /// The dialog removed its own window (Escape, or a project was added).
     Close,
 }
@@ -50,6 +61,9 @@ pub(crate) struct AddProjectModalConfig {
     pub(crate) palette: ModalPalette,
     pub(crate) clone_job_poll_interval: Duration,
     pub(crate) slow_operation_notice: Duration,
+    /// Clone & Add hands the clone to the app and closes ([`AddProjectModalCommand::StartBackgroundClone`]);
+    /// off, the dialog stays open and follows the clone itself (a handoff waits on the new project).
+    pub(crate) background_clone: bool,
     /// Opens straight on the clone flow's destination step for this repository, on
     /// `initial_machine_id`.
     ///
@@ -363,6 +377,7 @@ pub(crate) struct GpuiAddProjectModalWindow {
     pub(super) focus_handle: FocusHandle,
     pub(super) chrome_focus: HashMap<FocusSlot, FocusHandle>,
     pub(super) clone_job_poll_interval: Duration,
+    pub(super) background_clone: bool,
     slow_operation_notice: Duration,
     next_request_id: u64,
     pending: HashMap<u64, Pending>,
@@ -484,6 +499,7 @@ impl GpuiAddProjectModalWindow {
             focus_handle: cx.focus_handle(),
             chrome_focus: HashMap::new(),
             clone_job_poll_interval: config.clone_job_poll_interval,
+            background_clone: config.background_clone,
             slow_operation_notice: config.slow_operation_notice,
             next_request_id: 0,
             pending: HashMap::new(),

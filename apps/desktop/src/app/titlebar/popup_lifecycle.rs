@@ -119,6 +119,10 @@ impl GhostexGpuiApp {
             window,
             cx,
         );
+        // The jobs popover is redrawn by the app whenever a job moves (background_jobs/).
+        if let GpuiTitlebarPopupContent::Jobs(panel) = &content {
+            self.background_jobs.panel = Some(panel.downgrade());
+        }
         // `popup_bounds` is measured from this window's frame.
         let display_id = crate::app::window::popup_frame::PopupOwner::of(window, cx)
             .display_for(popup_bounds, cx);
@@ -153,7 +157,10 @@ impl GhostexGpuiApp {
             move |popup_window, cx| {
                 // The Share popover's glass panel is rounded 10px (share_popover_view.rs).
                 popup_window.set_background_corner_radius(px(
-                    if kind == GpuiTitlebarPopupKind::CollabShare {
+                    if matches!(
+                        kind,
+                        GpuiTitlebarPopupKind::CollabShare | GpuiTitlebarPopupKind::Jobs
+                    ) {
                         10.0
                     } else {
                         8.0
@@ -393,6 +400,9 @@ impl GhostexGpuiApp {
                     )
                 }))
             }
+            GpuiTitlebarPopupKind::Jobs => GpuiTitlebarPopupContent::Jobs(cx.new(|_| {
+                crate::app::window::jobs_popover::JobsPopoverPanel::new(main_app.clone())
+            })),
             GpuiTitlebarPopupKind::CollabShare => {
                 let key = crate::app::render::workarea_header::share_button::share_target()
                     .expect("chat chosen before opening its Share popover");

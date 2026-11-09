@@ -340,13 +340,13 @@ fn remote_machine() -> AddProjectMachineOption {
 /// GHOSTEX_ADD_PROJECT_DEMO_GXSERVER=<base url> with GHOSTEX_ADD_PROJECT_DEMO_GXSERVER_TOKEN=<token
 /// file> answers every round trip from a real gxserver (a `cargo xtask test-server`), so the
 /// listing and a clone run against the daemon's own answers instead of the fixture tree.
-struct LiveGxserver {
-    base_url: String,
-    token: String,
+pub(super) struct LiveGxserver {
+    pub(super) base_url: String,
+    pub(super) token: String,
 }
 
 impl LiveGxserver {
-    fn from_env() -> Option<Self> {
+    pub(super) fn from_env() -> Option<Self> {
         let base_url = std::env::var("GHOSTEX_ADD_PROJECT_DEMO_GXSERVER").ok()?;
         let token_file = std::env::var("GHOSTEX_ADD_PROJECT_DEMO_GXSERVER_TOKEN").ok()?;
         let token = std::fs::read_to_string(token_file.trim()).ok()?;
@@ -371,7 +371,12 @@ impl LiveGxserver {
         })
     }
 
-    fn call(base_url: &str, token: &str, endpoint: &str, params: Value) -> Result<Value, String> {
+    pub(super) fn call(
+        base_url: &str,
+        token: &str,
+        endpoint: &str,
+        params: Value,
+    ) -> Result<Value, String> {
         let config = ureq::Agent::config_builder()
             .timeout_global(Some(Duration::from_secs(120)))
             .http_status_as_error(false)
@@ -533,6 +538,14 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             })
             .detach();
         }
+        AddProjectModalCommand::StartBackgroundClone {
+            machine_id,
+            params,
+            repository,
+            destination,
+        } => {
+            eprintln!("background clone on {machine_id}: {repository} into {destination} {params}");
+        }
         AddProjectModalCommand::Close => {
             eprintln!("close");
             cx.quit();
@@ -552,6 +565,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             demo.palette
         },
         clone_job_poll_interval: AddProjectModalConfig::CLONE_JOB_POLL_INTERVAL,
+        // GHOSTEX_ADD_PROJECT_DEMO_BACKGROUND=1: Clone & Add hands the clone off and closes, as in the app.
+        background_clone: std::env::var("GHOSTEX_ADD_PROJECT_DEMO_BACKGROUND").as_deref()
+            == Ok("1"),
         // GHOSTEX_ADD_PROJECT_DEMO_CLONE_URL opens on the clone destination step, as a handoff's destination does.
         initial_clone_url: std::env::var("GHOSTEX_ADD_PROJECT_DEMO_CLONE_URL")
             .ok()
