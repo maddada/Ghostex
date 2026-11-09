@@ -636,12 +636,38 @@ pub fn catalog_json() -> String {
 /// Security logs (Extensions > Experimental) is held the same way; its help, and the help that names Settings > Security, wait in the held help patch.
 pub const HELD_FROM_HELP_FILES: &[&str] = &[];
 
-/// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`].
+/// Rows whose new wording is held out of the committed Help files until a release ships it: the
+/// key, then the title, subtitle and Advanced placement the Help files keep meanwhile. The release
+/// that ships the change empties this list and regenerates.
+///
+/// CDXC:Coordinators 2026-11-09 DECISION:
+/// The coordinator, for the user: Settings > Chat > Playbook overrides became the Coordinator
+/// playbook row (out of Advanced, with View playbook and Edit overrides); its Help waits in the held
+/// help patch like any other, so installed copies keep reading the row they have.
+pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[(
+    "orchestratorPlaybook",
+    "Playbook overrides",
+    "Your own instructions for every coordinator, such as \"Never push without asking\". Coordinators read them after Ghostex's playbook and follow them over it, and Ghostex's playbook keeps getting its updates. Existing coordinators follow them from their next message.",
+    true,
+)];
+
+/// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`],
+/// and with [`HELD_ROW_WORDING`]'s rows as they read before.
 pub fn published_catalog() -> Catalog {
     let mut catalog = catalog();
     catalog
         .settings
         .retain(|entry| !HELD_FROM_HELP_FILES.contains(&entry.key.as_str()));
+    for entry in &mut catalog.settings {
+        if let Some((_, title, subtitle, advanced)) = HELD_ROW_WORDING
+            .iter()
+            .find(|(key, ..)| *key == entry.key.as_str())
+        {
+            entry.title = (*title).to_string();
+            entry.subtitle = (*subtitle).to_string();
+            entry.advanced = *advanced;
+        }
+    }
     catalog
 }
 
