@@ -6,7 +6,7 @@ pub(crate) mod claude_swap_build;
 pub(crate) mod claude_swap_switch;
 mod cli;
 mod codex_blockers;
-mod codex_identity;
+pub(crate) mod codex_identity;
 mod codex_identity_migration;
 pub(crate) mod continuation;
 mod conversation_link;

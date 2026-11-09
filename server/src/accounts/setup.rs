@@ -128,66 +128,51 @@ pub(crate) fn dispatch(
             .map(|synced| synced.email.clone())
             .filter(|email| !email.is_empty());
         let email = email.or(synced_email.as_deref());
-        let binary = helpers::executable(
-            &state.paths.home_dir,
-            if provider == Provider::Claude {
-                "ghostex"
-            } else {
-                "xswap"
-            },
-        )
-        .ok_or_else(|| {
-            DomainStateError::bad_request(format!(
+        // Both providers sign in through `ghostex account-login`, which reports to a result file:
+        // Claude saves with cswap, Codex with xswap (ghostex_cli/account_login*.rs).
+        if helpers::executable(&state.paths.home_dir, provider.helper()).is_none() {
+            return Err(DomainStateError::bad_request(format!(
                 "Install {} in Settings > Accounts first.",
                 helpers::tool_label(provider.helper())
-            ))
-        })?;
-        let mut command = CommandBuilder::new(binary);
-        let result_dir = if provider == Provider::Claude {
-            Some(
-                tempfile::Builder::new()
-                    .prefix("ghostex-account-login-")
-                    .tempdir()
-                    .map_err(store::error)?,
+            )));
+        }
+        let binary = helpers::executable(&state.paths.home_dir, "ghostex").ok_or_else(|| {
+            DomainStateError::bad_request(
+                "Ghostex's ghostex command wasn't found. Reinstall Ghostex, then try again.",
             )
-        } else {
-            None
-        };
-        if let Some(result_dir) = &result_dir {
-            command.args(["account-login", "claude", "--json", "--result-file"]);
-            command.arg(result_dir.path().join(RESULT_FILE));
-            if let Some(selector) = selector {
-                // The CLI pre-fills the browser with the saved account's own email.
-                command.args(["--account", selector]);
-            } else if let Some(email) = email {
-                command.args(["--email", email]);
-            }
-        } else if let Some(selector) = selector {
-            command.args(["login", selector]);
+        })?;
+        // CDXC:AgentProviders 2026-11-05 DECISION:
+        // User picked "No email, like Claude" for adding a Codex account: Codex Swap 0.3.6 saves whichever account the browser signs in to (`--any-account`) and still refuses one that is already saved. Settings updates an older Codex Swap first (`codexSwapNeedsUpdate` on the helper row). Supersedes the 2026-10-14 rule that Add account asked for a new Codex account's email.
+        if provider == Provider::Codex
+            && selector.is_none()
+            && email.is_none()
+            && super::helper_tools::codex_swap_needs_update_to_add(&state.paths.home_dir)
+        {
+            return Err(DomainStateError::bad_request(
+                "Update Codex Swap to add a Codex account, then try again.",
+            ));
+        }
+        let mut command = CommandBuilder::new(binary);
+        let result_dir = tempfile::Builder::new()
+            .prefix("ghostex-account-login-")
+            .tempdir()
+            .map_err(store::error)?;
+        command.args([
+            "account-login",
+            if provider == Provider::Claude {
+                "claude"
+            } else {
+                "codex"
+            },
+            "--json",
+            "--result-file",
+        ]);
+        command.arg(result_dir.path().join(RESULT_FILE));
+        if let Some(selector) = selector {
+            // Claude's CLI pre-fills the browser with the saved account's own email.
+            command.args(["--account", selector]);
         } else if let Some(email) = email {
-            command.args([
-                "add",
-                "--login",
-                "--share-history",
-                "--email",
-                email,
-                "--json",
-            ]);
-        } else {
-            // CDXC:AgentProviders 2026-11-05 DECISION:
-            // User picked "No email, like Claude" for adding a Codex account: Codex Swap 0.3.6 saves whichever account the browser signs in to (`--any-account`) and still refuses one that is already saved. Settings updates an older Codex Swap first (`codexSwapNeedsUpdate` on the helper row). Supersedes the 2026-10-14 rule that Add account asked for a new Codex account's email.
-            if super::helper_tools::codex_swap_needs_update_to_add(&state.paths.home_dir) {
-                return Err(DomainStateError::bad_request(
-                    "Update Codex Swap to add a Codex account, then try again.",
-                ));
-            }
-            command.args([
-                "add",
-                "--login",
-                "--share-history",
-                "--any-account",
-                "--json",
-            ]);
+            command.args(["--email", email]);
         }
         command.cwd(&state.paths.home_dir);
         command.env("TERM", "dumb");
@@ -262,25 +247,24 @@ pub(crate) fn dispatch(
             }
             drop(pair.master);
             let transcript = output.join().unwrap_or_default();
-            let report = result_dir.as_ref().and_then(|dir| {
-                serde_json::from_slice::<Value>(&std::fs::read(dir.path().join(RESULT_FILE)).ok()?)
-                    .ok()
-            });
+            let report = serde_json::from_slice::<Value>(
+                &std::fs::read(result_dir.path().join(RESULT_FILE)).unwrap_or_default(),
+            )
+            .ok();
             drop(result_dir);
             let result = match exit {
                 Err(error) => Err(store::error(error)),
-                Ok(_) if provider == Provider::Claude => {
-                    claude_outcome(exited_ok, report.as_ref(), selector.as_deref())
-                        .map_err(DomainStateError::bad_request)
-                }
-                Ok(_) if !exited_ok => Err(DomainStateError::bad_request(LOGIN_INCOMPLETE)),
-                Ok(_) => selector
-                    .clone()
-                    .or_else(|| transcript_account_number(&transcript))
-                    .ok_or_else(|| DomainStateError::bad_request(HELPER_SILENT)),
+                Ok(_) => reported_outcome(exited_ok, report.as_ref(), selector.as_deref())
+                    .map_err(DomainStateError::bad_request),
             };
+            // The helper's own words (xswap's error line) for Copy details and the checks below.
+            let detail = report
+                .as_ref()
+                .and_then(|report| report["detail"].as_str())
+                .unwrap_or_default()
+                .to_string();
             let failure_text = format!(
-                "{transcript}\n{}",
+                "{transcript}\n{}\n{detail}",
                 report
                     .as_ref()
                     .and_then(|report| report["error"].as_str())
@@ -291,7 +275,7 @@ pub(crate) fn dispatch(
                 .err()
                 .and_then(|_| wrong_account(&failure_text));
             let blockers = (provider == Provider::Codex && result.is_err())
-                .then(|| codex_blockers::pids_in_refusal(&transcript))
+                .then(|| codex_blockers::pids_in_refusal(&failure_text))
                 .filter(|pids| !pids.is_empty())
                 .map(|pids| codex_blockers::describe(&state, &pids));
             let result = result.and_then(|selector| {
@@ -325,6 +309,9 @@ pub(crate) fn dispatch(
                         } else {
                             job.view["error"] = json!(error.message);
                         }
+                        if !detail.is_empty() {
+                            job.view["detail"] = json!(detail);
+                        }
                         // A login that failed after cswap saved part of it must not leave the list stale.
                         state.accounts.invalidate();
                         log_failure(
@@ -333,6 +320,7 @@ pub(crate) fn dispatch(
                             selector.as_deref(),
                             exit_code,
                             job.view["error"].as_str().unwrap_or_default(),
+                            &detail,
                             &transcript,
                         );
                     }
@@ -405,10 +393,10 @@ const LOGIN_INCOMPLETE: &str = "Login did not complete. Check the terminal detai
 const HELPER_SILENT: &str =
     "The sign-in finished, but the account wasn't saved. Update it in Settings > Accounts and try again.";
 
-/// A Claude login's outcome from the helper's result file: the saved slot, or the reason it
+/// A login's outcome from the result file `ghostex account-login` writes: the saved slot, or the reason it
 /// failed. The terminal screen is never read for it.
 /// `run` in server/src/ghostex_cli/account_login.rs writes the file.
-fn claude_outcome(
+fn reported_outcome(
     exited_ok: bool,
     report: Option<&Value>,
     selector: Option<&str>,
@@ -434,26 +422,6 @@ fn claude_outcome(
         .ok_or_else(|| HELPER_SILENT.to_string())
 }
 
-/// The saved slot an `xswap ... --json` login printed on its terminal: the first JSON object on
-/// screen with `account.number`, whatever output follows it.
-fn transcript_account_number(transcript: &str) -> Option<String> {
-    transcript
-        .char_indices()
-        .filter(|(_, c)| *c == '{')
-        .filter_map(|(index, _)| {
-            serde_json::Deserializer::from_str(&transcript[index..])
-                .into_iter::<Value>()
-                .next()?
-                .ok()
-        })
-        .find_map(|value| {
-            value
-                .pointer("/account/number")
-                .and_then(Value::as_u64)
-                .map(|number| number.to_string())
-        })
-}
-
 /// Every failed Settings login is logged with the reason shown and the end of its terminal, so a
 /// banner can be traced without a reproduction (#347 left no gxserver entry at all).
 fn log_failure(
@@ -462,6 +430,7 @@ fn log_failure(
     selector: Option<&str>,
     exit_code: Option<u32>,
     error: &str,
+    detail: &str,
     transcript: &str,
 ) {
     let lines: Vec<&str> = transcript
@@ -482,6 +451,7 @@ fn log_failure(
             "provider": provider,
             "selector": selector,
             "exitCode": exit_code,
+            "helperError": detail,
             "terminalTail": tail,
         })),
     });
@@ -551,23 +521,21 @@ mod tests {
     fn saved_account_completes_although_the_screen_lost_the_result() {
         let screen = reporter_screen();
         assert!(screen.contains("Login successful.\n{"));
-        // The screen alone never says which slot was saved: the old completion check failed here.
-        assert_eq!(transcript_account_number(&screen), None);
         let report = json!({"schemaVersion":1,"account":{"number":2,"email":"second@example.com"}});
-        assert_eq!(claude_outcome(true, Some(&report), None), Ok("2".into()));
+        assert_eq!(reported_outcome(true, Some(&report), None), Ok("2".into()));
     }
 
     #[test]
     fn saved_account_completes_when_the_helper_exits_with_an_error() {
         let report = json!({"schemaVersion":1,"account":{"number":2,"email":"second@example.com"}});
-        assert_eq!(claude_outcome(false, Some(&report), None), Ok("2".into()));
+        assert_eq!(reported_outcome(false, Some(&report), None), Ok("2".into()));
     }
 
     #[test]
     fn failed_login_shows_the_helpers_reason() {
         let report = json!({"ok":false,"error":"Claude Swap could not save this login. Check the message above and try again."});
         assert_eq!(
-            claude_outcome(false, Some(&report), None),
+            reported_outcome(false, Some(&report), None),
             Err(
                 "Claude Swap could not save this login. Check the message above and try again."
                     .into()
@@ -578,11 +546,14 @@ mod tests {
     #[test]
     fn login_without_a_report_says_what_is_known() {
         assert_eq!(
-            claude_outcome(false, None, None),
+            reported_outcome(false, None, None),
             Err(LOGIN_INCOMPLETE.into())
         );
-        assert_eq!(claude_outcome(true, None, None), Err(HELPER_SILENT.into()));
-        assert_eq!(claude_outcome(true, None, Some("3")), Ok("3".into()));
+        assert_eq!(
+            reported_outcome(true, None, None),
+            Err(HELPER_SILENT.into())
+        );
+        assert_eq!(reported_outcome(true, None, Some("3")), Ok("3".into()));
     }
 
     #[test]
@@ -592,18 +563,6 @@ mod tests {
         assert_eq!(
             wrong_account(&failure_text),
             Some("other@example.com".into())
-        );
-    }
-
-    #[test]
-    fn codex_result_is_found_with_crlf_and_output_after_it() {
-        let mut terminal = LoginTerminal::new();
-        terminal.process(
-            b"Login successful.\r\n{\"schemaVersion\":1,\"account\":{\"number\":3,\"email\":\"c@example.com\"}}\r\nDone.\r\n",
-        );
-        assert_eq!(
-            transcript_account_number(&terminal.text()),
-            Some("3".into())
         );
     }
 }

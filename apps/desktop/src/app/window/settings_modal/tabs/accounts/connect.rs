@@ -562,8 +562,30 @@ impl AccountsTab {
                     .into_any_element(),
             );
         }
-        if let Some(output) = output
-            && (active || status.as_deref() == Some("failed"))
+        // A failed login keeps its reason short; what the helper printed, and its own error line,
+        // fold under Details with Copy details for a bug report.
+        let failure_detail = job
+            .as_ref()
+            .filter(|_| status.as_deref() == Some("failed"))
+            .map(|job| {
+                [job["output"].as_str(), job["detail"].as_str()]
+                    .into_iter()
+                    .flatten()
+                    .map(str::trim)
+                    .filter(|text| !text.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            })
+            .filter(|text| !text.is_empty());
+        if let Some(raw) = failure_detail {
+            children.push(super::super::super::fields::notice::raw_details(
+                p,
+                format!("{key}-failure-details"),
+                account_text(&raw, hide),
+                &self.store,
+            ));
+        } else if let Some(output) = output
+            && active
         {
             children.push(self.render_details(p, &key, terminal, &output, hide, cx));
         }

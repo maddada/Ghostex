@@ -1,4 +1,5 @@
 mod account_login;
+mod account_login_codex;
 mod accounts;
 pub mod actions;
 mod agent_cli;
@@ -97,6 +98,10 @@ sees identical behavior after the Node CLI deletion.
 */
 
 pub fn run() -> i32 {
+    // Started by Codex Swap as its Codex during a Settings login (account_login_codex.rs).
+    if let Some(code) = account_login_codex::shim() {
+        return code;
+    }
     let argv: Vec<String> = std::env::args().skip(1).collect();
     if let Some(warning) = crate::paths::migrate_legacy_storage() {
         eprintln!("{warning}");

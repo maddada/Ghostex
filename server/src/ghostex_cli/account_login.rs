@@ -5,11 +5,11 @@ use serde_json::Value;
 use std::process::Stdio;
 use std::{path::Path, process::Command};
 
-const HELP: &str = "Usage: ghostex account-login claude [--account NUMBER] [--email EMAIL] [--json] [--result-file PATH]\n\nSign in with a separate Claude profile and save it with cswap.\nWithout --account, saves the account you choose in the browser; --email pre-fills it and requires that account.\nWith --account, reconnects only that saved account.\n--result-file writes the saved account, or the reason the login failed, to PATH as JSON.";
+const HELP: &str = "Usage: ghostex account-login claude [--account NUMBER] [--email EMAIL] [--json] [--result-file PATH]\n       ghostex account-login codex [--account NUMBER] [--email EMAIL] [--json] [--result-file PATH]\n\nclaude: sign in with a separate Claude profile and save it with cswap.\nWithout --account, saves the account you choose in the browser; --email pre-fills it and requires that account.\nWith --account, reconnects only that saved account.\n--result-file writes the saved account, or the reason the login failed, to PATH as JSON.";
 
 /// CDXC:AgentProviders 2026-10-28 WHY:
 /// Settings read the login's result from its terminal screen, and on Windows ConPTY can drop a process's last output when it exits, so a saved account was reported as "Login did not complete" with only the `{` of the result left on screen (#347). The result now also goes to a file gxserver names; the terminal stays for the person watching.
-/// SEE-ALSO: `claude_outcome` in server/src/accounts/setup.rs reads this file.
+/// SEE-ALSO: `reported_outcome` in server/src/accounts/setup.rs reads this file.
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
     let result_index = args.iter().position(|arg| arg == "--result-file");
     let result_file = result_index.and_then(|index| args.get(index + 1));
@@ -22,12 +22,18 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         .filter(|(index, _)| result_index.is_none_or(|at| *index != at && *index != at + 1))
         .map(|(_, arg)| arg.clone())
         .collect();
-    let result = login(&rest);
+    let result = if rest.first().map(String::as_str) == Some("codex") {
+        super::account_login_codex::login(&rest)
+    } else {
+        login(&rest).map_err(|error| LoginFailure::plain(error.to_string()))
+    };
     if let Some(path) = result_file {
         let report = match &result {
             Ok(Some(saved)) => saved.clone(),
             Ok(None) => return Ok(()),
-            Err(error) => serde_json::json!({"ok": false, "error": error.to_string()}),
+            Err(error) => {
+                serde_json::json!({"ok": false, "error": error.message, "detail": error.detail})
+            }
         };
         if let Err(error) = std::fs::write(path, report.to_string()) {
             // A failed login keeps its own reason; a saved one must say the report is missing.
@@ -38,7 +44,21 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             }
         }
     }
-    result.map(|_| ())
+    result.map(|_| ()).map_err(|error| failure(error.message))
+}
+
+/// Why a login failed: the sentence Settings shows, and the helper's own words for Copy details.
+pub(super) struct LoginFailure {
+    pub(super) message: String,
+    pub(super) detail: String,
+}
+impl LoginFailure {
+    pub(super) fn plain(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            detail: String::new(),
+        }
+    }
 }
 
 /// CDXC:AgentProviders 2026-09-07 WHY:
