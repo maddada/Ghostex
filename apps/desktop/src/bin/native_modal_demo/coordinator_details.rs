@@ -2,7 +2,8 @@
 //! default (Memory with more notes than the window holds, so the list scrolls), `few` (three
 //! notes), `goal` (Goal & Instructions), `overrides` (Playbook overrides), `overrides-old` (with
 //! an edited full playbook saved before overrides still in use), `overrides-view` (Playbook
-//! overrides with its View playbook page open).
+//! overrides with its View playbook page open), `overrides-playbook` (opened on that page, as the
+//! menus' View playbook rows open it).
 use super::coordinator_details_modal::*;
 use gpui::{App, AppContext as _};
 use std::rc::Rc;
@@ -64,6 +65,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             .state
             .starts_with("overrides")
             .then(|| Ok(super::new_coordinator_demo::demo_guide())),
+        on_playbook: demo.state == "overrides-playbook",
         palette: demo.palette,
     };
     let open_view = demo.state == "overrides-view";

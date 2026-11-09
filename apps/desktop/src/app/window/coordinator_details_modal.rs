@@ -95,6 +95,9 @@ pub(crate) struct CoordinatorDetailsModalConfig {
     /// Ghostex's part of the playbook the coordinator reads (`/api/readCoordinatorGuide`), or why
     /// it could not be read; `None` leaves View playbook out (Overrides mode only).
     pub(crate) guide: Option<Result<String, String>>,
+    /// Opens on the read-only playbook page (the menus' View playbook rows), whose Close then
+    /// closes the window rather than going back to the editor.
+    pub(crate) on_playbook: bool,
     pub(crate) palette: ModalPalette,
 }
 
@@ -114,6 +117,8 @@ pub(crate) struct GpuiCoordinatorDetailsModalWindow {
     guide: Option<Result<String, String>>,
     /// The read-only playbook page is open (Overrides mode).
     viewing: bool,
+    /// The window opened on that page, so leaving it closes the window.
+    opened_on_playbook: bool,
     note: String,
     notes: Vec<String>,
     /// A save is on its way to gxserver; the editor waits for its answer.
@@ -202,6 +207,13 @@ impl GpuiCoordinatorDetailsModalWindow {
                 overrides_input.update(cx, |input, cx| input.focus(window, cx))
             }
         }
+        let opened_on_playbook = config.on_playbook
+            && config.mode == CoordinatorDetailsMode::Overrides
+            && config.guide.is_some();
+        let focus_handle = cx.focus_handle();
+        if opened_on_playbook {
+            focus_handle.focus(window, cx);
+        }
         Self {
             host,
             palette: config.palette,
@@ -218,13 +230,14 @@ impl GpuiCoordinatorDetailsModalWindow {
             guide: config.guide.map(|guide| {
                 guide.map(|text| super::new_coordinator_modal::guide_ghostex_part(&text))
             }),
-            viewing: false,
+            viewing: opened_on_playbook,
+            opened_on_playbook,
             note: String::new(),
             notes: config.notes,
             saving: false,
             error: None,
             fit: ModalFit::fixed(),
-            focus_handle: cx.focus_handle(),
+            focus_handle,
             _subscriptions: subscriptions,
         }
     }
@@ -248,6 +261,7 @@ impl GpuiCoordinatorDetailsModalWindow {
         cx: &mut Context<Self>,
     ) {
         self.viewing = viewing;
+        self.opened_on_playbook &= viewing;
         if viewing {
             self.focus_handle.focus(window, cx);
         } else {
@@ -368,7 +382,7 @@ impl GpuiCoordinatorDetailsModalWindow {
 
     fn on_escape_action(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
-        if self.viewing {
+        if self.viewing && !self.opened_on_playbook {
             self.set_viewing(false, window, cx);
             return;
         }
@@ -378,8 +392,7 @@ impl GpuiCoordinatorDetailsModalWindow {
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         if self.viewing {
             if event.keystroke.key == "escape" {
-                self.set_viewing(false, window, cx);
-                cx.stop_propagation();
+                self.on_escape_action(&Escape, window, cx);
             }
             return;
         }
@@ -583,16 +596,29 @@ impl GpuiCoordinatorDetailsModalWindow {
     fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
         if self.viewing {
-            let back = modal_action_button(
-                &p,
-                "coordinator-details-playbook-back",
-                "Back",
-                None,
-                ModalButtonTone::Neutral,
-                false,
-                |this, window, cx| this.set_viewing(false, window, cx),
-                cx,
-            );
+            let back = if self.opened_on_playbook {
+                modal_action_button(
+                    &p,
+                    "coordinator-details-playbook-close",
+                    "Close",
+                    None,
+                    ModalButtonTone::Neutral,
+                    false,
+                    |this, window, cx| this.cancel(window, cx),
+                    cx,
+                )
+            } else {
+                modal_action_button(
+                    &p,
+                    "coordinator-details-playbook-back",
+                    "Back",
+                    None,
+                    ModalButtonTone::Neutral,
+                    false,
+                    |this, window, cx| this.set_viewing(false, window, cx),
+                    cx,
+                )
+            };
             let edit = modal_action_button(
                 &p,
                 "coordinator-details-playbook-edit",

@@ -108,7 +108,7 @@ pub(crate) fn old_copies_note_elsewhere(places: &[String]) -> Option<String> {
     old_copies_note(places).map(|note| {
         note.replace(
             "Use Ghostex's Playbook saves it",
-            "Use Ghostex's Playbook in Settings > Chat > Playbook overrides saves it",
+            "Use Ghostex's Playbook in Settings > Chat > Coordinator playbook saves it",
         )
     })
 }

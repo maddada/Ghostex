@@ -480,7 +480,7 @@ fn move_to_group_item(id: &str, moves: Option<&SessionGroupMoves>, stale: bool) 
     MenuItem::submenu("Move to Group", "layout-sidebar-right-expand", children).with_page()
 }
 
-/// An orchestrator's Goal & Instructions, Memory and Playbook overrides editors, and a thread's Mark Thread Done or
+/// An orchestrator's Goal & Instructions, Memory, View playbook and Playbook overrides, and a thread's Mark Thread Done or
 /// Reopen Thread, after a separator. An orchestrator's block goes on with Sleep Inactive Threads.
 ///
 /// CDXC:Coordinators 2026-10-13 DECISION:
@@ -502,11 +502,20 @@ fn coordinator_rows(row: &SessionRow, stale: bool) -> Vec<MenuItem> {
             "brain",
             MenuCommand::coordinator_session(id, "memory"),
         ));
+        // CDXC:Coordinators 2026-11-09 WHY: the user, after View playbook had shipped inside the
+        // New Coordinator dialog, Settings and the overrides editor: "i still don't know how a
+        // user can see the coordinator playbook". The playbook this coordinator reads (Ghostex's,
+        // the reply format, then the user's overrides) opens straight from its own menu.
+        rows.push(MenuItem::row(
+            "View playbook",
+            "book",
+            MenuCommand::coordinator_session(id, "viewPlaybook"),
+        ));
         // CDXC:Coordinators 2026-11-07: the user's playbook overrides (for every coordinator on
         // this one's computer) open from here too; see server/src/coordinators/playbook.rs.
         rows.push(MenuItem::row(
             "Playbook overrides…",
-            "book",
+            "pencil",
             MenuCommand::coordinator_session(id, "playbookOverrides"),
         ));
     } else if row.coordinator_parent.is_some() {

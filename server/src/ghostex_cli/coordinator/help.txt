@@ -260,8 +260,9 @@ COORDINATOR PLAYBOOK
   it but stops using it, --on uses it again (--project-id <id> or
   --this-project for a project's copy).
   In the app: the Playbook overrides row of the New Coordinator dialog,
-  Settings > Chat > Playbook overrides, and Playbook overrides… on a
-  coordinator's sidebar menu.
+  Settings > Chat > Coordinator playbook, and Playbook overrides… on a
+  coordinator's sidebar menu. View playbook (on a coordinator's sidebar
+  menu, its chat's More actions menu and Settings) shows what guide prints.
 
 STATES
   waiting   a question, an approval or another prompt needs an answer

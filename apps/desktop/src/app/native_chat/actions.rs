@@ -25,6 +25,7 @@ fn host_action_icon(id: &str) -> Option<&'static str> {
         "rename" => "titlebar/pencil.svg",
         "sleep" => "titlebar/moon.svg",
         "switchAccount" => "titlebar/switch-horizontal.svg",
+        "viewPlaybook" => "titlebar/book.svg",
         _ => return None,
     })
 }
@@ -238,7 +239,7 @@ impl NativeChatView {
         for action in actions.iter().filter(|action| {
             matches!(
                 text(action, "id").as_str(),
-                "delayedActions" | "closeAfterDone"
+                "delayedActions" | "closeAfterDone" | "viewPlaybook"
             )
         }) {
             rows.push(host_row(action));
@@ -321,7 +322,7 @@ impl NativeChatView {
                 action["group"] != "agent"
                     && !matches!(
                         text(action, "id").as_str(),
-                        "delayedActions" | "closeAfterDone"
+                        "delayedActions" | "closeAfterDone" | "viewPlaybook"
                     )
             })
             .collect();

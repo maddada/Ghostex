@@ -165,10 +165,15 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         // CDXC:Sessions 2026-10-21 (server/src/close_after_done.rs `is_orchestrator`): an
         // orchestrator never takes Close After Done.
         .filter(|action| {
-            action.id != "closeAfterDone"
-                || !crate::extras::coordinator_threads::is_coordinator(
-                    state.session.coordinator_threads.as_ref(),
-                )
+            let coordinator = crate::extras::coordinator_threads::is_coordinator(
+                state.session.coordinator_threads.as_ref(),
+            );
+            match action.id.as_str() {
+                "closeAfterDone" => !coordinator,
+                // Only a coordinator has a playbook to show.
+                "viewPlaybook" => coordinator,
+                _ => true,
+            }
         })
         .collect();
     into.side_chat = crate::composer::side_chat::side_chat_prefix(state);

@@ -330,8 +330,8 @@ fn read_aloud_rows(
 /// than the usual select.
 const READ_ALOUD_VOICE_WIDTH: f32 = 280.0;
 
-/// The playbook overrides for every coordinator: their first line and the Edit button that opens
-/// their editor (tabs/orchestrator_playbook.rs). They live in gxserver, not in the settings file.
+/// The Coordinator playbook row: View playbook (Ghostex's playbook, the reply format, then the
+/// overrides) and Edit overrides (tabs/orchestrator_playbook.rs). They live in gxserver, not in the settings file.
 fn orchestrator_playbook_row(
     page: &mut GeneralTab,
     g: &GeneralCx,
@@ -343,8 +343,8 @@ fn orchestrator_playbook_row(
         return None;
     }
     let known = playbook_overrides(page, cx);
-    let spec = RowSpec::new("Playbook overrides").description(
-        "Your own instructions for every coordinator, such as \"Never push without asking\". Coordinators read them after Ghostex's playbook and follow them over it, and Ghostex's playbook keeps getting its updates. Existing coordinators follow them from their next message.",
+    let spec = RowSpec::new("Coordinator playbook").description(
+        "How your coordinators work: Ghostex's playbook, then your overrides, which they follow over it.",
     );
     let rpc_available = page.store.read(cx).request().gxserver_rpc_available;
     let control = playbook_control(

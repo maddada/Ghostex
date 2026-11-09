@@ -1,5 +1,5 @@
 //! An orchestrator's and a thread's rows in the session context menu: Goal & Instructions,
-//! Memory, Playbook overrides, Mark Thread Done and Reopen Thread (`coordinatorSessionAction`), on
+//! Memory, View playbook, Playbook overrides, Mark Thread Done and Reopen Thread (`coordinatorSessionAction`), on
 //! this computer or a remote one.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_menu/session.rs (`coordinator_rows`), server/src/server/coordinator_resolve.rs (`/api/resolveCoordinatorThread`), apps/desktop/src/app/coordinator_details_modal_lifecycle.rs.
@@ -91,6 +91,7 @@ impl GhostexGpuiApp {
                             &read["coordinator"],
                             None,
                             None,
+                            false,
                             cx,
                         ),
                         Err(error) => this.dispatch_gpui_app_modal_toast(
@@ -103,8 +104,10 @@ impl GhostexGpuiApp {
                 })
                 .detach();
             }
-            // The user's playbook overrides, kept by the gxserver that runs this orchestrator.
-            Some("playbookOverrides") => {
+            // The user's playbook overrides, kept by the gxserver that runs this orchestrator;
+            // View playbook opens the same window on its read-only playbook page.
+            Some(action @ ("playbookOverrides" | "viewPlaybook")) => {
+                let on_playbook = action == "viewPlaybook";
                 cx.spawn(async move |this, cx| {
                     let coordinator =
                         gx_rpc(remote.clone(), "/api/readCoordinator", ids.clone()).await;
@@ -143,11 +146,16 @@ impl GhostexGpuiApp {
                             &read["coordinator"],
                             Some(&view),
                             Some(guide),
+                            on_playbook,
                             cx,
                         ),
                         (Err(error), _) | (_, Err(error)) => this.dispatch_gpui_app_modal_toast(
                             "warning",
-                            "Could not read the playbook overrides",
+                            if on_playbook {
+                                "Could not read the playbook"
+                            } else {
+                                "Could not read the playbook overrides"
+                            },
                             &error.message,
                             cx,
                         ),

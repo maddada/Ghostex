@@ -456,6 +456,14 @@ impl GhostexGpuiApp {
                 self.web_open_chat_delayed_send(session, &row, cx);
                 return true;
             }
+            // A coordinator's View playbook: the page its sidebar menu row opens.
+            Some("viewPlaybook") => {
+                self.gx_store_run_coordinator_action(
+                    &json!({ "type": "coordinatorSessionAction", "sessionId": row, "action": "viewPlaybook" }),
+                    cx,
+                );
+                return true;
+            }
             // The working card's Links pill: the page's links card, as the sidebar row opens it.
             Some("sessionLinks") => {
                 self.open_session_links_card(row.clone(), cx);

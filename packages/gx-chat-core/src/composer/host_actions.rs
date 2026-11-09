@@ -79,6 +79,15 @@ const DEFINITIONS: &[Definition] = &[
         label: "Handoff / Export",
         hotkey: Some("exportTranscript"),
     },
+    // CDXC:Coordinators 2026-11-09 WHY: the user: "i still don't know how a user can see the
+    // coordinator playbook". A coordinator's chat offers View playbook in its More actions menu,
+    // opening the same read-only page as the coordinator's sidebar menu row; only coordinators get
+    // it (composer/document.rs).
+    Definition {
+        id: "viewPlaybook",
+        label: "View playbook",
+        hotkey: None,
+    },
 ];
 
 /// Actions the composer's own toolbar already offers, so the menu does not repeat them.

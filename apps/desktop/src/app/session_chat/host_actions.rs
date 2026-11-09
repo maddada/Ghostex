@@ -780,6 +780,32 @@ impl GhostexGpuiApp {
             self.select_session_chat_fork_branch(session_id, &message, cx);
             return;
         }
+        // A coordinator's View playbook: the page its sidebar menu row opens
+        // (gx_store/coordinator_actions.rs).
+        if action == "viewPlaybook" {
+            let session = match self.workspace_terminal_key_for_shell_session(session_id) {
+                Some(GpuiWorkspaceTerminalSessionKey::Local(key)) => {
+                    ghostex_gx_core::SessionKey::local(key.project_id, key.session_id)
+                }
+                Some(GpuiWorkspaceTerminalSessionKey::Remote(key)) => {
+                    ghostex_gx_core::SessionKey::remote(
+                        key.remote_machine_id,
+                        key.project_id,
+                        key.session_id,
+                    )
+                }
+                None => return,
+            };
+            self.gx_store_run_coordinator_action(
+                &serde_json::json!({
+                    "type": "coordinatorSessionAction",
+                    "sessionId": session.to_sidebar_session_id(),
+                    "action": "viewPlaybook",
+                }),
+                cx,
+            );
+            return;
+        }
         // A side chat opens as a tab of the side panel (side_chat_panel/), and a deleted one's
         // tab closes.
         if action == "openSideChat" {

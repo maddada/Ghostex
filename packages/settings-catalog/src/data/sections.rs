@@ -45,6 +45,10 @@ use crate::json::J;
 /// User (Q5): Power & Sleep is its own page now (layout.rs), and every one of its rows was advanced, so with Show Advanced off the page was empty. Auto sleep agents after, Default keep-awake duration and Keep awake for working sessions show without Show Advanced, so the page always has its three everyday rows; the rest stay advanced.
 /// CDXC:Settings 2026-10-29 DECISION:
 /// User: "remove show advanced from bottom left ... group advanced settings at the bottom of each page together" in a section "collapsed by default ... called Advanced". The Show Advanced switch and `showAdvancedSettings` are gone; these keys now name the rows each page folds into its Advanced section at the bottom (apps/desktop settings_modal/search.rs `RowTier`). Search still finds them in place.
+/// CDXC:Coordinators 2026-11-09 DECISION:
+/// User: "i still don't know how a user can see the coordinator playbook". The Coordinator
+/// playbook row (`orchestratorPlaybook`: View playbook and Edit overrides) shows on the Chat page
+/// itself, out of its Advanced section, superseding the Q30-Q32 move above for that one row.
 pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "workAreaFrame",
     "showWindowButtonsWhenSidebarCollapsed",
@@ -143,7 +147,6 @@ pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "sessionChatTranscriptWidthPercent",
     "sessionChatKeepComposerExpanded",
     "sessionChatConfirmEscapeInterrupt",
-    "orchestratorPlaybook",
     "terminalPaneHorizontalPaddingPx",
     "terminalPaneVerticalPaddingPx",
     "terminalBackgroundOpacity",

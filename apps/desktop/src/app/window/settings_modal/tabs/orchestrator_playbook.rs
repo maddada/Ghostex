@@ -667,13 +667,13 @@ pub(crate) fn playbook_control<V: HasOrchestratorPlaybook>(
     let state = match known {
         None => "Loading…".to_string(),
         Some(known) if !known.old_copies.is_empty() => "Old edited playbook in use".to_string(),
-        Some(known) if known.text.is_empty() => "None".to_string(),
+        Some(known) if known.text.is_empty() => "No overrides".to_string(),
         Some(known) => overrides_summary(&known.text),
     };
     let edit = settings_button(
         p,
         format!("{id}-edit"),
-        "Edit…",
+        format!("{EDIT_OVERRIDES}…"),
         None,
         ButtonVariant::Outline,
         !rpc_available,
