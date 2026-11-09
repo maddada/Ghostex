@@ -632,29 +632,9 @@ pub fn catalog_json() -> String {
 /// CDXC:Extensions 2026-11-09 DECISION:
 /// The coordinator, for the user: the Grok extension (official_extensions.rs) is held the same way until the release that ships it; its hand-written paragraph waits in the held help patch.
 ///
-/// CDXC:SessionChat 2026-11-09 DECISION:
-/// Tool call lines (Extensions > Experimental) is held the same way until the release that ships it; its help waits in the held help patch.
-///
 /// CDXC:Security 2026-11-09 DECISION:
 /// Security logs (Extensions > Experimental) is held the same way; its help, and the help that names Settings > Security, wait in the held help patch.
-///
-/// CDXC:SessionChat 2026-11-09 DECISION:
-/// The coordinator, for the user (#517, merged as it came): the six chat look rows (Settings > Chat > Advanced) are held the same way until the release that ships them, with the contributor's Help paragraph and the two sentences it added to Transcript width and Tool call cards; they wait in the held help patch.
-pub const HELD_FROM_HELP_FILES: &[&str] = &[
-    "sidebarMergeRepositoryCopies",
-    "grokWeb",
-    "grokWebHidden",
-    "grokWebStartPage",
-    "grokWebLogins",
-    "chatToolCallLines",
-    "securityLogsEnabled",
-    "chatMessageLayout",
-    "chatUserMessageStyle",
-    "chatAgentWorkStyle",
-    "chatStatusInTranscript",
-    "chatComposerMatchesTranscriptWidth",
-    "chatMessageSpacing",
-];
+pub const HELD_FROM_HELP_FILES: &[&str] = &[];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`].
 pub fn published_catalog() -> Catalog {

@@ -53,7 +53,7 @@
     {
       "key": "sessionChatTranscriptWidthPercent",
       "title": "Transcript width",
-      "subtitle": "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way.",
+      "subtitle": "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -81,13 +81,135 @@
     {
       "key": "chatToolCallCards",
       "title": "Tool call cards (preview)",
-      "subtitle": "Show each run of tool calls as one line that says which call is running now; click it to see every call with its result, time and the reason for any failure. Off keeps the current look.",
+      "subtitle": "Show each run of tool calls as one line that says which call is running now; click it to see every call with its result, time and the reason for any failure. Off keeps the current look. Agent work's Reduced and Quiet replace these cards.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "chatMessageLayout",
+      "title": "Message layout",
+      "subtitle": "Default puts your messages on the right as bubbles. Left aligned starts every message at the same left edge.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "enum",
+      "default": "default",
+      "options": [
+        {
+          "label": "Default",
+          "value": "default"
+        },
+        {
+          "label": "Left aligned",
+          "value": "left"
+        }
+      ],
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatUserMessageStyle",
+      "title": "Your messages",
+      "subtitle": "How your messages stand out from the agent's: Default keeps the bubble, Band puts them on a soft full-width strip. Band also left-aligns them.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "enum",
+      "default": "default",
+      "options": [
+        {
+          "label": "Default",
+          "value": "default"
+        },
+        {
+          "label": "Band",
+          "value": "band"
+        }
+      ],
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatAgentWorkStyle",
+      "title": "Agent work",
+      "subtitle": "Default shows a Worked for card before each reply. Reduced shows one small line for everything the agent did for each of your messages. Quiet keeps the agent's work out of the chat and puts a button for it with each reply's hover buttons.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "enum",
+      "default": "default",
+      "options": [
+        {
+          "label": "Default",
+          "value": "default"
+        },
+        {
+          "label": "Reduced",
+          "value": "reduced"
+        },
+        {
+          "label": "Quiet",
+          "value": "quiet"
+        }
+      ],
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatStatusInTranscript",
+      "title": "Status line in the chat",
+      "subtitle": "Show what the agent is doing as the last line of the chat instead of above the chat box.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatComposerMatchesTranscriptWidth",
+      "title": "Chat box matches transcript width",
+      "subtitle": "When Transcript width is set to a percentage, the chat box takes the same width instead of its standard width.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
+      "key": "chatMessageSpacing",
+      "title": "Message spacing",
+      "subtitle": "Compact puts messages closer together and keeps a small row under each message for its buttons, which show on hover.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "enum",
+      "default": "default",
+      "options": [
+        {
+          "label": "Default",
+          "value": "default"
+        },
+        {
+          "label": "Compact",
+          "value": "compact"
+        }
+      ],
+      "advanced": true,
       "agentWritable": true
     },
     {
@@ -470,6 +592,18 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "sidebarMergeRepositoryCopies",
+      "title": "Merge copies of the same repository",
+      "subtitle": "Show two folders on this computer that are copies of the same repository (the same git remote, opened at the same folder inside it) as one project, with the sessions of both. Turn off to give each folder its own project with only its own sessions. Copies on different computers are one project either way. The phone follows this. Shown while Separate by machine is off.",
+      "tab": "sidebar",
+      "tabTitle": "Sidebar & Sessions",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": true,
       "agentWritable": true
     },
     {
@@ -2767,6 +2901,30 @@
       "type": "boolean",
       "default": false,
       "agentWritable": true
+    },
+    {
+      "key": "grokWebStartPage",
+      "title": "Grok start page",
+      "subtitle": "The page the Grok view opens on, for every Grok login: grok.com, or a page of your own such as one of your Grok bots. Left empty, or not a web address, it opens grok.com. Shown while the Grok extension is on.",
+      "tab": "tools",
+      "tabTitle": "Files & Links",
+      "section": "browser",
+      "sectionTitle": "Browser",
+      "type": "string",
+      "default": "https://grok.com/",
+      "agentWritable": true
+    },
+    {
+      "key": "grokWebLogins",
+      "title": "Grok logins",
+      "subtitle": "The Grok logins the bar above the Grok page switches between, each with its own sign-in. Add one there or here; removing one signs it out. Shown while the Grok extension is on.",
+      "tab": "tools",
+      "tabTitle": "Files & Links",
+      "section": "browser",
+      "sectionTitle": "Browser",
+      "type": "json",
+      "default": [],
+      "agentWritable": false
     },
     {
       "key": "codeServerLinkVscodeUserConfig",
@@ -8591,7 +8749,7 @@
     {
       "key": "updatesUpdateAll",
       "title": "Update all",
-      "subtitle": "Updates everything listed that has an update: the agents you use, Claude Swap and Codex Swap, Fast Computer & Browser Use, SpaceO, the tools Ghostex installed, extensions, remote machines, the VS Code view and the Chromium runtime. Ghostex itself updates last and restarts once; your agents keep running, and each agent whose CLI changed restarts into the same chat once it finishes its turn.",
+      "subtitle": "Updates everything the shown machine lists that has an update (Update all machines, beside the machine picker, updates every connected machine): the agents you use, Claude Swap and Codex Swap, Fast Computer & Browser Use, SpaceO, the tools Ghostex installed, extensions, remote machines, the VS Code view and the Chromium runtime. Ghostex itself updates last and restarts once; your agents keep running, and each agent whose CLI changed restarts into the same chat once it finishes its turn.",
       "tab": "updates",
       "tabTitle": "Updates",
       "section": "updates",
@@ -11365,6 +11523,18 @@
       "agentWritable": true
     },
     {
+      "key": "grokWebHidden",
+      "title": "Turn off Grok",
+      "subtitle": "Turn off Grok: the Grok button in the sidebar and the Grok view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Built-in",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
       "key": "connectorsHidden",
       "title": "Turn off Connectors",
       "subtitle": "Turn off Connectors everywhere: the Connectors page in Settings, the apps your agents get and the ghostex connectors commands. Experimental, off by default; your sign-ins and connected apps are kept.",
@@ -11417,6 +11587,30 @@
       "key": "fasterRendering",
       "title": "Faster rendering",
       "subtitle": "Redraw only the parts of a window that changed, so Ghostex uses less CPU while agents stream and you scroll; it applies at once. Turn it off if part of a window stops updating. Experimental, off by default.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Experimental",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "chatToolCallLines",
+      "title": "Tool call lines",
+      "subtitle": "Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows. Settings > Chat > Agent work set to Reduced or Quiet replaces these lines. Experimental, off by default.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Experimental",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "securityLogsEnabled",
+      "title": "Security logs",
+      "subtitle": "Shows the Security page in Settings: the log of every sensitive action on this computer. The log is kept and its alerts arrive whether this is on or off. Experimental, off by default.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",

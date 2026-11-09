@@ -784,6 +784,19 @@ projects are in one list. A project on several computers (the same git remote,
 else the same folder name), or cloned twice on one computer, is one entry with
 the sessions of every copy mixed under it; a session on another computer shows
 that computer's name, and the project's header names the computers it is on.
+To keep two copies on one computer apart (say a folder copied to a new name),
+turn off Merge copies of the same repository (Settings > Sidebar & Sessions,
+`sidebarMergeRepositoryCopies`, on by default): each folder is then its own
+project with only its own sessions, and a copy on another computer still joins
+the one with its folder's name. The phone's project list follows the same
+switch.
+To put a project on a computer that doesn't have it yet, right-click it and
+pick Clone on… and the computer: Ghostex clones its git remote into that
+computer's usual projects folder (Settings > Projects > Default projects folder
+on this computer, the home folder on another one), using `<name>-2` and so on
+when the folder name is taken, shows the clone in the header's jobs button, and
+adds the project there. Computers that aren't connected are listed greyed, and
+a project with no git remote can't be cloned this way.
 Different folders of one repository (the repository itself and its subfolders,
 like `monorepo` and `monorepo/trading`) are always separate projects, each in
 its own Space, on one computer and across computers.
@@ -901,7 +914,7 @@ Right-click a session > Tag As" with a Clear filter button.
 
 Workspaces keep different parts of your work apart, for example one per company
 you work for and a Personal one. Workspaces is a built-in extension, off by
-default: turn it on with its switch in Settings > Extensions (Features). It also
+default: turn it on with its switch in Settings > Extensions > Built-in. It also
 brings the team backend (see Git and worktrees); Issues Workflow works without it.
 While it is off there is no workspace button, every window shows every project,
 the project menu has no Move to workspace, and the `ghostex workspace`, `team`
@@ -957,7 +970,7 @@ Delete moves its projects and Spaces to Personal. From the command line:
 its name or id; a project also by its folder).
 Spaces group projects or groups together; they are not saved filters, and a
 filter cannot be saved as a Space. Spaces is a built-in extension, off by
-default: turn it on with its switch in Settings > Extensions (Features). While
+default: turn it on with its switch in Settings > Extensions > Built-in. While
 it is off the sidebar has no Space row or Space menus, the Space settings are
 hidden, and a view limited to some Spaces shows everywhere; your Spaces are
 kept and come back when you turn it on (`sidebarSpacesEnabled`). Spaces follow the
@@ -1554,16 +1567,18 @@ On the computer, Ghostex saves pasted images at up to 32 MiB; it converts BMP
 and TIFF to PNG and reduces very large pictures when needed. OpenCode reduces large
 images further when sending them to its service. If an image still cannot fit,
 the chat box shows its size and the limit.
-Type `@` in the chat box to mention a project file, `$` to pick one of the
-agent's skills, and `+` (at the start or after a space) to mention another agent
+Type `/` in the chat box to pick one of the agent's skills (`$` opens the same
+list), `@` to mention a project file, and `+` (at the start or after a space) to mention another agent
 session of the same project: the list shows each session's logo, title and
 whether it is working, newest first, and narrows as you type. A picked session
 goes in as a mention, `[<title>](<Global Ref>)`, which the agent can pass to
-`ghostex agents send`. The `$` list holds the skills that agent's own CLI loads: its
+`ghostex agents send`. The skills list holds the skills that agent's own CLI loads: its
 home skills folders (Codex, Pi, Cursor, Gemini CLI and GitHub Copilot also read
-`~/.agents/skills`, and Cursor lists its own built-in skills too) and the skills folders inside the session's project. For Claude Code it also holds the skills and commands of its enabled plugins, named `plugin:name`. A picked skill shows as a pill in the way that agent invokes
-skills: `/skill-name` for Claude Code, which Claude receives as its slash
-command, and `$skill-name` for Codex.
+`~/.agents/skills`, and Cursor lists its own built-in skills too) and the skills folders inside the session's project. For Claude Code it also holds the skills and commands of its enabled plugins, named `plugin:name`, under Custom commands. A picked skill shows as a `/skill-name` pill with every agent, and each agent receives it the way it runs skills itself:
+`/skill-name` for Claude Code, Copilot, Cursor and Gemini CLI, `$skill-name` for
+Codex, `/skill:skill-name` for Pi and `@skill-name` for OpenCode. A skill name
+you type yourself (`/skill-name` or `$skill-name`, without picking it) becomes
+the same pill when you send, as long as the list has that skill.
 Skills, second from the bottom of the chat's More actions menu and of the ⋯ menu
 under a terminal view (on the computer and the phone), lists the Ghostex skills
 the session's agent has installed: in the chat a skill goes into the chat box as
@@ -1692,9 +1707,8 @@ until that computer has it, shows Recording, Transcribing and Transcribe again
 offers Transcribe previous.
 Settings: `dictateHotkeyMode`, `dictateMicrophone`, `dictateInsertSpacing` (this computer's own); Dictate's engine, language, dictionary, filler removal and AI polish are saved by each computer's gxserver and changed in Settings > Dictation (`ghostex settings open --tab dictation`). Hotkey: Dictate (`toggleDictation`).
 Read aloud speaks the agent's replies, so you can follow a session while you
-drive or walk. It is experimental and off by default: turn on Settings > About
-> Experimental > Enable Experimental Features, then switch on Read
-aloud in Settings > Extensions (Features). On the computer, hover an
+drive or walk. It is experimental and off by default: switch on Read aloud in
+Settings > Extensions > Experimental. On the computer, hover an
 agent's final reply and press Read aloud (the speaker, last before the time); on
 the reply being read it becomes Stop reading. Turn on Auto-read in the chat's
 More actions (⋯) menu to hear each finished reply of the chat you are looking
@@ -1721,7 +1735,7 @@ such notification: a reply being read keeps playing with the phone locked, and
 Stop reading is in the chat's ⋯ menu. If the phone cannot reach
 the computer for 5 minutes, Auto-read turns itself off and says so; if Ghostex
 on that computer is too old to stay connected in the background, the phone asks
-you to update it there (`showBetaFeatures`, `readAloudHidden`, `readAloudVoice`,
+you to update it there (`readAloudHidden`, `readAloudVoice`,
 `readAloudRate`).
 A long code block shows its first lines and scrolls inside the block; the arrows
 button in the block's header shows the whole block, and again collapses it.
@@ -1774,7 +1788,10 @@ Down on the last line to the end, Option+Up/Down moves the current line,
 Option+Shift+Up/Down duplicates it, Cmd+Shift+K deletes it, Cmd+L selects it,
 and with nothing selected Cmd+X cuts the whole line and Cmd+C copies it (Alt and
 Ctrl on Windows and Linux).
-Type `/` in the chat box to browse the agent's built-in commands. In Cursor
+Type `/` at the start of the chat box to browse the agent's skills, its custom
+and plugin commands, and its built-in commands, each under its own heading;
+later in a message, `/` lists only the skills (a `/` word that names no skill,
+such as a path, stays plain text). In Cursor
 chats, `/compact` summarizes the conversation to reduce context, just like
 `/summarize`.
 In Claude Code, Codex, and OpenCode chats, start a message with `!` to run a shell command
@@ -1940,8 +1957,8 @@ shell command it is running. The mode button switches Copilot between
 Interactive, Plan and Autopilot; the model pill shows the model Copilot reports
 (Auto and the model it routed to), and the model is changed in the CLI with
 `/model`, since which models you can pick depends on your Copilot plan. The `/`
-menu lists Copilot's own commands, and `$` lists your Copilot skills, which run
-as `/skill-name`. Sleeping and waking a Copilot session, Full Reload and Fork
+menu lists your Copilot skills and Copilot's own commands; skills run as
+`/skill-name`. Sleeping and waking a Copilot session, Full Reload and Fork
 keep the same conversation.
 Grok Build chats show the same cards. When Grok asks for permission (any mode
 but Always approve, which Grok starts in while Agent approvals is set to accept
@@ -2436,9 +2453,15 @@ to Detailed view switch in its Settings > Advanced.
 
 While the agent is working, its thinking shows as a closed "Thinking…" card with the newest finished line beside it, so it never pushes the rest of the chat away; click (or tap) the card to read the whole thought, which keeps the newest lines in view as they arrive, and click again to close it. The commands the thought runs stay in view below the card, and when the turn ends everything folds into its "Previous turn" card as before. This works the same for every agent, on the computer, the web and the phone.
 
-Show thinking in grey (Settings > Interface > Text, off by default) shows the agent's thinking in grey and its replies in the full text colour, so the two are easy to tell apart (`sessionChatMutedThinking`); the phone has the same switch in its Settings > Chat.
+Show thinking in grey (Settings > Interface > Text, off by default) shows the agent's thinking in grey, so it reads apart from the agent's replies, which Text strength sets how bright (`sessionChatMutedThinking`); the phone has the same switch in its Settings > Chat.
 
 Tool call cards (Settings > Chat, a preview, off by default) show each run of tool calls between two pieces of the agent's text as one card: its header stacks the tools' icons and says "Used 6 tools" with any failures and the time once done, and each call reads like a sentence that changes tense when it ends ("Reading main.rs", then "Read main.rs · 92 lines · 30ms"), with its result and time on the right. A failed call says what failed with the reason underneath, and calls to apps such as Linear, GitHub or Notion show the app's logo. The card stays one line while its calls run and after: while a call runs, that line says what it is doing in its own words ("Reading main.rs") with "+2 more" for the card's other calls, and once they are done it says "Used 6 tools". It never opens or folds by itself: click (or tap) it to see every call, and it opens on its own only when a call in it waits for your approval. Click a call to see its command and output (`chatToolCallCards`). The phone has its own switch for it in its Settings > Chat.
+
+Tool call lines (Settings > Extensions > Experimental, off by default; on the phone, Settings > Chat > Tool call lines) draw each run of an agent's tool calls as one quiet line with no box: its tools' icons, the running call's own words while it runs (with "+2 more" for the run's other calls), then the call's words for a run of one or "Used 3 tools" for a longer run, with a red "1 failed" count and the time. Click (or tap) the line to see its calls as rows, each in its tense with its result and time and the reason for a failure; Detailed view opens every line and Simple keeps them shut, and a call waiting for your approval opens its line. Opening a call shows its output's first 12 lines and a Show all button for the rest. A run that starts a background task, or reports one ending, stays as rows (`chatToolCallLines`).
+
+A call that is still running shows a light sweeping across its words in every look: the tool rows, Tool call cards and Tool call lines.
+
+Chat look (Settings > Chat > Advanced) has six opt-in settings for a quieter, Slack or Claude Code style chat. With all six at Default the chat looks as it always has. Message layout set to Left aligned starts every message at the same left edge instead of putting yours on the right. Your messages set to Band puts yours on a soft full-width strip and also left-aligns them. Agent work set to Reduced shows one small line for everything the agent did for each of your messages (how long it took, its tool calls and edited files), which you click open to see the steps, and Quiet keeps the agent's work out of the chat and puts a button for it (how long it took, how many tools and files) with each reply's hover buttons, which opens the steps under the reply, and while the agent works it shows only the status line until the reply is done; both replace the Worked for card and the tool call cards. Approvals, questions, sent-message cards, Workflow cards, pages, forms, charts and images always stay as they are. Status line in the chat shows what the agent is doing as the last line of the chat instead of above the chat box. Chat box matches transcript width makes the chat box as wide as the transcript when Transcript width is set to a percentage (computer only). Message spacing set to Compact puts messages closer together and keeps a small row under each message for its buttons (Copy, Edit, Rewind, the time), which show when you point at the message; on the phone that row shows the time (and the work button under Quiet). The phone follows the computer's choices for all but the chat box width, and picks up a changed look the next time a chat opens or catches up after a lost connection; the computer's Reduced or Quiet also turn off the phone's own Tool call cards (`chatMessageLayout`, `chatUserMessageStyle`, `chatAgentWorkStyle`, `chatStatusInTranscript`, `chatComposerMatchesTranscriptWidth`, `chatMessageSpacing`).
 
 Marked handovers: coordinators and their threads begin each part of
 the message they hand back with a marker. What happened comes first: ✅ Done, 🚀 Shipped,
@@ -2750,8 +2773,9 @@ choose Use draft to load it into your input, or Dismiss to keep what you have.
 
 Settings > Accounts saves Claude and Codex logins, and shows the usage of
 Cursor, Gemini and Copilot accounts. The left side has one **Add account**
-button over each provider's accounts, each with a usage bar (or a Reconnect
-button when a login stopped working), and the Claude and Codex rules; click one
+button over each provider's accounts, each with a usage bar (or "Sign in
+needed" when a login stopped working: its Reconnect is on the right), and the
+Claude and Codex rules; click one
 to see it on the right: its usage bars with reset times (labelled 5h, 7d and
 Fable), Name, **Use this account** (Automatically: Ghostex may start sessions on
 it and move sessions to it at a limit; Only when I pick it: automatic switching
@@ -2971,7 +2995,7 @@ For a session on a saved account it opens the same browser sign-in as that
 account's Reconnect in Settings (or skips it when the account's saved login
 has already worked again since the error), and when you finish, the session (and any
 other session on that account showing the same card) restarts on its own
-conversation, so you don't retype anything. The account shows Needs sign-in in
+conversation, so you don't retype anything. The account shows Sign in needed in
 Settings > Accounts and `ghostex accounts` from the moment a session reports
 the error, and new sessions and automatic switches skip it until it signs in
 again or one of its sessions answers again. A Claude session on its own login
@@ -3124,10 +3148,9 @@ the Acrylic, Plain blur or Off choice) is set on the Interface page only (Settin
 Transparency). Ghostty's own `background-opacity`
 and `background-blur` lines in the terminal config do not change Ghostex's panes.
 
-On macOS, Custom shaders (experimental) runs the `custom-shader` files from
+On macOS, Terminal shaders runs the `custom-shader` files from
 Ghostex's terminal config over its terminal panes, in the order the config lists them.
-Turn on Enable Experimental Features (Settings > About > Experimental) to see it at the bottom of
-the Terminal section. While it is on, terminals use the background color and
+Turn it on in Settings > Extensions > Experimental (`terminalShadersEnabled`). While it is on, terminals use the background color and
 opacity from Ghostex's terminal config, so Terminal background and its color are greyed
 out. Shader animation follows Ghostty's `custom-shader-animation`. Turn the switch
 off to go back to normal rendering; running sessions keep going. If a shader file
@@ -3280,7 +3303,7 @@ project one. The phone lists Global Actions only from a computer whose Ghostex
 offers them (update Ghostex on an older computer) and only while Actions is
 on. From a terminal: `ghostex run-action <id> --project-id <id> --scope global`.
 Actions is a built-in extension, off by default: turn it on with its switch in
-Settings > Extensions (Features). While it is off the Start button, the Actions
+Settings > Extensions > Built-in. While it is off the Start button, the Actions
 page in Settings, Actions pinned to project rows, the Start Action hotkeys and
 Quick Access's Action rows are gone, and `ghostex run-action`, `run-command`,
 `save-command` and `click-button command` say Actions is turned off. Your saved
@@ -4044,9 +4067,9 @@ build.
 
 Setting: `botAutomationsHidden` (on by default, which keeps the feed hidden).
 
-## GBots
+## GBots (beta, off by default)
 
-GBots are your own team of bots, led by Chief of Staff in Main Hub. Each GBot
+GBots (beta) are your own team of bots, led by Chief of Staff in Main Hub. Each GBot
 has a name, a role, standing instructions, an icon and a colour, and a memory
 it keeps in every chat; its chats run on your own Claude Code or Codex. Turn
 them on in Settings > Extensions, on the Experimental tab: they are off by
@@ -4767,7 +4790,7 @@ sessions, so any client can control agents on any machine.
   coordinator's threads on a computer that runs only gxserver report back like
   threads here. Connecting is the permission: an agent that can
   type into a session on the other computer can run commands there, as you
-  could. Turn **Agent access** off in the machine's Edit dialog to stop agents
+  could. Turn **Agent access** off, under Advanced in the machine's Edit dialog, to stop agents
   on either computer from using the other.
   Files and folders you drop onto a remote terminal or add with its attach
   (paperclip) button are uploaded to that computer first, so the terminal gets
@@ -4793,7 +4816,12 @@ sessions, so any client can control agents on any machine.
   Remote localhost links open in the built-in Browser through that computer,
   even when ordinary web links are set to open in your external browser.
   When a machine cannot connect, its tab's cloud turns red and its list says
-  why, with Reconnect and Remote Settings buttons. Ghostex keeps retrying a
+  why in one line (hover it for the rest), with Reconnect and Details buttons.
+  Details opens the machine in Settings > Remote, where its tile shows a short
+  status with a red dot (Setup failed, Can't reach, Sign-in refused) and its
+  sheet starts with the whole reason and Reconnect, Reinstall on <machine> (for
+  a Ghostex server Ghostex installed there; it replaces it even at the same
+  version) and Copy details, for a bug report. Ghostex keeps retrying a
   dropped connection, but a rejected username or password is not retried (so
   the account is not locked out); saving a new SSH password reconnects it.
   A machine you reach through Easy Connect from before 11.1 that the other
@@ -5142,7 +5170,7 @@ The link's traffic goes through Ghostex's share relay, locked end to end with th
 
 Ghostex keeps a security log of every sensitive action on your computer: pairing a phone (and failed pairing attempts), showing a pairing code, Easy Connect changes (on or off, its allow-list, ports and relay), sharing a chat in Collab or changing how a share works, letting a connected computer's agents in, Autopilot answering an approval or being allowed to do more, adding a GBot, turning a GBot's Bot API on or off or giving it a new key, a playbook, skill or agent command arriving by settings sync, and any attempt to change a setting only you can change. Each entry says what happened, who asked (this computer's app or an agent, naming the session it says it runs in, a paired phone, another computer, Autopilot), when, and how it ended. Each one also shows in the notification bell and as a notification on your paired phones, so you see it when it happens; clicking it opens Settings > Security.
 
-Settings > Security lists the entries, newest first. Every entry is chained to the one before it, so if something edits or removes an entry after Ghostex wrote it, the page says "The security log was changed" and where. `ghostex security log` shows the same list in a terminal (`--last <n>`, `--json`) and exits with code 2 when the log was changed.
+Settings > Security is hidden until you turn on Settings > Extensions > Experimental > Security logs; the log is kept and its alerts arrive either way, and a notification's "open the log" opens the page even while it is hidden. Once the switch is on, Settings > Security lists the entries, newest first. Every entry is chained to the one before it, so if something edits or removes an entry after Ghostex wrote it, the page says "The security log was changed" and where. `ghostex security log` shows the same list in a terminal (`--last <n>`, `--json`) and exits with code 2 when the log was changed.
 
 Agents and the `ghostex` CLI can't change settings that only you may change (Remote, Accounts, keys and tokens), even through `ghostex actions`; the attempt is refused and logged. Easy Connect serves only SSH and Ghostex itself, never other ports. Private file links never open keys (such as `~/.ssh`), Ghostex's own data, or a project's hidden files like `.env`.
 
@@ -5150,7 +5178,7 @@ After updating to 11.1, Ghostex shows a one-time notice: Ghostex went through a 
 
 ## Approvals (sensitive changes need your Touch ID, Windows Hello or phone)
 
-Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a GBot (Chief of Staff adds one without asking while Chief of Staff may add GBots on its own is on), or change a setting that loosens security (the Sync page's, for example), the change waits and an "Approval needed" notice opens in the middle of the Ghostex window on your computer, saying who asked and on which computer, with Deny and Approve. Enter never approves; Escape, Close or the corner X put it aside, still waiting, behind an "Approvals waiting" pill in the work area header: click the pill (or wait for the next notice) to bring it back. When several wait, they show one at a time ("1 of 3"). Agents can message, start sessions in, type into, stop and answer the permission prompts of sessions in any project without asking, as can the `ghostex` CLI and agents on your connected computers (within what you let that computer do). Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows, or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. Adding, editing, hiding or removing a computer that this one connects to (Settings > Remote, Remote machines), saving its SSH password, and changing this computer's short name never ask: they let no one in. An approval is good for that one change only and lapses after 10 minutes unanswered (a connected computer's request waits a day, as one card whoever asks); a connected computer, once approved, stays connected for 30 days. Starting an agent with approvals off ("accept all") when your own setting for that agent doesn't asks every time. Starting a Cloud Box, letting Cloud Boxes use one of your agent logins, and changing what a project's boxes get ask when an agent does them, and so does connecting this computer to a team backend (the last step of `ghostex team deploy`).
+Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a GBot (Chief of Staff adds one without asking while Chief of Staff may add GBots on its own is on), or change a setting that loosens security (the Sync page's, for example), the change waits and an "Approval needed" notice opens in the middle of the Ghostex window on your computer, saying who asked and on which computer, with Deny and Approve. Enter never approves; Escape, Close or the corner X put it aside, still waiting, behind an "Approvals waiting" pill in the work area header: click the pill (or wait for the next notice) to bring it back. When several wait, they show one at a time ("1 of 3"). Agents can message, start sessions in, type into, stop and answer the permission prompts of sessions in any project without asking, as can the `ghostex` CLI and agents on your connected computers (within what you let that computer do). Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows (or your Windows password where Windows Hello isn't set up), or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. Adding, editing, hiding or removing a computer that this one connects to (Settings > Remote, Remote machines), saving its SSH password, and changing this computer's short name never ask: they let no one in. An approval is good for that one change only and lapses after 10 minutes unanswered (a connected computer's request waits a day, as one card whoever asks); a connected computer, once approved, stays connected for 30 days. Starting an agent with approvals off ("accept all") when your own setting for that agent doesn't asks every time. Starting a Cloud Box, letting Cloud Boxes use one of your agent logins, and changing what a project's boxes get ask when an agent does them, and so does connecting this computer to a team backend (the last step of `ghostex team deploy`).
 
 Some things only you can do, in Settings, and agents can't even ask for them: installing an extension or turning one on and giving it permissions (Settings > Extensions), adding, changing or removing a secret provider (Settings > Secrets), joining a team, making invites, the team's Linear keys and its Slack flow (Settings > Workspaces), and the settings that loosen security: Agent approvals accept all, Workspaces, Cloud Boxes' Start boxes from your phone, Trust project folders automatically, Connectors, the custom commands Ghostex runs (Custom Title Command, Global worktree command, Custom editor command), Paste protection and Bot automations. An agent asked to do one of these explains it and points you to the page. This includes the `ghostex` CLI in your own terminal, which Ghostex can't tell apart from an agent. Turning things off never asks. Every request, approval and denial is in Settings > Security's log. Each session now gets its own key to Ghostex that ends with the session, and the shared key file only gives agent-level access. The keys that approve are kept in macOS Keychain, Windows Credential Manager or the Linux Secret Service; on Windows and Linux other programs running as you can read those, so the protection there is weaker than on macOS. The CLI waits for your answer (`--no-wait` returns at once).
 
@@ -5515,8 +5543,14 @@ Repository file links identify the repository; unambiguous branch links
 also prefill the branch. Registered paths offer Open existing project, and
 files inside a Git repository offer its root. Press Enter to continue,
 choose a destination (on a Windows PowerShell machine the folder list starts at
-your drives), and review before Clone & Add. While it clones, the dialog shows
-Git's progress and a Cancel clone link.
+your drives), and review before Clone & Add. Clone & Add closes the dialog and
+the clone carries on in the background: a button left of the voice button in
+the work area header shows it ("Cloning 14%", the full line on hover), and a
+click opens the list of running jobs with each one's progress and Cancel. The
+project shows in the sidebar when the clone finishes, with a short "Repository
+cloned" message; a clone that fails stays in that list with the reason, Retry
+and a close button. (A clone started from Handoff / Export still runs in the
+dialog, which waits for it.)
 
 Project headers show the branch and diff stats; the header’s Commit (Git) menu offers
 commit, sync with main, PR review by a prompt agent, and related actions with
@@ -5686,7 +5720,9 @@ and issue links you write yourself are suggested. Suggested shows the five
 newest; when there are more, Show all under them lists the rest, and Show fewer folds
 them again. A suggestion's × (click it twice, like a linked link's) dismisses it for
 good: it moves under Removed, where Restore puts it back under Suggested, and a Linear
-ticket you later type yourself still links. The + in the list's header (Add on the
+ticket you later type yourself still links. The × on the Suggested header removes
+every suggestion the same way (the first click turns it red with Remove all?, the
+second removes them; on the phone, tap it twice). The + in the list's header (Add on the
 phone) links one by hand: type `SPX-123`, `#123` or `owner/repo#123`, or paste a
 GitHub or Linear link, and press Enter; Ghostex asks GitHub whether a bare number is
 a PR or an issue, and says so under the field when it can't read it or GitHub doesn't
@@ -5882,43 +5918,52 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   opens the Extensions page. Under it, a small chevron row (*N extension
   pages*) folds and unfolds the add-on pages: Voice agent, Workspaces, Cloud
   Boxes, Connectors, Actions, Open In, OS Integration and Debugging, each only
-  while it is shown. Connectors, OS Integration and Debugging are built-in
-  extensions, on by default, with switches in the Extensions page's Features; the
-  Connectors and OS Integration pages and cards also need Enable Experimental
-  Features (`connectorsHidden`, `osIntegrationHidden`, `debuggingHidden`). **Show
+  while it is shown. Debugging is a built-in extension, on by default, with its
+  switch in the Extensions page's Built-in tab; Connectors and OS Integration are
+  experimental, off by default, with switches in its Experimental tab
+  (`connectorsHidden`, `osIntegrationHidden`, `debuggingHidden`). **Show
   Advanced** (its switch is in the Settings sidebar) never hides a page: it only
   shows or hides rows inside pages. The pages start folded and Settings remembers whether you left
   them open; a search opens them and lists only the pages that match, and opening
   one of them from elsewhere (a link, a menu, a turned-off message) opens
   them too. While they are folded over the page you are on, the chevron row is
   highlighted.
-- Settings > Extensions shows every extension as a card, three to a row: the
-  built-in ones, grouped by category (Features, Project websites, Code and
-  files, Planning and automation, Header buttons, Menus and panels, Shared
-  runtime),
-  then Get more (installed extensions first, then the audited
-  third-party ones you can install), then Your views (custom URLs, Linear,
-  GitHub Issues, dev server commands, HTML reports). One filter bar above them
-  searches all of them at once and filters by source, type, and category; the
-  count beside it says how many are shown. Each card's switch turns it on or
-  off, and its actions (Edit, Details, Remove, Reinstall) appear when you hover
+- Settings > Extensions is in tabs: **Built-in** (parts of Ghostex you can
+  switch off), **Views** (project websites, code and files, planning, the view
+  order with Arrange views, and your own views), **Panels & menus** (header
+  buttons and ⋯ menu entries), **Installed** (extensions you installed, Install
+  from folder…, and Collab), **Community** (the audited third-party extensions
+  you can install) and **Experimental**. Each tab shows its count, and Settings
+  reopens on the tab you had open. Every extension is a small tile, two to a
+  row: its icon, its name and one line of what it does (hover the tile and point
+  at the (i) beside the name to read all of it). The search box at the top of
+  Settings searches every tab at once: while you type, the page lists the matches
+  of every tab and each tab shows how many it has. Each tile's switch turns it on
+  or off, and its actions (Edit, Details, Remove, Reinstall) appear when you hover
   it. Extension commands use the active local project's folder unless the
   extension supplies a folder; relative folders are resolved inside the active
   project. Installing or updating a third-party extension first lists what it
   asks for (permissions, a background process, a remote website) and grants only
   that; an update always shows the list again, and permissions you removed stay
   removed when it updates.
-  Features are whole parts of Ghostex you can switch off to keep the app
+  Experimental holds features that are still early, each off until you turn it
+  on: Main Hub (beta), GBots (beta), Read aloud, Connectors, OS Integration, Keep Awake
+  (macOS), All Automations, Terminal shaders (macOS), Faster rendering, Tool call lines and
+  Security logs. They replace the single
+  Enable Experimental Features switch; anyone who had it on keeps each of these
+  as it was.
+  Built-in holds whole parts of Ghostex you can switch off to keep the app
   simple: Actions (off by default), Open In (on by default), Spaces (off by
   default), Cloud Boxes (on by default), Workspaces (off by default; it brings workspaces and the team's
-  Slack flow), Read aloud (off by default, and
-  listed only while Enable Experimental Features is on) and the Session details
-  panel (beta, on by default). Turning one off removes it everywhere at once (its header button,
+  Slack flow) and the Session details panel (beta, on by default). Turning one off removes it everywhere at once (its header button,
   Settings pages and rows, hotkeys, Quick Access rows and menus) and turning it
   back on restores everything you had set up. Settings: `actionsHidden`,
   `openInTitlebarButtonHidden`, `sidebarSpacesEnabled`, `cloudBoxesEnabled`,
-  `workspacesHidden`, `readAloudHidden`, `sessionDetailsPanelHidden`.
-  The Edit (pencil) button on a card chooses where that view, header button, or
+  `workspacesHidden`, `sessionDetailsPanelHidden`; Experimental: `mainHubHidden`,
+  `gbotsEnabled`, `readAloudHidden`, `connectorsHidden`, `osIntegrationHidden`,
+  `keepAwakeEnabled`, `allAutomationsEnabled`, `terminalShadersEnabled`, `fasterRendering`,
+  `chatToolCallLines`, `securityLogsEnabled`.
+  The Edit (pencil) button on a tile chooses where that view, header button, or
   extension appears. Pick **Everywhere** or **Only in selected places**, then
   choose projects and spaces from the dropdown next to **Except in** (or
   **Show in**), so a view can be hidden in one project without listing every
@@ -6003,19 +6048,19 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   run only for local projects. Only you install extensions, in Settings >
   Extensions, which shows what each one may do first; agents and the CLI can't
   install one, turn one on or give it a permission. To install one you made or downloaded
-  yourself, use **Install from folder…** at the top of Get more: pick its folder,
+  yourself, use **Install from folder…** on the Extensions page's Installed tab: pick its folder,
   then tick each permission you give it (nothing is ticked at first; it gets nothing
   you leave unticked) and Install. CLI: `ghostex extensions list`,
   `ghostex extensions state <id> --set pinned=true`.
 - **Claude** is a built-in extension, off by default: turn it on with its switch
-  in Settings > Extensions (Features) to use claude.ai inside Ghostex.
-  It adds a Claude button (grey, like its neighbours) to the sidebar's top row, next to the Issues button.
+  in Settings > Extensions > Built-in to use claude.ai inside Ghostex.
+  It adds a Claude button (grey, like its neighbours) to the sidebar's bottom bar, right of Commands.
   Clicking it turns Claude on: claude.ai takes the whole window, from any
   project, and the sidebar, the side panel and the Commands pane are hidden.
-  The sidebar's top buttons (Toggle sidebar, the Agents Panel toggle, Claude,
-  Search, the bell and the menu) stay where they are, so the Claude button is
-  in the same spot to turn it off, and the header no longer names the project
-  and session you were in.
+  The sidebar's top buttons (Toggle sidebar, the Agents Panel toggle, Search,
+  the bell and the menu) stay where they are, with the Claude button among them
+  while Claude is on so you can turn it off there, and the header no longer
+  names the project and session you were in.
   Claude never gets a tab in the side panel; you can still open the side panel
   beside it (the Browser and every other view work there as usual), and bring
   the Commands pane back with its usual button and shortcut. Showing the
@@ -6040,8 +6085,27 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   signed in as a different email than its account offers **Sign in as** the
   right account. With no saved Claude account, the page uses one shared
   sign-in. Setting: `claudeWebHidden`.
+- **Grok** is a built-in extension, off by default: turn it on with its switch
+  in Settings > Extensions > Built-in to use grok.com inside Ghostex. It adds a
+  Grok button right of the Claude button in the sidebar's bottom bar, and works like Claude:
+  clicking it turns Grok on and grok.com takes the whole window, the same way
+  (the hidden panels, the header, showing the sidebar or opening a session
+  turns it off). With Claude on, clicking Grok switches to Grok in place, and
+  back. Grok keeps several logins apart: each login has its own browser
+  profile, so its grok.com sign-in, cookies and history never reach another
+  login's. The bar above the page shows the login you are on: click it to
+  switch logins, **Add another login** (a new, signed-out login named Grok 2,
+  Grok 3 and so on), or **Manage logins…**, which opens Settings > Files &
+  Links > Browser, where **Grok logins** renames and removes them (removing one
+  signs it out). Ghostex remembers the login you picked. The bar's house button
+  goes back to the start page and the arrow reloads the page. The page opens on
+  grok.com; to open a page of your own instead, such as one of your Grok bots,
+  put its address in **Grok start page** on the same Settings page (one start
+  page for every login; left empty, it opens grok.com). Ghostex never reads
+  the Grok page, so the bar shows no signed-in dot or email. Settings:
+  `grokWebHidden`, `grokWebStartPage`, `grokWebLogins`.
 - **Session notes** is a built-in extension, off by default: turn it on with its
-  switch in Settings > Extensions (Features) to attach a note to an agent
+  switch in Settings > Extensions > Built-in to attach a note to an agent
   conversation, such as what to do next when you come back to it. Then
   right-click a session and choose **Note** (or use its hover button, or
   Option+Cmd+N on macOS for the focused session), or pick **Session note** in the chat's
@@ -6055,7 +6119,7 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   save --session-id <id> --note '<text>'` (only while it is on).
 - Settings > Open In chooses which apps appear on session and project Open In
   menus and adds custom open targets. Open In is a built-in extension, on by
-  default: switching it off in Settings > Extensions (Features) removes the
+  default: switching it off in Settings > Extensions > Built-in removes the
   header's Open button, the Open In page and the Open In rows in Quick Access
   and menus, and keeps your apps and custom targets for when you turn it back
   on (`openInTitlebarButtonHidden`).
@@ -6155,11 +6219,10 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   installs Node.js first on its own.
 - Connectors link a workspace to your apps (Gmail, Google Calendar, Slack,
   Notion, GitHub, Linear, Outlook and many more) through Composio. Connectors
-  is experimental: turn on Settings > About > Experimental >
-  Enable Experimental Features (or run `ghostex settings set showBetaFeatures
-  true`) to use it. It is also a built-in extension, on by default: switching
-  Connectors off in Settings > Extensions (or `ghostex settings set
-  connectorsHidden true`) removes its page and its apps from agents, and
+  is experimental and off by default: switch it on in Settings > Extensions >
+  Experimental (or run `ghostex settings set connectorsHidden false`). Switching
+  it off again (`ghostex settings set connectorsHidden true`) removes its page
+  and its apps from agents, and
   `ghostex connectors` refuses until you turn it back on; your sign-ins and
   connected apps are kept. If `ghostex connectors` is still not in `ghostex
   --help` with both on, this version of Ghostex does not have Connectors yet. Sign the
@@ -6183,8 +6246,8 @@ backend: `ghostex team deploy|identity|status|ping|leave`. Slack:
   anything that would send, post, create, edit or delete is refused.
   `ghostex connectors sign-out` removes a workspace's sign-in. Every command
   takes `--workspace <name>`, and `ghostex connectors help` lists them all,
-  so an agent can set connectors up for you. Settings › Connectors (shown while Enable
-  Experimental Features and the Connectors extension are on) does the same with buttons, one section per
+  so an agent can set connectors up for you. Settings › Connectors (shown while
+  Connectors is on) does the same with buttons, one section per
   workspace: the Composio sign-in and apps, Executor and its apps, the
   Ask/Allow/Never rules and the `gh` and `gws` sign-ins.
 - Agents use connectors on their own: every Claude and Codex session that
@@ -6343,32 +6406,44 @@ one Up to date card below. The filter at the top shows only Ghostex, Agents,
 Tools or Extensions. Check now reads every version again (otherwise every half
 hour).
 
-**Every connected computer.** With remote machines connected, the page is
-grouped by computer: this computer first, then each remote machine (headless
-Linux boxes too), each with its own cards, Up to date pills and Not installed
-part, and that machine's Ghostex at the top of its group. Update, Retry,
-Dismiss and Update automatically on another computer's card run on that
-computer. A computer that isn't connected shows "Offline"; one whose Ghostex is
-too old to list its updates shows "Update Ghostex on <name> to see its
-updates" (update its Ghostex from its card or Settings > Remote, then its list
-appears).
+**Pick a machine.** Once you have saved a remote machine, a Machine picker sits
+at the top of the page, the same one Settings > Agents, Integrations and Voice
+agent use (picking a machine on one of those pages picks it on all of them
+until Settings closes). The page then shows that machine's cards, Up to date
+pills and Not installed part, with its Ghostex at the top; Update, Retry,
+Dismiss and Update automatically run on that machine. A machine that isn't
+connected is listed with why (Can't connect, Turned off) and can't be picked;
+one that drops while picked shows "Offline", and one whose Ghostex is too old to
+list its updates shows "Update Ghostex on <name> to see its updates" (update its
+Ghostex from Settings > Remote, then its list appears).
 
-**Not installed.** Under each computer's updates, a quieter Not installed part
+**Update all machines**, beside the picker, runs every update on every
+connected machine at once, each through that machine's own Ghostex. A line per
+machine under the picker then says how it went: Updating 2 of 3…, Updated 3,
+which item failed and why, or Skipped: not connected.
+
+**Not installed.** Under the machine's updates, a quieter Not installed part
 lists the agent CLIs, Claude Swap or Codex Swap and the tools Ghostex can
 install there but that aren't installed yet. Click one to install it on that
-computer, the same way Settings > Agents, Accounts or Integrations > Tools would
-(an agent CLI with the first install method that works there). Nothing in Not
-installed ever installs by itself or through Update all, and it is never counted
-in the ↑ button. A failed install stays in the list with its reason and Retry.
+machine (point at it: "Install <name>"), the same way Settings > Agents,
+Accounts or Integrations > Tools would (an agent CLI with the first install
+method that works there); the pill shows a spinner while it installs, then
+moves to Up to date. Nothing in Not installed ever installs by itself or
+through Update all, and it is never counted in the ↑ button. A failed install
+stays in the list with its reason and Retry.
 
-**Update all** runs every update the page lists, each the way its own Settings
-row does (an agent CLI the way it was installed, Claude Swap through uv or
-whatever installed it, tools through Settings > Integrations' installer, a
-remote machine with its own updater). Ghostex itself updates last and restarts
-once; your agents keep running. Every agent whose CLI changed restarts into the
-same chat as soon as it finishes its turn, so it runs the new version without
-losing the conversation (a session you put to sleep stays asleep). Droid's
-updater stops running Droid sessions, so Ghostex waits until they are idle.
+**Update all**, at the top of the updates, runs every update the shown machine
+lists, each the way its own Settings row does (an agent CLI the way it was
+installed, Claude Swap through uv or whatever installed it, tools through
+Settings > Integrations' installer, a remote machine with its own updater).
+Ghostex itself updates last and restarts once; your agents keep running. Every
+agent whose CLI changed restarts into the same chat as soon as it finishes its
+turn, so it runs the new version without losing the conversation (a session
+you put to sleep stays asleep). Droid's updater stops running Droid sessions,
+so Ghostex waits until they are idle.
+
+A version that is really a build id (the VS Code view's code-server) shows no
+number on its pill; point at the pill to see it whole.
 
 Each card has an **Update automatically** switch, off by default: Ghostex then
 installs that item's updates by itself, only while it isn't in use (an agent
@@ -6543,12 +6618,12 @@ Windows' own rounding.
 Behind the glass (on macOS, Windows and Linux) is four cards: Desktop and windows (the default) shows everything behind Ghostex; on macOS, in full screen (where nothing sits behind the window) it shows your desktop wallpaper blurred and tinted the same way, and leaving full screen shows everything behind Ghostex again (a solid color wallpaper stays black in full screen). Wallpaper only shows just your desktop wallpaper, so other windows never show through; built-in wallpapers such as Sequoia show as a still picture of that wallpaper, and a solid color wallpaper shows everything behind the window. Picture shows a picture you choose instead, one for dark mode and one for light mode, side by side with Choose and Clear buttons; a mode with no picture shows everything behind the window. Live shows something moving behind the glass, chosen for dark mode and for light mode (only dark mode with Transparency set to Dark only): one of eight calm animations drawn in your theme's colours (Aurora, Ink, Drift, Nebula, Silk, Bokeh, Waves, Mesh), so switching themes or Colourfulness recolours it at once, or, on macOS and Linux, Your video, a .mov, .mp4 or .m4v file you choose, which plays muted, looping and blurred (a mode set to Your video with no file shows everything behind the window). On Windows, Live pauses when Show animations is off in Windows Settings > Accessibility > Visual effects (showing a still frame) and in battery saver. Speed sets how fast the animation moves (a quarter of its pace to twice as fast) and Brightness how bright it glows (60% by default, a soft glow that shows through the tints; every animation is about as bright as the others at the same setting); your own video plays as it is. An animation loops every two minutes without a seam, and changing the animation, theme or brightness, or switching between an animation and your video, fades rather than jumping. Nothing is downloaded. Live pauses whenever Ghostex is in the background, hidden or minimized, while the display sleeps and in Low Power Mode; Reduce Motion shows a still frame; and Play only when plugged in (on by default) pauses it on battery. For Wallpaper, Picture and Your video, Picture position picks Moves with the window (the default: the picture covers the window and moves with it) or Stays with the desktop (the picture stays put while the window moves over it, and can trail the window while you drag it) (`windowGlassSource`, `windowGlassImagePlacement`, `windowGlassImageDark`, `windowGlassImageLight`, `windowGlassLiveStyleDark`, `windowGlassLiveStyleLight`, `windowGlassVideoDark`, `windowGlassVideoLight`, `windowGlassLiveSpeed`, `windowGlassLiveBrightness`, `windowGlassVideoOnlyOnPower`).
 On Linux, transparency works on Xorg and Wayland desktops (the desktop app currently uses XWayland for its embedded pages). Desktop and windows uses your compositor's blur: on Hyprland, keep background blur enabled; on Xorg, run a compositor with transparency and blur support. The compositor controls the blur's strength. Picture and Live animations work without compositor blur. Wallpaper only reads the picture reported by Hyprpaper, swww/awww, GNOME, Cinnamon, MATE or a single-screen Plasma desktop; when no readable picture is available it shows Desktop and windows. Stays with the desktop works on X11 and Hyprland; other native Wayland compositors cannot report the position needed for this mode, so use Moves with the window. Your video requires FFmpeg (included as a Linux package dependency). Live respects battery power, the power-saver profile, and disabled desktop animations (`windowGlass`, `windowGlassSource`, `windowGlassImagePlacement`, `windowGlassVideoOnlyOnPower`).
 While glass is on, four sliders tune it, each in dark mode and in light mode: Sidebar tint and Work area tint set how much of the desktop each area hides, independently, so either can be the darker one; lower shows more of your desktop.
-Keep Awake (Power)
-prevents sleep while agents work.
-Advanced holds Enable Experimental Features and Faster rendering (off by default), which
-redraws only the parts of a window that changed so Ghostex uses less CPU while agents stream
-and you scroll; it applies at once, and turning it off brings back the usual drawing if part
-of a window ever stops updating (`fasterRendering`). The separate Debugging page sits
+Keep Awake (Power, macOS) prevents sleep while agents work; it is experimental:
+switch it on in Settings > Extensions > Experimental (`keepAwakeEnabled`).
+Faster rendering (Settings > Extensions > Experimental, off by default) redraws only the
+parts of a window that changed so Ghostex uses less CPU while agents stream and you scroll; it
+applies at once, and turning it off brings back the usual drawing if part of a window ever
+stops updating (`fasterRendering`). The separate Debugging page sits
 in the Settings sidebar's Extensions group and is listed
 while its Debugging extension is on (it is by default;
 switch it off in Settings > Extensions, or `debuggingHidden`, to drop the page). It starts with Show debug UI controls.
@@ -6567,7 +6642,7 @@ Related settings: `sidebarTheme`, `darkThemePreset`, `lightThemePreset`,
 `customSidebarTitlebarLightBackgroundLightnessPercent`, `customSidebarTitlebarLightBackgroundTintColor`,
 `windowGlass`, `windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`,
 `windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`, `themeSidebarContrast`, `themeWorkAreaContrast`, `showActivePaneOutline`, `workAreaFrame`, the `keepAwake*` rows,
-`showBetaFeatures`, `debuggingMode`.
+`debuggingMode`.
 
 ### When your computer starts (start at login, resume after a restart)
 

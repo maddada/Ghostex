@@ -13,7 +13,7 @@ pub(crate) fn page() -> Page {
                 "updates",
                 "Updates",
                 vec![
-                    row("updatesUpdateAll", "Update all", "Updates everything listed that has an update: the agents you use, Claude Swap and Codex Swap, Fast Computer & Browser Use, SpaceO, the tools Ghostex installed, extensions, remote machines, the VS Code view and the Chromium runtime. Ghostex itself updates last and restarts once; your agents keep running, and each agent whose CLI changed restarts into the same chat once it finishes its turn."),
+                    row("updatesUpdateAll", "Update all", "Updates everything the shown machine lists that has an update (Update all machines, beside the machine picker, updates every connected machine): the agents you use, Claude Swap and Codex Swap, Fast Computer & Browser Use, SpaceO, the tools Ghostex installed, extensions, remote machines, the VS Code view and the Chromium runtime. Ghostex itself updates last and restarts once; your agents keep running, and each agent whose CLI changed restarts into the same chat once it finishes its turn."),
                     row("updatesAutoUpdate", "Update automatically", "A switch on each card, off by default: Ghostex installs that item's updates by itself, only while it isn't in use (an agent while none of its sessions is working, the other tools while no agent is working). On Ghostex's own card it is Keep this machine up to date."),
                     row("updatesCheckNow", "Check now", "Checks every item for a newer version now instead of waiting for the next check (every half hour)."),
                 ],
