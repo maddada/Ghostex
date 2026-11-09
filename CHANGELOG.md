@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **A Claude chat on a Claude Swap account reopens again** (#521): Ghostex now finds the conversation in that account's own history. A chat whose conversation really is gone says so and offers Start fresh, which starts a new conversation in the same session instead of leaving the input box stuck.
 - **Settings > Security shows only while Extensions > Experimental > Security logs is on (off by default):** the page leaves the rail and the search, while the log keeps being written, its alerts and `ghostex security log` work as before, and a link to the page (the bell's "open the log") still opens it
 - **Grok, a new built-in extension (off by default):** a Grok button beside Claude's opens grok.com inside Ghostex, with several Grok logins kept apart (each signed in on its own) and a start page you can set in Settings > Files & Links.
 - **File and folder paths in Ghostex's own screens open in Files when clicked** (Settings pages and their descriptions, dialogs, chat folders): `~` expands to your home folder, a right-click offers Copy path and Reveal in Finder, and a folder outside the project opens in your file manager.
