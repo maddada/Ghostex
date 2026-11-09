@@ -32,6 +32,9 @@ fn with_repository<T>(
     work(&db, &repository)
 }
 
+/// How long a reopen waits for the thread's session to wake before answering.
+const REOPEN_WAKE_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
+
 /// Marks a thread done and closes its session (`keepOpen` parks it instead), or reopens it,
 /// waking its session first when it is not running.
 ///
@@ -88,19 +91,39 @@ pub(crate) async fn handle_resolve_coordinator_thread_http(
     // coordinator as closed and marked done again, and a sleeping one would leave a message waiting.
     // CDXC:Coordinators 2026-10-12 WHY: a sleeping thread is woken too; reopen used to wake only a closed (`stopped`) one, so it answered "Reopened" and left a sleeping thread asleep with a message waiting for it.
     let resumed = !resolved && lifecycle != "running";
+    let mut resuming = false;
     if resumed {
-        let woke = handle_zmx_lifecycle_http(
-            state,
-            "/api/wakeSession".to_string(),
-            uuid::Uuid::new_v4().to_string(),
-            &session_body,
-        )
-        .await;
-        if !woke.response.status().is_success() {
-            let detail = routed_failure(woke).await;
-            return fail(DomainStateError::bad_request(format!(
-                "Could not resume the thread's session: {detail}. It was not reopened."
-            )));
+        // CDXC:Coordinators 2026-11-10 WHY: waking a closed thread resumes its agent, which can take
+        // longer than a client waits for this answer: `ghostex coordinator reopen` gave up after 15
+        // seconds and the thread stayed done (GitHub #531). A wake that fails quickly still refuses
+        // the reopen; one still going after `REOPEN_WAKE_WAIT` finishes on its own while the thread
+        // is reopened, and the supervisor's grace for a closed session (coordinator_runtime.rs,
+        // `CLOSED_GRACE_MS`) keeps it from being reported closed meanwhile.
+        let wake_state = state.clone();
+        let wake_body = session_body.clone();
+        let mut wake = tokio::spawn(async move {
+            handle_zmx_lifecycle_http(
+                &wake_state,
+                "/api/wakeSession".to_string(),
+                uuid::Uuid::new_v4().to_string(),
+                &wake_body,
+            )
+            .await
+        });
+        match tokio::time::timeout(REOPEN_WAKE_WAIT, &mut wake).await {
+            Ok(Ok(woke)) if !woke.response.status().is_success() => {
+                let detail = routed_failure(woke).await;
+                return fail(DomainStateError::bad_request(format!(
+                    "Could not resume the thread's session: {detail}. It was not reopened."
+                )));
+            }
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => {
+                return fail(DomainStateError::bad_request(format!(
+                    "Could not resume the thread's session: {error}. It was not reopened."
+                )));
+            }
+            Err(_) => resuming = true,
         }
     }
     let mut result = match with_repository(state, |db, repository| {
@@ -141,6 +164,7 @@ pub(crate) async fn handle_resolve_coordinator_thread_http(
     }
     result["sessionClosed"] = json!(close_session);
     result["sessionResumed"] = json!(resumed);
+    result["sessionResuming"] = json!(resuming);
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,

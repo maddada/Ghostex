@@ -566,6 +566,8 @@ pub(super) fn set_resolved(parsed: &ParsedArgs, resolved: bool) -> CliResult<()>
         );
     } else if resolved {
         println!("Marked {global_ref} done; its session stays open (parked).");
+    } else if result["sessionResuming"].as_bool() == Some(true) {
+        println!("Reopened {global_ref}; its session is still starting and resumes on its own.");
     } else if resumed {
         println!("Reopened {global_ref} and resumed its session.");
     } else {

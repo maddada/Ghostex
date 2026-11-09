@@ -29,11 +29,15 @@ pub(super) const UNDELIVERED_MIN_AGE_MS: i64 = 60_000;
 pub(super) const UNDELIVERED_IDLE_MS: i64 = 20_000;
 /// How often one thread's transcript is read for a pending message.
 const DELIVERY_CHECK_EVERY_MS: i64 = 6_000;
+/// How long an open thread's session stays closed before it is reported closed and marked done.
+const CLOSED_GRACE_MS: i64 = 60_000;
 
 #[derive(Default)]
 struct SupervisorMemory {
     /// When each thread was first seen out of work since it last worked.
     not_working_since: HashMap<SessionKey, i64>,
+    /// When each open thread's session was first seen closed (`CLOSED_GRACE_MS`).
+    stopped_since: HashMap<SessionKey, i64>,
     /// Coordinators with a delivery running right now.
     in_flight: HashSet<SessionKey>,
     /// Coordinator → (consecutive failures, earliest retry in ms).
@@ -454,6 +458,9 @@ fn supervise(
         .not_working_since
         .retain(|key, _| open_keys.contains(key));
     memory
+        .stopped_since
+        .retain(|key, _| open_keys.contains(key));
+    memory
         .transcript_gates
         .retain(|key, _| open_keys.contains(key));
     memory
@@ -532,8 +539,21 @@ fn supervise(
             continue;
         };
         let lifecycle = effective_lifecycle_state(&session);
+        if lifecycle != "stopped" {
+            memory.stopped_since.remove(&key);
+        }
         if lifecycle == "stopped" {
             memory.not_working_since.remove(&key);
+            // CDXC:Coordinators 2026-11-10 WHY: a coordinator's message to a thread it resolved
+            // (or `coordinator reopen`) reopens it while its session is still being woken, and the
+            // session reads closed until the wake ends. The tick in between reported the thread
+            // closed and marked it done again, so nothing watched the turn the message started and
+            // its report never reached the coordinator (GitHub #531). A thread is reported closed
+            // only once its session has stayed closed for `CLOSED_GRACE_MS`.
+            let since = *memory.stopped_since.entry(key.clone()).or_insert(now);
+            if now - since < CLOSED_GRACE_MS {
+                continue;
+            }
             let project = projects
                 .entry(thread.project_id.clone())
                 .or_insert_with(|| repository.get_project(&thread.project_id).ok().flatten())
@@ -1506,8 +1526,18 @@ fn settle_report(
         return;
     };
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    // A thread reopened while its closed report was on the way is under its coordinator again.
+    let still_closed = || {
+        repository
+            .get_session(&thread.project_id, &thread.session_id)
+            .ok()
+            .flatten()
+            .is_none_or(|session| effective_lifecycle_state(&session) == "stopped")
+    };
     if closed {
-        let _ = set_thread_resolved(&db, &thread.project_id, &thread.session_id, true);
+        if still_closed() {
+            let _ = set_thread_resolved(&db, &thread.project_id, &thread.session_id, true);
+        }
     } else {
         let _ = record_thread_report(
             &db,
