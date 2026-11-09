@@ -19,12 +19,13 @@ use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, Bounds, Context, InteractiveElement as _,
-    IntoElement, ParentElement as _, Pixels, ScrollHandle, StatefulInteractiveElement as _,
-    Styled as _, canvas, div, point, px, relative, svg,
+    IntoElement, ParentElement as _, Pixels, StatefulInteractiveElement as _, Styled as _, canvas,
+    div, point, px, svg,
 };
 use serde_json::Value;
 use std::{
     cell::{Cell, RefCell},
+    collections::{HashMap, HashSet},
     rc::Rc,
     time::Duration,
 };
@@ -68,18 +69,102 @@ pub(super) fn edge_fade(toward_left: bool, edge: gpui::Hsla, width: f32) -> gpui
 pub(super) struct PillsStripCells {
     /// The strip's border box at its last paint, inside the chat box the pills' menus open above.
     bounds: Rc<Cell<Bounds<Pixels>>>,
-    scroll: ScrollHandle,
-    /// Each scrolling pill's border box at the last paint, in row order.
+    /// Each pill's border box at the last paint, in row order.
     pill_bounds: Rc<RefCell<Vec<Bounds<Pixels>>>>,
-    /// How much of itself each scrolling pill (row order) keeps at the last paint, less than 1.0
-    /// toward an edge that hides more (`pill_opacities`).
-    opacities: Rc<RefCell<Vec<f32>>>,
+    /// What each drawn pill is, in row order (`pill_bounds`'s kinds).
+    items: Rc<RefCell<Vec<StripItem>>>,
+    /// Every panel pill in row order with its label's width (unscaled), the hidden ones too.
+    order: Rc<RefCell<Vec<(String, f32)>>>,
+    /// Each panel pill's width (unscaled) with its label and without, as last drawn each way.
+    widths: Rc<RefCell<HashMap<String, (Option<f32>, Option<f32>)>>>,
+    /// Which pills drop their label and how many of the last ones wait in the "+N" pill.
+    plan: Rc<RefCell<StripPlan>>,
+    /// The "+N" pill's width at its last paint (unscaled).
+    overflow_width: Rc<Cell<Option<f32>>>,
+    /// The pills in the "+N" pill's list, as the core described them.
+    pub(super) hidden: RefCell<Vec<Value>>,
     /// Whether the strip showed at the last render, and the last change: when it was first drawn,
     /// which way, and a counter naming its animation.
     shown: Cell<bool>,
     change: Cell<Option<(Option<Instant>, bool, u64)>>,
     /// The change whose end already has a redraw booked.
     settle_booked: Cell<Option<u64>>,
+}
+
+/// What a drawn pill is: a fixed one (timers, ?, ↓, Links) always shows; a panel pill can drop its
+/// label or go into the "+N" pill (`plan_strip`).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum StripItem {
+    Fixed,
+    Panel {
+        id: String,
+        collapsed: bool,
+        /// The label's width (unscaled), which dropping it frees.
+        label: f32,
+    },
+    Overflow,
+}
+
+/// How the row fits: the panel pills that drop their label, and how many of the last panel pills
+/// wait in the "+N" pill.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct StripPlan {
+    collapsed: HashSet<String>,
+    hidden: usize,
+}
+
+/// The gap between two pills (unscaled), and the "+N" pill's width before it has been drawn once.
+const PILL_GAP: f32 = 6.0;
+const OVERFLOW_ESTIMATE: f32 = 56.0;
+
+/// What a panel pill measures with its label (`full`) and without (`icon`): the other from the one
+/// drawn when only that is known (the label, its 5px gap and the 1px of padding a label-less pill
+/// takes less on each side).
+fn pill_widths(full: Option<f32>, icon: Option<f32>, label: f32) -> Option<(f32, f32)> {
+    let freed = if label > 0.0 { label + 7.0 } else { 0.0 };
+    match (full, icon) {
+        (Some(full), Some(icon)) => Some((full, icon)),
+        (Some(full), None) => Some((full, (full - freed).max(0.0))),
+        (None, Some(icon)) => Some((icon + freed, icon)),
+        (None, None) => None,
+    }
+}
+
+/// How the row of pills fits `avail`: how many of the last panel pills go into the "+N" pill and how
+/// many of the last ones left drop their label, as few as can be, labels before pills. `fixed` are
+/// the widths of the pills that always show and `pills` the panel pills' (with label, without).
+fn plan_strip(
+    avail: f32,
+    fixed: &[f32],
+    pills: &[(f32, f32)],
+    overflow: f32,
+    gap: f32,
+) -> (usize, usize) {
+    let n = pills.len();
+    for hidden in 0..=n {
+        let visible = n - hidden;
+        for collapsed in 0..=visible {
+            let mut total: f32 = fixed.iter().sum();
+            let mut count = fixed.len();
+            for (index, (full, icon)) in pills[..visible].iter().enumerate() {
+                total += if index >= visible - collapsed {
+                    *icon
+                } else {
+                    *full
+                };
+                count += 1;
+            }
+            if hidden > 0 {
+                total += overflow;
+                count += 1;
+            }
+            total += gap * count.saturating_sub(1) as f32;
+            if total <= avail + 0.5 {
+                return (hidden, collapsed);
+            }
+        }
+    }
+    (n, 0)
 }
 
 impl PillsStripCells {
@@ -129,31 +214,86 @@ pub(super) fn strip_menu_left(
 
 impl NativeChatView {
     /// The panel pills, the ? and the armed timers that call for the strip; the ↓ only joins them.
-    fn strip_pills(&self, p: &ChatAppearance, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    /// A panel pill the row has no room for drops its label, or goes into the "+N" pill
+    /// (`StripPlan`).
+    fn strip_pills(
+        &self,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Vec<(StripItem, AnyElement)> {
         let ids: Vec<&str> = self.snapshot["workingCard"]["pills"]
             .as_array()
             .into_iter()
             .flatten()
             .filter_map(Value::as_str)
             .collect();
-        let mut panel_pills: Vec<AnyElement> = ids
+        let panel: Vec<Value> = ids
             .iter()
             .filter_map(|id| {
                 self.snapshot["chatPills"]
                     .as_array()?
                     .iter()
                     .find(|pill| pill["id"] == *id)
+                    .cloned()
             })
-            .map(|pill| self.chat_pill(pill, p, cx))
             .collect();
+        let plan = self.pills_strip.plan.borrow().clone();
+        let hidden = plan.hidden.min(panel.len());
+        let visible = panel.len() - hidden;
+        let labels: Vec<f32> = panel
+            .iter()
+            .map(|pill| self.pill_label_width(&super::transcript::text(pill, "label"), p, cx))
+            .collect();
+        *self.pills_strip.order.borrow_mut() = panel
+            .iter()
+            .zip(&labels)
+            .map(|(pill, label)| (super::transcript::text(pill, "id"), *label))
+            .collect();
+        *self.pills_strip.hidden.borrow_mut() = panel[visible..].to_vec();
+        let mut pills: Vec<(StripItem, AnyElement)> = self
+            .armed_action_items(p, cx)
+            .into_iter()
+            .chain(self.previous_question_icon_pill(p, cx))
+            .map(|pill| (StripItem::Fixed, pill))
+            .collect();
+        for (pill, label) in panel[..visible].iter().zip(&labels) {
+            let id = super::transcript::text(pill, "id");
+            let collapsed = plan.collapsed.contains(&id);
+            pills.push((
+                StripItem::Panel {
+                    id,
+                    collapsed,
+                    label: *label,
+                },
+                self.chat_pill(pill, collapsed, p, cx),
+            ));
+        }
+        if hidden > 0 {
+            pills.push((StripItem::Overflow, self.strip_overflow_pill(hidden, p, cx)));
+        }
         // The Links pill is the last one (links_pill.rs has the user's words).
         if let Some(links) = &self.links_pill {
-            panel_pills.push(self.links_pill_element(links, p, cx));
+            pills.push((StripItem::Fixed, self.links_pill_element(links, p, cx)));
         }
-        let mut pills = self.armed_action_items(p, cx);
-        pills.extend(self.previous_question_icon_pill(p, cx));
-        pills.extend(panel_pills);
         pills
+    }
+
+    /// How wide `label` is in a pill (unscaled), which dropping it frees.
+    fn pill_label_width(&self, label: &str, p: &ChatAppearance, cx: &gpui::App) -> f32 {
+        if label.is_empty() {
+            return 0.0;
+        }
+        let system = gpui::WindowTextSystem::new(cx.text_system().clone());
+        let run = gpui::TextRun {
+            len: label.len(),
+            font: gpui::font(p.font.clone()),
+            ..Default::default()
+        };
+        system
+            .shape_line(label.to_owned().into(), px(13.0 * p.scale), &[run], None)
+            .width
+            .as_f32()
+            / p.scale
     }
 
     /// The view status chip at the strip's left: a click goes back to Normal view, and it shows an X
@@ -302,10 +442,11 @@ impl NativeChatView {
             (Vec::new(), Vec::new())
         };
         // The ↓ at the left of the pills, so it appearing moves none of them.
-        let scrolling: Vec<AnyElement> = (shown && left_bottom)
+        let scrolling: Vec<(StripItem, AnyElement)> = (shown && left_bottom)
             .then(|| self.scroll_bottom_icon_pill(p, cx))
             .flatten()
             .into_iter()
+            .map(|pill| (StripItem::Fixed, pill))
             .chain(pills)
             .collect();
         let row = div()
@@ -313,7 +454,7 @@ impl NativeChatView {
             .items_center()
             .flex_shrink_0()
             .gap(px(6.0 * s))
-            .children(self.measured_strip_pills(scrolling));
+            .children(self.measured_strip_pills(scrolling, s));
         let tint = p.foreground.opacity(STRIP_TINT);
         let measured = self.pills_strip.bounds.clone();
         let strip = div()
@@ -337,8 +478,8 @@ impl NativeChatView {
                     .flex()
                     .items_center()
                     .gap(px(8.0 * s))
-                    // The Saved draft pill and the chips stay pinned left; the pills scroll in what
-                    // is left beside them.
+                    // The Saved draft pill and the chips stay pinned left; the pills fit in what is
+                    // left beside them.
                     .when(!chips.is_empty(), |band| {
                         band.child(
                             div()
@@ -349,7 +490,7 @@ impl NativeChatView {
                                 .children(chips),
                         )
                     })
-                    .child(self.pills_strip_scroll(row, p, cx)),
+                    .child(self.pills_strip_fit(row, p, cx)),
             )
             // The hairline under the band, the box's border colour.
             .child(div().h(px(1.0)).flex_shrink_0().bg(p.composer_border))
@@ -379,37 +520,58 @@ impl NativeChatView {
         })
     }
 
-    /// The scrolling pills, each measured for `opacities`, and faded toward an edge that hides more.
-    ///
-    /// CDXC:SessionChat 2026-11-07 WHY:
-    /// On window glass the box's fill is a 6% white wash, so the 24px fade into it hid nothing: with Saved draft and the ↓ showing, the last pill ended in a hard cut at the box's edge ("How to u…") and nothing said more pills (Stashed) sat past it. A fade can only ramp into a solid colour, so a pill the edge cuts is also drawn faint, which reads as fading out on glass too; opaque themes keep the colour fade over it. A vertical wheel turn still moves the strip sideways (GPUI's x-only scroller).
-    fn measured_strip_pills(&self, pills: Vec<AnyElement>) -> Vec<AnyElement> {
+    /// The pills, each measured: its border box for the "+N" and menus, and a panel pill's width for
+    /// the fit (`pills_strip_fit`), with its label or without as it was drawn.
+    fn measured_strip_pills(&self, pills: Vec<(StripItem, AnyElement)>, s: f32) -> Vec<AnyElement> {
         let measured = self.pills_strip.pill_bounds.clone();
         {
             let mut bounds = measured.borrow_mut();
             bounds.clear();
             bounds.resize(pills.len(), Bounds::default());
         }
-        let opacities = self.pills_strip.opacities.borrow().clone();
+        *self.pills_strip.items.borrow_mut() = pills.iter().map(|(item, _)| item.clone()).collect();
+        let widths = self.pills_strip.widths.clone();
+        let overflow_width = self.pills_strip.overflow_width.clone();
         pills
             .into_iter()
             .enumerate()
-            .map(|(index, pill)| {
+            .map(|(index, (item, pill))| {
                 let measured = measured.clone();
+                let widths = widths.clone();
+                let overflow_width = overflow_width.clone();
                 div()
                     .relative()
                     .flex()
                     .flex_shrink_0()
-                    .when_some(
-                        opacities.get(index).copied().filter(|keep| *keep < 1.0),
-                        |pill, keep| pill.opacity(keep),
-                    )
                     .child(pill)
                     .child(
                         canvas(
                             move |bounds, _, _| {
                                 if let Some(slot) = measured.borrow_mut().get_mut(index) {
                                     *slot = bounds;
+                                }
+                                let width = f32::from(bounds.size.width) / s;
+                                if width <= 0.0 {
+                                    return;
+                                }
+                                match &item {
+                                    StripItem::Panel {
+                                        id,
+                                        collapsed,
+                                        label,
+                                    } => {
+                                        let mut widths = widths.borrow_mut();
+                                        let entry = widths.entry(id.clone()).or_default();
+                                        if *label <= 0.0 {
+                                            *entry = (Some(width), Some(width));
+                                        } else if *collapsed {
+                                            entry.1 = Some(width);
+                                        } else {
+                                            entry.0 = Some(width);
+                                        }
+                                    }
+                                    StripItem::Overflow => overflow_width.set(Some(width)),
+                                    StripItem::Fixed => {}
                                 }
                             },
                             |_, _, _, _| {},
@@ -422,60 +584,84 @@ impl NativeChatView {
             .collect()
     }
 
-    /// The pills' scroll: right-aligned while they fit, scrolling sideways when they don't, each
-    /// pill fading out (`pill_opacities`) before an edge that hides more reaches it.
+    /// The pills' room: they sit at the right, whole. No pill is ever scrolled, cut or faded; when the
+    /// row is too wide the last panel pills drop their label first, then go into one "+N" pill
+    /// (`plan_strip`, strip_overflow.rs has the user's words).
     ///
-    /// CDXC:SessionChat 2026-11-08 DECISION:
-    /// User, of the strip scrolled sideways, a dark gradient band over a clipped stub of the previous pill at its left edge: "This effect we show here for the pills bar above the composer is bad man, please fix this". The colour band is gone: on window glass the box's fill is see-through, so a fade painted in the band's colour read as a dark smear. Each pill fades itself instead, over 24px before the edge (solid further in, gone as its near edge reaches the clip), so a pill is never cut: no half-pill stub, no clipped border showing as a hairline above and below the row, no word ending in a hard cut. The user then pointed at exactly those hairlines and at a right-edge pill's text cut hard (Back|), so the fade is by distance from the edge, the same on both. Glass and opaque themes alike. Supersedes 2026-10-28's 24px colour fade and 2026-11-07's flat dimming of a cut pill below. The phone matches in PillsStrip.tsx.
-    ///
-    /// CDXC:SessionChat 2026-10-28 DECISION:
-    /// User, of the pills' row: "I don't like how the background gets cut off on the right. I think we can do something better than that to show that it's going off screen. I don't like inner shadow." The pills scroll inside the strip, inset from the box's rounded edge, and fade into the band's colour over 24px at an edge that hides more of them (the right edge until scrolled to the end, the left once scrolled); no fade while everything shows. The phone matches in PillsStrip.tsx.
-    fn pills_strip_scroll(
+    /// CDXC:SessionChat 2026-11-10 DECISION:
+    /// User, of the row scrolling sideways behind edge fades (Board and Autopilot faded at its two
+    /// edges once the pills grew to 13px): "the pills hiding is still bad, please make this simpler".
+    /// Supersedes the 2026-10-28 and 2026-11-08 edge fades and the sideways scroll.
+    fn pills_strip_fit(
         &self,
         row: gpui::Div,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let scroll = self.pills_strip.scroll.clone();
-        let pill_bounds = self.pills_strip.pill_bounds.clone();
-        let opacities = self.pills_strip.opacities.clone();
+        let cells = &self.pills_strip;
+        let pill_bounds = cells.pill_bounds.clone();
+        let items = cells.items.clone();
+        let order = cells.order.clone();
+        let widths = cells.widths.clone();
+        let plan = cells.plan.clone();
+        let overflow_width = cells.overflow_width.clone();
         let chat = cx.entity_id();
         div()
             .relative()
             .flex_1()
             .min_w_0()
             .h_full()
-            .child(
-                div()
-                    .id("chat-pills-strip-scroll")
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .overflow_x_scroll()
-                    .track_scroll(&scroll)
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_end()
-                            .flex_shrink_0()
-                            .min_w(relative(1.0))
-                            .child(row.relative()),
-                    ),
-            )
+            .overflow_hidden()
+            .flex()
+            .items_center()
+            .justify_end()
+            .child(row.relative())
             .child(
                 canvas(
                     move |view, _, cx| {
-                        let offset = -f32::from(scroll.offset().x);
-                        let more = (
-                            offset > 0.5,
-                            f32::from(scroll.max_offset().x) - offset > 0.5,
-                        );
-                        let next =
-                            pill_opacities(&pill_bounds.borrow(), view, more, px(PILLS_FADE * s));
-                        if *opacities.borrow() != next {
-                            *opacities.borrow_mut() = next;
+                        let avail = f32::from(view.size.width) / s;
+                        let fixed: Vec<f32> = items
+                            .borrow()
+                            .iter()
+                            .zip(pill_bounds.borrow().iter())
+                            .filter(|(item, _)| **item == StripItem::Fixed)
+                            .map(|(_, bounds)| f32::from(bounds.size.width) / s)
+                            .collect();
+                        let order = order.borrow();
+                        let current = plan.borrow().clone();
+                        let measured: Option<Vec<(f32, f32)>> = order
+                            .iter()
+                            .map(|(id, label)| {
+                                let (full, icon) =
+                                    widths.borrow().get(id).copied().unwrap_or_default();
+                                pill_widths(full, icon, *label)
+                            })
+                            .collect();
+                        let next = match measured {
+                            Some(pills) => {
+                                let (hidden, collapsed) = plan_strip(
+                                    avail,
+                                    &fixed,
+                                    &pills,
+                                    overflow_width.get().unwrap_or(OVERFLOW_ESTIMATE),
+                                    PILL_GAP,
+                                );
+                                let visible = order.len() - hidden;
+                                StripPlan {
+                                    collapsed: order[visible - collapsed..visible]
+                                        .iter()
+                                        .map(|(id, _)| id.clone())
+                                        .collect(),
+                                    hidden,
+                                }
+                            }
+                            // A pill never drawn has no width yet: show them all once to measure it.
+                            None if current.hidden > 0 => StripPlan::default(),
+                            None => return,
+                        };
+                        if next != current {
+                            *plan.borrow_mut() = next;
                             cx.notify(chat);
                         }
                     },
@@ -488,38 +674,9 @@ impl NativeChatView {
     }
 }
 
-/// How much of itself each pill keeps inside `view`, fading out toward an edge that hides more
-/// pills (`more` is left then right): the pill's near edge `fade` away from that edge or more is
-/// solid, and it ramps to nothing as that edge reaches it, so a pill is gone before the edge can
-/// cut it. No pill ever ends in a clipped border or word, and no band is painted over any (the
-/// box's fill may be see-through glass, so nothing can fade into it). An edge with nothing more
-/// past it fades nothing, so the right-aligned pills at rest stay solid. Steps of 1/16 keep a
-/// scroll from redrawing at every pixel.
-fn pill_opacities(
-    pills: &[Bounds<Pixels>],
-    view: Bounds<Pixels>,
-    more: (bool, bool),
-    fade: Pixels,
-) -> Vec<f32> {
-    pills
-        .iter()
-        .map(|pill| {
-            let mut keep = 1.0_f32;
-            if more.0 {
-                keep = keep.min(f32::from(pill.left() - view.left()) / f32::from(fade));
-            }
-            if more.1 {
-                keep = keep.min(f32::from(view.right() - pill.right()) / f32::from(fade));
-            }
-            let keep = keep.clamp(0.0, 1.0);
-            (keep * 16.0).round() / 16.0
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{pill_opacities, strip_menu_left};
+    use super::strip_menu_left;
     use gpui::{Bounds, Pixels, point, px, size};
 
     fn rect(left: f32, width: f32) -> Bounds<Pixels> {
@@ -568,29 +725,6 @@ mod tests {
         assert_eq!(
             strip_menu_left(rect(760.0, 80.0), chat_box(), px(1000.0)),
             px(100.0)
-        );
-    }
-
-    #[test]
-    fn a_pill_fades_out_before_the_edge_that_hides_more_reaches_it() {
-        let view = rect(100.0, 300.0);
-        let fade = px(24.0);
-        let pills = [
-            rect(40.0, 50.0),  // wholly left of the view
-            rect(88.0, 50.0),  // cut by the left edge
-            rect(106.0, 50.0), // 6px from the left edge
-            rect(150.0, 80.0), // well inside
-            rect(340.0, 50.0), // 10px from the right edge
-            rect(360.0, 80.0), // cut by the right edge
-        ];
-        assert_eq!(
-            pill_opacities(&pills, view, (true, true), fade),
-            [0.0, 0.0, 0.25, 1.0, 0.4375, 0.0]
-        );
-        // Nothing hidden past an edge: nothing fades there.
-        assert_eq!(
-            pill_opacities(&pills[2..3], view, (false, true), fade),
-            [1.0]
         );
     }
 }

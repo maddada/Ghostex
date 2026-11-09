@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_chat/strip_overflow.rs

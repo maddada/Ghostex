@@ -53,6 +53,8 @@ pub(super) struct ChatPillBounds {
     resources: Rc<Cell<Bounds<Pixels>>>,
     /// The Links pill (links_pill.rs), which the session's links list lines up with.
     pub(super) links: Rc<Cell<Bounds<Pixels>>>,
+    /// The "+N" pill (strip_overflow.rs), which its list of the pills the row has no room for opens against.
+    overflow: Rc<Cell<Bounds<Pixels>>>,
     /// The Saved draft pill (saved_draft_pill.rs), which its menu opens against.
     pub(super) saved_draft: Rc<Cell<Bounds<Pixels>>>,
     /// The Approvals pill (relayed_approval.rs), which its menu of thread cards opens against.
@@ -70,6 +72,7 @@ impl ChatPillBounds {
             SIDE_CHATS_PILL => self.side_chats.clone(),
             super::coordinator_board::BOARD_MENU => self.board.clone(),
             super::questions_list::QUESTIONS_MENU => self.resources.clone(),
+            super::strip_overflow::OVERFLOW_MENU => self.overflow.clone(),
             super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft.clone(),
             super::relayed_approval::APPROVALS_MENU => self.approvals.clone(),
             super::coordinator_intro::INTRO_MENU => self.intro.clone(),
@@ -145,6 +148,7 @@ fn trigger_id(id: &str) -> &'static str {
         // The Resources pill opens the question list.
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_TRIGGER,
         super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_TRIGGER,
+        super::strip_overflow::OVERFLOW_MENU => super::strip_overflow::OVERFLOW_TRIGGER,
         super::saved_draft_pill::SAVED_DRAFT_MENU => super::saved_draft_pill::SAVED_DRAFT_TRIGGER,
         super::relayed_approval::APPROVALS_MENU => super::relayed_approval::APPROVALS_TRIGGER,
         super::coordinator_intro::INTRO_MENU => super::coordinator_intro::INTRO_TRIGGER,
@@ -153,7 +157,7 @@ fn trigger_id(id: &str) -> &'static str {
     }
 }
 
-fn icon(id: &str) -> &'static str {
+pub(super) fn pill_icon(id: &str) -> &'static str {
     match id {
         "threads" => "titlebar/users-group.svg",
         super::coordinator_board::BOARD_MENU => "titlebar/layout-board-split.svg",
@@ -177,6 +181,7 @@ fn menu_width(id: &str) -> f32 {
     match id {
         "tasks" => 420.0,
         super::coordinator_board::BOARD_MENU => super::coordinator_board::BOARD_WIDTH,
+        super::strip_overflow::OVERFLOW_MENU => super::strip_overflow::OVERFLOW_MENU_WIDTH,
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_MENU_WIDTH,
         super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_WIDTH,
         super::saved_draft_pill::SAVED_DRAFT_MENU => {
@@ -420,11 +425,56 @@ impl NativeChatView {
         )
     }
 
+    /// What a click on the panel pill `id` does, painted at `bounds`; the "+N" pill's list runs the
+    /// same for a pill that does not fit the row.
+    pub(super) fn activate_chat_pill(
+        &mut self,
+        id: &str,
+        switch: bool,
+        bounds: Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let trigger = trigger_id(id);
+        if switch {
+            self.open_autopilot_menu(id, None, window, cx);
+            return;
+        }
+        if id == "tasks" && self.show_session_details_for_tasks(cx) {
+            return;
+        }
+        if id == STASHED_PILL {
+            // The list the Stash prompt row opens from an empty chat box (toolbar.rs).
+            self.host("stashedPrompts", json!({}), cx);
+            return;
+        }
+        if id == super::coordinator_board::BOARD_MENU {
+            self.toggle_coordinator_board(bounds, window, cx);
+            return;
+        }
+        // Blocked opens the board at its Blocked group (the core's `show_group`).
+        if id == ghostex_gx_chat_core::extras::coordinator_board::BLOCKED_PILL {
+            self.invoke(
+                json!({"type": "showCoordinatorBoardGroup", "group": "blocked"}),
+                cx,
+            );
+            return;
+        }
+        self.toggle_pill_menu(id, bounds, window, cx);
+        if id == super::questions_list::QUESTIONS_MENU && self.chat_menu_is_open(trigger) {
+            self.keep_question_ages_current(cx);
+        }
+    }
+
     /// One panel pill in the Worked row's chip look (completed_work_row.rs): icon, label, count, and
     /// the amber dot when something in it needs the user. A click opens its menu.
+    ///
+    /// `collapsed` drops the label when the row has no room for it (pills_strip.rs): the icon and
+    /// the count or dots stay, and the tooltip says what the pill is.
     pub(super) fn chat_pill(
         &self,
         pill: &Value,
+        collapsed: bool,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -453,11 +503,17 @@ impl NativeChatView {
         let dots = (!dots.is_empty()).then(|| inline_dots(&dots, p));
         // A pill with no label (Blocked) is drawn like the ? pill: its icon and dot, its word in
         // the tooltip.
-        let label = text(pill, "label");
+        let name = text(pill, "label");
+        let label = if collapsed {
+            String::new()
+        } else {
+            name.clone()
+        };
         // A switch pill (Autopilot) opens its small menu; its tooltip says where it stands.
         let switch = pill["switch"].as_bool();
         let tooltip = match switch {
             Some(_) => Some(text(pill, "ariaLabel")),
+            None if collapsed && !name.is_empty() => Some(text(pill, "ariaLabel")),
             None => Some(text(pill, "meta")).filter(|meta| label.is_empty() && !meta.is_empty()),
         };
         div()
@@ -489,7 +545,7 @@ impl NativeChatView {
             .hover(|style| style.bg(p.foreground.opacity(0.06)))
             .child(
                 svg()
-                    .path(icon(&id))
+                    .path(pill_icon(&id))
                     .size(px(14.0 * s))
                     .flex_shrink_0()
                     .text_color(p.card_muted),
@@ -526,34 +582,7 @@ impl NativeChatView {
             })
             .on_click(cx.listener(move |this, _, window, cx| {
                 cx.stop_propagation();
-                if switch.is_some() {
-                    this.open_autopilot_menu(&id, None, window, cx);
-                    return;
-                }
-                if id == "tasks" && this.show_session_details_for_tasks(cx) {
-                    return;
-                }
-                if id == STASHED_PILL {
-                    // The list the Stash prompt row opens from an empty chat box (toolbar.rs).
-                    this.host("stashedPrompts", json!({}), cx);
-                    return;
-                }
-                if id == super::coordinator_board::BOARD_MENU {
-                    this.toggle_coordinator_board(bounds.get(), window, cx);
-                    return;
-                }
-                // Blocked opens the board at its Blocked group (the core's `show_group`).
-                if id == ghostex_gx_chat_core::extras::coordinator_board::BLOCKED_PILL {
-                    this.invoke(
-                        json!({"type": "showCoordinatorBoardGroup", "group": "blocked"}),
-                        cx,
-                    );
-                    return;
-                }
-                this.toggle_pill_menu(&id, bounds.get(), window, cx);
-                if id == super::questions_list::QUESTIONS_MENU && this.chat_menu_is_open(trigger) {
-                    this.keep_question_ages_current(cx);
-                }
+                this.activate_chat_pill(&id, switch.is_some(), bounds.get(), window, cx);
             }))
             .child(
                 // The pill's own border box, which its menu lines up with
@@ -652,6 +681,9 @@ impl NativeChatView {
         if id == super::resource_modal::RESOURCE_MODAL_MENU {
             return self.resource_modal_height();
         }
+        if id == super::strip_overflow::OVERFLOW_MENU {
+            return self.strip_overflow_height();
+        }
         if id == super::saved_draft_pill::SAVED_DRAFT_MENU {
             return self.saved_draft_menu_height();
         }
@@ -690,6 +722,7 @@ impl NativeChatView {
             SIDE_CHATS_PILL => self.side_chats_menu_body(p, cx),
             super::questions_list::QUESTIONS_MENU => self.questions_menu_body(p, window, cx),
             super::resource_modal::RESOURCE_MODAL_MENU => self.resource_modal_body(p, window, cx),
+            super::strip_overflow::OVERFLOW_MENU => self.strip_overflow_body(p, cx),
             super::saved_draft_pill::SAVED_DRAFT_MENU => self.saved_draft_menu_body(p, cx),
             super::relayed_approval::APPROVALS_MENU => self.approvals_menu_body(p, cx),
             super::coordinator_intro::INTRO_MENU => self.coordinator_intro_menu_body(p, cx),
