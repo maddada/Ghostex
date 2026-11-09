@@ -36,6 +36,7 @@ pub const COORDINATOR_ENDPOINTS: &[&str] = &[
     "/api/coordinatorThreadTitleReminder",
     "/api/checkAgentSessionWrite",
     "/api/coordinatorBoard",
+    "/api/coordinatorWork",
 ];
 
 fn text(params: &Map<String, Value>, key: &str) -> Option<String> {
@@ -89,6 +90,20 @@ pub fn handle_coordinator_endpoint(
             }
             let threads = super::panel::cached_thread_rows(&key);
             let (result, _) = super::board::handle_board_request(db, &key, &threads, params)?;
+            Ok(CoordinatorEndpointOutput {
+                result,
+                changed_sessions: Vec::new(),
+            })
+        }
+        // The work items: list them, or add, update, ask, wait on, finish or drop one (work.rs).
+        "/api/coordinatorWork" => {
+            let key = required_ids(params, "projectId", "sessionId")?;
+            resolve_coordinator(db, &key)?;
+            let threads = super::panel::cached_thread_rows(&key);
+            let ask_floor =
+                crate::session_chat_open_questions::highest_question_tag(&key.0, &key.1);
+            let (result, _) =
+                super::work::handle_work_request(db, &key, &threads, params, ask_floor)?;
             Ok(CoordinatorEndpointOutput {
                 result,
                 changed_sessions: Vec::new(),

@@ -3,6 +3,12 @@
 //!
 //! An item is named `B7`; anything else is a thread ref, which `move` pins to a group its state
 //! cannot tell (Blocked, Needs you, a kind of Later) and `done` resolves like `coordinator resolve`.
+//!
+//! CDXC:Coordinators 2026-11-10 DECISION:
+//! Work items replaced the board (server/src/coordinators/work.rs, Q2096 "replace"). These verbs
+//! stay a while as a thin alias so running coordinators and saved briefs don't break: each changes
+//! the work item with the same number (B7 is W7) and prints the `ghostex coordinator item` command
+//! that does the same, so the coordinator learns the new verbs as it goes.
 
 use serde_json::{json, Map, Value};
 
@@ -82,6 +88,9 @@ pub(super) fn board(parsed: &ParsedArgs) -> CliResult<()> {
                 print_json(&board);
             } else {
                 print_board(&board, parsed.flags.truthy("all"));
+                println!(
+                    "\nThe board is drawn from work items now: ghostex coordinator item list shows them (W7 is B7)."
+                );
             }
             return Ok(());
         }
@@ -126,13 +135,18 @@ pub(super) fn board(parsed: &ParsedArgs) -> CliResult<()> {
         }
     }
     params.insert("op".into(), json!(verb));
-    let result = call_gxserver_rpc("/api/coordinatorBoard", &Value::Object(params), &flags)?;
+    let result = call_gxserver_rpc(
+        "/api/coordinatorBoard",
+        &Value::Object(params.clone()),
+        &flags,
+    )?;
     if parsed.flags.truthy("json") {
         print_json(&result);
         return Ok(());
     }
     let name = agents::text(&result, "item");
     let heading = heading(agents::text(&result, "group"));
+    let hint = item_equivalent(verb, &name, &params);
     match verb {
         "add" => println!("{name} added to {heading}{}.", reason_words(&result)),
         "move" => println!("{name} moved to {heading}{}.", reason_words(&result)),
@@ -143,7 +157,43 @@ pub(super) fn board(parsed: &ParsedArgs) -> CliResult<()> {
             "{name} moved to Removed. ghostex coordinator board restore {name} brings it back."
         ),
     }
+    if let Some(hint) = hint {
+        println!("Board commands now update work items. Next time: {hint}");
+    }
     Ok(())
+}
+
+/// The `ghostex coordinator item` command that does what a board verb just did, for an item.
+fn item_equivalent(verb: &str, name: &str, params: &Map<String, Value>) -> Option<String> {
+    let item = name.strip_prefix('B').map(|number| format!("W{number}"))?;
+    let base = "ghostex coordinator item";
+    Some(match verb {
+        "add" => format!("{base} add \"<line of work>\" (this one is {item})"),
+        "note" => format!("{base} now {item} \"<where it stands>\""),
+        "done" => format!("{base} done {item} \"<the one line worth keeping>\""),
+        "drop" => format!("{base} drop {item}"),
+        "restore" => format!("{base} restore {item}"),
+        "move" => match params
+            .get("group")
+            .and_then(Value::as_str)
+            .and_then(crate::coordinators::parse_status)
+        {
+            Some(("needs", _)) => {
+                format!("{base} ask {item} \"<what the user must do or decide>\"")
+            }
+            Some(("blocked", _)) => {
+                format!("{base} ask {item} \"<what the user must do>\" --holds")
+            }
+            Some(("waiting", _)) => format!("{base} wait {item} --on \"<what it waits on>\""),
+            Some(("moving", _)) => format!("{base} now {item} \"<where it stands>\""),
+            Some(("finished", _)) => format!("{base} done {item}"),
+            Some((_, reason)) if !reason.is_empty() => {
+                format!("{base} edit {item} --status {reason}")
+            }
+            _ => format!("{base} edit {item} --status later"),
+        },
+        _ => return None,
+    })
 }
 
 /// Puts the item (`B7`) or the thread a reference names into `params`.

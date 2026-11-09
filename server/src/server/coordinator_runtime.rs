@@ -1954,12 +1954,14 @@ pub(crate) fn handle_coordinator_http(
     }
     // The orchestrator's Threads panel is a cache the supervisor rebuilds every tick; an unlinked
     // thread must leave it now, not on the next tick.
-    // A board change shows on the coordinator's chat now too (board.rs).
-    let board_changed = endpoint_path == "/api/coordinatorBoard"
-        && params
-            .get("op")
-            .and_then(Value::as_str)
-            .is_some_and(|op| op != "read");
+    // A board or work item change shows on the coordinator's chat now too (board.rs, work.rs).
+    let board_changed = matches!(
+        endpoint_path,
+        "/api/coordinatorBoard" | "/api/coordinatorWork"
+    ) && params
+        .get("op")
+        .and_then(Value::as_str)
+        .is_some_and(|op| !matches!(op, "read" | "list"));
     if endpoint_path == "/api/unlinkCoordinatorThread" || board_changed {
         for (project_id, session_id) in
             crate::coordinators::refresh_coordinator_panels(db, repository)

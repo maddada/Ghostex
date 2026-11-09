@@ -810,8 +810,30 @@ fn queued_answers(db: &rusqlite::Connection, project_id: &str, session_id: &str)
         .collect()
 }
 
+/// The highest question tag (`Q2101` is 2101) the session's chat has asked, as its ledger last
+/// read it, so a work item's ask takes the next one (coordinators/work.rs).
+pub(crate) fn highest_question_tag(project_id: &str, session_id: &str) -> u64 {
+    let ledger_key = crate::server::session_observer_key(project_id, session_id);
+    let Some(entry) = ledgers()
+        .lock()
+        .ok()
+        .and_then(|ledgers| ledgers.get(&ledger_key).cloned())
+    else {
+        return 0;
+    };
+    let Ok(ledger) = entry.lock() else {
+        return 0;
+    };
+    ledger
+        .tag_states(&[], |_| false)
+        .keys()
+        .filter_map(|tag| tag.strip_prefix('Q')?.parse::<u64>().ok())
+        .max()
+        .unwrap_or(0)
+}
+
 /// Marks done the coordinator's Needs you items whose questions its chat has settled, from the
-/// ledger `read_open` just brought up to date (coordinators/board.rs `settle_answered_items`). The
+/// ledger `read_open` just brought up to date (coordinators/work.rs `settle_answered_items`). The
 /// supervisor's next tick shows the change on the board.
 fn settle_board_items(
     state: &AppState,

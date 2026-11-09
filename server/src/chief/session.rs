@@ -360,6 +360,7 @@ pub(super) fn move_coordinator(
         "coordinator_threads",
         "coordinator_remote_threads",
         "coordinator_board_items",
+        "coordinator_work_items",
     ] {
         db.execute(
             &format!(

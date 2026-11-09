@@ -74,6 +74,7 @@ fn panel_rank(row: &Value) -> u8 {
 fn cached_panel(
     mut threads: Vec<Value>,
     board: Value,
+    work: Value,
     approvals: Value,
     intro_hidden: bool,
     previous: Option<&CachedPanel>,
@@ -91,6 +92,7 @@ fn cached_panel(
     if let Some(previous) = previous.filter(|previous| {
         previous.threads == threads
             && previous.summary["board"] == board
+            && previous.summary["work"] == work
             && previous.summary["approvals"] == approvals
             && previous.summary["introHidden"] == intro_hidden
     }) {
@@ -113,6 +115,9 @@ fn cached_panel(
         // The coordinator's board, capped per group (board.rs); it rides on this field so every
         // client that carries the Workers list carries it too.
         "board": board,
+        // The coordinator's work items (work.rs): what the Work panel lists and the chat's item
+        // cards are drawn from. `board` stays for clients from before them.
+        "work": work,
         // The thread approval cards its chat relays, open and recently ended (relay.rs).
         "approvals": approvals,
         // "Don't show again" on the coordinator tips, for every coordinator (intro.rs).
@@ -185,7 +190,7 @@ fn resolved_recheck_at(key: &SessionKey) -> std::time::Instant {
 /// What one coordinator's panel was last built from.
 struct PanelInputs {
     rows: Vec<Value>,
-    items: Vec<super::board::BoardItem>,
+    items: Vec<super::work::WorkItem>,
     custom_tags: Value,
     intro_hidden: bool,
     built_at: std::time::Instant,
@@ -667,7 +672,7 @@ pub fn refresh_coordinator_panels(
     };
     let threads = list_threads(db).unwrap_or_default();
     let remote_threads = list_remote_threads(db).unwrap_or_default();
-    let mut board_items = super::board::list_all_board_items(db);
+    let mut board_items = super::work::list_all_work_items(db);
     let intro_hidden = super::intro::intro_hidden(db);
     let generated_at = now_iso();
     let now = chrono::Utc::now();
@@ -809,7 +814,16 @@ pub fn refresh_coordinator_panels(
         let mut board =
             super::board::board_value(&panel_rows, &items, Some(super::board::SUMMARY_ROWS), now);
         super::board::add_tag_looks(&mut board, &custom_tags);
-        let panel = cached_panel(panel_rows, board, approvals, intro_hidden, panels.get(&key));
+        let mut work = super::work::work_value(&panel_rows, &items, false, now);
+        super::work::add_work_tag_looks(&mut work, &custom_tags);
+        let panel = cached_panel(
+            panel_rows,
+            board,
+            work,
+            approvals,
+            intro_hidden,
+            panels.get(&key),
+        );
         next.insert(key.clone(), panel);
         next_inputs.insert(
             key,
@@ -904,7 +918,7 @@ mod tests {
         assert_eq!(row["detail"], "Find the CPU churn");
         assert_eq!(row["recent"], true);
         assert_eq!(panel_rank(&row), 0);
-        let panel = cached_panel(vec![row], Value::Null, json!([]), false, None);
+        let panel = cached_panel(vec![row], Value::Null, Value::Null, json!([]), false, None);
         assert_eq!(panel.summary["total"], 1);
         assert_eq!(panel.summary["threads"][0]["serverId"], "S4k");
 

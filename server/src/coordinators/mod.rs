@@ -31,6 +31,7 @@ mod stall;
 mod state;
 mod thread_messages;
 mod title;
+mod work;
 
 pub use auto_sleep::*;
 pub use board::*;
@@ -61,3 +62,4 @@ pub use stall::*;
 pub use state::*;
 pub use thread_messages::*;
 pub use title::*;
+pub use work::*;

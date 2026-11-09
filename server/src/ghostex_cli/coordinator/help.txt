@@ -23,6 +23,22 @@ USAGE
   ghostex coordinator reopen <thread-ref> [--json]
   ghostex coordinator sleep-inactive-threads [<coordinator-ref>] [--coordinator <ref>] [--json]
   ghostex coordinator acknowledge-threads [<coordinator-ref>] [--coordinator <ref>] [--json]
+  ghostex coordinator item list [<W7>] [--all] [--json] [--coordinator <ref>]
+  ghostex coordinator item add "<line of work>" [--thread <thread-ref>]... [--now "<line>"]
+                              [--later next|held|parked|backlog] [--link <url|path>]
+                              [--release <name>] [--json]
+  ghostex coordinator item now <W7> "<where it stands>" [--thread <thread-ref>]... [--json]
+  ghostex coordinator item step <W7> "<step>" [--done] [--chore] [--json]
+  ghostex coordinator item ask <W7> "<what you ask>" [--answers "A,B" [--recommended B]]
+                              [--holds] [--steps <file|url>] [--tag Q12] [--json]
+  ghostex coordinator item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
+  ghostex coordinator item wait <W7> --on <W8|Q12|"words">... [--until <when>] ["<line>"] [--json]
+  ghostex coordinator item done <W7> ["<the one line worth keeping>"] [--json]
+  ghostex coordinator item drop <W7> [--json]
+  ghostex coordinator item restore <W7> [--json]
+  ghostex coordinator item edit <W7> [--title "<name>"] [--status <status>] [--link <url|path>]
+                              [--release <name>] [--thread <ref>]... [--detach <ref>]...
+                              [--untested | --tested] [--json]
   ghostex coordinator board [--all] [--json] [--coordinator <ref>]
   ghostex coordinator board add "<title>" [--group <group>] [--note "<line>"] [--link <url|path>]
                               [--release <name>] [--answers "Yes,No" [--recommended Yes]]
@@ -179,7 +195,52 @@ THREADS
   opening the coordinator does: their blue dot clears, while a thread waiting
   on a question or approval keeps its dot.
 
+WORK ITEMS
+  A coordinator tracks each line of work as one work item, named the way the
+  user would name it ("iPhone voice calls"), as W<number> (never reused). A
+  thread, a rebuild, a release step or a question is never an item: attach it
+  to one (--thread, item step, item ask). The chat draws a card under the
+  coordinator's reply for each item that changed in that turn, and the Work
+  panel lists every item by who has the ball, both from the same record.
+  Statuses, in the order the Work panel lists them:
+    Needs you  the user has something to do or decide (an open ask)
+    Blocked    the work stops until the user acts: an ask with --holds, or a
+               thread still not moving after Ghostex's nudge
+    Moving     the coordinator or a thread is on it
+    Waiting    on another item, an ask, or something outside
+    Later      nobody is on it yet (next, held for a release, parked, backlog)
+    Finished   done; today's show, older ones leave after 14 days
+  Ghostex works the status out: a working thread makes its item Moving, a
+  thread waiting on a question or approval makes it Needs you, and a wait on
+  another item or an ask clears itself once that finishes or is answered (the
+  coordinator has the ball again). Who has the ball (You, the coordinator, a
+  thread, what it waits on) follows from the status.
+  add starts an item (Later until something moves it; --now starts it Moving)
+  and prints its W number; --thread attaches a thread (repeat it for more).
+  now replaces the line saying where it stands and makes it Moving: never
+  append, say where it stands now. step records a step (--done when it is);
+  --chore keeps a rebuild or test run out of sight: chores are never shown.
+  ask puts something before the user, with a question tag (the next after the
+  chat's, or --tag Q12 for one already asked in the chat): one-click answers
+  with --answers, the steps to follow with --steps, and --holds when the work
+  stops until they do it. An ask settles when the user answers it (its card,
+  or "Q12: yes" in the chat for a tag asked there), with --done Q12 when the
+  user did it, or --withdraw Q12. wait replaces what it waits on: W8 (another
+  item), Q12 (an ask) or words for something outside, with --until for when
+  it's expected. done finishes it with the one line worth keeping and
+  withdraws its open asks; drop takes it off (restore brings it back for 7
+  days). edit renames it, attaches or detaches threads, or sets its status
+  (needs-you, blocked, moving, waiting, later, next, held, parked, backlog,
+  finished). list prints the items by status with their asks, waits and
+  threads (Finished and dropped with --all); list W7 prints one with its
+  steps and history. A thread on no item is listed by its own state.
+
 BOARD
+  The board's verbs still work, as a thin alias for older coordinators: they
+  change the work item with the same number (B7 is W7) and print the item
+  command that does the same. The rest of this section describes the board as
+  it was; clients from before the Work panel still show it, drawn from the
+  work items.
   The board is the Board pill above the coordinator's chat box: its lines of
   work grouped by who has the ball. Backlog, To do (nobody is on it yet:
   parked, up next or held for a release), Needs you, Blocked (needs the
