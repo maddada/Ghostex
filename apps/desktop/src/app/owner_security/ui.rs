@@ -16,6 +16,27 @@ fn card_id(machine_id: Option<&str>, request_id: &str) -> String {
     )
 }
 
+/*
+CDXC:RemotePairing 2026-11-09 WHY:
+User, about the phone's pairing card: "i don't understand as a user what the heck I need to do
+here". The phone now says that Ghostex on the computer shows "Approve this phone?" with the same
+three words, so a phone's pairing request is titled that here instead of the generic
+"Approval needed" (a computer asking to connect through Easy Connect reads "Approve this
+computer?"). gxserver writes the summary: a phone's starts with "Pair", a computer's with "Let".
+*/
+/// The notice's title: what the person is asked to approve.
+fn approval_title(request: &ApprovalRequest) -> &'static str {
+    use ghostex_gx_protocol::approval::SensitiveAction;
+    if request.action != SensitiveAction::PairingApproveDevice {
+        return "Approval needed";
+    }
+    if request.summary.starts_with("Pair ") {
+        "Approve this phone?"
+    } else {
+        "Approve this computer?"
+    }
+}
+
 impl GhostexGpuiApp {
     /// `approvalRequestsChanged` from this computer's gxserver (`machine_id: None`) or a
     /// connected computer's.
@@ -125,7 +146,7 @@ impl GhostexGpuiApp {
             GpuiAppToast {
                 id,
                 level: GpuiAppToastLevel::Warning,
-                title: "Approval needed".to_string(),
+                title: approval_title(&request).to_string(),
                 description: Some(description),
                 copy_text: None,
                 action: Some(GpuiAppToastAction::SecurityApproval {
