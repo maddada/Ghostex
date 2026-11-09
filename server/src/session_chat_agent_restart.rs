@@ -464,9 +464,9 @@ pub(crate) async fn reload(
             "This session has no saved conversation to resume yet, so a reload would start a new one. Nothing was reloaded.",
         ));
     }
-    crate::session_chat_queue_runtime::cycle_session(state, &project_id, &session_id)
+    crate::session_chat_queue_runtime::cycle_session_explained(state, &project_id, &session_id)
         .await
-        .map_err(|reason| invalid(format!("Ghostex could not reload this session: {reason}.")))?;
+        .map_err(|failure| invalid(format!("Ghostex could not reload this session: {failure}.")))?;
     note_agent_restarted(state, &project_id, &session_id);
     crate::session_chat_send_diagnostics::record_send_recovery(
         state,

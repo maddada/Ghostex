@@ -127,6 +127,7 @@ pub(crate) fn run_zmx_start_command(
         for loaded in [MacosZmxLaunchdDomain::Gui, MacosZmxLaunchdDomain::User] {
             let _ = job.launchctl(&["bootout", &job.job_target(loaded)]);
         }
+        let previous_run_ended = job.wait_until_unloaded();
         let retry = job.bootstrap(domain);
         if !retry.success {
             job.remove_private_launch_script();
@@ -136,7 +137,12 @@ pub(crate) fn run_zmx_start_command(
                 retry.message()
             );
             return Err(ZmxEndpointError::DependencyUnavailable(
-                TERMINAL_START_REFUSED.to_string(),
+                if previous_run_ended {
+                    TERMINAL_START_REFUSED
+                } else {
+                    TERMINAL_PREVIOUS_RUN_STILL_ENDING
+                }
+                .to_string(),
             ));
         }
     }
@@ -457,6 +463,28 @@ done
         }
     }
 
+    /// CDXC:Zmx 2026-11-09 WHY: `launchctl bootout` answers before launchd lets go of a job whose
+    /// process is still exiting, and a bootstrap of the same label in that window fails with
+    /// "5: Input/output error" (GitHub #522). Since the foreground start (#504) that process is the
+    /// zmx daemon itself, which takes a moment to end its agent, so a wake right after a sleep (every
+    /// `ghostex agents reload`) hit the window and was told macOS refused the login. Wait until the
+    /// label is gone from both domains before bootstrapping it again; false when it never went.
+    fn wait_until_unloaded(&self) -> bool {
+        let deadline = Instant::now() + Duration::from_millis(MACOS_ZMX_PREVIOUS_RUN_END_WAIT_MS);
+        loop {
+            let loaded = [MacosZmxLaunchdDomain::Gui, MacosZmxLaunchdDomain::User]
+                .into_iter()
+                .any(|domain| self.launchctl(&["print", &self.job_target(domain)]).success);
+            if !loaded {
+                return true;
+            }
+            if Instant::now() >= deadline {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(ZMX_START_POLL_BACKOFF_MAX_MS / 2));
+        }
+    }
+
     fn remove_private_launch_script(&self) {
         let _ = fs::remove_file(&self.launch_script_path);
     }
@@ -475,6 +503,12 @@ done
 /// What a person reads when macOS would not start a terminal's background job.
 #[cfg(target_os = "macos")]
 const TERMINAL_START_REFUSED: &str = "Ghostex couldn't start this terminal: macOS refused to start it from this login. Log out and back in, or restart Ghostex.";
+/// What a person reads when the terminal's previous run still held its launchd job after the wait below.
+#[cfg(target_os = "macos")]
+const TERMINAL_PREVIOUS_RUN_STILL_ENDING: &str = "Ghostex couldn't start this terminal: its previous run was still ending after 10 seconds. Try again in a moment.";
+/// How long a start waits for macOS to let go of the session's previous launchd job.
+#[cfg(target_os = "macos")]
+const MACOS_ZMX_PREVIOUS_RUN_END_WAIT_MS: u64 = 10_000;
 
 #[cfg(target_os = "macos")]
 fn macos_zmx_retry_domain(gui_domain_probe: &MacosLaunchctlResult) -> MacosZmxLaunchdDomain {

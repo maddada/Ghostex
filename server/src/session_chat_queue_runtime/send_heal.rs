@@ -608,24 +608,66 @@ pub(crate) async fn cycle_session(
     project_id: &str,
     session_id: &str,
 ) -> Result<(), &'static str> {
+    cycle_session_explained(state, project_id, session_id)
+        .await
+        .map_err(|failure| failure.step)
+}
+
+/// A failed [`cycle_session_explained`]: the step that failed, and what the server said about it.
+pub(crate) struct CycleFailure {
+    pub(crate) step: &'static str,
+    pub(crate) reason: Option<String>,
+}
+
+impl std::fmt::Display for CycleFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.reason {
+            Some(reason) => write!(
+                formatter,
+                "{} ({})",
+                self.step,
+                reason.trim_end_matches('.')
+            ),
+            None => formatter.write_str(self.step),
+        }
+    }
+}
+
+/// [`cycle_session`] keeping the sleep's or wake's own error, for a person reading why a reload
+/// failed (GitHub #522: "the session could not be started again" hid a refused macOS start).
+pub(crate) async fn cycle_session_explained(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> Result<(), CycleFailure> {
     let body = json!({ "params": { "projectId": project_id, "sessionId": session_id } });
     for path in ["/api/sleepSession", "/api/wakeSession"] {
-        let ok = crate::server::handle_zmx_lifecycle_http(
+        let response = crate::server::handle_zmx_lifecycle_http(
             state,
             path.to_string(),
             uuid::Uuid::new_v4().to_string(),
             &body,
         )
         .await
-        .response
-        .status()
-        .is_success();
+        .response;
+        let ok = response.status().is_success();
         crate::session_chat_options::forget_session_chat_options(state, project_id, session_id);
         if !ok {
-            return Err(if path == "/api/sleepSession" {
-                "the session could not be put to sleep"
-            } else {
-                "the session could not be started again"
+            let answer = axum::body::to_bytes(response.into_body(), 256 * 1024)
+                .await
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
+            return Err(CycleFailure {
+                step: if path == "/api/sleepSession" {
+                    "the session could not be put to sleep"
+                } else {
+                    "the session could not be started again"
+                },
+                reason: answer
+                    .as_ref()
+                    .and_then(|answer| answer.get("message"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
             });
         }
     }
