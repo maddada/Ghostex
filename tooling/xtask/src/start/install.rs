@@ -403,7 +403,7 @@ impl Start {
                     self.log.detail("No running gxserver control plane found.");
                 } else {
                     self.log.detail(&format!(
-                        "Something holds {} but did not answer for {} s; leaving it.",
+                        "{} (asked for {} s); leaving it running.",
                         heard(false),
                         gxserver::PATIENT_PROBE.as_secs()
                     ));

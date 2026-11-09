@@ -147,7 +147,7 @@ pub fn probe(base_url: &str, token: &str, timeout: Duration) -> Probe {
 /// How long [`probe_patiently`] keeps asking a silent port: a gxserver busy with the app's disconnect can miss one short probe.
 pub const PATIENT_PROBE: Duration = Duration::from_secs(5);
 
-/// Probes until the port answers, asking again for up to [`PATIENT_PROBE`] while it stays silent, so one slow moment is not taken for a hang.
+/// Probes until the port answers or refuses the connection (nothing listens), asking again for up to [`PATIENT_PROBE`] while it stays silent, so one slow moment is not taken for a hang.
 pub fn probe_patiently(base_url: &str, token: &str) -> Probe {
     let deadline = Instant::now() + PATIENT_PROBE;
     loop {
@@ -157,7 +157,10 @@ pub fn probe_patiently(base_url: &str, token: &str) -> Probe {
             token,
             left.clamp(Duration::from_millis(200), Duration::from_millis(1500)),
         );
-        if result.answered() || Instant::now() + Duration::from_millis(300) >= deadline {
+        if result.answered()
+            || matches!(result, Probe::NoAnswer(NoAnswer::Refused))
+            || Instant::now() + Duration::from_millis(300) >= deadline
+        {
             return result;
         }
         sleep_ms(300);
