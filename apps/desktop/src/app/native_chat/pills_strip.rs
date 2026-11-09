@@ -114,7 +114,7 @@ pub(super) struct StripPlan {
 }
 
 /// The gap between two pills (unscaled), and the "+N" pill's width before it has been drawn once.
-const PILL_GAP: f32 = 6.0;
+pub(super) const PILL_GAP: f32 = 6.0;
 const OVERFLOW_ESTIMATE: f32 = 56.0;
 
 /// What a panel pill measures with its label (`full`) and without (`icon`): the other from the one
@@ -133,7 +133,7 @@ fn pill_widths(full: Option<f32>, icon: Option<f32>, label: f32) -> Option<(f32,
 /// How the row of pills fits `avail`: how many of the last panel pills go into the "+N" pill and how
 /// many of the last ones left drop their label, as few as can be, labels before pills. `fixed` are
 /// the widths of the pills that always show and `pills` the panel pills' (with label, without).
-fn plan_strip(
+pub(super) fn plan_strip(
     avail: f32,
     fixed: &[f32],
     pills: &[(f32, f32)],

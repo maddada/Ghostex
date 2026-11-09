@@ -114,6 +114,22 @@ impl SingleLineCard {
     }
 
     /// A pill on the card's right: `tone` colours its glyph and words, its hairline stays neutral.
+    /// How wide a `pill` is (unscaled), its border included, from its label's own width.
+    pub(super) fn pill_width(&self, icon: bool, label_width: f32) -> f32 {
+        let pill = &self.pill;
+        let inner = match (icon, label_width > 0.0) {
+            (true, true) => pill.icon_size + pill.gap + label_width,
+            (true, false) => pill.icon_size,
+            (false, _) => label_width,
+        };
+        inner + 2.0 * pill.padding_x + 2.0
+    }
+
+    /// A pill's text size (unscaled).
+    pub(super) fn pill_text_size(&self) -> f32 {
+        self.pill.text_size
+    }
+
     pub(super) fn pill(
         &self,
         icon: Option<&'static str>,

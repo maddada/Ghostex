@@ -68,6 +68,9 @@ pub(crate) struct NativeChatView {
     pub(super) menu_toggle: super::menu_toggle::ChatMenuToggle,
     /// The working card's pills, measured where their menus open (`chat_pills.rs`).
     pub(super) pill_bounds: super::chat_pills::ChatPillBounds,
+    /// The room right of each "Worked for" title, by row, as last painted (unscaled), which its
+    /// count pills fit on one line (completed_work_row.rs `stat_pills`).
+    pub(super) stat_room: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, f32>>>,
     /// "Don't show again" is ticked in the open coordinator tips; it applies when they close
     /// (coordinator_intro.rs).
     pub(super) coordinator_intro_dont_show: bool,
@@ -444,6 +447,7 @@ impl NativeChatView {
             worktree_tray_detail_bounds: Default::default(),
             menu_toggle: Default::default(),
             pill_bounds: Default::default(),
+            stat_room: Default::default(),
             coordinator_intro_dont_show: false,
             working_card: Default::default(),
             status_tail: false,

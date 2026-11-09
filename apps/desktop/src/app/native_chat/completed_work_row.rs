@@ -355,7 +355,7 @@ impl NativeChatView {
     ///
     /// Its height, fill and type are every one-line card's (`SINGLE_LINE_CARD`, cards.rs).
     ///
-    /// CDXC:SessionChat 2026-10-11 DECISION: User: move the count pills to the right side of the "Worked …" row and give them fully rounded (pill) corners. They wrap among themselves, right-aligned, when the row is narrow; the phone's `TranscriptItemRow.tsx` lays them out the same way.
+    /// CDXC:SessionChat 2026-10-11 DECISION: User: move the count pills to the right side of the "Worked …" row and give them fully rounded (pill) corners. How they fit a narrow row is `stat_pills`' (2026-11-10, no longer wrapping).
     fn work_summary(
         &self,
         item: &TranscriptItem,
@@ -388,19 +388,6 @@ impl NativeChatView {
             .collect::<Vec<_>>()
             .join(", ");
         let card = &*SINGLE_LINE_CARD;
-        let chip = |kind: &str, label: String| {
-            let failed = matches!(kind, "failed" | "recovered");
-            let tone = if failed { p.error() } else { p.card_muted };
-            let icon = match kind {
-                "files" => "titlebar/pencil.svg",
-                "images" => "titlebar/photo.svg",
-                "messages" => "titlebar/messages.svg",
-                "answers" => "titlebar/chat-card-question.svg",
-                "failed" | "recovered" => "titlebar/alert-triangle.svg",
-                _ => "titlebar/tool.svg",
-            };
-            card.pill(Some(icon), Some(label), tone, p)
-        };
         // CDXC:SessionChat 2026-10-25 DECISION: User: "make hovering on this [the Worked for header] show same bg change that we get when i hover on this [the Message from card]". The press and its hover live on the row inside the bordered shell, as the Message from card's do (inter_agent_message.rs `agent_card`), so the fill lies over the shell's fill; on the shell itself it replaced that fill and showed no change.
         let bar = card
             .shell(div(), p)
@@ -428,17 +415,7 @@ impl NativeChatView {
                             .text_color(p.foreground)
                             .child(label),
                     )
-                    .child(
-                        div()
-                            .flex()
-                            .flex_1()
-                            .min_w_0()
-                            .flex_wrap()
-                            .justify_end()
-                            .items_center()
-                            .gap(px(6.0 * s))
-                            .children(stats.into_iter().map(|(kind, label)| chip(&kind, label))),
-                    )
+                    .child(self.stat_pills(id, &stats, p, cx))
                     .when(expandable, |row| {
                         let id = id.to_string();
                         let action = deferred
@@ -476,6 +453,108 @@ impl NativeChatView {
                 )
             });
         bar.into_any_element()
+    }
+
+    /// The count pills right of a "Worked for" title, always on one line: when they don't fit, the
+    /// last ones drop their words and show icon and count ("7"), and only if that still doesn't fit
+    /// the last ones go into one "+N" pill. The bar's own label still names every count. The room is
+    /// measured as painted (`stat_room`), so a new width takes one more frame, as the pills row above
+    /// the chat box does (pills_strip.rs `pills_strip_fit`).
+    ///
+    /// CDXC:SessionChat 2026-11-10 DECISION: User, of a "Worked for" row whose four pills ("7 tool calls", "1 file", "2 messages", "1 answer") wrapped onto two lines and were clipped: "Don't wrap and don't grow the row: follow the rule the pills row above the chat box just got": labels drop from the right, then one "+N" (`plan_strip`). Supersedes the 2026-10-11 rule that the pills wrap among themselves. The phone matches in `statPills.tsx`.
+    fn stat_pills(
+        &self,
+        id: &str,
+        stats: &[(String, String)],
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        use super::pills_strip::{PILL_GAP, plan_strip};
+        let s = p.scale;
+        let card = &*SINGLE_LINE_CARD;
+        let icon = |kind: &str| match kind {
+            "files" => "titlebar/pencil.svg",
+            "images" => "titlebar/photo.svg",
+            "messages" => "titlebar/messages.svg",
+            "answers" => "titlebar/chat-card-question.svg",
+            "failed" | "recovered" => "titlebar/alert-triangle.svg",
+            _ => "titlebar/tool.svg",
+        };
+        let tone = |kind: &str| {
+            if matches!(kind, "failed" | "recovered") {
+                p.error()
+            } else {
+                p.card_muted
+            }
+        };
+        // Every label opens with its count ("7 tool calls"), which is all a short pill keeps.
+        let short = |label: &str| label.split(' ').next().unwrap_or(label).to_string();
+        let room = self.stat_room.borrow().get(id).copied();
+        let (hidden, collapsed) = match room {
+            Some(room) => {
+                let size = card.pill_text_size();
+                let width = |label: &str, with_icon: bool| {
+                    card.pill_width(with_icon, text_width(label, size, p, cx))
+                };
+                let pills: Vec<(f32, f32)> = stats
+                    .iter()
+                    .map(|(_, label)| (width(label, true), width(&short(label), true)))
+                    .collect();
+                let overflow = width(&format!("+{}", stats.len()), false);
+                plan_strip(room, &[], &pills, overflow, PILL_GAP)
+            }
+            // Not painted yet: everything whole, cut at the edge for one frame.
+            None => (0, 0),
+        };
+        let visible = stats.len() - hidden;
+        let mut pills: Vec<AnyElement> = stats[..visible]
+            .iter()
+            .enumerate()
+            .map(|(index, (kind, label))| {
+                let label = if index >= visible - collapsed {
+                    short(label)
+                } else {
+                    label.clone()
+                };
+                card.pill(Some(icon(kind)), Some(label), tone(kind), p)
+                    .into_any_element()
+            })
+            .collect();
+        if hidden > 0 {
+            pills.push(
+                card.pill(None, Some(format!("+{hidden}")), p.card_muted, p)
+                    .into_any_element(),
+            );
+        }
+        let rooms = self.stat_room.clone();
+        let key = id.to_string();
+        let chat = cx.entity_id();
+        div()
+            .relative()
+            .flex()
+            .flex_1()
+            .min_w_0()
+            .overflow_hidden()
+            .justify_end()
+            .items_center()
+            .gap(px(PILL_GAP * s))
+            .children(pills)
+            .child(
+                gpui::canvas(
+                    move |bounds, _, cx| {
+                        let room = f32::from(bounds.size.width) / s;
+                        let mut rooms = rooms.borrow_mut();
+                        if rooms.get(&key).is_none_or(|was| (was - room).abs() > 0.5) {
+                            rooms.insert(key.clone(), room);
+                            cx.notify(chat);
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .inset_0(),
+            )
+            .into_any_element()
     }
 
     /// The row while it folds, opens or closes. Each part carries the gap above it, so a part
@@ -557,4 +636,22 @@ impl NativeChatView {
         )
         .into_any_element()
     }
+}
+
+/// How wide `label` is in the chat's font at `size` (both unscaled).
+fn text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
+    if label.is_empty() {
+        return 0.0;
+    }
+    let system = gpui::WindowTextSystem::new(cx.text_system().clone());
+    let run = gpui::TextRun {
+        len: label.len(),
+        font: gpui::font(p.font.clone()),
+        ..Default::default()
+    };
+    system
+        .shape_line(label.to_owned().into(), px(size * p.scale), &[run], None)
+        .width
+        .as_f32()
+        / p.scale
 }
