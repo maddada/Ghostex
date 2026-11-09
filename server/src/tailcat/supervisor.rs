@@ -62,6 +62,8 @@ struct TailcatLaneState {
     running: bool,
     token: Option<String>,
     last_error: Option<String>,
+    /// Why gxserver is stopping this lane's helper now, for the log (`take_stop_reason`).
+    stop_reason: Option<&'static str>,
 }
 
 #[derive(Default)]
@@ -154,13 +156,13 @@ impl TailcatRuntime {
     */
     pub(crate) fn apply(&self, paths: &GxserverPaths, state: &TailcatState) {
         if !state.enabled {
-            self.stop();
+            self.stop_because("turnedOff");
             self.set_last_error(TailcatLane::Public, None);
             self.set_last_error(TailcatLane::Relay, None);
             return;
         }
         let Some(binary_path) = resolve_host_tailcat_binary(paths) else {
-            self.stop();
+            self.stop_because("helperMissing");
             // CDXC:Notices 2026-11-06: Settings > Remote shows these to a person (Q1410); raw errors go to the log.
             eprintln!(
                 "[gxserver] tailcat binary not found (bundled, managed or GHOSTEX_TAILCAT_BIN)"
@@ -176,7 +178,7 @@ impl TailcatRuntime {
         };
         let key_file = tailcat_key_file(paths);
         if let Err(error) = ensure_tailcat_key_file(&binary_path, &key_file) {
-            self.stop();
+            self.stop_because("keyMissing");
             eprintln!("[gxserver] could not create the tailcat server key: {error}");
             self.set_last_error(
                 TailcatLane::Public,
@@ -185,7 +187,7 @@ impl TailcatRuntime {
             return;
         }
         if let Err(error) = record_host_tailcat_binary(paths, &binary_path) {
-            self.stop();
+            self.stop_because("helperMissing");
             self.set_last_error(
                 TailcatLane::Public,
                 Some(format!("Could not record the Easy Connect helper: {error}")),
@@ -217,12 +219,12 @@ impl TailcatRuntime {
             inner.relay_host = host.clone();
         }
         let Some(host) = host else {
-            self.stop_lane(TailcatLane::Relay);
+            self.stop_lane(TailcatLane::Relay, "relayOff");
             self.set_last_error(TailcatLane::Relay, None);
             return;
         };
         let Some(binary_path) = resolve_client_tailcat_binary() else {
-            self.stop_lane(TailcatLane::Relay);
+            self.stop_lane(TailcatLane::Relay, "relayOff");
             self.set_last_error(
                 TailcatLane::Relay,
                 Some("Ghostex's relay needs a newer Easy Connect helper; install it above. The public relays still work.".to_string()),
@@ -231,7 +233,7 @@ impl TailcatRuntime {
         };
         let key_file = tailcat_relay_key_file(paths, &host);
         if let Err(error) = ensure_tailcat_relay_key_file(&binary_path, &key_file, &host) {
-            self.stop_lane(TailcatLane::Relay);
+            self.stop_lane(TailcatLane::Relay, "relayOff");
             eprintln!("[gxserver] could not create the tailcat relay key for {host}: {error}");
             self.set_last_error(
                 TailcatLane::Relay,
@@ -256,8 +258,14 @@ impl TailcatRuntime {
         if self.is_current_spec(&spec) {
             return;
         }
-        self.stop_lane(spec.lane);
-        self.start(spec);
+        let previous = self
+            .inner
+            .lock()
+            .ok()
+            .and_then(|mut inner| inner.lane(spec.lane).spec.clone());
+        let reason = restart_reason(previous.as_ref(), &spec);
+        self.stop_lane(spec.lane, reason);
+        self.start(spec, reason);
     }
 
     /*
@@ -328,18 +336,23 @@ impl TailcatRuntime {
         super::status::start_tailcat_from_persisted_state(paths, self);
     }
 
-    /// Stops both helpers.
+    /// Stops both helpers (gxserver is stopping).
     pub fn stop(&self) {
-        self.stop_lane(TailcatLane::Public);
-        self.stop_lane(TailcatLane::Relay);
+        self.stop_because("gxserverStopping");
     }
 
-    fn stop_lane(&self, lane: TailcatLane) {
+    fn stop_because(&self, reason: &'static str) {
+        self.stop_lane(TailcatLane::Public, reason);
+        self.stop_lane(TailcatLane::Relay, reason);
+    }
+
+    fn stop_lane(&self, lane: TailcatLane, reason: &'static str) {
         let stop_tx = {
             let Ok(mut inner) = self.inner.lock() else {
                 return;
             };
             let state = inner.lane(lane);
+            state.stop_reason = Some(reason);
             state.generation = state.generation.wrapping_add(1);
             state.spec = None;
             state.running = false;
@@ -355,7 +368,16 @@ impl TailcatRuntime {
         }
     }
 
-    fn start(&self, spec: TailcatServeSpec) {
+    /// Why this lane's helper was just stopped, once.
+    fn take_stop_reason(&self, lane: TailcatLane) -> &'static str {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|mut inner| inner.lane(lane).stop_reason.take())
+            .unwrap_or("stopped")
+    }
+
+    fn start(&self, spec: TailcatServeSpec, reason: &'static str) {
         let (stop_tx, stop_rx) = mpsc::channel();
         let (generation, logger) = {
             let Ok(mut inner) = self.inner.lock() else {
@@ -377,7 +399,7 @@ impl TailcatRuntime {
             thread::spawn(move || watch_relay_reachability(runtime, generation, key_file));
         }
         let runtime = self.clone();
-        thread::spawn(move || supervise(runtime, generation, spec, stop_rx, logger));
+        thread::spawn(move || supervise(runtime, generation, spec, stop_rx, logger, reason));
     }
 
     fn is_current_spec(&self, spec: &TailcatServeSpec) -> bool {
@@ -493,8 +515,10 @@ fn supervise(
     spec: TailcatServeSpec,
     stop_rx: mpsc::Receiver<mpsc::SyncSender<()>>,
     logger: Option<std::sync::Arc<crate::logging::GxserverLogger>>,
+    first_reason: &'static str,
 ) {
     let lane = spec.lane;
+    let mut start_reason = first_reason;
     let link_context = super::link_log::LinkLogContext {
         lane: lane.as_str(),
         relay: super::relay_probe::key_relay_label(&spec.key_file),
@@ -524,15 +548,28 @@ fn supervise(
                 continue;
             }
         };
+        // The peers this helper carries, so its end can be logged for each of them.
+        let peers = super::link_log::LinkPeers::default();
         if let Some(stderr) = child.stderr.take() {
             let context = link_context.clone();
-            thread::spawn(move || super::link_log::follow_tailcat_log(stderr, context));
+            let peers = peers.clone();
+            thread::spawn(move || super::link_log::follow_tailcat_log(stderr, context, peers));
         }
+        super::link_log::record_helper_event(&link_context, "started", start_reason, None);
         runtime.mark_running(lane, generation, true);
         let started_at = Instant::now();
         let exit_reason = loop {
             if let Ok(reply) = stop_rx.try_recv() {
                 terminate_process_group(&mut child);
+                let reason = runtime.take_stop_reason(lane);
+                let uptime_ms = started_at.elapsed().as_millis() as u64;
+                super::link_log::record_helper_event(
+                    &link_context,
+                    "stopped",
+                    reason,
+                    Some(uptime_ms),
+                );
+                super::link_log::record_links_ended(&link_context, &peers, reason);
                 let _ = reply.send(());
                 return;
             }
@@ -551,6 +588,14 @@ fn supervise(
             }
         };
         let was_stable = started_at.elapsed() >= STABLE_UPTIME;
+        super::link_log::record_helper_event(
+            &link_context,
+            "exited",
+            "helperExited",
+            Some(started_at.elapsed().as_millis() as u64),
+        );
+        super::link_log::record_links_ended(&link_context, &peers, "helperExited");
+        start_reason = "restartedAfterExit";
         runtime.record_error(lane, generation, exit_reason);
         if was_stable {
             backoff = INITIAL_BACKOFF;
@@ -594,6 +639,41 @@ pub(crate) const TAILCAT_ALLOW_NONE: &str = "none";
 /// The `--allow` list a helper is started with: nothing (any client) only while the pairing window
 /// is open; otherwise the saved keys, and an empty list is closed (`none`), never open
 /// (CDXC:RemotePairing 2026-11-08 above).
+/*
+CDXC:RemotePairing 2026-11-09 WHY:
+GitHub #520: one peer's Easy Connect link started again every 18 to 128 s while both helpers and
+the relay read healthy, and nothing in the log said a link had ended or why. A link ends with the
+helper that carries it (tailcat keeps its peers for the life of the process and prints nothing when
+one goes quiet), and gxserver restarts a helper whenever what it serves changes: the allow-list
+lifted while a pairing code is on screen or a phone or computer waits as Pending, the list restored
+60 s after the last ask, a key added when a pairing is approved, the ports, the helper binary or
+the relay. Each start, stop and exit of a helper is now logged as `easyConnect.helper` with that
+reason, and the end of every link it carried as `easyConnect.link` `phase: ended` with the same
+reason, so a pairing that keeps failing and retrying shows as what it is.
+*/
+/// Why a lane's helper starts again with `next` after `previous` (none: it wasn't running).
+fn restart_reason(previous: Option<&TailcatServeSpec>, next: &TailcatServeSpec) -> &'static str {
+    let Some(previous) = previous else {
+        return "turnedOn";
+    };
+    let lifted = |spec: &TailcatServeSpec| spec.allowed_client_keys.is_empty();
+    if !lifted(previous) && lifted(next) {
+        "allowListLiftedForPairing"
+    } else if lifted(previous) && !lifted(next) {
+        "allowListRestored"
+    } else if previous.allowed_client_keys != next.allowed_client_keys {
+        "allowListChanged"
+    } else if previous.ports != next.ports {
+        "portsChanged"
+    } else if previous.binary_path != next.binary_path {
+        "helperChanged"
+    } else if previous.key_file != next.key_file {
+        "relayChanged"
+    } else {
+        "settingsChanged"
+    }
+}
+
 pub(crate) fn served_allow_list(saved: &[String], pairing_window_open: bool) -> Vec<String> {
     if pairing_window_open {
         return Vec::new();

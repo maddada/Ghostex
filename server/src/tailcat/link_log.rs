@@ -149,8 +149,40 @@ pub(crate) struct LinkLogContext {
     pub(crate) logger: Option<std::sync::Arc<GxserverLogger>>,
 }
 
+/// The peers one helper process has carried a link for (a refused hello is not one).
+#[derive(Clone, Default)]
+pub(crate) struct LinkPeers(std::sync::Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>);
+
+impl LinkPeers {
+    fn note(&self, event: &LinkEvent) {
+        let mut peers = self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match event {
+            LinkEvent::Started { peer } | LinkEvent::Direct { peer, .. } => {
+                peers.insert(peer.clone());
+            }
+            LinkEvent::Refused { peer } => {
+                peers.remove(peer);
+            }
+        }
+    }
+
+    fn take(&self) -> Vec<String> {
+        std::mem::take(
+            &mut *self
+                .0
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        )
+        .into_iter()
+        .collect()
+    }
+}
+
 /// Reads one helper's log until it closes, recording every link event; the rest is dropped.
-pub(crate) fn follow_tailcat_log(stream: impl Read, context: LinkLogContext) {
+pub(crate) fn follow_tailcat_log(stream: impl Read, context: LinkLogContext, peers: LinkPeers) {
     let mut tracker = LinkTracker::default();
     let reader = BufReader::new(stream);
     for line in reader.split(b'\n') {
@@ -159,9 +191,64 @@ pub(crate) fn follow_tailcat_log(stream: impl Read, context: LinkLogContext) {
         };
         let line = String::from_utf8_lossy(&line);
         if let Some(event) = tracker.observe(&line, Instant::now()) {
+            peers.note(&event);
             record_link_event(&context, &event);
         }
     }
+}
+
+/// `easyConnect.helper`: one helper `phase` (`started`, `stopped`, `exited`) with its `reason`,
+/// and how long it ran when it ends.
+pub(crate) fn record_helper_event(
+    context: &LinkLogContext,
+    phase: &str,
+    reason: &str,
+    uptime_ms: Option<u64>,
+) {
+    let mut details = json!({
+        "lane": context.lane,
+        "relay": context.relay,
+        "phase": phase,
+        "reason": reason,
+    });
+    if let Some(uptime_ms) = uptime_ms {
+        details["uptimeMs"] = json!(uptime_ms);
+    }
+    log_record(context, "easyConnect.helper", phase == "exited", details);
+}
+
+/// The end of every link the helper carried, for `reason` (the helper stopped or exited).
+pub(crate) fn record_links_ended(context: &LinkLogContext, peers: &LinkPeers, reason: &str) {
+    for peer in peers.take() {
+        log_record(
+            context,
+            "easyConnect.link",
+            false,
+            json!({
+                "lane": context.lane,
+                "relay": context.relay,
+                "phase": "ended",
+                "peer": peer,
+                "reason": reason,
+            }),
+        );
+    }
+}
+
+fn log_record(context: &LinkLogContext, event: &str, warn: bool, details: serde_json::Value) {
+    let Some(logger) = context.logger.as_ref() else {
+        return;
+    };
+    let _ = logger.log_record(GxserverLogInput {
+        level: if warn { LogLevel::Warn } else { LogLevel::Info },
+        event: event.to_string(),
+        server_id: None,
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: None,
+        details: Some(details),
+    });
 }
 
 fn record_link_event(context: &LinkLogContext, event: &LinkEvent) {
