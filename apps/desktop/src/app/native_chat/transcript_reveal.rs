@@ -87,7 +87,7 @@ impl NativeChatView {
             .get_or_insert_with(Instant::now);
         let s = p.scale;
         if state["transcriptSkeleton"] == true {
-            return transcript_skeleton(p);
+            return transcript_skeleton(self.transcript_column_cap(p), p);
         }
         // `size_full`, not `flex_1`: this element is the cached transcript view's root, whose parent
         // is not a flex column, so `flex_1` left it content-height and pinned to the top.
@@ -167,20 +167,18 @@ pub(super) fn skeleton_look(p: &ChatAppearance) -> (gpui::Hsla, Duration, f32) {
     )
 }
 
-/// The skeleton rows, in the transcript's own column, pulsing like the other skeletons.
-fn transcript_skeleton(p: &ChatAppearance) -> AnyElement {
+/// The skeleton rows, in the transcript's own column (at most `cap`, transcript.rs
+/// `transcript_column_cap`), pulsing like the other skeletons.
+fn transcript_skeleton(cap: f32, p: &ChatAppearance) -> AnyElement {
     use crate::app::helpers::ThrottledAnimationExt as _;
     let s = p.scale;
     let g = &*SKELETON;
     let tint = p.foreground.opacity(g.tint);
     let column = div()
         .w_full()
-        .max_w(px(768.0 * s))
+        .max_w(px(cap))
         .px(px(16.0 * s))
         .pt(px(g.top_padding * s))
-        .when_some(p.transcript_width, |this, width| {
-            this.max_w(gpui::relative(1.0)).w(gpui::relative(width))
-        })
         .flex()
         .flex_col()
         // Message spacing Compact shrinks its gaps by the transcript's own ratio (16px to 8px).

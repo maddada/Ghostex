@@ -164,6 +164,9 @@ pub(crate) struct NativeChatView {
     /// keep this frame while one slides (`render.rs` `hold_text_width_while_sliding`).
     pub(super) settled_text_width: Option<f32>,
     pub(super) held_text_width: Option<f32>,
+    /// The window's width on this frame, which a Transcript width percentage is taken of
+    /// (transcript.rs `transcript_column_cap`).
+    pub(super) window_width: f32,
     /// The transcript scrollbar's measured track: from the top of the transcript region to the
     /// bottom of the pane, so the composer's height never shortens it (scrollbar.rs).
     pub(super) scrollbar_track: std::rc::Rc<std::cell::Cell<gpui::Pixels>>,
@@ -503,6 +506,7 @@ impl NativeChatView {
             bounds: Default::default(),
             settled_text_width: None,
             held_text_width: None,
+            window_width: 0.0,
             scrollbar_track: Default::default(),
             transcript_scrolled_at: None,
             scroll_bottom_drawn: Default::default(),

@@ -449,7 +449,7 @@ impl NativeChatView {
         if let Some(prompt) = self.render_prompt(p, window, cx) {
             if self.snapshot["prompt"]["kind"] == "question" {
                 return self
-                    .composer_row(p, maximized)
+                    .composer_row()
                     .child(footer.children(waiting).child(prompt))
                     .into_any_element();
             }
@@ -714,22 +714,15 @@ impl NativeChatView {
         if self.status_line_reserved() && !self.collab_guest() {
             footer = footer.child(self.render_context_status(p, cx));
         }
-        self.composer_row(p, maximized)
+        self.composer_row()
             .when(maximized, |this| this.h_full().min_h_0())
             .child(footer)
             .into_any_element()
     }
 
-    /// The row the chat box is centred in. With Chat box matches transcript width it is inset like
-    /// the transcript list (transcript.rs `transcript_list_gutters`), so the box's percentage
-    /// width is the rows' own.
-    fn composer_row(&self, p: &ChatAppearance, maximized: bool) -> gpui::Div {
-        let row = div().flex().w_full().justify_center().flex_shrink_0();
-        if p.composer_matches_transcript && !maximized {
-            self.transcript_list_gutters(row, p)
-        } else {
-            row
-        }
+    /// The row the chat box is centred in.
+    fn composer_row(&self) -> gpui::Div {
+        div().flex().w_full().justify_center().flex_shrink_0()
     }
 }
 

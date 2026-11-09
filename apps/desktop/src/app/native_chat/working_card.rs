@@ -141,15 +141,14 @@ impl NativeChatView {
                     .block_mouse_except_scroll()
                     .child(pill),
             );
-        let row = div()
-            .absolute()
-            .bottom(px(super::transcript_layout::LAYOUT.end_padding * s))
-            .left_0()
-            .right_0()
-            .flex()
-            .justify_center();
         Some(
-            self.transcript_list_gutters(row, p)
+            div()
+                .absolute()
+                .bottom(px(super::transcript_layout::LAYOUT.end_padding * s))
+                .left_0()
+                .right_0()
+                .flex()
+                .justify_center()
                 .child(column)
                 .into_any_element(),
         )
