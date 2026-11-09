@@ -88,7 +88,9 @@ pub use machine_disable::{
     owns_machine_disable_command, plan_machine_disable, MACHINE_DISABLE_SETTINGS_SOURCE,
 };
 pub use modals::{owns_modal_message, plan_modal_action, rename_seed_title, ModalAction};
-pub use open::{owns_open_command, plan_open_action, OPEN_COMMAND_TYPES};
+pub use open::{
+    new_coordinator_modal_payload, owns_open_command, plan_open_action, OPEN_COMMAND_TYPES,
+};
 pub use plan::{ActionEffect, SidebarActionPlan, ToastButton, ToastLevel};
 pub use read_only::{
     plan_read_only_action, plan_remote_project_open, RemoteProjectOpen, READ_ONLY_MESSAGE_TYPES,

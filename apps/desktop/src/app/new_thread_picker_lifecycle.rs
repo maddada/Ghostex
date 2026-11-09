@@ -556,15 +556,10 @@ impl GhostexGpuiApp {
                     .take()
                     .or_else(|| self.gx_store_active_group_id());
                 self.release_gpui_new_thread_picker_window(cx);
+                // Opened straight from the pick, which may be neither a drawn project nor the copy
+                // a merged entry acts on, so it resolves the project itself.
                 if let Some(group_id) = group_id {
-                    self.dispatch_gpui_sidebar_host_message(
-                        json!({
-                            "type": "projectAction",
-                            "action": "coordinator",
-                            "groupId": group_id,
-                        }),
-                        cx,
-                    );
+                    self.gx_store_open_new_coordinator(&group_id, cx);
                 }
             }
             NewThreadPickerCommand::OpenBrowser { target } => {

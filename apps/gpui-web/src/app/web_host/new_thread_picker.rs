@@ -137,6 +137,8 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    /// The web build's New thread picker commands: the desktop's own handling
+    /// (new_thread_picker_lifecycle.rs) minus what a page cannot open.
     fn handle_web_new_thread_picker_command(
         &mut self,
         command: NewThreadPickerCommand,
@@ -177,11 +179,9 @@ impl GhostexGpuiApp {
                     .picker_target
                     .take()
                     .or_else(|| self.gx_store_active_group_id());
+                // Straight from the pick, as on the desktop (new_thread_picker_lifecycle.rs).
                 if let Some(group_id) = group_id {
-                    self.dispatch_gpui_sidebar_host_message(
-                        json!({ "type": "projectAction", "action": "coordinator", "groupId": group_id }),
-                        cx,
-                    );
+                    self.gx_store_open_new_coordinator(&group_id, cx);
                 }
             }
             NewThreadPickerCommand::CreateTerminal { target } => {
