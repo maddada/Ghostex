@@ -62,6 +62,7 @@ mod retire;
 mod routine_runs;
 mod routines;
 mod session;
+mod skill;
 mod sweep;
 mod team_file;
 mod trash;
@@ -83,6 +84,7 @@ pub(crate) use endpoint::{handle_gbots_http, GBOTS_ENDPOINT};
 pub(crate) use feature::{chief_adds_on_its_own, gbots_off_message, gbots_on, gbots_shown};
 pub(crate) use folder::gbots_dir as gbots_folder;
 pub(crate) use markers::keep_gbot_marks;
+pub(crate) use skill::install_for_visiting_chat as install_gbots_skill_for_visiting_chat;
 pub(crate) use memory::{
     coordinator_remember as gbot_coordinator_remember, observe_activity as observe_gbot_activity,
 };

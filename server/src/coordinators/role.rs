@@ -155,32 +155,48 @@ fn orchestrator_skill_agent(family: &str) -> Option<&'static str> {
     }
 }
 
-/// Installs the orchestrator skill for `family`: one copy in `~/.agents/skills`, written from this
-/// build when it is missing, and a link in the agent's own skills folder when the agent does not
-/// read `~/.agents/skills` itself (the shape Settings installs make). An existing copy is left as
-/// it is: the startup refresh keeps it equal to GitHub main (agent_skills_remote.rs).
+/// Installs the orchestrator skill for `family` ([`ensure_bundled_skill_installed`]).
 pub fn ensure_orchestrator_skill_installed(
     paths: &GxserverPaths,
     family: &str,
 ) -> Result<PathBuf, DomainStateError> {
+    ensure_bundled_skill_installed(
+        paths,
+        family,
+        ORCHESTRATOR_SKILL_NAME,
+        ORCHESTRATOR_SKILL_MD,
+        ORCHESTRATOR_SKILL_OPENAI_YAML,
+    )
+}
+
+/// Installs the bundled skill `name` for `family`: one copy in `~/.agents/skills`, written from
+/// this build (`skill_md`, `openai_yaml`) when it is missing, and a link in the agent's own skills
+/// folder when the agent does not read `~/.agents/skills` itself (the shape Settings installs
+/// make). An existing copy is left as it is: the startup refresh keeps it equal to GitHub main
+/// (agent_skills_remote.rs). Used for the skills a role is handed in its first message: the
+/// orchestrator playbook and the GBot playbook (gbots/skill.rs).
+pub fn ensure_bundled_skill_installed(
+    paths: &GxserverPaths,
+    family: &str,
+    name: &str,
+    skill_md: &str,
+    openai_yaml: &str,
+) -> Result<PathBuf, DomainStateError> {
     let home = paths.agent_config_home_dir();
     let canonical = home
         .join(crate::agent_skills::CANONICAL_AGENT_SKILLS_DIR)
-        .join(ORCHESTRATOR_SKILL_NAME);
+        .join(name);
     let install_error = |path: &Path, error: std::io::Error| DomainStateError {
         code: "internalError",
         message: format!(
-            "Could not install the {ORCHESTRATOR_SKILL_NAME} skill at {}: {error}",
+            "Could not install the {name} skill at {}: {error}",
             path.display()
         ),
     };
     if !canonical.join("SKILL.md").is_file() {
-        write_if_changed(
-            &canonical.join("agents").join("openai.yaml"),
-            ORCHESTRATOR_SKILL_OPENAI_YAML,
-        )
-        .map_err(|error| install_error(&canonical, error))?;
-        write_if_changed(&canonical.join("SKILL.md"), ORCHESTRATOR_SKILL_MD)
+        write_if_changed(&canonical.join("agents").join("openai.yaml"), openai_yaml)
+            .map_err(|error| install_error(&canonical, error))?;
+        write_if_changed(&canonical.join("SKILL.md"), skill_md)
             .map_err(|error| install_error(&canonical, error))?;
     }
     let agent_root = orchestrator_skill_agent(family).and_then(|agent_id| {
@@ -190,10 +206,7 @@ pub fn ensure_orchestrator_skill_installed(
             .and_then(|spec| spec.skills_dir)
     });
     if let Some(root) = agent_root {
-        crate::agent_skills::link_skill_into_agent_root(
-            &canonical,
-            &root.join(ORCHESTRATOR_SKILL_NAME),
-        )?;
+        crate::agent_skills::link_skill_into_agent_root(&canonical, &root.join(name))?;
     }
     Ok(canonical)
 }

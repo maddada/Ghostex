@@ -50,11 +50,27 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     The orchestrator playbook is a bundled skill gxserver installs when an orchestrator is created or promoted (coordinators/role.rs), so it is listed here for the startup refresh from GitHub main, but left out of the default install set (`ORCHESTRATOR_ONLY_GHOSTEX_AGENT_SKILL_NAMES`): an ordinary session never needs it.
     */
     "ghostex-orchestrator",
+    /*
+    CDXC:GBots 2026-11-09 WHY:
+    Every GBot chat's first message says "Read and adhere to this skill: $ghostex-gbots" (gbots/session.rs `first_message`), but nothing installed it, so the chat looked for a skill that was not there. gxserver now installs it when a GBot chat starts (gbots/skill.rs), here and on a connected computer that opens a GBot's chat. Like the orchestrator playbook it is listed for the startup refresh from GitHub main and left out of the default install set (`GBOT_ONLY_GHOSTEX_AGENT_SKILL_NAMES`): an ordinary session never needs it.
+    */
+    "ghostex-gbots",
 ];
 
 /// Bundled skills installed only for the agent an orchestrator runs on, never by a plain "install
 /// the Ghostex skills".
 pub const ORCHESTRATOR_ONLY_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &["ghostex-orchestrator"];
+
+/// Bundled skills installed only for the agent a GBot chat runs on (gbots/skill.rs), never by a
+/// plain "install the Ghostex skills".
+pub const GBOT_ONLY_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &["ghostex-gbots"];
+
+/// Whether `name` is installed only for one role (an orchestrator or a GBot chat), so Settings,
+/// settings sync and the default install set leave it out.
+pub fn role_only_ghostex_agent_skill(name: &str) -> bool {
+    ORCHESTRATOR_ONLY_GHOSTEX_AGENT_SKILL_NAMES.contains(&name)
+        || GBOT_ONLY_GHOSTEX_AGENT_SKILL_NAMES.contains(&name)
+}
 
 /// Bundled skills that only work on macOS: left out of the default install set elsewhere, and
 /// refused when asked for by name (`SPACEO_MACOS_ONLY_MESSAGE`).
@@ -661,7 +677,7 @@ pub fn normalize_agent_skill_names(
             .filter(|skill_name| {
                 (cfg!(target_os = "macos")
                     || !MACOS_ONLY_GHOSTEX_AGENT_SKILL_NAMES.contains(skill_name))
-                    && !ORCHESTRATOR_ONLY_GHOSTEX_AGENT_SKILL_NAMES.contains(skill_name)
+                    && !role_only_ghostex_agent_skill(skill_name)
             })
             .map(|skill_name| (*skill_name).to_string())
             .collect()

@@ -7,9 +7,8 @@
 //! SEE-ALSO: apps/desktop/src/app/remote_conn/settings_rpc.rs (the desktop's route to a machine), apps/desktop/src/app/window/settings_modal/tabs/integrations/remote_machine.rs.
 use crate::{
     agent_skills::{
-        self, CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_AGENT_SKILL_NAMES,
-        MACOS_ONLY_GHOSTEX_AGENT_SKILL_NAMES, ORCHESTRATOR_ONLY_GHOSTEX_AGENT_SKILL_NAMES,
-        SPACEO_MACOS_ONLY_MESSAGE,
+        self, role_only_ghostex_agent_skill, CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_AGENT_SKILL_NAMES,
+        MACOS_ONLY_GHOSTEX_AGENT_SKILL_NAMES, SPACEO_MACOS_ONLY_MESSAGE,
     },
     agent_skills_remote,
     domain::DomainStateError,
@@ -59,11 +58,11 @@ fn platform() -> &'static str {
 }
 
 /// The bundled skills a person installs from Settings: every shipped one but the orchestrator
-/// playbook (installed only for an orchestrator), each once.
+/// and GBot playbooks (installed only for an orchestrator or a GBot chat), each once.
 fn listed_skill_names() -> Vec<&'static str> {
     let mut names: Vec<&'static str> = Vec::new();
     for name in GHOSTEX_AGENT_SKILL_NAMES {
-        if !ORCHESTRATOR_ONLY_GHOSTEX_AGENT_SKILL_NAMES.contains(name) && !names.contains(name) {
+        if !role_only_ghostex_agent_skill(name) && !names.contains(name) {
             names.push(name);
         }
     }

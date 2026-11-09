@@ -3759,11 +3759,11 @@ agent. An Empryo coordinator runs as the Empryo agent `ghostex-coordinator`: Gho
 keeps its playbook in `~/.empryo/agents/ghostex-coordinator.md` and switches the
 session to it with `/agent ghostex-coordinator` before anything else, so leave that
 file in place. From a terminal or another agent: `ghostex coordinator create --title <name>
-[--model <m>] [--effort <e>] [--goal <text>] [--task <first request>]`, `ghostex coordinator
+[--path <folder> | --project-id <id>] [--model <m>] [--effort <e>] [--goal <text>] [--task <first request>]`, `ghostex coordinator
 promote <session> [--goal <text>] [--computer <name>]` (make an existing session a coordinator; in versions after 10.49.0 this works on a connected computer's session too, and so does the sidebar's Advanced > Make Coordinator on its rows: that computer installs the coordinator skill and keeps the coordinator), `ghostex coordinator status`,
 `ghostex coordinator options` (the agents, models and efforts a coordinator can use),
 `ghostex coordinator start-thread --title <title> --task <brief> [--worktree]
-[--agent <id>] [--model <m>] [--effort <e>] [--account <number|email>]` (`--account`, in versions after 10.45.0, starts a Claude or Codex thread on that saved account instead of the Account for new sessions rule; one that needs signing in is refused), `ghostex coordinator resolve
+[--agent <id>] [--model <m>] [--effort <e>] [--account <number|email>]` (`--path <folder>`, here and on `coordinator create` and `ghostex agents create`, adds that folder as a project, creating it if needed, and starts there; `--account`, in versions after 10.45.0, starts a Claude or Codex thread on that saved account instead of the Account for new sessions rule; one that needs signing in is refused), `ghostex coordinator resolve
 <thread> [--keep-open]` (mark done and close its session), `ghostex coordinator
 reopen <thread>` (resume a closed thread), `ghostex coordinator unlink <thread>` (take a
 thread out of the coordinator's tree: it stays running as an ordinary session of its
@@ -3805,8 +3805,8 @@ itself ("what's stuck?", "how do I pair my phone?").
   questions and permission prompts, without asking you each time. Work in a
   project goes to that project's coordinator, and work on another computer to
   that computer's Chief of Staff. Collab, pairing, Easy Connect, connecting
-  computers, Autopilot's limits, GBots, security settings and installing things
-  stay yours.
+  computers, Autopilot's limits, turning GBots on, security settings and
+  installing things stay yours.
 - **New Chat keeps your old chat**: right-click the Chief of Staff row for New
   Chat (Ghostex asks first; tick Don't ask again to stop asking). The old chat
   stays in Main Hub, asleep and named after the day it started. Change Agent
@@ -3818,7 +3818,8 @@ itself ("what's stuck?", "how do I pair my phone?").
   `.config/gh`, `.netrc`, keychains, password stores, browser profiles, agent
   logins and the like. Claude Code's file tools are held to it, but its shell
   commands are not; Codex is held to it for everything it runs; other agents are
-  not.
+  not. Chief of Staff on Codex runs without asking, because Codex's sandbox would
+  otherwise stop it reaching Ghostex; Codex still keeps it out of these folders.
 - **Several computers**: with computers combined, every computer's home is one
   Main Hub, each computer's Chief of Staff pinned at the top and other
   computers' chats marked with their computer's name.
@@ -4043,54 +4044,236 @@ build.
 
 Setting: `botAutomationsHidden` (on by default, which keeps the feed hidden).
 
-## GBots (bots on your own Claude Code and Codex)
+## GBots
 
-GBots are long-lived bots that run on your own Claude Code or Codex and can
-start and steer agent sessions on any of your computers. Turn GBots on in
-Settings > Extensions, under Planning and automation (off by default). Turning
-it on downloads the GBots runtime once (about 50 MB) on the computer GBots runs
-on; the GBots card shows the download, any error with a Retry button, and then
-Running on <computer>. GBots runs on macOS and Linux.
+GBots are your own team of bots, led by Chief of Staff in Main Hub. Each GBot
+has a name, a role, standing instructions, an icon and a colour, and a memory
+it keeps in every chat; its chats run on your own Claude Code or Codex. Turn
+them on in Settings > Extensions, on the Experimental tab: they are off by
+default, need Main Hub on, and turning them on asks for your approval (Touch
+ID), so an agent can only ask. While GBots or Main Hub are off, nothing of
+GBots shows, on your computer or the phone: no GBots group in Main Hub, no GBot
+menu items, cards or Settings rows beyond the switch. Their chats sleep and
+every `ghostex gbots` command stops; the bots and their memory stay for when
+you turn them back on.
 
-- **The Bots space**: GBots use the Bots space, opened from the button in the
-  Space row or the sidebar's top row (a robot while it shows GBots). With both
-  Bots (Hermes) and GBots on, the GBots card's **Bots space shows** picks
-  Hermes or GBots.
-- **New bot**: the New bot row at the top of the Bots space asks for a name,
-  what the bot runs on (Claude Code or Codex) and its instructions.
-- **Bot rows**: each bot has a row with a periwinkle letter tile and a dot:
-  green while it waits, blue while it works, grey while GBots is not running.
-  Its conversations sit under it; **+** (or New conversation) starts another.
-- **Chatting**: a conversation opens in the chat like any session. Messages
-  go to the bot; Stop stops its turn. Every turn runs on the Claude or Codex
-  accounts saved in Settings > Accounts (through Claude Swap and Codex Swap),
-  picked the way new sessions pick them, so a bot moves to another account
-  when one reaches its limit.
-- **Sessions on other computers**: every bot can use the `ghostex` CLI, so you
-  can ask it to start, message, read and steer agent sessions on this computer
-  or any connected one (for example "start a Codex thread in my app project
-  and tell me what it finds"). The sessions it starts show in your sidebar
-  with a card saying which bot sent the task.
-- **Apps and tools**: bots get what Claude and Codex sessions get from
-  Connectors: every app connected in Settings > Connectors for the bot's
-  workspace (Composio's apps such as Gmail, Google Calendar, Slack, Notion,
-  GitHub and Linear, and Executor's when it is on) and the workspace's `gh`
-  and `gws` sign-ins. Reads run at once; anything that would send, post,
-  create, edit or delete follows the workspace's Ask/Allow/Never rules, and
-  Ask shows the approval card in the bot's conversation. Connect an app the
-  same way as for sessions (Settings > About > Experimental > Enable
-  Experimental Features, then Settings > Connectors, or `ghostex connectors
-  sign-in` and `ghostex connectors connect <app>`); the bot's next turn has
-  it. GBots' own apps screen is not part of Ghostex.
-- **One GBots computer**: all bots, their conversations and the accounts they
-  use live on one computer. Pick it with **Runs on** on the GBots card (this
-  computer by default; it lists your connected remote machines). Choosing
-  another computer starts GBots there; bots made on the old computer stay on
-  it, since moving bots between computers is not available yet.
+- **In the sidebar**: your GBots sit in Main Hub under Chief of Staff, in a
+  GBots group above Main Hub's other chats. Each GBot's row shows its icon in
+  its colour, its name and a dot while one of its chats works or waits for
+  you; click it to fold its chats under it (a chat Chief of Staff opened says
+  "Chief"). Right-click a GBot for New Chat, GBot Settings… and Remove GBot…,
+  and right-click the GBots heading (or press its +) or Main Hub for New
+  GBot…. On the phone, GBots show the same way in Main Hub; long-press a GBot
+  for the same choices, and the GBots heading or Main Hub for New GBot. A
+  GBot's folder never shows as a project.
+- **GBot Settings**: its own window, opened from the GBot's row (GBot
+  Settings…): Profile (name, role, description, icon and colour, the agent and
+  model it runs on, how much it may do without asking), Instructions,
+  Department, Memory, Routines, Computer and Bot API, each described below. A
+  new GBot starts at Ask; a Codex GBot starts at Full access, because Codex's
+  sandbox below Full can't reach Ghostex, and Codex still keeps it out of your
+  secret folders. Only you can let a GBot do more.
+- **Adding a GBot**: press + on the GBots heading, ask Chief of Staff for one, or run
+  `ghostex gbots create --name <name> --title <role>` (add `--soul-file
+  <file>` for its instructions, `--agent <id>` for what it runs on, `--icon`
+  and `--color` for its look). From a terminal, Ghostex asks for your
+  approval first (Chief of Staff adds one on its own, see Handing it work).
+  Only you and Chief of Staff can add, change or remove GBots; a department's
+  lead may change only its members' instructions, and other agents are refused.
+- **Chatting with it**: `ghostex gbots new-chat <bot>` opens a chat (add
+  `--task "<text>"` to hand it something to do). A GBot can have several chats
+  at once, all sharing its instructions and memory; `ghostex gbots chats <bot>`
+  lists them and who opened them, and `ghostex gbots close-chat <chat>` closes
+  one (Chief of Staff can close only the chats it opened).
+- **Its folder**: each GBot has a folder holding its instructions (`SOUL.md`),
+  its memory (`MEMORY.md` and `memory/`) and its working files (`files/`);
+  `ghostex gbots show <bot>` says where. A new chat starts with its
+  instructions and memory loaded, and `ghostex gbots brief --bot <bot>` shows
+  what it loads. Change its instructions with `ghostex gbots edit <bot>
+  --soul-file <file>`: editing `SOUL.md` itself changes nothing, and `show`
+  points such an edit out.
+- **Its memory**: a GBot keeps dated notes in `MEMORY.md` (`ghostex gbots
+  memory add "<note>"`, with `--until <date>` for something that stops being
+  true), longer detail in topic notes it reads when needed (`--topic <name>`),
+  and Ghostex writes a daily log of what it did. Up to 200 lines and 24 KB of
+  `MEMORY.md` load at the start of every chat; when it fills up, the oldest
+  notes move to `memory/archive.md`. Right-click the GBot and choose Memory…
+  (or open the Memory tab of GBot Settings) to see what loads with a gauge
+  (amber when nearly full), edit `MEMORY.md` (the save is refused if the GBot
+  wrote to it meanwhile), show a topic in Finder, read the daily log and undo
+  the newest change. On the phone the tab is read-only with Undo. From a
+  terminal: `ghostex gbots memory show|add|forget|edit|undo|journal|topics|topic|log
+  --bot <bot>`. Keys and passwords in a note are replaced with «redacted».
+- **Preferences every GBot reads**: `ghostex gbots prefs set --text "<how you
+  like things>"` (you and Chief of Staff only) puts up to 100 lines in every
+  GBot's brief; open chats are told to read it again.
+- **Routines**: ask a GBot in its chat for something on a schedule ("every
+  weekday at 8, check my inbox folder") and it sets a routine: each run is a
+  chat of that GBot, and a "Routine set" card in its chat shows the schedule in
+  words and the next run, with Pause, Edit and Undo. A routine can check first,
+  with no model (new Gmail, a calendar event coming up, a web page, a folder, a
+  command), and runs only when that check sees something new, so a quiet day
+  costs nothing. Runs come at least 15 minutes apart, 24 a day at most; a run
+  missed while Ghostex was closed is caught up only if it is less than 12 hours
+  late, and a failing check backs off up to 4 hours. A routine can also tell
+  Chief of Staff when it finds something, or hand what it finds to Chief of
+  Staff to tell you with a notification (`--deliver brief`). The Routines tab
+  of GBot Settings (on the phone too) lists them with Pause, Resume, Run now and Remove; Edit on the
+  card opens the Automate view. A command check a GBot sets waits paused until
+  you turn it on. From a terminal: `ghostex gbots routine
+  list|add|edit|pause|resume|remove|run-now --bot <bot>`.
+- **Keep an eye on my day**: with Gmail or Google Calendar connected in
+  Settings > Connectors, ask Chief of Staff to keep an eye on your day (it
+  also offers once, when they are connected). It adds a GBot, Day Watcher,
+  that only reads your mail and calendar (Ghostex refuses anything it tries to
+  send, reply to, accept, create or change) with two routines: a daily brief at
+  08:00 (Needs you, Your day, Important emails, Routines) and a watch every 15
+  minutes from 07:00 to 21:45 that tells you when a meeting is about to start
+  or important mail comes in. Both land in Chief of Staff's chat with a
+  notification and a phone push; a quiet watch costs nothing. Ask Chief of
+  Staff for another time or to stop, pause a routine or Day Watcher in its GBot
+  Settings, or remove it. From a terminal: `ghostex gbots day-watch
+  [status]|on [--brief-time HH:MM]|off`.
+- **Starting work in a folder**: ask a GBot to make a project in a folder and
+  set up a coordinator for it, and it adds the folder as a project (creating
+  the folder if needed) and starts the coordinator there, so it shows in your
+  sidebar and in `ghostex coordinator list`. A GBot's own folder holds only its
+  chats: a coordinator, thread or session can never start there, so a GBot (or
+  you) passes `--path <folder>` or `--project-id <id>` to `ghostex coordinator
+  create`, `coordinator start-thread` or `agents create`.
+- **Its computer**: give a GBot a computer of its own in the Computer tab of
+  GBot Settings (right-click the GBot, Computer…): one of your connected
+  computers (Settings > Remote, with Agent access on) or one of your Cloud
+  Boxes. The chats you, Chief of Staff and other GBots open with it then run
+  there (chats already open stay where they are), and its row shows that
+  computer's name. On a connected computer its chats work in `~/GBots/<name>`
+  there, still read its instructions and keep its memory on this computer, and
+  show under its row while that computer is connected. On a Cloud Box each chat
+  gets its own worktree of the box's project and carries its instructions with
+  it; a chat Chief of Staff or another GBot starts there asks for your approval
+  first, since the box gets your agent logins and the GBot's instructions and
+  memory, and runs and bills while it works. Use the screen and apps
+  lets it drive apps on that computer with SpaceO or cua-driver (macOS); off,
+  its chats start without those tools (a Codex GBot at Full access can still run
+  their command-line tools from a shell). Its folder, memory and routine runs
+  stay on this computer. Only you give a GBot a computer, a new folder there or
+  computer use, from Ghostex on your computer, and each asks for your approval
+  (Touch ID); the phone's
+  Computer tab shows where it works and can give it this computer back. From a
+  terminal: `ghostex gbots computer <bot>` shows where it works and what it
+  could have, and `ghostex gbots computer <bot> --use this` brings it back.
+- **Removing it**: `ghostex gbots remove <bot>` closes its chats, removes it
+  and moves its folder, memory included, to the Trash.
+- **Departments**: group GBots under a name, like Research or Writing. Every
+  GBot in a department follows its shared instructions under its own, and a
+  department can have one lead, marked with a small crown, who hands the
+  others work and may change their instructions (nothing else). In Main Hub a
+  department is a small heading under GBots that folds its bots; right-click
+  it for Department Settings… or Remove Department… (its GBots stay, in no
+  department). Set a GBot's department, whether it leads, and the department's
+  name and shared instructions in the Department tab of GBot Settings (on the
+  phone too), where you can also add a new department. Only you and Chief of
+  Staff change departments. From a terminal: `ghostex gbots department
+  list|show|create|edit|set-lead|remove`, and `ghostex gbots edit <bot>
+  --department <name>|none [--lead]` to move a GBot.
+- **Handing it work**: Chief of Staff hands work to the right GBot on its own,
+  and adds one when no GBot fits, telling you in a "GBot added" card in its
+  chat with Undo (Undo removes the bot and closes its chats; it is refused once
+  the bot was changed since). To have it ask you before each add instead, turn
+  off Settings > Agents > Chief of Staff may add GBots on its own. Chief of
+  Staff and a department's lead hand a GBot work with `ghostex gbots ask <bot>
+  --task "<brief>"` (Chief of Staff gives a department with a lead its work
+  through the lead); any other GBot or coordinator may only ask it a question
+  (`--consult`). The answer comes back to the sender's chat when the GBot
+  finishes, headed "Researcher reports on A12"; a report that falls short goes
+  back with `ghostex gbots ask --rework A12 --task "<what is missing>"`, twice
+  at most. `ghostex gbots assignments` lists the work handed out, `ghostex gbots
+  changes` what was added or changed, and `ghostex gbots undo <change>` undoes
+  an add or a change.
+- **When a GBot gets stuck**: Ghostex watches the GBot chats nobody is
+  following (ones you opened, routine runs, ones Chief of Staff opened) and
+  tells Chief of Staff in its chat when one can't start (Ghostex tries a plain
+  start failure once more first), stops and can't be restarted, shows no new
+  output for 20 minutes, or a routine run fails. Chief of Staff can restart it
+  where it stopped (twice at most) or send it a new message, and tells you in
+  two lines when only you can fix it, such as a sign-in or a missing key. A
+  GBot opened by anyone but you that waits on a question or an approval goes
+  to Chief of Staff too: Chief of Staff may answer it for the GBots it added
+  (never a push, a deletion, a publish or spending money you didn't ask for),
+  and otherwise tells you where to answer; a sign-in always comes to you. A
+  GBot can also raise a flag itself (`ghostex gbots flag "<what it needs>"`).
+  A chat that keeps hitting problems (more than 5 in an hour, or 3 waits) stops
+  being reported for an hour and you get one notification. From a terminal:
+  `ghostex gbots problem list|retry|rebrief|close`.
+- **Team files**: share a team of GBots with another Ghostex, or keep a copy,
+  as one JSON file. Right-click the GBots heading in Main Hub and choose Export
+  Team… (the whole team, a department, or one GBot as a preset; tick Include
+  starter notes to add each GBot's memory and topic notes), then Save… or Copy;
+  on the phone, long-press the GBots heading and choose Export Team to share the
+  file. A team file holds each GBot's name, role, description, look,
+  instructions and department, the departments' shared instructions and leads,
+  and the GBots' routines. It never holds chat history, the agent or model a
+  GBot runs on, approval levels, computers, keys or sign-ins, and anything that
+  looks like a password or key is replaced with «redacted» (the export says
+  how many). Import Team… (or Import Team on the phone) shows what a file adds
+  before anything is added: names already taken get " 2", routines arrive
+  paused until you resume them, and imported GBots start at the approval level
+  every new GBot starts at (Ask; Codex GBots at Full access). Importing asks for
+  your approval, like adding a GBot; afterwards Undo Import removes the whole
+  import, unless one of its GBots was changed since. From a terminal: `ghostex
+  gbots team export [--department <name> | --preset <bot>] [--notes] [--out
+  <file>]` and `ghostex gbots team import <file> [--dry-run]`.
+- **Presets**: New GBot can start from a preset (Researcher, Writer, Planner,
+  Code reviewer, Note keeper, and the ones you keep): pick one under Start from
+  to fill the name, role and instructions, then change what you like. Keep a
+  GBot as a preset from Export Team… > One GBot > Keep as Preset, or open a
+  `.gbots-preset.json` file with Import Team…. From a terminal: `ghostex gbots
+  preset list|show|import|save|export|remove` and `ghostex gbots create
+  --preset <preset> --name <name>`.
+- **Bot API**: let an app or script on your computer message a GBot and get
+  its reply. In the GBot's settings (its row's GBot Settings…), open Bot API and
+  turn on "Apps may message <name>": it asks for your approval, then shows the
+  GBot's key once, inside a `curl` command to paste (Copy command, Copy key).
+  Ghostex keeps only the key's fingerprint, so copy it then; New key makes
+  another and the old one stops working, and turning it off stops the key at
+  once. Only you can turn it on, make a key or turn it off (agents, Chief of
+  Staff included, can't), and each change goes into the security log. An app
+  sends `POST /hooks/gbots/bots/<id>/messages` with `{"message": "…"}` and
+  `Authorization: Bearer <key>`, and gets the GBot's reply (`"wait"` up to 300
+  seconds; a longer answer comes back as "working" with an address to ask
+  again; add `"chat": "new"` for a fresh chat). `POST
+  /hooks/gbots/bots/<id>/routines/<routine id>/run` starts one of the GBot's
+  routines. It is reachable only from your computer itself and from devices
+  that already reach it over SSH (a paired phone, another computer of yours):
+  Ghostex opens no port for it. The Bot API is for GBots on Claude Code or
+  Codex. Messages from apps land in the GBot's chats titled "API · …", marked
+  as coming from outside. Those chats start in their own folder, are kept out
+  of your secret folders and Ghostex's own files (Codex can read the rest of
+  the disk but write only its own folder, and never asks; Claude asks first as
+  at Ask), never save to the GBot's memory, and read its memory and your shared
+  preferences only when you turn on "Apps may read <name>'s memory" (it asks
+  for your approval). Only you, from Ghostex on your computer or phone, answer
+  what they wait on or send them anything. A key makes up to 10 calls a minute,
+  200 messages and 20 new chats a day, keeps at most 3 chats open (a new one
+  closes the oldest that isn't working) and opens at most one a minute; a
+  message is at most 48,000 characters. On the phone: GBot Settings > API. From
+  a terminal: `ghostex gbots api [status] <bot>`, `api on <bot> [--label <who
+  uses it>]`, `api new-key <bot>`, `api off <bot>`, `api share-memory <bot>
+  on|off`.
 
-Settings: `gbotsEnabled` (off by default), `botsSpaceSource` (`hermes` or
-`gbots`), `gbotsComputer`. CLI: `ghostex gbots status`, `ghostex gbots list`,
-`ghostex gbots create <name> [--instructions <text>] [--agent claude|codex]`.
+The previous GBots, which downloaded a separate runtime and showed its bots in
+the Bots space, is gone, and its bots and their chats were not carried over.
+On the first start after the update, each computer stops its background
+server, removes those bots and their chats from the sidebar, deletes its
+download (about 50 MB) and moves its old folder, with each bot's instructions
+and notes, to the Trash as "GBots (previous)". The Bots space now shows Hermes
+bots only.
+
+Settings: `gbotsEnabled` (off by default), `gbotsChiefAddsOnItsOwn` (on by
+default). CLI: `ghostex gbots list`, `show`, `create`, `edit`, `remove`,
+`chats`, `new-chat`, `close-chat`, `brief`, `memory`, `prefs`, `routine`,
+`day-watch`, `ask`, `assignments`, `changes`, `undo`, `flag`, `problem`,
+`department`, `team`, `preset`, `computer`, `api`.
 
 ## Voice agent
 
@@ -4957,7 +5140,7 @@ The link's traffic goes through Ghostex's share relay, locked end to end with th
 
 ## Security log (Settings > Security)
 
-Ghostex keeps a security log of every sensitive action on your computer: pairing a phone (and failed pairing attempts), showing a pairing code, Easy Connect changes (on or off, its allow-list, ports and relay), sharing a chat in Collab or changing how a share works, letting a connected computer's agents in, Autopilot answering an approval or being allowed to do more, adding a GBots bot, a playbook, skill or agent command arriving by settings sync, and any attempt to change a setting only you can change. Each entry says what happened, who asked (this computer's app or an agent, naming the session it says it runs in, a paired phone, another computer, Autopilot), when, and how it ended. Each one also shows in the notification bell and as a notification on your paired phones, so you see it when it happens; clicking it opens Settings > Security.
+Ghostex keeps a security log of every sensitive action on your computer: pairing a phone (and failed pairing attempts), showing a pairing code, Easy Connect changes (on or off, its allow-list, ports and relay), sharing a chat in Collab or changing how a share works, letting a connected computer's agents in, Autopilot answering an approval or being allowed to do more, adding a GBot, turning a GBot's Bot API on or off or giving it a new key, a playbook, skill or agent command arriving by settings sync, and any attempt to change a setting only you can change. Each entry says what happened, who asked (this computer's app or an agent, naming the session it says it runs in, a paired phone, another computer, Autopilot), when, and how it ended. Each one also shows in the notification bell and as a notification on your paired phones, so you see it when it happens; clicking it opens Settings > Security.
 
 Settings > Security lists the entries, newest first. Every entry is chained to the one before it, so if something edits or removes an entry after Ghostex wrote it, the page says "The security log was changed" and where. `ghostex security log` shows the same list in a terminal (`--last <n>`, `--json`) and exits with code 2 when the log was changed.
 
@@ -4967,7 +5150,7 @@ After updating to 11.1, Ghostex shows a one-time notice: Ghostex went through a 
 
 ## Approvals (sensitive changes need your Touch ID, Windows Hello or phone)
 
-Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a bot, or change a setting that loosens security (the Sync page's, for example), the change waits and an "Approval needed" notice opens in the middle of the Ghostex window on your computer, saying who asked and on which computer, with Deny and Approve. Enter never approves; Escape, Close or the corner X put it aside, still waiting, behind an "Approvals waiting" pill in the work area header: click the pill (or wait for the next notice) to bring it back. When several wait, they show one at a time ("1 of 3"). Agents can message, start sessions in, type into, stop and answer the permission prompts of sessions in any project without asking, as can the `ghostex` CLI and agents on your connected computers (within what you let that computer do). Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows, or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. Adding, editing, hiding or removing a computer that this one connects to (Settings > Remote, Remote machines), saving its SSH password, and changing this computer's short name never ask: they let no one in. An approval is good for that one change only and lapses after 10 minutes unanswered (a connected computer's request waits a day, as one card whoever asks); a connected computer, once approved, stays connected for 30 days. Starting an agent with approvals off ("accept all") when your own setting for that agent doesn't asks every time. Starting a Cloud Box, letting Cloud Boxes use one of your agent logins, and changing what a project's boxes get ask when an agent does them, and so does connecting this computer to a team backend (the last step of `ghostex team deploy`).
+Agents can only ask for changes that let someone in from outside or hand out access; only you can allow them. When an agent (or the `ghostex` CLI in a terminal) asks to turn on Easy Connect, open a port or let a new device in through it, change its relay, connect another computer for agents, let Autopilot answer permission prompts or change its limits, turn on GBots or add a GBot (Chief of Staff adds one without asking while Chief of Staff may add GBots on its own is on), or change a setting that loosens security (the Sync page's, for example), the change waits and an "Approval needed" notice opens in the middle of the Ghostex window on your computer, saying who asked and on which computer, with Deny and Approve. Enter never approves; Escape, Close or the corner X put it aside, still waiting, behind an "Approvals waiting" pill in the work area header: click the pill (or wait for the next notice) to bring it back. When several wait, they show one at a time ("1 of 3"). Agents can message, start sessions in, type into, stop and answer the permission prompts of sessions in any project without asking, as can the `ghostex` CLI and agents on your connected computers (within what you let that computer do). Approve asks for Touch ID or your Mac password on macOS, Windows Hello on Windows, or your system password (polkit) on Linux; a plain click is never enough, because agents can click. On the phone, open the computer in Machines, then Approvals, and approve with Face ID, your fingerprint or the screen lock (the first time, approve adding the phone on the computer). When you make one of these changes yourself in Ghostex, including a Remote, Accounts, Secrets, Sync or Connectors setting in the Settings window, the same prompt shows right away, and nothing is saved if you cancel it. Adding, editing, hiding or removing a computer that this one connects to (Settings > Remote, Remote machines), saving its SSH password, and changing this computer's short name never ask: they let no one in. An approval is good for that one change only and lapses after 10 minutes unanswered (a connected computer's request waits a day, as one card whoever asks); a connected computer, once approved, stays connected for 30 days. Starting an agent with approvals off ("accept all") when your own setting for that agent doesn't asks every time. Starting a Cloud Box, letting Cloud Boxes use one of your agent logins, and changing what a project's boxes get ask when an agent does them, and so does connecting this computer to a team backend (the last step of `ghostex team deploy`).
 
 Some things only you can do, in Settings, and agents can't even ask for them: installing an extension or turning one on and giving it permissions (Settings > Extensions), adding, changing or removing a secret provider (Settings > Secrets), joining a team, making invites, the team's Linear keys and its Slack flow (Settings > Workspaces), and the settings that loosen security: Agent approvals accept all, Workspaces, Cloud Boxes' Start boxes from your phone, Trust project folders automatically, Connectors, the custom commands Ghostex runs (Custom Title Command, Global worktree command, Custom editor command), Paste protection and Bot automations. An agent asked to do one of these explains it and points you to the page. This includes the `ghostex` CLI in your own terminal, which Ghostex can't tell apart from an agent. Turning things off never asks. Every request, approval and denial is in Settings > Security's log. Each session now gets its own key to Ghostex that ends with the session, and the shared key file only gives agent-level access. The keys that approve are kept in macOS Keychain, Windows Credential Manager or the Linux Secret Service; on Windows and Linux other programs running as you can read those, so the protection there is weaker than on macOS. The CLI waits for your answer (`--no-wait` returns at once).
 

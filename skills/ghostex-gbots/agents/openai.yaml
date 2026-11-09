@@ -1,0 +1,7 @@
+interface:
+  display_name: 'Ghostex GBot'
+  short_description: 'How a GBot works in Ghostex: its brief, memory, team and reports'
+  default_prompt: 'Use $ghostex-gbots to work as this GBot: run ghostex gbots brief first and follow it.'
+
+policy:
+  allow_implicit_invocation: false

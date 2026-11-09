@@ -106,6 +106,13 @@ pub(super) async fn route_sessions_http(
                     apply_created_session_identity(repository, &created_session, &create_params)?;
                 let is_coordinator =
                     crate::coordinators::register_created_coordinator(db, params, &session)?;
+                // Another computer's GBot chat gets the playbook its first message names.
+                crate::gbots::install_gbots_skill_for_visiting_chat(
+                    &state.paths,
+                    params,
+                    &project,
+                    &session,
+                );
                 let project_id = value_text(&session, "projectId")?;
                 let session_id = value_text(&session, "sessionId")?;
                 // Queued before the response, so the skill line goes ahead of anything a client

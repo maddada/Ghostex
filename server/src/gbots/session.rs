@@ -358,6 +358,7 @@ pub(crate) fn create_bot_chat_with(
         // The session exists: a skill that would not install or a message that would not queue is
         // reported by the chat, not a reason to leave a session nobody started.
         let _ = crate::coordinators::ensure_orchestrator_skill_installed(&state.paths, family);
+        let _ = super::skill::ensure_gbots_skill_installed(&state.paths, family);
         let _ = queue_session_chat_prompt(
             state,
             &project_id,

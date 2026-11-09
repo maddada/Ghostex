@@ -195,6 +195,7 @@ bundled_cli_skill_assets=(
 	ghostex-secrets
 	ghostex-agent-guide
 	ghostex-orchestrator
+	ghostex-gbots
 )
 
 validate_completion_sound_assets() {

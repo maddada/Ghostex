@@ -21,8 +21,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::agent_skills::{
-    AGENT_SKILL_COPY_EXCLUDED_NAMES, CANONICAL_AGENT_SKILLS_DIR, GHOSTEX_AGENT_SKILL_NAMES,
-    MACOS_ONLY_GHOSTEX_AGENT_SKILL_NAMES, ORCHESTRATOR_ONLY_GHOSTEX_AGENT_SKILL_NAMES,
+    role_only_ghostex_agent_skill, AGENT_SKILL_COPY_EXCLUDED_NAMES, CANONICAL_AGENT_SKILLS_DIR,
+    GHOSTEX_AGENT_SKILL_NAMES, MACOS_ONLY_GHOSTEX_AGENT_SKILL_NAMES,
 };
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
@@ -235,10 +235,10 @@ impl Engine<'_> {
 }
 
 /// A bundled skill sync installs and removes: a listed one this system can run, other than the
-/// coordinator playbook (installed when a coordinator is made).
+/// coordinator and GBot playbooks (installed when a coordinator or a GBot chat starts).
 fn bundled_skill_syncs(name: &str) -> bool {
     GHOSTEX_AGENT_SKILL_NAMES.contains(&name)
-        && !ORCHESTRATOR_ONLY_GHOSTEX_AGENT_SKILL_NAMES.contains(&name)
+        && !role_only_ghostex_agent_skill(name)
         && (cfg!(target_os = "macos") || !MACOS_ONLY_GHOSTEX_AGENT_SKILL_NAMES.contains(&name))
 }
 
