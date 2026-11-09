@@ -6,9 +6,12 @@
 //! status from the transcript lifecycle; the client re-checks the lifecycle so a terminal boundary
 //! can settle a stale "working" signal without waiting for the next frame.
 
-use ghostex_gx_protocol::{ChatMessage, ChatRole, ChatStatus, TurnLifecycle, TurnLifecycleState};
+use ghostex_gx_protocol::{
+    ChatBlock, ChatMessage, ChatRole, ChatSource, ChatStatus, TurnLifecycle, TurnLifecycleState,
+};
 
 use crate::session::constants::{LIFECYCLE_CLOCK_SKEW_SLACK_MS, REAL_EPOCH_FLOOR_MS};
+use crate::state::QuietCard;
 
 /// Whether this lifecycle ends the turn that started at `working_started_at`.
 pub fn lifecycle_terminates_current_turn(
@@ -143,6 +146,142 @@ pub fn working_signal(state: &crate::state::ChatState) -> bool {
         || session.server_working
         || matches!(session.server_status, ChatStatus::Working)
         || session.external_working
+}
+
+/// Whether a Completed or Interrupted lifecycle is about the newest row: its time is absent, or it
+/// is no older than the newest row the transcript recorded. A later prompt or row means a newer
+/// generation has started.
+pub fn newest_turn_ended(state: &crate::state::ChatState) -> bool {
+    let Some(lifecycle) = state.session.lifecycle.as_ref() else {
+        return false;
+    };
+    if !matches!(
+        lifecycle.state,
+        TurnLifecycleState::Completed | TurnLifecycleState::Interrupted
+    ) {
+        return false;
+    }
+    let Some(stamp) = lifecycle.timestamp else {
+        return true;
+    };
+    state
+        .messages
+        .composed
+        .iter()
+        // An informational warning can land after the row that ended the turn.
+        .filter(|row| row.source == ChatSource::Transcript && row.role != ChatRole::System)
+        .filter_map(|row| row.timestamp)
+        .max()
+        .is_none_or(|newest| stamp >= newest)
+}
+
+/// Whether Agent work Quiet hides the response still running (`transcript/grouped_work.rs`
+/// `hide_work`).
+///
+/// CDXC:SessionChat 2026-11-08 WHY: a hidden reply is far worse than extra words, so this hides only when every signal agrees the agent is mid-response, and the words show whenever one doubts it. [`lifecycle_terminates_current_turn`] compares a Completed with when this client began watching, so a chat opened after the turn ended (subagents still running, or an explicit working whose Stop was lost) reads as working for as long as that lasts, with the reply out of sight; [`newest_turn_ended`] compares it with the newest row instead. [`is_working`] settling on trailing prose while [`transcript_working`] does not left a chat with neither words nor a status line, so a mid-turn sentence on an agent that reports no Working (Cursor) shows until its next tool row.
+pub fn hides_running_response(state: &crate::state::ChatState) -> bool {
+    state.transcript_view.hidden_work()
+        && ((transcript_working(state) && is_working(state) && !newest_turn_ended(state))
+            || quiet_holds_turn_open(state))
+}
+
+/// While Agent work Quiet hides the running response: the time up to which its rows are from runs
+/// that already finished, whose replies stay in view. The lifecycle's own stamp separates them (a
+/// Working stamps when this run began, a stale Completed when the one before it ended), or when
+/// this client began watching for an agent that has reported neither.
+///
+/// CDXC:SessionChat 2026-11-08 WHY: a run with no prompt or harness row of its own (a goal's next step) leaves the finished replies inside the running response (`active_response_start_index`), where they would vanish. It is a time rather than remembered rows: the follower drains once a second and keeps only the last lifecycle, so a Completed and the next Working in one drain reach the client as Working alone, and a chat opened mid-run has seen nothing. It is every reply up to that time rather than the newest, which vanished when a chain of steps moved on to the next one; that also keeps some words from those earlier steps.
+pub fn quiet_finished_before(state: &crate::state::ChatState) -> Option<i64> {
+    if !hides_running_response(state) {
+        return None;
+    }
+    state
+        .session
+        .lifecycle
+        .as_ref()
+        .and_then(|lifecycle| lifecycle.timestamp)
+        .or(state
+            .session
+            .working_started_at_ms
+            .map(|at| at.round() as i64))
+}
+
+/// Whether a card is up that the agent waits on: an approval, a question, or a dialog in its
+/// terminal (a permission prompt, a plan to approve).
+pub fn waits_on_user(state: &crate::state::ChatState) -> bool {
+    use crate::questions::gates::{notice_visible, question_card_visible};
+    use crate::questions::model::{InteractivePrompt, TerminalNotice};
+    let session = &state.session;
+    if session.interrupted || (session.prompt.is_none() && session.terminal_notice.is_none()) {
+        return false;
+    }
+    let prompt = InteractivePrompt::parse(session.prompt.as_ref());
+    let notice = TerminalNotice::parse(session.terminal_notice.as_ref());
+    question_card_visible(state, prompt.as_ref(), notice.as_ref())
+        || (notice_visible(state)
+            && notice
+                .as_ref()
+                .is_some_and(|notice| notice.passthrough || notice.holds_input()))
+}
+
+/// Agent work Quiet: a turn waiting on the user is still running, whatever the working signal says.
+/// Claude in manual mode reads as idle while it waits on a permission, which drew the turn as
+/// finished: its reply and its calls came into view beside the card, and left once it was answered.
+/// So is one whose card just left, until [`track_quiet_card`] lets go.
+pub fn quiet_holds_turn_open(state: &crate::state::ChatState) -> bool {
+    state.transcript_view.hidden_work()
+        && !newest_turn_ended(state)
+        && (waits_on_user(state) || matches!(state.transcript_view.quiet_card, QuietCard::Left(_)))
+}
+
+/// Agent work Quiet: keeps a turn open in the gap between its card leaving and the agent reporting
+/// again. Run once per pass, before [`quiet_holds_turn_open`] is read.
+///
+/// CDXC:SessionChat 2026-11-08 WHY: answering a card leaves the working signal false for a moment (Claude reads as idle while it waits on the user), and with nothing bridging that gap the transcript recorded its newest row as settled and drew the running turn as finished, its work button and in-between words included, until the next row. No timer: the hold rests on the row the card left on, and only when that row ends in a call or a call's result, which no finished turn ends on, so a reply is never hidden by it. It lets go when working returns, on a new row other than a call's bare result (the answer being recorded, which arrives before the agent reports and is not it reporting), on a Completed or Interrupted lifecycle, or on an interrupt. If an agent dies right there and reports none of those, the hold stands until the next send or reload, hiding only words from between its calls.
+pub fn track_quiet_card(state: &mut crate::state::ChatState) {
+    let next =
+        if !state.transcript_view.hidden_work()
+            || state.session.interrupted
+            || newest_turn_ended(state)
+        {
+            QuietCard::None
+        } else if waits_on_user(state) {
+            QuietCard::Up
+        } else if transcript_working(state) {
+            QuietCard::None
+        } else {
+            let newest =
+                state.messages.composed.iter().rev().find(|row| {
+                    row.source == ChatSource::Transcript && row.role != ChatRole::System
+                });
+            match (&state.transcript_view.quiet_card, newest) {
+                (QuietCard::Up, Some(row)) if ends_in_tool_block(row) => {
+                    QuietCard::Left(row.id.clone())
+                }
+                (QuietCard::Left(at), Some(row)) if *at == row.id || holds_only_results(row) => {
+                    QuietCard::Left(row.id.clone())
+                }
+                _ => QuietCard::None,
+            }
+        };
+    state.transcript_view.quiet_card = next;
+}
+
+/// Whether the agent owes more after `row`: it ends in a call or a call's result.
+fn ends_in_tool_block(row: &ChatMessage) -> bool {
+    matches!(
+        row.blocks.last(),
+        Some(ChatBlock::ToolCall { .. } | ChatBlock::ToolResult { .. })
+    )
+}
+
+/// Whether `row` is only calls' results.
+fn holds_only_results(row: &ChatMessage) -> bool {
+    !row.blocks.is_empty()
+        && row
+            .blocks
+            .iter()
+            .all(|block| matches!(block, ChatBlock::ToolResult { .. }))
 }
 
 /// Whether the transcript keeps the newest turn open: the live signal, with the Stop suppression

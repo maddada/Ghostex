@@ -345,9 +345,16 @@ impl NativeChatView {
             .pt(px(8.0 * s))
             .pb(px(12.0 * s))
             .max_w(px(768.0 * s))
+            // CDXC:SessionChat 2026-11-07 DECISION:
+            // Chat box matches transcript width (`chatComposerMatchesTranscriptWidth`, desktop only). User: "the input bar itself... is very narrow, it does not get wider with the rest". On, the chat box, its pill strip and the status line under it take the transcript column's width, the Transcript width percentage and the width the rows hold while a panel slides (render.rs), so they shrink on a narrow pane exactly as the rows do. Off keeps the fixed 768px chat box: "all of these things need to be advanced mode and if we don't enable anything then it should remain to look like it does now".
+            .when(p.composer_matches_transcript && !maximized, |this| {
+                self.with_transcript_width(this, p)
+            })
             .when(maximized, |this| this.p_0().max_w_full().h_full().min_h_0());
-        // First in the stack, right above whatever else waits on the user (working_card.rs).
-        let working_card = if maximized {
+        // First in the stack, right above whatever else waits on the user (working_card.rs). With
+        // Status line in the chat on, the line is the transcript's last row instead
+        // (status_tail.rs), and the box keeps the lead-in it has with no card above it.
+        let working_card = if maximized || p.chat_look.status_in_transcript {
             None
         } else {
             self.render_working_card(p, cx)
@@ -426,11 +433,8 @@ impl NativeChatView {
         }
         if let Some(prompt) = self.render_prompt(p, window, cx) {
             if self.snapshot["prompt"]["kind"] == "question" {
-                return div()
-                    .flex()
-                    .w_full()
-                    .justify_center()
-                    .flex_shrink_0()
+                return self
+                    .composer_row(p, maximized)
                     .child(footer.children(waiting).child(prompt))
                     .into_any_element();
             }
@@ -695,14 +699,22 @@ impl NativeChatView {
         if self.status_line_reserved() && !self.collab_guest() {
             footer = footer.child(self.render_context_status(p, cx));
         }
-        div()
-            .flex()
-            .w_full()
-            .justify_center()
-            .flex_shrink_0()
+        self.composer_row(p, maximized)
             .when(maximized, |this| this.h_full().min_h_0())
             .child(footer)
             .into_any_element()
+    }
+
+    /// The row the chat box is centred in. With Chat box matches transcript width it is inset like
+    /// the transcript list (transcript.rs `transcript_list_gutters`), so the box's percentage
+    /// width is the rows' own.
+    fn composer_row(&self, p: &ChatAppearance, maximized: bool) -> gpui::Div {
+        let row = div().flex().w_full().justify_center().flex_shrink_0();
+        if p.composer_matches_transcript && !maximized {
+            self.transcript_list_gutters(row, p)
+        } else {
+            row
+        }
     }
 }
 

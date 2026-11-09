@@ -510,6 +510,22 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 COORDINATOR_BOARD_VIEW_OPTIONS.to_json(),
             ),
             (
+                "CHAT_MESSAGE_LAYOUT_OPTIONS",
+                CHAT_MESSAGE_LAYOUT_OPTIONS.to_json(),
+            ),
+            (
+                "CHAT_USER_MESSAGE_STYLE_OPTIONS",
+                CHAT_USER_MESSAGE_STYLE_OPTIONS.to_json(),
+            ),
+            (
+                "CHAT_AGENT_WORK_STYLE_OPTIONS",
+                CHAT_AGENT_WORK_STYLE_OPTIONS.to_json(),
+            ),
+            (
+                "CHAT_MESSAGE_SPACING_OPTIONS",
+                CHAT_MESSAGE_SPACING_OPTIONS.to_json(),
+            ),
+            (
                 "WEB_LINK_OPEN_TARGET_OPTIONS",
                 WEB_LINK_OPEN_TARGET_OPTIONS.to_json(),
             ),

@@ -236,9 +236,10 @@ pub fn is_role(message: &ChatMessage, role: ChatRole) -> bool {
 /// newest row is the one the transcript settled on. [`crate::transcript::rows::refresh`] records
 /// that settle; this only reads it, so pure readers get the same answer.
 pub fn is_working(state: &crate::state::ChatState) -> bool {
-    crate::session::working::transcript_working(state)
+    (crate::session::working::transcript_working(state)
         && !crate::transcript::turns::sticky_fold_holds(
             &state.messages.composed,
             state.transcript_view.fold_settled_at.as_deref(),
-        )
+        ))
+        || crate::session::working::quiet_holds_turn_open(state)
 }

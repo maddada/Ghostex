@@ -91,7 +91,7 @@ impl NativeChatView {
             .flex_col()
             .w_full()
             .min_w_0()
-            .gap(px(SINGLE_LINE_CARD.stack_gap() * s))
+            .gap(px(SINGLE_LINE_CARD.stack_gap(p) * s))
             .children(statuses.iter().enumerate().map(|(index, status)| {
                 self.status_row(
                     format!("status:{id}:{index}"),

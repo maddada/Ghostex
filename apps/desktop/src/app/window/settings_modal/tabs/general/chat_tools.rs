@@ -57,7 +57,7 @@ fn chat_section(
             .spec(
                 "sessionChatTranscriptWidthPercent",
                 "Transcript width (%)",
-                "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way.",
+                "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.",
             )
             .modified(
                 g.values.is_modified("sessionChatTranscriptWidthPercent")
@@ -132,7 +132,81 @@ fn chat_section(
         ));
     }
     rows.extend(page.toggle(g, s, "sessionChatFileEditPreviews", "Show file edit previews", "Show the first seven code lines in each file edit. Turn off to show only the path and change counts.", false, cx));
-    rows.extend(page.toggle(g, s, "chatToolCallCards", "Tool call cards (preview)", "Show each run of tool calls as one line that says which call is running now; click it to see every call with its result, time and the reason for any failure. Off keeps the current look.", false, cx));
+    rows.extend(page.toggle(g, s, "chatToolCallCards", "Tool call cards (preview)", "Show each run of tool calls as one line that says which call is running now; click it to see every call with its result, time and the reason for any failure. Off keeps the current look. Agent work's Reduced and Quiet replace these cards.", false, cx));
+    if g.visible(s, "chatMessageLayout") {
+        let spec = g.spec(
+            "chatMessageLayout",
+            "Message layout",
+            "Default puts your messages on the right as bubbles. Left aligned starts every message at the same left edge.",
+        );
+        rows.extend(page.segmented(
+            g,
+            s,
+            "chatMessageLayout",
+            spec,
+            Some(reset_key::<GeneralTab>("chatMessageLayout")),
+            g.options("CHAT_MESSAGE_LAYOUT_OPTIONS"),
+            cx,
+        ));
+    }
+    if g.visible(s, "chatUserMessageStyle") {
+        let spec = g.spec(
+            "chatUserMessageStyle",
+            "Your messages",
+            "How your messages stand out from the agent's: Default keeps the bubble, Band puts them on a soft full-width strip. Band also left-aligns them.",
+        );
+        rows.extend(page.segmented(
+            g,
+            s,
+            "chatUserMessageStyle",
+            spec,
+            Some(reset_key::<GeneralTab>("chatUserMessageStyle")),
+            g.options("CHAT_USER_MESSAGE_STYLE_OPTIONS"),
+            cx,
+        ));
+    }
+    if g.visible(s, "chatAgentWorkStyle") {
+        let spec = g.spec(
+            "chatAgentWorkStyle",
+            "Agent work",
+            "Default shows a Worked for card before each reply. Reduced shows one small line for everything the agent did for each of your messages. Quiet keeps the agent's work out of the chat and puts a button for it with each reply's hover buttons.",
+        );
+        rows.extend(page.segmented(
+            g,
+            s,
+            "chatAgentWorkStyle",
+            spec,
+            Some(reset_key::<GeneralTab>("chatAgentWorkStyle")),
+            g.options("CHAT_AGENT_WORK_STYLE_OPTIONS"),
+            cx,
+        ));
+    }
+    rows.extend(page.toggle(
+        g,
+        s,
+        "chatStatusInTranscript",
+        "Status line in the chat",
+        "Show what the agent is doing as the last line of the chat instead of above the chat box.",
+        false,
+        cx,
+    ));
+    rows.extend(page.toggle(g, s, "chatComposerMatchesTranscriptWidth", "Chat box matches transcript width", "When Transcript width is set to a percentage, the chat box takes the same width instead of its standard width.", false, cx));
+    if g.visible(s, "chatMessageSpacing") {
+        let spec = g.spec(
+            "chatMessageSpacing",
+            "Message spacing",
+            "Compact puts messages closer together and keeps a small row under each message for its buttons, which show on hover.",
+        );
+        rows.extend(page.segmented(
+            g,
+            s,
+            "chatMessageSpacing",
+            spec,
+            Some(reset_key::<GeneralTab>("chatMessageSpacing")),
+            g.options("CHAT_MESSAGE_SPACING_OPTIONS"),
+            cx,
+        ));
+    }
     rows.extend(page.toggle(g, s, "sessionChatKeepComposerExpanded", "Keep chat box expanded while scrolling", "Keep the desktop chat box at full size while you scroll the transcript instead of shrinking it as you scroll up and growing it back at the end.", false, cx));
     rows.extend(page.toggle(g, s, "sessionChatConfirmEscapeInterrupt", "Press Escape twice to interrupt", "While the agent is working, the first Escape asks you to press Escape again within 2 seconds before it interrupts. Turn off to interrupt on the first Escape.", false, cx));
     // CDXC:Settings 2026-11-02 SEE-ALSO: the user's words on Default to Detailed view (an Advanced row) are in packages/settings-catalog/src/general/chat.rs.

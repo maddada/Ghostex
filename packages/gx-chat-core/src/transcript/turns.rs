@@ -101,7 +101,7 @@ fn has_text_content(message: &ChatMessage) -> bool {
     })
 }
 
-fn has_agent_response_content(message: &ChatMessage) -> bool {
+pub(crate) fn has_agent_response_content(message: &ChatMessage) -> bool {
     message.role == ChatRole::Assistant
         && message.id != STREAMING_ID
         && message.blocks.iter().any(|block| match block {
@@ -358,7 +358,7 @@ pub fn is_settled_reply(row: &ChatMessage) -> bool {
 /// mid-response and a prompt the agent CLI is still holding in its queue both arrive as user rows;
 /// neither starts a new response, so neither may settle the one in flight. Falls back to 0 when no
 /// such row exists (stitched scroll-back that opens mid-conversation).
-fn active_response_start_index(messages: &[ChatMessage]) -> usize {
+pub(crate) fn active_response_start_index(messages: &[ChatMessage]) -> usize {
     (0..messages.len())
         .rev()
         .find(|at| is_accepted_user_prompt(&messages[*at]) || wakes_settled_agent(messages, *at))

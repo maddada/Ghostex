@@ -218,6 +218,10 @@ fn settle_with_ids(
     }
     let prompt_open = state.session.prompt.is_some();
     terminal_tail::expire(&mut state.extras.terminal_tail, (working, prompt_open));
+    // Reduced and Quiet fold the work the way the renderers draw it (`SearchFolds::quiet_style`).
+    state.extras.search.folds.quiet_style = state.transcript_view.chat_look.agent_work
+        != crate::transcript::chat_look::AgentWork::Default;
+    state.extras.search.folds.hidden = state.transcript_view.hidden_work();
     search::settle(&mut state.extras.search, &items);
     settle_activity_clock(state, context);
     arm_timers(state, context);

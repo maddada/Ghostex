@@ -319,6 +319,10 @@ pub struct ChatSettings {
     /// level of its own opens in (`transcript::view_level`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detailed_default: Option<bool>,
+    /// The five chat look settings (`transcript/chat_look.rs`), the same way; a field left out
+    /// keeps what the core has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat_look: Option<ghostex_gx_protocol::ChatLookSettings>,
 }
 
 /// A size or position only the renderer can know, folded back into the document.

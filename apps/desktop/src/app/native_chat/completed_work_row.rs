@@ -14,24 +14,19 @@ use super::disclosure_motion::{FoldFrame, FoldMotionKind, motion_clip};
 use super::transcript::text;
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
-use ghostex_gx_chat_core::TranscriptItem;
+use ghostex_gx_chat_core::{ProjectedMessage, TranscriptItem};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 use std::{cell::Cell, rc::Rc};
 
 /// Space between the rows of an opened turn's log.
 const LOG_GAP: f32 = 8.0;
 /// Space between the parts of a finished turn.
 const PART_GAP: f32 = 10.0;
-/// Space between two transcript list items, the gap every row wrapper ends with, which the live
-/// rows had between them before they folded.
-fn live_row_gap() -> f32 {
-    super::transcript_layout::LAYOUT.row_gap
-}
 
 /// A part whose height eases between nothing and its natural height; the fold applies its own
 /// opacity to the rows, so the clip carries none.
@@ -49,6 +44,44 @@ fn eased_part(height: Rc<Cell<f32>>, factor: f32, content: AnyElement) -> AnyEle
         0.0,
         content,
     )
+}
+
+/// What a finished turn keeps out of its fold, drawn after it: shaped like the same-named fields
+/// of `completed-work`, and of each turn a `grouped-work` line merged.
+pub(super) struct WorkTail<'a> {
+    /// The turn's `work:` key, which its answered questions' cards are kept under.
+    pub key: &'a str,
+    pub artifacts: &'a [ProjectedMessage],
+    pub questions: &'a [Value],
+    pub sent_messages: &'a [Value],
+    pub gbot_cards: &'a [Value],
+    pub workflows: &'a [Value],
+    pub final_message: Option<&'a Value>,
+}
+
+/// Each tail part with the space above it. The heading is a one-line card unless `above_is_card`
+/// says otherwise, so a stack of cards right under it (or under another stack) sits a row gap away
+/// (`SINGLE_LINE_CARD.gap_above`); `first_text_gap`, when given, is the space above a first part
+/// that is not a card (a quiet line's 2px, quiet_work.rs).
+pub(super) fn spaced_tail(
+    parts: Vec<(AnyElement, bool)>,
+    mut above_is_card: bool,
+    first_text_gap: Option<f32>,
+    p: &ChatAppearance,
+) -> Vec<(AnyElement, f32)> {
+    let mut first = true;
+    parts
+        .into_iter()
+        .map(|(part, is_card)| {
+            let gap = match first_text_gap {
+                Some(gap) if first && !is_card => gap,
+                _ => SINGLE_LINE_CARD.gap_above(above_is_card, is_card, PART_GAP, p),
+            };
+            first = false;
+            above_is_card = is_card;
+            (part, gap)
+        })
+        .collect()
 }
 
 impl NativeChatView {
@@ -127,7 +160,8 @@ impl NativeChatView {
                 let row = self.message_row(message, p, window, cx);
                 let card_first = message["toolCard"].is_object()
                     && super::transcript::text(message, "text").trim().is_empty();
-                let extra = SINGLE_LINE_CARD.gap_above(card_above, card_first, LOG_GAP) - LOG_GAP;
+                let extra =
+                    SINGLE_LINE_CARD.gap_above(card_above, card_first, LOG_GAP, p) - LOG_GAP;
                 log.push(if extra > 0.0 {
                     div().mt(px(extra * s)).child(row).into_any_element()
                 } else {
@@ -152,39 +186,21 @@ impl NativeChatView {
             None
         };
         self.hide_file_changes = true;
-        // Each part after the files, and whether it is a stack of one-line cards.
-        let mut tail: Vec<(AnyElement, bool)> = Vec::new();
-        for message in artifacts {
-            tail.push((self.message_row(message, p, window, cx), false));
-        }
-        // The turn's answered questions, lifted out of the fold so an exchange the reader took
-        // part in is never buried by a collapsed "Worked for Xs" section.
-        if let Some(cards) = self.question_exchange_cards(&id, questions, p, cx) {
-            tail.push((cards, true));
-        }
-        if let Some(cards) = self.sent_agent_message_cards(sent_messages, p, cx) {
-            tail.push((cards, true));
-        }
-        if let Some(cards) = self.gbot_cards(gbot_cards, p, cx) {
-            tail.push((cards, true));
-        }
-        if let Some(cards) = self.workflow_cards(workflows, p, cx) {
-            tail.push((cards, false));
-        }
-        if let Some(reply) = final_message.as_deref().filter(|reply| reply.is_object()) {
-            tail.push((self.message_row(reply, p, window, cx), false));
-        }
-        // The space above each tail part: the heading is a one-line card, so a stack of cards right
-        // under it (or under another stack) sits a row gap away (`SINGLE_LINE_CARD.gap_above`).
-        let mut above_is_card = log.is_none();
-        let tail: Vec<(AnyElement, f32)> = tail
-            .into_iter()
-            .map(|(part, is_card)| {
-                let gap = SINGLE_LINE_CARD.gap_above(above_is_card, is_card, PART_GAP);
-                above_is_card = is_card;
-                (part, gap)
-            })
-            .collect();
+        let tail = self.work_tail_parts(
+            WorkTail {
+                key: &id,
+                artifacts,
+                questions,
+                sent_messages,
+                gbot_cards,
+                workflows,
+                final_message: final_message.as_deref(),
+            },
+            p,
+            window,
+            cx,
+        );
+        let tail = spaced_tail(tail, log.is_none(), None, p);
         self.hide_file_changes = false;
 
         let Some(frame) = motion else {
@@ -197,7 +213,42 @@ impl NativeChatView {
                 .children(tail.into_iter().map(|(part, gap)| spaced(part, gap)))
                 .into_any_element();
         };
-        self.moving_completed_work_row(&id, frame, heading, log, tail, s)
+        self.moving_completed_work_row(&id, frame, heading, log, tail, p)
+    }
+
+    /// The parts of a finished turn after its fold, in order: its artifacts, its answered
+    /// questions, the messages its work sent other agents, its Workflow cards and its reply, each
+    /// with whether it is a stack of one-line cards. A Reduced line draws each merged turn's the
+    /// same way (quiet_work.rs).
+    pub(super) fn work_tail_parts(
+        &mut self,
+        tail: WorkTail<'_>,
+        p: &ChatAppearance,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<(AnyElement, bool)> {
+        let mut parts: Vec<(AnyElement, bool)> = Vec::new();
+        for message in tail.artifacts {
+            parts.push((self.message_row(message, p, window, cx), false));
+        }
+        // The turn's answered questions, lifted out of the fold so an exchange the reader took
+        // part in is never buried by a collapsed "Worked for Xs" section.
+        if let Some(cards) = self.question_exchange_cards(tail.key, tail.questions, p, cx) {
+            parts.push((cards, true));
+        }
+        if let Some(cards) = self.sent_agent_message_cards(tail.sent_messages, p, cx) {
+            parts.push((cards, true));
+        }
+        if let Some(cards) = self.gbot_cards(tail.gbot_cards, p, cx) {
+            parts.push((cards, true));
+        }
+        if let Some(cards) = self.workflow_cards(tail.workflows, p, cx) {
+            parts.push((cards, false));
+        }
+        if let Some(reply) = tail.final_message.filter(|reply| reply.is_object()) {
+            parts.push((self.message_row(reply, p, window, cx), false));
+        }
+        parts
     }
 
     /// The bar a finished turn folds behind: a clock tile with a green check badge, "Worked for
@@ -331,15 +382,22 @@ impl NativeChatView {
     /// The row while it folds, opens or closes. Each part carries the gap above it, so a part
     /// eased to nothing leaves no gap behind. Opening or closing, `log` is the files fold and the
     /// work log, which ease together.
+    ///
+    /// CDXC:SessionChat 2026-11-08 WHY:
+    /// Folding rows sit one row gap above the tail, whose first part brings its own `PART_GAP`. At Compact the row gap (8px) is smaller than `PART_GAP`, and the log's clip measures the padding too, so making up the difference with negative padding clipped the bottom of the last row (a tool card's border). The first tail part's own gap gives the difference back instead, eased with the log so it lands on `PART_GAP`.
     fn moving_completed_work_row(
         &mut self,
         id: &str,
         frame: FoldFrame,
         heading: AnyElement,
         log: Option<Vec<AnyElement>>,
-        tail: Vec<(AnyElement, f32)>,
-        s: f32,
+        mut tail: Vec<(AnyElement, f32)>,
+        p: &ChatAppearance,
     ) -> AnyElement {
+        let s = p.scale;
+        // The space between two transcript list items, the gap every row wrapper ends with, which
+        // the live rows had between them before they folded.
+        let live_row_gap = p.row_gap();
         let mut row = div().flex().flex_col().w_full();
         let top = div()
             .flex()
@@ -361,14 +419,17 @@ impl NativeChatView {
                 top,
             ));
             if let Some(rows) = log {
+                if let Some((_, gap)) = tail.first_mut() {
+                    *gap -= (PART_GAP - live_row_gap).max(0.0) * frame.log.clamp(0.0, 1.0);
+                }
                 row = row.child(eased_part(
                     self.disclosure_motion.borrow_mut().height(id, "log"),
                     frame.log,
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(live_row_gap() * s))
-                        .pb(px((live_row_gap() - PART_GAP) * s))
+                        .gap(px(live_row_gap * s))
+                        .pb(px((live_row_gap - PART_GAP).max(0.0) * s))
                         .opacity(frame.rows_opacity)
                         .children(rows)
                         .into_any_element(),

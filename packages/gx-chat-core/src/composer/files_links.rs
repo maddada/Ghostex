@@ -361,6 +361,15 @@ pub(crate) fn row_of(
                 .chain(final_message)
                 .cloned()
                 .collect(),
+            TranscriptItem::GroupedWork { work, turns, .. } => work
+                .iter()
+                .chain(
+                    turns
+                        .iter()
+                        .flat_map(|turn| turn.artifacts.iter().chain(&turn.final_message)),
+                )
+                .cloned()
+                .collect(),
             TranscriptItem::Unknown(_) => Vec::new(),
         }
     };
@@ -372,8 +381,12 @@ pub(crate) fn row_of(
             }
             _ => None,
         };
+        // A Reduced line stands for each turn it merged.
+        let merges_turn = matches!(item, TranscriptItem::GroupedWork { turns, .. }
+            if turns.iter().any(|turn| turn.id == message_id));
         let messages = messages_of(item);
         if item_id.as_deref() == Some(message_id)
+            || merges_turn
             || messages
                 .iter()
                 .any(|message| id_of(message).as_deref() == Some(message_id))

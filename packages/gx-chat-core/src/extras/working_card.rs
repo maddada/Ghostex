@@ -37,11 +37,13 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         .then(|| running_call_label(state))
         .flatten();
     let activity = strip.presentation.clone().filter(Value::is_object);
+    // Status line in the chat: the finished turn's time stays on its fold, so the card never
+    // shows the worked line (`transcript/chat_look.rs`); nothing changes while the agent works.
     let worked = state
         .transcript_view
         .worked_line
         .clone()
-        .filter(|_| !working);
+        .filter(|_| !working && !state.transcript_view.chat_look.status_in_transcript);
     let (label, label_kind) = if let Some(activity) = &activity {
         (
             activity

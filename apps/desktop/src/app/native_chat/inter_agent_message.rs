@@ -250,7 +250,7 @@ impl NativeChatView {
                 .flex_col()
                 .min_w_0()
                 .w_full()
-                .gap(px(SINGLE_LINE_CARD.stack_gap() * p.scale))
+                .gap(px(SINGLE_LINE_CARD.stack_gap(p) * p.scale))
                 .children(cards.iter().map(|sent| {
                     let marked = text(sent, "markdown");
                     self.agent_card(

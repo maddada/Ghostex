@@ -176,8 +176,12 @@ fn is_exit_code_line(line: &str) -> bool {
 /// chip's glyph. A turn whose rows are still on the server (`deferredWork`) knows only its files
 /// until it is opened.
 pub fn work_stats(rows: &[&ChatMessage], changed_files: usize) -> Vec<Value> {
-    let calls: usize = rows
-        .iter()
+    counted_work_stats(tool_call_count(rows), changed_files)
+}
+
+/// The tool calls [`work_stats`] counts in `rows`.
+pub fn tool_call_count(rows: &[&ChatMessage]) -> usize {
+    rows.iter()
         .map(|message| {
             // A background task's end counts as the call it reports (`background_rows.rs`).
             let message = background_task_source(message);
@@ -187,7 +191,12 @@ pub fn work_stats(rows: &[&ChatMessage], changed_files: usize) -> Vec<Value> {
                 .filter(|pair| pair.call_name().is_some() && pair.call_input().is_some())
                 .count()
         })
-        .sum();
+        .sum()
+}
+
+/// [`work_stats`] for counts already taken: a Reduced line adds up its turns'
+/// (`grouped_work.rs`).
+pub fn counted_work_stats(calls: usize, changed_files: usize) -> Vec<Value> {
     let mut stats = Vec::new();
     if calls > 0 {
         stats.push(json!({

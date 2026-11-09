@@ -2,8 +2,8 @@ use super::appearance::ChatAppearance;
 use crate::app::helpers::ThrottledAnimationExt;
 use crate::assets::chat_working::{VISUAL, spark_svg_size};
 use gpui::{
-    AnyElement, IntoElement, ParentElement, Styled, Transformation, div, percentage, px, rgb, size,
-    svg,
+    AnyElement, IntoElement, ParentElement, Styled, Transformation, div, percentage,
+    prelude::FluentBuilder as _, px, rgb, size, svg,
 };
 use std::time::Duration;
 
@@ -23,7 +23,8 @@ pub(super) fn css_ease_in_out(progress: f32) -> f32 {
     3.0 * (1.0 - t) * t * t + t * t * t
 }
 
-pub(super) fn spark(p: &ChatAppearance, reduced_motion: bool) -> AnyElement {
+/// The working spark; `glow` adds the soft blue and white layers behind it, drawn up to 96px wide.
+pub(super) fn spark(p: &ChatAppearance, reduced_motion: bool, glow: bool) -> AnyElement {
     let container = div()
         .relative()
         .size(px(VISUAL.spark_box * p.scale))
@@ -64,31 +65,35 @@ pub(super) fn spark(p: &ChatAppearance, reduced_motion: bool) -> AnyElement {
                 let glyph_svg = spark_svg_size(VISUAL.spark_size);
                 let glyph_inset = (VISUAL.spark_box - glyph_svg) / 2.0 * p.scale;
                 container
-                    .child(
-                        svg()
-                            .absolute()
-                            .left(px(glow_inset))
-                            .top(px(glow_inset))
-                            .size(px(96.0 * p.scale))
-                            .path(format!("chat-working/blue-{glow_step}"))
-                            .text_color(
-                                gpui::Hsla::from(rgb(0xa0beff)).opacity(0.22 * pulse * opacity),
+                    .when(glow, |container| {
+                        container
+                            .child(
+                                svg()
+                                    .absolute()
+                                    .left(px(glow_inset))
+                                    .top(px(glow_inset))
+                                    .size(px(96.0 * p.scale))
+                                    .path(format!("chat-working/blue-{glow_step}"))
+                                    .text_color(
+                                        gpui::Hsla::from(rgb(0xa0beff))
+                                            .opacity(0.22 * pulse * opacity),
+                                    )
+                                    .with_transformation(transform),
                             )
-                            .with_transformation(transform),
-                    )
-                    .child(
-                        svg()
-                            .absolute()
-                            .left(px(glow_inset))
-                            .top(px(glow_inset))
-                            .size(px(96.0 * p.scale))
-                            .path(format!("chat-working/white-{glow_step}"))
-                            .text_color(
-                                gpui::Hsla::from(rgb(0xffffff))
-                                    .opacity((0.15 + 0.3 * pulse) * opacity),
+                            .child(
+                                svg()
+                                    .absolute()
+                                    .left(px(glow_inset))
+                                    .top(px(glow_inset))
+                                    .size(px(96.0 * p.scale))
+                                    .path(format!("chat-working/white-{glow_step}"))
+                                    .text_color(
+                                        gpui::Hsla::from(rgb(0xffffff))
+                                            .opacity((0.15 + 0.3 * pulse) * opacity),
+                                    )
+                                    .with_transformation(transform),
                             )
-                            .with_transformation(transform),
-                    )
+                    })
                     .child(
                         svg()
                             .absolute()

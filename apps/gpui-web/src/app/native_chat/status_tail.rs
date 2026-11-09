@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_chat/status_tail.rs

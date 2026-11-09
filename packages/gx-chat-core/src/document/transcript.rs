@@ -109,10 +109,87 @@ pub enum TranscriptItem {
         /// (`transcript/read_images.rs`).
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         read_images: Vec<Value>,
+        /// What a Reduced line adds up when it folds this turn in (`transcript/grouped_work.rs`).
+        /// Never on the wire; boxed so the row stays no bigger than the others need.
+        #[serde(skip)]
+        tally: Box<WorkTally>,
+    },
+    /// Agent work set to Reduced (or Quiet): the finished turns the agent ran for one message of yours, folded
+    /// into one line (`transcript/grouped_work.rs`). The fields are those of `completed-work`
+    /// added up over every merged turn; what each turn keeps out of the fold is in `turns`.
+    #[serde(rename = "grouped-work", rename_all = "camelCase")]
+    GroupedWork {
+        /// `grouped:` plus the first merged turn's id.
+        id: String,
+        /// "Worked for 1m 16s": the merged turns' times added up.
+        label: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        stats: Vec<Value>,
+        #[serde(default)]
+        files_card: Value,
+        files: Vec<Value>,
+        files_label: String,
+        simple_files_label: String,
+        expandable: bool,
+        /// Every merged turn's folded rows, in turn order.
+        work: Vec<ProjectedMessage>,
+        /// Each merged turn's tail, in turn order, drawn after the line.
+        turns: Vec<GroupedTurn>,
+        /// The pictures the merged work opened from disk, each once, drawn as a strip under the
+        /// line while it is closed.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        read_images: Vec<Value>,
+        /// What the reply's work button says under Agent work Quiet, which draws no line:
+        /// "24s · 5 tools · 2 files" (`grouped_work::work_button`).
+        #[serde(default)]
+        work_button: String,
+        /// Agent work Quiet: the id of the reply whose hover row carries the work button, the
+        /// row's last reply with actions; absent when none has them (the button then stands on
+        /// its own row after the tails) and under Reduced.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        work_carrier: Option<String>,
     },
     /// A kind this build does not know, kept verbatim so one new row cannot drop the list.
     #[serde(untagged)]
     Unknown(Value),
+}
+
+/// One turn a `grouped-work` line merged: what stays out of the line, shaped like the same-named
+/// `completed-work` fields, and the turn's own id and `deferred`, which opening the line reads back
+/// (`{type: 'loadWork', id, work: deferred}`, one per turn that has it).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupedTurn {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deferred: Option<Value>,
+    pub questions: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sent_messages: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gbot_cards: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workflows: Vec<Value>,
+    pub artifacts: Vec<ProjectedMessage>,
+    #[serde(rename = "final", default, skip_serializing_if = "Option::is_none")]
+    pub final_message: Option<ProjectedMessage>,
+}
+
+/// A finished turn's numbers, kept beside its `completed-work` row so a Reduced line can add them
+/// up without reading its labels back.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkTally {
+    /// When the turn's opener arrived, which starts a line the turn opens.
+    pub started_ms: Option<i64>,
+    /// When the turn ended (`presentation::turn_end`), which ends a line the turn opens.
+    pub ended_ms: Option<i64>,
+    /// How far the turn carries a line it does not open: an OMP wake-up's reply only, the way a
+    /// prompt's own label runs on through them (`presentation::turn_worked_label`), else its end.
+    pub extends_to_ms: Option<i64>,
+    /// Its tool calls, as `work_summary::work_stats` counts them.
+    pub tool_calls: usize,
+    /// The paths its "N files changed" counts, the held-back ones included.
+    pub changed: Vec<String>,
 }
 
 // A host may hand the rows to another thread, so a row stays `Send + Sync`, and cloning one shares

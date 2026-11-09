@@ -16,13 +16,17 @@ enum ReplyAction {
 }
 
 impl NativeChatView {
+    /// The focus a reply tracks for its action row; at Message spacing Compact (`compact`) your
+    /// own prompts track one too, so keyboard focus can reveal their footer's buttons
+    /// (message_spacing.rs).
     pub(super) fn reply_focus(
         &self,
         message: &Value,
+        compact: bool,
         window: &mut gpui::Window,
         cx: &mut Context<Self>,
     ) -> Option<(gpui::FocusHandle, bool)> {
-        if !self.has_reply_actions(message) {
+        if !self.has_reply_actions(message) && !(compact && Self::has_user_bar(message)) {
             return None;
         }
         let state = window.use_keyed_state(
@@ -40,6 +44,23 @@ impl NativeChatView {
         let focus = state.read(cx).clone();
         let focused = focus.contains_focused(window, cx);
         Some((focus, focused))
+    }
+
+    /// Whether a prompt of yours has an action row: anything to copy.
+    pub(super) fn has_user_actions(message: &Value) -> bool {
+        !text(message, "copyText").is_empty()
+    }
+
+    /// Whether a row of yours draws as a prompt with an action row (bubble, band, rule or names),
+    /// not as a message to or from another agent, a page's answers alone, a `!` command or a
+    /// status row, which carry no footer at Message spacing Compact.
+    pub(super) fn has_user_bar(message: &Value) -> bool {
+        message["role"] == "user"
+            && message["suppressed"].is_null()
+            && !message["interAgentMessage"].is_object()
+            && message["shellCommand"] != true
+            && !(message["pageAnswers"].is_object() && message["pageAnswers"]["withText"] != true)
+            && Self::has_user_actions(message)
     }
 
     pub(super) fn has_reply_actions(&self, message: &Value) -> bool {
@@ -85,16 +106,50 @@ impl NativeChatView {
 
     /// CDXC:SessionChat 2026-09-19 SEE-ALSO:
     /// React's `CopyFooter` and `.ghostex-chat-message-actions` in packages/core-ui/styles/chat.css (both deleted 2026-09-25) carried the user decision this mirrors: a final reply's actions sit in a row below it, Copy, Reply by Annotating, Save to md, then the time it arrived, starting at the prose column. Read aloud joins the row just before the time (CDXC:VoiceMode below).
+    ///
+    /// `work` is the reply's work under Agent work Quiet (hidden_work.rs): its button leads the
+    /// row, and an opened work keeps the row shown so the button that closes it stays.
     pub(super) fn reply_actions(
         &self,
         message: &Value,
         focused: bool,
+        work: Option<&super::hidden_work::HiddenWork>,
         p: &ChatAppearance,
         cx: &Context<Self>,
-    ) -> AnyElement {
+    ) -> Option<AnyElement> {
         let id = text(message, "id");
+        let work_open = work.is_some_and(|work| work.expanded);
+        // Message spacing Compact: the footer keeps its space, and holds nothing while it is
+        // hidden (message_spacing.rs).
+        let compact = p.compact();
+        if compact && !work_open && !self.message_bar_shown(&id, focused) {
+            return Some(super::message_spacing::message_footer(p).into_any_element());
+        }
+        let work_button = work.map(|work| {
+            self.work_button(
+                work,
+                if compact {
+                    super::message_spacing::FOOTER_HEIGHT
+                } else {
+                    20.0
+                },
+                p,
+                cx,
+            )
+        });
         let markdown = text(message, "copyText");
-        let icon_color = if p.light { p.muted } else { p.primary };
+        let icon_color = if compact {
+            p.muted.opacity(super::message_spacing::FOOTER_DIM)
+        } else if p.light {
+            p.muted
+        } else {
+            p.primary
+        };
+        let button_size = if compact {
+            super::message_spacing::FOOTER_BUTTON
+        } else {
+            24.0
+        };
         let hover_background = if p.light {
             gpui::rgb(0xfafafa).into()
         } else {
@@ -109,12 +164,12 @@ impl NativeChatView {
                 .role(gpui::Role::Button)
                 .aria_label(label)
                 .tab_index(0)
-                .size(px(24.0 * p.scale))
+                .size(px(button_size * p.scale))
                 .flex_shrink_0()
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded(px(8.0 * p.scale))
+                .rounded(px(if compact { 4.0 } else { 8.0 } * p.scale))
                 .border(px(p.scale))
                 .border_color(gpui::transparent_black())
                 .chat_cursor_pointer()
@@ -197,12 +252,35 @@ impl NativeChatView {
         } else {
             24.0
         };
-        message_actions_row(p, focused)
-            .pl(px(prose_column * p.scale))
-            .tab_group()
-            .child(buttons)
-            .when_some(message_time(&id, message, p), |row, time| row.child(time))
-            .into_any_element()
+        // Message spacing Compact: the work button at the footer's left, from the prose column,
+        // the buttons and the time at its right (message_spacing.rs).
+        if compact {
+            return Some(
+                super::message_spacing::message_footer(p)
+                    .pl(px(prose_column * p.scale))
+                    .tab_group()
+                    .children(work_button)
+                    .child(
+                        div()
+                            .ml_auto()
+                            .flex()
+                            .items_center()
+                            .child(buttons)
+                            .children(footer_time(&id, message, p)),
+                    )
+                    .into_any_element(),
+            );
+        }
+        let fill = |row: gpui::Div| {
+            row.tab_group()
+                .children(work_button)
+                .child(buttons)
+                .when_some(message_time(&id, message, p), |row, time| row.child(time))
+        };
+        Some(
+            fill(message_actions_row(p, focused || work_open).pl(px(prose_column * p.scale)))
+                .into_any_element(),
+        )
     }
 
     /// CDXC:SavedPrompts 2026-09-06 DECISION:
@@ -216,6 +294,7 @@ impl NativeChatView {
     pub(super) fn user_actions(
         &self,
         message: &Value,
+        focused: bool,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
@@ -224,6 +303,13 @@ impl NativeChatView {
         // Nothing to copy, save, or rewind to: an empty prompt has no action row at all.
         if prompt.is_empty() {
             return None;
+        }
+        // Message spacing Compact: the footer keeps its space, and holds nothing while it is
+        // hidden (message_spacing.rs).
+        let compact = p.compact();
+        let left = p.left_aligned();
+        if compact && !self.message_bar_shown(&id, focused) {
+            return Some(super::message_spacing::message_footer(p).into_any_element());
         }
         let saved = self.snapshot["savedPrompts"][id.as_str()]
             .as_str()
@@ -263,7 +349,7 @@ impl NativeChatView {
         was sent, in the order Rewind, Save prompt, Copy, so Copy lands at the bubble's edge.
         */
         let button = |key: &str, label: String, icon: &'static str, action: Value| {
-            Self::user_action_button(&id, key, label, icon, action, p, cx)
+            Self::user_action_button(&id, key, label, icon, action, compact, p, cx)
         };
         let buttons = div()
             .flex()
@@ -333,38 +419,72 @@ impl NativeChatView {
                 "chat-actions/copy",
                 json!({"type":"copyPrompt","text":prompt.clone()}),
             ));
-        Some(
-            message_actions_row(p, false)
-                .pr(px(4.0 * p.scale))
-                .when_some(message_time(&id, message, p), |row, time| row.child(time))
+        // Under a left-aligned message the row starts at its left edge (user_message_look.rs).
+        // Message spacing Compact: the buttons, then the time, on the message's side of its
+        // footer (message_spacing.rs).
+        if compact {
+            return Some(
+                super::message_spacing::message_footer(p)
+                    .when(!left, |row| row.justify_end().pr(px(4.0 * p.scale)))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .child(buttons)
+                            .children(footer_time(&id, message, p)),
+                    )
+                    .into_any_element(),
+            );
+        }
+        let fill = |row: gpui::Div| {
+            row.when_some(message_time(&id, message, p), |row, time| row.child(time))
                 .child(buttons)
-                .into_any_element(),
+        };
+        Some(
+            fill(
+                message_actions_row(p, false)
+                    .when(!left, |row| row.pr(px(4.0 * p.scale)))
+                    .when(left, |row| row.w_full().justify_start()),
+            )
+            .into_any_element(),
         )
     }
 
     /// One of a prompt's action buttons: a 24px square with a 12px icon, a hover fill and a
-    /// tooltip. `action` is `{"type":"copyPrompt","text":…}` for a copy, or any chat action.
+    /// tooltip (a 20px square with a dimmer icon in a Compact footer, `compact`). `action` is
+    /// `{"type":"copyPrompt","text":…}` for a copy, or any chat action.
+    #[allow(clippy::too_many_arguments)]
     fn user_action_button(
         id: &str,
         key: &str,
         label: String,
         icon: &'static str,
         action: Value,
+        compact: bool,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
+        let (size, radius, tone) = if compact {
+            (
+                super::message_spacing::FOOTER_BUTTON,
+                4.0,
+                p.muted.opacity(super::message_spacing::FOOTER_DIM),
+            )
+        } else {
+            (24.0, 6.0, p.muted)
+        };
         div()
             .id(gpui::SharedString::from(format!("{key}:{id}")))
             .group("native-chat-user-action")
             .role(gpui::Role::Button)
             .aria_label(label.clone())
             .tab_index(0)
-            .size(px(24.0 * p.scale))
+            .size(px(size * p.scale))
             .flex_shrink_0()
             .flex()
             .items_center()
             .justify_center()
-            .rounded(px(6.0 * p.scale))
+            .rounded(px(radius * p.scale))
             .chat_cursor_pointer()
             .hover(|style| style.bg(p.border.opacity(0.4)))
             .tooltip(move |window, cx| {
@@ -374,7 +494,7 @@ impl NativeChatView {
                 svg()
                     .path(icon)
                     .size(px(12.0 * p.scale))
-                    .text_color(p.muted)
+                    .text_color(tone)
                     .group_hover("native-chat-user-action", |style| {
                         style.text_color(p.foreground)
                     }),
@@ -410,6 +530,7 @@ impl NativeChatView {
                 "Copy message".into(),
                 "chat-actions/copy",
                 json!({"type":"copyPrompt","text":command}),
+                false,
                 p,
                 cx,
             ))
@@ -471,6 +592,30 @@ fn message_time(id: &str, message: &Value, p: &ChatAppearance) -> Option<AnyElem
             .whitespace_nowrap()
             .text_size(px(12.0 * p.scale))
             .text_color(p.muted)
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(title.clone()).build(window, cx)
+            })
+            .child(label)
+            .into_any_element(),
+    )
+}
+
+/// The time in a Compact footer: [`message_time`] at 11.5px, as dim as the footer's icons, 6px
+/// after them.
+fn footer_time(id: &str, message: &Value, p: &ChatAppearance) -> Option<AnyElement> {
+    let label = text(&message["time"], "label");
+    if label.is_empty() {
+        return None;
+    }
+    let title = gpui::SharedString::from(text(&message["time"], "title"));
+    Some(
+        div()
+            .id(gpui::SharedString::from(format!("message-time:{id}")))
+            .flex_shrink_0()
+            .whitespace_nowrap()
+            .ml(px(6.0 * p.scale))
+            .text_size(px(11.5 * p.scale))
+            .text_color(p.muted.opacity(super::message_spacing::FOOTER_DIM))
             .tooltip(move |window, cx| {
                 gpui_component::tooltip::Tooltip::new(title.clone()).build(window, cx)
             })

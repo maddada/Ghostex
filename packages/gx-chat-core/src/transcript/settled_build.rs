@@ -9,8 +9,8 @@ use crate::extras::minimap_rail::MinimapMarkerRow;
 use crate::state::{ChatContext, ChatState, TranscriptViewState, EAGER_TAIL_ITEMS};
 use crate::transcript::foreign::{is_working, order_cmp, order_key};
 use crate::transcript::presentation::{
-    build_items, drop_hidden_rows, item_index, latest_worked_turn, line_breaks, prune_cache,
-    Builder, Projection, ProjectionCache, ProjectionScope,
+    build_items, drop_hidden_rows, hide_running_work, item_index, latest_worked_turn, line_breaks,
+    prune_cache, Builder, Projection, ProjectionCache, ProjectionScope,
 };
 use crate::transcript::sent_message::{learn_names, resolve_recipients_after};
 use crate::transcript::thinking_card::RunningThinking;
@@ -117,8 +117,19 @@ fn build_after(
             .map(|at| composed[*at].clone())
             .collect()
     };
+    // Agent work Quiet: an active chunk has hidden its rows, so it stands only while they are still
+    // hidden, and not while an approval may be waiting on a call in one of them: then the running
+    // turn's rows stay in the stretch, read whole.
+    let hides_running = crate::session::working::hides_running_response(state);
+    let quiet_reads_whole = view.hidden_work() && (approval_wait.is_some() || !hides_running);
+    // They hid every row after this time, so a new run's time is theirs to draw again.
+    let quiet_finished_before = crate::session::working::quiet_finished_before(state);
+    if settled.has_active() && settled.quiet_finished_before != quiet_finished_before {
+        settled.drop_active();
+    }
+    settled.quiet_finished_before = quiet_finished_before;
     // The running turn's chunks stand only while it works, in the verbose list.
-    if settled.has_active() && (!working || summary) {
+    if settled.has_active() && (!working || summary || quiet_reads_whole) {
         settled.drop_active();
     }
     let mut stretch = rows_after(settled);
@@ -172,7 +183,11 @@ fn build_after(
         agent_message_deliveries: state.session.agent_message_deliveries.as_ref(),
         backfilled: &view.backfilled,
         question_forms: std::cell::OnceCell::from(forms),
-        tool_cards: view.tool_cards,
+        tool_cards: view.effective_tool_cards(),
+        grouped_work: view.grouped_work(),
+        hidden_work: view.hidden_work(),
+        hides_running,
+        quiet_finished_before,
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),
     };
@@ -246,6 +261,7 @@ fn build_after(
     // pass reuses while the turn keeps working.
     if working
         && !summary
+        && !quiet_reads_whole
         && live_side_question.is_none()
         && stretch.len() >= ACTIVE_STRETCH_ROWS
         && !restarts_response(&tail.0)
@@ -414,6 +430,22 @@ fn build_after(
         false,
     );
     let worked_turn = latest_worked_turn(&projection.items, working);
+    // The call an approval waits on is the newest one: in the stretch, or the prefix has to be
+    // built with the mark.
+    let before: Vec<&[TranscriptItem]> = settled
+        .chunks
+        .iter()
+        .map(|chunk| chunk.items.as_slice())
+        .collect();
+    if !crate::transcript::approval_wait::open_waiting_call_in(
+        &mut items,
+        &before,
+        cache,
+        scope.approval_wait.as_ref(),
+    ) {
+        return None;
+    }
+    hide_running_work(&mut items, &scope, &projection);
     // The rail counts its dashes, not the turns: a turn the user did not open gets none.
     let minimap = {
         let turns: Vec<_> = projection
@@ -436,21 +468,6 @@ fn build_after(
             Vec::new()
         }
     };
-    // The call an approval waits on is the newest one: in the stretch, or the prefix has to be
-    // built with the mark.
-    let before: Vec<&[TranscriptItem]> = settled
-        .chunks
-        .iter()
-        .map(|chunk| chunk.items.as_slice())
-        .collect();
-    if !crate::transcript::approval_wait::open_waiting_call_in(
-        &mut items,
-        &before,
-        cache,
-        scope.approval_wait.as_ref(),
-    ) {
-        return None;
-    }
     // `prune_cache`'s own bound, checked first so the prefix's ids are only gathered when it
     // prunes.
     if cache.len() > scope.messages.len() * 2 + 64 {

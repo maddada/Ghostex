@@ -489,6 +489,25 @@ pub struct ChatForkInfo {
     pub ancestor_ids: Vec<String>,
 }
 
+/// The chat look settings as the stored option ids (`chatMessageLayout`, `chatUserMessageStyle`,
+/// `chatAgentWorkStyle`, `chatStatusInTranscript`, `chatMessageSpacing`), which the chat read and
+/// the desktop host's chat settings carry. A field left out keeps what the chat core has; the core
+/// reads an unknown id as Default (`gx-chat-core`'s `transcript/chat_look.rs`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatLookSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_layout: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_work: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_in_transcript: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spacing: Option<String>,
+}
+
 /// Result of `POST /api/readSessionChat`: a snapshot without the routing keys.
 ///
 /// `(epoch, seq)` is `(0, 0)` when no follower exists, and can be older than the live stream: a
@@ -551,6 +570,9 @@ pub struct ReadSessionChatResult {
     /// The Text strength setting (0 to 100), the same way as `catch_up`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chat_text_strength: Option<f64>,
+    /// The five chat look settings, the same way as `catch_up`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat_look: Option<ChatLookSettings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_info: Option<ChatForkInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -116,6 +116,21 @@ impl ChatTextColors {
         self.strengthened(self.primary, percent)
     }
 
+    /// Your message's text under Your messages Band: a third of the way from the foreground to the
+    /// bubble's text, so it reads brighter than the agent's prose.
+    pub(crate) fn user_style_prose(&self, percent: u8) -> Hsla {
+        let foreground = gpui::Rgba::from(self.foreground);
+        let primary = gpui::Rgba::from(self.primary);
+        let third = |from: f32, to: f32| from + (to - from) / 3.0;
+        let color = gpui::Rgba {
+            r: third(foreground.r, primary.r),
+            g: third(foreground.g, primary.g),
+            b: third(foreground.b, primary.b),
+            a: foreground.a,
+        };
+        self.strengthened(color.into(), percent)
+    }
+
     /// An agent's thinking: Text strength leaves it alone, so it stays apart from the reply. Light
     /// mode always mutes it; dark mode draws it like the answer unless Grey thinking is on.
     pub(crate) fn thinking(&self, muted_thinking: bool) -> Hsla {

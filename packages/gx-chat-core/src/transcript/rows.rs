@@ -72,7 +72,14 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
     // in for "this is a new array".
     // `update()` runs the sticky fold before its change check, so a working blip over an unchanged
     // transcript rebuilds nothing.
-    let live = crate::session::working::transcript_working(state);
+    crate::session::working::track_quiet_card(state);
+    let holds_open = crate::session::working::quiet_holds_turn_open(state);
+    let live = crate::session::working::transcript_working(state) || holds_open;
+    // A turn held open has not settled, whatever a working blip before its card recorded, so
+    // answering the card does not draw it as finished until its next row.
+    if holds_open {
+        state.transcript_view.fold_settled_at = None;
+    }
     crate::transcript::turns::sticky_transcript_working(
         &state.messages.composed,
         live,
@@ -82,6 +89,8 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
         composed: Vec::new(),
         composition_identity: state.messages.compose_generation,
         working: crate::transcript::foreign::is_working(state),
+        hides_running: crate::session::working::hides_running_response(state),
+        quiet_finished_before: crate::session::working::quiet_finished_before(state),
         summary: state.transcript_view.summary_mode,
         detail_revision: state.transcript_view.detail_revision,
         backfill_revision: state.transcript_view.backfill_revision,
@@ -134,10 +143,18 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
     state.extras.minimap = projection.minimap;
     let view = &mut state.transcript_view;
     let mut items = projection.items;
-    view.worked_line = projection.worked_turn.map(|(id, label)| {
-        without_worked_time(&mut items, &id);
-        label
-    });
+    // Status line in the chat keeps the time on the turn's own fold and leaves the card above the
+    // chat box without a worked line (`transcript/chat_look.rs`).
+    view.worked_line = if view.chat_look.status_in_transcript {
+        None
+    } else {
+        projection.worked_turn.map(|(id, label)| {
+            // A grouped line's time spans the whole reply, so the card says that one.
+            without_worked_time(&mut items, &id)
+                .filter(|group| group != "Worked")
+                .unwrap_or(label)
+        })
+    };
     view.items = std::sync::Arc::new(TranscriptItems::with_settled(&settled_rows, items));
     view.final_ids = projection.final_ids;
     view.answered_pages = projection.answered_pages;
@@ -211,16 +228,29 @@ pub fn advance(state: &mut ChatState, context: &ChatContext) -> bool {
 
 /// The finished turn whose "Worked for 2m 13s" the working card shows drops it from its own fold, which
 /// reads "Previous turn" beside its counts instead, so the time is on screen once. The OMP wake-ups'
-/// turns after it (`presentation::latest_worked_turn`) keep their own times.
+/// turns after it (`presentation::latest_worked_turn`) keep their own times. Under Agent work
+/// Reduced the turn's line is the whole reply's, so this returns that line's own label, which the
+/// card shows in the turn's place.
 ///
 /// CDXC:SessionChat 2026-10-18 DECISION:
 /// User (Q257, the card when the turn ends: "worked line"): "then you need to not show the same text up top in the collapsed section that mentions how many tool calls were done in this case if you get me (because otherwise we'd have "worked 2m 13s" twice on screen". While the working card shows a turn's Worked line, that turn's fold drops its time. Then (2026-10-18), seeing the fold left with only its chevron and counts: "Make this say 'Previous turn' on the left side after the chevron". Supersedes the 2026-10-17 fold that showed only its counts.
-fn without_worked_time(items: &mut [TranscriptItem], turn_id: &str) {
-    let fold = items.iter_mut().rev().find_map(|item| match item {
-        TranscriptItem::CompletedWork { id, label, .. } if id == turn_id => Some(label),
+fn without_worked_time(items: &mut [TranscriptItem], turn_id: &str) -> Option<String> {
+    let (label, button) = items.iter_mut().rev().find_map(|item| match item {
+        TranscriptItem::CompletedWork { id, label, .. } if id == turn_id => Some((label, None)),
+        // Agent work Reduced (and Quiet): the line that merged the turn says it for the whole
+        // reply, and so does Quiet's work button, which drops its time the same way.
+        TranscriptItem::GroupedWork {
+            turns,
+            label,
+            work_button,
+            ..
+        } if turns.iter().any(|turn| turn.id == turn_id) => Some((label, Some(work_button))),
         _ => None,
-    });
-    if let Some(label) = fold {
-        *label = "Previous turn".to_string();
+    })?;
+    let previous = std::mem::replace(label, "Previous turn".to_string());
+    let button = button?;
+    if let Some(time) = crate::transcript::grouped_work::short_time(&previous) {
+        *button = crate::transcript::grouped_work::without_time(button, time);
     }
+    Some(previous)
 }

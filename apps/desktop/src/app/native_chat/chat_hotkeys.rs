@@ -69,6 +69,28 @@ fn replies_newest_first<'a>(items: &'a [TranscriptItem], final_ids: &[Value]) ->
                 .chain(artifacts.iter().map(|model| &**model))
                 .chain(final_message.iter().map(|model| &**model))
                 .collect(),
+            TranscriptItem::GroupedWork {
+                stats,
+                files_card,
+                files,
+                work,
+                turns,
+                ..
+            } => stats
+                .iter()
+                .chain([files_card])
+                .chain(files)
+                .chain(work.iter().map(|model| &**model))
+                .chain(turns.iter().flat_map(|turn| {
+                    turn.deferred
+                        .iter()
+                        .chain(&turn.questions)
+                        .chain(&turn.sent_messages)
+                        .chain(&turn.workflows)
+                        .chain(turn.artifacts.iter().map(|model| &**model))
+                        .chain(turn.final_message.iter().map(|model| &**model))
+                }))
+                .collect(),
             TranscriptItem::Unknown(row) => vec![row],
         };
         let mut messages = Vec::new();

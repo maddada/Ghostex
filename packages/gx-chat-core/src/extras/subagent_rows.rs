@@ -62,7 +62,12 @@ fn scope<'a>(
         agent_message_deliveries: None,
         backfilled: &view.backfilled,
         question_forms: std::cell::OnceCell::new(),
-        tool_cards: view.tool_cards,
+        tool_cards: view.effective_tool_cards(),
+        grouped_work: view.grouped_work(),
+        hidden_work: view.hidden_work(),
+        // The viewer is opened to read what the subagent does.
+        hides_running: false,
+        quiet_finished_before: None,
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),
     }
@@ -105,6 +110,8 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
         composed: rows.clone(),
         composition_identity: 0,
         working,
+        hides_running: false,
+        quiet_finished_before: None,
         summary: false,
         detail_revision: 0,
         backfill_revision: state.extras.subagent.view.backfill_revision,

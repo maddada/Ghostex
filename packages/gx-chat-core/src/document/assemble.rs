@@ -126,6 +126,29 @@ fn item_identity(state: &ChatState, item: &TranscriptItem) -> u64 {
                 .chain(final_message.iter())
                 .fold(deferred, |seed, row| mix(seed, placeholder(row)))
         }
+        TranscriptItem::GroupedWork { work, turns, .. } => {
+            let seed = turns
+                .iter()
+                .filter(|turn| turn.deferred.is_some())
+                .map(|turn| {
+                    state
+                        .messages
+                        .deferred_objects
+                        .get(&turn.id)
+                        .copied()
+                        .unwrap_or_default()
+                })
+                .fold(0, mix);
+            let seed = work
+                .iter()
+                .fold(seed, |seed, row| mix(seed, placeholder(row)));
+            turns.iter().fold(seed, |seed, turn| {
+                turn.artifacts
+                    .iter()
+                    .chain(turn.final_message.iter())
+                    .fold(seed, |seed, row| mix(seed, placeholder(row)))
+            })
+        }
         TranscriptItem::Unknown(_) => 0,
     }
 }

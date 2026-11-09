@@ -1034,7 +1034,7 @@ impl NativeChatView {
                 VISUAL.assistant_row_gap
             } * p.scale))
             .py(px(VISUAL.row_padding_y * p.scale))
-            .when(user, |row| row.justify_end());
+            .when(user && !p.left_aligned(), |row| row.justify_end());
         for index in 0..images.len() {
             row = row.child(self.image_tile(&id, &images, index, user, p, cx));
         }

@@ -5,7 +5,9 @@ use crate::app::helpers::{
     gpui_session_chat_uses_light_theme, sidebar_titlebar_pack_rgb, sidebar_titlebar_rgb_channels,
     work_area_background_for_variant,
 };
+use ghostex_gx_chat_core::transcript::chat_look::ChatLook;
 use gpui::{Hsla, Styled as _, rgb};
+use serde::Deserialize as _;
 
 #[derive(Clone)]
 pub(crate) struct ChatAppearance {
@@ -66,6 +68,14 @@ pub(crate) struct ChatAppearance {
     pub(crate) text_strength: u8,
     /// Whether this chat is drawn on window glass (`on_window_glass`).
     pub(crate) window_glass: bool,
+    /// The chat look settings, from the document's `chatLook` (absent: all Default, today's chat).
+    pub(crate) chat_look: ChatLook,
+    /// Chat box matches transcript width (`chatComposerMatchesTranscriptWidth`, desktop only): the
+    /// chat box takes the transcript column's width (composer.rs).
+    pub(crate) composer_matches_transcript: bool,
+    /// Your message's fill under the Band style: one input step further off the background than
+    /// the bubble (`input`).
+    pub(crate) user_band: Hsla,
 }
 
 impl ChatAppearance {
@@ -81,6 +91,7 @@ impl ChatAppearance {
         };
         if self.light {
             self.input = wash(false, 0.04);
+            self.user_band = wash(false, 0.08);
             self.border = wash(false, 0.08);
             self.card_background = wash(true, 0.5);
             self.card_panel = wash(true, 0.5);
@@ -90,6 +101,7 @@ impl ChatAppearance {
             self.card_row = self.input;
         } else {
             self.input = wash(true, 0.06);
+            self.user_band = wash(true, 0.12);
             self.border = wash(true, 0.08);
             self.card_background = gpui::transparent_black();
             self.card_panel = wash(true, 0.06);
@@ -162,6 +174,11 @@ impl ChatAppearance {
     /// packages/gx-chat-core/src/transcript/text_strength.rs).
     pub(crate) fn strengthened(&self, color: Hsla) -> Hsla {
         self.text_colors().strengthened(color, self.text_strength)
+    }
+
+    /// Your message's text under a Your messages style, at this chat's Text strength.
+    pub(crate) fn user_style_prose(&self) -> Hsla {
+        self.text_colors().user_style_prose(self.text_strength)
     }
 
     /// This chat's body text colours (`chat_text_look.rs`, which the Settings preview draws from).
@@ -277,6 +294,7 @@ impl ChatAppearance {
             muted: text.muted,
             border: lifted(0.062, 0.095),
             input: lifted(INPUT_STEP_DARK, INPUT_STEP_LIGHT),
+            user_band: lifted(INPUT_STEP_DARK * 2.0, INPUT_STEP_LIGHT * 2.0),
             composer_border: lifted(0.08, 0.067),
             composer_background: if light {
                 raised(0.3)
@@ -302,6 +320,10 @@ impl ChatAppearance {
                 .and_then(ghostex_gx_chat_core::transcript::text_strength::text_strength)
                 .unwrap_or(0),
             window_glass: false,
+            // Published only when a setting is off Default, with the effective layout already in
+            // `messageLayout` (gx-chat-core transcript/chat_look.rs).
+            chat_look: ChatLook::deserialize(&state["chatLook"]).unwrap_or_default(),
+            composer_matches_transcript: enabled("chatComposerMatchesTranscriptWidth"),
             transcript_width: enabled("sessionChatCustomTranscriptWidthEnabled").then(|| {
                 settings
                     .get("sessionChatTranscriptWidthPercent")

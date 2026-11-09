@@ -7,6 +7,7 @@
 use super::disclosure_body::{DisclosureRail, disclosure_body};
 use super::disclosure_motion::motion_clip;
 use super::file_actions::FileMenuExt as _;
+use super::quiet_work::{QuietLine, QuietMark, finished_mark};
 use super::{
     appearance::ChatAppearance, fonts::CHAT_MONO, state::NativeChatView, transcript::text,
 };
@@ -89,21 +90,71 @@ impl NativeChatView {
         if visible.is_empty() {
             return Vec::new();
         }
-        if p.simple && !show_all {
+        // An opened quiet line lists each call as one of its steps (quiet_work.rs), one column with
+        // no gap between them, as the mockup and the phone draw them; as separate parts of the
+        // message they would sit the message's part gap apart.
+        if self.quiet_steps {
+            let steps: Vec<AnyElement> = visible
+                .iter()
+                .map(|index| self.quiet_step_row(&id, *index, &tools[*index], p, cx))
+                .collect();
+            return vec![
+                div()
+                    .flex()
+                    .flex_col()
+                    .w_full()
+                    .min_w_0()
+                    .children(steps)
+                    .into_any_element(),
+            ];
+        }
+        // Agent work Reduced or Quiet: the run is one live quiet line in every view, open in
+        // Detailed (quiet_work.rs).
+        let quiet = p.quiet_style();
+        if (p.simple || quiet) && !show_all {
             let key = format!("tools:{id}");
             // The run disclosure opens on demand and is never opened by verbose mode, as React's was;
             // only a call waiting on an approval opens it (gx-chat-core `approval_wait.rs`).
             let awaiting = tools.iter().any(|tool| tool["awaitingApproval"] == true);
-            let expanded = self.is_expanded(&key, awaiting);
+            let expanded = self.is_expanded(&key, awaiting || (quiet && p.work_open));
             let motion = self.disclosure_frame(&key, expanded, cx);
-            let mut rows = vec![self.disclosure(
-                key.clone(),
-                text(message, "simpleToolLabel"),
-                expanded,
-                None,
-                p,
-                cx,
-            )];
+            let heading = if quiet {
+                let running = tools.iter().any(|tool| tool["status"] == "running");
+                let label = text(message, "simpleToolLabel");
+                self.quiet_work_line(
+                    QuietLine {
+                        key: key.clone(),
+                        segments: vec![(
+                            if running {
+                                format!("Working \u{b7} {label}\u{2026}")
+                            } else {
+                                label
+                            },
+                            None,
+                        )],
+                        mark: if running {
+                            QuietMark::Running
+                        } else {
+                            finished_mark([message])
+                        },
+                        expanded,
+                        expandable: true,
+                        actions: Vec::new(),
+                    },
+                    p,
+                    cx,
+                )
+            } else {
+                self.disclosure(
+                    key.clone(),
+                    text(message, "simpleToolLabel"),
+                    expanded,
+                    None,
+                    p,
+                    cx,
+                )
+            };
+            let mut rows = vec![heading];
             if expanded || motion.is_some() {
                 let body = self.tool_row_list(&id, &tools, &visible, p, cx);
                 let body = disclosure_body(
@@ -119,7 +170,11 @@ impl NativeChatView {
             } else if let Some(pictures) = self.read_picture_strip(
                 &format!("{key}:read"),
                 &message["readImages"],
-                super::read_pictures::FOLDED_CALLS_INSET,
+                if quiet {
+                    0.0
+                } else {
+                    super::read_pictures::FOLDED_CALLS_INSET
+                },
                 p.background,
                 p,
                 cx,
