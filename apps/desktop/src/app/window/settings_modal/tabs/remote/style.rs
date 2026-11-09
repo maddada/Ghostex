@@ -3,7 +3,9 @@
 //! pieces every card shares (badges, section labels, spinners, the raised segmented control, the
 //! small switch, compact buttons and inputs).
 use super::super::super::super::native_modal_kit::*;
-use super::super::super::fields::{icon, settings_icon, settings_switch, tooltip_text};
+use super::super::super::fields::{
+    icon, settings_icon, settings_switch, tooltip_text, wrapped_tooltip_text,
+};
 use super::super::super::palette::SettingsPalette;
 use super::RemoteTab;
 use super::model::BadgeTone;
@@ -14,7 +16,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, Transformation, Window, div, px, radians, rgb,
 };
 use gpui_component::input::{Input, InputState};
-use gpui_component::{Sizable as _, Size as ComponentSize, h_flex, v_flex};
+use gpui_component::{Sizable as _, Size as ComponentSize, h_flex};
 use std::time::Duration;
 
 pub(super) const ICON_ALERT: &str = "modals/settings/alert-triangle.svg";
@@ -615,21 +617,78 @@ pub(super) fn dialog_colors(t: &RemoteTokens) -> DialogColors {
     }
 }
 
-/// A switch row of a Settings > Remote dialog: a title and one line of detail, the app's switch
-/// on the right, and the whole row toggles it (`SwitchRowExt` in native_modal_kit/controls.rs).
+/// The (i) that follows a dialog field's label while the pointer is over the field (`group`, set on
+/// the field's wrapper): hovering it shows the field's explanation in Settings' wrapping tooltip,
+/// the same icon and tooltip as the Extensions cards' (i). It sits in a click shield so a press on
+/// it never toggles the switch row it may be inside.
+///
+/// CDXC:RemoteMachines 2026-11-09 DECISION:
+/// User, of the machine dialog: "pls reduce what i see right away here by moving the descriptions
+/// for each field to be in a i icon that appears when i hover on that field/heading so i can hover
+/// on it to read what each one requires". A field's explanation is no longer a line under it;
+/// errors and validation messages stay inline.
+pub(super) fn info_hint(
+    t: &RemoteTokens,
+    id: impl Into<ElementId>,
+    group: SharedString,
+    text: impl Into<SharedString>,
+) -> AnyElement {
+    click_shield(
+        div()
+            .id(id)
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .opacity(0.0)
+            .group_hover(group, |this| this.opacity(1.0))
+            .tooltip(wrapped_tooltip_text(text))
+            .child(settings_icon(
+                "modals/settings/info-circle.svg",
+                14.0,
+                t.muted,
+            )),
+    )
+}
+
+/// A dialog field's label, with its (i) right after it when it has an explanation.
+pub(super) fn dialog_label(
+    t: &RemoteTokens,
+    label: &'static str,
+    info: Option<SharedString>,
+    group: SharedString,
+) -> AnyElement {
+    h_flex()
+        .min_w_0()
+        .items_center()
+        .gap(px(6.0))
+        .child(
+            div()
+                .text_size(px(14.0))
+                .line_height(px(19.25))
+                .text_color(hsla(t.muted))
+                .child(label),
+        )
+        .children(info.map(|text| info_hint(t, format!("remote-dialog-info-{label}"), group, text)))
+        .into_any_element()
+}
+
+/// A switch row of a Settings > Remote dialog: its title (with the (i) that holds the
+/// explanation), the app's switch on the right, and the whole row toggles it (`SwitchRowExt` in
+/// native_modal_kit/controls.rs).
 pub(super) fn dialog_switch_row(
     t: &RemoteTokens,
-    colors: &DialogColors,
     id: &'static str,
     label: &'static str,
-    detail_text: &'static str,
+    info: &'static str,
     value: bool,
     toggle: impl Fn(&mut RemoteTab) + 'static,
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
     let p = t.p.nested_dialog();
+    let group = SharedString::from(format!("{id}-group"));
     h_flex()
         .id(id)
+        .group(group.clone())
         .role(gpui::Role::Switch)
         .aria_toggled(a11y_toggled(value))
         .aria_label(label)
@@ -645,23 +704,10 @@ pub(super) fn dialog_switch_row(
             }),
         )
         .child(
-            v_flex()
+            div()
                 .flex_1()
                 .min_w_0()
-                .child(
-                    div()
-                        .text_size(px(14.0))
-                        .line_height(px(19.25))
-                        .text_color(hsla(t.muted))
-                        .child(label),
-                )
-                .child(
-                    div()
-                        .text_size(px(13.0))
-                        .line_height(px(18.85))
-                        .text_color(hsla(colors.muted))
-                        .child(detail_text),
-                ),
+                .child(dialog_label(t, label, Some(info.into()), group)),
         )
         .child(
             div()

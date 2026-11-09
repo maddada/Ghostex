@@ -703,6 +703,13 @@ fn machine_draft_from_form(form: &Value, base: MachineDraft) -> MachineDraft {
     }
 }
 
+/// The preview's `remote-edit-machine-advanced` state: the open dialog with Advanced expanded.
+pub(super) fn preview_open_dialog_advanced(tab: &mut RemoteTab) {
+    if let Some(dialog) = tab.machine_dialog.as_mut() {
+        dialog.advanced_open = true;
+    }
+}
+
 /// The preview binary's `remote-add-ec` state: Easy Connect code mode with a code pasted.
 pub(super) fn preview_paste_easy_connect_code(
     tab: &mut RemoteTab,
@@ -1032,27 +1039,31 @@ fn machine_tile(
 
 // ---- the dialog ------------------------------------------------------------------------------------
 
-/// A labelled field (`Field` + `FieldLabel` + control + `FieldDescription`).
+/// A labelled field (`Field` + `FieldLabel` + control + `FieldDescription`). `info` is its
+/// explanation, shown by the (i) after the label; `message` is an error or a result of checking
+/// the value, which stays under the field.
 fn field(
     t: &RemoteTokens,
     colors: &DialogColors,
     label: &'static str,
     control: AnyElement,
-    description: Option<(String, Option<gpui::Rgba>)>,
+    info: Option<&str>,
+    message: Option<(String, Option<gpui::Rgba>)>,
 ) -> AnyElement {
+    let group = SharedString::from(format!("remote-dialog-field-{label}"));
     v_flex()
+        .group(group.clone())
         .w_full()
         .min_w_0()
         .gap(px(6.0))
-        .child(
-            div()
-                .text_size(px(14.0))
-                .line_height(px(19.25))
-                .text_color(hsla(t.muted))
-                .child(label),
-        )
+        .child(dialog_label(
+            t,
+            label,
+            info.map(|text| SharedString::from(text.to_string())),
+            group,
+        ))
         .child(control)
-        .children(description.map(|(text, color)| {
+        .children(message.map(|(text, color)| {
             div()
                 .w_full()
                 .text_size(px(13.0))
@@ -1156,7 +1167,6 @@ pub(super) fn machine_dialog(
         let visible = !draft.disabled;
         fields.push(dialog_switch_row(
             t,
-            &colors,
             "remote-machine-dialog-visible",
             "Show in sidebar",
             "Turn off to hide this machine from the sidebar without deleting it.",
@@ -1169,45 +1179,27 @@ pub(super) fn machine_dialog(
             cx,
         ));
     }
-    {
-        // CDXC:RemoteMachines 2026-11-03 DECISION: the user chose that connecting a computer is permission enough for agents on both computers to start, message and read each other's sessions, with one switch per machine to stop it (on by default). SEE-ALSO: server/src/connected_computers/registry.rs.
-        let agent_access = !draft.agent_access_off;
-        fields.push(dialog_switch_row(
-            t,
-            &colors,
-            "remote-machine-dialog-agent-access",
-            "Agent access",
-            "Agents on this computer can start, message and read sessions on this machine, and its agents can do the same here.",
-            agent_access,
-            move |tab| {
-                if let Some(dialog) = tab.machine_dialog.as_mut() {
-                    dialog.draft.agent_access_off = agent_access;
-                }
-            },
-            cx,
-        ));
-    }
     if let Some(reading) = &code_reading {
-        let (text, color) = match reading {
-            CodeReading::Accepted { summary, .. } => (
+        // The reading of a pasted code stays under the field; only the empty field's how-to moves
+        // into the (i).
+        let message = match reading {
+            CodeReading::Accepted { summary, .. } => Some((
                 summary.clone(),
                 Some(css_mix(gpui::rgb(0x4ade80), 0.78, t.foreground)),
-            ),
-            CodeReading::Rejected(reason) => (
+            )),
+            CodeReading::Rejected(reason) => Some((
                 reason.clone(),
                 Some(css_mix(gpui::rgb(0xf87171), 0.82, t.foreground)),
-            ),
-            CodeReading::Empty => (
-                "On the other computer, open Settings → Remote → Easy Connect → Connect a Remote machine and click \"Copy Easy Connect code\".".to_string(),
-                None,
-            ),
+            )),
+            CodeReading::Empty => None,
         };
         fields.push(field(
             t,
             &colors,
             "Easy Connect code",
             input(&code_input, window, cx),
-            Some((text, color)),
+            Some("On the other computer, open Settings → Remote → Easy Connect → Connect a Remote machine and click \"Copy Easy Connect code\"."),
+            message,
         ));
     }
     fields.push(field(
@@ -1215,6 +1207,7 @@ pub(super) fn machine_dialog(
         &colors,
         "Name",
         input(&name_input, window, cx),
+        None,
         None,
     ));
     // CDXC:RemoteMachines 2026-11-06: the sidebar's pill for this machine (gx-core
@@ -1224,10 +1217,10 @@ pub(super) fn machine_dialog(
         &colors,
         "Short name",
         input(&short_name_input, window, cx),
-        Some((
-            "Up to 2 characters, shown on the sidebar's computer pills. Leave it empty to use one made from the name.".to_string(),
-            None,
-        )),
+        Some(
+            "Up to 2 characters, shown on the sidebar's computer pills. Leave it empty to use one made from the name.",
+        ),
+        None,
     ));
     if !easy_connect {
         fields.push(field(
@@ -1236,6 +1229,7 @@ pub(super) fn machine_dialog(
             "SSH host",
             input(&host_input, window, cx),
             None,
+            None,
         ));
     }
     fields.push(field(
@@ -1243,10 +1237,8 @@ pub(super) fn machine_dialog(
         &colors,
         "SSH username",
         input(&user_input, window, cx),
-        Some((
-            "The account you sign in with on the other computer.".to_string(),
-            None,
-        )),
+        Some("The account you sign in with on the other computer."),
+        None,
     ));
     let password_row = if is_new {
         input(&password_input, window, cx)
@@ -1293,14 +1285,12 @@ pub(super) fn machine_dialog(
         &colors,
         "SSH password",
         password_row,
-        Some((
-            if is_new {
-                "Use the password for this username on the other computer. If you already use SSH keys, leave this blank and set the key under Advanced.".to_string()
-            } else {
-                "Passwords are stored in secure system storage. Leave blank and press Save to remove a saved password.".to_string()
-            },
-            None,
-        )),
+        Some(if is_new {
+            "Use the password for this username on the other computer. If you already use SSH keys, leave this blank and set the key under Advanced."
+        } else {
+            "Passwords are stored in secure system storage. Leave blank and press Save to remove a saved password."
+        }),
+        None,
     ));
     // CDXC:RemotePairing 2026-09-05 DECISION: User: simplify adding a machine and hide the WSL version details under Advanced.
     let mut advanced = v_flex()
@@ -1329,12 +1319,29 @@ pub(super) fn machine_dialog(
         )));
     if advanced_open {
         let mut advanced_fields = v_flex().w_full().gap(px(12.0)).pt(px(12.0));
+        // CDXC:RemoteMachines 2026-11-03 DECISION: the user chose that connecting a computer is permission enough for agents on both computers to start, message and read each other's sessions, with one switch per machine to stop it (on by default). SEE-ALSO: server/src/connected_computers/registry.rs.
+        // CDXC:RemoteMachines 2026-11-09 DECISION: User: "please move agent access to advanced at the bottom". It is the first row of Advanced; turning it on works as before.
+        let agent_access = !draft.agent_access_off;
+        advanced_fields = advanced_fields.child(dialog_switch_row(
+            t,
+            "remote-machine-dialog-agent-access",
+            "Agent access",
+            "Agents on this computer can start, message and read sessions on this machine, and its agents can do the same here.",
+            agent_access,
+            move |tab| {
+                if let Some(dialog) = tab.machine_dialog.as_mut() {
+                    dialog.draft.agent_access_off = agent_access;
+                }
+            },
+            cx,
+        ));
         if !easy_connect {
             advanced_fields = advanced_fields.child(field(
                 t,
                 &colors,
                 "SSH port",
                 input(&port_input, window, cx),
+                None,
                 None,
             ));
         }
@@ -1344,17 +1351,18 @@ pub(super) fn machine_dialog(
                 &colors,
                 "Identity file",
                 input(&identity_input, window, cx),
-                Some(("Optional. Use an SSH private key instead of a password.".to_string(), None)),
+                Some("Optional. Use an SSH private key instead of a password."),
+                None,
             ))
             .child(field(
                 t,
                 &colors,
                 "Windows WSL distribution",
                 input(&wsl_input, window, cx),
-                Some((
-                    "Optional. Enter a distribution to use WSL2. Leave blank to follow Windows Environment on the remote computer, which defaults to native PowerShell.".to_string(),
-                    None,
-                )),
+                Some(
+                    "Optional. Enter a distribution to use WSL2. Leave blank to follow Windows Environment on the remote computer, which defaults to native PowerShell.",
+                ),
+                None,
             ));
         // A Windows WSL machine's gxserver listens inside that distribution, where a forward in
         // the user's own SSH connection cannot land, so the setting is not offered for it.
@@ -1371,7 +1379,6 @@ pub(super) fn machine_dialog(
             let reuse = draft.reuse_ssh_connection;
             advanced_fields = advanced_fields.child(dialog_switch_row(
                 t,
-                &colors,
                 "remote-machine-dialog-reuse-ssh",
                 "Reuse an existing SSH connection",
                 "For computers that ask for a verification code each time you sign in. Sign in once in a terminal with ControlMaster on in your SSH config, and Ghostex uses that connection instead of signing in again.",

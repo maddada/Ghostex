@@ -14,6 +14,7 @@
 //! `remote-add-machine`,
 //! `remote-add-ec` (Add a machine in Easy Connect code mode with a code pasted),
 //! `remote-edit-machine` (the saved machine's dialog through `initialRemoteMachineId`),
+//! `remote-edit-machine-advanced` (the same dialog with its Advanced section open),
 //! `remote-advanced` (Advanced open with the raw JSON), `remote-no-server` (no gxserver
 //! connection), and the deep links `remote-deeplink-ec` / `remote-deeplink-tailscale`
 //! (`initialRemoteSection`: the card opens and scrolls to the top), `remote-machine-failed` (the
@@ -171,7 +172,9 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
         "remote-deeplink-ec" => message["initialRemoteSection"] = json!("easyConnect"),
         "remote-deeplink-tailscale" => message["initialRemoteSection"] = json!("tailscale"),
         // The story's `story-remote` id is not a `remote-*` id, so the normalized list renumbers it.
-        "remote-edit-machine" => message["initialRemoteMachineId"] = json!("remote-1"),
+        "remote-edit-machine" | "remote-edit-machine-advanced" => {
+            message["initialRemoteMachineId"] = json!("remote-1")
+        }
         "remote-machine-failed-sheet" => message["initialRemoteMachineId"] = json!("remote-2"),
         _ => {}
     }

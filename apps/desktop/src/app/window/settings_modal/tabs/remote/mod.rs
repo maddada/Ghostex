@@ -1099,6 +1099,7 @@ impl RemoteTab {
                 | "remote-add-machine"
                 | "remote-add-ec"
                 | "remote-edit-machine"
+                | "remote-edit-machine-advanced"
                 | "remote-machine-failed"
                 | "remote-machine-failed-sheet"
         ) {
@@ -1125,6 +1126,9 @@ impl RemoteTab {
                 self.advanced.raw_open = true;
             }
             "remote-add-machine" => self.open_machine_dialog(None, window, cx),
+            "remote-edit-machine-advanced" => {
+                machines::preview_open_dialog_advanced(self);
+            }
             "remote-add-ec" => {
                 self.open_machine_dialog(None, window, cx);
                 machines::preview_paste_easy_connect_code(self, window, cx);
