@@ -26,7 +26,9 @@ pub struct TranscriptMatch {
     pub label: Option<String>,
 }
 
-/// The renderer's fold state, which decides what a reader can see.
+/// The renderer's fold state, which decides what a reader can see. Find searches only what it
+/// leaves open, and the working card names the running call only when it leaves the call shut
+/// (`extras::working_card`), so the renderers report it whenever it changes.
 ///
 /// The keys are the renderer's own (`work:<id>`, `tools:<id>`, `reasoning:<id>`, `tool-run:<id>`,
 /// `prompt:<id>`, …), the same on desktop (`native_chat/state.rs` `expanded` / `collapsed`) and the
@@ -74,7 +76,7 @@ impl SearchFolds {
     }
 
     /// The renderers' `is_expanded(key, default)`.
-    fn open(&self, key: &str, default: bool) -> bool {
+    pub(crate) fn open(&self, key: &str, default: bool) -> bool {
         self.expanded.contains(key) || default && !self.collapsed.contains(key)
     }
 }
@@ -98,6 +100,13 @@ pub fn visible_segments(item: &Value, folds: &SearchFolds) -> Vec<Segment> {
             for message in array(item, "outcome") {
                 message_segments(message, folds, false, &mut out);
             }
+            // The rows drawn in full under the prompt, which the folds below leave out
+            // (`turns::content_rows`, `grouped_work::keep_in_view_while_shut`).
+            let cards = array(item, "cards");
+            for message in cards {
+                message_segments(message, folds, false, &mut out);
+            }
+            let carded = |message: &Value| cards.iter().any(|card| card["id"] == message["id"]);
             let has_final = item["final"].is_object();
             if has_final || item["active"] == true {
                 let key = if has_final {
@@ -109,12 +118,18 @@ pub fn visible_segments(item: &Value, folds: &SearchFolds) -> Vec<Segment> {
                 if folds.open(&key, default) {
                     if has_final {
                         for reply in array(item, "earlierReplies") {
-                            message_segments(reply, folds, false, &mut out);
+                            if !carded(reply) {
+                                message_segments(reply, folds, false, &mut out);
+                            }
                         }
-                        message_segments(&item["final"], folds, false, &mut out);
+                        if !carded(&item["final"]) {
+                            message_segments(&item["final"], folds, false, &mut out);
+                        }
                     } else {
                         for message in array(item, "work") {
-                            message_segments(message, folds, false, &mut out);
+                            if !carded(message) {
+                                message_segments(message, folds, false, &mut out);
+                            }
                         }
                     }
                 }
@@ -317,10 +332,11 @@ fn tool_segments(message: &Value, folds: &SearchFolds, in_work_fold: bool, out: 
         visible
     } else if (folds.simple || folds.quiet_style) && !show_all {
         let awaiting = tools.iter().any(|tool| tool["awaitingApproval"] == true);
-        if folds.open(
-            &format!("tools:{id}"),
-            awaiting || (folds.quiet_style && folds.work_open),
-        ) {
+        // Under kept words the line has a key of its own (`grouped_work::only_what_waits`).
+        let key = message["toolsLineKey"]
+            .as_str()
+            .map_or_else(|| format!("tools:{id}"), str::to_string);
+        if folds.open(&key, awaiting || (folds.quiet_style && folds.work_open)) {
             visible
         } else {
             Vec::new()

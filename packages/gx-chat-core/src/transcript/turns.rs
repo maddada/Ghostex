@@ -87,6 +87,17 @@ pub fn is_agent_conversation(message: &ChatMessage) -> bool {
         || crate::transcript::agent_message::parse_agent_message(body).is_some()
 }
 
+/// A report one of this session's own background agents handed back (Claude's
+/// `<agent-message from="…">`), which reaches the session as a user row. A message from another
+/// session or agent (`ghostex agents send`, `<cross-session-message>`) is not one.
+pub fn is_subagent_report(message: &ChatMessage) -> bool {
+    message.role == ChatRole::User
+        && crate::transcript::agent_message::parse_cross_session_message(
+            &crate::transcript::prose::prose_markdown(&message.blocks),
+        )
+        .is_some_and(|report| report.subagent)
+}
+
 /// One entry of the verbose transcript.
 #[derive(Clone, Debug, PartialEq)]
 pub enum RenderItem {
@@ -124,7 +135,7 @@ pub fn opens_turn(message: &ChatMessage) -> bool {
 
 /// One compact row per genuine user prompt, paired with its settled final reply.
 ///
-/// CDXC:SessionChat 2026-10-13 DECISION: User: "ok if the issue was that i had summary mode on, i think we should just expand the currently running agent's work even in this status you know? (the stuff under the last user message basically needs to not be all hidden like this)" and "also yea why not, if you can show the description of the tool call would be nice". While a summary-mode turn runs, its "Active work" fold starts open (`workOpen`) and the agent's newest row opens its tool calls (`running_row`, `toolsOpen`), so the work under the last prompt shows as it does with summary mode off; the reader can close the fold for the rest of that turn, and the settled turn folds as before. (A tool row's description label, which this decision first gave Simple mode, now applies in every mode: see `tool_description` in `tool_summary.rs`.) Supersedes the same day's rule that kept the newest message and running row in view under a closed fold.
+/// CDXC:SessionChat 2026-10-13 DECISION: User: "ok if the issue was that i had summary mode on, i think we should just expand the currently running agent's work even in this status you know? (the stuff under the last user message basically needs to not be all hidden like this)" and "also yea why not, if you can show the description of the tool call would be nice". While a summary-mode turn runs, its "Active work" fold starts open (`workOpen`) and the agent's newest row opens its tool calls (`running_row`, `toolsOpen`), so the work under the last prompt shows as it does with summary mode off; the reader can close the fold for the rest of that turn, and the settled turn folds as before. (A tool row's description label, which this decision first gave Simple mode, now applies in every mode: see `tool_description` in `tool_summary.rs`.) Supersedes the same day's rule that kept the newest message and running row in view under a closed fold. Exception (Sebastian, 2026-11-09): under Agent work Reduced and Quiet the running work starts shut and Quiet hides it while the agent runs (`presentation::turn_items`).
 pub fn summary_mode_turns(
     messages: &[ChatMessage],
     final_assistant_message_ids: &[String],
@@ -237,14 +248,21 @@ pub fn is_visible_assistant_artifact(message: &ChatMessage) -> bool {
 }
 
 /// Splits a completed turn's work into the rows that stay visible and the rows that collapse.
-pub fn partition_completed_work(messages: &[ChatMessage]) -> (Vec<ChatMessage>, Vec<ChatMessage>) {
+/// Under Agent work Reduced or Quiet (`grouped`) a subagent's report is work too
+/// ([`completed_work_render_items`]).
+pub fn partition_completed_work(
+    messages: &[ChatMessage],
+    grouped: bool,
+) -> (Vec<ChatMessage>, Vec<ChatMessage>) {
     let mut visible_artifacts = Vec::new();
     let mut collapsed_work = Vec::new();
     for message in messages {
         // The "Interrupted" marker stays in view as it does in summary mode; Claude's used to be a user row, gxserver's own is a system row.
         // A model or effort change made while the turn ran stays in view too, as a status row.
         if is_visible_assistant_artifact(message)
-            || (message.role == ChatRole::User && !is_background_task_row(message))
+            || (message.role == ChatRole::User
+                && !is_background_task_row(message)
+                && !(grouped && is_subagent_report(message)))
             || suppressed_turn_label(message).as_deref() == Some("Interrupted")
             || is_setting_status(message)
             || crate::transcript::open_questions::asks_questions(message)
@@ -350,6 +368,50 @@ pub fn is_settled_reply(row: &ChatMessage) -> bool {
         )
 }
 
+/// A row of the agent's own work in a turn: its words, thoughts and calls, and a background task's
+/// end, which is drawn as a call.
+fn is_agent_work_row(row: &ChatMessage) -> bool {
+    matches!(
+        row.role,
+        ChatRole::Assistant | ChatRole::Reasoning | ChatRole::Tool
+    ) || is_background_task_row(row)
+}
+
+/// Whether the row at `at` is a subagent's report that reached the agent mid-response: the agent's
+/// last row before it is not a finished reply ([`is_settled_reply`], past the rows a wake-up test
+/// looks past), so the words before it are commentary between calls, not a reply.
+///
+/// CDXC:SessionChat 2026-11-09 DECISION:
+/// Agent work Reduced and Quiet treat a report from one of the session's own subagents (`<agent-message from="…">`, a user row) and the harness's `<task-notification>` as the agent's work. User, agreeing to the behaviour: under Reduced they are a step in the turn's line, and opening the line shows the report's card; under Quiet they sit behind the reply's work button, and while the agent runs the status line says it is reading the subagent's report; they never open a turn of their own, and a report that wakes an idle agent shows (under Quiet) only the reply it writes. So the report's turn folds with the report in it ([`completed_work_render_items`]), which merges it into the line of the message it answers (`grouped_work.rs`), and the words a report cut short fold as commentary. Messages from other sessions or agents (`ghostex agents send`, `<cross-session-message>`) stay cards: they are real messages. Default is unchanged: the report is its own card there (the 2026-09-30 decision on `parse_cross_session_message`).
+pub(crate) fn report_lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
+    messages.get(at).is_some_and(is_subagent_report) && lands_mid_response(messages, at)
+}
+
+/// Under Reduced and Quiet: whether the row at `at` opens a turn that is the agent's work landing
+/// mid-response, so the words before it are commentary: a subagent's report
+/// ([`report_lands_mid_response`]), or a background task's end that gxserver handed back holding
+/// the rows after it (`deferredWork`), which opens a turn here so those rows still load.
+///
+/// CDXC:SessionChat 2026-11-09 WHY: gxserver's collapsed history cuts a turn at every user row, so a task notification after a subagent's report holds the rest of the response in its own `deferredWork`; read as one of the turn's calls, that section was never loaded and the line's steps stopped at the notification. Default still reads it the old way.
+fn work_lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
+    report_lands_mid_response(messages, at)
+        || messages.get(at).is_some_and(|row| {
+            is_background_task_row(row)
+                && row.deferred_work.is_some()
+                && lands_mid_response(messages, at)
+        })
+}
+
+/// Whether the agent's last row before `at` is not a finished reply ([`is_settled_reply`]), past
+/// the rows a wake-up test looks past.
+fn lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
+    !messages[..at]
+        .iter()
+        .rev()
+        .find(|row| !passed_over_before_wake(row))
+        .is_some_and(is_settled_reply)
+}
+
 /// Where the response the agent is CURRENTLY producing begins: the last user row that is a genuine
 /// prompt the agent has accepted for delivery, or a harness row that woke it after it had finished
 /// (`wakes_settled_agent`).
@@ -445,13 +507,19 @@ pub fn final_assistant_message_ids(messages: &[ChatMessage], is_working: bool) -
 /// prompt lands mid-response and would close the streaming turn the moment it appears, folding live
 /// work into a "Worked for" row and yanking the bottom-pinned viewport onto it, only for the fold to
 /// vanish again when the injected row settles.
+///
+/// `grouped` is Agent work Reduced or Quiet (`transcript/chat_look.rs`), where every finished turn
+/// folds and a subagent's report is the agent's work ([`report_lands_mid_response`]).
 pub fn completed_work_render_items(
     messages: &[ChatMessage],
     is_working: bool,
     interacted_message_ids: &[String],
     raw_messages: &[ChatMessage],
-) -> Vec<RenderItem> {
+    grouped: bool,
+) -> (Vec<RenderItem>, Vec<String>) {
     let mut items = Vec::new();
+    // The words a subagent's report cut short, which are commentary rather than a reply.
+    let mut demoted = Vec::new();
     let raw_index = |id: &str| raw_messages.iter().position(|message| message.id == id);
     let active_start = if is_working {
         active_response_start_index(messages)
@@ -484,7 +552,8 @@ pub fn completed_work_render_items(
                 // A background task ending mid-response is one of the turn's calls
                 // (`background_rows.rs`); one that woke the agent after its reply opens a turn.
                 || (is_background_task_row(&messages[next_user_index])
-                    && !wakes_settled_agent(messages, next_user_index))
+                    && !wakes_settled_agent(messages, next_user_index)
+                    && !(grouped && messages[next_user_index].deferred_work.is_some()))
                 || (message.deferred_work.is_some()
                     && messages[next_user_index].byte_offset.is_none()
                     && !is_command_turn(&messages[next_user_index])))
@@ -500,11 +569,26 @@ pub fn completed_work_render_items(
                 .any(|row| suppressed_turn_label(row).as_deref() == Some("Interrupted"))
         });
         let final_index = final_index.filter(|_| !interrupted);
+        // A turn a background task's end or an OMP wake-up opened folds that row with its work,
+        // as the call or card it is; so does a subagent's report under Reduced and Quiet.
+        let opener_is_work = message.role != ChatRole::User
+            || is_background_task_row(message)
+            || (grouped && is_subagent_report(message));
+        // Reduced and Quiet: words a subagent's report cut short are not a reply.
+        let final_index = match final_index {
+            Some(at) if grouped && work_lands_mid_response(messages, next_user_index) => {
+                demoted.push(turn_messages[at].id.clone());
+                None
+            }
+            final_index => final_index,
+        };
         let interacted_inline_diff = turn_messages
             .iter()
             .any(|row| interacted_message_ids.contains(&row.id));
         let interacted_grouped_diff = interacted_message_ids.contains(&message.id);
-        if (section.is_none() && final_index.is_none() && !interrupted)
+        let folds_without_reply =
+            grouped && (opener_is_work || turn_messages.iter().any(is_agent_work_row));
+        if (section.is_none() && final_index.is_none() && !interrupted && !folds_without_reply)
             || (index >= active_start && !interacted_grouped_diff)
             || interacted_inline_diff
         {
@@ -524,7 +608,13 @@ pub fn completed_work_render_items(
         the fold swallowed it and drew it above that reply. It is the seam before the next turn,
         not work.
         */
-        let trailing_compactions: Vec<&ChatMessage> = final_index
+        // A turn folded with no reply (Reduced, Quiet) ends with its last piece of work.
+        let tail_from = final_index.or_else(|| {
+            grouped
+                .then(|| turn_messages.iter().rposition(is_agent_work_row))
+                .flatten()
+        });
+        let trailing_compactions: Vec<&ChatMessage> = tail_from
             .map_or(&[][..], |at| &turn_messages[at + 1..])
             .iter()
             .filter(|row| is_turn_seam(row))
@@ -535,9 +625,6 @@ pub fn completed_work_render_items(
             .and_then(|next| raw_index(&next.id))
             .unwrap_or(raw_messages.len());
         let final_id = final_message.as_ref().map(|row| row.id.clone());
-        // A turn a background task's end or an OMP wake-up opened folds that row with its work,
-        // as the call or card it is.
-        let opener_is_work = message.role != ChatRole::User || is_background_task_row(message);
         if !opener_is_work {
             items.push(RenderItem::Message(Box::new(message.clone())));
         }
@@ -570,7 +657,7 @@ pub fn completed_work_render_items(
         );
         index = next_user_index;
     }
-    items
+    (items, demoted)
 }
 
 /// `stickySessionChatTranscriptWorking` in `packages/shared/session-chat-presentation/turns.ts`:
@@ -695,12 +782,12 @@ mod tests {
             row("w1", "assistant", &format!("One question first:\n\n{FORM}")),
             row("w2", "assistant", "Running the checks now."),
         ];
-        let (visible, folded) = partition_completed_work(&work);
+        let (visible, folded) = partition_completed_work(&work, false);
         let ids = |rows: &[ChatMessage]| rows.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
         assert_eq!(ids(&visible), ["w1"]);
         assert_eq!(ids(&folded), ["w2"]);
         let withdraw = "```questions\n{\"withdraw\":[\"Q1\"]}\n```";
-        let (visible, _) = partition_completed_work(&[row("w3", "assistant", withdraw)]);
+        let (visible, _) = partition_completed_work(&[row("w3", "assistant", withdraw)], false);
         assert!(visible.is_empty(), "a withdrawal asks nothing");
     }
 

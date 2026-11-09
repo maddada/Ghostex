@@ -57,7 +57,7 @@ fn chat_section(
             .spec(
                 "sessionChatTranscriptWidthPercent",
                 "Transcript width (%)",
-                "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.",
+                "The widest the centered transcript gets. Auto matches the prompt composer; drag to set a percentage of the window instead. Side panels you open take the empty space beside it first, so the text only narrows once none is left. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.",
             )
             .modified(
                 g.values.is_modified("sessionChatTranscriptWidthPercent")

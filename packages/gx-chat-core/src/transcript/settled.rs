@@ -271,10 +271,13 @@ fn order_is_ambiguous<'a>(sorted: impl Iterator<Item = &'a ChatMessage>) -> bool
 /// Whether a row can start a settled turn, or the stretch after the prefix: an accepted user
 /// prompt from the transcript, which ends the turn before it in every pass, that no marker before
 /// it merges into. In summary mode a message from another agent opens no turn there
-/// (`turns::is_agent_conversation`), so it starts no settled turn either.
-fn opens_turn(message: &ChatMessage, summary: bool) -> bool {
+/// (`turns::is_agent_conversation`), so it starts no settled turn either; nor, under Agent work
+/// Reduced and Quiet (`grouped`), does a subagent's report, whose turn folds into the line of the
+/// message before it (`turns::report_lands_mid_response`).
+fn opens_turn(message: &ChatMessage, summary: bool, grouped: bool) -> bool {
     use crate::transcript::noise::{is_hidden_message, suppressed_turn_label};
     !(summary && crate::transcript::turns::is_agent_conversation(message))
+        && !(grouped && crate::transcript::turns::is_subagent_report(message))
         && message.role == ChatRole::User
         && message.source == ChatSource::Transcript
         && order_key(message).0 == 0
@@ -324,9 +327,9 @@ fn asks_resend(rows: &[ChatMessage]) -> bool {
 /// it sorts strictly after the row before it (two prompts delivered in the same millisecond do
 /// not), it has a byte offset (a row without one folds into a deferred turn before it), and it
 /// splits no `/btw` question from its answer and no two rows sharing an id.
-fn seams(rows: &[ChatMessage], summary: bool) -> Vec<usize> {
+fn seams(rows: &[ChatMessage], summary: bool, grouped: bool) -> Vec<usize> {
     cuts(rows, |row| {
-        opens_turn(row, summary) && row.byte_offset.is_some()
+        opens_turn(row, summary, grouped) && row.byte_offset.is_some()
     })
 }
 
@@ -532,8 +535,11 @@ impl SettledPrefix {
         let opens = if self.has_active() {
             opens_active_stretch(first)
         } else {
-            opens_turn(first, self.key.summary)
-                && !(self.last_opener_deferred && first.byte_offset.is_none())
+            opens_turn(
+                first,
+                self.key.summary,
+                self.key.grouped_work && !self.key.summary,
+            ) && !(self.last_opener_deferred && first.byte_offset.is_none())
         };
         if order_key(first) <= self.order_max || !opens {
             return false;
@@ -852,7 +858,12 @@ impl SettledPrefix {
     ) -> Option<Unresolved> {
         let chunk = &self.chunks[index];
         let rows = &self.messages[chunk.start..chunk.end];
-        let (projection, own_redone) = project_chat_segment(rows, chunk.active, &self.redone);
+        let (projection, own_redone) = project_chat_segment(
+            rows,
+            chunk.active,
+            &self.redone,
+            self.key.grouped_work && !self.key.summary,
+        );
         if own_redone
             .iter()
             .any(|redone| !self.redone.contains(redone))
@@ -1029,6 +1040,7 @@ impl SettledPrefix {
         scope: &ProjectionScope,
     ) -> Option<Self> {
         let summary = scope.summary;
+        let grouped = scope.grouped_work && !summary;
         let composed = &state.messages.composed;
         let order = sorted_positions(composed);
         let sorted: Vec<ChatMessage> = order.iter().map(|at| composed[*at].clone()).collect();
@@ -1037,13 +1049,13 @@ impl SettledPrefix {
         }
         // The stretch after the prefix starts at the newest seam; with none (no turn closed yet) the
         // prefix starts empty, and the running turn's rows can still join it.
-        let mut cuts = seams(&sorted, summary);
+        let mut cuts = seams(&sorted, summary, grouped);
         let seam = cuts.pop().unwrap_or(0);
         let normalized = normalize_chat_transcript(&sorted[..seam]);
         let redone = redone_forms(&normalized);
         let question = scope.live_side_question.as_deref();
         let (rest, rest_redone, rest_hides) =
-            project_chat_segment_with(&sorted[seam..], scope.working, &redone, question);
+            project_chat_segment_with(&sorted[seam..], scope.working, &redone, question, grouped);
         // A stretch that redoes a form, or a side-question card whose row is in the prefix, makes
         // every pass on the prefix fall back (`build_after`), so it is not settled at all.
         let prefix_asks = question.is_some_and(|question| {
@@ -1092,7 +1104,7 @@ impl SettledPrefix {
                 break;
             }
             let (projection, own_redone) =
-                project_chat_segment(&sorted[start..end], false, &settled.redone);
+                project_chat_segment(&sorted[start..end], false, &settled.redone, grouped);
             if own_redone
                 .iter()
                 .any(|redone| !settled.redone.contains(redone))
@@ -1228,6 +1240,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         grouped_work: view.grouped_work(),
         hidden_work: view.hidden_work(),
         hides_running: crate::session::working::hides_running_response(state),
+        hides_live_calls: true,
         quiet_finished_before: crate::session::working::quiet_finished_before(state),
         picture_digests: &view.picture_digests,
         seen_pictures: std::cell::OnceCell::new(),

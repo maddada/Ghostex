@@ -7,6 +7,7 @@
 
 use super::tone_card::{ToneButton, ToneCardParts, ToneLook, tone_look};
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
+use ghostex_gx_chat_core::transcript::chat_look::UserStyle;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -179,6 +180,10 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let words = text(row, "text");
+        // It sits where your other messages do (user_message_look.rs): on the left under Left
+        // aligned, and across the column under Band, still dashed while it waits.
+        let left = p.left_aligned();
+        let band = p.chat_look.user_style == UserStyle::Band;
         div()
             .id(gpui::SharedString::from(format!(
                 "collab-waiting:{}",
@@ -189,7 +194,8 @@ impl NativeChatView {
             .w_full()
             .flex()
             .flex_col()
-            .items_end()
+            .when(!left, |column| column.items_end())
+            .when(left, |column| column.items_start())
             .gap(px(3.0 * s))
             .child(
                 div()
@@ -210,10 +216,12 @@ impl NativeChatView {
             .when(!words.is_empty(), |column| {
                 column.child(
                     div()
-                        .max_w(relative_width())
+                        .when(!band, |bubble| {
+                            bubble.max_w(relative_width()).rounded(px(12.0 * s))
+                        })
+                        .when(band, |bubble| bubble.w_full().rounded(px(8.0 * s)))
                         .px(px(12.0 * s))
                         .py(px(8.0 * s))
-                        .rounded(px(12.0 * s))
                         .border_1()
                         .border_dashed()
                         .border_color(p.muted.opacity(0.45))

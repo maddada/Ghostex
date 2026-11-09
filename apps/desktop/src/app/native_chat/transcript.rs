@@ -85,46 +85,45 @@ impl NativeChatView {
         self.with_transcript_width(column, p)
     }
 
-    /// The transcript column's width on `column`: the Transcript width percentage, and while a
-    /// panel slides the text width the rows hold (render.rs). The rows, the lone ↓ pill
-    /// (working_card.rs) and, with Chat box matches transcript width, the chat box (composer.rs)
-    /// all take it, so they line up; the two outside the list sit in `transcript_list_gutters`.
+    /// The transcript column's width on `column`: at most the Transcript width percentage of the
+    /// window, and while a panel slides the text width the rows hold (render.rs). The rows, the
+    /// lone ↓ pill (working_card.rs), the skeleton (transcript_reveal.rs) and, with Chat box
+    /// matches transcript width, the chat box (composer.rs) all take it, so they line up.
     pub(super) fn with_transcript_width(&self, column: gpui::Div, p: &ChatAppearance) -> gpui::Div {
         column
-            .when_some(p.transcript_width, |this, width| {
-                this.max_w(relative(1.0)).w(relative(width))
+            .when(p.transcript_width.is_some(), |this| {
+                this.max_w(px(self.transcript_column_cap(p)))
             })
             .when_some(self.held_text_width, |this, width| {
                 this.flex_shrink_0().w(px(width)).max_w(px(width))
             })
     }
 
+    /// The widest the transcript column gets: 768px, or the Transcript width percentage of the
+    /// window. The column fills the pane up to it, so a side panel that opens takes the empty
+    /// margins first and the text only narrows once none is left.
+    ///
+    /// CDXC:SessionChat 2026-11-09 DECISION:
+    /// User: opening a sidebar shrank the chat's content while empty margins stayed on both sides. The percentage was a share of the chat pane, so every panel beside it narrowed the text; it is now a share of the window and only a maximum, like Auto's 768px, so the chosen width no longer changes when a panel opens. Approved by the maintainer on 2026-11-09.
+    pub(super) fn transcript_column_cap(&self, p: &ChatAppearance) -> f32 {
+        match p.transcript_width {
+            Some(ratio) => self.window_width * ratio,
+            None => 768.0 * p.scale,
+        }
+    }
+
     /// The transcript list's own width: the pane less the minimap's column and its mirror
-    /// (minimap.rs). The rows' Transcript width percentage is a share of it.
+    /// (minimap.rs).
     fn transcript_list_width(&self, p: &ChatAppearance) -> f32 {
         let gutter = self.minimap_gutter(p).map_or(0.0, |gutter| gutter.as_f32());
         self.bounds.get().size.width.as_f32() - 2.0 * gutter
     }
 
-    /// The width the rows' column takes when nothing holds it (render.rs): the Transcript width
-    /// percentage of the list, or the list capped at 768px.
+    /// The width the rows' column takes when nothing holds it (render.rs): the list, capped at
+    /// `transcript_column_cap`.
     pub(super) fn transcript_text_width(&self, p: &ChatAppearance) -> f32 {
-        let list = self.transcript_list_width(p);
-        match p.transcript_width {
-            Some(ratio) => list * ratio,
-            None => list.min(768.0 * p.scale),
-        }
-    }
-
-    /// Insets a container drawn outside the transcript list (the chat box's row, the lone ↓ pill's
-    /// row) by the minimap's gutters, so a Transcript width percentage inside it is taken of the
-    /// list's width and its column lines up with the rows.
-    ///
-    /// CDXC:SessionChat 2026-11-07 WHY:
-    /// The percentage resolves against the parent, and the list sits between the minimap's column and its mirror while these rows span the whole pane, so at 90% the chat box came out about 47px wider than the rows on each side. The capped 768px column needs no inset: the rail only shows when the pane has room for it beside 768px.
-    pub(super) fn transcript_list_gutters(&self, row: gpui::Div, p: &ChatAppearance) -> gpui::Div {
-        let gutter = p.transcript_width.and_then(|_| self.minimap_gutter(p));
-        row.when_some(gutter, |this, gutter| this.px(gutter))
+        self.transcript_list_width(p)
+            .min(self.transcript_column_cap(p))
     }
 
     /// One row of a projected transcript. The subagent viewer renders its own item list
@@ -187,11 +186,13 @@ impl NativeChatView {
                 let expanded = self.is_expanded(&key, *latest_reply || *work_open);
                 let motion = self.disclosure_frame(&key, expanded, cx);
                 self.in_summary_turn = true;
+                // The gap between the turn's parts shrinks at Message spacing Compact (message_spacing.rs).
+                let part_gap = p.inner_gap(8.0) * s;
                 let mut row = div()
                     .flex()
                     .flex_col()
                     .w_full()
-                    .gap(px(8.0 * s))
+                    .gap(px(part_gap))
                     .child(self.message_row(user, &p, window, cx));
                 for output in outcome {
                     row = row.child(self.message_row(output, &p, window, cx));
@@ -251,14 +252,14 @@ impl NativeChatView {
                         }
                     }
                     if expanded || motion.is_some() {
-                        let mut body = div().flex().flex_col().w_full().gap(px(8.0 * s));
+                        let mut body = div().flex().flex_col().w_full().gap(px(part_gap));
                         for message in fold_rows {
                             body = body.child(self.message_row(message, &p, window, cx));
                         }
                         row = row.child(self.disclosure_body_motion(
                             &key,
                             motion,
-                            8.0 * s,
+                            part_gap,
                             body.into_any_element(),
                         ));
                     }
@@ -558,17 +559,36 @@ impl NativeChatView {
             bubble_appearance.prose = p.strengthened(p.primary);
             bubble_appearance.code_text = p.primary;
             // The delivery indicator sits left of the bubble, level with its last line, so it never drifts away from a short prompt. It hangs off the bubble's own left edge (6px gap, the 1px border counted) because a flex row around the bubble measured a prompt with an inline picture at min-content, one word per line.
-            let indicator = self
-                .delivery_indicator(message, p, cx)
-                .map(|(icon, slots)| {
-                    // Each 24px slot after the first adds its own width and the 2px gap between them.
-                    let offset = 31.0 + 26.0 * slots.saturating_sub(1) as f32;
-                    div()
-                        .absolute()
-                        .bottom(px(11.0 * s))
-                        .left(px(-offset * s))
-                        .child(icon)
-                });
+            // A message with pictures and no words draws only its pictures and icons (as the phone does).
+            let has_body = !body.trim().is_empty() || self.attaching_pictures(&id) > 0;
+            let indicator = self.delivery_indicator(message, p, cx);
+            if !has_body {
+                let failed_delivery = self.render_startup_delivery(message, false, p, cx);
+                let thumbnails = self.user_image_thumbnails(message, p, cx);
+                let actions = self.user_actions(message, reply_focused, p, cx);
+                return row
+                    .when_some(thumbnails, |this, images| this.child(images))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_end()
+                            .gap(px(4.0 * s))
+                            .children(indicator.map(|(icon, _)| icon))
+                            .children(failed_delivery)
+                            .children(actions),
+                    )
+                    .into_any_element();
+            }
+            let indicator = indicator.map(|(icon, slots)| {
+                // Each 24px slot after the first adds its own width and the 2px gap between them.
+                let offset = 31.0 + 26.0 * slots.saturating_sub(1) as f32;
+                div()
+                    .absolute()
+                    .bottom(px(11.0 * s))
+                    .left(px(-offset * s))
+                    .child(icon)
+            });
             let bubble = div()
                 .relative()
                 .max_w(relative(0.8))

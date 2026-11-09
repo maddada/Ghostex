@@ -10,6 +10,22 @@ use gpui::{
 use serde_json::json;
 
 impl NativeChatView {
+    /// Takes this frame's window width, which a Transcript width percentage is a share of. The
+    /// list only remeasures its rows when its own width changes, so a percentage column that
+    /// changed with the window while the pane kept its width remeasures them here.
+    fn sync_window_width(&mut self, p: &ChatAppearance, window: &Window) {
+        let width = window.viewport_size().width.as_f32();
+        if (self.window_width - width).abs() < 0.5 {
+            return;
+        }
+        let before = self.transcript_column_cap(p);
+        self.window_width = width;
+        if p.transcript_width.is_some() && (self.transcript_column_cap(p) - before).abs() > 0.5 {
+            self.list.remeasure();
+            self.subagent_list.remeasure();
+        }
+    }
+
     /// Decides this frame's `held_text_width`: while a window panel or the docked Session details
     /// column slides (`terminal_element::grid_resize_held`, `session_details.motion`) and the pane's width would change the transcript's
     /// text width, the rows keep the width they had before the slide, centred; the settling frame
@@ -102,6 +118,7 @@ impl Render for NativeChatView {
         // before the hold below reads whether the docked column is sliding.
         self.sync_session_details(&p, window, cx);
         self.sync_coordinator_board(&p, window, cx);
+        self.sync_window_width(&p, window);
         self.hold_text_width_while_sliding(&p);
         self.sync_search_scroll();
         self.sync_files_links_jump();
@@ -127,6 +144,7 @@ impl Render for NativeChatView {
         // Under glass the subagent viewer sits straight on the pane's glass, so the chat behind it
         // is not painted (subagent_view.rs, `render_subagent_viewer`).
         let covered = maximized || (glass && self.snapshot["subagent"].is_object());
+        self.sync_search_folds(&p, cx);
         let search_bar = if covered {
             None
         } else {

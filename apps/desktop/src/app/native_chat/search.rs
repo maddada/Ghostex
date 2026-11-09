@@ -124,7 +124,6 @@ impl NativeChatView {
         self.search_input = None;
         self.search_subscription = None;
         self.search_scrolled_revision = -1;
-        self.search_folds_sent = None;
         self.focus_requested = true;
         self.invoke(json!({"type":"searchClose"}), cx);
     }
@@ -260,9 +259,20 @@ impl NativeChatView {
             .collect()
     }
 
-    /// Reports the folds this view has open while the find bar is open, so the core searches only
-    /// what the reader can see (gx-chat-core `transcript_search.rs`, `visible_segments`).
-    fn sync_search_folds(&mut self, p: &ChatAppearance, cx: &mut Context<Self>) {
+    /// Reports the folds this view has open whenever they change, so the core searches only what
+    /// the reader can see (gx-chat-core `transcript_search.rs`, `visible_segments`) and the working
+    /// card names a running call only while its words are shut (`extras/working_card.rs`).
+    pub(super) fn sync_search_folds(&mut self, p: &ChatAppearance, cx: &mut Context<Self>) {
+        let signature = (
+            self.expanded.revision(),
+            self.collapsed.revision(),
+            p.simple,
+            p.work_open,
+        );
+        if self.search_folds_sent == Some(signature) {
+            return;
+        }
+        self.search_folds_sent = Some(signature);
         let mut expanded: Vec<&String> = self.expanded.iter().collect();
         let mut collapsed: Vec<&String> = self.collapsed.iter().collect();
         expanded.sort();
@@ -274,10 +284,6 @@ impl NativeChatView {
             "simple": p.simple,
             "workOpen": p.work_open,
         });
-        if self.search_folds_sent.as_ref() == Some(&folds) {
-            return;
-        }
-        self.search_folds_sent = Some(folds.clone());
         self.invoke(folds, cx);
     }
 
@@ -313,10 +319,8 @@ impl NativeChatView {
                 self.search_input = None;
                 self.search_subscription = None;
             }
-            self.search_folds_sent = None;
             return None;
         }
-        self.sync_search_folds(p, cx);
         self.ensure_search_input(window, cx);
         let s = p.scale;
         let label = text(&self.snapshot["transcriptSearch"], "label");

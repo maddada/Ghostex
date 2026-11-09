@@ -13,6 +13,7 @@ use super::{
 };
 use crate::app::helpers::ThrottledAnimationExt as _;
 use crate::app::native_chat::cursor::ChatCursor as _;
+use ghostex_gx_chat_core::transcript::chat_look::UserStyle;
 use ghostex_gx_chat_core::transcript::tool_rows::tool_fold_toggle_before;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -112,7 +113,11 @@ impl NativeChatView {
         // Detailed (quiet_work.rs).
         let quiet = p.quiet_style();
         if (p.simple || quiet) && !show_all {
-            let key = format!("tools:{id}");
+            // Under kept words the line has a key of its own, apart from their chevron's
+            // (gx-chat-core `grouped_work::only_what_waits`).
+            let key = message["toolsLineKey"]
+                .as_str()
+                .map_or_else(|| format!("tools:{id}"), str::to_string);
             // The run disclosure opens on demand and is never opened by verbose mode, as React's was;
             // only a call waiting on an approval opens it (gx-chat-core `approval_wait.rs`).
             let awaiting = tools.iter().any(|tool| tool["awaitingApproval"] == true);
@@ -303,7 +308,7 @@ impl NativeChatView {
 
     /// A `!` command the user ran (`shellCard`, gx-chat-core's `shell_card`), in the user's bubble:
     /// a header with the terminal glyph, the command and its failure status, opening onto the
-    /// output alone; its copy button floats outside the bubble, on its left. It shows in simple mode too, since it is what the user typed. It folds
+    /// output alone; its copy button floats beside the bubble (on its left at Default). It shows in simple mode too, since it is what the user typed. It folds
     /// like every disclosure: the header and the rail both flip it, and a running card that opened
     /// on its own records the close against that default.
     pub(super) fn shell_command_card(
@@ -393,39 +398,65 @@ impl NativeChatView {
                         .child(status),
                 )
             });
+        // Under the chat look the card sits where your other messages do (user_message_look.rs):
+        // Left aligned keeps the bubble at the left edge with Copy on its right, and Band draws the
+        // header and its output across the column on the band's fill, Copy at the header's right end.
+        let left = p.left_aligned();
+        let band = p.chat_look.user_style == UserStyle::Band;
         let bubble = |content: AnyElement| {
-            div()
-                .max_w(gpui::relative(0.8))
-                .min_w_0()
-                .rounded(px(16.0 * s))
-                .bg(p.input)
-                .child(content)
+            let frame = div().min_w_0().child(content);
+            if band {
+                frame.w_full().rounded(px(8.0 * s)).bg(p.user_band)
+            } else {
+                frame
+                    .max_w(gpui::relative(0.8))
+                    .rounded(px(16.0 * s))
+                    .bg(p.input)
+            }
         };
-        // The copy button floats outside the bubble on its left, the message action of an ordinary
-        // prompt, shown while the row is hovered.
+        // The copy button floats beside the bubble on its inner side, the message action of an
+        // ordinary prompt, shown while the row is hovered; a `!` command keeps it at Compact too,
+        // with no footer row (`has_user_bar`).
         let copy = self.shell_command_copy_action(message, &full_command, p, cx);
+        let header_row = if band {
+            bubble(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(4.0 * s))
+                    .w_full()
+                    .min_w_0()
+                    .child(header.flex_1())
+                    .child(copy)
+                    .into_any_element(),
+            )
+            .px(px(12.0 * s))
+            .py(px(8.0 * s))
+        } else {
+            let header_bubble = bubble(header.into_any_element())
+                .px(px(12.0 * s))
+                .py(px(8.0 * s));
+            let row = div()
+                .flex()
+                .items_center()
+                .gap(px(4.0 * s))
+                .w_full()
+                .min_w_0();
+            if left {
+                row.justify_start().child(header_bubble).child(copy)
+            } else {
+                row.justify_end().child(copy).child(header_bubble)
+            }
+        };
         let mut column = div()
             .flex()
             .flex_col()
             .gap(px(6.0 * s))
-            .items_end()
+            .when(!left, |column| column.items_end())
+            .when(left, |column| column.items_start())
             .w_full()
             .min_w_0()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_end()
-                    .gap(px(4.0 * s))
-                    .w_full()
-                    .min_w_0()
-                    .child(copy)
-                    .child(
-                        bubble(header.into_any_element())
-                            .px(px(12.0 * s))
-                            .py(px(8.0 * s)),
-                    ),
-            );
+            .child(header_row);
         // The output opens in a bubble of its own below the header, which keeps its collapsed size;
         // the header is its toggle, so it carries no rail.
         if (open || motion.is_some()) && has_body {
@@ -447,7 +478,8 @@ impl NativeChatView {
             let output = div()
                 .flex()
                 .flex_col()
-                .items_end()
+                .when(!left, |output| output.items_end())
+                .when(left, |output| output.items_start())
                 .w_full()
                 .min_w_0()
                 .child(

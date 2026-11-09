@@ -368,8 +368,9 @@ impl NativeChatView {
             .when(maximized, |this| this.p_0().max_w_full().h_full().min_h_0());
         // First in the stack, right above whatever else waits on the user (working_card.rs). With
         // Status line in the chat on, the line is the transcript's last row instead
-        // (status_tail.rs), and the box keeps the lead-in it has with no card above it.
-        let working_card = if maximized || p.chat_look.status_in_transcript {
+        // (status_tail.rs), and the box keeps the lead-in it has with no card above it; an empty
+        // chat has no row to end with and keeps the card (gx-chat-core `inTranscript`).
+        let working_card = if maximized || self.snapshot["workingCard"]["inTranscript"] == true {
             None
         } else {
             self.render_working_card(p, cx)
@@ -449,7 +450,7 @@ impl NativeChatView {
         if let Some(prompt) = self.render_prompt(p, window, cx) {
             if self.snapshot["prompt"]["kind"] == "question" {
                 return self
-                    .composer_row(p, maximized)
+                    .composer_row()
                     .child(footer.children(waiting).child(prompt))
                     .into_any_element();
             }
@@ -714,22 +715,15 @@ impl NativeChatView {
         if self.status_line_reserved() && !self.collab_guest() {
             footer = footer.child(self.render_context_status(p, cx));
         }
-        self.composer_row(p, maximized)
+        self.composer_row()
             .when(maximized, |this| this.h_full().min_h_0())
             .child(footer)
             .into_any_element()
     }
 
-    /// The row the chat box is centred in. With Chat box matches transcript width it is inset like
-    /// the transcript list (transcript.rs `transcript_list_gutters`), so the box's percentage
-    /// width is the rows' own.
-    fn composer_row(&self, p: &ChatAppearance, maximized: bool) -> gpui::Div {
-        let row = div().flex().w_full().justify_center().flex_shrink_0();
-        if p.composer_matches_transcript && !maximized {
-            self.transcript_list_gutters(row, p)
-        } else {
-            row
-        }
+    /// The row the chat box is centred in.
+    fn composer_row(&self) -> gpui::Div {
+        div().flex().w_full().justify_center().flex_shrink_0()
     }
 }
 

@@ -44,9 +44,6 @@ struct MinimapSpec {
     preview_line_height: f32,
 }
 
-/// The widest a transcript row gets before it centres itself, the cap `transcript.rs` applies.
-const TRANSCRIPT_MAX_WIDTH: f32 = 768.0;
-
 static SPEC: LazyLock<MinimapSpec> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
         "../../../../../packages/gx-chat-core/visual/minimap.json"
@@ -102,16 +99,14 @@ impl NativeChatView {
     }
 
     /// The width of the rail's column and of the gutter mirroring it on the left, when the rail
-    /// shows beside the rows (`minimap_row`): the transcript list is the pane less both, which is
-    /// what a Transcript width percentage is taken of (transcript.rs `transcript_list_gutters`).
+    /// shows beside the rows (`minimap_row`): only when the column the rows are capped at
+    /// (transcript.rs `transcript_column_cap`) still fits between them, so the rail eats margin only.
     pub(super) fn minimap_gutter(&self, p: &ChatAppearance) -> Option<Pixels> {
         if self.list.item_count() == 0 || !self.minimap_visible() {
             return None;
         }
         let pane = self.bounds.get().size.width;
-        let content = p
-            .transcript_width
-            .map_or(px(TRANSCRIPT_MAX_WIDTH * p.scale), |ratio| pane * ratio);
+        let content = px(self.transcript_column_cap(p)).min(pane);
         let width = px(SPEC.column_width * SPEC.scale * p.scale);
         ((pane - content) / 2.0 >= width).then_some(width)
     }

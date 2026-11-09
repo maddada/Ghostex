@@ -78,6 +78,8 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         )
     } else if let Some(label) = running {
         (Some(label), "tool")
+    } else if working && reads_subagent_report(state) {
+        (Some("Reading the subagent's report".to_string()), "word")
     } else if let Some(word) = &strip.label {
         (Some(word.clone()), "word")
     } else if working {
@@ -123,20 +125,97 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
         pills: pill_ids,
         aria_label,
         label_parts,
+        in_transcript: state.transcript_view.chat_look.status_in_transcript
+            && !state.transcript_view.items.is_empty(),
     }
 }
 
 /// Whether the transcript draws the running call's own words where the reader sees them: a tool
 /// call card's or Tool call lines' header always does, and the tool rows do when the running
 /// turn's calls start open (Detailed view, and the Summary view's running row). In Normal view the
-/// rows sit shut behind their sentence, so the card is where the words show.
+/// rows sit shut behind their sentence, so the card is where the words show. Agent work Reduced
+/// turns the cards off and draws the running calls as one line that starts open only in Detailed,
+/// and Quiet leaves them out of the chat; both still draw a call waiting on an approval. Under
+/// Reduced the line, and the Summary view's "Active work" fold around it, are read as the reader
+/// left them ([`reduced_shows_running_call`]).
 ///
 /// CDXC:SessionChat 2026-11-09 DECISION:
-/// User, with Tool call cards on, of the card's live line and this card both reading "Type-check the phone and check Help on the rebased branch": "i still see the same text twice in the chat transcript man … we agreed to solve this". While the transcript shows the running call's words, this card shows the agent's own activity, else the working word and its clock, else "Working"; it names the call only when the transcript does not (a Normal-view row shut behind its sentence, or a call read off the screen that the transcript has not recorded yet). Every chat look (`transcript/chat_look.rs`) draws the running turn's calls the same way, so they change nothing here.
+/// User, with Tool call cards on, of the card's live line and this card both reading "Type-check the phone and check Help on the rebased branch": "i still see the same text twice in the chat transcript man … we agreed to solve this". While the transcript shows the running call's words, this card shows the agent's own activity, else the working word and its clock, else "Working"; it names the call only when the transcript does not (a Normal-view row shut behind its sentence, or a call read off the screen that the transcript has not recorded yet). Later the same day the user approved that the check follows what the transcript actually draws under the chat look (`transcript/chat_look.rs`): under Agent work Quiet, and under Reduced while its line is shut, this card names the running call; the same words still never show twice. Supersedes this decision's earlier line that the chat look changes nothing here.
 fn transcript_draws_running_call(state: &ChatState) -> bool {
+    use crate::transcript::view_level::{view_level, NORMAL};
     let view = &state.transcript_view;
-    view.tool_cards
-        || crate::transcript::view_level::view_level(view) != crate::transcript::view_level::NORMAL
+    if view.grouped_work() {
+        let waiting = crate::transcript::approval_wait::approval_wait(state).is_some();
+        return waiting || (!view.hidden_work() && reduced_shows_running_call(state));
+    }
+    view.tool_cards || view_level(view) != NORMAL
+}
+
+/// Agent work Reduced: whether the row running a call shows its calls with the folds as the
+/// renderer reported them (`searchFolds`, `transcript_search::SearchFolds`): the row's quiet line,
+/// open by default only in Detailed (the desktop's `tool_run.rs`, the phone's `ToolRows.tsx`), and
+/// in the Summary view the turn's "Active work" fold around it. A row drawn in full shows them.
+fn reduced_shows_running_call(state: &ChatState) -> bool {
+    use crate::document::TranscriptItem;
+    use crate::transcript::view_level::{view_level, DETAILED};
+    let view = &state.transcript_view;
+    let folds = &state.extras.search.folds;
+    let detailed = view_level(view) == DETAILED;
+    let runs = |row: &&crate::document::ProjectedMessage| {
+        row["tools"]
+            .as_array()
+            .is_some_and(|tools| tools.iter().any(|tool| tool["status"] == "running"))
+    };
+    let line_open = |row: &Value| {
+        if row["toolsShowAllRows"] == true {
+            return true;
+        }
+        let id = row["id"].as_str().unwrap_or_default();
+        let key = row["toolsLineKey"]
+            .as_str()
+            .map_or_else(|| format!("tools:{id}"), str::to_string);
+        let awaiting = row["tools"]
+            .as_array()
+            .is_some_and(|tools| tools.iter().any(|tool| tool["awaitingApproval"] == true));
+        folds.open(&key, awaiting || detailed)
+    };
+    // The row of the call the card names ([`running_call_label`], the newest one still out)
+    // decides: the last running row in the list's order, where a summary turn's `work` holds its
+    // rows in the order they came and `cards` the copies drawn outside its fold.
+    view.items
+        .iter()
+        .filter_map(|item| match item {
+            TranscriptItem::Message { message } if runs(&message) => Some(line_open(message)),
+            TranscriptItem::Summary {
+                id,
+                work,
+                work_open,
+                cards,
+                ..
+            } => work.iter().rev().find(runs).map(|row| {
+                match cards.iter().find(|card| card["id"] == row["id"]) {
+                    Some(card) => line_open(card),
+                    None => folds.open(&format!("active-work:{id}"), *work_open) && line_open(row),
+                }
+            }),
+            _ => None,
+        })
+        .last()
+        .unwrap_or(false)
+}
+
+/// Agent work Quiet hides a subagent's report as the agent's work, so while the agent has not gone
+/// on from it the line says what it does (`turns::report_lands_mid_response`).
+fn reads_subagent_report(state: &ChatState) -> bool {
+    use crate::transcript::turns::{is_subagent_report, passed_over_before_wake};
+    state.transcript_view.hidden_work()
+        && state
+            .messages
+            .list
+            .iter()
+            .rev()
+            .find(|row| !passed_over_before_wake(row))
+            .is_some_and(is_subagent_report)
 }
 
 /// The two labels name the same call: equal once their spacing and case are set aside.

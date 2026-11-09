@@ -8,6 +8,7 @@ The one exception is the user's 2026-10-08 decision (CDXC:SessionChat in package
 */
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
+use ghostex_gx_chat_core::transcript::chat_look::UserStyle;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -86,7 +87,7 @@ impl NativeChatView {
             .get_or_insert_with(Instant::now);
         let s = p.scale;
         if state["transcriptSkeleton"] == true {
-            return transcript_skeleton(p);
+            return transcript_skeleton(self.transcript_column_cap(p), p);
         }
         // `size_full`, not `flex_1`: this element is the cached transcript view's root, whose parent
         // is not a flex column, so `flex_1` left it content-height and pinned to the top.
@@ -166,25 +167,26 @@ pub(super) fn skeleton_look(p: &ChatAppearance) -> (gpui::Hsla, Duration, f32) {
     )
 }
 
-/// The skeleton rows, in the transcript's own column, pulsing like the other skeletons.
-fn transcript_skeleton(p: &ChatAppearance) -> AnyElement {
+/// The skeleton rows, in the transcript's own column (at most `cap`, transcript.rs
+/// `transcript_column_cap`), pulsing like the other skeletons.
+fn transcript_skeleton(cap: f32, p: &ChatAppearance) -> AnyElement {
     use crate::app::helpers::ThrottledAnimationExt as _;
     let s = p.scale;
     let g = &*SKELETON;
     let tint = p.foreground.opacity(g.tint);
     let column = div()
         .w_full()
-        .max_w(px(768.0 * s))
+        .max_w(px(cap))
         .px(px(16.0 * s))
         .pt(px(g.top_padding * s))
-        .when_some(p.transcript_width, |this, width| {
-            this.max_w(gpui::relative(1.0)).w(gpui::relative(width))
-        })
         .flex()
         .flex_col()
-        .gap(px(g.row_gap * s))
+        // Message spacing Compact shrinks its gaps by the transcript's own ratio (16px to 8px).
+        .gap(px(p.inner_gap(g.row_gap) * s))
         .children(g.rows.iter().map(|row| {
             if row.role == "user" {
+                // Your messages Band draws the bubble across the column (user_message_look.rs).
+                let band = p.chat_look.user_style == UserStyle::Band;
                 div()
                     .w_full()
                     .flex()
@@ -197,9 +199,18 @@ fn transcript_skeleton(p: &ChatAppearance) -> AnyElement {
                     })
                     .child(
                         div()
-                            .w(gpui::relative(row.widths.first().copied().unwrap_or(0.4)))
+                            .map(|bubble| {
+                                if band {
+                                    bubble.w_full().rounded(px(8.0 * s))
+                                } else {
+                                    bubble
+                                        .w(gpui::relative(
+                                            row.widths.first().copied().unwrap_or(0.4),
+                                        ))
+                                        .rounded(px(g.bubble_radius * s))
+                                }
+                            })
                             .h(px(g.bubble_height * s))
-                            .rounded(px(g.bubble_radius * s))
                             .bg(tint),
                     )
             } else {

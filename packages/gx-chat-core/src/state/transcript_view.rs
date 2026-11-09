@@ -57,6 +57,9 @@ pub enum QuietCard {
     Up,
     /// The card left and nothing has reported since: the newest row it rests on.
     Left(String),
+    /// The user stopped the agent: the newest row then, which an unanswered question no longer
+    /// holds open (`working::quiet_holds_turn_open`) until a new row arrives.
+    Stopped(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]

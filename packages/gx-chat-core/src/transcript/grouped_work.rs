@@ -25,10 +25,11 @@ use crate::transcript::simple::{edit_label, edited_and_failed_paths, tool_count_
 use crate::transcript::turns::worked_duration_label;
 use crate::transcript::work_summary::counted_work_stats;
 
-/// `items` with each run of `completed-work` rows folded into one `grouped-work` row. Under Agent
-/// work Quiet (`hidden`, the projection's final reply ids) each reply's own calls and edits move
-/// into the row's work too (`reply_calls`), and the row names the reply that carries the work
-/// button (`workCarrier`).
+/// `items` with each run of `completed-work` rows folded into one `grouped-work` row. Each reply's
+/// own calls and edits, and those of the pictures and question forms that stay in view, move into
+/// the row's work too (`reply_calls`), so the line's steps list every call it counts. Under Agent
+/// work Quiet (`hidden`, the projection's final reply ids) the row names the reply that carries
+/// the work button (`workCarrier`).
 pub fn group_work(items: Vec<TranscriptItem>, hidden: Option<&[String]>) -> Vec<TranscriptItem> {
     let mut grouped = Vec::with_capacity(items.len());
     let mut run: Vec<TranscriptItem> = Vec::new();
@@ -72,7 +73,7 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
             sent_messages,
             gbot_cards,
             workflows,
-            artifacts,
+            mut artifacts,
             mut final_message,
             read_images: turn_images,
             tally,
@@ -83,7 +84,9 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
             continue;
         };
         if id.is_empty() {
-            id = format!("grouped:{turn_id}");
+            // The first turn's own id, so its fold key (`work:<id>`) is the one Default's
+            // "Worked for" fold uses: a fold closed under one look stays closed under the other.
+            id = turn_id.clone();
             started = tally.started_ms;
             ended = tally.ended_ms;
         } else {
@@ -100,15 +103,41 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
         }
         files.extend(turn_files);
         expandable |= turn_expandable;
+        let turn_start = work.len();
         work.extend(turn_work);
-        if hidden.is_some() {
-            if let Some(calls) = final_message.as_mut().and_then(reply_calls) {
-                // The work button opens these even when the reply held the turn's only calls.
+        // The pictures the moved calls read, which their rows no longer show: the line's strip and
+        // its "N images" take them over.
+        let mut moved_images: Vec<Value> = Vec::new();
+        let mut take_images = |row: &crate::document::ProjectedMessage| {
+            for image in row["readImages"].as_array().into_iter().flatten() {
+                moved_images.push(image.clone());
+            }
+        };
+        // A picture's or a question form's calls go where the row sat among the turn's work.
+        for artifact in artifacts.iter_mut() {
+            let before = artifact.clone();
+            if let Some(calls) = reply_calls(artifact) {
+                take_images(&before);
                 expandable = true;
-                work.push(calls);
+                let at = calls["timestamp"].as_i64().map_or(work.len(), |at| {
+                    work[turn_start..]
+                        .iter()
+                        .position(|row| row["timestamp"].as_i64().is_some_and(|row| row > at))
+                        .map_or(work.len(), |place| turn_start + place)
+                });
+                work.insert(at, calls);
             }
         }
-        for image in turn_images {
+        let reply_before = final_message.clone();
+        if let Some(calls) = final_message.as_mut().and_then(reply_calls) {
+            // The line opens onto these even when the reply held the turn's only calls.
+            expandable = true;
+            work.push(calls);
+            if let Some(reply) = &reply_before {
+                take_images(reply);
+            }
+        }
+        for image in turn_images.into_iter().chain(moved_images) {
             push_once(&mut read_images, image);
         }
         turns.push(GroupedTurn {
@@ -172,9 +201,12 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
     }
 }
 
-/// Agent work Quiet: takes a reply's own calls and edits off it and returns them as a row of the
-/// work (`None` when it has none), so no work is drawn in or after a reply. The row keeps none of
-/// what the reply itself shows (its words, actions, pictures, cards).
+/// Agent work Reduced and Quiet: takes a reply's own calls and edits off it (or off a picture or
+/// question form that stays in view) and returns them as a row of the work (`None` when it has
+/// none), so no work is drawn in or after a reply. The row keeps none of what the reply itself
+/// shows (its words, actions, pictures, cards).
+///
+/// CDXC:SessionChat 2026-11-09 WHY: under Reduced the reply drew its own calls as Default chevron rows under it, which the line counted (`tool_call_count` reads the reply) but its steps did not list, so "9 tool calls" opened onto 7; a picture's or a form's calls did the same under both looks.
 ///
 /// CDXC:SessionChat 2026-11-07 WHY: the row reuses the reply's id on purpose: its calls' details (`row_detail`) and its Find and disclosure keys (`tool:<id>:<n>`) are read by it, and nothing indexes a grouped row's work by id, so the reply and this row sharing it collides with nothing.
 fn reply_calls(
@@ -209,6 +241,42 @@ fn reply_calls(
     Some(std::sync::Arc::new(calls))
 }
 
+/// Agent work Reduced and Quiet: a row the chat draws (the running turn's, mostly) lists its calls
+/// as one quiet line after its words, as a row with no words does, instead of its words opening
+/// onto them: its text owns none of them (`toolsFlat`), the run is not shown whole
+/// (`toolsShowAllRows`), and a running thought no longer folds them behind its line
+/// (`thinkingCard.calls`). The renderers and Find read those keys as they do in a work fold.
+///
+/// CDXC:SessionChat 2026-11-09 WHY: only a row with no words became a quiet line, so while the agent ran a sentence with calls drew Default's chevron over full tool rows, and a thought or a reasoning headline kept its own fold, beside the quiet lines of the rows around them, until the turn finished and folded.
+pub fn calls_as_lines(items: &mut [TranscriptItem]) {
+    for item in items {
+        let TranscriptItem::Message { message } = item else {
+            continue;
+        };
+        let words = message["text"]
+            .as_str()
+            .is_some_and(|text| !text.is_empty());
+        let calls = message["tools"]
+            .as_array()
+            .is_some_and(|tools| !tools.is_empty());
+        if !words
+            || !calls
+            || !matches!(message["role"].as_str(), Some("assistant" | "reasoning"))
+            || message["toolsFlat"] == true
+            || message["toolCard"].is_object()
+        {
+            continue;
+        }
+        if let Value::Object(fields) = std::sync::Arc::make_mut(message) {
+            fields.insert("toolsFlat".into(), Value::Bool(true));
+            fields.insert("toolsShowAllRows".into(), Value::Bool(false));
+            if let Some(Value::Object(card)) = fields.get_mut("thinkingCard") {
+                card.remove("calls");
+            }
+        }
+    }
+}
+
 /// `row` without its calls and edits.
 fn strip_calls(row: &mut crate::document::ProjectedMessage) {
     if let Value::Object(fields) = std::sync::Arc::make_mut(row) {
@@ -240,43 +308,206 @@ pub fn hide_work(
     live: &std::collections::HashSet<&str>,
     finished_before: Option<i64>,
 ) {
+    let messages: Vec<Option<&Value>> = items
+        .iter()
+        .map(|item| match item {
+            TranscriptItem::Message { message } => Some(&**message),
+            _ => None,
+        })
+        .collect();
+    let before = before_question(&messages, live);
+    let mut place = 0usize;
     items.retain_mut(|item| {
-        let TranscriptItem::Message { message } = item else {
-            return true;
-        };
+        let at = place;
+        place += 1;
+        match item {
+            TranscriptItem::Message { message } => {
+                keeps_live_row(message, live, finished_before, before.contains(&at))
+            }
+            // The Summary view's running turn: its "Active work" fold holds the same rows.
+            TranscriptItem::Summary { work, .. } => {
+                let rows: Vec<Option<&Value>> = work.iter().map(|row| Some(&**row)).collect();
+                let before = before_question(&rows, live);
+                let mut place = 0usize;
+                work.retain_mut(|message| {
+                    let at = place;
+                    place += 1;
+                    keeps_live_row(message, live, finished_before, before.contains(&at))
+                });
+                true
+            }
+            _ => true,
+        }
+    });
+}
+
+/// Agent work Quiet while the agent works but one working signal doubts it is mid-response
+/// (`working::hides_running_response`, an agent such as Cursor that reports no Working): the words
+/// stay in view, since a hidden reply is far worse than extra words, but the calls and edits of the
+/// running response's rows (`live`) and a subagent's report do not. A call waiting on an approval
+/// still draws ([`only_what_waits`]), and a row left with nothing to draw goes.
+///
+/// CDXC:SessionChat 2026-11-09 DECISION: Sebastian decided that under Quiet the tool calls are hidden for these agents too, while hiding their words stays cautious; before, nothing of the running response was hidden for them and its calls drew in the chat.
+pub fn hide_live_calls(items: &mut Vec<TranscriptItem>, live: &std::collections::HashSet<&str>) {
+    let keep = |message: &mut crate::document::ProjectedMessage| -> bool {
         if !live.contains(message["id"].as_str().unwrap_or_default()) {
             return true;
         }
         let role = message["role"].as_str().unwrap_or_default();
+        if role == "user" && message["interAgentMessage"]["subagent"] == true {
+            return false;
+        }
         if !matches!(role, "assistant" | "reasoning") || message["pending"] == true {
             return true;
         }
-        let finished_reply = role == "assistant"
-            && message["text"]
-                .as_str()
-                .is_some_and(|text| !text.is_empty())
-            && message["timestamp"]
-                .as_i64()
-                .zip(finished_before)
-                .is_some_and(|(at, before)| at <= before);
         if waits_on_approval(message) {
-            only_what_waits(message, finished_reply);
+            only_what_waits(message, true);
             return true;
         }
         let has = |key: &str| message[key].as_array().is_some_and(|list| !list.is_empty());
-        let reports = role != "reasoning"
-            && ["apiError", "systemCard", "suppressed", "sideQuestion"]
+        if !(has("tools") || has("files")) {
+            return true;
+        }
+        strip_calls(message);
+        let words = message["text"]
+            .as_str()
+            .is_some_and(|text| !text.is_empty());
+        words
+            || needs_the_user(message)
+            || ["apiError", "systemCard", "suppressed", "sideQuestion"]
                 .iter()
-                .any(|key| message[*key].is_object());
-        let shows = needs_the_user(message) || finished_reply || reports;
-        if shows && (has("tools") || has("files")) {
-            strip_calls(message);
+                .any(|key| message[*key].is_object())
+    };
+    items.retain_mut(|item| match item {
+        TranscriptItem::Message { message } => keep(message),
+        TranscriptItem::Summary { work, .. } => {
+            work.retain_mut(|message| keep(message));
+            true
         }
-        if !finished_reply && !reports && holds_only_answered_cards(message) {
-            drop_words(message);
-        }
-        shows
+        _ => true,
     });
+}
+
+/// The Summary view under Agent work Reduced and Quiet, where the running turn's "Active work"
+/// starts shut: every row of it that needs the user (`chat_look::needs_the_user`: a question, an
+/// approval, a picture, a card) joins the rows drawn in full under the prompt (`cards`, which the
+/// fold leaves out), in the order they came, with its calls as one quiet line. Runs once the
+/// waiting call is marked and Quiet has hidden the rest. Marking a waiting call opens the fold
+/// around it (`approval_wait::mark_waiting_call`); once its row is drawn here the fold goes back
+/// to shut, so an approval never opens the earlier work beside it.
+///
+/// CDXC:SessionChat 2026-11-09 WHY: the summary turn only hoisted fenced forms, pages and charts (`turns::content_rows`), which was enough while the running fold started open; shut, it also hid one-click answers in a sentence, shared pictures and approvals, which must surface at once (the 2026-11-08 decision on `chat_look::needs_the_user`).
+pub fn keep_in_view_while_shut(items: &mut [TranscriptItem]) {
+    for item in items {
+        let TranscriptItem::Summary {
+            active: true,
+            work,
+            work_open,
+            cards,
+            ..
+        } = item
+        else {
+            continue;
+        };
+        if work.iter().any(|row| waits_on_approval(row)) {
+            *work_open = false;
+        }
+        let id = |row: &crate::document::ProjectedMessage| row["id"].as_str().map(str::to_string);
+        let carded: Vec<Option<String>> = cards.iter().map(id).collect();
+        let mut kept: Vec<crate::document::ProjectedMessage> = work
+            .iter()
+            .filter(|row| carded.contains(&id(row)) || needs_the_user(row))
+            .map(|row| {
+                let mut row = row.clone();
+                if let Value::Object(fields) = std::sync::Arc::make_mut(&mut row) {
+                    fields.insert("toolsShowAllRows".into(), Value::Bool(false));
+                }
+                row
+            })
+            .collect();
+        let shown: Vec<Option<String>> = kept.iter().map(id).collect();
+        kept.extend(cards.drain(..).filter(|card| !shown.contains(&id(card))));
+        *cards = kept;
+    }
+}
+
+/// [`hide_work`] for one row: whether it stays, and what of it.
+fn keeps_live_row(
+    message: &mut crate::document::ProjectedMessage,
+    live: &std::collections::HashSet<&str>,
+    finished_before: Option<i64>,
+    before_question: bool,
+) -> bool {
+    if !live.contains(message["id"].as_str().unwrap_or_default()) {
+        return true;
+    }
+    let role = message["role"].as_str().unwrap_or_default();
+    // A subagent's report is the agent's work, which the status line names while it runs
+    // (`turns::report_lands_mid_response`).
+    if role == "user" && message["interAgentMessage"]["subagent"] == true {
+        return false;
+    }
+    if !matches!(role, "assistant" | "reasoning") || message["pending"] == true {
+        return true;
+    }
+    // A row that ends in a call or a call's result owes more, and one a question follows
+    // introduces it, so neither is a run's reply: a question's sentence stays hidden once the
+    // answer starts a new run.
+    let finished_reply = role == "assistant"
+        && message["text"]
+            .as_str()
+            .is_some_and(|text| !text.is_empty())
+        && !ends_in_call(message)
+        && !before_question
+        && message["timestamp"]
+            .as_i64()
+            .zip(finished_before)
+            .is_some_and(|(at, before)| at <= before);
+    if waits_on_approval(message) {
+        only_what_waits(message, finished_reply);
+        return true;
+    }
+    let has = |key: &str| message[key].as_array().is_some_and(|list| !list.is_empty());
+    let reports = role != "reasoning"
+        && ["apiError", "systemCard", "suppressed", "sideQuestion"]
+            .iter()
+            .any(|key| message[*key].is_object());
+    let shows = needs_the_user(message) || finished_reply || reports;
+    if shows && (has("tools") || has("files")) {
+        strip_calls(message);
+    }
+    if !finished_reply && !reports && holds_only_answered_cards(message) {
+        drop_words(message);
+    }
+    shows
+}
+
+/// The places in `rows` of the live rows a question follows at once: their words introduce it,
+/// they are not a run's reply. `None` stands for an item that is not a message.
+fn before_question(
+    rows: &[Option<&Value>],
+    live: &std::collections::HashSet<&str>,
+) -> std::collections::HashSet<usize> {
+    rows.windows(2)
+        .enumerate()
+        .filter_map(|(at, pair)| {
+            let (Some(row), Some(next)) = (pair[0], pair[1]) else {
+                return None;
+            };
+            let asks = next["questions"]
+                .as_array()
+                .is_some_and(|list| !list.is_empty());
+            (asks && live.contains(row["id"].as_str().unwrap_or_default())).then_some(at)
+        })
+        .collect()
+}
+
+/// Whether a row's last block is a call or a call's result.
+fn ends_in_call(row: &Value) -> bool {
+    row["blocks"]
+        .as_array()
+        .and_then(|blocks| blocks.last())
+        .is_some_and(|block| matches!(block["type"].as_str(), Some("tool-call" | "tool-result")))
 }
 
 /// `row` showing only its calls and edits that wait on an approval: the rest of its calls keep
@@ -292,6 +523,12 @@ fn only_what_waits(row: &mut crate::document::ProjectedMessage, keep_words: bool
     let Value::Object(fields) = std::sync::Arc::make_mut(row) else {
         return;
     };
+    // Kept words head the run's own chevron (`tools:<id>`), and the quiet line of the waiting
+    // call drawn under them needs a key of its own, or closing one would close the other.
+    if keep_words && fields.get("role") != Some(&Value::from("reasoning")) {
+        let id = fields.get("id").and_then(Value::as_str).unwrap_or_default();
+        fields.insert("toolsLineKey".into(), format!("tools-line:{id}").into());
+    }
     let mut waiting = 0;
     if let Some(Value::Array(tools)) = fields.get_mut("tools") {
         for tool in tools.iter_mut() {
