@@ -109,19 +109,35 @@ pub(crate) fn resolve_session_transcript_path(
 /// Claude transcript roots shared with the Session Chat resolver
 /// (`session_chat.rs`), which also scans them for hook `session_id`s that
 /// diverge from the file-name `sessionId` on resumed/forked sessions.
+///
+/// CDXC:AgentProviders 2026-11-09 WHY:
+/// GitHub #521: a Claude Swap account runs Claude with `CLAUDE_CONFIG_DIR` set to its own profile (`<swap root>/sessions/<N>-<email>`), and its transcripts are under that profile's `projects/`. `--share-history` makes that folder a link to `~/.claude/projects`, but only when cswap can make the link (a Windows profile it could not link, or an account run without sharing, keeps its own), so the title lookup and the "was this conversation written" check read `~/.claude` alone, missed the conversation and the restore failed with "Unable to find restorable Claude session id". Every account profile is read too, and the session's own `CLAUDE_CONFIG_DIR` when the lookup runs inside it. A profile linked to `~/.claude/projects` is the same folder, so each folder is read once (by its resolved path).
 pub(crate) fn claude_project_roots() -> Vec<PathBuf> {
     let home = home_dir();
-    let mut roots = vec![
-        ghostex_paths::agent_homes::claude_default_home(&home).join("projects"),
-        ghostex_paths::agent_homes::claude_default_home(&home).join("projects2"),
-    ];
-    if let Ok(profiles) = fs::read_dir(home.join(".claude-profiles")) {
-        for profile in profiles.flatten() {
-            roots.push(profile.path().join("projects"));
-            roots.push(profile.path().join("projects2"));
-        }
-    }
-    roots
+    let mut config_dirs = vec![ghostex_paths::agent_homes::claude_default_home(&home)];
+    let subfolders = |parent: PathBuf| {
+        fs::read_dir(parent)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|entry| entry.path())
+            .collect::<Vec<_>>()
+    };
+    config_dirs.extend(subfolders(home.join(".claude-profiles")));
+    config_dirs.extend(
+        std::env::var_os("CLAUDE_CONFIG_DIR")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute()),
+    );
+    config_dirs.extend(subfolders(
+        crate::accounts::claude_resets::swap_root(&home).join("sessions"),
+    ));
+    let mut seen = std::collections::HashSet::new();
+    config_dirs
+        .into_iter()
+        .flat_map(|dir| [dir.join("projects"), dir.join("projects2")])
+        .filter(|root| seen.insert(fs::canonicalize(root).unwrap_or_else(|_| root.clone())))
+        .collect()
 }
 
 /// CDXC:SessionChat 2026-11-04 WHY:

@@ -210,15 +210,9 @@ fn lookup_claude(project_path: &str, title: &str, first_prompt: &str) -> Option<
         return None;
     }
 
-    let home = home_dir();
-    let mut roots = vec![ghostex_paths::agent_homes::claude_default_home(&home).join("projects")];
-    if let Ok(entries) = fs::read_dir(home.join(".claude-profiles")) {
-        for entry in entries.flatten() {
-            if entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
-                roots.push(entry.path().join("projects"));
-            }
-        }
-    }
+    // `~/.claude`, every `.claude-profiles` and Claude Swap account profile, and the session's own
+    // CLAUDE_CONFIG_DIR (GitHub #521, `claude_project_roots`).
+    let roots = crate::agent_transcripts::claude_project_roots();
 
     // The folder names Claude can store this project's conversations under; `None` scans every folder (no project given).
     let project_folders =

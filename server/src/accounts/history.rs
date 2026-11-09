@@ -87,11 +87,8 @@ impl HistoryRuntime {
 fn roots(provider: Provider) -> (Vec<PathBuf>, bool) {
     let home = crate::resume_lookup::home_dir();
     if provider == Provider::Claude {
-        let mut roots = crate::agent_transcripts::claude_project_roots();
-        if let Some(config) = std::env::var_os("CLAUDE_CONFIG_DIR") {
-            roots.push(PathBuf::from(config).join("projects"));
-        }
-        return (roots, false);
+        // Every account profile and CLAUDE_CONFIG_DIR, each folder once.
+        return (crate::agent_transcripts::claude_project_roots(), false);
     }
     let mut homes = crate::resume_lookup::codex_homes();
     let mut partial = false;
