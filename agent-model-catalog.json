@@ -1,7 +1,7 @@
 {
   "_readme": "Do not edit blind. docs/important/agent-model-catalog.md explains the schema, how every Ghostex client loads this file from GitHub (with the bundled copy as the offline source), how to publish a change, and how to re-collect models, efforts and fast mode from the agent CLIs' own /model pickers.",
   "schemaVersion": 1,
-  "updatedAt": "2026-10-28T09:30:00Z",
+  "updatedAt": "2026-11-09T19:32:00Z",
   "effortLabels": {
     "none": "None",
     "off": "Off",
@@ -17,7 +17,7 @@
   "agents": {
     "claude": {
       "name": "Claude Code",
-      "cliVersion": "2.1.311",
+      "cliVersion": "2.1.319",
       "modelCommand": "/model <value>",
       "effortCommand": "/effort <value>",
       "efforts": ["low", "medium", "high", "xhigh", "max", "ultracode"],
@@ -32,7 +32,7 @@
         {
           "value": "fable",
           "label": "Fable 5.1",
-          "description": "For your toughest challenges",
+          "description": "Most capable for your hardest and longest-running tasks",
           "fastMode": false
         },
         {
@@ -41,6 +41,14 @@
           "description": "For complex work and everyday tasks",
           "default": true,
           "fastMode": true
+        },
+        {
+          "value": "claude-fable-5-2",
+          "label": "Fable 5.2",
+          "description": "For your toughest challenges",
+          "defaultEffort": "medium",
+          "fastMode": false,
+          "notes": "A row of its own since 2.1.319: the `fable` alias still runs claude-fable-5-1, so Fable 5.2 is typed by its full id. Its effort rail is Low to Max like Fable 5.1's, but it defaults to Medium."
         },
         {
           "value": "sonnet",
@@ -58,7 +66,7 @@
           "notes": "The `haiku` alias runs claude-haiku-5-5. Its effort rail stops at Max (no Ultracode) and defaults to Medium; Haiku 4.5 had no effort tiers."
         }
       ],
-      "notes": "Re-read from the 2.1.311 /model picker on 2026-10-28: unchanged (Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5, then Haiku 4.5, Sonnet 5, Opus 5, Fable 5, Opus 4.8, 4.7, 4.6 and Sonnet 4.6, none of them listed here). Re-read from the 2.1.293 /model picker on 2026-10-07: Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5 (the `haiku` alias now runs claude-haiku-5-5, with a Low to Max effort rail, default Medium, which replaces Haiku 4.5 at the user's request), then older models (Sonnet 5, Opus 5, Fable 5, Opus 4.8, 4.7, ...). The `sonnet` alias runs claude-sonnet-5-5, so Sonnet 5.5 replaces Sonnet 5, and Opus 5 is not listed: the user asked that Sonnet 5.5 and Opus 5.5 fully replace Sonnet 5 and Opus 5 wherever both are offered. Opus 5.5 is one `opus[1m]` row: the picker has no 200K Opus and `claude -p --model opus` reports a 1,000,000-token window, so the 200K `opus` twin was removed at the user's request and the model menu shows no Context Window choice for it. The older models are not listed, and neither are sonnet[1m] and fable[1m], which `claude --model` accepts but the picker never offers."
+      "notes": "Re-read from the 2.1.319 /model picker on 2026-11-09: Default (recommended) Fable 5.1, Opus 5.5, Fable 5.2 (new, claude-fable-5-2, \"For your toughest challenges\", Low to Max, default Medium, no fast mode), Sonnet 5.5, Haiku 5.5, then More models: Fable 5.1 (now \"Most capable for your hardest and longest-running tasks\"), Haiku 4.5, Sonnet 5, Opus 5 and older. The `fable` alias still runs claude-fable-5-1, so Fable 5.2 is its own row with its full id as the value; Opus, Sonnet and Haiku rows are unchanged. Re-read from the 2.1.311 /model picker on 2026-10-28: unchanged (Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5, then Haiku 4.5, Sonnet 5, Opus 5, Fable 5, Opus 4.8, 4.7, 4.6 and Sonnet 4.6, none of them listed here). Re-read from the 2.1.293 /model picker on 2026-10-07: Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5 (the `haiku` alias now runs claude-haiku-5-5, with a Low to Max effort rail, default Medium, which replaces Haiku 4.5 at the user's request), then older models (Sonnet 5, Opus 5, Fable 5, Opus 4.8, 4.7, ...). The `sonnet` alias runs claude-sonnet-5-5, so Sonnet 5.5 replaces Sonnet 5, and Opus 5 is not listed: the user asked that Sonnet 5.5 and Opus 5.5 fully replace Sonnet 5 and Opus 5 wherever both are offered. Opus 5.5 is one `opus[1m]` row: the picker has no 200K Opus and `claude -p --model opus` reports a 1,000,000-token window, so the 200K `opus` twin was removed at the user's request and the model menu shows no Context Window choice for it. The older models are not listed, and neither are sonnet[1m] and fable[1m], which `claude --model` accepts but the picker never offers."
     },
     "codex": {
       "name": "Codex CLI",
