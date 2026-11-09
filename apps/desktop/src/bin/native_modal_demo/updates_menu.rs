@@ -1,7 +1,9 @@
 //! Preview of the top bar's Updates button and list (app/titlebar/updates_menu_rows.rs, drawn
 //! from the app's own file): one item updating, one failed with its reason on the red icon, one
 //! waiting. `GHOSTEX_NATIVE_MODAL_DEMO_STATE=dismissed` shows the list after the failure was
-//! dismissed. Clicks print what the app would run.
+//! dismissed; `=long` adds an update with a very long name and computer; `=long-failed` is the
+//! same with the failure kept, its name long too. Clicks print what the app
+//! would run.
 use gpui::{
     App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, Styled as _, Window, div, px, rgb,
@@ -16,7 +18,7 @@ use crate::app::helpers::*;
 #[path = "../../app/titlebar/updates_menu_rows.rs"]
 mod rows;
 
-fn items(dismissed: bool) -> Vec<Value> {
+fn items(dismissed: bool, long: bool) -> Vec<Value> {
     let mut items = vec![
         json!({
             "id": "agent:codex", "name": "Codex", "state": "updating",
@@ -40,10 +42,21 @@ fn items(dismissed: bool) -> Vec<Value> {
     ];
     if !dismissed {
         items.insert(0, json!({
-            "id": "agent:claude", "name": "Claude Code", "state": "failed",
+            "id": "agent:claude", "name": if long { "Claude Code with a name that goes on and on" } else { "Claude Code" }, "state": "failed",
             "canUpdate": true, "counts": true,
             "error": "npm couldn't write to /usr/local/lib/node_modules (permission denied). Fix that folder's owner, or update Claude Code in Settings > Agents.",
         }));
+    }
+    if long {
+        items.insert(
+            0,
+            json!({
+                "id": "remote:long:agent:fast", "kind": "agent",
+                "name": "Fast Computer & Browser Use", "state": "available", "latest": "0.44.0",
+                "canUpdate": true, "counts": true,
+                "computer": "remote-long", "computerName": "Macbook Pro of the design team",
+            }),
+        );
     }
     items
 }
@@ -54,8 +67,8 @@ struct UpdatesMenuDemo {
 }
 
 impl UpdatesMenuDemo {
-    fn new(dismissed: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let items = items(dismissed);
+    fn new(dismissed: bool, long: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let items = items(dismissed, long);
         let rows = items.clone();
         let menu = PopupMenu::build(window, cx, move |menu, _, _| {
             let mut menu = menu
@@ -72,21 +85,21 @@ impl UpdatesMenuDemo {
                     border: titlebar_popup_menu_border_color(),
                     hover: titlebar_popup_menu_hover_color(),
                 })
-                .min_w(px(300.0))
-                .max_w(px(300.0));
+                .min_w(px(MENU_WIDTH))
+                .max_w(px(MENU_WIDTH));
             let failed = rows.iter().filter(|item| item["state"] == "failed").count();
             let count = rows.len();
             let other_computers = rows.iter().any(|item| item["computerName"].is_string());
             menu = menu.menu_element_with_disabled(
                 Box::new(RunGpuiTitlebarUpdates { update_all: false }),
                 true,
-                move |_, _| rows::updates_menu_header(count, failed, other_computers),
+                move |_, _| rows::updates_menu_header(count, failed, other_computers, MENU_WIDTH),
             );
             for item in rows.clone() {
                 let id = item["id"].as_str().unwrap_or_default().to_string();
                 menu = menu
                     .menu_element(Box::new(RunGpuiTitlebarUpdateItem { id }), move |_, _| {
-                        rows::updates_menu_item_row(&item)
+                        rows::updates_menu_item_row(&item, MENU_WIDTH)
                     });
             }
             menu.separator()
@@ -152,7 +165,12 @@ impl Render for UpdatesMenuDemo {
                             .child("Ghostex"),
                     ),
             )
-            .child(div().mt(px(4.0)).w(px(302.0)).child(self.menu.clone()))
+            .child(
+                div()
+                    .mt(px(4.0))
+                    .w(px(MENU_WIDTH + 2.0))
+                    .child(self.menu.clone()),
+            )
     }
 }
 
@@ -160,20 +178,24 @@ use gpui::Focusable as _;
 use gpui::prelude::FluentBuilder as _;
 
 const WIDTH: f32 = 460.0;
-const HEIGHT: f32 = 400.0;
+/// The Updates list's width in the app (`titlebar_popup_menu_width`).
+const MENU_WIDTH: f32 = 300.0;
+const HEIGHT: f32 = 480.0;
 
 pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     let dismissed = demo.state == "dismissed";
+    let long = demo.state.starts_with("long");
+    let dismissed = dismissed || demo.state == "long";
     // The env reader lowercases; a snapshot path keeps its case.
     let snapshot = std::env::var("GHOSTEX_NATIVE_MODAL_DEMO_SNAPSHOT").unwrap_or_default();
     if !snapshot.trim().is_empty() {
-        open_snapshot(dismissed, snapshot.trim().to_string(), cx);
+        open_snapshot(dismissed, long, snapshot.trim().to_string(), cx);
         return;
     }
     super::open_modal_window(
         WIDTH,
         HEIGHT,
-        move |window, cx| cx.new(|cx| UpdatesMenuDemo::new(dismissed, window, cx)),
+        move |window, cx| cx.new(|cx| UpdatesMenuDemo::new(dismissed, long, window, cx)),
         cx,
     );
 }
@@ -181,7 +203,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
 /// Draws the preview in a window far off every screen, optionally points at the HOVER spot (a
 /// failure icon, for its tooltip), then writes the frame to `path` and quits.
 #[cfg(feature = "modal-demo-snapshot")]
-fn open_snapshot(dismissed: bool, path: String, cx: &mut App) {
+fn open_snapshot(dismissed: bool, long: bool, path: String, cx: &mut App) {
     use gpui::{Bounds, Modifiers, MouseMoveEvent, PlatformInput, WindowBounds, WindowOptions};
     use gpui::{point, size};
     use std::time::Duration;
@@ -198,7 +220,7 @@ fn open_snapshot(dismissed: bool, path: String, cx: &mut App) {
     };
     let window = cx
         .open_window(options, move |window, cx| {
-            let view = cx.new(|cx| UpdatesMenuDemo::new(dismissed, window, cx));
+            let view = cx.new(|cx| UpdatesMenuDemo::new(dismissed, long, window, cx));
             cx.new(|cx| gpui_component::Root::new(view, window, cx))
         })
         .expect("open the snapshot window");
@@ -251,7 +273,7 @@ fn open_snapshot(dismissed: bool, path: String, cx: &mut App) {
 }
 
 #[cfg(not(feature = "modal-demo-snapshot"))]
-fn open_snapshot(_dismissed: bool, _path: String, cx: &mut App) {
+fn open_snapshot(_dismissed: bool, _long: bool, _path: String, cx: &mut App) {
     eprintln!("snapshots need: cargo build --bin native-modal-demo --features modal-demo-snapshot");
     cx.quit();
 }

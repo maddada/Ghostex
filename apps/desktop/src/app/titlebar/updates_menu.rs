@@ -57,13 +57,13 @@ pub(crate) fn build_gpui_titlebar_updates_popup_menu(
     // Disabled header row: the placeholder action the Git, Tips and Help menus use for labels.
     menu =
         menu.menu_element_with_disabled(Box::new(CopyGpuiTitlebarGitBranch), true, move |_, _| {
-            updates_menu_header(count, failed, other_computers)
+            updates_menu_header(count, failed, other_computers, width)
         });
     for item in items.iter().take(MAX_ROWS) {
         let item = item.clone();
         let id = item["id"].as_str().unwrap_or_default().to_string();
         menu = menu.menu_element(Box::new(RunGpuiTitlebarUpdateItem { id }), move |_, _| {
-            updates_menu_item_row(&item)
+            updates_menu_item_row(&item, width)
         });
     }
     menu = menu.separator();

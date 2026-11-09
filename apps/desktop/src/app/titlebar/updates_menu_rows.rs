@@ -29,6 +29,15 @@ use crate::app::helpers::{
 use crate::app::window::native_modal_kit::modal_spinner;
 
 pub(crate) const UPDATES_MENU_HEADER_HEIGHT: f32 = 52.0;
+/// The menu's own padding (`titlebar_popup_menu_with_scroll_behavior`) on each side of a row.
+const MENU_PADDING_X: f32 = 6.0;
+
+/// What a row may draw across, given the menu's width: a menu item sizes itself to its content, so
+/// text longer than this would push the row (and its version) past the popup's edge instead of
+/// being cut with an ellipsis.
+fn row_content_width(menu_width: f32) -> f32 {
+    (menu_width - 2.0 * (MENU_PADDING_X + TITLEBAR_POPUP_MENU_ITEM_PADDING_X)).max(0.0)
+}
 const ICON_FAILED: &str = "titlebar/alert-circle.svg";
 const ICON_DISMISS: &str = "modals/kit/x.svg";
 /// A failure's reason in its tooltip is cut here; the Settings page shows all of it.
@@ -77,13 +86,25 @@ fn failure_reason(item: &Value) -> String {
 }
 
 /// `other_computers`: some of the items are another computer's, so the line says every computer.
+/// `menu_width`: the menu's width, so a long line is cut with an ellipsis inside its padding.
 pub(crate) fn updates_menu_header(
     count: usize,
     failed: usize,
     other_computers: bool,
+    menu_width: f32,
 ) -> impl IntoElement {
+    let subtitle: gpui::SharedString = match failed {
+        0 if other_computers => {
+            "Ghostex, the agents you use and what failed, on every computer.".to_string()
+        }
+        0 => "Ghostex, the agents you use and what failed.".to_string(),
+        1 => "1 update failed. Point at its icon to see why.".to_string(),
+        failed => format!("{failed} updates failed. Point at an icon to see why."),
+    }
+    .into();
+    let tooltip_text = subtitle.clone();
     v_flex()
-        .w_full()
+        .w(px(row_content_width(menu_width)))
         .min_h(px(UPDATES_MENU_HEADER_HEIGHT))
         .justify_center()
         .gap(px(2.0))
@@ -101,6 +122,12 @@ pub(crate) fn updates_menu_header(
         )
         .child(
             div()
+                .id("updates-menu-subtitle")
+                .min_w_0()
+                .max_w_full()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .text_size(px(12.0))
                 .line_height(px(16.0))
                 .text_color(if failed > 0 {
@@ -108,15 +135,11 @@ pub(crate) fn updates_menu_header(
                 } else {
                     titlebar_inactive_text_color()
                 })
-                .child(match failed {
-                    0 if other_computers => {
-                        "Ghostex, the agents you use and what failed, on every computer."
-                            .to_string()
-                    }
-                    0 => "Ghostex, the agents you use and what failed.".to_string(),
-                    1 => "1 update failed. Point at its icon to see why.".to_string(),
-                    failed => format!("{failed} updates failed. Point at an icon to see why."),
-                }),
+                .child(subtitle)
+                .managed_tooltip_with_placement(
+                    ManagedTooltipPlacement::Auto,
+                    move |window, cx| titlebar_tooltip(tooltip_text.clone(), window, cx),
+                ),
         )
 }
 
@@ -158,28 +181,37 @@ fn row_spinner() -> AnyElement {
         .into_any_element()
 }
 
-pub(crate) fn updates_menu_item_row(item: &Value) -> AnyElement {
+/// `menu_width`: the menu's width; the name is cut to leave the version its room.
+pub(crate) fn updates_menu_item_row(item: &Value, menu_width: f32) -> AnyElement {
     let id = text(item, "id").unwrap_or_default().to_string();
     let state = item["state"].as_str().unwrap_or_default();
     let failed = state == "failed";
     let updating = state == "updating";
     let reason: gpui::SharedString = failure_reason(item).into();
     let error = text(item, "error").unwrap_or_default().to_string();
+    let label: gpui::SharedString = item_label(item).into();
+    let label_tooltip = label.clone();
     let row = h_flex()
-        .w_full()
-        .min_w_0()
+        .w(px(row_content_width(menu_width)))
         .items_center()
         .justify_between()
         .gap(px(12.0))
         .child(
+            // The name gives way first: the version and any badge beside it keep their width.
             div()
+                .id(ElementId::Name(format!("updates-name-{id}").into()))
+                .flex_1()
                 .min_w_0()
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
                 .text_size(px(13.0))
                 .text_color(titlebar_popup_menu_foreground())
-                .child(item_label(item)),
+                .child(label)
+                .managed_tooltip_with_placement(
+                    ManagedTooltipPlacement::Auto,
+                    move |window, cx| titlebar_tooltip(label_tooltip.clone(), window, cx),
+                ),
         )
         .child(
             h_flex()
@@ -209,6 +241,8 @@ pub(crate) fn updates_menu_item_row(item: &Value) -> AnyElement {
                 })
                 .child(
                     div()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
                         .text_size(px(12.0))
                         .text_color(if failed {
                             titlebar_popup_menu_destructive()
