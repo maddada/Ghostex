@@ -25,7 +25,7 @@ pub(crate) enum GpuiRemoteLinkEnd {
     HealthRefused,
     /// Health checks through the tunnel went unanswered for a minute.
     HealthUnanswered,
-    /// The first health check after this computer woke was not answered.
+    /// Two health checks in a row after this computer woke did not confirm the tunnel.
     WakeUnconfirmed,
     /// The liveness stream kept ending and the tunnel no longer answered.
     LiveStreamFailed,

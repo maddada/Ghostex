@@ -12,7 +12,8 @@
 //! an answer to any request through the tunnel counts as a sign of life, and only a tunnel that
 //! refuses (nothing listening, or the far side closing without an answer) twice in a row, or that
 //! answers nothing for [`TUNNEL_UNANSWERED_PROBES_TO_DROP`] probes in a row, is dropped. A tunnel
-//! whose SSH process exits is still dropped at once by the watchdog.
+//! whose SSH process exits is still dropped at once by the watchdog, and after a wake two checks
+//! in a row that do not confirm a tunnel drop it ([`TUNNEL_UNCONFIRMED_WAKE_CHECKS_TO_DROP`]).
 //! SEE-ALSO: apps/desktop/src/app/remote_conn/presentation_and_watchdog.rs (the watchdog),
 //! websocket_presentation.rs (the event stream's liveness), tunnel_and_auth.rs (the connect wait),
 //! ~/.local/share/agent-work/Ghostex/issues-1027/remote-slow-361/ (the measurements).
@@ -33,6 +34,12 @@ pub(crate) const TUNNEL_REFUSED_PROBES_TO_DROP: u8 = 2;
 /// Probes in a row with no answer at all (and no other request answered meanwhile) that drop a
 /// tunnel: at the watchdog's 15 s interval, a minute or more of silence.
 pub(crate) const TUNNEL_UNANSWERED_PROBES_TO_DROP: u8 = 4;
+
+/// Checks in a row after this computer woke that did not confirm a tunnel before it is dropped.
+///
+/// CDXC:RemoteMachines 2026-11-10 WHY:
+/// A user reported "a lot of reconnects" between app and remote. After a wake, one check that was not confirmed dropped the tunnel at once, although a link that outlived the sleep (SSH over Tailscale or Easy Connect usually does) needs a few seconds for the network to return, and a refusal can be the far gxserver starting. A dropped tunnel costs a whole reconnect and every request in flight. The wake's check is now followed by a second one two seconds later, and only a tunnel that neither confirms is dropped: a dead one goes about half a minute after the wake at the latest (two 15 s checks), sooner when it refuses or its SSH exits, and one that answers either check is kept.
+pub(crate) const TUNNEL_UNCONFIRMED_WAKE_CHECKS_TO_DROP: u8 = 2;
 
 /// What one authenticated health probe got back.
 #[derive(Clone, Debug)]
@@ -59,6 +66,8 @@ pub(crate) enum GpuiRemoteTunnelVerdict {
 pub(crate) struct GpuiRemoteTunnelLiveness {
     refused_in_a_row: u8,
     unanswered_in_a_row: u8,
+    /// Checks made because this computer woke that did not confirm the tunnel, in a row.
+    unconfirmed_after_wake: u8,
 }
 
 impl GpuiRemoteTunnelLiveness {
@@ -97,6 +106,36 @@ impl GpuiRemoteTunnelLiveness {
                 }
             }
         }
+    }
+}
+
+impl GpuiRemoteTunnelLiveness {
+    /// Records a check made because this computer woke. A tunnel it does not confirm is kept the
+    /// first time and dropped the second ([`TUNNEL_UNCONFIRMED_WAKE_CHECKS_TO_DROP`]); the
+    /// watchdog's own rule still drops one that refuses or stays silent long enough.
+    pub(crate) fn record_after_wake(
+        &mut self,
+        probe: &GpuiRemoteHealthProbe,
+        answered_meanwhile: bool,
+    ) -> GpuiRemoteTunnelVerdict {
+        match self.record(probe, answered_meanwhile) {
+            GpuiRemoteTunnelVerdict::Slow => {
+                self.unconfirmed_after_wake = self.unconfirmed_after_wake.saturating_add(1);
+                if self.unconfirmed_after_wake >= TUNNEL_UNCONFIRMED_WAKE_CHECKS_TO_DROP {
+                    GpuiRemoteTunnelVerdict::Dropped
+                } else {
+                    GpuiRemoteTunnelVerdict::Slow
+                }
+            }
+            verdict => verdict,
+        }
+    }
+
+    /// Whether the last drop was the wake's rule, not the watchdog's own.
+    pub(crate) fn dropped_after_wake(&self) -> bool {
+        self.unconfirmed_after_wake >= TUNNEL_UNCONFIRMED_WAKE_CHECKS_TO_DROP
+            && self.refused_in_a_row < TUNNEL_REFUSED_PROBES_TO_DROP
+            && self.unanswered_in_a_row < TUNNEL_UNANSWERED_PROBES_TO_DROP
     }
 }
 

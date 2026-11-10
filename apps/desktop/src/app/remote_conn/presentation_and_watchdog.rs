@@ -313,6 +313,7 @@ impl GhostexGpuiApp {
                     this.remote_gxserver_watchdog_probe_in_flight = false;
                 }
                 let mut failed_machine_ids = Vec::new();
+                let mut check_again_after_wake = false;
                 for (machine_id, generation, local_port, probe, answered_meanwhile) in results {
                     if !this.gpui_remote_gxserver_connect_generation_is_current(
                         machine_id.as_str(),
@@ -331,25 +332,40 @@ impl GhostexGpuiApp {
                     }
                     // Slow is still connected: the sidebar, the chat and the terminal (which has
                     // its own SSH) keep agreeing that the machine is there (GitHub #361). After
-                    // a wake any unconfirmed tunnel is replaced at once, as before.
-                    let verdict = connection.liveness.record(&probe, answered_meanwhile);
-                    let dropped = match verdict {
-                        GpuiRemoteTunnelVerdict::Live => false,
-                        GpuiRemoteTunnelVerdict::Slow => wake_validation,
-                        GpuiRemoteTunnelVerdict::Dropped => true,
+                    // a wake a tunnel gets a second check before it is replaced
+                    // (CDXC:RemoteMachines 2026-11-10 in tunnel_liveness.rs).
+                    let verdict = if wake_validation {
+                        connection
+                            .liveness
+                            .record_after_wake(&probe, answered_meanwhile)
+                    } else {
+                        connection.liveness.record(&probe, answered_meanwhile)
                     };
-                    if dropped {
-                        let reason = match (verdict, &probe) {
-                            (GpuiRemoteTunnelVerdict::Slow, _) => {
+                    match verdict {
+                        GpuiRemoteTunnelVerdict::Live => {}
+                        GpuiRemoteTunnelVerdict::Slow => check_again_after_wake |= wake_validation,
+                        GpuiRemoteTunnelVerdict::Dropped => {
+                            let reason = if connection.liveness.dropped_after_wake() {
                                 GpuiRemoteLinkEnd::WakeUnconfirmed
-                            }
-                            (_, GpuiRemoteHealthProbe::NoAnswer) => {
+                            } else if matches!(probe, GpuiRemoteHealthProbe::NoAnswer) {
                                 GpuiRemoteLinkEnd::HealthUnanswered
-                            }
-                            _ => GpuiRemoteLinkEnd::HealthRefused,
-                        };
-                        failed_machine_ids.push((machine_id, reason));
+                            } else {
+                                GpuiRemoteLinkEnd::HealthRefused
+                            };
+                            failed_machine_ids.push((machine_id, reason));
+                        }
                     }
+                }
+                if check_again_after_wake {
+                    cx.spawn(async move |this, cx| {
+                        cx.background_executor()
+                            .timer(GPUI_REMOTE_GXSERVER_WAKE_RECHECK_DELAY)
+                            .await;
+                        let _ = this.update(cx, |this, cx| {
+                            this.validate_gpui_remote_gxserver_connections(true, cx);
+                        });
+                    })
+                    .detach();
                 }
                 for (machine_id, reason) in failed_machine_ids {
                     this.note_gpui_remote_link_ended(machine_id.as_str(), reason);

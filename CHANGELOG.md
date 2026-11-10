@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Waking your computer no longer drops a connection that only needed a moment:** after a wake, a computer whose connection did not answer the first check gets a second one two seconds later and is reconnected only if that fails too, so a link that outlived the sleep (most do over Tailscale and Easy Connect) carries on instead of reconnecting. A connection that is really gone is replaced within about half a minute of the wake.
+
 ## 11.3.0 - 2026-11-10
 
 **Ghostex 11.3.0 is out.** Ghostex asks for approval only when someone new wants in, pairing a phone takes one window, connections between your computers and phones stay up, coordinators keep work items with what needs you right above the chat box, each project gets a main coordinator, terminals draw pictures, Windows builds are signed, and a new iPhone app is on its way.

@@ -444,6 +444,9 @@ pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_HEALTHY_AFTER: Duratio
 // How long the stream waits to try again when it keeps ending on a tunnel that answers.
 pub(crate) const GPUI_REMOTE_GXSERVER_PRESENTATION_STREAM_RETRY_WHEN_HEALTHY: Duration =
     Duration::from_secs(30);
+// How long after a wake's check that did not confirm a tunnel the second one starts
+// (tunnel_liveness.rs).
+pub(crate) const GPUI_REMOTE_GXSERVER_WAKE_RECHECK_DELAY: Duration = Duration::from_secs(2);
 // How often the app looks for a tunnel whose SSH exited, between the watchdog's health checks.
 pub(crate) const GPUI_REMOTE_GXSERVER_TUNNEL_EXIT_CHECK_INTERVAL: Duration = Duration::from_secs(2);
 /*
