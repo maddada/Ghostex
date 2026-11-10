@@ -75,6 +75,7 @@ const ICON_CHEVRON: &str = "titlebar/chevron-down.svg";
 const ICON_HISTORY: &str = "titlebar/history.svg";
 const ICON_TRASH: &str = "titlebar/trash.svg";
 const ICON_FRESH: &str = "titlebar/refresh.svg";
+const ICON_PLAY: &str = "titlebar/player-play.svg";
 /// The remembered conversation's accent (the speaking violet).
 const MEMORY_ACCENT: u32 = 0xa78bfaff;
 
@@ -1763,7 +1764,7 @@ impl VoicePanelWindow {
                                 .gap(px(6.0))
                                 .child(self.button(
                                     "voice-panel-memory-continue",
-                                    ICON_HISTORY,
+                                    ICON_PLAY,
                                     Some("Continue"),
                                     PanelAction::ContinueMemory,
                                     colors,
