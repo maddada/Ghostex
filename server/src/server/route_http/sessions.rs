@@ -259,22 +259,46 @@ pub(super) async fn route_sessions_http(
                 of them reports an actual change.
                 */
                 let sessions = list_sessions(project_id.as_deref())?;
-                let mut sessions_changed = sync_session_state_sidecars(
-                    &state,
-                    db,
-                    repository,
-                    &sessions,
-                    "list-sessions",
-                )?;
-                sessions_changed |= sync_zmx_provider_existence(&state, db, repository, &sessions)?;
-                sessions_changed |= sync_live_zmx_process_identities(
-                    &state,
-                    db,
-                    repository,
-                    &sessions,
-                    None,
-                    "list-sessions",
-                )?;
+                /*
+                CDXC:StateSync 2026-11-10 WHY:
+                Phones re-ran `ghostex sessions --json --mobile-summary` several times a second,
+                and each run's listSessions ran the three passes (the zmx process scan, a parse of
+                the Codex hook file, a stat of every sidecar): about 400 of 3,605 busy samples of
+                gxserver. The passes only copy what agents and zmx report outside gxserver into the
+                rows, so they now run at most every 5 seconds, as the snapshot's do (2026-09-18
+                above): a session's reported state, process identity or missing zmx provider can
+                reach this list up to 5 seconds late. Every write gxserver makes itself (a CLI
+                action, a rename, a new session) is in the rows this reads, so a caller that
+                changes a session and then lists sees its change at once. A list without stopped
+                sessions shares the snapshot's gate; a list with them has its own, because only it
+                carries the title repair to stopped rows, and the snapshot would otherwise take
+                nearly every turn of a shared gate.
+                */
+                let passes_due = if include_stopped {
+                    full_session_list_sync_due()
+                } else {
+                    presentation_snapshot_sync_due()
+                };
+                let mut sessions_changed = false;
+                if passes_due {
+                    sessions_changed = sync_session_state_sidecars(
+                        &state,
+                        db,
+                        repository,
+                        &sessions,
+                        "list-sessions",
+                    )?;
+                    sessions_changed |=
+                        sync_zmx_provider_existence(&state, db, repository, &sessions)?;
+                    sessions_changed |= sync_live_zmx_process_identities(
+                        &state,
+                        db,
+                        repository,
+                        &sessions,
+                        None,
+                        "list-sessions",
+                    )?;
+                }
                 let sessions = if sessions_changed {
                     list_sessions(project_id.as_deref())?
                 } else {

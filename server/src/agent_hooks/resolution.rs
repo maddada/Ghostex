@@ -1,4 +1,9 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+    time::SystemTime,
+};
 
 use serde_json::Value;
 
@@ -33,14 +38,52 @@ pub(crate) fn is_codex_subagent_transcript(transcript_path: Option<&str>) -> boo
         .is_some_and(|meta| meta.is_subagent)
 }
 
+/// Each zmx surface's newest Codex hook identity from `codex-hook-sessions.json`, read again only
+/// when the file's modification time or size changes.
+///
+/// CDXC:AgentHooks 2026-11-10 WHY: the live zmx identity pass parsed the whole file (505 KB on the
+/// profiled Mac) on every run, 124 of 3,605 busy samples of gxserver; it changes only when a
+/// Codex hook fires, so its parsed identities are kept under its stamp.
 pub(crate) fn read_codex_hook_session_identities(
     paths: &GxserverPaths,
-) -> HashMap<String, CodexHookSessionIdentity> {
+) -> Arc<HashMap<String, CodexHookSessionIdentity>> {
+    type Stamp = (Option<SystemTime>, u64);
+    static MEMO: OnceLock<
+        Mutex<
+            Option<(
+                PathBuf,
+                Stamp,
+                Arc<HashMap<String, CodexHookSessionIdentity>>,
+            )>,
+        >,
+    > = OnceLock::new();
     let store_path = paths
         .app_state_dir
         .join("agent-hooks")
         .join("codex-hook-sessions.json");
-    let data = read_json_object(&read_file_text(&store_path));
+    let stamp = std::fs::metadata(&store_path)
+        .ok()
+        .map(|meta| (meta.modified().ok(), meta.len()));
+    let memo = MEMO.get_or_init(Default::default);
+    if let (Some(stamp), Ok(memo)) = (stamp, memo.lock()) {
+        if let Some((_, _, identities)) = memo
+            .as_ref()
+            .filter(|(path, known, _)| *path == store_path && *known == stamp)
+        {
+            return identities.clone();
+        }
+    }
+    let identities = Arc::new(parse_codex_hook_session_identities(&store_path));
+    if let (Some(stamp), Ok(mut memo)) = (stamp, memo.lock()) {
+        *memo = Some((store_path, stamp, identities.clone()));
+    }
+    identities
+}
+
+fn parse_codex_hook_session_identities(
+    store_path: &std::path::Path,
+) -> HashMap<String, CodexHookSessionIdentity> {
+    let data = read_json_object(&read_file_text(store_path));
     let Some(sessions) = data.get("sessions").and_then(Value::as_object) else {
         return HashMap::new();
     };

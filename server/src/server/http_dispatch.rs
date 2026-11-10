@@ -80,10 +80,22 @@ pub(super) async fn handle_http_request(
     Ok(routed.response)
 }
 
-/// True at most once per five seconds across every snapshot read.
+/// True at most once per five seconds across every snapshot read and every `/api/listSessions`
+/// that leaves out stopped sessions.
 pub(super) fn presentation_snapshot_sync_due() -> bool {
     static LAST_SYNC: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
-    let Ok(mut last) = LAST_SYNC.lock() else {
+    sync_due(&LAST_SYNC)
+}
+
+/// True at most once per five seconds across every `/api/listSessions` that includes stopped
+/// sessions, whose title repair also reaches stopped rows that no snapshot lists.
+pub(super) fn full_session_list_sync_due() -> bool {
+    static LAST_SYNC: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+    sync_due(&LAST_SYNC)
+}
+
+fn sync_due(last_sync: &std::sync::Mutex<Option<std::time::Instant>>) -> bool {
+    let Ok(mut last) = last_sync.lock() else {
         return true;
     };
     let now = std::time::Instant::now();
