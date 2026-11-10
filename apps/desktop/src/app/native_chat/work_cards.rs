@@ -1530,21 +1530,77 @@ impl NativeChatView {
             return column.into_any_element();
         }
         column
+            .child(self.show_more_pill(&format!("more:{id}"), more_key, whole, line_height, p, cx))
+            .into_any_element()
+    }
+
+    /// The control under a cut description or question: "Show more" with a down chevron, "Show
+    /// less" with an up one once open, as the chat's own expander says it (thinking.rs
+    /// `show_more_toggle`), but centred and drawn as a small pill in the quiet glass tones, so it
+    /// reads as a control and not as a word of the text. It sits one line under the last whole
+    /// line, in a line of its own (`line_height`).
+    ///
+    /// CDXC:Coordinators 2026-11-11 DECISION:
+    /// User, of the plain "more" under a description: "also please make more appear centered
+    /// and with better design to indicate that it's not part of the text? right now too bland i
+    /// think". The same pill in the dock row, the Work panel card and the Columns card.
+    pub(super) fn show_more_pill(
+        &self,
+        id: &str,
+        key: String,
+        open: bool,
+        line_height: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        div()
+            .w_full()
+            .min_h(px(line_height * s))
+            .pt(px(4.0 * s))
+            .flex()
+            .items_center()
+            .justify_center()
             .child(
                 div()
-                    .id(gpui::SharedString::from(format!("more:{id}")))
+                    .id(gpui::SharedString::from(id.to_string()))
                     .role(gpui::Role::Button)
-                    .aria_expanded(whole)
-                    .text_size(px(size * s))
-                    .line_height(px(line_height * s))
+                    .aria_expanded(open)
+                    .aria_label(if open { "Show less" } else { "Show more" })
+                    .h(px(20.0 * s))
+                    .px(px(9.0 * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(4.0 * s))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(p.foreground.opacity(0.08))
+                    .bg(p.foreground.opacity(0.05))
+                    .text_size(px(12.0 * s))
+                    .line_height(px(16.0 * s))
                     .text_color(p.muted)
                     .chat_cursor_pointer()
-                    .hover(|style| style.text_color(p.foreground))
-                    .child(if whole { "less" } else { "more" })
+                    .hover(|style| {
+                        style
+                            .bg(p.foreground.opacity(0.09))
+                            .text_color(p.foreground)
+                    })
+                    .child(
+                        svg()
+                            .path(if open {
+                                "titlebar/chevron-up.svg"
+                            } else {
+                                "titlebar/chevron-down.svg"
+                            })
+                            .size(px(12.0 * s))
+                            .flex_shrink_0()
+                            .text_color(p.muted),
+                    )
+                    .child(if open { "Show less" } else { "Show more" })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
-                        if !this.expanded.remove(&more_key) {
-                            this.expanded.insert(more_key.clone());
+                        if !this.expanded.remove(&key) {
+                            this.expanded.insert(key.clone());
                         }
                         cx.notify();
                     })),
@@ -1597,25 +1653,7 @@ impl NativeChatView {
             .flex()
             .flex_col()
             .child(text_block)
-            .child(
-                div()
-                    .id(gpui::SharedString::from(format!("more:{id}")))
-                    .role(gpui::Role::Button)
-                    .aria_expanded(whole)
-                    .text_size(px(size * s))
-                    .line_height(px(line_height * s))
-                    .text_color(p.muted)
-                    .chat_cursor_pointer()
-                    .hover(|style| style.text_color(p.foreground))
-                    .child(if whole { "less" } else { "more" })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        if !this.expanded.remove(&more_key) {
-                            this.expanded.insert(more_key.clone());
-                        }
-                        cx.notify();
-                    })),
-            )
+            .child(self.show_more_pill(&format!("more:{id}"), more_key, whole, line_height, p, cx))
             .into_any_element()
     }
 
