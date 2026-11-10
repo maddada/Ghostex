@@ -182,6 +182,7 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
 mod tests {
     use super::super::builtin::{current_block, with_current_block, BUILTIN_END, BUILTIN_START};
     use super::super::kit::KIT_SCRIPT;
+    use super::super::prepare::PAGE_CONTENT_SECURITY_POLICY;
     use super::*;
 
     #[test]
@@ -209,7 +210,7 @@ mod tests {
         let page = format!(
             "<!doctype html><html><head>{BUILTIN_START}<style>old</style>{BUILTIN_END}<title>t</title></head><body></body></html>"
         );
-        let served = with_current_block(page);
+        let served = with_current_block(page, PAGE_CONTENT_SECURITY_POLICY);
         assert!(served.contains(FIT_STYLE) && served.contains(FIT_SCRIPT));
         assert!(!served.contains("<style>old</style>"));
     }

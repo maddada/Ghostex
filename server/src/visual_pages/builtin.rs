@@ -21,8 +21,14 @@ const VIEWPORT_META: &str =
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
 const POLICY_META_START: &str = "<meta http-equiv=\"Content-Security-Policy\" content=\"";
 
-/// Today's built-in block, marked so it can be swapped exactly.
+/// Today's built-in block as a page is published with it, marked so it can be swapped exactly.
 pub(super) fn current_block() -> String {
+    block_with_policy(PAGE_CONTENT_SECURITY_POLICY)
+}
+
+/// Today's built-in block with `policy` in its policy tag: the published one, or the one `serve`
+/// names the page's own address in (serve.rs `served_policy`).
+fn block_with_policy(policy: &str) -> String {
     let mut block = String::with_capacity(
         THEME_STYLE.len()
             + PAGE_API.len()
@@ -34,7 +40,7 @@ pub(super) fn current_block() -> String {
     );
     block.push_str(BUILTIN_START);
     block.push_str(POLICY_META_START);
-    block.push_str(PAGE_CONTENT_SECURITY_POLICY);
+    block.push_str(policy);
     block.push_str("\">");
     block.push_str(THEME_STYLE);
     block.push_str(PAGE_BOOTSTRAP);
@@ -53,14 +59,14 @@ pub(super) fn current_block() -> String {
 /// CDXC:SessionChat 2026-10-26 DECISION:
 /// User, asked whether pages that are already published should get Ghostex's newest built-in page script whenever they're opened instead of the one they were published with: "Yes, always use the newest script". A page published before a fix (the phone's Send that said "Failed to fetch" and the drafts that stopped landing, theme.rs) kept the broken script because `prepare` writes the block into the stored file, so the block is swapped here on every serve and the stored file is never rewritten.
 /// CDXC:SessionChat 2026-10-26 WHY:
-/// Only the block `prepare` wrote is replaced, found where `prepare` put it (right after the document's prologue, past the charset and viewport tags it may have added) and never by a search through the page, so the page's own content and scripts are left as they are. A page published since this change has the block between `BUILTIN_START` and `BUILTIN_END`. Older pages have one of four layouts, each a prefix of today's (policy and theme; then the bootstrap; then the page API and its state marker; then the kit's style and script), recognised part by part by openings that never changed: the policy tag, `<style id="ghostex-theme">`, the bootstrap's `var d=document.documentElement;`, the page API's `var st=null` followed by the state marker, `<style id="ghostex-kit">` followed by the kit's script. A built-in style or script never holds `</style>` or `</script>`, so each part ends at the first one. The policy tag is swapped too, because pages published before 2026-10-11 lack the `connect-src 'self'` today's script posts its drafts and answers through. A page whose start matches none of this is served as it was stored.
-pub(super) fn with_current_block(html: String) -> String {
+/// Only the block `prepare` wrote is replaced, found where `prepare` put it (right after the document's prologue, past the charset and viewport tags it may have added) and never by a search through the page, so the page's own content and scripts are left as they are. A page published since this change has the block between `BUILTIN_START` and `BUILTIN_END`. Older pages have one of four layouts, each a prefix of today's (policy and theme; then the bootstrap; then the page API and its state marker; then the kit's style and script), recognised part by part by openings that never changed: the policy tag, `<style id="ghostex-theme">`, the bootstrap's `var d=document.documentElement;`, the page API's `var st=null` followed by the state marker, `<style id="ghostex-kit">` followed by the kit's script. A built-in style or script never holds `</style>` or `</script>`, so each part ends at the first one. The policy tag is swapped too, for the `policy` the caller serves the page under: pages published before 2026-10-11 have no `connect-src` their page may post its drafts and answers through, and every stored page says `'self'` there, which names no address in WebKit (serve.rs `served_policy`). A page whose start matches none of this is served as it was stored.
+pub(super) fn with_current_block(html: String, policy: &str) -> String {
     let Some(range) = published_block(&html) else {
         return html;
     };
     let mut out = String::with_capacity(html.len() + 64 * 1024);
     out.push_str(&html[..range.start]);
-    out.push_str(&current_block());
+    out.push_str(&block_with_policy(policy));
     out.push_str(&html[range.end..]);
     out
 }
