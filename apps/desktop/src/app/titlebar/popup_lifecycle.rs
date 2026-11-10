@@ -145,7 +145,11 @@ impl GhostexGpuiApp {
             is_minimizable: false,
             titlebar: None,
             // Under window glass the dropdown blurs what is behind it, rounded to its 8px panel.
-            window_background: if window_glass_active() {
+            // The usage panel opens without its glass and turns it on as it fades in, once it has
+            // fitted itself to its content (`reveal_popup_window` in account_usage/panel.rs).
+            window_background: if window_glass_active()
+                && !matches!(kind, GpuiTitlebarPopupKind::AccountUsage(_))
+            {
                 WindowBackgroundAppearance::Blurred
             } else {
                 WindowBackgroundAppearance::Transparent
@@ -168,11 +172,7 @@ impl GhostexGpuiApp {
                 ));
                 apply_frosted_menu_blur(popup_window);
                 prepare_gpui_titlebar_popup_window_chrome(popup_window);
-                // The usage panel fades in once it has fitted itself to its content
-                // (CDXC:AgentProviders 2026-11-11 in account_usage/panel.rs).
-                if matches!(kind, GpuiTitlebarPopupKind::AccountUsage(_)) {
-                    crate::app::window::popup_frame::hide_popup_window(popup_window);
-                } else if matches!(kind, GpuiTitlebarPopupKind::Notifications) {
+                if matches!(kind, GpuiTitlebarPopupKind::Notifications) {
                     crate::app::window::popup_frame::fade_in_popup_window(
                         popup_window,
                         cx.reduce_motion(),

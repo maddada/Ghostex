@@ -225,19 +225,6 @@ void GhostexGpuiSetChildWindowContentFrame(void *childNativeView,
 
 // Fades a just-opened popup window in, its backdrop blur and shadow with it. Runs before the window's
 // first flush, so it never shows at full alpha first.
-// Keeps a just-opened popup window invisible until it has its final size and place.
-void GhostexGpuiHidePopupWindow(void *nativeView) {
-  @autoreleasepool {
-    if (nativeView == NULL) {
-      return;
-    }
-    NSWindow *window = ((__bridge NSView *)nativeView).window;
-    if (window != nil) {
-      window.alphaValue = 0.0;
-    }
-  }
-}
-
 void GhostexGpuiFadeInPopupWindow(void *nativeView, double seconds) {
   @autoreleasepool {
     if (nativeView == NULL) {

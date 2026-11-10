@@ -517,7 +517,7 @@ impl AccountUsagePanel {
     /// once it has its first measured size.
     ///
     /// CDXC:AgentProviders 2026-11-11 DECISION:
-    /// User: opening a usage popup is "also jerky. wish it would fade in smoother please and not adjust size after appearing". The popup opens invisible at its estimated size; once its content is laid out and the window moved to the measured size, it fades in on the next frame, so it is never seen at one size and then another.
+    /// User: opening a usage popup is "also jerky. wish it would fade in smoother please and not adjust size after appearing". The popup opens drawn transparent, without glass, at its estimated size; once its content is laid out and the window moved to the measured size, it fades in on the next frame, so it is never seen at one size and then another.
     fn fit(&mut self, height: f32, window: &mut Window, cx: &mut gpui::Context<Self>) {
         let id = self.id;
         let _ = self.main_app.update(cx, |app, cx| {
@@ -532,7 +532,7 @@ impl AccountUsagePanel {
                 panel.revealed = true;
                 cx.notify();
                 window.on_next_frame(|window, cx| {
-                    crate::app::window::popup_frame::fade_in_popup_window(
+                    crate::app::window::popup_frame::reveal_popup_window(
                         window,
                         cx.reduce_motion(),
                     );
