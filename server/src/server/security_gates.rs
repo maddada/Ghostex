@@ -42,6 +42,9 @@ pub(crate) fn gate(
                     "This chat takes messages from an app through the GBot API, so only you, from Ghostex on your computer or phone, answer what it waits on or send it anything.",
                 ));
             }
+            if let Some(message) = relayed_card_refusal(caller, endpoint_path, &params) {
+                return Some(forbidden(endpoint_path, request_id, message));
+            }
         }
     }
     // Guests and extensions keep their own endpoint allow-lists, checked at the auth gate; agents
@@ -138,6 +141,50 @@ fn api_chat_refused(
             false
         }
         _ => crate::gbots::is_api_chat_session(state, project_id, session_id),
+    }
+}
+
+/*
+CDXC:Coordinators 2026-11-11 DECISION:
+User (Q2272, on GitHub PR #548): gxserver itself refuses an agent that answers a thread's approval card relayed to its coordinator's chat. Until now only the CLI refused it (`refuse_relayed_answer`, and the `agentCaller` mark `coordinators::refuse_agent_answer` reads), so a raw HTTP call or `send-key`/`send-text` into the thread's terminal answered the card around it. The caller decides here, not a mark in the body: your own computer (its owner session, or the token file the desktop app, the GPUI web build and your own terminal use) and your paired phones pass, so your click on the card, in the thread or in the coordinator's chat, still answers it. An agent's session token, another computer's agents, extensions and Collab guests are refused: a relayed answer (`relayedFrom`) always, and while the thread's card waits on you, an approval answer to that thread and any typing or Enter into its terminal. Escape and Ctrl-C still go through (coordinators stop stuck threads that way; they cancel, they never approve). The token file stays allowed because it is how the user's own tools call; an agent that reads that file directly instead of using its session token is the one way left, as for every other owner route.
+SEE-ALSO: server/src/coordinators/relay.rs (`thread_card_waits_on_user`), server/src/ghostex_cli/rpc.rs (`refuse_relayed_answer`), server/src/session_chat_send/answer_http.rs.
+*/
+const RELAYED_CARD_ONLY_YOU: &str = "Only the user can answer this thread's approval: it is waiting on its card in the coordinator's chat. Tell the user it is there; never answer it for them.";
+
+/// Why this caller may not answer, type or press Enter for a thread whose approval card was
+/// relayed to its coordinator's chat, or `None`.
+fn relayed_card_refusal(
+    caller: &Principal,
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+) -> Option<&'static str> {
+    if caller.is_owner_device() {
+        return None;
+    }
+    let session_id = text(params, "sessionId").unwrap_or_default();
+    let project_id = text(params, "projectId").unwrap_or_default();
+    match endpoint_path {
+        "/api/answerSessionChatPrompt" => {
+            if params.contains_key("relayedFrom") {
+                return Some(RELAYED_CARD_ONLY_YOU);
+            }
+            let kind = text(params, "kind").unwrap_or_default();
+            (crate::coordinators::is_relayed_answer_kind(kind)
+                && crate::coordinators::thread_card_waits_on_user(project_id, session_id))
+            .then_some(RELAYED_CARD_ONLY_YOU)
+        }
+        "/api/sendSessionText" | "/api/sendSessionEnter" | "/api/sendSessionMessage" => {
+            let typed = params
+                .get("text")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if endpoint_path == "/api/sendSessionText" && is_interrupt(typed) {
+                return None;
+            }
+            crate::coordinators::thread_card_waits_on_user(project_id, session_id)
+                .then_some(RELAYED_CARD_ONLY_YOU)
+        }
+        _ => None,
     }
 }
 

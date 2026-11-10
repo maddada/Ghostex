@@ -84,6 +84,11 @@ list requests, answer or read a secret, enroll an owner key, get a pairing code 
 connection details with an empty code), or ask to pair over SSH (`/api/pairOverSsh` takes only the
 token file); a request is never approved by the caller that asked (`ApprovalStore::approve_plain`).
 A GBot API chat takes input only from you (`api_chat_refused`): its text comes from outside Ghostex.
+A thread's approval card relayed to its coordinator's chat is answered only by you
+(`relayed_card_refusal`): gxserver refuses a relayed answer (`relayedFrom`) from anyone but your
+own computer and phones, and while the card waits, an approval answer to that thread and any typing
+or Enter into its terminal from an agent's session token, another computer's agents, extensions or
+guests. Escape and Ctrl-C still pass (they cancel; coordinators stop stuck threads that way).
 
 ### Chief's head role
 
