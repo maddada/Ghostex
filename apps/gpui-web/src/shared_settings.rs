@@ -49,6 +49,8 @@ struct PageSettings {
     /// What this page set on its own (`?settings=`, a zoom chord, a folded links group): the page
     /// cannot save Settings, so these stay on top of every later read until the page reloads.
     page: Map<String, Value>,
+    /// The number of the last read of gxserver's settings started.
+    latest_read: u64,
 }
 
 thread_local! {
@@ -72,7 +74,10 @@ pub fn install(object: Map<String, Value>) {
     CURRENT.with(|current| {
         let mut current = current.borrow_mut();
         for (key, value) in object {
-            if current.saved.get(&key) != Some(&value) {
+            if current.saved.get(&key) == Some(&value) {
+                // Back to the saved value: the saved one leads again, later changes included.
+                current.page.remove(&key);
+            } else {
                 current.page.insert(key, value);
             }
         }
@@ -80,11 +85,25 @@ pub fn install(object: Map<String, Value>) {
     });
 }
 
-/// Installs the settings gxserver read from this computer's settings file. `false` when they are
-/// what the page already had.
-pub fn install_saved(saved: Map<String, Value>) -> bool {
+/// Starts a read of gxserver's settings and returns its number for [`install_saved`], which
+/// drops an answer when a later read was started: an older answer that arrives last never
+/// replaces a newer one.
+pub fn begin_saved_read() -> u64 {
     CURRENT.with(|current| {
         let mut current = current.borrow_mut();
+        current.latest_read += 1;
+        current.latest_read
+    })
+}
+
+/// Installs the settings gxserver read from this computer's settings file. `false` when they are
+/// what the page already had, or a later read was started ([`begin_saved_read`]).
+pub fn install_saved(read: u64, saved: Map<String, Value>) -> bool {
+    CURRENT.with(|current| {
+        let mut current = current.borrow_mut();
+        if read != current.latest_read {
+            return false;
+        }
         if current.saved == saved && current.snapshot.revision > 0 {
             return false;
         }

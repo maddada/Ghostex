@@ -12,20 +12,22 @@ pub(super) const SHARED_SETTINGS_CHANGED_FRAME: &str = "\"type\":\"sharedSetting
 
 impl GhostexGpuiApp {
     pub(super) fn gx_store_read_shared_settings(&mut self, cx: &mut gpui::Context<Self>) {
+        let read = crate::shared_settings::begin_saved_read();
         cx.spawn(async move |app, cx| {
             let settings = match super::gx_rpc(None, READ_SHARED_SETTINGS_PATH, json!({})).await {
                 Ok(result) => match result.get("settings") {
                     Some(Value::Object(settings)) => settings.clone(),
                     _ => Map::new(),
                 },
-                // An older gxserver has no settings read: the page keeps its defaults.
+                // An older gxserver has no settings read, or the file could not be read: the page keeps
+                // the settings it has.
                 Err(error) => {
                     log::warn!("could not read the settings: {}", error.message);
                     return;
                 }
             };
             let _ = app.update(cx, |app, cx| {
-                if crate::shared_settings::install_saved(settings) {
+                if crate::shared_settings::install_saved(read, settings) {
                     app.web_shared_settings_changed(cx);
                 }
             });

@@ -37,22 +37,37 @@ pub(crate) fn read_shared_settings_in(app_config_dir: &Path) -> Option<Value> {
 }
 
 fn read(app_config_dir: &Path, log_paths: impl FnOnce() -> GxserverPaths) -> Option<Value> {
+    read_checked(app_config_dir, log_paths).unwrap_or(None)
+}
+
+/// [`read_shared_settings`] that tells a refused read (`Err`) from a missing file (`Ok(None)`),
+/// for a reader that must keep what it had rather than fall back to the defaults.
+pub(crate) fn read_shared_settings_checked(
+    paths: &GxserverPaths,
+) -> Result<Option<Value>, std::io::Error> {
+    read_checked(&paths.app_config_dir, || paths.clone())
+}
+
+fn read_checked(
+    app_config_dir: &Path,
+    log_paths: impl FnOnce() -> GxserverPaths,
+) -> Result<Option<Value>, std::io::Error> {
     match ghostex_paths::settings_file::read(&app_config_dir.join(SETTINGS_FILE_NAME)) {
         Ok(read) => {
             if !read.problems.is_empty() {
                 log_problems(&log_paths(), &read.problems);
             }
-            read.object.map(|mut object| {
+            Ok(read.object.map(|mut object| {
                 // Enable Experimental Features is one switch each now; until the app saves that
                 // (or a gxserver-owned file is saved), every read sees the switches it had
                 // (CDXC:Extensions 2026-11-09 in the settings catalog).
                 ghostex_settings_catalog::migrate_experimental_features_switch(&mut object);
                 Value::Object(object)
-            })
+            }))
         }
         Err(error) => {
             log_refused_read(log_paths, &error);
-            None
+            Err(error)
         }
     }
 }
