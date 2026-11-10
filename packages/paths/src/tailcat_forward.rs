@@ -6,7 +6,7 @@
 //!
 //! CDXC:RemotePairing 2026-11-10 WHY:
 //! A user reported "a lot of reconnects" between app and remote. Measured with tailcat v0.6.0: when the far computer's `tailcat serve` starts again (its gxserver restarted or updated, a pairing code was shown, a key was added to its allow-list), a client that was connected never comes back by itself. The new server process does not know it, the client never says hello again, and its connections, old and new, hang without closing (2.5 minutes watched; a fresh client connected in 1.6 s). The desktop came back only after SSH's own keepalive gave up (45 s), the watchdog's next look (up to 15 s) and a whole reconnect; gxserver's tunnels never did. The link now notices on its own: bytes sent with nothing coming back for [`SUSPECT_AFTER`] make it open one connection of its own through the client ([`ForwardProbe`]), and when that hears nothing either the client is started again, with the reason in a [`ForwardEvent`]. A client that works is never restarted: any byte from the far side clears the suspicion, on whichever connection it arrives.
-//! A network that is down looks the same from inside the client (nothing comes back), and there a restart would only cut connections that resume by themselves when it returns, as they always did. So before a quiet client is replaced the link looks for the address's relay ([`relay_hosts`]): when the relay cannot be reached either, the network is the problem and the client is left alone.
+//! A network that is down looks the same from inside the client (nothing comes back), and there a restart would only cut connections that resume by themselves when it returns, as they always did. So before a quiet client is replaced the link asks whether this computer has a way to the address's relay at all ([`relay_hosts`], `network_is_down`): when it has none, the network is the problem and the client is left alone.
 //! This replaces the desktop's earlier rule (a fresh connection that heard nothing for 20 s restarted the client), which could end every working connection of a machine because one new connection was slow.
 
 use std::{
@@ -582,31 +582,31 @@ fn client_carries_nothing(
     }
 }
 
-/// How long one look for a relay may take, name lookup included.
+/// How long the look for a way to the relay may take: it is the name lookup, which has no timeout
+/// of its own.
 const RELAY_CHECK_TIMEOUT: Duration = Duration::from_secs(4);
 
-/// Whether none of `relays` accepts a connection: this computer's network is down (or the relay
-/// is, which leaves a new client as stuck as the old one). `false` when the address names no relay.
+/*
+CDXC:RemotePairing 2026-11-10 WHY:
+The first version of this look opened a TCP connection to the relay's port 443. On 2026-11-10 Ghostex's relay was crash-looping because its accept-rate limit was exceeded by reconnecting clients, and a connection per quiet link, sent by every client at the moment a relay fails, is exactly what such a relay cannot take. The look therefore sends the relay nothing: it resolves the relay's name and asks the system for a route to it (connecting a UDP socket sends no packet). No answer to the name lookup or no route means this computer is offline.
+*/
+/// Whether this computer has no way to any of `relays`: their names do not resolve, or the system
+/// has no route to them. `false` when the address names no relay.
 fn network_is_down(relays: &[String]) -> bool {
     if relays.is_empty() {
         return false;
     }
-    // The name lookup has no timeout of its own, so it runs on a thread that is left behind when
-    // it takes too long.
     let (tx, rx) = std::sync::mpsc::channel();
     for relay in relays.iter().cloned() {
         let tx = tx.clone();
+        // On a thread that is left behind when the lookup takes too long.
         thread::spawn(move || {
             use std::net::ToSocketAddrs;
-            let reachable = (relay.as_str(), 443)
+            let routed = (relay.as_str(), 443)
                 .to_socket_addrs()
-                .map(|addresses| {
-                    addresses.take(4).any(|address| {
-                        TcpStream::connect_timeout(&address, Duration::from_secs(3)).is_ok()
-                    })
-                })
+                .map(|addresses| addresses.take(4).any(|address| has_route_to(&address)))
                 .unwrap_or(false);
-            let _ = tx.send(reachable);
+            let _ = tx.send(routed);
         });
     }
     drop(tx);
@@ -620,6 +620,16 @@ fn network_is_down(relays: &[String]) -> bool {
             Err(_) => return true,
         }
     }
+}
+
+/// Whether the system would send a packet to `address` somewhere. Sends none.
+fn has_route_to(address: &std::net::SocketAddr) -> bool {
+    let local = if address.is_ipv4() {
+        "0.0.0.0:0"
+    } else {
+        "[::]:0"
+    };
+    std::net::UdpSocket::bind(local).is_ok_and(|socket| socket.connect(address).is_ok())
 }
 
 /// The relay host names in `address_blob`, as `tailcat parse` prints them (`Region[].Nodes[].HostName`);
