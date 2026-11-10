@@ -1122,7 +1122,9 @@ mod verified_daemon_tests {
     #[test]
     fn a_zmx_run_command_names_its_session() {
         assert_eq!(
-            zmx_run_session_name("/Applications/Ghostex.app/Contents/MacOS/zmx run S1b-P1-G1 --foreground"),
+            zmx_run_session_name(
+                "/Applications/Ghostex.app/Contents/MacOS/zmx run S1b-P1-G1 --foreground"
+            ),
             Some("S1b-P1-G1")
         );
         assert_eq!(zmx_run_session_name("zmx run S1b-P1-G1"), Some("S1b-P1-G1"));
@@ -1152,7 +1154,11 @@ mod verified_daemon_tests {
 
     /// A long-running process whose command line reads `<folder>/zmx run <name>`: a copy of
     /// `yes`, which takes any arguments and runs until it is ended.
-    fn fake_daemon(folder: &std::path::Path, name: &str, token_file: Option<&std::path::Path>) -> Child {
+    fn fake_daemon(
+        folder: &std::path::Path,
+        name: &str,
+        token_file: Option<&std::path::Path>,
+    ) -> Child {
         let zmx = folder.join("zmx");
         if !zmx.exists() {
             fs::copy("/usr/bin/yes", &zmx).unwrap();
@@ -1227,25 +1233,37 @@ mod verified_daemon_tests {
         // Another session's name is not this process.
         assert!(matches!(
             zmx_daemon_ownership(pid, "S1b-P1-G2", &own),
-            ZmxDaemonOwnership::Kept { reason: "processChanged", .. }
+            ZmxDaemonOwnership::Kept {
+                reason: "processChanged",
+                ..
+            }
         ));
         // Another server's token file.
         assert!(matches!(
             zmx_daemon_ownership(pid, "S1b-P1-G1", &other),
-            ZmxDaemonOwnership::Kept { reason: "otherServer", .. }
+            ZmxDaemonOwnership::Kept {
+                reason: "otherServer",
+                ..
+            }
         ));
         end(ours);
         // Gone: neither its start time nor its ownership can be read any more.
         assert!(!is_same_zmx_process(pid, started));
         assert!(matches!(
             zmx_daemon_ownership(pid, "S1b-P1-G1", &own),
-            ZmxDaemonOwnership::Kept { reason: "processChanged", .. }
+            ZmxDaemonOwnership::Kept {
+                reason: "processChanged",
+                ..
+            }
         ));
 
         let unmarked = fake_daemon(folder.path(), "S1b-P1-G3", None);
         assert!(matches!(
             zmx_daemon_ownership(i64::from(unmarked.id()), "S1b-P1-G3", &own),
-            ZmxDaemonOwnership::Kept { reason: "noTokenVariable", .. }
+            ZmxDaemonOwnership::Kept {
+                reason: "noTokenVariable",
+                ..
+            }
         ));
         end(unmarked);
     }
@@ -1266,7 +1284,8 @@ mod verified_daemon_tests {
         let mut live = fake_daemon(folder.path(), "S1b-P1-G4", Some(&own));
         let pid = i64::from(live.id());
         let (exited_tx, exited) = std::sync::mpsc::channel();
-        let ZmxDaemonOwnership::Ours { started } = zmx_daemon_ownership(pid, "S1b-P1-G4", &own) else {
+        let ZmxDaemonOwnership::Ours { started } = zmx_daemon_ownership(pid, "S1b-P1-G4", &own)
+        else {
             panic!("the fake daemon should be ours");
         };
         // A record of the same pid with another start time stands for a reused pid: not signalled.
@@ -1279,7 +1298,10 @@ mod verified_daemon_tests {
             terminate_verified_zmx_session_daemons(std::slice::from_ref(&reused)),
             vec![Ok("exited".to_string())]
         );
-        assert!(live.try_wait().unwrap().is_none(), "a reused pid must not be signalled");
+        assert!(
+            live.try_wait().unwrap().is_none(),
+            "a reused pid must not be signalled"
+        );
         // A real daemon is no child of gxserver, so it is reaped the moment it ends; this one is
         // the test's own, so it is reaped beside the signals (a zombie keeps its start time).
         std::thread::spawn(move || {
