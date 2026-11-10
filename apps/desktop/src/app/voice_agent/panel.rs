@@ -1749,16 +1749,7 @@ impl VoicePanelWindow {
                                         .when(!ago.is_empty(), |this| {
                                             this.child(format!("· {ago}"))
                                         }),
-                                )
-                                .child(self.button(
-                                    "voice-panel-memory-forget",
-                                    ICON_TRASH,
-                                    None,
-                                    PanelAction::ForgetMemory,
-                                    colors,
-                                    false,
-                                    cx,
-                                )),
+                                ),
                         )
                         .child(
                             div()
