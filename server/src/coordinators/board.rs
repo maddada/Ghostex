@@ -823,12 +823,13 @@ pub fn handle_board_request(
                 "tag": params.get("tag"),
             }))?,
             // A work ask snoozed or cancelled from its card (work.rs).
-            "snooze" | "cancel" => {
+            "snooze" | "cancel" | "reply" => {
                 let changed = work(json!({
                     "op": op,
                     "item": name,
                     "ask": params.get("ask"),
                     "hours": params.get("hours"),
+                    "answer": params.get("answer"),
                 }))?;
                 return Ok((json!({ "item": format!("B{number}"), "work": changed }), true));
             }

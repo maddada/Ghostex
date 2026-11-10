@@ -670,7 +670,9 @@ fn ask_value(ask: &WorkAsk) -> Value {
     }
     // A snooze still running; one that has ended reads as if there was none.
     if let Some((until, at)) = ask.snoozed_until.as_deref().and_then(|until| {
-        let at = DateTime::parse_from_rfc3339(until).ok()?.with_timezone(&Local);
+        let at = DateTime::parse_from_rfc3339(until)
+            .ok()?
+            .with_timezone(&Local);
         (at.with_timezone(&Utc) > Utc::now()).then_some((until, at))
     }) {
         out["snoozedUntil"] = json!(until);
@@ -1294,6 +1296,30 @@ pub fn handle_work_request(
         // cancel it". A snoozed ask leaves the dock and the Needs you count until its end and comes
         // back by itself (`snoozedUntil` is read against the clock); the Work panel keeps it under
         // a quiet "Snoozed until".
+        // The user's own words for an open ask (the dock's Reply): recorded once as its answer,
+        // whatever answers it offers; the client then tells the coordinator "W7 Q12: words".
+        //
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User: "whenever u send me a question card (needs you) ALWAYS have a button i can click to
+        // reply to the question with my own text", then "WE MUST HAVE REPLY BUTTON FOR NEEDS YOU
+        // STUFF".
+        "reply" => {
+            let given = param_text(params, "answer").ok_or_else(|| bad("Say the reply."))?;
+            let tag = param_text(params, "ask").and_then(|tag| question_tag(&tag));
+            let ask = item
+                .asks
+                .iter_mut()
+                .find(|ask| tag.as_ref().is_none_or(|tag| ask.tag == *tag))
+                .ok_or_else(|| bad(format!("{name} has no ask{}.", tag.as_ref().map(|tag| format!(" {tag}")).unwrap_or_default())))?;
+            if !ask.is_open() {
+                return Err(bad(format!("{name} was already answered: {}.", if ask.answered.is_empty() { "withdrawn" } else { ask.answered.as_str() })));
+            }
+            ask.answered = given.chars().take(2_000).collect();
+            ask.settled_at = Some(now.clone());
+            let words = format!("{}: {}", ask.tag, ask.answered.chars().take(120).collect::<String>());
+            item.record("answer", words, &now);
+            finish_if_only_asking(&mut item, &now);
+        }
         "snooze" | "cancel" => {
             let tag = param_text(params, "ask").and_then(|tag| question_tag(&tag));
             let ask = item
@@ -1305,7 +1331,7 @@ pub fn handle_work_request(
             if op == "cancel" {
                 ask.settled_at = Some(now.clone());
                 ask.withdrawn = true;
-                let words = format!("{} cancelled by the user", ask.tag);
+                let words = format!("{} dismissed by the user", ask.tag);
                 item.record("settle", words.trim().to_string(), &now);
                 finish_if_only_asking(&mut item, &now);
             } else {

@@ -25,7 +25,7 @@ use gpui::{
     AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div, px, svg,
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// A status's glyph and colour, the board's (coordinator_board.rs `group_look`), so a card reads as
 /// its row in the Work panel does.
@@ -44,7 +44,7 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
 
 /// A chip's glyph by what it says.
 /// The dock's cards stop growing here (unscaled) and scroll inside it.
-const DOCK_MAX_HEIGHT: f32 = 420.0;
+const DOCK_MAX_HEIGHT: f32 = 360.0;
 /// The dock's cards fold by themselves while the draft is longer than this.
 const DOCK_FOLDS_PAST_CHARS: usize = 280;
 
@@ -167,124 +167,373 @@ impl NativeChatView {
             .collect()
     }
 
-    /// The dock above a chat box (gx-chat-core work_cards.rs `dock`, which holds the user's
-    /// decisions): every open ask, unanswered form or page, blocked line of work and what the latest
-    /// turn finished, as cards in a stack capped at `DOCK_MAX_HEIGHT` with its own scroll; nothing
-    /// when there are none. The counts are the Work pill's. The cards step aside while a long
-    /// message is typed, and while the Work panel is docked beside the chat (it lists the same
-    /// things, so nothing reads as two lists of the same thing).
+    /// The dock directly on the chat box (gx-chat-core work_cards.rs `dock`, which holds the user's
+    /// decisions): one surface of compact rows, what needs him first, then blocked work and what
+    /// the newest turn finished; at most `limit` rows, then "N more need you". A row shows its
+    /// answer buttons (the recommended one starred); a click on it expands it in place to its full
+    /// text, its links and its actions (Reply, Open, Mention, Show in chat, Dismiss, Snooze), and
+    /// a click again folds it. Its x hides the whole dock; the Work pill brings it back. Nothing
+    /// when there are no rows, while a long message is typed, or while the Work panel is docked
+    /// beside the chat (it lists the same things).
     pub(super) fn render_work_dock(
         &self,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let cards: Vec<Value> = self.snapshot["workDock"]["cards"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-        if cards.is_empty() {
+        let dock = &self.snapshot["workDock"];
+        let rows: Vec<Value> = dock["rows"].as_array().cloned().unwrap_or_default();
+        if rows.is_empty() || dock["hidden"] == true {
             return None;
         }
         let long_draft = self
             .input
             .as_ref()
             .is_some_and(|input| input.read(cx).value().len() > DOCK_FOLDS_PAST_CHARS);
-        let panel_open = self.board.open && self.board.docked;
-        if long_draft || panel_open {
+        if long_draft || (self.board.open && self.board.docked) {
             return None;
         }
         let s = p.scale;
+        let limit = dock["limit"].as_u64().unwrap_or(4) as usize;
+        let hidden = rows.len().saturating_sub(limit);
+        let mut list = div()
+            .id("work-dock-rows")
+            .w_full()
+            .min_w_0()
+            .max_h(px(DOCK_MAX_HEIGHT * s))
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .p(px(4.0 * s));
+        for row in rows.iter().take(limit) {
+            list = list.child(self.dock_row(row, p, cx));
+        }
+        if hidden > 0 {
+            let more = dock["more"].clone();
+            list = list.child(
+                div()
+                    .id("work-dock-more")
+                    .role(gpui::Role::Button)
+                    .pl(px(31.0 * s))
+                    .pr(px(8.0 * s))
+                    .pt(px(2.0 * s))
+                    .pb(px(6.0 * s))
+                    .text_color(p.muted)
+                    .chat_cursor_pointer()
+                    .hover(|style| style.text_color(p.foreground))
+                    .child(format!("{hidden} more need you"))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.invoke(more.clone(), cx);
+                    })),
+            );
+        }
         Some(
             div()
-                .id("work-dock-cards")
+                .relative()
                 .w_full()
                 .min_w_0()
-                .max_h(px(DOCK_MAX_HEIGHT * s))
-                .overflow_y_scroll()
-                .flex()
-                .flex_col()
-                .gap(px(6.0 * s))
-                .children(cards.iter().map(|card| {
-                    let key = text(card, "key");
-                    let drawn = if card["kind"] == "questions" {
-                        self.dock_questions_card(card, p, cx)
-                    } else {
-                        self.work_card(card, p, cx)
-                    };
-                    self.open_question_frame(Some(key.as_str()), drawn, p)
-                }))
+                .rounded(px(12.0 * s))
+                .border_1()
+                .border_color(p.input_border)
+                .bg(p.card_panel)
+                .text_size(px(PROSE_SIZE * s))
+                .line_height(px(PROSE_LINE_HEIGHT * s))
+                .child(list)
+                // The x hides the whole dock until the Work pill or something new brings it back.
+                .child(
+                    div()
+                        .id("work-dock-hide")
+                        .role(gpui::Role::Button)
+                        .aria_label("Hide")
+                        .absolute()
+                        .top(px(-9.0 * s))
+                        .right(px(-9.0 * s))
+                        .size(px(18.0 * s))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded_full()
+                        .border_1()
+                        .border_color(p.input_border)
+                        .bg(p.card_panel)
+                        .chat_cursor_pointer()
+                        .hover(|style| style.bg(p.foreground.opacity(0.12)))
+                        .tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new(
+                                "Hide until something new needs you (the Work pill shows it again)",
+                            )
+                            .build(window, cx)
+                        })
+                        .child(
+                            svg()
+                                .path("titlebar/x.svg")
+                                .size(px(10.0 * s))
+                                .text_color(p.muted),
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.invoke(json!({"type": "hideWorkDock"}), cx);
+                        })),
+                )
                 .into_any_element(),
         )
     }
 
-    /// An unanswered form or page in the dock: its title, how many questions it has open, and Open,
-    /// which goes to it (gx-chat-core work_cards.rs `question_dock_cards`).
-    fn dock_questions_card(
-        &self,
-        card: &Value,
-        p: &ChatAppearance,
-        cx: &Context<Self>,
-    ) -> AnyElement {
+    /// One dock row: its status glyph, title, answer buttons and age; open, its full text, links
+    /// and actions.
+    fn dock_row(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
         let s = p.scale;
-        let key = text(card, "key");
+        let key = text(row, "key");
+        let open_key = format!("dock-row:{key}");
+        let open = self.expanded.contains(&open_key);
+        let (icon, color) = status_look(&text(row, "status"), p);
         let body = p.strengthened(p.prose);
-        let top = div()
+        let busy = row["busy"] == true;
+        let buttons: Vec<AnyElement> = row["buttons"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .map(|(index, button)| {
+                let label = text(button, "label");
+                let command = button["command"].clone();
+                let picked = button["picked"] == true;
+                self.tone_button(
+                    gpui::SharedString::from(format!("dock-answer:{key}:{index}")),
+                    &label,
+                    picked.then_some("titlebar/check.svg"),
+                    ToneButton::Secondary,
+                    None,
+                    busy && !picked,
+                    p,
+                )
+                .when(button["recommended"] == true, |button| {
+                    button.aria_label(format!("{label}, Recommended")).child(
+                        svg()
+                            .path("titlebar/star-filled.svg")
+                            .size(px(10.0 * s))
+                            .flex_shrink_0()
+                            .text_color(super::ask_card::ask_color(p).opacity(0.75)),
+                    )
+                })
+                .when(!busy, |button| {
+                    button.on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(command.clone(), cx);
+                    }))
+                })
+                .into_any_element()
+            })
+            .collect();
+        let toggle = open_key.clone();
+        let mut head = div()
+            .id(gpui::SharedString::from(format!("dock-row-head:{key}")))
             .w_full()
             .min_w_0()
             .flex()
-            .items_center()
-            .gap(px(8.0 * s))
+            .flex_wrap()
+            .items_start()
+            .gap_x(px(10.0 * s))
+            .gap_y(px(4.0 * s))
+            .px(px(8.0 * s))
+            .py(px(6.0 * s))
+            .rounded(px(8.0 * s))
+            .chat_cursor_pointer()
+            .hover(|style| style.bg(p.foreground.opacity(0.04)))
             .child(
-                svg()
-                    .path("titlebar/help-circle.svg")
-                    .size(px(14.0 * s))
+                div()
+                    .h(px(PROSE_LINE_HEIGHT * s))
+                    .flex()
+                    .items_center()
                     .flex_shrink_0()
-                    .text_color(gpui::rgb(
-                        crate::app::native_sidebar::status::QUESTION_COLOR,
-                    )),
+                    .child(svg().path(icon).size(px(13.0 * s)).text_color(color)),
             )
             .child(
                 div()
                     .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(
-                        div()
-                            .whitespace_normal()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(body)
-                            .child(text(card, "title")),
-                    )
-                    .child(div().text_color(p.card_muted).child(text(card, "line"))),
+                    .min_w(px(160.0 * s))
+                    .when(!open, |title| title.truncate())
+                    .when(open, |title| title.whitespace_normal())
+                    .text_color(body)
+                    .child(text(row, "title")),
+            );
+        if !buttons.is_empty() {
+            head = head.child(div().flex().flex_wrap().gap(px(6.0 * s)).children(buttons));
+        }
+        head = head
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .text_color(p.muted)
+                    .child(text(row, "age")),
             )
-            .child(self.chat_button(
-                format!("dock-open:{key}"),
-                "Open".to_string(),
-                card["command"].clone(),
-                p,
-                cx,
-            ));
-        div()
+            .on_click(cx.listener(move |this, _, _, cx| {
+                if !this.expanded.remove(&toggle) {
+                    this.expanded.insert(toggle.clone());
+                }
+                cx.notify();
+            }));
+        if !open {
+            return div().w_full().child(head).into_any_element();
+        }
+        // Open: its full text, its links, then its actions as quiet buttons.
+        let mut detail = div()
             .w_full()
             .min_w_0()
             .flex()
             .flex_col()
             .gap(px(4.0 * s))
-            .px(px(12.0 * s))
-            .py(px(8.0 * s))
-            .rounded(px(10.0 * s))
-            .border_1()
-            .border_color(p.input_border)
-            .bg(p.card_panel)
-            .text_size(px(PROSE_SIZE * s))
-            .line_height(px(PROSE_LINE_HEIGHT * s))
-            .child(top)
-            // Snooze and Cancel under it, as on an ask's card.
-            .children(
-                self.snooze_cancel_row(card, p, cx)
-                    .map(|controls| div().pl(px(22.0 * s)).child(controls)),
+            .pl(px(31.0 * s))
+            .pr(px(8.0 * s))
+            .pb(px(8.0 * s));
+        for line in row["detail"].as_array().into_iter().flatten() {
+            let line = line.as_str().unwrap_or_default();
+            if !line.is_empty() {
+                detail = detail.child(
+                    div()
+                        .whitespace_normal()
+                        .text_color(p.card_muted)
+                        .child(line.to_string()),
+                );
+            }
+        }
+        let chips: Vec<AnyElement> = row["chips"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .map(|(index, chip)| self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx))
+            .collect();
+        if !chips.is_empty() {
+            detail = detail.child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_x(px(14.0 * s))
+                    .gap_y(px(4.0 * s))
+                    .children(chips),
+            );
+        }
+        let mut actions = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap(px(6.0 * s))
+            .pt(px(2.0 * s));
+        let action = |id: String, label: &'static str| {
+            self.tone_button(
+                gpui::SharedString::from(id),
+                label,
+                None,
+                ToneButton::Secondary,
+                None,
+                false,
+                p,
             )
+        };
+        let reply = row["reply"].clone();
+        if reply.is_object() {
+            actions = actions.child(action(format!("dock-reply:{key}"), "Reply").on_click(
+                cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    let at = event.position();
+                    let command = json!({
+                        "question": reply.clone(),
+                        "at": [f32::from(at.x), f32::from(at.y)],
+                    });
+                    this.open_reply_popover(&command, window, cx);
+                }),
+            ));
+        }
+        let open_command = row["open"].clone();
+        if open_command.is_object() {
+            actions = actions.child(action(format!("dock-open:{key}"), "Open").on_click(
+                cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.invoke(open_command.clone(), cx);
+                }),
+            ));
+        }
+        let mention = text(row, "mention");
+        if !mention.is_empty() {
+            actions = actions.child(action(format!("dock-mention:{key}"), "Mention").on_click(
+                cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.insert_board_reference(&mention, cx);
+                }),
+            ));
+        }
+        let show = row["showInChat"].clone();
+        if show.is_object() {
+            actions = actions.child(action(format!("dock-show:{key}"), "Show in chat").on_click(
+                cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.invoke(show.clone(), cx);
+                }),
+            ));
+        }
+        let dismiss = row["dismiss"].clone();
+        if dismiss.is_object() {
+            actions = actions.child(
+                action(format!("dock-dismiss:{key}"), "Dismiss")
+                    .tooltip(|window, cx| {
+                        gpui_component::tooltip::Tooltip::new(
+                            "Take it off for good and tell the agent",
+                        )
+                        .build(window, cx)
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(dismiss.clone(), cx);
+                    })),
+            );
+        }
+        // Snooze is one button that opens its three lengths, a temporary step apart from Dismiss.
+        let snooze: Vec<Value> = row["snooze"].as_array().cloned().unwrap_or_default();
+        let snooze_key = format!("dock-snooze-open:{key}");
+        let snooze_open = self.expanded.contains(&snooze_key);
+        if !snooze.is_empty() {
+            let toggle = snooze_key.clone();
+            actions = actions.child(
+                action(
+                    format!("dock-snooze:{key}"),
+                    if snooze_open { "Snooze for" } else { "Snooze" },
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    if !this.expanded.remove(&toggle) {
+                        this.expanded.insert(toggle.clone());
+                    }
+                    cx.notify();
+                })),
+            );
+        }
+        for (index, choice) in snooze.iter().enumerate().filter(|_| snooze_open) {
+            let command = choice["command"].clone();
+            let label = text(choice, "label");
+            actions = actions.child(
+                self.tone_button(
+                    gpui::SharedString::from(format!("dock-snooze:{key}:{index}")),
+                    &label,
+                    None,
+                    ToneButton::Secondary,
+                    None,
+                    false,
+                    p,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.invoke(command.clone(), cx);
+                })),
+            );
+        }
+        detail = detail.child(actions);
+        div()
+            .w_full()
+            .rounded(px(8.0 * s))
+            .bg(p.foreground.opacity(0.03))
+            .child(head)
+            .child(detail)
             .into_any_element()
     }
 

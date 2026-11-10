@@ -121,6 +121,41 @@ pub fn handle_with_ids(
                 })),
             }]
         }
+        // A dock row's "Show in chat": scrolls to the reply of the turn that asked or changed it,
+        // only because the reader pressed it (work_cards.rs `show_in_chat`).
+        ActionKind::ShowInChat => {
+            if crate::questions::open_questions::jump_to_row(
+                state,
+                context,
+                text(action, "messageId"),
+                text(action, "target"),
+                None,
+            ) {
+                Vec::new()
+            } else {
+                vec![crate::effect::Effect::Toast {
+                    level: "info".to_string(),
+                    message: "That turn isn't loaded in this chat any more.".to_string(),
+                }]
+            }
+        }
+        // The dock hidden whole by its x, and shown again (the Work pill, or something new).
+        ActionKind::HideWorkDock => {
+            let keys = crate::extras::work_cards::dock(state, context)["rows"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|row| row["key"].as_str().unwrap_or_default().to_string())
+                .collect();
+            state.extras.panels.work_dock_hidden = Some(keys);
+            state.core.request_publish();
+            Vec::new()
+        }
+        ActionKind::ShowWorkDock => {
+            state.extras.panels.work_dock_hidden = None;
+            state.core.request_publish();
+            Vec::new()
+        }
         // A finished-work card leaves the dock (work_cards.rs `dock`).
         ActionKind::DismissWorkDockCard => {
             state

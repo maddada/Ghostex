@@ -1552,7 +1552,8 @@ pub fn answer(
         "projectId": state.identity.project_id,
         "sessionId": state.identity.session_id,
         // `cancel` withdraws a work ask for good (work.rs); its message goes the same way.
-        "op": if field("op") == "cancel" { "cancel" } else { "answer" },
+        // `reply` records the user's own words (the dock's Reply).
+        "op": match field("op") { "cancel" => "cancel", "reply" => "reply", _ => "answer" },
         "item": item,
         "answer": label,
     });

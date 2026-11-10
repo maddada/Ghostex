@@ -154,10 +154,10 @@ pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
         return effects;
     }
     let text = if tags.is_empty() {
-        "I cancelled your questions there: no need to ask them again.".to_string()
+        "I dismissed your questions there: no need to ask them again.".to_string()
     } else {
         format!(
-            "I cancelled {}: no need to ask {} again.",
+            "I dismissed {}: no need to ask {} again.",
             tags.join(", "),
             if tags.len() == 1 { "it" } else { "them" }
         )

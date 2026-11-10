@@ -327,8 +327,10 @@ fn ask_card(
         "key": key,
         "item": reference,
         "ask": tag,
-        "label": "Cancelled",
-        "text": format!("{reference} {tag}: I cancelled this question; no need to ask it again."),
+        "label": "Dismissed",
+        // Dismiss, one word for taking it off for good (the user's "Dismiss is the same thing as
+        // Cancel").
+        "text": format!("{reference} {tag}: I dismissed this; no need to ask it again."),
     });
     json!({
         "snooze": if open { snooze } else { Value::Null },
@@ -370,7 +372,15 @@ fn ask_card(
 /// everything else is one status line under it that opens the Work panel. An open ask is drawn
 /// only there, never also under its reply; it leaves the dock once settled.
 pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
-    let questions = question_dock_cards(state);
+    let now_ms = context.now_millis();
+    let turns = turns(state);
+    // (sinks, at, row): a row that needs him is newest first, but one older than a day sinks below
+    // the newer ones, so long-lived tasks do not squat in the first rows (they stay reachable under
+    // "N more need you" and in the Work panel).
+    let mut needs: Vec<(bool, i64, Value)> = question_rows(state, context, now_ms)
+        .into_iter()
+        .map(|(at, row)| (now_ms - at > DAY_MS, at, row))
+        .collect();
     let work = state
         .session
         .coordinator_threads
@@ -383,17 +393,8 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
         // Lines of work and threads on no item, as the Work panel lists them.
         .filter(|item| text(item, "status") != "dropped")
         .collect();
-    let Some(work) = work.filter(|_| !items.is_empty()) else {
-        // Any agent's chat: only its unanswered forms and pages, with no status line.
-        return if questions.is_empty() {
-            Value::Null
-        } else {
-            json!({ "cards": questions })
-        };
-    };
-    let now_ms = context.now_millis();
     let answers = &state.extras.panels.board_answers;
-    let mut cards: Vec<(i64, Value)> = Vec::new();
+    let mut later: Vec<(i64, Value)> = Vec::new();
     for item in &items {
         for ask in item["asks"].as_array().into_iter().flatten() {
             if ask["open"] != true {
@@ -405,117 +406,264 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
                 continue;
             }
             let at = at_ms(text(ask, "askedAt")).unwrap_or(now_ms);
-            cards.push((
+            let card = ask_card(
+                item,
+                ask,
+                answers.get(&key).map(String::as_str),
                 at,
-                ask_card(
-                    item,
-                    ask,
-                    answers.get(&key).map(String::as_str),
-                    at,
-                    now_ms,
-                    context,
-                ),
-            ));
+                now_ms,
+                context,
+            );
+            let asked_in = item["history"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|event| {
+                    text(event, "kind") == "ask"
+                        && text(event, "text").split(':').next() == Some(text(ask, "tag"))
+                })
+                .filter_map(|event| at_ms(text(event, "at")))
+                .next_back()
+                .unwrap_or(at);
+            let mut row = json!({
+                "key": key,
+                "kind": "ask",
+                "status": card["status"],
+                "title": card["title"],
+                "age": card["age"],
+                // The work it belongs to is its link (`chips`), not a second line.
+                "detail": [card["line"]],
+                "buttons": card["buttons"],
+                "busy": card["busy"],
+                "reply": { "item": text(item, "ref"), "key": key, "tag": text(ask, "tag") },
+                "mention": mention_of(item),
+                "dismiss": card["cancel"],
+                "snooze": card["snooze"],
+                "chips": card["chips"],
+                "needs": true,
+            });
+            row["showInChat"] = show_in_chat(&turns, asked_in, &key);
+            needs.push((now_ms - at > DAY_MS, at, row));
         }
     }
-    cards.sort_by(|left, right| right.0.cmp(&left.0));
-    let mut cards: Vec<Value> = cards.into_iter().map(|(_, card)| card).collect();
-    // The unanswered forms and pages wait with the asks.
-    cards.extend(questions);
-    // Then every blocked line of work that no holding ask already stands for (a stuck thread, or
-    // the coordinator's word), newest first.
-    let mut blocked: Vec<(i64, Value)> = items
+    // Then every blocked line of work no holding ask already stands for (a stuck thread, or the
+    // coordinator's word), and what the newest turn finished: a finished row leaves after the next
+    // turn, or with its x.
+    for item in items
         .iter()
         .filter(|item| text(item, "status") == "blocked")
-        .filter(|item| {
-            !item["asks"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .any(|ask| ask["open"] == true && ask["holds"] == true)
-        })
-        .map(|item| {
-            let at = at_ms(text(item, "at")).unwrap_or(0);
-            (at, dock_item_card(item, now_ms, None))
-        })
-        .collect();
-    blocked.sort_by(|left, right| right.0.cmp(&left.0));
-    cards.extend(blocked.into_iter().map(|(_, card)| card));
-    // Then what finished in the latest turn that finished anything: the done cards, until a later
-    // turn finishes something else or the reader dismisses them.
-    let turns = turns(state);
-    let finished: Vec<(usize, &Value)> = items
+    {
+        if item["asks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|ask| ask["open"] == true && ask["holds"] == true)
+        {
+            continue;
+        }
+        let at = at_ms(text(item, "at")).unwrap_or(0);
+        later.push((at, work_row(item, &turns, now_ms, None)));
+    }
+    let newest_turn = turns.len().checked_sub(1);
+    let dismissed = &state.extras.panels.work_dock_dismissed;
+    for item in items
         .iter()
         .filter(|item| text(item, "status") == "finished")
-        .filter_map(|item| {
-            let done_at = item["history"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter(|event| text(event, "kind") == "done")
-                .filter_map(|event| at_ms(text(event, "at")))
-                .max()?;
-            Some((turn_of(&turns, done_at)?, *item))
-        })
-        .collect();
-    // Only the newest turn's: a finished row leaves after the next turn (the target page).
-    let newest_turn = turns.len().checked_sub(1);
-    if let Some(latest) =
-        newest_turn.filter(|newest| finished.iter().any(|(turn, _)| turn == newest))
     {
-        let dismissed = &state.extras.panels.work_dock_dismissed;
-        for (_, item) in finished.iter().filter(|(turn, _)| *turn == latest) {
-            let key = format!("work-dock:{}:{}:done", text(item, "ref"), turns[latest].id);
-            if !dismissed.contains(&key) {
-                cards.push(dock_item_card(item, now_ms, Some(key)));
-            }
+        let Some(done_at) = item["history"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|event| text(event, "kind") == "done")
+            .filter_map(|event| at_ms(text(event, "at")))
+            .max()
+        else {
+            continue;
+        };
+        let turn = turn_of(&turns, done_at);
+        if turn.is_none() || turn != newest_turn {
+            continue;
+        }
+        let key = format!(
+            "work-dock:{}:{}:done",
+            text(item, "ref"),
+            turns[turn.unwrap_or(0)].id
+        );
+        if !dismissed.contains(&key) {
+            later.push((done_at, work_row(item, &turns, now_ms, Some(key))));
         }
     }
-    // Only cards he must act on or was just told about; nothing at all when there are none. The
-    // counts are the Work pill's (`coordinator_board::pill`).
-    let _ = work;
-    if cards.is_empty() {
+    needs.sort_by(|left, right| left.0.cmp(&right.0).then(right.1.cmp(&left.1)));
+    later.sort_by(|left, right| right.0.cmp(&left.0));
+    let rows: Vec<Value> = needs
+        .into_iter()
+        .map(|(_, _, row)| row)
+        .chain(later.into_iter().map(|(_, row)| row))
+        .collect();
+    if rows.is_empty() {
         return Value::Null;
     }
-    json!({ "cards": cards })
+    // Hidden whole by the reader: it stays hidden until shown again (the Work pill) or a row that
+    // was not there when it was hidden arrives, since that is news he has not seen.
+    //
+    // CDXC:Coordinators 2026-11-10 DECISION:
+    // User: "please let's allow fully collapsing the needs u row". One click hides the dock
+    // completely; the Work pill keeps its "N need you" and brings it back.
+    let hidden = state
+        .extras
+        .panels
+        .work_dock_hidden
+        .as_ref()
+        .is_some_and(|keys| rows.iter().all(|row| keys.contains(text(row, "key"))));
+    // At most four rows show (three on the phone); the rest are "N more need you", which opens the
+    // Work panel at Needs you. The counts are the Work pill's (`coordinator_board::pill`).
+    json!({
+        "rows": rows,
+        "hidden": hidden,
+        "limit": 4,
+        "phoneLimit": 3,
+        "more": { "type": "showCoordinatorBoardGroup", "group": "needs" },
+    })
 }
 
-/// The forms and question pages in the chat's replies that still wait on the reader, newest first,
-/// as compact dock cards: `{key, kind: "questions", form: bool, title, line, command}`, Open going
-/// to the form or page (`goToResource`). They are the ? pill's own unanswered list
+/// A day, in ms: a needs-you row older than this sinks below the newer ones (`dock`).
+const DAY_MS: i64 = 86_400_000;
+
+/// The mention a work item's Mention button puts in the chat box: `[title](board:B12)`, the
+/// reference a + pick inserts.
+fn mention_of(item: &Value) -> String {
+    let reference = text(item, "ref").replacen('W', "B", 1);
+    if reference.is_empty() || text(item, "kind") != "item" {
+        return String::new();
+    }
+    format!(
+        "[{}](board:{reference})",
+        text(item, "title").replace(['[', ']'], "")
+    )
+}
+
+/// "Show in chat": the reply of the turn holding `at`, or `null` when no loaded turn does. It
+/// scrolls only when pressed (`showInChat`), the one deliberate exception to "nothing scrolls".
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User: "i think we should have jump to reference to jump to the place it was asked if i want to
+/// see more from the agent chat there", then "do this one for all of them so i can go to the turn
+/// that gave me this q cuz maybe agent mentioned something in that turn end about it". Every row's
+/// expanded card has it: an ask's goes to the reply of the turn that asked it, a form's or page's
+/// to the reply that sent it, any other line of work's to the latest turn that changed it.
+fn show_in_chat(turns: &[Turn], at: i64, target: &str) -> Value {
+    match turn_of(turns, at).and_then(|turn| turns[turn].anchor.clone()) {
+        Some(anchor) => json!({ "type": "showInChat", "messageId": anchor, "target": target }),
+        None => Value::Null,
+    }
+}
+
+/// A blocked or just-finished line of work's dock row (`done_key`: the finished row's, with the x
+/// that dismisses it).
+fn work_row(item: &Value, turns: &[Turn], now_ms: i64, done_key: Option<String>) -> Value {
+    let card = dock_item_card(item, now_ms, done_key.clone());
+    let changed_at = item["history"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|event| at_ms(text(event, "at")))
+        .max()
+        .unwrap_or(0);
+    let key = text(&card, "key").to_string();
+    json!({
+        "key": key,
+        "kind": if done_key.is_some() { "finished" } else { "blocked" },
+        "status": card["status"],
+        "title": card["title"],
+        "age": card["age"],
+        "detail": [card["line"]],
+        "buttons": [],
+        "mention": mention_of(item),
+        "dismiss": card["dismiss"],
+        "chips": card["chips"],
+        "showInChat": show_in_chat(turns, changed_at, &key),
+        "needs": false,
+    })
+}
+
+/// The forms, pages and one-click questions in the chat's replies that still wait on the reader,
+/// as dock rows with when they were asked. They are the ? pill's own unanswered list
 /// (`questions::open_questions::unanswered`), so For later ones stay out and nothing is counted
 /// twice; one leaves the dock once every question on it is answered, skipped or withdrawn.
 ///
 /// CDXC:Coordinators 2026-11-10 DECISION:
-/// User, adding to placement C: "also please let's show those inline htmls from the agent replies
-/// there docked above while not answered". Any agent chat that asks, not only a coordinator's.
-fn question_dock_cards(state: &ChatState) -> Vec<Value> {
-    let mut askers: Vec<&crate::transcript::open_questions::Asker> =
-        crate::questions::open_questions::unanswered(state);
-    askers.sort_by_key(|asker| std::cmp::Reverse(asker.at.unwrap_or(0)));
-    askers
+/// User: "also please let's show those inline htmls from the agent replies there docked above while
+/// not answered", then, of questions asked inside a reply: "i need to scroll back to see that
+/// question ... should always be shown as card ... this can be smaller just for 1 off quick
+/// question". A one-click question is one compact row with its answers on it (the recommended one
+/// starred) and Reply; a form of several questions, a text question or a page keeps "N questions
+/// open" and Open (the answer popup, or the page). Any agent chat, not only a coordinator's.
+fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(i64, Value)> {
+    let _ = context;
+    crate::questions::open_questions::unanswered(state)
         .into_iter()
         .map(|asker| {
-            let form = matches!(
-                asker.kind,
-                crate::transcript::open_questions::AskerKind::Form
-            );
+            let at = asker.at.unwrap_or(now_ms);
+            let form = matches!(asker.kind, crate::transcript::open_questions::AskerKind::Form);
             let open = asker.waiting(None);
             let noun = if open == 1 { "question" } else { "questions" };
-            json!({
+            let snooze = snooze_choices(
+                |hours| json!({ "type": "snoozeQuestion", "id": asker.id, "hours": hours }),
+            );
+            let base = json!({
                 "key": format!("dock-questions:{}", asker.id),
-                "kind": "questions",
-                "form": form,
+                "status": "needs",
                 "title": if asker.title.is_empty() { "Questions" } else { asker.title.as_str() },
-                "line": format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" }),
-                "command": { "type": "openResource", "id": asker.id },
-                "snooze": snooze_choices(
-                    |hours| json!({ "type": "snoozeQuestion", "id": asker.id, "hours": hours }),
-                ),
-                "cancel": { "type": "cancelQuestion", "id": asker.id },
-            })
+                "age": crate::transcript::message_time::age_label(now_ms, at),
+                "dismiss": { "type": "cancelQuestion", "id": asker.id },
+                "snooze": snooze,
+                "showInChat": { "type": "showInChat", "messageId": asker.message_id, "target": asker.id },
+                "mention": "",
+                "needs": true,
+            });
+            let mut row = base;
+            // A one-click question: its answers on the row and Reply, no Open step.
+            if let Some(question) = form.then(|| one_click(state, &asker.message_id, &asker.id)).flatten() {
+                row["kind"] = json!("question");
+                row["title"] = json!(question.question);
+                row["buttons"] = json!(question
+                    .choices
+                    .iter()
+                    .enumerate()
+                    .map(|(index, choice)| json!({
+                        "label": choice.label,
+                        "recommended": choice.recommended,
+                        "command": { "type": "inlineAnswer", "form": asker.id, "choice": index },
+                    }))
+                    .collect::<Vec<_>>());
+                row["reply"] = json!({ "form": asker.id, "tag": question.tag });
+                row["detail"] = json!([]);
+            } else {
+                row["kind"] = json!("form");
+                row["buttons"] = json!([]);
+                row["detail"] = json!([format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" })]);
+                row["open"] = json!({ "type": "openResource", "id": asker.id });
+            }
+            (at, row)
         })
         .collect()
+}
+
+/// The one-click question (a reply's answer links) a form id names, when the form is one.
+fn one_click(
+    state: &ChatState,
+    message_id: &str,
+    form_id: &str,
+) -> Option<crate::transcript::inline_answers::InlineQuestion> {
+    let message = state
+        .messages
+        .composed
+        .iter()
+        .find(|message| message.id == message_id)?;
+    let prose = crate::transcript::prose::prose_markdown(&message.blocks);
+    crate::transcript::inline_answers::inline_questions(&prose)
+        .into_iter()
+        .find(|question| question.form().id == form_id)
 }
 
 /// The Work panel row key of the open ask a question tag names (`work-ask:W3:Q12`), if a work item

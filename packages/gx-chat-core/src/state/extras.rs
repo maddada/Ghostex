@@ -104,6 +104,10 @@ pub struct PanelsState {
     /// Work asks snoozed here, by card key, until when (epoch ms): shown at once, before gxserver's
     /// `snoozedUntil` comes back.
     pub work_snoozed: std::collections::BTreeMap<String, i64>,
+    /// The dock above the chat box hidden by the reader: the rows it held then. It stays hidden
+    /// until the reader shows it again or a row that is not among these arrives
+    /// (`extras::work_cards::dock`).
+    pub work_dock_hidden: Option<std::collections::BTreeSet<String>>,
     /// The board's groups showing every row instead of the first few.
     pub board_expanded: std::collections::BTreeSet<String>,
     /// The board changes in flight (a row moved to Removed or restored), whose refusal is toasted.
@@ -151,6 +155,7 @@ impl Default for PanelsState {
             board_toggled: Default::default(),
             work_dock_dismissed: Default::default(),
             work_snoozed: Default::default(),
+            work_dock_hidden: None,
             board_expanded: Default::default(),
             board_change_requests: Default::default(),
             board_answers: Default::default(),

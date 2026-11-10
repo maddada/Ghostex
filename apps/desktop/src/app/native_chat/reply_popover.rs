@@ -40,6 +40,9 @@ pub(in crate::app::native_chat) struct ReplyPopoverState {
 struct QuestionReply {
     form: Option<String>,
     tag: String,
+    /// A coordinator's work item ask (`W7`) and its card key: the words answer that ask
+    /// (gx-chat-core `coordinator_board::answer` with op `reply`).
+    work: Option<(String, String)>,
 }
 
 /// What the popover's actions do with the chat box.
@@ -82,6 +85,18 @@ impl NativeChatView {
             .map(|tag| QuestionReply {
                 form: command["question"]["form"].as_str().map(str::to_owned),
                 tag: tag.to_owned(),
+                work: command["question"]["item"]
+                    .as_str()
+                    .filter(|item| !item.is_empty())
+                    .map(|item| {
+                        (
+                            item.to_owned(),
+                            command["question"]["key"]
+                                .as_str()
+                                .unwrap_or_default()
+                                .to_owned(),
+                        )
+                    }),
             });
         let quote = command["quote"].as_str().unwrap_or_default();
         if quote.is_empty() && question.is_none() {
@@ -215,6 +230,29 @@ impl NativeChatView {
         if let Some(question) = question {
             let reply = reply.trim();
             if reply.is_empty() {
+                return;
+            }
+            // A work item ask: the words are its answer, recorded once and sent to the
+            // coordinator as "W7 Q12: words" (the user's "WE MUST HAVE REPLY BUTTON FOR NEEDS YOU
+            // STUFF").
+            if let Some((item, key)) = &question.work {
+                match action {
+                    ReplyAction::Send => self.invoke(
+                        serde_json::json!({
+                            "type": "coordinatorBoardAnswer",
+                            "op": "reply",
+                            "key": key,
+                            "item": item,
+                            "ask": question.tag,
+                            "label": reply,
+                            "text": format!("{item} {}: {reply}", question.tag),
+                        }),
+                        cx,
+                    ),
+                    ReplyAction::AddToPrompt => {
+                        self.append_prompt(&format!("{item} {}: {reply}", question.tag), cx)
+                    }
+                }
                 return;
             }
             match action {

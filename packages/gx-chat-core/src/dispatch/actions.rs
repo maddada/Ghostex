@@ -190,6 +190,9 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::JumpToWorkCard
         | ActionKind::DismissWorkDockCard
         | ActionKind::SnoozeWorkAsk
+        | ActionKind::ShowInChat
+        | ActionKind::HideWorkDock
+        | ActionKind::ShowWorkDock
         | ActionKind::InsertBoardReference
         | ActionKind::HideCoordinatorIntro
         | ActionKind::ToggleAutopilot
@@ -371,6 +374,9 @@ fn clears_error(kind: &ActionKind) -> bool {
         | ActionKind::JumpToWorkCard
         | ActionKind::DismissWorkDockCard
         | ActionKind::SnoozeWorkAsk
+        | ActionKind::ShowInChat
+        | ActionKind::HideWorkDock
+        | ActionKind::ShowWorkDock
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
         | ActionKind::ToggleAutopilot
@@ -443,6 +449,9 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::JumpToWorkCard
             | ActionKind::DismissWorkDockCard
             | ActionKind::SnoozeWorkAsk
+            | ActionKind::ShowInChat
+            | ActionKind::HideWorkDock
+            | ActionKind::ShowWorkDock
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
             | ActionKind::ToggleAutopilot

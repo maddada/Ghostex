@@ -460,6 +460,11 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // The dock hidden by its x comes back with the Work pill.
+        if self.snapshot["workDock"]["hidden"] == true {
+            self.invoke(json!({"type": "showWorkDock"}), cx);
+            return;
+        }
         if self.board_view() == COLUMNS_VIEW {
             if !self.chat_menu_toggled_shut(BOARD_COLUMNS_TRIGGER, cx) {
                 self.open_board_columns_after_dock(window, cx);
@@ -2072,7 +2077,7 @@ impl NativeChatView {
 
     /// Puts a card's reference in the chat box at the caret (or over the selection) and gives the
     /// box the keyboard, so the user can comment on it; a floating board closes out of the way.
-    fn insert_board_reference(&mut self, reference: &str, cx: &mut Context<Self>) {
+    pub(super) fn insert_board_reference(&mut self, reference: &str, cx: &mut Context<Self>) {
         let selection = self
             .input
             .as_ref()
