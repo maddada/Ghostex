@@ -253,7 +253,7 @@ impl TailcatRuntime {
             self.set_last_error(
                 TailcatLane::Public,
                 Some(
-                    "The Easy Connect helper isn't installed on this computer yet. Install it from Settings > Remote or Connect a phone."
+                    "The Easy Connect helper isn't installed on this computer yet. Install it from Settings > Remote or Connect a Device."
                         .to_string(),
                 ),
             );

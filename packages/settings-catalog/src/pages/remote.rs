@@ -31,8 +31,8 @@ pub(crate) fn easy_connect() -> Section {
         "easyConnect",
         "Phones and computers that can reach this machine",
         vec![
-            row("easyConnectEnabled", "Easy Connect", "Reach this machine from anywhere; only the devices in the list get in. Connect a phone turns it on by itself."),
-            row("pairingCode", "Connect a phone", "Opens the Connect a phone window with the code to scan; Connect a computer shows the code another computer pastes."),
+            row("easyConnectEnabled", "Easy Connect", "Reach this machine from anywhere; only the devices in the list get in. Connect a Device turns it on by itself."),
+            row("pairingCode", "Connect a Device", "Opens the Connect a phone window with the code to scan; Connect a computer shows the code another computer pastes."),
             row("pairedDevices", "Paired devices", "Phones and computers that can reach this machine, and any waiting for Approve; remove one to cut it off."),
         ],
     )

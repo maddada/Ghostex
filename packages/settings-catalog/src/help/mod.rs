@@ -653,7 +653,25 @@ pub fn api_may_write(_key: &str, agent_writable: bool) -> bool {
 ///
 /// CDXC:SessionChat 2026-11-10 DECISION:
 /// The coordinator, for the user (#535, merged as it came): Transcript width's new subtitle (a share of the window and only a maximum) waits in the held help patch with the rest of that change's Help.
-pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[];
+///
+/// CDXC:RemotePairing 2026-11-11 DECISION:
+/// The coordinator, for the user ("rename it in the menu to Connect a Device"): Settings > Remote's
+/// Connect a phone button and the line that names it read Connect a Device; Help keeps the old words
+/// until the release (release-11.3.1/help/connect-a-device.patch).
+pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[
+    (
+        "easyConnectEnabled",
+        "Easy Connect",
+        "Reach this machine from anywhere; only the devices in the list get in. Connect a phone turns it on by itself.",
+        false,
+    ),
+    (
+        "pairingCode",
+        "Connect a phone",
+        "Opens the Connect a phone window with the code to scan; Connect a computer shows the code another computer pastes.",
+        false,
+    ),
+];
 
 /// Hotkeys whose new description is held out of the committed Help files until a release ships
 /// it: the hotkey id, then the description the Help files keep meanwhile. The release that ships
