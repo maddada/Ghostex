@@ -724,9 +724,12 @@ several. On the phone, the pencil at the top of the Sessions list (New session,
 next to the bell, in both the Unified and the Project layout) lists every
 project on every computer, recent ones first, with a search field and a chip for
 each computer, starting on the one you used last for that project. Tap a project
-and the agent you last picked there starts in a new chat, where you can still
-change the agent, model, worktree, project or computer before you send the first
-message. If that computer isn't connected, it says so. A project's "+" and the
+and its remembered agent starts there (the computer's Settings > Agents >
+Remember the agent you pick decides whether that is the agent picked last in the
+project, in its Space or anywhere) in a new chat, where you can still change the
+agent, model, worktree, project or computer before you send the first message.
+An agent without chat opens its terminal instead. If that computer isn't
+connected, it says so. A project's "+" and the
 "+" on a project in the filter open the agent menu instead, which shows its
 project on top (tap it to pick any project) and the same computer chips.
 
