@@ -58,6 +58,9 @@ pub struct ThreadRecord {
     pub coordinator_session_id: String,
     pub task: String,
     pub resolved_at: Option<String>,
+    /// The latest Mark Done, stamped by every resolve, even of a thread already done
+    /// (`resolved_at` keeps the first one). `None` for a thread resolved before migration 0075.
+    pub last_resolved_at: Option<String>,
     pub observed_working: bool,
     pub reported_at: Option<String>,
     pub reported_prompt_key: Option<String>,
@@ -66,6 +69,8 @@ pub struct ThreadRecord {
     pub pending_message: Option<String>,
     /// When that message was sent.
     pub pending_message_at: Option<String>,
+    /// That message's `sendRequestId`, when its sender gave one: what its confirmation names.
+    pub pending_message_send_id: Option<String>,
     /// When closing its coordinator closed it too; restoring the coordinator restores it.
     pub closed_with_coordinator_at: Option<String>,
     pub created_at: String,
@@ -86,6 +91,13 @@ impl ThreadRecord {
 
     pub fn is_resolved(&self) -> bool {
         self.resolved_at.is_some()
+    }
+
+    /// When the thread was last marked done: the stamp a message must not predate to reopen it.
+    pub fn close_stamp(&self) -> Option<&str> {
+        self.last_resolved_at
+            .as_deref()
+            .or(self.resolved_at.as_deref())
     }
 }
 
@@ -141,12 +153,14 @@ fn thread_from_row(row: &Row<'_>) -> rusqlite::Result<ThreadRecord> {
         coordinator_session_id: row.get("coordinatorSessionId")?,
         task: row.get("task")?,
         resolved_at: row.get("resolvedAt")?,
+        last_resolved_at: row.get("lastResolvedAt")?,
         observed_working: row.get::<_, i64>("observedWorking")? == 1,
         reported_at: row.get("reportedAt")?,
         reported_prompt_key: row.get("reportedPromptKey")?,
         last_report: row.get("lastReport")?,
         pending_message: row.get("pendingMessage")?,
         pending_message_at: row.get("pendingMessageAt")?,
+        pending_message_send_id: row.get("pendingMessageSendId")?,
         closed_with_coordinator_at: row.get("closedWithCoordinatorAt")?,
         created_at: row.get("createdAt")?,
         updated_at: row.get("updatedAt")?,
@@ -155,7 +169,7 @@ fn thread_from_row(row: &Row<'_>) -> rusqlite::Result<ThreadRecord> {
 
 const COORDINATOR_COLUMNS: &str =
     "projectId, sessionId, goal, instructions, memoryJson, createdAt, updatedAt";
-const THREAD_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, pendingMessage, pendingMessageAt, closedWithCoordinatorAt, createdAt, updatedAt";
+const THREAD_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, resolvedAt, lastResolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, pendingMessage, pendingMessageAt, pendingMessageSendId, closedWithCoordinatorAt, createdAt, updatedAt";
 
 pub fn read_coordinator(
     db: &Connection,
@@ -355,6 +369,7 @@ pub fn set_thread_resolved(
             r#"
             UPDATE coordinator_threads
             SET resolvedAt = CASE WHEN ?3 THEN COALESCE(resolvedAt, ?4) ELSE NULL END,
+                lastResolvedAt = CASE WHEN ?3 THEN ?4 ELSE lastResolvedAt END,
                 observedWorking = CASE WHEN ?3 THEN 0 ELSE observedWorking END,
                 updatedAt = ?4
             WHERE projectId = ?1 AND sessionId = ?2
@@ -443,21 +458,22 @@ pub fn record_thread_report(
 }
 
 /// Watches a message handed to the thread until its transcript records it; a newer message
-/// replaces the one being watched.
+/// replaces the one being watched. `send_id` is the message's `sendRequestId`, when known.
 pub fn set_thread_pending_message(
     db: &Connection,
     project_id: &str,
     session_id: &str,
     excerpt: &str,
     sent_at: &str,
+    send_id: Option<&str>,
 ) -> Result<(), DomainStateError> {
     db.execute(
         r#"
         UPDATE coordinator_threads
-        SET pendingMessage = ?3, pendingMessageAt = ?4, updatedAt = ?5
+        SET pendingMessage = ?3, pendingMessageAt = ?4, pendingMessageSendId = ?6, updatedAt = ?5
         WHERE projectId = ?1 AND sessionId = ?2
         "#,
-        params![project_id, session_id, excerpt, sent_at, now_iso()],
+        params![project_id, session_id, excerpt, sent_at, now_iso(), send_id],
     )
     .map_err(sql_error)?;
     Ok(())
@@ -472,13 +488,44 @@ pub fn drop_thread_pending_message(
     db.execute(
         r#"
         UPDATE coordinator_threads
-        SET pendingMessage = NULL, pendingMessageAt = NULL, updatedAt = ?3
+        SET pendingMessage = NULL, pendingMessageAt = NULL, pendingMessageSendId = NULL, updatedAt = ?3
         WHERE projectId = ?1 AND sessionId = ?2 AND pendingMessageAt IS NOT NULL
         "#,
         params![project_id, session_id, now_iso()],
     )
     .map_err(sql_error)?;
     Ok(())
+}
+
+/// The watched message's sender saw it arrive: stops the watch if the watched message is the one
+/// sent with `send_id`, first marking the thread seen working when it is open and has not been
+/// reported on since that message was sent (a reply too fast for a supervisor tick to see is
+/// reported through that mark). One conditional update, so a newer message watched meanwhile, or
+/// a report recorded meanwhile, is never overwritten. Returns whether it matched.
+///
+/// CDXC:Coordinators 2026-11-10 WHY:
+/// The confirmation used to drop whatever watch the thread had, without marking it seen working, so a reply too fast for a supervisor tick lost its report, and an older message's confirmation (a retried send) dropped a newer message's watch. It now names the send (`sendRequestId`) and changes only the watch of that send; a confirmation without one (an older CLI) changes nothing and the supervisor's own transcript check settles the watch. A matching start of the text is no identity: two messages can begin alike, or repeat.
+pub fn acknowledge_thread_pending_message(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    send_id: &str,
+) -> Result<bool, DomainStateError> {
+    let changed = db
+        .execute(
+            r#"
+            UPDATE coordinator_threads
+            SET observedWorking = CASE
+                  WHEN resolvedAt IS NULL AND (reportedAt IS NULL OR reportedAt < pendingMessageAt)
+                  THEN 1 ELSE observedWorking END,
+                pendingMessage = NULL, pendingMessageAt = NULL, pendingMessageSendId = NULL,
+                updatedAt = ?4
+            WHERE projectId = ?1 AND sessionId = ?2 AND pendingMessageSendId = ?3
+            "#,
+            params![project_id, session_id, send_id, now_iso()],
+        )
+        .map_err(sql_error)?;
+    Ok(changed > 0)
 }
 
 /// Stops watching the message sent at `sent_at`; a newer one sent meanwhile stays watched.
@@ -491,7 +538,7 @@ pub fn clear_thread_pending_message(
     db.execute(
         r#"
         UPDATE coordinator_threads
-        SET pendingMessage = NULL, pendingMessageAt = NULL, updatedAt = ?4
+        SET pendingMessage = NULL, pendingMessageAt = NULL, pendingMessageSendId = NULL, updatedAt = ?4
         WHERE projectId = ?1 AND sessionId = ?2 AND pendingMessageAt = ?3
         "#,
         params![project_id, session_id, sent_at, now_iso()],

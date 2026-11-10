@@ -119,9 +119,10 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         ))
     })?;
     let duplicate = result["duplicate"] == json!(true);
-    // CDXC:Coordinators 2026-09-30 WHY: a coordinator's follow-up to a thread it already marked done reopens that thread, or its reply would go unsupervised and never be reported back.
+    // A coordinator's follow-up to a thread it already marked done reopens that thread, or its reply would go unsupervised and never be reported back; gxserver owns the rule (CDXC:Coordinators in server/src/coordinators/reopen.rs).
     // A repeated request id was linked by its first attempt; linking again would restart the delivery watch from now and miss the row the first attempt produced.
     // CDXC:Coordinators 2026-11-10 WHY: the reopen was silent, so a coordinator could not tell its message had put a done thread back under it, and a reply the thread finished while done was never reported (GitHub #541). The send says so in one line and prints that held reply.
+    // gxserver's send route reopens the thread itself and says so in the send's answer (server/src/coordinators/reopen.rs); this link call still watches the message, reopens for `--queue`, and answers for an older gxserver, guarded on the server by `sentAtMs`.
     let reopen = (!duplicate)
         .then(|| call_gxserver_rpc(
             "/api/linkCoordinatorThread",
@@ -129,17 +130,22 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
                 "coordinatorProjectId": sender["projectId"], "coordinatorSessionId": sender["sessionId"],
                 "projectId": recipient["projectId"], "sessionId": recipient["sessionId"],
                 "onlyIfCoordinator": true, "reopenOnly": true,
-                "pendingMessage": body, "sentAtMs": sent_at_ms,
+                "pendingMessage": body, "sentAtMs": sent_at_ms, "sendRequestId": send_request_id,
             }),
             &flags,
         ).ok())
         .flatten();
-    let reopened = reopen
-        .as_ref()
-        .is_some_and(|reopen| reopen["reopened"] == json!(true));
-    let held_report = reopen
-        .as_ref()
-        .and_then(|reopen| reopen["heldReport"].as_str())
+    let reopened = result["reopenedThread"] == json!(true)
+        || reopen
+            .as_ref()
+            .is_some_and(|reopen| reopen["reopened"] == json!(true));
+    let held_report = result["heldReport"]
+        .as_str()
+        .or_else(|| {
+            reopen
+                .as_ref()
+                .and_then(|reopen| reopen["heldReport"].as_str())
+        })
         .map(str::to_string);
     if reopened {
         // stderr, so the JSON on stdout keeps parsing.
@@ -176,7 +182,7 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         ("accepted", "Ghostex typed and submitted the message, but the recipient's transcript does not show it yet; a busy agent takes it at its next input boundary. Read its chat before sending it again.")
     };
     if status == "delivered" {
-        confirm_coordinator_delivery(&sender, &recipient, &flags);
+        confirm_coordinator_delivery(&sender, &recipient, &send_request_id, &flags);
     } else {
         // The sender's chat card follows the message until it arrives (agent_message_deliveries.rs);
         // an older gxserver without the watch refuses the call and the card keeps this status.
@@ -210,14 +216,22 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
 }
 
 /// Tells gxserver a coordinator's message to its thread arrived, so its delivery watch stops
-/// (a no-op for any other sender or recipient, and for a gxserver without the watch).
-pub(crate) fn confirm_coordinator_delivery(sender: &Value, recipient: &Value, flags: &Flags) {
+/// (a no-op for any other sender or recipient, and for a gxserver without the watch). The send's
+/// `sendRequestId` names which watch it confirms: an older message's confirmation leaves a newer
+/// one watched.
+pub(crate) fn confirm_coordinator_delivery(
+    sender: &Value,
+    recipient: &Value,
+    send_request_id: &str,
+    flags: &Flags,
+) {
     let _ = call_gxserver_rpc(
         "/api/linkCoordinatorThread",
         &json!({
             "coordinatorProjectId": sender["projectId"], "coordinatorSessionId": sender["sessionId"],
             "projectId": recipient["projectId"], "sessionId": recipient["sessionId"],
             "onlyIfCoordinator": true, "reopenOnly": true, "messageDelivered": true,
+            "sendRequestId": send_request_id,
         }),
         flags,
     );
