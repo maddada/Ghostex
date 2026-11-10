@@ -544,18 +544,21 @@ impl NativeChatView {
     }
 
     /// Whether any text field inside this chat pane holds GPUI focus: the composer, the Cmd+F
-    /// find field, the session note, question answers or the terminal dialog field.
+    /// find field, the session note, question answers, a question form's boxes or the terminal
+    /// dialog field.
     ///
     /// CDXC:SessionChat 2026-09-22 WHY:
     /// Background typing sends keys to the composer only when no chat field is focused. Checking
     /// just the composer made every other field (the Cmd+F find bar first) lose its typing to the
     /// composer; every in-pane text field must be listed here.
+    /// CDXC:Dictate 2026-11-10 WHY: the question form's boxes were missing here. The desktop's pane frame hands the keyboard to the chat box on every press inside the chat (`render_agents_session_chat_body_frame`), and that queued focus lands unless one of these fields holds the keyboard, so pressing the microphone with the caret in a form's note moved the caret to the chat box before Dictate looked for it, and the words went to the chat box. A press on anything that takes no focus of its own (the microphone, a choice, a button) now leaves the caret in the form box, as it does for the note and the answer fields.
     pub(crate) fn chat_text_field_focused(&self, window: &Window, cx: &gpui::App) -> bool {
         self.input
             .iter()
             .chain(self.note_input.iter())
             .chain(self.answer_input.iter().map(|(_, input)| input))
             .chain(self.async_answer_input.iter().map(|(_, input)| input))
+            .chain(self.form_inputs.values().map(|entry| &entry.input))
             .map(|input| input.focus_handle(cx))
             .chain(self.search_input.iter().map(|input| input.focus_handle(cx)))
             .chain(

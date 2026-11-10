@@ -61,6 +61,7 @@ impl GhostexGpuiApp {
             v_flex()
                 .w_full()
                 .flex_shrink_0()
+                .child(self.render_native_sidebar_new_session_row(&appearance, cx))
                 .child(self.render_native_unified_header(unified, &appearance, window, cx))
                 .when(snapshot.spaces_enabled, |header| {
                     header.child(div().h(px(4.0 * appearance.scale)).flex_shrink_0())

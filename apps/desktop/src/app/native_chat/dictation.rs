@@ -1,6 +1,7 @@
 //! The composer's Dictate control: the microphone records to a file first and the recording is
 //! transcribed after Stop (`voice_agent::Dictate`, gxserver's `/api/transcribeDictation`); the text
-//! is typed into the draft. While it records or transcribes, a small pill just above the
+//! is typed into the draft, or into the question form box that had the keyboard when the recording
+//! started (`aim_dictation`). While it records or transcribes, a small pill just above the
 //! microphone shows it with an ✕ that cancels (Escape cancels too); a failed transcription turns it
 //! into a small card that says what went wrong and what to do, with Add key or Check key and
 //! Transcribe again. Hovering the microphone when a recording has no text yet offers Transcribe
@@ -19,10 +20,10 @@ use super::state::{NativeChatEvent, NativeChatView};
 use crate::app::voice_agent::{Dictate, DictateEvent, DictateFailure, DictatePhase};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, AppContext as _, Bounds, Context, Entity, EntityInputHandler as _,
-    FontFeatures, FontWeight, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, canvas,
-    deferred, div, px,
+    AnyElement, App, AppContext as _, Bounds, Context, Entity, FontFeatures, FontWeight, Hsla,
+    InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, canvas, deferred,
+    div, px,
 };
 use serde_json::json;
 use std::time::Duration;
@@ -209,6 +210,9 @@ pub(crate) struct DictationControl {
     /// The pill at its last paint, and the spot it was last placed at (`Placement`).
     pill: Rc<Cell<Bounds<Pixels>>>,
     placed: Rc<Cell<(Pixels, Pixels)>>,
+    /// The question form box (its `form_inputs` key) the running dictation types into; `None` is
+    /// the chat box (`aim_dictation`).
+    target: Option<String>,
 }
 
 pub(crate) type Dictation = Option<DictationControl>;
@@ -219,24 +223,23 @@ impl NativeChatView {
             return control.dictate.clone();
         }
         let dictate = cx.new(|_| Dictate::new());
-        let subscription =
-            cx.subscribe_in(&dictate, window, |this, _, event, window, cx| match event {
-                DictateEvent::Text(text) => this.insert_dictation(text, window, cx),
-                DictateEvent::Failure { title, message } => {
-                    // A failed transcription shows in the pill over the microphone with Transcribe
-                    // again; only what the pill does not show becomes a toast.
-                    let in_row = this.dictation.as_ref().is_some_and(|control| {
-                        matches!(
-                            control.dictate.read(cx).phase(),
-                            DictatePhase::Failed { .. }
-                        )
-                    });
-                    if !in_row {
-                        cx.emit(NativeChatEvent::Host(dictation_toast(title, message)));
-                    }
-                    cx.notify();
+        let subscription = cx.subscribe_in(&dictate, window, |this, _, event, _, cx| match event {
+            DictateEvent::Text(text) => this.insert_dictation(text, cx),
+            DictateEvent::Failure { title, message } => {
+                // A failed transcription shows in the pill over the microphone with Transcribe
+                // again; only what the pill does not show becomes a toast.
+                let in_row = this.dictation.as_ref().is_some_and(|control| {
+                    matches!(
+                        control.dictate.read(cx).phase(),
+                        DictatePhase::Failed { .. }
+                    )
+                });
+                if !in_row {
+                    cx.emit(NativeChatEvent::Host(dictation_toast(title, message)));
                 }
-            });
+                cx.notify();
+            }
+        });
         cx.observe(&dictate, |_, _, cx| cx.notify()).detach();
         self.dictation = Some(DictationControl {
             dictate: dictate.clone(),
@@ -244,8 +247,36 @@ impl NativeChatView {
             hover: None,
             pill: Default::default(),
             placed: Rc::new(Cell::new((px(0.0), px(0.0)))),
+            target: None,
         });
         dictate
+    }
+
+    /// Sets where the words of the run `dictate` is about to begin are typed: `target`, a question
+    /// form box, or the chat box. A new recording aims at the box that has the keyboard
+    /// (`focused_form_box`); a recording transcribed later (Transcribe again, Transcribe previous)
+    /// at the chat box. Nothing changes while one records or transcribes, so a box focused
+    /// meanwhile does not move it.
+    ///
+    /// CDXC:Dictate 2026-11-10 WHY: Dictate typed into the chat box even when the caret was in a question form's note, text answer or "Anything else?" box, so the words had to be cut from the draft and pasted into the box. The box that has the keyboard when the recording starts gets them, at its caret with the chat box's spacing; if its form was sent or answered meanwhile they go to the chat box, so a dictation is never lost. This widens "typed into the draft" of the SessionChat 2026-10-08 DECISION and follows the VoiceMode 2026-10-20 one on the caret showing where the words will land (both in this file's head).
+    /// CDXC:Dictate 2026-11-10 SEE-ALSO: the chat core writes the words and decides whether the box still takes them (`insert` in packages/gx-chat-core/src/questions/dictation.rs); the phone's rule is `apps/mobile/app/src/chat/native/composer/dictationTarget.ts`; the box shows it is the target in `question_form.rs` `note_box`.
+    fn aim_dictation(&mut self, dictate: &Entity<Dictate>, target: Option<String>, cx: &App) {
+        let dictate = dictate.read(cx);
+        if dictate.recording() || dictate.transcribing() {
+            return;
+        }
+        if let Some(control) = self.dictation.as_mut() {
+            control.target = target;
+        }
+    }
+
+    /// The form box the running dictation will type into, while it records or transcribes.
+    pub(super) fn dictation_target(&self, cx: &App) -> Option<&str> {
+        let control = self.dictation.as_ref()?;
+        let dictate = control.dictate.read(cx);
+        (dictate.recording() || dictate.transcribing())
+            .then_some(control.target.as_deref())
+            .flatten()
     }
 
     /// Whether the microphone is recording (the Stop glyph).
@@ -258,6 +289,7 @@ impl NativeChatView {
     /// Start recording, or stop and transcribe.
     pub(super) fn toggle_dictation(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let dictate = self.dictate(window, cx);
+        self.aim_dictation(&dictate, self.focused_form_box(window, cx), cx);
         dictate.update(cx, |dictate, cx| dictate.toggle(cx));
         cx.notify();
     }
@@ -277,6 +309,9 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         let dictate = self.dictate(window, cx);
+        if start {
+            self.aim_dictation(&dictate, self.focused_form_box(window, cx), cx);
+        }
         dictate.update(cx, |dictate, cx| {
             if start {
                 dictate.start(cx);
@@ -310,6 +345,7 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         let dictate = self.dictate(window, cx);
+        self.aim_dictation(&dictate, None, cx);
         dictate.update(cx, |dictate, cx| dictate.transcribe_previous(cx));
     }
 
@@ -359,6 +395,17 @@ impl NativeChatView {
         self.show_chat_menu(rows, trigger, 260.0, window, cx);
     }
 
+    /// The microphone was pressed: the pointer on it is no longer one that came to rest there, so
+    /// the hover menu stays shut until it has left the button and come back (`hover_dictation`).
+    ///
+    /// CDXC:Dictate 2026-11-10 WHY: With a recording waiting for Transcribe previous, the hover menu that was armed when the pointer reached the microphone was not called off by a press, so a click made within its delay started a recording and the menu then opened over it. That menu is a window of its own that takes the keyboard from the main window, where the caret stops being drawn, and a click that closes it leaves the keyboard where the click landed: the box being dictated into could be left without it (user: "bazen fokus orada değil başka bir şeyde oldu"). A press also makes GPUI report the button as not hovered, so the pointer can count as entering it again while it never left, possibly once the words are in. So a press calls off a waiting menu and none is armed until the pointer has really left the button, which that report cannot tell from a press: the button's own bounds and the window's exit say so (composer.rs). It is the same for the chat box, as the 2026-10-20 decision at the top of this file asks ("Pressing the microphone … never takes focus from the chat box").
+    pub(super) fn press_dictation(&mut self) {
+        self.dictate_pressed.set(true);
+        if let Some(control) = self.dictation.as_mut() {
+            control.hover = None;
+        }
+    }
+
     /// The pointer entered or left the microphone.
     pub(super) fn hover_dictation(
         &mut self,
@@ -367,6 +414,10 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         if !dictation_drawn() {
+            return;
+        }
+        // Still the pointer that pressed the microphone (`press_dictation`).
+        if hovered && self.dictate_pressed.get() {
             return;
         }
         let dictate = self.dictate(window, cx);
@@ -641,6 +692,7 @@ impl NativeChatView {
                 .on_click(cx.listener(|this, _, _, cx| {
                     if let Some(control) = this.dictation.as_ref() {
                         let dictate = control.dictate.clone();
+                        this.aim_dictation(&dictate, None, cx);
                         dictate.update(cx, |dictate, cx| dictate.retry(cx));
                     }
                     cx.notify();
@@ -684,44 +736,216 @@ impl NativeChatView {
         !self.composer_animation.shown_collapsed() && self.composer_control_available("dictate")
     }
 
-    /// Type a finished dictation at the caret (over a selection), spaced from the characters on
-    /// either side of it (`spaced_at_caret`) while Insert with spacing is on.
-    ///
-    /// CDXC:VoiceMode 2026-11-05 DECISION: User (Q1264) picked "Spacing at the caret": the space
-    /// is decided by the characters next to the caret, not by the end of the draft, so text
-    /// dictated into the middle of a sentence gets a space on each side it needs one and none
-    /// before a comma or after an opening bracket. `dictateInsertSpacing` off types it as heard.
-    fn insert_dictation(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
+    /// Hands a finished dictation to the chat core (`insertDictation`, `questions/dictation.rs`
+    /// in gx-chat-core), which types it at the caret (over a selection), spaced from the
+    /// characters on either side of it while Insert with spacing is on (the VoiceMode 2026-11-05
+    /// DECISION on its `spaced_at_caret`): into the form box the dictation was aimed at
+    /// (`aim_dictation`) while that box still takes text, into the chat box otherwise. The view
+    /// says which box and where each caret is; the core answers with `dictation_inserted`.
+    fn insert_dictation(&mut self, text: &str, cx: &mut Context<Self>) {
         let text = text.trim();
+        let target = self
+            .dictation
+            .as_mut()
+            .and_then(|control| control.target.take());
+        cx.notify();
         if text.is_empty() {
-            cx.notify();
             return;
         }
-        let Some(input) = self.input.clone() else {
-            cx.notify();
+        let (start, end) = utf16_selection(&self.draft, self.composer_selection(cx));
+        let mut action = json!({
+            "type": "insertDictation",
+            "text": text,
+            "spacing": dictate_insert_spacing(),
+            "draft": self.draft,
+            "start": start,
+            "end": end,
+        });
+        if let Some((key, (form, slot))) = target
+            .as_deref()
+            .and_then(|key| Some((key, key.rsplit_once(':')?)))
+        {
+            action["form"] = json!(form);
+            action["slot"] = slot
+                .parse::<usize>()
+                .map_or_else(|_| json!(slot), |index| json!(index));
+            if let Some(entry) = self.form_inputs.get(key) {
+                let input = entry.input.read(cx);
+                let shown = input.value().to_string();
+                let (start, end) = utf16_selection(&shown, Some(input.selected_range()));
+                action["shown"] = json!(shown);
+                action["shownStart"] = json!(start);
+                action["shownEnd"] = json!(end);
+            }
+        }
+        self.invoke(action, cx);
+    }
+
+    /// The chat box's selection in `self.draft`, while the field shows that text.
+    fn composer_selection(&self, cx: &App) -> Option<std::ops::Range<usize>> {
+        let input = self.input.as_ref()?.read(cx);
+        (input.value().to_string() == self.draft).then(|| input.selected_range())
+    }
+
+    /// The core's `dictationInserted`: Dictate's words are in a draft, the chat box's or a form
+    /// box's, and `content` is that draft's text now. The chat box shows it at once, or asks again
+    /// when the reader typed in it meanwhile (the chat box's draft is this view's, not the
+    /// core's); a form box at its next draw, where its window is at hand (`show_dictated`), in the
+    /// transcript and in the Resources modal's copy alike.
+    pub(super) fn dictation_inserted(
+        &mut self,
+        params: &serde_json::Value,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(dictated) = Dictated::of(params) else {
             return;
         };
-        let spaced = if dictate_insert_spacing() {
-            let (before, after) = {
-                let input = input.read(cx);
-                let value = input.value();
-                let range = input.selected_range();
-                let start = range.start.min(value.len());
-                let end = range.end.clamp(start, value.len());
-                (
-                    value.get(..start).and_then(|text| text.chars().next_back()),
-                    value.get(end..).and_then(|text| text.chars().next()),
-                )
-            };
-            spaced_at_caret(before, after, text)
-        } else {
-            text.to_owned()
+        let Some(form) = params["form"].as_str() else {
+            if dictated.supersedes.contains(&self.draft) {
+                self.replace_draft(&dictated.content, false, false, cx);
+                self.input_caret = Some(dictated.caret);
+            } else if let Some(text) = params["text"].as_str() {
+                // The reader typed in the chat box after the words were asked for: the core
+                // places them again, in the text and at the caret as they are now.
+                let (start, end) = utf16_selection(&self.draft, self.composer_selection(cx));
+                self.invoke(
+                    json!({
+                        "type": "insertDictation",
+                        "text": text,
+                        "spacing": params["spacing"],
+                        "id": params["id"],
+                        "draft": self.draft,
+                        "start": start,
+                        "end": end,
+                    }),
+                    cx,
+                );
+            }
+            return;
         };
-        input.update(cx, |input, cx| {
-            input.focus(window, cx);
-            input.replace_text_in_range(None, &spaced, window, cx);
-        });
+        let key = match &params["slot"] {
+            serde_json::Value::String(slot) => format!("{form}:{slot}"),
+            slot => format!("{form}:{}", slot.as_u64().unwrap_or_default()),
+        };
+        for modal in [false, true] {
+            // A copy that is drawn takes the answer. The transcript's box takes words just heard
+            // also while it has no input: it is the dictation's own target, and the sync that
+            // makes its input shows them (`sync_form_input_in`), or drops them with the box.
+            if self.inputs_mut(modal).contains_key(&key) || (!modal && dictated.heard) {
+                let copy = (modal, key.clone());
+                let dictated = match self.dictated_boxes.remove(&copy) {
+                    Some(waiting) => dictated.clone().after(waiting),
+                    None => dictated.clone(),
+                };
+                self.dictated_boxes.insert(copy, dictated);
+            }
+        }
         cx.notify();
+    }
+
+    /// Shows the text the core says this form box's draft has now (`dictation_inserted`). A copy
+    /// of the box that shows one of the texts it supersedes takes it, with the caret after the
+    /// words, and the input's report of it is not sent back as an edit (`FormInput::adopted`); a
+    /// copy showing anything else holds an edit the core has not answered yet, whose own answer
+    /// brings its text. The transcript's box, where a dictation started, takes the keyboard unless
+    /// the Resources modal is open.
+    ///
+    /// CDXC:Dictate 2026-11-10 WHY: After a dictation into a box nobody had typed in, the caret stood before the words instead of after them (user: "cursor'ı cümlenin başına indiriyor. Aslında en sonuna indirmesi lazım"). Such a box is still waiting for its saved draft (`FormInput::settled`), so the document that carried the words filled it through `set_value`, which puts a multi-line input's caret at the start, and this function then found the words already shown and left the caret alone. A box's sync therefore runs this before that fill (`sync_form_input_in`), and a copy that already shows words just heard gets the core's caret too, for the document that arrives before the answer. The same happened to a target whose input was made after the answer: a form sent while the recording ran loses its inputs, a refused send opens it again, and words that arrived before the next draw found no input to keep their answer for, so the new input was made from the draft with the caret at the start and without the keyboard. The answer for the transcript's box is therefore kept until that box's next sync (`dictation_inserted`), which shows it in the input it makes or drops it with a box that is no longer there; an answer is never kept for a copy that is opened later.
+    pub(super) fn show_dictated(
+        &mut self,
+        modal: bool,
+        key: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.dictated_boxes.is_empty() {
+            return;
+        }
+        let Some(dictated) = self.dictated_boxes.remove(&(modal, key.to_string())) else {
+            return;
+        };
+        let Some(entry) = self.inputs_mut(modal).get_mut(key) else {
+            return;
+        };
+        let input = entry.input.clone();
+        let current = input.read(cx).value().to_string();
+        let adopts = dictated.supersedes.contains(&current);
+        let shows = current == dictated.content;
+        if adopts || shows {
+            entry.settled = true;
+            entry.core = dictated.core.clone();
+            entry.rev = dictated.rev;
+        }
+        if adopts {
+            entry.adopted = Some(dictated.content.clone());
+        }
+        // Not while the Resources modal is open: the reader may be typing in its copy.
+        let takes_keyboard =
+            dictated.heard && !modal && self.snapshot["resourceModal"]["id"].is_null();
+        input.update(cx, |input, cx| {
+            let caret = super::form_attachments::utf16_to_byte(&dictated.content, dictated.caret);
+            if adopts {
+                input.replace_all(dictated.content, window, cx);
+            }
+            if adopts || (shows && dictated.heard) {
+                input.set_selected_range(caret..caret, cx);
+            }
+            if takes_keyboard {
+                input.focus(window, cx);
+            }
+        });
+    }
+}
+
+/// The core's `dictationInserted` (`dictation_inserted`), kept for a form box until its next
+/// draw.
+#[derive(Clone)]
+pub(crate) struct Dictated {
+    /// The texts a copy of the target may show to take `content` in their place.
+    supersedes: Vec<String>,
+    /// The target's text now, and the UTF-16 offset after the words in it.
+    content: String,
+    caret: usize,
+    /// A form box's draft now: the core that holds it and how many dictations it has.
+    core: String,
+    rev: u64,
+    /// The words were just heard; false when another copy's edit moved them.
+    heard: bool,
+}
+
+impl Dictated {
+    fn of(params: &serde_json::Value) -> Option<Self> {
+        Some(Self {
+            supersedes: params["supersedes"]
+                .as_array()?
+                .iter()
+                .filter_map(|text| text.as_str().map(str::to_owned))
+                .collect(),
+            content: params["content"].as_str()?.to_owned(),
+            caret: params["caret"].as_u64()? as usize,
+            core: params["core"].as_str().unwrap_or_default().to_owned(),
+            rev: params["rev"].as_u64().unwrap_or(0),
+            heard: params["text"].is_string(),
+        })
+    }
+
+    /// This answer in place of `waiting`, one the copy has not drawn yet: when it builds on
+    /// `waiting`'s text, a copy that would have taken that text takes this one's.
+    fn after(mut self, waiting: Self) -> Self {
+        if self.supersedes.contains(&waiting.content) {
+            self.supersedes.extend(waiting.supersedes);
+            self.heard |= waiting.heard;
+        }
+        self
+    }
+}
+
+/// `range` (byte offsets into `text`) as UTF-16 offsets; the end of the text without one.
+fn utf16_selection(text: &str, range: Option<std::ops::Range<usize>>) -> (usize, usize) {
+    let units = |byte: usize| text.get(..byte).unwrap_or(text).encode_utf16().count();
+    match range {
+        Some(range) => (units(range.start), units(range.end.max(range.start))),
+        None => (units(text.len()), units(text.len())),
     }
 }
 
@@ -781,40 +1005,6 @@ fn dictate_insert_spacing() -> bool {
         .get("dictateInsertSpacing")
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(true)
-}
-
-/// `text` with the spaces the caret's neighbours need: one before it after a word or a closing
-/// mark (not at the start, after a space, or after an opening bracket or quote), and one after
-/// it before a word (not before a space or a punctuation mark that hugs the word before it).
-pub(super) fn spaced_at_caret(before: Option<char>, after: Option<char>, text: &str) -> String {
-    let first = text.chars().next();
-    let last = text.chars().next_back();
-    let hugs_left = |c: char| {
-        matches!(
-            c,
-            ',' | '.' | ';' | ':' | '!' | '?' | ')' | ']' | '}' | '…' | '%'
-        )
-    };
-    let opens = |c: char| {
-        matches!(
-            c,
-            '(' | '[' | '{' | '"' | '\'' | '`' | '/' | '@' | '#' | '“' | '‘'
-        )
-    };
-    let space_before = before.is_some_and(|c| !c.is_whitespace() && !opens(c))
-        && first.is_some_and(|c| !c.is_whitespace() && !hugs_left(c));
-    let space_after = after
-        .is_some_and(|c| !c.is_whitespace() && !hugs_left(c) && c != '"' && c != '\'')
-        && last.is_some_and(|c| !c.is_whitespace() && !opens(c));
-    let mut spaced = String::with_capacity(text.len() + 2);
-    if space_before {
-        spaced.push(' ');
-    }
-    spaced.push_str(text);
-    if space_after {
-        spaced.push(' ');
-    }
-    spaced
 }
 
 #[cfg(test)]
@@ -948,46 +1138,5 @@ mod tests {
                 "initialVoiceAgentKey": "openai",
             })
         );
-    }
-
-    #[test]
-    fn an_empty_draft_or_a_caret_after_a_space_gets_no_leading_space() {
-        assert_eq!(spaced_at_caret(None, None, "hello there"), "hello there");
-        assert_eq!(spaced_at_caret(Some(' '), None, "hello"), "hello");
-        assert_eq!(spaced_at_caret(Some('\n'), None, "hello"), "hello");
-    }
-
-    #[test]
-    fn a_caret_right_after_a_word_gets_a_space_before() {
-        assert_eq!(spaced_at_caret(Some('d'), None, "hello"), " hello");
-        assert_eq!(spaced_at_caret(Some('.'), None, "Next one"), " Next one");
-    }
-
-    #[test]
-    fn a_caret_in_the_middle_of_a_sentence_is_spaced_on_both_sides() {
-        // "fix the|bug" with the caret between "the" and "bug".
-        assert_eq!(spaced_at_caret(Some('e'), Some('b'), "login"), " login ");
-        // "fix the |bug": the space is already before the caret.
-        assert_eq!(spaced_at_caret(Some(' '), Some('b'), "login"), "login ");
-        // "fix the| bug": the space is already after the caret.
-        assert_eq!(spaced_at_caret(Some('e'), Some(' '), "login"), " login");
-    }
-
-    #[test]
-    fn the_end_of_the_draft_is_not_what_decides() {
-        // The draft ends in a word, but the caret sits at its start.
-        assert_eq!(spaced_at_caret(None, Some('w'), "Hello"), "Hello ");
-    }
-
-    #[test]
-    fn punctuation_and_brackets_hug_their_word() {
-        assert_eq!(
-            spaced_at_caret(Some('('), Some(')'), "see notes"),
-            "see notes"
-        );
-        assert_eq!(spaced_at_caret(Some('d'), Some(','), "please"), " please");
-        assert_eq!(spaced_at_caret(Some('d'), Some('.'), "now"), " now");
-        assert_eq!(spaced_at_caret(Some('d'), None, ", then"), ", then");
-        assert_eq!(spaced_at_caret(Some('"'), Some('"'), "quoted"), "quoted");
     }
 }

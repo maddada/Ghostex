@@ -416,11 +416,19 @@ pub fn project_message(
     // (`tool_card.rs`); off, the rows draw as before.
     if tool_cards {
         let (_, tool_blocks) = split_blocks(&message.blocks);
+        // When each unanswered call started, for a running call's live time; only a working
+        // session has running calls, and they are in the live rows.
+        let starts = if working {
+            crate::transcript::work_summary::tool_starts(message, [messages])
+        } else {
+            Default::default()
+        };
         if let Some(card) = crate::transcript::tool_card::tool_card(
             &tool_blocks,
             &rows,
             &files,
             spans,
+            &starts,
             working_directory,
             working,
         ) {

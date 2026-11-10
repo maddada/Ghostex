@@ -19,7 +19,7 @@
 //! SEE-ALSO: packages/gx-chat-core/src/extras/coordinator_board.rs (the wording, folds and menus),
 //! packages/gx-chat-core/src/extras/work_cards.rs (the same items as cards in the chat).
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::extras::work_cards::{owner_words, waits_line};
 
@@ -138,6 +138,16 @@ fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
     if item["untested"] == true {
         row["untested"] = json!(true);
     }
+    // Under Needs you with no open question: Done, its one answer ("W7: Done"), given until the
+    // coordinator next changes the item (`saidDone`); `answerKey` locks it here and on its dock
+    // row alike (work_cards.rs `done_answer_key`).
+    if let Some(answer_key) = crate::extras::work_cards::done_answer_key(item) {
+        row["answers"] = json!([{ "label": "Done", "recommended": false }]);
+        row["answerKey"] = json!(answer_key);
+        if item["saidDone"] == true {
+            row["answered"] = json!("Done");
+        }
+    }
     // A thread on it waiting on the user, or not moving: the board's chips that open it.
     if let Some(thread) = item["threads"]
         .as_array()
@@ -205,6 +215,8 @@ fn ask_row(item: &Value, ask: &Value, now_ms: i64) -> Value {
         "askRow": true,
         "group": if !snoozed.is_empty() { "later" } else if holds { "blocked" } else { "needs" },
         "title": text(ask, "text"),
+        // Its longer explanation under the short title (`item ask --detail`).
+        "body": text(ask, "detail"),
         "detail": detail,
         "note": if steps.is_empty() { detail.clone() } else { format!("{detail} \u{b7} Steps: {steps}") },
         "at": text(ask, "askedAt"),

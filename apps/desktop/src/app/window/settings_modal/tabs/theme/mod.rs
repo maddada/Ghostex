@@ -517,8 +517,9 @@ impl ThemeTab {
         .map(IntoElement::into_any_element)
     }
 
-    /// The window frame rows of the Advanced fold: Frame the work area, and under it the window
-    /// buttons the sidebar's collapse keeps. macOS only; None elsewhere or when a search hides both.
+    /// The window frame rows of the Advanced fold: Frame the work area, under it the window
+    /// buttons the sidebar's collapse keeps, then the side the close buttons of dialogs and toasts
+    /// sit on. macOS only; None elsewhere or when a search hides all three.
     ///
     /// CDXC:Settings 2026-11-08 DECISION:
     /// User: "please also move this whole setting under a new advanced area in the interface page in settings". Both rows moved out of Colours into the page's collapsed Advanced fold (`ADVANCED_MAIN_SETTING_KEYS`), as About does with Experimental: a search shows the matching rows in this section in place and the fold stays out.
@@ -554,6 +555,22 @@ impl ThemeTab {
                     "Keep the red, yellow and green window buttons in the window's top left while the sidebar is collapsed. Off hides them until you open the floating sidebar, which carries them in its top row. Full screen keeps its own title bar either way.",
                 ),
                 values.bool("showWindowButtonsWhenSidebarCollapsed"),
+                cx,
+            ));
+        }
+        // CDXC:AppModal 2026-11-10 DECISION in window/round_close_button.rs: dialogs and toasts
+        // close from their top left on macOS; this row puts the X back on the right.
+        if t.visible("closeButtonsOnRight") {
+            rows.push(toggle_field(
+                self,
+                &p,
+                "closeButtonsOnRight",
+                t.spec_plain(
+                    "closeButtonsOnRight",
+                    "Close buttons on the right",
+                    "Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button.",
+                ),
+                values.bool("closeButtonsOnRight"),
                 cx,
             ));
         }

@@ -181,8 +181,8 @@ fn scope_options(
         })
         .collect();
     for (key, _) in &scope.spaces {
-        // With the Spaces extension off the HUD lists no Space, and a saved Space rule is kept
-        // but not offered (built_in_extensions.rs).
+        // With Spaces off the HUD lists no Space, and a saved Space rule is kept
+        // but not offered (settings-catalog spaces.rs).
         if spaces.is_empty()
             || spaces.iter().any(|space| space.key() == *key)
             || parse_view_scope_space_key(key).is_none()

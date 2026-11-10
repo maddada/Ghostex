@@ -59,7 +59,6 @@ pub(crate) fn official(platform: Platform) -> Section {
         row("gitActions", "Git actions", "A work area header button for commit, branch, and worktree helpers on the active project."),
         row("quickActions", "Actions", "Saved terminal commands and web pages you start in one click from the Start button, a hotkey, Quick Access or a project row."),
         row("openIn", "Open In", "Open the active project or a session's folder in your editor, terminal or file manager from the Open button and the Open In menus."),
-        row("spaces", "Spaces", "Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping."),
         row("cloudBoxes", "Cloud Boxes", "Run agent sessions on a Cloud Box: a Linux machine on your Instabox or Boat account, started from a new chat, with more providers through agentbox."),
         row("workspaces", "Workspaces", "Keep each company's projects, Spaces, browser sign-ins, Linear key and Claude account in its own workspace, pick each one's primary tracker, and share a team backend for your team's Slack flow."),
         row("connectors", "Connectors", "Connect Gmail, Slack, Linear and more apps to a workspace so its agents can use them, from the Connectors page and the ghostex connectors commands."),

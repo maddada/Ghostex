@@ -426,7 +426,7 @@ pub(crate) struct GeneralSearch {
     pub(crate) query: String,
     /// The rows this copy of the search shows (`RowTier`); `None` for every row.
     pub(crate) tier: Option<RowTier>,
-    /// Rows of a built-in extension that is off (the Space rows while Spaces is off).
+    /// Rows of a built-in extension that is off, and the Space rows while Spaces is off.
     pub(crate) hidden_keys: Vec<&'static str>,
     /// `settingsSearch[sectionId]`.
     pub(crate) sections: HashMap<String, SectionSearch>,
@@ -490,6 +490,13 @@ impl GeneralSearch {
 
     pub(crate) fn is_searching(&self) -> bool {
         !js_trim(&self.query).is_empty()
+    }
+
+    /// Whether this is the Advanced fold's pass. A row that is not a setting (a link to another
+    /// page, a button strip) belongs to the page body's pass only, or it draws twice with the
+    /// same element ids once the fold opens.
+    pub(crate) fn is_advanced_pass(&self) -> bool {
+        self.tier == Some(RowTier::Advanced)
     }
 
     /// Whether a row that stands for several settings (Card details, Animations, Transcript

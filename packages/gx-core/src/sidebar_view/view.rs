@@ -371,6 +371,24 @@ pub struct GroupSummary {
     /// Rows waiting for approval (the red dot); counted here only, not as questions or attention.
     pub approval_count: usize,
     pub awake_count: usize,
+    /// Rows of any kind whose session is running (not asleep, closed or errored).
+    pub running_count: usize,
+    /// A project with nothing running, working or waiting on the user, its session groups
+    /// included; a project with no sessions at all is inactive. Set by `assemble`
+    /// (`mark_inactive_projects`) for project groups only.
+    pub inactive: bool,
+}
+
+impl GroupSummary {
+    /// No row works, runs or waits on the user.
+    pub(crate) fn is_quiet(&self) -> bool {
+        self.working_count == 0
+            && self.attention_count == 0
+            && self.background_work_count == 0
+            && self.question_count == 0
+            && self.approval_count == 0
+            && self.running_count == 0
+    }
 }
 
 /// One heading of a project's session list.

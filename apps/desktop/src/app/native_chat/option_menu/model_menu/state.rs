@@ -48,6 +48,12 @@ fn shape(view: &Value) -> Value {
     })
 }
 
+/// Where the footer buttons start in the cursor's one run of positions (models, the Legacy models
+/// row when the tab has one, then the buttons).
+pub(super) fn footer_start(view: &Value) -> usize {
+    view["rows"].as_array().map_or(0, Vec::len) + usize::from(view["legacy"].is_object())
+}
+
 fn selected_row(view: &Value) -> usize {
     view["rows"]
         .as_array()
@@ -130,6 +136,26 @@ impl ModelMenuState {
 
     pub(super) fn traits(&self) -> &[Value] {
         self.view["traits"].as_array().map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether the open tab folds older models under a Legacy models row, which the cursor visits
+    /// as one stop between the last model and the footer buttons.
+    pub(super) fn has_fold(&self) -> bool {
+        self.view["legacy"].is_object()
+    }
+
+    pub(super) fn fold_open(&self) -> bool {
+        self.view["legacy"]["open"] == true
+    }
+
+    /// The cursor position of the Legacy models row, when the tab has one.
+    pub(super) fn fold_stop(&self) -> Option<usize> {
+        self.has_fold().then(|| self.rows().len())
+    }
+
+    /// The cursor position of the first footer button: the models, then the fold's one stop.
+    pub(super) fn footer_start(&self) -> usize {
+        footer_start(&self.view)
     }
 
     /// The row the Reasoning button follows: the highlighted model, else the one the cursor last
@@ -274,14 +300,35 @@ impl ChatOptionMenuPanel {
             return;
         }
         let moved = next["tab"] != state.view["tab"];
+        let (old_rows, old_fold, old_footer, was_open) = (
+            state.rows().len(),
+            state.fold_stop(),
+            state.footer_start(),
+            state.fold_open(),
+        );
         state.view = next;
         if moved {
             state.active = selected_row(&state.view);
             state
                 .scroll
                 .scroll_to_item(state.active, ScrollStrategy::Top);
+        } else {
+            // The Legacy models row opening or closing moves the rows and the buttons after it:
+            // the cursor stays on the same row, the fold or the same button.
+            let new_footer = state.footer_start();
+            if old_fold == Some(state.active) {
+                state.active = state.fold_stop().unwrap_or(state.active);
+            } else if state.active >= old_footer {
+                state.active = new_footer + (state.active - old_footer);
+            } else if state.active >= state.rows().len() {
+                state.active = state.fold_stop().unwrap_or(new_footer);
+            }
+            // Opening the list scrolls to its first model, so the click or the key shows what it added.
+            if !was_open && state.fold_open() {
+                state.scroll.scroll_to_item(old_rows, ScrollStrategy::Top);
+            }
         }
-        let count = state.rows().len() + state.traits().len();
+        let count = state.footer_start() + state.traits().len();
         state.active = state.active.min(count.saturating_sub(1));
         cx.notify();
     }

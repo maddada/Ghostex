@@ -450,7 +450,12 @@ pub async fn run_gxserver_foreground(
     if let Ok(db) = open_gxserver_database(&paths) {
         let repository = DomainRepository::new(&db, metadata.server_id.as_str());
         cycle_wire_incompatible_zmx_session_daemons(&repository, &logger, &metadata.server_id);
-        crate::zmx::end_unowned_zmx_session_daemons(&repository, &logger, &metadata.server_id);
+        crate::zmx::end_unowned_zmx_session_daemons(
+            &repository,
+            &logger,
+            &metadata.server_id,
+            &paths.auth_token_file,
+        );
     }
     // Read before any client connects: its first listing marks the daemons a shutdown ended as missing.
     let sessions_to_resume =

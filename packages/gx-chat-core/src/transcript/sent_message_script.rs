@@ -168,6 +168,8 @@ impl<'a> Script<'a> {
     }
 
     /// What a file held, when the same call or message wrote it (`-` is the send's here-document).
+    /// The two may name it differently: a Write tool records the absolute path while the send says
+    /// `~/…` ([`same_file`]).
     pub fn file_text(&self, path: &str, send: &ShellCommand) -> Option<String> {
         if matches!(path, "-" | "/dev/stdin") {
             return send.heredoc.clone();
@@ -177,8 +179,11 @@ impl<'a> Script<'a> {
             .rev()
             .find_map(|shell| {
                 let writes = match shell.words.first().map(String::as_str) {
-                    Some("cat") => shell.stdout_file.as_deref() == Some(path),
-                    Some("tee") => shell.words[1..].iter().any(|word| word == path),
+                    Some("cat") => shell
+                        .stdout_file
+                        .as_deref()
+                        .is_some_and(|file| same_file(file, path)),
+                    Some("tee") => shell.words[1..].iter().any(|word| same_file(word, path)),
                     _ => false,
                 };
                 writes.then(|| shell.heredoc.clone()).flatten()
@@ -187,7 +192,7 @@ impl<'a> Script<'a> {
                 self.written
                     .iter()
                     .rev()
-                    .find(|(file, _)| *file == path)
+                    .find(|(file, _)| same_file(file, path))
                     .map(|(_, content)| content.to_string())
             })
     }
@@ -344,4 +349,45 @@ pub(crate) fn is_expansion(word: &str) -> bool {
         || word.strip_prefix('$').is_some_and(|rest| {
             rest.starts_with(|next: char| next.is_alphabetic() || matches!(next, '_' | '{' | '('))
         })
+}
+
+/// Whether two names of a file are the same file: equal, or one under the home folder (`~/`,
+/// `$HOME/`, `${HOME}/`) and the other the same path under an absolute home folder
+/// (`/Users/<name>`, `/home/<name>`, `/root`, `C:\Users\<name>`). The core does not know the
+/// machine's home folder, so any home-shaped prefix stands for it.
+///
+/// CDXC:SessionChat 2026-11-10 WHY: a coordinator wrote a thread's brief with the Write tool (an
+/// absolute path) and started the thread with `--body-file ~/…/brief.md`; the exact match missed,
+/// the card had no message and its row did nothing when clicked.
+fn same_file(a: &str, b: &str) -> bool {
+    a == b
+        || under_home(a).is_some_and(|rest| in_some_home(b, rest))
+        || under_home(b).is_some_and(|rest| in_some_home(a, rest))
+}
+
+/// The rest of a path named from the home folder (`~/rest`, `$HOME/rest`, `${HOME}/rest`).
+fn under_home(path: &str) -> Option<&str> {
+    ["~/", "$HOME/", "${HOME}/"]
+        .iter()
+        .find_map(|home| path.strip_prefix(home))
+        .filter(|rest| !rest.is_empty())
+}
+
+/// Whether `path` is `rest` under an absolute home folder.
+fn in_some_home(path: &str, rest: &str) -> bool {
+    let path = path.replace('\\', "/");
+    let rest = rest.replace('\\', "/");
+    let Some(home) = path
+        .strip_suffix(rest.as_str())
+        .and_then(|home| home.strip_suffix('/'))
+    else {
+        return false;
+    };
+    let parts: Vec<&str> = home.split('/').collect();
+    match parts.as_slice() {
+        ["", "root"] => true,
+        ["", "Users" | "home", name] => !name.is_empty(),
+        [drive, "Users", name] => drive.len() == 2 && drive.ends_with(':') && !name.is_empty(),
+        _ => false,
+    }
 }

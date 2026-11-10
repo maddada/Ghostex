@@ -392,8 +392,8 @@ pub(crate) fn render_veil(time: f32, saturation: f32) -> BackdropPixels {
             let mut v = uv_y;
             u *= 0.75;
             v = v * 0.35 - 0.8;
-            let du = (v * 6.283 + time * 0.5).sin() * warp * 0.05;
-            let dv = (u * 6.283 + time * 0.5).cos() * warp * 0.05;
+            let du = (v * std::f32::consts::TAU + time * 0.5).sin() * warp * 0.05;
+            let dv = (u * std::f32::consts::TAU + time * 0.5).cos() * warp * 0.05;
             u += du;
             v += dv;
             let color = cppn(u, v, in0, in1, in2);

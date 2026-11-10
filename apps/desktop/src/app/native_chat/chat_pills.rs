@@ -652,7 +652,14 @@ impl NativeChatView {
         };
         // Upward from the chat box's top edge, lined up with the pill (`PillsStripCells::menu_anchor`
         // has the user's words).
-        let (trigger, side) = self.pills_strip.menu_anchor(pill);
+        let (mut trigger, side) = self.pills_strip.menu_anchor(pill);
+        // The work items list opens from the dock's header, so it stands above the dock rather
+        // than over the button that opened it.
+        if id == super::coordinator_board::BOARD_MENU
+            && let Some(top) = self.board.dock_top.get()
+        {
+            trigger.origin.y = top;
+        }
         self.menu_side = Some(side);
         self.show_chat_menu(
             vec![json!({"pillMenu": {"id": id, "height": height}})],

@@ -30,8 +30,8 @@ USAGE
                               [--release <name>] [--json]
   ghostex coordinator item now <W7> "<where it stands>" [--thread <thread-ref>]... [--json]
   ghostex coordinator item step <W7> "<step>" [--done] [--chore] [--json]
-  ghostex coordinator item ask <W7> "<what you ask>" [--answers "A,B" | --answer "A" --answer "B"]
-                              [--recommended B]
+  ghostex coordinator item ask <W7> "<title>" [--detail "<the rest>"]
+                              [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
                               [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex coordinator item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
   ghostex coordinator item wait <W7> --on <W8|Q12|"words">... [--until <when>] ["<line>"] [--json]
@@ -216,12 +216,14 @@ WORK ITEMS
   A coordinator tracks each line of work as one work item, named the way the
   user would name it ("iPhone voice calls"), as W<number> (never reused). A
   thread, a rebuild, a release step or a question is never an item: attach it
-  to one (--thread, item step, item ask). The Work panel (the Work pill,
-  which carries the counts) lists every item by who has the ball; what needs
-  the user sits as rows above their chat box, where they answer, Reply in
-  their own words, Dismiss or Snooze; under the reply one line says what the
-  turn changed. An answer or Reply arrives as "W7 Q12: <answer>" and is
-  already recorded; a Dismiss withdraws the ask for good.
+  to one (--thread, item step, item ask). The Work panel lists every item by
+  who has the ball; what needs the user sits as rows above their chat box,
+  under a header with the counts and the button that opens the panel, where
+  they answer, Reply in their own words, Dismiss or Snooze; under the reply
+  one line says what the turn changed. An answer or Reply arrives as "W7 Q12: <answer>" and is
+  already recorded; a Dismiss withdraws the ask for good. A Needs you item
+  with no open ask offers Done: "W7: Done" means the user did what the item
+  asked, so move it on or finish it; Reply on it arrives as "W7: <words>".
   Statuses, in the order the Work panel lists them:
     Needs you  the user has something to do or decide (an open ask)
     Blocked    the work stops until the user acts: an ask with --holds, or a
@@ -242,7 +244,11 @@ WORK ITEMS
   append, say where it stands now. step records a step (--done when it is);
   --chore keeps a rebuild or test run out of sight: chores are never shown.
   ask puts something before the user, with a question tag (the next after the
-  chat's, or --tag Q12 for one already asked in the chat): one-click answers
+  chat's, or --tag Q12 for one already asked in the chat). Its title is one
+  short plain question or instruction a person understands at a glance, about
+  ten words, with no item names or code names ("Ship the new pairing screen
+  today?"); everything else (why, what to check, where) goes in --detail, which
+  shows under the title when the user opens the row. One-click answers
   with --answers (commas split them; write \, for a comma inside an answer,
   or give each with --answer "Too small to read, simplify it"), the steps to
   follow with --steps, and --holds when the work

@@ -227,7 +227,12 @@ fn expanded_card_height(row: &Value) -> f32 {
     } else {
         lines(&line) * 19.0 + 6.0
     };
-    20.0 + lines(&text(row, "title")) * 20.0 + body + 28.0 + 32.0
+    // A work ask's detail under its title, four lines at most until "more" (`board_card`).
+    let detail = match text(row, "body").as_str() {
+        "" => 0.0,
+        words => lines(words).min(super::work_cards::DOCK_QUESTION_LINES as f32 + 1.0) * 19.0 + 6.0,
+    };
+    20.0 + lines(&text(row, "title")) * 20.0 + detail + body + 28.0 + 32.0
 }
 
 /// The board's content height (unscaled): its header, each group's line, an open group's rows
@@ -330,6 +335,12 @@ pub(crate) struct CoordinatorBoardView {
     /// Where a count on the dock's status line was clicked: the next focus opens the panel as its
     /// floating card there, over the chat, even where it could dock (work_cards.rs).
     pub(super) float_at: Option<gpui::Bounds<gpui::Pixels>>,
+    /// The dock's top edge at its last paint, `None` while it is not drawn: the work items list
+    /// its header's button opens sits above the dock instead of over it (work_cards.rs).
+    pub(super) dock_top: std::rc::Rc<std::cell::Cell<Option<gpui::Pixels>>>,
+    /// The dock's rows' width at its last paint (unscaled), 0 before the first: what decides
+    /// whether a row's answers fit beside its question (work_cards.rs `dock_row`).
+    pub(super) dock_width: std::rc::Rc<std::cell::Cell<f32>>,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only
@@ -455,19 +466,15 @@ impl NativeChatView {
         }
     }
 
-    /// The Board pill was clicked: in the list view the docked column comes or goes where there is
-    /// room, else the floating card opens or shuts; in the columns view the overlay does.
+    /// The dock header's work items button (work_cards.rs) was clicked: in the list view the
+    /// docked column comes or goes where there is room, else the floating card opens or shuts; in
+    /// the columns view the overlay does.
     pub(super) fn toggle_coordinator_board(
         &mut self,
         pill: gpui::Bounds<gpui::Pixels>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // The dock hidden by its x comes back with the Work pill.
-        if self.snapshot["workDock"]["hidden"] == true {
-            self.invoke(json!({"type": "showWorkDock"}), cx);
-            return;
-        }
         if self.board_view() == COLUMNS_VIEW {
             if !self.chat_menu_toggled_shut(BOARD_COLUMNS_TRIGGER, cx) {
                 self.open_board_columns_after_dock(window, cx);
@@ -1401,6 +1408,21 @@ impl NativeChatView {
                     .children(self.board_restore_button(row, p, cx)),
             );
         if expanded {
+            // A work ask's longer explanation under its short title, in the quieter colour: four
+            // lines, then "more" (the dock row's rule, work_cards.rs `ask_detail`).
+            let body = text(row, "body");
+            if !body.is_empty() {
+                card = card.child(self.ask_detail(
+                    &key,
+                    &body,
+                    inner_width,
+                    p.card_muted,
+                    13.0,
+                    19.0,
+                    p,
+                    cx,
+                ));
+            }
             // Its latest line (a thread's report or what it is on, an item's note), whole.
             let line = Some(text(row, "detail"))
                 .filter(|line| !line.is_empty())

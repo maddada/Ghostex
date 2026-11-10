@@ -1219,7 +1219,7 @@ impl RemoteTab {
                     "Relay, ports, allowed keys, the pairing address, raw status".to_string()
                 }
             };
-            rows.push(style::fold_row(
+            let header = style::fold_row(
                 t,
                 fold.anchor(),
                 fold.title(),
@@ -1227,22 +1227,25 @@ impl RemoteTab {
                 open,
                 move |tab: &mut Self, _window, cx| tab.toggle_fold(fold, cx),
                 cx,
-            ));
+            );
             if !open {
+                rows.push(style::fold_group(t, header, Vec::new()));
                 continue;
             }
-            match fold {
+            // What an open fold holds is set in under its header (CDXC:Settings 2026-11-10 on
+            // `style::fold_row`).
+            let body = match fold {
                 RemoteFold::ThisComputer => {
-                    rows.extend(current_machine::this_computer_rows(self, t, window, cx));
+                    current_machine::this_computer_rows(self, t, window, cx)
                 }
-                RemoteFold::Tailscale => rows.push(
+                RemoteFold::Tailscale => vec![
                     div()
                         .w_full()
                         .p(px(12.0))
                         .child(tailscale::tailscale_panel(self, t, cx))
                         .into_any_element(),
-                ),
-                RemoteFold::Advanced => rows.push(
+                ],
+                RemoteFold::Advanced => vec![
                     div()
                         .w_full()
                         .p(px(12.0))
@@ -1252,8 +1255,9 @@ impl RemoteTab {
                             no_server_line(t)
                         })
                         .into_any_element(),
-                ),
-            }
+                ],
+            };
+            rows.push(style::fold_group(t, header, body));
         }
         paired_devices::rows_frame(t, rows)
     }

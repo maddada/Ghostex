@@ -773,6 +773,20 @@ fn list_item(
         .into_any_element()
 }
 
+/// A line of quiet text as a row of a section's card: an empty list ("No chat is shared right
+/// now."), a note under a list or a message about it, padded like every other row.
+///
+/// CDXC:Settings 2026-11-10 DECISION:
+/// User, of Collab's "No chat is shared right now." and "Nothing yet. Every guest message ..."
+/// drawn with no padding inside their section's rounded card, the text touching its edge: "these
+/// are so ugly man. please do a check all over settings for anything like this and fix". Every
+/// empty list and note inside a card is this row: the row inset ([`card_inset`]) with the plain
+/// quiet [`static_note`], the look Secrets' "No 1Password account yet." already had. Never put a
+/// bare [`static_note`] in a card (it has no padding), nor a boxed one (a box inside the card).
+pub(crate) fn settings_note_row(p: &SettingsPalette, value: impl Into<SharedString>) -> AnyElement {
+    card_inset(static_note(p, value, false))
+}
+
 /// `StaticNoteField`'s value box.
 pub(crate) fn static_note(
     p: &SettingsPalette,
@@ -786,13 +800,16 @@ pub(crate) fn static_note(
             .child(value.into())
             .into_any_element();
     }
+    // A boxed note on the page (an error, a service it can't reach) is a one-row card: the
+    // section card's radius, fill and hairline with the row inset ([`card_inset`]), so it reads
+    // like the cards around it (CDXC:Settings 2026-11-10 on [`settings_note_row`]).
     div()
-        .px(px(12.0))
-        .py(px(8.0))
-        .rounded(px(MODAL_RADIUS_CONTROL))
+        .px(px(ROW_PADDING_X))
+        .py(px(14.0))
+        .rounded(px(MODAL_RADIUS_SECTION))
         .border_1()
         .border_color(hsla(p.hairline))
-        .bg(hsla(css_fade(p.raised_hover, 0.3)))
+        .bg(hsla(p.raised))
         .text_size(px(14.0))
         .text_color(hsla(p.muted))
         .child(value.into())

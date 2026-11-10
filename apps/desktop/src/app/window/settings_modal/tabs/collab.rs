@@ -17,8 +17,8 @@ use super::super::catalog::SettingOption;
 use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
     ButtonVariant, CONTROL_LANE_WIDTH, FieldStates, ListItemStatus, RowSpec, SettingsPage,
-    segmented_field, setting_row, settings_button, settings_list_item, settings_section,
-    settings_text_input, static_note,
+    segmented_field, setting_row, settings_button, settings_list_item, settings_note_row,
+    settings_section, settings_text_input, static_note,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -404,10 +404,10 @@ impl CollabTab {
             .as_ref()
             .and_then(|view| view["guestPage"]["message"].as_str())
         {
-            rows.push(static_note(p, message.to_string(), true).into_any_element());
+            rows.push(settings_note_row(p, message.to_string()));
         }
         if shares.is_empty() {
-            rows.push(static_note(p, "No chat is shared right now.", false).into_any_element());
+            rows.push(settings_note_row(p, "No chat is shared right now."));
         }
         for share in &shares {
             let id = share["shareId"].as_str().unwrap_or_default().to_string();
@@ -474,14 +474,10 @@ impl CollabTab {
     fn log_section(&mut self, p: &SettingsPalette) -> Option<Div> {
         let mut rows = Vec::new();
         if self.log.is_empty() {
-            rows.push(
-                static_note(
-                    p,
-                    "Nothing yet. Every guest message and what you did with it shows here.",
-                    false,
-                )
-                .into_any_element(),
-            );
+            rows.push(settings_note_row(
+                p,
+                "Nothing yet. Every guest message and what you did with it shows here.",
+            ));
         }
         for entry in &self.log {
             let guest = entry["guest"].as_str().unwrap_or("A guest");

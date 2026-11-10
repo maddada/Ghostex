@@ -1,7 +1,9 @@
 // Formats the files an agent just edited, from a PostToolUse hook in your own untracked agent settings (.claude/settings.local.json for Claude Code, .codex/hooks.json for Codex; ai/formatting-and-file-size.md).
 // It reads the hook's JSON on stdin (Claude's `tool_input.file_path`, or the paths in Codex's `apply_patch` text); file paths given as arguments are formatted instead, for a manual run.
 // Only app-owned files are touched, by tooling/format/scope.json: Rust anywhere outside `neverFormat`, and prettier only for the files its globs cover.
-// It never fails the edit: every outcome exits 0, and a formatter error is one short line on stderr.
+// It never fails the edit: from a hook every outcome exits 0, and a formatter error is one short line on stderr. A manual run
+// (paths as arguments) exits 1 when a formatter could not run at all (rustfmt missing, prettier not installed), so a
+// file left unformatted is not mistaken for a formatted one.
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -10,8 +12,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'));
 const scope = JSON.parse(readFileSync(path.join(root, 'tooling/format/scope.json'), 'utf8'));
 
+let formatterMissing = false;
+
 function note(message) {
   process.stderr.write(`format-edited-file: ${message}\n`);
+}
+
+function noteMissing(message) {
+  formatterMissing = true;
+  note(message);
 }
 
 function readStdin() {
@@ -111,7 +120,7 @@ function formatRust(file) {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
-  if (result.error) return note(`rustfmt could not run: ${result.error.message}`);
+  if (result.error) return noteMissing(`rustfmt could not run: ${result.error.message}`);
   if (result.status !== 0) {
     return note(`rustfmt left ${path.relative(root, file)} as it was: ${result.stderr.trim().split('\n')[0]}`);
   }
@@ -120,7 +129,7 @@ function formatRust(file) {
 
 async function formatPrettier(file) {
   const entry = path.join(root, 'node_modules/prettier/index.mjs');
-  if (!existsSync(entry)) return note('prettier is not installed (run bun install)');
+  if (!existsSync(entry)) return noteMissing('prettier is not installed (run bun install)');
   const prettier = await import(pathToFileURL(entry).href);
   const before = readFileSync(file, 'utf8');
   const options = (await prettier.resolveConfig(file)) ?? {};
@@ -141,7 +150,8 @@ export async function formatFile(file) {
 
 async function main() {
   let files = process.argv.slice(2).map((file) => path.resolve(file));
-  if (files.length === 0) {
+  const manual = files.length > 0;
+  if (!manual) {
     try {
       files = editedPaths(JSON.parse(readStdin() || '{}'));
     } catch {
@@ -149,6 +159,7 @@ async function main() {
     }
   }
   for (const file of new Set(files)) await formatFile(file);
+  if (manual && formatterMissing) process.exitCode = 1;
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

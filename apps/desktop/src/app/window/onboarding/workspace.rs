@@ -496,7 +496,8 @@ impl GpuiOnboardingWindow {
         // CDXC:Onboarding 2026-11-06 DECISION:
         // A Discord request from a new user: Spaces is an extension that is off by default, so
         // nobody finds it. The Workspace panel gets a Spaces switch that writes the same key as
-        // Settings > Extensions (`sidebarSpacesEnabled`). It is not a view tab, so the mock window
+        // Settings > Extensions (`sidebarSpacesEnabled`, now Settings > Sidebar & Sessions > Spaces:
+        // CDXC:Spaces 2026-11-10). It is not a view tab, so the mock window
         // has nothing to preview for it.
         let spaces_on = self.settings.spaces_on;
         let spaces_thumb = self.thumb("ws-Spaces", spaces_on, now);

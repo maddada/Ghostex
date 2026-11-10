@@ -73,6 +73,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::FormSend
         | ActionKind::FormSkipAll
         | ActionKind::FormToggle
+        | ActionKind::InsertDictation
         | ActionKind::InlineAnswer
         | ActionKind::InlineAnswerChange
         | ActionKind::InlineAnswerText

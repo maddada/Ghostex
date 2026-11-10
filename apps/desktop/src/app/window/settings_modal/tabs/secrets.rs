@@ -12,8 +12,8 @@ use super::super::super::native_modal_kit::*;
 use super::super::catalog::settings_catalog;
 use super::super::fields::{
     ButtonVariant, FieldStates, ListItemStatus, RowSpec, SettingsPage, card_inset, setting_row,
-    settings_button, settings_icon_button, settings_list_item, settings_section,
-    settings_text_input, static_note,
+    settings_button, settings_icon_button, settings_list_item, settings_note_row, settings_section,
+    settings_text_input,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -323,18 +323,10 @@ impl SecretsTab {
         if let Some(providers) = &self.providers
             && providers.is_empty()
         {
-            rows.push(card_inset(static_note(
-                p,
-                "No 1Password account yet. Add one to paste op:// references where Ghostex asks for a key.",
-                false,
-            )));
+            rows.push(settings_note_row(p, "No 1Password account yet. Add one to paste op:// references where Ghostex asks for a key."));
         }
         if !self.cli_installed {
-            rows.push(card_inset(static_note(
-                p,
-                "The 1Password CLI (op) isn't installed on this computer. Install it from 1Password's website or with Homebrew (brew install 1password-cli), then turn on \"Integrate with 1Password CLI\" in 1Password's Developer settings.",
-                true,
-            )));
+            rows.push(settings_note_row(p, "The 1Password CLI (op) isn't installed on this computer. Install it from 1Password's website or with Homebrew (brew install 1password-cli), then turn on \"Integrate with 1Password CLI\" in 1Password's Developer settings."));
         }
         let form = if self.add_open {
             v_flex()
@@ -541,13 +533,8 @@ impl Render for SecretsTab {
         }
         if search.row_visible("requests", REQUESTS)
             && let Some((title, subtitle)) = Self::catalog_row(REQUESTS)
-            && let Some(section) = settings_section(
-                &p,
-                title,
-                None,
-                None,
-                vec![card_inset(static_note(&p, subtitle, false))],
-            )
+            && let Some(section) =
+                settings_section(&p, title, None, None, vec![settings_note_row(&p, subtitle)])
         {
             let mut block = PageBlock::section("requests", section);
             if blocks.is_empty() {

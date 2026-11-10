@@ -9,6 +9,7 @@
 
 use super::{appearance::ChatAppearance, option_menu, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, AppContext as _, Bounds, Context, Entity, FocusHandle, Focusable as _, FontWeight,
     InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, Render,
@@ -22,6 +23,8 @@ use std::time::Duration;
 /// The card's size before the chat's zoom.
 const WIDTH: f32 = 360.0;
 const HEIGHT: f32 = 132.0;
+/// The line that says why the last send failed (`reopen_failed_reply`).
+const ERROR_LINE: f32 = 22.0;
 const RADIUS: f32 = 12.0;
 /// How long the press on the Reply row still counts as "a press just now" once the card is open:
 /// a little over the 0.3s of `GhostexGpuiPointerPressedRecently`.
@@ -31,6 +34,9 @@ pub(super) const OPENING_PRESS: Duration = Duration::from_millis(350);
 #[derive(Default)]
 pub(in crate::app::native_chat) struct ReplyPopoverState {
     handle: Option<gpui::WindowHandle<Root>>,
+    /// The last popover's command and the window it opened from, so a work item Reply whose send
+    /// failed opens again where it was (`reopen_failed_reply`).
+    last: Option<(gpui::AnyWindowHandle, serde_json::Value)>,
 }
 
 /// The one-click question a Reply popover answers (inline_answers.rs): its form when the click
@@ -58,6 +64,8 @@ struct ReplyPopover {
     quote: String,
     /// Set when it answers a one-click question instead of quoting a selection.
     question: Option<QuestionReply>,
+    /// Why the last send of these words failed, shown beside the buttons (`reopen_failed_reply`).
+    error: String,
     input: Entity<TextareaState>,
     focus: FocusHandle,
     appearance: ChatAppearance,
@@ -79,9 +87,11 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A work item with no open question has no tag: its words go to the item ("W7: words").
+        let item = command["question"]["item"].as_str().unwrap_or_default();
         let question = command["question"]["tag"]
             .as_str()
-            .filter(|tag| !tag.is_empty())
+            .filter(|tag| !tag.is_empty() || !item.is_empty())
             .map(|tag| QuestionReply {
                 form: command["question"]["form"].as_str().map(str::to_owned),
                 tag: tag.to_owned(),
@@ -103,6 +113,10 @@ impl NativeChatView {
             return;
         }
         self.close_reply_popover(cx);
+        self.reply_popover.last = Some((window.window_handle(), command.clone()));
+        // Opened again after a failed send: the words typed, and why it did not go.
+        let typed = command["text"].as_str().unwrap_or_default().to_owned();
+        let error = command["error"].as_str().unwrap_or_default().to_owned();
         let coordinate = |index: usize| command["at"][index].as_f64().unwrap_or(0.0) as f32;
         let at = Point::new(px(coordinate(0)), px(coordinate(1)));
         let appearance = ChatAppearance::current(&self.snapshot);
@@ -114,7 +128,7 @@ impl NativeChatView {
         } else {
             content
         };
-        let bounds = popover_bounds(content.origin + at, within, scale);
+        let bounds = popover_bounds(content.origin + at, within, scale, !error.is_empty());
         let parent = super::child_window::window_native_view(window)
             .unwrap_or(self.config.parent_native_view);
         let display_id =
@@ -160,7 +174,9 @@ impl NativeChatView {
                             window, parent,
                         );
                         let popover = cx.new(|cx| {
-                            ReplyPopover::new(chat, quote, question, appearance, window, cx)
+                            ReplyPopover::new(
+                                chat, quote, question, typed, error, appearance, window, cx,
+                            )
                         });
                         cx.new(|cx| {
                             Root::new(popover, window, cx)
@@ -177,6 +193,45 @@ impl NativeChatView {
                     cx.notify();
                 }
             });
+        });
+    }
+
+    /// A work item Reply that did not go (gx-chat-core `coordinator_board`'s `workReplyFailed`):
+    /// its popover opens again where it was, with the words typed and the error, so he can send
+    /// again; with no popover to reopen, the words go into the chat box instead.
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// The user's typed Reply on a Work panel item failed with a red notice and his text was gone.
+    /// A Reply whose record or message fails is never lost: the box comes back holding it.
+    pub(super) fn reopen_failed_reply(
+        &mut self,
+        params: &serde_json::Value,
+        cx: &mut Context<Self>,
+    ) {
+        let words = params["text"].as_str().unwrap_or_default().to_owned();
+        if words.is_empty() {
+            return;
+        }
+        let key = params["key"].as_str().unwrap_or_default();
+        let last = self
+            .reply_popover
+            .last
+            .clone()
+            .filter(|(_, command)| command["question"]["key"] == key);
+        let Some((handle, mut command)) = last else {
+            self.append_prompt(&words, cx);
+            return;
+        };
+        command["text"] = serde_json::json!(words);
+        command["error"] = params["message"].clone();
+        let view = cx.entity();
+        cx.defer(move |cx| {
+            let opened = handle.update(cx, |_, window, cx| {
+                view.update(cx, |chat, cx| chat.open_reply_popover(&command, window, cx));
+            });
+            if opened.is_err() {
+                view.update(cx, |chat, cx| chat.append_prompt(&words, cx));
+            }
         });
     }
 
@@ -236,6 +291,12 @@ impl NativeChatView {
             // coordinator as "W7 Q12: words" (the user's "WE MUST HAVE REPLY BUTTON FOR NEEDS YOU
             // STUFF").
             if let Some((item, key)) = &question.work {
+                // "W7 Q12: words", or "W7: words" for an item that asks no question.
+                let to = if question.tag.is_empty() {
+                    item.clone()
+                } else {
+                    format!("{item} {}", question.tag)
+                };
                 match action {
                     ReplyAction::Send => self.invoke(
                         serde_json::json!({
@@ -245,13 +306,11 @@ impl NativeChatView {
                             "item": item,
                             "ask": question.tag,
                             "label": reply,
-                            "text": format!("{item} {}: {reply}", question.tag),
+                            "text": format!("{to}: {reply}"),
                         }),
                         cx,
                     ),
-                    ReplyAction::AddToPrompt => {
-                        self.append_prompt(&format!("{item} {}: {reply}", question.tag), cx)
-                    }
+                    ReplyAction::AddToPrompt => self.append_prompt(&format!("{to}: {reply}"), cx),
                 }
                 return;
             }
@@ -281,10 +340,16 @@ impl NativeChatView {
 
 /// Where the card opens: its top-left corner at the press, kept inside the chat with a margin, and
 /// above the press when there is no room below it.
-fn popover_bounds(at: Point<Pixels>, within: Bounds<Pixels>, scale: f32) -> Bounds<Pixels> {
+fn popover_bounds(
+    at: Point<Pixels>,
+    within: Bounds<Pixels>,
+    scale: f32,
+    error: bool,
+) -> Bounds<Pixels> {
     let margin = px(12.0 * scale);
     let width = px(WIDTH * scale).min(within.size.width - margin * 2.0);
-    let height = px(HEIGHT * scale);
+    // A send that failed says why on a line of its own above the buttons.
+    let height = px((HEIGHT + if error { ERROR_LINE } else { 0.0 }) * scale);
     let y = if at.y + px(4.0 * scale) + height < within.bottom() - margin {
         at.y + px(4.0 * scale)
     } else {
@@ -310,11 +375,18 @@ impl ReplyPopover {
         chat: WeakEntity<NativeChatView>,
         quote: String,
         question: Option<QuestionReply>,
+        typed: String,
+        error: String,
         appearance: ChatAppearance,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let placeholder = match &question {
+            Some(QuestionReply {
+                tag,
+                work: Some((item, _)),
+                ..
+            }) if tag.is_empty() => format!("Your reply on {item}…"),
             Some(question) => format!("Your answer to {}…", question.tag),
             None => "Reply…".to_string(),
         };
@@ -324,6 +396,7 @@ impl ReplyPopover {
                 .auto_text_direction(true)
                 .submit_on_enter(true)
                 .placeholder(placeholder)
+                .default_value(typed)
         });
         // Enter is the field's own key (GPUI runs key bindings before key-down listeners): with
         // `submit_on_enter` a plain Enter reports `PressEnter` instead of a new line, Cmd+Enter
@@ -380,6 +453,7 @@ impl ReplyPopover {
             chat,
             quote,
             question,
+            error,
             input,
             focus,
             appearance,
@@ -496,6 +570,7 @@ impl Render for ReplyPopover {
         let p = self.appearance.clone();
         let s = p.scale;
         let (_, edge) = menu_ink_washes(p.light);
+        let error_color = p.error();
         div()
             .id("chat-reply-popover")
             .role(gpui::Role::Dialog)
@@ -523,9 +598,29 @@ impl Render for ReplyPopover {
                         .text_size(px(13.0 * s)),
                 ),
             )
+            .when(!self.error.is_empty(), |card| {
+                card.child(
+                    div()
+                        .id("chat-reply-error")
+                        .w_full()
+                        .min_w_0()
+                        .px(px(4.0 * s))
+                        .truncate()
+                        .text_color(error_color)
+                        .child(self.error.clone())
+                        .tooltip({
+                            let error = self.error.clone();
+                            move |window, cx| {
+                                gpui_component::tooltip::Tooltip::new(error.clone())
+                                    .build(window, cx)
+                            }
+                        }),
+                )
+            })
             .child(
                 div()
                     .flex()
+                    .items_center()
                     .justify_end()
                     .gap(px(2.0 * s))
                     .font_weight(FontWeight::MEDIUM)

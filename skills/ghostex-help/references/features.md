@@ -1655,7 +1655,15 @@ and it stops when you let go (Settings > Dictation > Hotkey mode also offers Tog
 and Hold). When macOS already uses Option+Ctrl+Space to switch input sources,
 Settings > Hotkeys says so under Dictate and offers Option+Ctrl+D with one
 click; like every hotkey it can be changed there. What you said goes into the chat box (or is typed into that
-session's terminal) and is never sent by itself. Dictate records first and
+session's terminal) and is never sent by itself. On the computer, in versions
+newer than 11.3.0, a dictation you start while the caret is in a text box
+of a question form in the chat (a question's note, the note under "Other / none of
+these", a text answer, or "Anything else?") is typed into that box instead, at its
+caret. The box shows a small microphone while it waits for your words, touching
+another box while you talk does not move them, and if the form is sent or answered
+before they arrive they go into the chat box. Transcribe again and Transcribe
+previous always type into the chat box, and so does every dictation on the phone
+and in 11.3.0 and earlier. Dictate records first and
 transcribes second: your voice is saved as a recording while you talk, and only
 after you stop is it turned into text by the engine you picked in Settings >
 Dictation: Hex, the recommended engine, or OpenAI's or xAI's speech-to-text
@@ -2941,7 +2949,7 @@ and the sessions on it; `ghostex agents switch-account <session> --account
 <number or email>` moves a session to another account and resumes its
 conversation there, also when it could not start, and refuses an account that
 needs signing in (and a session in the middle of a turn, unless `--force` ends
-that turn and sends "." afterwards so it carries on); `ghostex agents reload <session>` stops a stuck session's
+that turn and sends "." afterwards so it carries on); `ghostex create-agent <claude or codex> --project-id <id> --account <number or email>`, in versions after 11.3.0, starts a new session on that saved account instead of the New sessions start on rule, and refuses one that needs signing in; `ghostex agents reload <session>` stops a stuck session's
 agent and starts it again on the same conversation, losing what its current turn
 was doing. A coordinator uses them when a thread can't start or gets stuck,
 and tells you what it did.

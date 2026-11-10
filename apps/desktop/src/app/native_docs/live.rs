@@ -1,6 +1,8 @@
 //! The live Markdown editor (zorite-editor): creating it for a document, reacting to its edits,
 //! following its links, switching Live and Source, and keeping the caret on screen.
 
+use std::path::{Path, PathBuf};
+
 use gpui::{AppContext as _, Context, Entity, Window, px};
 use serde_json::json;
 use zorite_editor::{EditorEvent, EditorState};
@@ -179,8 +181,13 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// A Cmd-clicked link: web and email addresses open in the browser or mail app, a link to
-    /// another app asks first, relative paths inside the Docs roots open in Docs.
+    /// A clicked link. Web pages open where chat links open (the "Open links in embedded
+    /// browser" setting), email in the mail app, a link to another app asks first, and a link to
+    /// a file (absolute, `~/`, `file://` or relative to this document, with or without a
+    /// `#heading` or `:line`) opens in Files, in a tab beside this one.
+    ///
+    /// CDXC:Docs 2026-11-10 DECISION:
+    /// User: "when i click on this it should open it in a new files tab". A click on a link to a local file opens that file in a new Files tab beside the current one (a file already open is shown in its own tab), a path that is not there says so in a notice, and a web link follows the chat's "Open links in embedded browser" setting. A plain click follows a link, like the view's other clickable things; on the link the caret is in (its raw `[text](url)` showing) a plain click places the caret, and Cmd-click (Ctrl-click off macOS) opens it.
     fn native_docs_open_link(
         &mut self,
         doc_path: &str,
@@ -188,7 +195,18 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if target.contains("://") || target.starts_with("mailto:") {
+        let target = target.trim().trim_start_matches('<').trim_end_matches('>');
+        if target.is_empty() || target.starts_with('#') {
+            return;
+        }
+        if crate::app::helpers::gpui_terminal_link_is_web_url(target) {
+            self.open_session_chat_link(target, None, false, false, window, cx);
+            return;
+        }
+        let is_file_url = target
+            .get(..7)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("file://"));
+        if !is_file_url && (target.contains("://") || target.starts_with("mailto:")) {
             if crate::app::helpers::gpui_link_is_web_or_email(target) {
                 crate::app::helpers::gpui_open_external_url(target, cx);
             } else {
@@ -203,19 +221,73 @@ impl GhostexGpuiApp {
             }
             return;
         }
-        let target = target.split('#').next().unwrap_or(target);
-        if target.is_empty() {
-            return;
-        }
-        let Some(resolved) = super::blocks::resolve_image_path(doc_path, target) else {
+        let Some(path) = self.native_docs_link_file_path(doc_path, target) else {
             return;
         };
-        if Self::native_docs_is_outside_file(&resolved) {
-            // A link beside an outside file: it opens through a grant of its own.
-            self.native_docs_open_absolute_path(std::path::Path::new(&resolved), cx);
-        } else {
-            self.native_docs_open_external(resolved, cx);
+        let before = self.native_docs.documents.len();
+        let shown = self.native_docs.active.as_deref().and_then(|active| {
+            self.native_docs
+                .documents
+                .iter()
+                .position(|d| d.path == active)
+        });
+        self.native_docs_open_absolute_path(&path, cx);
+        // A newly opened file's tab goes right after the tab the link was clicked in.
+        if self.native_docs.documents.len() == before + 1
+            && let Some(shown) = shown
+            && shown + 1 < before
+        {
+            let opened = self.native_docs.documents.remove(before);
+            self.native_docs.documents.insert(shown + 1, opened);
+            self.native_docs_persist_open_files(cx);
+            self.native_docs_notify(cx);
         }
+    }
+
+    /// The file a link names, as an absolute path: `file://` and `~/` expanded, a relative link
+    /// joined to the clicked document's folder, and a `#heading` or `:line` dropped when the path
+    /// without it is the one that exists (on a remote project, which this computer cannot check,
+    /// always dropped).
+    fn native_docs_link_file_path(&self, doc_path: &str, target: &str) -> Option<PathBuf> {
+        let project = self.native_docs.project.as_ref()?;
+        let remote =
+            crate::app::helpers::gpui_remote_project_reference_from_project_id(&project.project_id)
+                .is_some();
+        let absolute = |link: &str| -> Option<PathBuf> {
+            if let Some(path) = super::open_file::typed_absolute_path(link) {
+                return Some(path);
+            }
+            let resolved = super::blocks::resolve_image_path(doc_path, link)?;
+            let resolved = Path::new(&resolved);
+            Some(if resolved.is_absolute() {
+                resolved.to_path_buf()
+            } else {
+                project.project_path.join(resolved)
+            })
+        };
+        let mut candidates = Vec::new();
+        let without_heading = target.split_once('#').map_or(target, |(path, _)| path);
+        for link in [target, without_heading] {
+            let decoded = percent_encoding::percent_decode_str(link)
+                .decode_utf8()
+                .map(|text| text.into_owned())
+                .unwrap_or_else(|_| link.to_string());
+            for link in [link.to_string(), decoded] {
+                let short = without_line_suffix(&link).to_string();
+                candidates.push(link);
+                candidates.push(short);
+            }
+        }
+        let fallback = absolute(without_line_suffix(without_heading));
+        if remote {
+            return fallback;
+        }
+        candidates
+            .iter()
+            .filter(|link| !link.is_empty())
+            .filter_map(|link| absolute(link))
+            .find(|path| path.exists())
+            .or(fallback)
     }
 
     /// Scrolls the document so the caret stays on screen after an edit or a caret move.
@@ -322,4 +394,22 @@ impl GhostexGpuiApp {
             this.native_docs_notify(cx);
         });
     }
+}
+
+/// `link` without a trailing `:line` or `:line:column`.
+fn without_line_suffix(link: &str) -> &str {
+    let mut rest = link;
+    for _ in 0..2 {
+        match rest.rsplit_once(':') {
+            Some((head, tail))
+                if !head.is_empty()
+                    && !tail.is_empty()
+                    && tail.bytes().all(|b| b.is_ascii_digit()) =>
+            {
+                rest = head;
+            }
+            _ => break,
+        }
+    }
+    rest
 }

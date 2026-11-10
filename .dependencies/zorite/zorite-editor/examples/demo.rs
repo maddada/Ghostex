@@ -86,7 +86,7 @@ fn demo_markdown_style() -> SyntaxStyle {
         heading: None,
         quote_bar: hsla(0., 0., 0.6, 1.),
         code_border: None,
-        links_need_modifier: false,
+        revealed_links_need_modifier: false,
     }
 }
 

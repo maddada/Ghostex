@@ -318,6 +318,14 @@ fn dispatched(action: &str, mut params: Map<String, Value>) -> HostRequest {
             method: "handoff".to_string(),
             params,
         },
+        // The view shows the words in its own field, the chat box's or a question form box's
+        // (`dictation_inserted` in native_chat/dictation.rs).
+        ghostex_gx_chat_core::questions::dictation::DICTATION_INSERTED => HostRequest {
+            id: None,
+            kind: RequestKind::DictationInserted,
+            method: String::new(),
+            params,
+        },
         // Everything else is `{kind: "host", method: <action>, params}`, which the view turns into
         // `{type: "sessionChatHostAction", action, ...params}`.
         _ => HostRequest {

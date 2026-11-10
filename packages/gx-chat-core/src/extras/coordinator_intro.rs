@@ -88,7 +88,7 @@ pub const TIPS: &[Tip] = &[
     Tip {
         icon: "layout-board-split",
         title: "Run several lines of work at once",
-        detail: "The Board pill shows each one and who has the ball.",
+        detail: "The work items list shows each one and who has the ball.",
         example: "What's moving, and what's blocked?",
     },
     Tip {

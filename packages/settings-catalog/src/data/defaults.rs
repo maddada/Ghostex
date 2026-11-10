@@ -946,6 +946,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("workAreaFrame", J::Bool(true)),
     // CDXC:Settings 2026-11-08 DECISION: User: "to show traffic lights on macos when sidebar is collapsed (default to yes)". On: the window's buttons stay with the sidebar collapsed, as they did before the 2026-11-06 floating-sidebar change (GitHub #432), which off restores.
     ("showWindowButtonsWhenSidebarCollapsed", J::Bool(true)),
+    ("closeButtonsOnRight", J::Bool(false)),
     ("windowGlass", J::Str("auto")),
     ("windowGlassSource", J::Str("desktopAndWindows")),
     ("windowGlassImagePlacement", J::Str("static")),
@@ -973,6 +974,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("workspaceBackgroundColor", J::Str("")),
     ("clickToWakeSleepingSessions", J::Bool(true)),
     ("dimSleepingSessions", J::Bool(false)),
+    ("dimInactiveProjects", J::Bool(false)),
     ("wakeSleepingSessionsOnSelect", J::Bool(true)),
     ("customViews", J::Arr(&[])),
     ("customViewTemplates", J::Arr(&[])),

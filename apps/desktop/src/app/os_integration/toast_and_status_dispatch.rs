@@ -113,9 +113,17 @@ impl GhostexGpuiApp {
                 self.app_toast_window = None;
             }
         }
+        // The cards stay centred on the anchor: with the × on the left (macOS) the window's
+        // outset for it is on the cards' left (`GpuiAppToastWindow::render`).
+        let close_outset_on_left =
+            if crate::app::window::round_close_button::close_buttons_on_left() {
+                px(GPUI_APP_TOAST_CLOSE_OUTSET)
+            } else {
+                px(0.0)
+            };
         let bounds = Bounds {
             origin: point(
-                anchor.x - px(GPUI_APP_TOAST_WIDTH / 2.0),
+                anchor.x - px(GPUI_APP_TOAST_WIDTH / 2.0) - close_outset_on_left,
                 anchor.y - stack_height - px(GPUI_APP_TOAST_BOTTOM_MARGIN),
             ),
             size: size(px(GPUI_APP_TOAST_WINDOW_WIDTH), stack_height),

@@ -13,7 +13,6 @@ pub(crate) type Tab = (&'static str, &'static str);
 pub(crate) const THEME: Tab = ("theme", "Interface");
 /// The Terminal page, one of the pages General split into (layout.rs).
 const TERMINAL: Tab = ("terminal", "Terminal");
-const CHAT: Tab = ("chat", "Chat");
 const EXTENSIONS: Tab = ("extensions", "Extensions");
 const AGENTS: Tab = ("agents", "Agents");
 const PROJECTS: Tab = ("projects", "Projects");
@@ -432,17 +431,6 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         section_title: "Built-in",
         title: "Turn off Open In",
         subtitle: "Turn off Open In everywhere: the Open button, the Open In page in Settings and the Open In menus. Your apps and custom commands are kept.",
-        options: &[],
-        user_only: false,
-    },
-    Supplemental {
-        key: "sidebarSpacesEnabled",
-        tab: EXTENSIONS,
-        group: None,
-        section: "official",
-        section_title: "Built-in",
-        title: "Spaces",
-        subtitle: "Turn on Spaces: a row of Space icons at the top of the sidebar, Space menus, and the Space settings. Off by default; your saved Spaces are kept while it is off.",
         options: &[],
         user_only: false,
     },

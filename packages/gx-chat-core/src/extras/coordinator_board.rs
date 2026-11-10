@@ -154,6 +154,10 @@ pub struct BoardRow {
     /// it up ("iPhone push · Holds it up", work_panel.rs); "" elsewhere.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub lead: String,
+    /// A work item ask's longer explanation under its short title (`item ask --detail`), which
+    /// an opened card shows in the quieter colour; "" elsewhere.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub body: String,
     /// The card is open: it shows its whole line of work and its buttons (one card at a time).
     #[serde(default)]
     pub expanded: bool,
@@ -348,6 +352,15 @@ pub fn link_tone(link: &Value) -> &'static str {
     }
 }
 
+/// The key a row's answer is locked under: its own, or a work item's Done's (`answerKey`, shared
+/// with its dock row).
+fn answer_key(row: &Value) -> &str {
+    match text(row, "answerKey") {
+        "" => text(row, "key"),
+        key => key,
+    }
+}
+
 /// A row gxserver sent, worded.
 fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
     let open = |url: &str| json!({"type": "openMarkdownLink", "href": url});
@@ -516,7 +529,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
                         // A work item's ask names its tag (work_panel.rs, as its chat card does).
                         "" => json!({
                             "type": "coordinatorBoardAnswer",
-                            "key": text(row, "key"),
+                            "key": answer_key(row),
                             "item": text(row, "ref"),
                             "label": label,
                             "text": format!("{}: {label}", text(row, "ref")),
@@ -560,6 +573,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         },
         answers,
         lead: String::new(),
+        body: text(row, "body").to_string(),
         key: text(row, "key").to_string(),
         title: title.to_string(),
         detail: text(row, "detail").to_string(),
@@ -847,6 +861,7 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         note: String::new(),
                         answers: Vec::new(),
                         lead: String::new(),
+                        body: String::new(),
                         // A question leaves by being answered, or put off For later in Resources.
                         remove: Value::Null,
                         restore: Value::Null,
@@ -911,7 +926,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
                     now_ms,
                     panels
                         .board_answers
-                        .get(text(row, "key"))
+                        .get(answer_key(row))
                         .map(String::as_str),
                 );
                 if text(row, "kind") == "item" {
@@ -1563,13 +1578,18 @@ pub fn answer(
     if text.is_empty() || item.is_empty() || state.extras.panels.board_answers.contains_key(key) {
         return None;
     }
+    let reply = field("op") == "reply";
     let panels = &mut state.extras.panels;
     panels
         .board_answers
         .insert(key.to_string(), label.to_string());
+    // Recorded already and only its message failed: this try sends the message alone.
+    if panels.board_answer_unsent.contains(key) {
+        return Some(answer_message(state, request_id, key, label, text, reply));
+    }
     panels.board_answer_requests.insert(
         request_id,
-        (key.to_string(), label.to_string(), text.to_string()),
+        (key.to_string(), label.to_string(), text.to_string(), reply),
     );
     let mut body = json!({
         "projectId": state.identity.project_id,
@@ -1592,52 +1612,141 @@ pub fn answer(
     })
 }
 
+/// The message that tells the coordinator a card's answer, once gxserver has recorded it.
+fn answer_message(
+    state: &mut ChatState,
+    request_id: u64,
+    key: &str,
+    label: &str,
+    text: &str,
+    reply: bool,
+) -> crate::effect::Effect {
+    state
+        .extras
+        .panels
+        .board_answer_sends
+        .insert(request_id, (key.to_string(), label.to_string(), reply));
+    crate::effect::Effect::SendRpc {
+        request_id,
+        method: crate::wire::ChatRpcMethod::SendSessionChatMessage,
+        params: Box::new(json!({
+            "text": text,
+            "sendRequestId": answer_send_id(&state.identity.session_id, key, label),
+        })),
+    }
+}
+
+/// The message's send id: the card and its answer, so the send ledger drops a repeat of the same
+/// answer. gxserver takes 1 to 128 characters, and a Reply's answer is the user's own words, so a
+/// longer one is the card and words hashed instead.
+///
+/// CDXC:Coordinators 2026-11-10 WHY:
+/// The user's typed Reply on a Work panel item failed with "sendRequestId must be a string of 1
+/// to 128 characters." and his text was gone: the id held the whole reply.
+fn answer_send_id(session: &str, key: &str, label: &str) -> String {
+    let plain = format!("board-answer-{session}-{key}-{label}");
+    if plain.chars().count() <= 128 {
+        return plain;
+    }
+    // FNV-1a, so the same answer has the same id on every client and run.
+    let hash = plain.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    });
+    let short: String = session.chars().take(40).collect();
+    format!("board-answer-{short}-{hash:016x}")
+}
+
+/// A Reply that did not go: the card unlocks, and the Reply box opens again with the words and
+/// why (desktop `workReplyFailed`), so nothing typed is lost.
+fn reply_failed(key: &str, label: &str, message: &str) -> crate::effect::Effect {
+    crate::effect::Effect::HostAction {
+        action: "workReplyFailed".to_string(),
+        params: Box::new(json!({ "key": key, "text": label, "message": message })),
+    }
+}
+
 /// Takes gxserver's answer to [`answer`]'s record: once recorded, the message goes; refused because
 /// the card was already answered, nothing goes and the card stays locked; refused otherwise, the
-/// card unlocks and says why. `None` when `request_id` is not such a record.
+/// card unlocks and says why. A Reply refused either way opens again with its words. `None` when
+/// `request_id` is not such a record.
 pub fn settle_answer(
     state: &mut ChatState,
     request_id: u64,
     answer: Result<&Value, String>,
     next_request_id: u64,
 ) -> Option<Vec<crate::effect::Effect>> {
-    let (key, label, text) = state
+    if let Some((key, label, reply)) = state.extras.panels.board_answer_sends.remove(&request_id) {
+        return Some(settle_answer_message(state, &key, &label, reply, answer));
+    }
+    let (key, label, text, reply) = state
         .extras
         .panels
         .board_answer_requests
         .remove(&request_id)?;
     Some(match answer {
-        Ok(_) => {
-            state
-                .extras
-                .panels
-                .board_change_requests
-                .insert(next_request_id);
-            vec![crate::effect::Effect::SendRpc {
-                request_id: next_request_id,
-                method: crate::wire::ChatRpcMethod::SendSessionChatMessage,
-                params: Box::new(json!({
-                    "text": text,
-                    "sendRequestId": format!(
-                        "board-answer-{}-{key}-{label}",
-                        state.identity.session_id
-                    ),
-                })),
-            }]
-        }
-        Err(message) if message.contains("already answered") => Vec::new(),
+        Ok(_) => vec![answer_message(
+            state,
+            next_request_id,
+            &key,
+            &label,
+            &text,
+            reply,
+        )],
+        Err(message) if message.contains("already answered") && !reply => Vec::new(),
         Err(message) => {
-            state.extras.panels.board_answers.remove(&key);
-            vec![crate::effect::Effect::Toast {
+            let message = if message.is_empty() {
+                "Couldn't send that answer.".to_string()
+            } else {
+                message
+            };
+            if !message.contains("already answered") {
+                state.extras.panels.board_answers.remove(&key);
+            }
+            let mut effects = vec![crate::effect::Effect::Toast {
                 level: "error".to_string(),
-                message: if message.is_empty() {
-                    "Couldn't send that answer.".to_string()
-                } else {
-                    message
-                },
-            }]
+                message: message.clone(),
+            }];
+            if reply {
+                effects.push(reply_failed(&key, &label, &message));
+            }
+            effects
         }
     })
+}
+
+/// Takes the answer to an answer's message: sent, nothing more; failed, the card unlocks and a try
+/// again sends the message alone (it is recorded), and a Reply opens again with its words.
+fn settle_answer_message(
+    state: &mut ChatState,
+    key: &str,
+    label: &str,
+    reply: bool,
+    answer: Result<&Value, String>,
+) -> Vec<crate::effect::Effect> {
+    let panels = &mut state.extras.panels;
+    match answer {
+        Ok(_) => {
+            panels.board_answer_unsent.remove(key);
+            Vec::new()
+        }
+        Err(message) => {
+            panels.board_answers.remove(key);
+            panels.board_answer_unsent.insert(key.to_string());
+            let message = if message.is_empty() {
+                "Couldn't send that answer.".to_string()
+            } else {
+                message
+            };
+            let mut effects = vec![crate::effect::Effect::Toast {
+                level: "error".to_string(),
+                message: message.clone(),
+            }];
+            if reply {
+                effects.push(reply_failed(key, label, &message));
+            }
+            effects
+        }
+    }
 }
 
 /// `toggleCoordinatorBoardGroup {group}`: folds or unfolds a group; `coordinatorBoardMore

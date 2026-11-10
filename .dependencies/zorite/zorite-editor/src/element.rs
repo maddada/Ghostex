@@ -870,6 +870,9 @@ impl Element for EditorElement {
                         continue; // fully hidden (e.g. collapsed markers)
                     }
                     let origin = point(bounds.origin.x + inset, bounds.origin.y + line_tops[i]);
+                    // Local change (Ghostex Docs): the link being edited takes a plain click as
+                    // a caret move, so it shows the text cursor, not a hand (`caret_link_at`).
+                    let grip = hit.is_none() || editor.caret_link_at(i, range.start).is_none();
                     let hit_ref = hit;
                     if p1.y == p2.y {
                         // An RTL link ends to the LEFT of where it starts, so
@@ -878,7 +881,9 @@ impl Element for EditorElement {
                             point(origin.x + p1.x.min(p2.x), origin.y + p1.y),
                             size((p2.x - p1.x).abs(), *lh),
                         );
-                        link_grips.push(window.insert_hitbox(hit, HitboxBehavior::Normal));
+                        if grip {
+                            link_grips.push(window.insert_hitbox(hit, HitboxBehavior::Normal));
+                        }
                         if let Some(h) = hit_target(&hit_ref) {
                             link_rects.push((hit, h));
                         }
@@ -889,8 +894,10 @@ impl Element for EditorElement {
                             size((line_shaped.width() - p1.x).max(px(0.)), *lh),
                         );
                         let tail = Bounds::new(point(origin.x, origin.y + p2.y), size(p2.x, *lh));
-                        link_grips.push(window.insert_hitbox(head, HitboxBehavior::Normal));
-                        link_grips.push(window.insert_hitbox(tail, HitboxBehavior::Normal));
+                        if grip {
+                            link_grips.push(window.insert_hitbox(head, HitboxBehavior::Normal));
+                            link_grips.push(window.insert_hitbox(tail, HitboxBehavior::Normal));
+                        }
                         if let Some(h) = hit_target(&hit_ref) {
                             link_rects.push((head, h.clone()));
                             link_rects.push((tail, h));

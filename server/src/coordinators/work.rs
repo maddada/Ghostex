@@ -63,7 +63,16 @@ pub struct WorkThread {
 pub struct WorkAsk {
     /// Its question tag (`Q2101`), "" for an ask moved from the board without one.
     pub tag: String,
+    /// What it asks, as its title: one short plain question or instruction.
     pub text: String,
+    /// The longer explanation under the title (why, what to check, where), "" for none; asks
+    /// stored before it read as "".
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// User, of dock rows showing the first words of a whole paragraph: "please we need to tell
+    /// the agent to write a easy to understand title, and then the description can describe
+    /// more". `item ask W7 "<title>" --detail "<the rest>"`.
+    pub detail: String,
     /// One-click answers, the recommended one ending in `*` ("Yes*,No"); "" for a task.
     pub answers: String,
     /// The work stops until the user does it: the item is Blocked while it is open.
@@ -112,7 +121,8 @@ pub struct WorkStep {
 #[serde(rename_all = "camelCase", default)]
 pub struct WorkEvent {
     pub at: String,
-    /// add, now, step, ask, answer, wait, done, drop, restore, status, thread, edit, moved, settle.
+    /// add, now, step, ask, answer, reply, wait, done, drop, restore, status, thread, edit, moved,
+    /// settle.
     pub kind: String,
     pub text: String,
     /// The coordinator's status after the change.
@@ -657,7 +667,11 @@ fn ask_value(ask: &WorkAsk) -> Value {
         "open": ask.is_open(),
         "askedAt": ask.asked_at,
     });
-    for (key, value) in [("steps", &ask.steps), ("answered", &ask.answered)] {
+    for (key, value) in [
+        ("detail", &ask.detail),
+        ("steps", &ask.steps),
+        ("answered", &ask.answered),
+    ] {
         if !value.is_empty() {
             out[key] = json!(value);
         }
@@ -782,6 +796,11 @@ pub fn item_value(item: &WorkItem, context: &WorkContext<'_>, history: usize) ->
     }
     if item.untested {
         out["untested"] = json!(true);
+    }
+    // The user said Done on it and the coordinator has not changed it since: its cards show Done
+    // as given (gx-chat-core `work_panel`).
+    if said_done(item) {
+        out["saidDone"] = json!(true);
     }
     // Its link as the board showed it: a PR with its checks, an issue, a ticket or a file.
     if !item.link.is_empty() {
@@ -1036,6 +1055,14 @@ fn finish_if_only_asking(item: &mut WorkItem, at: &str) {
     }
 }
 
+/// Whether the user said Done on the item (it had no open question) and the coordinator has not
+/// changed it since: its latest change is that answer.
+fn said_done(item: &WorkItem) -> bool {
+    item.history.last().is_some_and(|event| {
+        event.kind == "answer" && event.text == "Done" && event.at == item.updated_at
+    })
+}
+
 /// What a request for an item answers: the item as clients and the CLI read it.
 fn answer(item: &WorkItem, threads: &[Value], db: &Connection, key: &SessionKey) -> Value {
     let items = list_work_items(db, key).unwrap_or_default();
@@ -1148,6 +1175,7 @@ pub fn handle_work_request(
             item.asks.push(WorkAsk {
                 tag: tag.clone(),
                 text: words.clone(),
+                detail: param_text(params, "detail").unwrap_or_default(),
                 answers: param_text(params, "answers").unwrap_or_default(),
                 holds: params.get("holds").and_then(Value::as_bool) == Some(true),
                 steps: param_text(params, "steps").unwrap_or_default(),
@@ -1245,6 +1273,23 @@ pub fn handle_work_request(
         "answer" => {
             let given = param_text(params, "answer").ok_or_else(|| bad("Say the answer."))?;
             let wanted = param_text(params, "ask").and_then(|tag| question_tag(&tag));
+            // The Done on an item that waits on the user with no question (the client then tells
+            // the coordinator "W7: Done"): kept as said until the coordinator next changes the
+            // item (`said_done`), so a second click or another client cannot send it again.
+            //
+            // CDXC:Coordinators 2026-11-10 DECISION:
+            // User, of a Needs you item with no question whose card had only Show in chat and
+            // Mention: "why don't i see a button to say All good on this task???? please fix for
+            // always". Every Needs you item with no open question offers Done.
+            if wanted.is_none() && given == "Done" && !item.asks.iter().any(WorkAsk::is_open) {
+                if said_done(&item) {
+                    return Err(bad(format!("{name} was already answered: Done.")));
+                }
+                item.record("answer", "Done", &now);
+                write_work_item(db, key, &item)?;
+                prune(db, key)?;
+                return Ok((answer(&item, threads, db, key), true));
+            }
             // A task's Mark done on its card ("Done"): the ask is done, recorded once.
             let task = item.asks.iter().position(|ask| {
                 wanted.as_ref().is_some_and(|tag| ask.tag == *tag)
@@ -1306,6 +1351,15 @@ pub fn handle_work_request(
         "reply" => {
             let given = param_text(params, "answer").ok_or_else(|| bad("Say the reply."))?;
             let tag = param_text(params, "ask").and_then(|tag| question_tag(&tag));
+            // The user's words on an item with no open question ("W7: words"): kept in its
+            // history; the item stays where it is for the coordinator to act on.
+            if tag.is_none() && !item.asks.iter().any(WorkAsk::is_open) {
+                let words: String = given.chars().take(120).collect();
+                item.record("reply", words, &now);
+                write_work_item(db, key, &item)?;
+                prune(db, key)?;
+                return Ok((answer(&item, threads, db, key), true));
+            }
             let ask = item
                 .asks
                 .iter_mut()

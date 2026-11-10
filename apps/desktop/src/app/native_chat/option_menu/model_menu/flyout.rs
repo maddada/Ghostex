@@ -90,7 +90,7 @@ impl ChatOptionMenuPanel {
             return;
         }
         state.flyout = Some(index);
-        state.active = state.rows().len() + index;
+        state.active = state.footer_start() + index;
         let error = if state.view["error"].is_string() {
             ERROR_HEIGHT
         } else {

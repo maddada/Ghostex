@@ -130,11 +130,16 @@ impl GhostexGpuiApp {
         macOS the floating sidebar starts at the window's top and shows the lights at this row's
         start, which it keeps clear (`lights_reserve`), and in full screen no row reserves them.
         CDXC:Sidebar 2026-09-23 DECISION:
-        User: on Windows and Linux too, the Toggle sidebar and Agents Panel buttons sit at the top
+        User: on Windows and Linux too, the Toggle sidebar button sits at the top
         left of the sidebar, and dragging the sidebar's top row moves the window. So this row owns
         the corner on every OS; only the traffic-light reserve is macOS's own
         (`SIDEBAR_TOGGLE_LEADING_X`). This supersedes the 2026-09-20 rule that kept the row a plain
-        row off macOS, with both toggles in the workarea header.
+        row off macOS, with the toggle in the workarea header.
+        CDXC:Sidebar 2026-11-10 DECISION:
+        User: "please remove this icon from the top of the sidebar it's confusing" (the chat icon,
+        Toggle Agents Panel, that sat right of Toggle sidebar here and in the collapsed header).
+        Both draw only Toggle sidebar now; the Agents Panel still folds with Expand side panel
+        (Cmd+Ctrl+E, the view tab strip's expand button, the command palette).
         CDXC:Sidebar 2026-09-23 WHY:
         On Windows WM_NCHITTEST reports the Drag region as caption wherever no interactive child
         occludes it, and a caption press never reaches an `on_click`, so every button in this row
@@ -271,9 +276,9 @@ impl GhostexGpuiApp {
             .text_color(appearance.chrome_icon)
             /*
             CDXC:Sidebar 2026-09-23 DECISION:
-            User: the Toggle sidebar and Agents Panel buttons at the top of the sidebar have the
-            same color as the notification bell there, so this row draws their icons in the
-            sidebar's icon grey rather than the header's bright one (since 2026-10-29 that grey is the header's own icon colour, see `SidebarAppearance::chrome_icon`).
+            User: the Toggle sidebar button at the top of the sidebar has the same color as the
+            notification bell there, so this row draws its icon in the sidebar's icon grey rather
+            than the header's bright one (since 2026-10-29 that grey is the header's own icon colour, see `SidebarAppearance::chrome_icon`).
             */
             .when(owns_window_corner, |row| {
                 // The header's copy of this row (Claude's) sits under the traffic lights the
@@ -288,13 +293,6 @@ impl GhostexGpuiApp {
                         .flex_shrink_0()
                         .when(under_lights, |button| button.invisible())
                         .child(self.render_sidebar_collapse_button(Some(appearance), cx)),
-                )
-                // Right of Toggle sidebar, as in the collapsed header (workarea_header/breadcrumb.rs).
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .when(under_lights, |button| button.invisible())
-                        .child(self.render_workarea_header_agents_toggle(Some(appearance), cx)),
                 )
                 // The negative margin cancels the row gap this zero-width spacer adds, so the
                 // buttons right of it keep their even 38px slots.

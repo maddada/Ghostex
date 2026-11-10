@@ -1,4 +1,4 @@
-//! The Sidebar group of General: Sidebar, Session Cards and Sidebar Tags.
+//! The Sidebar group of General: Sidebar, Spaces, Session Cards and Sidebar Tags.
 use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::{
     Chip, HoverStripKind, PageAction, RowSpec, card_inset, chips_field, custom_note,
@@ -157,35 +157,6 @@ fn sidebar_section(
             "Working section",
             "Fold sessions whose agent is working or still running something in the background into a Working section at the bottom of the list. They return to the top of the list when they need you. Shown while the Unified sidebar is selected.",
             true,
-            cx,
-        ));
-    }
-    // CDXC:Settings 2026-09-11 DECISION: dependent rows are hidden, not disabled, while their parent is off.
-    // Their parent is the Spaces switch on the Extensions page now (built_in_extensions.rs), so they
-    // sit as plain rows rather than indented under a row this page no longer has.
-    if ghostex_settings_catalog::built_in_extensions::enabled_with(
-        ghostex_settings_catalog::built_in_extensions::SPACES,
-        |key| Some(g.values.bool(key)),
-    ) {
-        rows.extend(page.select(
-            g,
-            s,
-            "sidebarSpaceSwitchBehavior",
-            "When switching to a Space",
-            "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. If that session is closed, the one before it is used; a Space with nothing remembered opens its first project.",
-            g.options("SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS"),
-            Some(256.0),
-            false,
-            window,
-            cx,
-        ));
-        rows.extend(page.toggle(
-            g,
-            s,
-            "sidebarSpaceFollowActiveSession",
-            "Switch Space when opening a session from another Space",
-            "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward, Search by Prompt, a notification, or Previous Sessions.",
-            false,
             cx,
         ));
     }
@@ -592,6 +563,56 @@ fn sidebar_section(
     .map(|section| PageBlock::section("sidebar", section))
 }
 
+/// The Spaces section: its switch, then the two Space rows while it is on (CDXC:Spaces 2026-11-10
+/// DECISION in packages/settings-catalog/src/spaces.rs).
+fn spaces_section(
+    page: &mut GeneralTab,
+    g: &GeneralCx,
+    window: &mut Window,
+    cx: &mut Context<GeneralTab>,
+) -> Option<PageBlock> {
+    if !g.search.subsection_visible("spaces", g.power_visible) {
+        return None;
+    }
+    let s = "spaces";
+    let mut rows: Vec<AnyElement> = Vec::new();
+    rows.extend(page.toggle(
+        g,
+        s,
+        ghostex_settings_catalog::spaces::SWITCH_KEY,
+        "Spaces",
+        "Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping. Off by default; your saved Spaces are kept while it is off.",
+        false,
+        cx,
+    ));
+    // CDXC:Settings 2026-09-11 DECISION: dependent rows are hidden, not disabled, while their parent is off.
+    if ghostex_settings_catalog::spaces::enabled_with(|key| Some(g.values.bool(key))) {
+        rows.extend(page.select(
+            g,
+            s,
+            "sidebarSpaceSwitchBehavior",
+            "When switching to a Space",
+            "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. If that session is closed, the one before it is used; a Space with nothing remembered opens its first project.",
+            g.options("SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS"),
+            Some(256.0),
+            true,
+            window,
+            cx,
+        ));
+        rows.extend(page.toggle(
+            g,
+            s,
+            "sidebarSpaceFollowActiveSession",
+            "Switch Space when opening a session from another Space",
+            "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward, Search by Prompt, a notification, or Previous Sessions.",
+            true,
+            cx,
+        ));
+    }
+    settings_section(&g.p, g.section_title("spaces", "Spaces"), None, None, rows)
+        .map(|section| PageBlock::section("spaces", section))
+}
+
 fn session_cards_section(
     page: &mut GeneralTab,
     g: &GeneralCx,
@@ -802,6 +823,7 @@ pub(super) fn sections(
 ) -> Vec<PageBlock> {
     [
         sidebar_section(page, g, window, cx),
+        spaces_section(page, g, window, cx),
         session_cards_section(page, g, window, cx),
         sidebar_tags_section(page, g, window, cx),
         // CDXC:Settings 2026-10-29 (model.rs): Sleeping Sessions left the Advanced group for this page.

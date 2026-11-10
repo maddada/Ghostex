@@ -274,6 +274,10 @@ pub(crate) struct NativeChatView {
         std::collections::HashMap<String, super::question_form::FormInput>,
     /// The modal is being drawn, so a form's boxes are looked up in `modal_form_inputs`.
     pub(super) form_in_modal: std::cell::Cell<bool>,
+    /// Dictations the core wrote into a form box's draft, by the box (modal's copy or not, and
+    /// its key), until that box's next draw shows them (`show_dictated` in dictation.rs).
+    pub(super) dictated_boxes:
+        std::collections::HashMap<(bool, String), super::dictation::Dictated>,
     /// The modal's window was asked for and not yet open, or the reader closed it and the core has
     /// not yet been told.
     pub(super) resource_modal_pending: bool,
@@ -347,6 +351,8 @@ pub(crate) struct NativeChatView {
     pub(super) code_expanded: HashSet<String>,
     /// The composer's dictation session, made the first time the reader presses Dictate.
     pub(crate) dictation: super::dictation::Dictation,
+    /// The microphone was pressed and the pointer has not left it since (`hover_dictation`).
+    pub(super) dictate_pressed: std::rc::Rc<std::cell::Cell<bool>>,
     pub(crate) list: gpui::ListState,
     /// Set while a transcript field has focus: whether tail following resumes when it leaves (scroll_bottom.rs).
     pub(super) transcript_focus_follow: std::cell::Cell<Option<bool>>,
@@ -391,6 +397,8 @@ pub(crate) struct NativeChatView {
     notify_scheduled: bool,
     /// A redraw is booked for the API error card's countdown (api_error_card.rs).
     pub(super) api_error_tick: std::cell::Cell<bool>,
+    /// A redraw is booked for a running tool call's time so far (tool_card.rs, `live_time`).
+    pub(super) tool_clock_tick: std::cell::Cell<bool>,
     /// The transcript starts at the window's top edge under the floating work area header, so its
     /// first row reserves the header's height (`set_under_workarea_header`).
     pub(crate) under_workarea_header: bool,
@@ -599,6 +607,7 @@ impl NativeChatView {
             files_links_menu_pending: false,
             modal_form_inputs: Default::default(),
             form_in_modal: Default::default(),
+            dictated_boxes: Default::default(),
             resource_modal_pending: false,
             resource_modal_closing: false,
             session_details: Default::default(),
@@ -632,6 +641,7 @@ impl NativeChatView {
             code_wrap_default: false,
             code_expanded: HashSet::new(),
             dictation: None,
+            dictate_pressed: Default::default(),
             list,
             transcript_host: None,
             composer_host: None,
@@ -652,6 +662,7 @@ impl NativeChatView {
             last_notified: None,
             notify_scheduled: false,
             api_error_tick: std::cell::Cell::new(false),
+            tool_clock_tick: std::cell::Cell::new(false),
             under_workarea_header: false,
         }
     }
@@ -1116,6 +1127,8 @@ impl NativeChatView {
                 }
                 // The page card's picture (`page_card.rs`), which the view keeps for itself.
                 Some("host") if request["method"] == "pageThumbnail" => self.receive_page_thumbnail(&request["params"], cx),
+                // A work item Reply that did not go opens again with its words (reply_popover.rs).
+                Some("host") if request["method"] == "workReplyFailed" => self.reopen_failed_reply(&request["params"], cx),
                 // The offline-computer card's check and Retry name the chat's machine for the app
                 // (remote_conn/chat_computers.rs).
                 Some("host") if matches!(request["method"].as_str(), Some("checkComputer" | "reconnectComputer")) => {
@@ -1139,6 +1152,7 @@ impl NativeChatView {
                         cx.emit(NativeChatEvent::Host(json!({"type": "toast", "level": level, "title": message})));
                     }
                 }
+                Some("dictationInserted") => self.dictation_inserted(&request["params"], cx),
                 Some("actionError") => { cx.notify(); }
                 Some("composer") => {
                     self.paste_tiles.inserted();

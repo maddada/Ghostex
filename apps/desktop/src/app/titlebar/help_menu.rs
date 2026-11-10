@@ -347,6 +347,22 @@ impl GhostexGpuiApp {
             })
         });
         let sidebar_session_id = chief.sidebar_session_id.clone();
+        /*
+        CDXC:Chief 2026-11-10 DECISION:
+        User (a Discord report): with Chief already selected the Ask Ghostex row seemed to do nothing, so it looked broken. The row now says that Chief of Staff took the question in a notice, and puts the keyboard in Chief's chat box.
+        */
+        let (title, description) = if staged.is_some() {
+            (
+                "Ask Chief of Staff",
+                "It answers Ghostex questions here. Your question is in its chat box: press Enter to send it.",
+            )
+        } else {
+            (
+                "Ask Chief of Staff",
+                "It answers Ghostex questions here. Type your question in its chat box.",
+            )
+        };
+        self.dispatch_gpui_app_modal_toast("info", title, description, cx);
         cx.spawn(async move |this, cx| {
             if let Some(params) = staged {
                 let _ = crate::app::gx_store::gx_rpc(None, "/api/setSessionChatDraft", params).await;
@@ -357,6 +373,9 @@ impl GhostexGpuiApp {
                     cx,
                 );
                 let _ = this.react_to_native_sidebar_session_click(&sidebar_session_id, cx);
+                // With Chief already selected the click moves nothing, so ask for the keyboard
+                // explicitly; the handoff waits for the chat box to be on screen.
+                this.request_keyboard_handoff_for_shell_focus(cx);
             });
         })
         .detach();

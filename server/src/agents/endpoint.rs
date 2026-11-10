@@ -181,6 +181,17 @@ pub fn dispatch_agent_endpoint(
                 result,
             }
         }
+        // Owns its write transaction, taken before the gone record's lock (agents/gone_activity.rs).
+        SETTLE_GONE_AGENT_ACTIVITY_ENDPOINT => {
+            let lifecycle = read_lifecycle(params)?;
+            let result = settle_gone_agent_activity(repository, &lifecycle, params)?;
+            let changed = result.get("changed").and_then(Value::as_bool) == Some(true);
+            AgentEndpointOutput {
+                presentation_session: changed
+                    .then_some((lifecycle.project_id, lifecycle.session_id)),
+                result,
+            }
+        }
         "/api/ingestAgentHookEvent" => {
             let lifecycle = read_lifecycle(params)?;
             let result = ingest_agent_hook_event(repository, &lifecycle, params, home_dir)?;

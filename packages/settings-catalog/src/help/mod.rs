@@ -615,7 +615,13 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:Security 2026-11-09 DECISION:
 /// Security logs (Extensions > Experimental) is held the same way; its help, and the help that names Settings > Security, wait in the held help patch.
-pub const HELD_FROM_HELP_FILES: &[&str] = &[];
+///
+/// CDXC:Sidebar 2026-11-10 DECISION:
+/// The coordinator, for the user: Dim inactive projects (Settings > Sidebar & Sessions > Sleeping Sessions) is held the same way; its Help text waits in the held help patch (release-11.3.1/help/dim-inactive-projects.patch).
+///
+/// CDXC:AppModal 2026-11-10 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so Close buttons on the right (Settings > Interface > Advanced, macOS) is held the same way; its hand-written paragraph waits in the held help patch (release-11.3.1/help/close-buttons-left.patch).
+pub const HELD_FROM_HELP_FILES: &[&str] = &["closeButtonsOnRight", "dimInactiveProjects"];
 
 /// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
 /// `agentWritable` (CDXC:Security 2026-11-10 above `number_range`).
@@ -636,17 +642,69 @@ pub fn api_may_write(_key: &str, agent_writable: bool) -> bool {
 /// The coordinator, for the user (#535, merged as it came): Transcript width's new subtitle (a share of the window and only a maximum) waits in the held help patch with the rest of that change's Help.
 pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[];
 
+/// Hotkeys whose new description is held out of the committed Help files until a release ships
+/// it: the hotkey id, then the description the Help files keep meanwhile. The release that ships
+/// the change empties this list and regenerates.
+///
+/// CDXC:Hotkeys 2026-11-10 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so New Thread in Active Project's description, which now names Coordinator among the picker's rows, waits in the held help patch (release-11.3.1/help/sidebar-new-button.patch).
+pub const HELD_HOTKEY_WORDING: &[(&str, &str)] = &[(
+    "openNewThreadPalette",
+    "Pick an agent, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
+)];
+
 /// Rows that moved to another page, held at their old place in the committed Help files until a
 /// release ships the move: the key, the tab id and title, the section id and title, the title and
 /// subtitle the Help files keep, and the key of the row they followed there.
 ///
 /// CDXC:Security 2026-11-10 DECISION:
 /// User (Q2173): the Security logs switch moves from Settings > Extensions > Experimental to Settings > Security; installed copies keep reading it where they have it until the release that ships the move empties this list and regenerates (security-b/release-steps.md).
-pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
+///
+/// CDXC:Spaces 2026-11-10 DECISION:
+/// The coordinator, for the user: Spaces moved from Settings > Extensions to its own section on Sidebar & Sessions (spaces.rs); its switch and its two rows stay where installed copies have them until the release that ships the move (release-11.3.1/help/spaces-setting.patch).
+pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[
+    (
+        "sidebarSpaceSwitchBehavior",
+        ("sidebar", "Sidebar & Sessions"),
+        ("sidebar", "Sidebar"),
+        "When switching to a Space",
+        "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Shown while the Spaces extension is on.",
+        "unifiedGroupByProject",
+    ),
+    (
+        "sidebarSpaceFollowActiveSession",
+        ("sidebar", "Sidebar & Sessions"),
+        ("sidebar", "Sidebar"),
+        "Switch Space when opening a session from another Space",
+        "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Shown while the Spaces extension is on.",
+        "sidebarSpaceSwitchBehavior",
+    ),
+    (
+        "sidebarSpacesEnabled",
+        ("extensions", "Extensions"),
+        ("official", "Built-in"),
+        "Spaces",
+        "Turn on Spaces: a row of Space icons at the top of the sidebar, Space menus, and the Space settings. Off by default; your saved Spaces are kept while it is off.",
+        "openInTitlebarButtonHidden",
+    ),
+];
+
+/// Settings UI rows (no settings key) that were removed, kept in the committed Help files until a
+/// release ships the removal, in [`HELD_ROW_PLACEMENT`]'s shape.
+///
+/// CDXC:Spaces 2026-11-10 DECISION: the Spaces card of Settings > Extensions (above).
+pub const HELD_REMOVED_ROWS: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[(
+    "spaces",
+    ("extensions", "Extensions"),
+    ("official", "Built-in"),
+    "Spaces",
+    "Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping.",
+    "openIn",
+)];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`],
-/// with [`HELD_ROW_WORDING`]'s rows as they read before, and [`HELD_ROW_PLACEMENT`]'s rows back
-/// where they were.
+/// with [`HELD_ROW_WORDING`]'s rows as they read before, [`HELD_ROW_PLACEMENT`]'s rows back
+/// where they were and [`HELD_REMOVED_ROWS`] put back.
 pub fn published_catalog() -> Catalog {
     let mut catalog = catalog();
     for (key, (tab, tab_title), (section, section_title), title, subtitle, after) in
@@ -668,6 +726,45 @@ pub fn published_catalog() -> Catalog {
             .position(|entry| entry.key == *after)
             .map_or(catalog.settings.len(), |found| found + 1);
         catalog.settings.insert(to, entry);
+    }
+    for (key, (tab, tab_title), (section, section_title), title, subtitle, after) in
+        HELD_REMOVED_ROWS
+    {
+        let to = catalog
+            .settings
+            .iter()
+            .position(|entry| entry.key == *after)
+            .map_or(catalog.settings.len(), |found| found + 1);
+        catalog.settings.insert(
+            to,
+            CatalogEntry {
+                key: (*key).to_string(),
+                title: (*title).to_string(),
+                subtitle: (*subtitle).to_string(),
+                tab: (*tab).to_string(),
+                tab_title: (*tab_title).to_string(),
+                group: None,
+                group_title: None,
+                section: (*section).to_string(),
+                section_title: (*section_title).to_string(),
+                value_type: ValueType::Ui,
+                default: None,
+                options: Vec::new(),
+                range: None,
+                advanced: false,
+                agent_writable: false,
+                platform_defaults: Vec::new(),
+                availability: None,
+                runtime_options: None,
+            },
+        );
+    }
+    // A hotkey whose new description is held (`HELD_HOTKEY_WORDING`) keeps the one it had.
+    for hotkey in &mut catalog.hotkeys {
+        if let Some((_, description)) = HELD_HOTKEY_WORDING.iter().find(|(id, _)| *id == hotkey.id)
+        {
+            hotkey.description = description;
+        }
     }
     catalog
         .settings

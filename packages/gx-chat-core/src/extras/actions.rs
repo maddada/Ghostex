@@ -139,7 +139,8 @@ pub fn handle_with_ids(
                 }]
             }
         }
-        // The dock hidden whole by its x, and shown again (the Work pill, or something new).
+        // The dock hidden (the phone's x; the computer's header collapses it), and shown again
+        // (the phone's Work pill, the computer's header, or something new).
         ActionKind::HideWorkDock => {
             let keys = crate::extras::work_cards::dock(state, context)["rows"]
                 .as_array()

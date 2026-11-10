@@ -467,7 +467,10 @@ fn terminal_section(
             cx,
         ));
     }
-    if !g.search.is_searching() {
+    // The two links are not settings, so only the page body's pass draws them: drawn in the
+    // Advanced fold's pass too they showed twice once the fold opened, with the same element ids
+    // (a duplicate a11y node, a panic in a debug build).
+    if !g.search.is_searching() && !g.search.is_advanced_pass() {
         rows.push(monospace_font_link(&p, cx));
         rows.push(font_size_link(&p, cx));
     }

@@ -48,7 +48,7 @@ impl GhostexGpuiApp {
     }
 
     /// Built-in extension `id` (`ghostex_settings_catalog::built_in_extensions`) is on. Every
-    /// surface of a whole-feature extension (Actions, Open In, Spaces) asks this before it draws
+    /// surface of a whole-feature extension (Actions, Open In) asks this before it draws
     /// or runs anything, so turning the switch off takes effect on the next redraw.
     pub(crate) fn built_in_extension_enabled(&self, id: &str) -> bool {
         built_in_extension_enabled(id)

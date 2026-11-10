@@ -1,7 +1,7 @@
 {
   "_readme": "Do not edit blind. docs/important/agent-model-catalog.md explains the schema, how every Ghostex client loads this file from GitHub (with the bundled copy as the offline source), how to publish a change, and how to re-collect models, efforts and fast mode from the agent CLIs' own /model pickers.",
   "schemaVersion": 1,
-  "updatedAt": "2026-11-10T14:23:25Z",
+  "updatedAt": "2026-11-10T19:15:48Z",
   "effortLabels": {
     "none": "None",
     "off": "Off",
@@ -248,6 +248,14 @@
           "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
           "defaultEffort": "medium",
           "fastMode": true
+        },
+        {
+          "value": "gemini-4-carbon",
+          "label": "Gemini 4 Carbon",
+          "pickerLabel": "Gemini 4 Carbon",
+          "efforts": ["low", "medium", "high"],
+          "defaultEffort": "medium",
+          "fastMode": false
         },
         {
           "value": "gemini-4-argon",
@@ -561,7 +569,7 @@
           "group": "legacy"
         }
       ],
-      "notes": "Re-read on 2026.10.22-27dcf5f (2026-10-28) from `cursor-agent --list-models` and the /model picker's Tab panels: DeepSeek V4.1 Flash 1017 (`deepseek-v41-flash-1017`, None to Max without Extra High, default High) is new; Grok 4.7's 500K is a Context choice inside Grok 4.7 (256K or 500K), not a model. The picker also offers GLM 5.3 and GLM 5.3 Flash (Low, High, Max; default High), but `--list-models` omits them and the headless CLI rejects every id tried for them, so they are not listed. The older Claude rows now carry Cursor's current ids (`claude-4.6-sonnet`, `claude-4.6-opus`, `claude-4.5-opus`, `claude-4.5-sonnet`, `claude-4-sonnet`), and every default effort follows the picker. gxserver reads this lineup from `cursor-agent --list-models` since 2026-10-17; these rows serve released apps and a computer whose Cursor never answered. Labels drop the 'Claude' word the TUI shows (Cursor dropped its own 'Cursor Grok' prefix in 2026.09.18); pickerLabel is the exact row text the /model filter needs. Row count re-read on 2026-09-03 (36 rows; Gemini 3.8 Flash added between Cursor Grok 4.5 and Gemini 3.7 Flash). Re-read on 2026.09.26-dd393fe (2026-09-29): Claude Opus 5.5 (300K/1M, Low to Max, default Medium, Fast) and Claude Sonnet 5.5 (300K/1M, Low to Max, default High, no Fast) replace Opus 5 and Sonnet 5 at the user's request, and no longer share a /model filter with them. Re-read on 2026.10.01-e373342 (2026-10-07): Claude Haiku 5.5 (300K/1M, Low to Max, default High, Thinking toggle) replaces Haiku 4.5 at the user's request and sits at the top level beside Sonnet 5.5; Haiku 4.5 is dropped from the catalog even though the picker still lists it. Checked against `cursor-agent --list-models` on 2026.10.16-e3cb207 (2026-10-17, on the Windows test machine, the only logged-in Cursor): Gemini 4 Argon (Low to High) and Muse Wonder (Minimal to Max, no Fast) added; their picker rows and default efforts were not read from the TUI. Opus 5 and Sonnet 5 stay out at the user's earlier request."
+      "notes": "Re-read on 2026.10.22-27dcf5f (2026-10-28) from `cursor-agent --list-models` and the /model picker's Tab panels: DeepSeek V4.1 Flash 1017 (`deepseek-v41-flash-1017`, None to Max without Extra High, default High) is new; Grok 4.7's 500K is a Context choice inside Grok 4.7 (256K or 500K), not a model. The picker also offers GLM 5.3 and GLM 5.3 Flash (Low, High, Max; default High), but `--list-models` omits them and the headless CLI rejects every id tried for them, so they are not listed. The older Claude rows now carry Cursor's current ids (`claude-4.6-sonnet`, `claude-4.6-opus`, `claude-4.5-opus`, `claude-4.5-sonnet`, `claude-4-sonnet`), and every default effort follows the picker. gxserver reads this lineup from `cursor-agent --list-models` since 2026-10-17; these rows serve released apps and a computer whose Cursor never answered. Labels drop the 'Claude' word the TUI shows (Cursor dropped its own 'Cursor Grok' prefix in 2026.09.18); pickerLabel is the exact row text the /model filter needs. Row count re-read on 2026-09-03 (36 rows; Gemini 3.8 Flash added between Cursor Grok 4.5 and Gemini 3.7 Flash). Re-read on 2026.09.26-dd393fe (2026-09-29): Claude Opus 5.5 (300K/1M, Low to Max, default Medium, Fast) and Claude Sonnet 5.5 (300K/1M, Low to Max, default High, no Fast) replace Opus 5 and Sonnet 5 at the user's request, and no longer share a /model filter with them. Re-read on 2026.10.01-e373342 (2026-10-07): Claude Haiku 5.5 (300K/1M, Low to Max, default High, Thinking toggle) replaces Haiku 4.5 at the user's request and sits at the top level beside Sonnet 5.5; Haiku 4.5 is dropped from the catalog even though the picker still lists it. Checked against `cursor-agent --list-models` on 2026.10.16-e3cb207 (2026-10-17, on the Windows test machine, the only logged-in Cursor): Gemini 4 Argon (Low to High) and Muse Wonder (Minimal to Max, no Fast) added; their picker rows and default efforts were not read from the TUI. Opus 5 and Sonnet 5 stay out at the user's earlier request. Checked against `cursor-agent --list-models` on 2026.11.05-86047df (2026-11-10, this Mac): Gemini 4 Carbon (`gemini-4-carbon-low`, `-medium`, `-high`) added directly above Gemini 4 Argon at the user's request; its picker row and default effort were not read from the TUI, so it mirrors Argon (default Medium)."
     },
     "grok": {
       "name": "Grok Build",

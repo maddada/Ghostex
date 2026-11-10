@@ -83,6 +83,63 @@ impl NativeChatView {
             .collect()
     }
 
+    /// The one button a dock row with no answers shows in their place, in their look: Open for a
+    /// page or form (`open`), else Reply for a question with no preset answers (`reply`, the
+    /// Reply popover at the press). `None` when it offers neither.
+    pub(super) fn work_row_action(
+        &self,
+        key: &str,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
+        let open = row["open"].clone();
+        let reply = row["reply"].clone();
+        // Each carries its icon, so it reads as an action and not as an answer.
+        let (label, icon, id) = if open.is_object() {
+            (
+                "Open",
+                "titlebar/arrow-up-right.svg",
+                format!("work-row-open:{key}"),
+            )
+        } else if reply.is_object() {
+            (
+                "Reply",
+                "titlebar/arrow-back-up.svg",
+                format!("work-row-reply:{key}"),
+            )
+        } else {
+            return None;
+        };
+        Some(
+            self.tone_button(
+                gpui::SharedString::from(id),
+                label,
+                Some(icon),
+                ToneButton::Secondary,
+                None,
+                false,
+                p,
+            )
+            .on_click(
+                cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    if open.is_object() {
+                        this.invoke(open.clone(), cx);
+                        return;
+                    }
+                    let at = event.position();
+                    let command = json!({
+                        "question": reply.clone(),
+                        "at": [f32::from(at.x), f32::from(at.y)],
+                    });
+                    this.open_reply_popover(&command, window, cx);
+                }),
+            )
+            .into_any_element(),
+        )
+    }
+
     /// An ask's answers at a closed Work panel card's size: the same neutral filled buttons as
     /// [`Self::work_answer_buttons`], with less padding so the card keeps its two lines. Each gives
     /// way with an ellipsis on a narrow card rather than running past its edge; the one sent from

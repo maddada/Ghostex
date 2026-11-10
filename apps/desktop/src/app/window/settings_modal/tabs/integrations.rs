@@ -327,13 +327,10 @@ fn skill_invocation(p: &SettingsPalette, skill_name: &str) -> AnyElement {
         .into_any_element()
 }
 
-/// `amber-500` (a pill that needs attention) and `sky-500` (Beta).
+/// `amber-500`: a pill that needs attention.
 const AMBER_500: u32 = 0xf59e0b;
 const AMBER_200: u32 = 0xfde68a;
 const AMBER_LIGHT_TEXT: u32 = 0x92400e;
-const SKY_500: u32 = 0x0ea5e9;
-const SKY_200: u32 = 0xbae6fd;
-const SKY_LIGHT_TEXT: u32 = 0x0369a1;
 const SKY_400: u32 = 0x38bdf8;
 
 pub(crate) fn integrations_tab_view(store: &Entity<SettingsStore>, cx: &mut App) -> AnyView {
@@ -513,10 +510,22 @@ fn integration_row(
                 .child(title.label.clone()),
         )
         .children(title.link)
+        // A product-state badge (Beta) is the Settings row badge (`setting_row` in fields/row.rs): a
+        // hairline outline and the quiet text colour, never a coloured border on the glass
+        // (CDXC:Settings 2026-11-10 on `settings_note_row` in fields/row.rs).
         .children(title.badge.map(|badge| {
             div()
                 .ml(px(6.0))
-                .child(tinted_label(p, SKY_500, SKY_200, SKY_LIGHT_TEXT, badge))
+                .flex_shrink_0()
+                .px(px(6.0))
+                .py(px(2.0))
+                .rounded(px(6.0))
+                .border_1()
+                .border_color(hsla(p.hairline))
+                .text_size(px(11.0))
+                .line_height(px(14.0))
+                .text_color(hsla(p.muted))
+                .child(badge.to_string())
         }))
         .children(title.pill.map(|pill| {
             div().ml(px(6.0)).child(tinted_label(

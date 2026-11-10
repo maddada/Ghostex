@@ -196,15 +196,6 @@ impl GhostexGpuiApp {
         div()
     }
 
-    /// The Agents Panel toggle folds the panel behind an open view; the browser build opens no views.
-    pub(crate) fn render_workarea_header_agents_toggle(
-        &self,
-        _in_sidebar: Option<&SidebarAppearance>,
-        _cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        div()
-    }
-
     /// The bell is never shown here (`titlebar_notification_bell_visible`), so neither is its dropdown.
     pub(crate) fn toggle_gpui_titlebar_notifications_popup(
         &mut self,

@@ -188,10 +188,9 @@ impl NativeChatView {
                     window,
                     cx,
                 ),
-                PasteInto::Form { key, input, modal } => chat.finish_form_attachments(
+                PasteInto::Form { key, modal, .. } => chat.finish_form_attachments(
                     key,
                     modal,
-                    input,
                     selection.unwrap(),
                     paths,
                     error,

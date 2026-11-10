@@ -9,7 +9,6 @@
 //! the live rows and the settled row exactly.
 
 use super::cards::{SINGLE_LINE_CARD, card_hover_fill};
-use super::disclosure_body::{DisclosureRail, disclosure_body};
 use super::disclosure_motion::{FoldFrame, FoldMotionKind, motion_clip};
 use super::transcript::text;
 use super::{appearance::ChatAppearance, state::NativeChatView};
@@ -201,14 +200,24 @@ impl NativeChatView {
             // The files fold leads the opened turn, collapsed, then the log; both ease in and out
             // together with the turn.
             let mut parts: Vec<AnyElement> = Vec::new();
+            // Whether the part right above the log is a stack of one-line cards.
+            let mut cards_above = false;
             if let Some(cards) = self.folded_cards(&id, &folded, p, window, cx) {
                 parts.push(cards);
+                cards_above = true;
             }
             if let Some(files) = self.completed_files_fold(item, true, p, cx) {
                 parts.push(files);
+                cards_above = false;
             }
-            // React hung the whole log off the rail the "Worked for" heading opened
-            // (`SessionChatExpansion`), so the turn's work reads as one indented block.
+            // The log starts at the turn's left edge, under the folded cards and the files fold.
+            //
+            // CDXC:SessionChat 2026-11-10 DECISION: User, of the opened turn's "Used N tools" card:
+            // "why do i see a line next to the used tools card". React hung the log off a rail under
+            // a heading whose chevron sat in the marker column (`SessionChatExpansion`); the heading
+            // is a card at the left edge now, and the folded messages, answers and files fold above
+            // the log stand outside any rail, so the line only set the log apart from the rest of
+            // its own turn. The log has no rail or indent; the heading closes the turn.
             self.hide_file_changes = true;
             let mut log: Vec<AnyElement> = Vec::new();
             if let Some(notice) = self.deferred_work_notice(item, p, cx) {
@@ -233,16 +242,28 @@ impl NativeChatView {
                 card_above = message["toolCard"].is_object();
             }
             self.in_work_fold = false;
+            // A log that opens on a tool card right under the folded cards is a row gap below
+            // them, like any two one-line cards (`SINGLE_LINE_CARD.gap_above`), not a part gap.
+            let log_opens_on_card = log.len() == work.len()
+                && work.first().is_some_and(|message| {
+                    message["toolCard"].is_object()
+                        && super::transcript::text(message, "text").trim().is_empty()
+                });
+            let log_extra =
+                SINGLE_LINE_CARD.gap_above(cards_above, log_opens_on_card, part_gap(p), p)
+                    - part_gap(p);
             if !log.is_empty() {
-                parts.push(disclosure_body(
-                    p,
-                    DisclosureRail::Work,
-                    LOG_GAP,
-                    id.clone(),
-                    "Collapse completed work",
-                    log,
-                    cx,
-                ));
+                parts.push(
+                    div()
+                        .when(log_extra > 0.0, |log| log.mt(px(log_extra * s)))
+                        .flex()
+                        .flex_col()
+                        .w_full()
+                        .min_w_0()
+                        .gap(px(LOG_GAP * s))
+                        .children(log)
+                        .into_any_element(),
+                );
             }
             (!parts.is_empty()).then_some(parts)
         } else {

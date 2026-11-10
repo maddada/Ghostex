@@ -535,7 +535,13 @@ impl GpuiAppToastWindow {
         div()
             .id(format!("ghostex-gpui-app-toast-dismiss-{toast_id}"))
             .absolute()
-            .right_0()
+            .map(|button| {
+                if super::round_close_button::close_buttons_on_left() {
+                    button.left_0()
+                } else {
+                    button.right_0()
+                }
+            })
             .top(px(GPUI_APP_TOAST_CLOSE_TOP_INSET))
             .flex()
             .size(px(GPUI_APP_TOAST_CLOSE_SIZE))
@@ -620,6 +626,9 @@ impl Render for GpuiAppToastWindow {
             Default::default();
         let region_frames = card_frames.clone();
         let toast_window = cx.entity().downgrade();
+        // The × overhangs the card's top-left corner on macOS (CDXC:AppModal 2026-11-10 in
+        // window/round_close_button.rs), so the card leaves its outset on that side.
+        let close_on_left = super::round_close_button::close_buttons_on_left();
 
         div()
             .flex()
@@ -679,7 +688,13 @@ impl Render for GpuiAppToastWindow {
                             .flex_col()
                             .w(px(GPUI_APP_TOAST_WIDTH))
                             .mt(px(GPUI_APP_TOAST_CLOSE_OUTSET))
-                            .mr(px(GPUI_APP_TOAST_CLOSE_OUTSET))
+                            .map(|card| {
+                                if close_on_left {
+                                    card.ml(px(GPUI_APP_TOAST_CLOSE_OUTSET))
+                                } else {
+                                    card.mr(px(GPUI_APP_TOAST_CLOSE_OUTSET))
+                                }
+                            })
                             .px(px(GPUI_APP_TOAST_HORIZONTAL_PADDING))
                             .py(px(GPUI_APP_TOAST_VERTICAL_PADDING))
                             .relative()

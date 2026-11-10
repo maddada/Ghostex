@@ -52,6 +52,7 @@ use crate::json::J;
 pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "workAreaFrame",
     "showWindowButtonsWhenSidebarCollapsed",
+    "closeButtonsOnRight",
     "closeEmptySessionsOnNew",
     "worktreeSessionsInProject",
     "pinnedSessionOrder",
@@ -130,6 +131,7 @@ pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "keepAwakeDeactivateOnUserSwitch",
     "attentionNotificationActions",
     "dimSleepingSessions",
+    "dimInactiveProjects",
     "wakeSleepingSessionsOnSelect",
     "markedHandoversStyle",
     "markedHandoversEmoji",
@@ -419,6 +421,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "workspaceActivePaneBorderColor",
             "workAreaFrame",
             "showWindowButtonsWhenSidebarCollapsed",
+            "closeButtonsOnRight",
             "appIconSourceId",
         ],
     ),
@@ -507,6 +510,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "offerCleanupWhenPrMerges",
             "sidebarSessionTagListItems",
             "dimSleepingSessions",
+            "dimInactiveProjects",
             "wakeSleepingSessionsOnSelect",
         ],
     ),
@@ -616,7 +620,11 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
     ),
     (
         "advanced",
-        &["dimSleepingSessions", "wakeSleepingSessionsOnSelect"],
+        &[
+            "dimSleepingSessions",
+            "dimInactiveProjects",
+            "wakeSleepingSessionsOnSelect",
+        ],
     ),
     (
         "theming",
@@ -667,6 +675,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "workspaceActivePaneBorderColor",
             "workAreaFrame",
             "showWindowButtonsWhenSidebarCollapsed",
+            "closeButtonsOnRight",
         ],
     ),
     ("sidebarTags", &["sidebarSessionTagListItems"]),
@@ -797,7 +806,11 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
     ),
     (
         "sleepingSessions",
-        &["dimSleepingSessions", "wakeSleepingSessionsOnSelect"],
+        &[
+            "dimSleepingSessions",
+            "dimInactiveProjects",
+            "wakeSleepingSessionsOnSelect",
+        ],
     ),
 ];
 
@@ -852,6 +865,7 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "workspaceActivePaneBorderColor",
             "workAreaFrame",
             "showWindowButtonsWhenSidebarCollapsed",
+            "closeButtonsOnRight",
             "appIconSourceId",
         ],
     ),

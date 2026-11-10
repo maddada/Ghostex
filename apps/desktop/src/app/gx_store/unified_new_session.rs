@@ -309,9 +309,9 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// The header's New session button and ⌘N: the New thread picker, starting where
-    /// `gx_store_new_session_start` says. Nothing is activated, so it cannot start a default agent
-    /// (CDXC:Sidebar 2026-10-31 WHY in gx-core unified_sidebar/choices.rs).
+    /// The New session row's arrow (native_sidebar/new_session_row.rs) and ⌘N: the New thread
+    /// picker, starting where `gx_store_new_session_start` says. Nothing is activated, so it cannot
+    /// start a default agent (CDXC:Sidebar 2026-10-31 WHY in gx-core unified_sidebar/choices.rs).
     pub(crate) fn open_unified_new_session(&mut self, cx: &mut gpui::Context<Self>) {
         self.gx_store.unified_sidebar.picker_start = None;
         self.open_gpui_new_thread_picker(cx);

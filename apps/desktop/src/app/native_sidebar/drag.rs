@@ -248,6 +248,13 @@ impl GhostexGpuiApp {
             self.resolve_native_sidebar_drop_landing(command, |app, command| {
                 app.with_native_sidebar_project_drop_landing(command)
             })
+        } else if command["type"] == "moveToSpace" {
+            // The Space button lights up (`native_sidebar_space_drop_target`) only when the drop
+            // changes the project's Space; the release still files it at the front as before.
+            self.resolve_native_sidebar_drop_landing(command, |app, mut command| {
+                command["changesSpace"] = json!(app.gx_store_move_to_space_changes_space(&command));
+                Some(command)
+            })
         } else {
             Some(command)
         };
@@ -403,6 +410,18 @@ impl GhostexGpuiApp {
         }
         (before.is_none() && landing["afterSessionId"].as_str() == Some(session_id))
             .then_some("after")
+    }
+
+    /// Whether a project or folder drag would move into this Space, for its button's highlight.
+    pub(crate) fn native_sidebar_space_drop_target(&self, space_id: &str) -> bool {
+        self.native_sidebar
+            .drop_command
+            .as_ref()
+            .is_some_and(|command| {
+                command["type"] == "moveToSpace"
+                    && command["spaceId"] == space_id
+                    && command["changesSpace"] == true
+            })
     }
 
     /// Whether a session drag would move the row into this group from another one, for the

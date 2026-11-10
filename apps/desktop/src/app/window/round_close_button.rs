@@ -1,7 +1,32 @@
 //! The round close (×) buttons drawn over a corner: the toast's dismiss button and the coordinator
 //! board card's remove button share these colours and this glyph, so the two always match.
-//! Pure gpui (no `crate::*`), so `native_modal_demo` can include this file for its preview.
+//! Pure gpui (no `crate::*`), so `native_modal_demo` can include this file for its preview. It also
+//! holds which side every dialog's and toast's close button sits on (`close_buttons_on_left`).
 use gpui::{Hsla, Styled as _, Svg, px, rgb, svg};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// `closeButtonsOnRight` (Settings > Interface > Advanced, macOS only; off when unset).
+///
+/// CDXC:AppModal 2026-11-10 DECISION:
+/// User: "the x button to close dialogs and toasts need to be on top left on mac not on top right (add advanced to switch it to the other side for people who want, show this setting only on mac". On macOS the close X of every app modal (the frame's corner X, window/modal_window_frame.rs), every sheet nested in Settings, the dialogs that draw their own X in their header (Markdown table, Mermaid diagram, visual page, picture viewer) and every toast sits at the top left, where macOS puts a window's close button; Close buttons on the right puts them back at the top right. Windows, Linux and the web build keep them on the right and show no row.
+static CLOSE_BUTTONS_ON_RIGHT: AtomicBool = AtomicBool::new(false);
+
+/// Reads `closeButtonsOnRight` from the settings object (off when unset: the catalog default).
+pub(crate) fn refresh_close_button_side(object: &serde_json::Map<String, serde_json::Value>) {
+    CLOSE_BUTTONS_ON_RIGHT.store(
+        object
+            .get("closeButtonsOnRight")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
+        Ordering::Relaxed,
+    );
+}
+
+/// Whether dialogs and toasts draw their close X at the top left: macOS, unless Close buttons on
+/// the right is on.
+pub(crate) fn close_buttons_on_left() -> bool {
+    cfg!(target_os = "macos") && !CLOSE_BUTTONS_ON_RIGHT.load(Ordering::Relaxed)
+}
 
 /// The toast's round × is a see-through light gray in both appearances, with a dark gray ×.
 ///

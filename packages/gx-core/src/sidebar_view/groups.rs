@@ -392,6 +392,9 @@ pub(crate) fn group_summary(sessions: &[SessionView]) -> GroupSummary {
         let is_terminal_or_browser = row.is_browser
             || row.session_kind.as_deref() == Some("terminal")
             || row.session_kind.as_deref() == Some("browser");
+        if row.lifecycle_state == "running" {
+            summary.running_count += 1;
+        }
         if row.lifecycle_state == "running" && is_terminal_or_browser {
             summary.awake_count += 1;
         }
