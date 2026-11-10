@@ -67,6 +67,68 @@ fn rendered_rows(snapshot: &NativeSidebarSnapshot) -> Vec<WalkRow<'_>> {
     rows
 }
 
+/// The Unified sidebar's drawn order, while it is the sidebar shown: Drafts while open, then each
+/// project group that is not folded (Group by Project) or the list, each card followed by the
+/// threads drawn under it, then the open shelves. A folded coordinator's threads, a folded shelf
+/// and a folded group contribute nothing, as on screen.
+///
+/// CDXC:Sidebar 2026-11-09 WHY:
+/// The walk read only the Project sidebar's snapshot, so with the Unified sidebar shown the hotkeys followed the Project order, and a thread nested under an unfolded Unified card could be skipped or reached out of place (a worktree thread sits in another project there).
+fn unified_rendered_rows<'a>(
+    unified: &'a crate::app::native_sidebar::unified::model::UnifiedSidebarSnapshot,
+    saved: &ghostex_gx_core::unified_sidebar::UnifiedSavedState,
+) -> Vec<WalkRow<'a>> {
+    use crate::app::native_sidebar::unified::model::{UnifiedCard, UnifiedCardLine};
+    use ghostex_gx_core::unified_sidebar::{UnifiedShelf, unified_shelf_key, unified_shelf_open};
+    let mut rows = Vec::new();
+    let push = |card: &'a UnifiedCard, rows: &mut Vec<WalkRow<'a>>| {
+        let row = |session: &'a NativeSidebarSession| WalkRow {
+            session,
+            is_sleeping: session.lifecycle_state.as_deref() == Some("sleeping"),
+        };
+        rows.push(row(&card.session));
+        for line in &card.lines {
+            if let UnifiedCardLine::Thread { card, .. } = line {
+                rows.push(row(&card.session));
+            }
+        }
+    };
+    let shelf_open = |shelf: UnifiedShelf, repo: Option<&str>| {
+        unified_shelf_open(saved, shelf, &unified_shelf_key(shelf, repo))
+    };
+    if shelf_open(UnifiedShelf::Drafts, None) {
+        for card in &unified.drafts {
+            push(card, &mut rows);
+        }
+    }
+    for group in &unified.groups {
+        if saved.folded_groups.contains(&group.repo_key) {
+            continue;
+        }
+        for card in &group.cards {
+            push(card, &mut rows);
+        }
+        for shelf in &group.shelves {
+            if shelf_open(shelf.shelf, Some(&group.repo_key)) {
+                for card in &shelf.cards {
+                    push(card, &mut rows);
+                }
+            }
+        }
+    }
+    for card in &unified.list {
+        push(card, &mut rows);
+    }
+    for shelf in &unified.shelves {
+        if shelf_open(shelf.shelf, None) {
+            for card in &shelf.cards {
+                push(card, &mut rows);
+            }
+        }
+    }
+    rows
+}
+
 /// The row next to `current`, ported from `resolveAdjacentRenderedSidebarSessionSlotId`: sleeping
 /// rows are candidates unless the setting skips them; with no current row among the rendered
 /// ones, next is the first candidate and previous the last; otherwise the walk steps from the
@@ -123,7 +185,11 @@ impl GhostexGpuiApp {
         let Some(snapshot) = self.native_sidebar.snapshot.clone() else {
             return;
         };
-        let rows = rendered_rows(&snapshot);
+        let unified = self.native_sidebar.unified.clone();
+        let rows = match unified.as_deref() {
+            Some(unified) => unified_rendered_rows(unified, &self.gx_store.unified_sidebar.saved),
+            None => rendered_rows(&snapshot),
+        };
         let current = self.gx_store_focused_sidebar_row_id(&snapshot);
         let skip_sleeping =
             snapshot.hud["settings"]["sidebarSessionCycleSkipsSleeping"].as_bool() == Some(true);

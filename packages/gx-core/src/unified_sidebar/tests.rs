@@ -889,7 +889,7 @@ fn every_card(view: &UnifiedSidebarView) -> Vec<String> {
 }
 
 #[test]
-fn a_coordinators_workers_here_and_on_another_computer_are_no_cards_of_their_own() {
+fn a_coordinators_workers_here_and_on_another_computer_nest_under_its_card() {
     let local = MachineId::Local;
     let windows = MachineId::Remote("windows".to_string());
     let lead = coordinator(&local, "p", "lead");
@@ -921,11 +921,43 @@ fn a_coordinators_workers_here_and_on_another_computer_are_no_cards_of_their_own
     ];
     let built = build_unified_sidebar(&machines, settings(), &UnifiedFilter::default(), NOW);
     assert_eq!(every_card(&built), ["lead", "mine"]);
-    assert_eq!(built.total, 2, "the counts leave workers out too");
+    assert_eq!(built.total, 2, "the counts leave nested threads out");
+    let lead = find_unified_row(&built, "lead").expect("the coordinator's card");
+    let mut threads: Vec<(MachineId, MachineId, String, String)> = lead
+        .row
+        .threads
+        .iter()
+        .map(|thread| {
+            (
+                thread.machine.clone(),
+                thread.lane.clone(),
+                thread.session.row.sidebar_session_id.clone(),
+                thread.repo.label.clone(),
+            )
+        })
+        .collect();
+    threads.sort_by(|left, right| left.2.cmp(&right.2));
+    // The Windows thread is the copy its coordinator's computer borrows: it runs on Windows and
+    // keeps its Windows project; the Windows computer's own copy is no card.
+    assert_eq!(
+        threads,
+        [
+            (local.clone(), local.clone(), "here".to_string(), "p".to_string()),
+            (
+                windows.clone(),
+                local.clone(),
+                "windows:w:away".to_string(),
+                "w".to_string()
+            ),
+        ]
+    );
+    let crew = lead.row.crew.as_ref().expect("its crew");
+    assert!(!crew.open, "folded by default");
+    assert_eq!(crew.total, 2);
 }
 
 #[test]
-fn a_worker_whose_coordinator_is_gone_and_a_nested_coordinators_workers() {
+fn a_worker_whose_coordinator_is_gone_is_a_card_and_a_nested_coordinators_workers_nest_under_it() {
     let local = MachineId::Local;
     let gone = coordinator(&local, "p", "gone");
     let orphan = worker_of(row(&local, "p", "orphan"), &gone);
@@ -946,6 +978,9 @@ fn a_worker_whose_coordinator_is_gone_and_a_nested_coordinators_workers() {
     }];
     let built = build_unified_sidebar(&machines, settings(), &UnifiedFilter::default(), NOW);
     assert_eq!(every_card(&built), ["orphan", "top"]);
+    let deep = find_unified_row(&built, "deep").expect("the nested coordinator's worker");
+    assert_eq!(deep.card.session.row.sidebar_session_id, "top");
+    assert_eq!(deep.ancestors, ["local|p|top", "local|p|middle"]);
 }
 
 #[test]
@@ -1168,6 +1203,7 @@ fn revealing_a_card_never_folds_drafts_and_leaves_an_open_list_alone() {
     let spot = |shelf| UnifiedRevealSpot {
         shelf,
         repo_key: "k".to_string(),
+        ancestors: Vec::new(),
     };
     // Drafts starts open, and sits above the groups.
     let mut saved = UnifiedSavedState::default();
@@ -1231,7 +1267,7 @@ fn revealing_a_card_the_filter_leaves_out_lifts_only_the_picks_it_misses() {
         },
     ];
     let built = build_unified_sidebar(&machines, settings(), &UnifiedFilter::default(), NOW);
-    let web = find_unified_row(&built, "r:web2:rw").expect("listed");
+    let web = find_unified_row(&built, "r:web2:rw").expect("listed").row;
 
     let mut filter = UnifiedFilter::default();
     filter.repos.insert("github.com/o/api".to_string());

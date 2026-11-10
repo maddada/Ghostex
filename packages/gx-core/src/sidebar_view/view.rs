@@ -440,8 +440,13 @@ pub struct FoldedStatus {
 
 impl FoldedStatus {
     pub(crate) fn add(&mut self, row: &SessionRow) {
-        // A thread that is not moving is the same red: it needs someone to look.
-        if row.awaiting_approval || row.stuck {
+        // A thread that is not moving, or failed, is the same red: it needs someone to look (a
+        // failed card's own status is that red too, `UnifiedStatus::Failed`).
+        if row.awaiting_approval
+            || row.stuck
+            || row.model_selection_failed
+            || row.program_status_failed
+        {
             self.approval = true;
             return;
         }

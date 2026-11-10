@@ -93,6 +93,11 @@ fn session_row(machine: &MachineId, session: &Value) -> SessionRow {
         is_draft: flag(session, "isDraft"),
         has_composer_draft: flag(session, "hasComposerDraft"),
         is_browser: flag(session, "isBrowser"),
+        is_coordinator: flag(session, "isCoordinator"),
+        thread_state: session["coordinatorThreadState"]
+            .as_str()
+            .map(str::to_string),
+        stuck: flag(session, "stuck"),
         // The phone knows a thread's coordinator on the thread's own computer only.
         coordinator_parent: session["coordinatorSessionId"]
             .as_str()
@@ -142,7 +147,7 @@ fn project_group(machine: &MachineId, project: &Value, sessions: &[&Value]) -> G
                 .iter()
                 .map(|session| SessionView {
                     row: Arc::new(session_row(machine, session)),
-                    is_focused: false,
+                    is_focused: flag(session, "isFocused"),
                     is_visible: false,
                     is_multi_selected: false,
                     nesting: Default::default(),
@@ -195,6 +200,101 @@ fn row_answer(row: &UnifiedRow) -> Value {
         "spaceKey": row.space_key,
         "cameBackMs": row.came_back_ms,
     })
+}
+
+/// What the fixture records of a row with threads under it.
+fn crew_answer(crew: &UnifiedCrew) -> Value {
+    let folded = crew.folded_status;
+    let dots: Vec<&str> = [
+        (folded.working, "working"),
+        (folded.attention, "attention"),
+        (folded.background_work, "backgroundWork"),
+        (folded.question, "question"),
+        (folded.approval, "approval"),
+    ]
+    .into_iter()
+    .filter_map(|(on, name)| on.then_some(name))
+    .collect();
+    json!({
+        "key": crew.key,
+        "open": crew.open,
+        "unfolded": crew.unfolded,
+        "total": crew.total,
+        "listed": crew.listed,
+        "older": crew.older,
+        "olderShown": crew.older_shown,
+        "heldOpen": crew.held_open,
+        "olderRow": crew.older_row,
+        "badgeCount": crew.badge.count,
+        "badgeTone": format!("{:?}", crew.badge.tone).to_lowercase(),
+        "folded": dots,
+        "containsActive": crew.contains_active,
+    })
+}
+
+/// The copies of a coordinator's threads on other computers that its computer borrows, as the
+/// store makes them (`sidebar_view/model.rs` `remote_thread_rows`): a coordinator names them in
+/// `coordinatorRemoteThreads` by the thread computer's `serverId`, and the copy is that computer's
+/// own row, linked to the coordinator, drawn in the coordinator's group.
+fn borrow_remote_threads(
+    machines_in: &[Value],
+    views: &mut [(MachineId, String, SidebarView, Option<SpacesState>)],
+) {
+    let mut borrowed: Vec<(usize, String, SessionRow)> = Vec::new();
+    for (index, machine) in machines_in.iter().enumerate() {
+        let coordinator_machine = machine_of(text(machine, "machine"));
+        for coordinator in machine["sessions"].as_array().into_iter().flatten() {
+            for thread in coordinator["coordinatorRemoteThreads"]
+                .as_array()
+                .into_iter()
+                .flatten()
+            {
+                let Some(remote) = machines_in
+                    .iter()
+                    .find(|other| other["serverId"] == thread["serverId"])
+                else {
+                    continue;
+                };
+                let Some(own) = remote["sessions"].as_array().and_then(|sessions| {
+                    sessions.iter().find(|session| {
+                        session["sessionId"] == thread["sessionId"]
+                            && session["projectId"] == thread["projectId"]
+                    })
+                }) else {
+                    continue;
+                };
+                let mut row = session_row(&machine_of(text(remote, "machine")), own);
+                row.coordinator_parent = Some(SessionKey {
+                    machine: coordinator_machine.clone(),
+                    project_id: text(coordinator, "projectId").to_string(),
+                    session_id: text(coordinator, "sessionId").to_string(),
+                });
+                row.thread_state = thread["threadState"].as_str().map(str::to_string);
+                borrowed.push((
+                    index,
+                    format!("project:{}", text(coordinator, "projectId")),
+                    row,
+                ));
+            }
+        }
+    }
+    for (index, group_id, row) in borrowed {
+        let Some(group) = views[index]
+            .2
+            .groups
+            .iter_mut()
+            .find(|group| group.core.group_id == group_id)
+        else {
+            continue;
+        };
+        Arc::make_mut(&mut group.core).sessions.push(SessionView {
+            row: Arc::new(row),
+            is_focused: false,
+            is_visible: false,
+            is_multi_selected: false,
+            nesting: Default::default(),
+        });
+    }
 }
 
 fn row_id(row: &UnifiedRow) -> String {
@@ -254,6 +354,7 @@ fn expected_of(case: &Value) -> Value {
             spaces_of(&machine["spaces"]),
         ));
     }
+    borrow_remote_threads(&machines_in, &mut views);
     let inputs: Vec<UnifiedMachineInput<'_>> = views
         .iter()
         .map(|(machine, label, view, spaces)| UnifiedMachineInput {
@@ -277,7 +378,42 @@ fn expected_of(case: &Value) -> Value {
         query: text(&case["filter"], "query").to_string(),
     };
     let now = case["nowMs"].as_u64().unwrap_or(0);
-    let view = build_unified_sidebar(&inputs, settings, &filter, now);
+    let folds = UnifiedFolds {
+        unfolded: strings(&case["folds"]["unfolded"]).into_iter().collect(),
+        older_shown: strings(&case["folds"]["olderShown"]).into_iter().collect(),
+        reveal: case["folds"]["reveal"].as_str().map(str::to_string),
+    };
+    let view = build_unified_sidebar_folded(&inputs, settings, &filter, None, &folds, now);
+    let mut crews = BTreeMap::new();
+    let mut lines = BTreeMap::new();
+    for card in view
+        .drafts
+        .iter()
+        .chain(&view.pinned)
+        .chain(&view.active)
+        .chain(&view.working)
+        .chain(&view.snoozed)
+        .chain(&view.parked)
+    {
+        for row in card.rows_in_tree() {
+            if let Some(crew) = &row.crew {
+                crews.insert(row_id(row), crew_answer(crew));
+            }
+        }
+        let drawn: Vec<String> = card
+            .drawn_lines()
+            .into_iter()
+            .map(|line| match line {
+                UnifiedTreeLine::Thread { row, depth } => format!("{}@{depth}", row_id(row)),
+                UnifiedTreeLine::Older { coordinator, depth } => {
+                    format!("older:{}@{depth}", row_id(coordinator))
+                }
+            })
+            .collect();
+        if !drawn.is_empty() {
+            lines.insert(row_id(card), drawn);
+        }
+    }
     let mut rows = BTreeMap::new();
     for row in view
         .drafts
@@ -469,6 +605,8 @@ fn expected_of(case: &Value) -> Value {
         "parked": ids(&view.parked),
         "total": view.total,
         "rows": rows,
+        "crews": crews,
+        "lines": lines,
         "options": {
             "repos": options_answer(&view.options.repos),
             "machines": options_answer(&view.options.machines),
@@ -483,6 +621,42 @@ fn session(id: &str, project: &str, extra: Value) -> Value {
         base.extend(extra.clone());
     }
     base
+}
+
+/// A coordinator with threads at two depths, one waiting on you, one working, one older than two
+/// hours, one on another computer, plus a worker whose coordinator is gone and a session started
+/// by hand, for the tree cases.
+fn tree_machines() -> Value {
+    json!([
+        {
+            "machine": "local", "label": "Local", "serverId": "S1",
+            "projects": [{"projectId": "p", "title": "p", "path": "/p"}],
+            "sessions": [
+                session("lead", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000, "activity": "working", "workingStartedMs": 8_900_000, "coordinatorRemoteThreads": [{"serverId": "S2", "projectId": "q", "sessionId": "away", "threadState": "working"}]})),
+                session("worker", "p", json!({"title": "worker", "activity": "working", "createdMs": 10, "workingStartedMs": 9_600_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead", "coordinatorThreadState": "working"})),
+                session("sub-lead", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_500_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"})),
+                session("deep", "p", json!({"title": "deepest thread", "activity": "attention", "createdMs": 10, "lastInteractionMs": 9_700_000, "coordinatorProjectId": "p", "coordinatorSessionId": "sub-lead", "coordinatorThreadState": "waiting"})),
+                session("old", "p", json!({"createdMs": 10, "lastInteractionMs": 1_000_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"})),
+                // A second older thread, which stays tucked when "old" is revealed.
+                session("stale", "p", json!({"createdMs": 10, "lastInteractionMs": 900_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"})),
+                session("orphan", "p", json!({"createdMs": 10, "lastInteractionMs": 4_000, "coordinatorProjectId": "p", "coordinatorSessionId": "closed"})),
+                session("mine", "p", json!({"createdMs": 10, "lastInteractionMs": 3_000})),
+            ],
+        },
+        {
+            "machine": "studio", "label": "Studio", "serverId": "S2",
+            "projects": [
+                {"projectId": "p", "title": "p", "path": "/p"},
+                {"projectId": "q", "title": "q", "path": "/q"},
+            ],
+            "sessions": [
+                // A link names a coordinator on the worker's own computer, so this one's is not here.
+                session("elsewhere", "p", json!({"createdMs": 10, "lastInteractionMs": 2_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"})),
+                // Linked only by its coordinator's `coordinatorRemoteThreads`.
+                session("away", "q", json!({"activity": "working", "createdMs": 10, "workingStartedMs": 9_800_000})),
+            ],
+        },
+    ])
 }
 
 /// The cases, in the phone's terms. The expected answers are the builder's.
@@ -738,30 +912,101 @@ fn cases() -> Vec<Value> {
             ],
         }),
         json!({
-            "name": "a coordinator's workers are no cards of their own; a worker whose coordinator is gone, and a session started by hand, are",
+            "name": "a coordinator's threads nest under its card, folded by default; a worker whose coordinator is gone, and a session started by hand, are cards",
             "nowMs": now,
             "settings": {"workingSection": true, "parking": true},
             "filter": {},
-            "machines": [
-                {
-                    "machine": "local", "label": "Local",
-                    "projects": [{"projectId": "p", "title": "p", "path": "/p"}],
-                    "sessions": [
-                        session("lead", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 5_000})),
-                        session("worker", "p", json!({"activity": "working", "createdMs": 10, "workingStartedMs": 6_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"})),
-                        session("sub-lead", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 4_500, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"})),
-                        session("deep", "p", json!({"createdMs": 10, "lastInteractionMs": 4_400, "coordinatorProjectId": "p", "coordinatorSessionId": "sub-lead"})),
-                        session("orphan", "p", json!({"createdMs": 10, "lastInteractionMs": 4_000, "coordinatorProjectId": "p", "coordinatorSessionId": "closed"})),
-                        session("mine", "p", json!({"createdMs": 10, "lastInteractionMs": 3_000})),
-                    ],
-                },
-                {
-                    "machine": "studio", "label": "Studio",
-                    "projects": [{"projectId": "p", "title": "p", "path": "/p"}],
-                    // A link names a coordinator on the worker's own computer, so this one's is not here.
-                    "sessions": [session("elsewhere", "p", json!({"createdMs": 10, "lastInteractionMs": 2_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"}))],
-                },
-            ],
+            "machines": tree_machines(),
+        }),
+        json!({
+            "name": "an unfolded coordinator lists its busy and recent threads, busy first, with the rest behind its older row; a sub-coordinator stays folded",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {},
+            "folds": {"unfolded": ["local|p|lead"]},
+            "machines": tree_machines(),
+        }),
+        json!({
+            "name": "a revealed older thread is listed with its coordinators unfolded, its siblings' older threads stay tucked",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {},
+            "folds": {"unfolded": ["local|p|lead"], "reveal": "old"},
+            "machines": tree_machines(),
+        }),
+        json!({
+            "name": "a coordinator's older threads and a sub-coordinator's threads listed",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {},
+            "folds": {"unfolded": ["local|p|lead", "local|p|sub-lead"], "olderShown": ["local|p|lead"]},
+            "machines": tree_machines(),
+        }),
+        json!({
+            "name": "a search for a thread keeps its coordinator's card and shows the way to it while folded",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {"query": "deepest"},
+            "machines": tree_machines(),
+        }),
+        json!({
+            "name": "a search matching a folded coordinator and one of its threads opens it to that thread",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {"query": "api"},
+            "machines": [{
+                "machine": "local", "label": "Local", "serverId": "S1",
+                "projects": [{"projectId": "p", "title": "p", "path": "/p"}],
+                "sessions": [
+                    session("api-lead", "p", json!({"title": "API coordinator", "isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000})),
+                    session("api-tests", "p", json!({"title": "API tests", "createdMs": 10, "lastInteractionMs": 9_100_000, "coordinatorProjectId": "p", "coordinatorSessionId": "api-lead"})),
+                    session("docs", "p", json!({"title": "Docs", "createdMs": 10, "lastInteractionMs": 9_200_000, "coordinatorProjectId": "p", "coordinatorSessionId": "api-lead"})),
+                ],
+            }],
+        }),
+        json!({
+            "name": "a chain of unfolded coordinators is drawn no deeper than the Project sidebar's tree",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {},
+            "folds": {"unfolded": ["local|p|c1", "local|p|c2", "local|p|c3", "local|p|c4"]},
+            "machines": [{
+                "machine": "local", "label": "Local", "serverId": "S1",
+                "projects": [{"projectId": "p", "title": "p", "path": "/p"}],
+                "sessions": [
+                    session("c1", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000})),
+                    session("c2", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000, "coordinatorProjectId": "p", "coordinatorSessionId": "c1"})),
+                    session("c3", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000, "coordinatorProjectId": "p", "coordinatorSessionId": "c2"})),
+                    session("c4", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000, "coordinatorProjectId": "p", "coordinatorSessionId": "c3"})),
+                    session("leaf", "p", json!({"createdMs": 10, "lastInteractionMs": 9_000_000, "coordinatorProjectId": "p", "coordinatorSessionId": "c4"})),
+                ],
+            }],
+        }),
+        json!({
+            "name": "a computer filter keeps a coordinator for its thread on that computer",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {"machines": ["studio"]},
+            "machines": tree_machines(),
+        }),
+        json!({
+            "name": "parked and snoozed threads are cards; a failed hidden thread is red; a hidden focused thread marks its coordinator; a loop stays cards",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {},
+            "machines": [{
+                "machine": "local", "label": "Local", "serverId": "S1",
+                "projects": [{"projectId": "p", "title": "p", "path": "/p"}],
+                "sessions": [
+                    session("boss", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000})),
+                    session("parked", "p", json!({"isParked": true, "createdMs": 10, "lastInteractionMs": 9_100_000, "coordinatorProjectId": "p", "coordinatorSessionId": "boss"})),
+                    session("napping", "p", json!({"snoozedUntilMs": 20_000_000, "createdMs": 10, "lastInteractionMs": 9_200_000, "coordinatorProjectId": "p", "coordinatorSessionId": "boss"})),
+                    session("broke", "p", json!({"modelSelectionFailed": true, "createdMs": 10, "lastInteractionMs": 9_300_000, "coordinatorProjectId": "p", "coordinatorSessionId": "boss"})),
+                    session("looking", "p", json!({"isFocused": true, "createdMs": 10, "lastInteractionMs": 9_400_000, "coordinatorProjectId": "p", "coordinatorSessionId": "boss"})),
+                    session("left", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 8_000_000, "coordinatorProjectId": "p", "coordinatorSessionId": "right"})),
+                    session("right", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 8_100_000, "coordinatorProjectId": "p", "coordinatorSessionId": "left"})),
+                ],
+            }],
         }),
     ]
 }

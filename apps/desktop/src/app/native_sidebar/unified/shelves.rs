@@ -121,6 +121,7 @@ impl GhostexGpuiApp {
             card.session.is_focused,
             card.session.is_visible,
         );
+        let focused = focused || card.crew.as_ref().is_some_and(|crew| crew.contains_active);
         let hovered =
             self.native_sidebar.hovered_session.as_deref() == Some(&card.session.session_id);
         let action = hovered
@@ -173,6 +174,10 @@ impl GhostexGpuiApp {
                     .opacity(0.8)
                     .child(card.session.title().to_owned()),
             )
+            // A parked or snoozed coordinator folds its threads from here too (CDXC:Sidebar
+            // 2026-11-09 in gx-core unified_sidebar/tree.rs).
+            .children(self.render_unified_crew_toggle(card, appearance, cx))
+            .children(super::threads::folded_slot(card, appearance).filter(|_| action.is_none()))
             .child(action.unwrap_or(trailing))
             .when(focused, |row| {
                 mark_active(
@@ -181,11 +186,13 @@ impl GhostexGpuiApp {
                     crate::app::native_sidebar::decorations::session_outline(appearance),
                 )
             });
+        let threads = self.render_unified_thread_lines(card, hud, appearance, cx);
         div()
             .w_full()
             .pb(px(1.0 * scale))
             .px(px(3.0 * scale))
             .child(self.unified_row_interactions(row, card, appearance, cx))
+            .children(threads)
             .into_any_element()
     }
 }
