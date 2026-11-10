@@ -35,16 +35,16 @@ pub struct SessionState {
     pub retired_async_question_ids: Vec<String>,
     /// The question forms and pages the user put off "For later", as gxserver keeps them (form or
     /// page ids, `crate::questions::later`). Absent means unchanged.
-    pub later_question_ids: Vec<String>,
+    pub later_question_ids: crate::state::Stamped<Vec<String>>,
     /// The modes this session's agent cannot use, as gxserver keeps them. Absent means unchanged.
     pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
     /// The question forms and pages the user removed without answering, as gxserver keeps them
     /// (`crate::questions::later`). Absent means unchanged.
-    pub removed_question_ids: Vec<String>,
+    pub removed_question_ids: crate::state::Stamped<Vec<String>>,
     /// The session's resource index as gxserver keeps it (`crate::questions::resource_index`):
     /// every form, page and chart of the whole conversation, which the Resources pill and list add
     /// to what the loaded rows hold. Absent means unchanged.
-    pub resource_index: crate::questions::resource_index::ResourceIndex,
+    pub resource_index: crate::state::Stamped<crate::questions::resource_index::ResourceIndex>,
     /// Questions older than this stamp no longer count. Absent means unchanged, `null` means none.
     pub async_questions_since: Option<i64>,
     /// When this session was forked from another (epoch ms): questions asked before then belong to
@@ -86,7 +86,7 @@ pub struct SessionState {
     pub returned_prompt: Option<Value>,
     /// A coordinator's threads (`{ threads }`); present only for a coordinator.
     /// Unchanged on omission.
-    pub coordinator_threads: Option<Value>,
+    pub coordinator_threads: crate::state::Stamped<Option<Value>>,
     /// This session's side chats (`[{ projectId, sessionId, title, ... }]`); unchanged on omission.
     pub side_chats: Option<Value>,
     /// For a side chat, its main session (`{ sessionId, title }`); unchanged on omission.
@@ -100,9 +100,9 @@ pub struct SessionState {
     /// (`extras::autopilot`). Unchanged on omission.
     pub autopilot: Option<Value>,
     /// Ghostex Collab, as gxserver says (`extras::collab`). Unchanged on omission.
-    pub collab: Option<Value>,
+    pub collab: crate::state::Stamped<Option<Value>>,
     /// Set on a Ghostex Collab guest's page (`{ viewerId, name }`, `setCollabGuest`).
-    pub collab_guest: Option<Value>,
+    pub collab_guest: crate::state::Stamped<Option<Value>>,
     /// How the messages this session sent other agents and left waiting ended, by send id.
     /// Unchanged on omission.
     pub agent_message_deliveries: Option<Value>,
@@ -139,10 +139,10 @@ pub struct SessionState {
     /// Ghostex's own prompt queue. `None` means no frame has carried a `queue` field yet, which is
     /// the "daemon does not support it" state and hides every queue control; an empty list means
     /// supported and empty.
-    pub queue_prompts: Option<Vec<Value>>,
+    pub queue_prompts: crate::state::Stamped<Option<Vec<Value>>>,
     /// The latest synced composer draft. Unchanged on omission; a clear is an explicit empty
     /// `content`.
-    pub synced_draft: Option<Value>,
+    pub synced_draft: Option<crate::document::SharedValue>,
     /// Bumped on every assignment of `synced_draft`, which is every `setSyncedDraft` with a
     /// merged (and therefore new) object: the identity the `useEffect` on `syncedDraft` re-runs
     /// on.
@@ -162,9 +162,9 @@ impl Default for SessionState {
             lifecycle: None,
             prompt: None,
             retired_async_question_ids: Vec::new(),
-            later_question_ids: Vec::new(),
+            later_question_ids: Default::default(),
             unavailable_modes: Vec::new(),
-            removed_question_ids: Vec::new(),
+            removed_question_ids: Default::default(),
             resource_index: Default::default(),
             async_questions_since: None,
             forked_at: None,
@@ -184,14 +184,14 @@ impl Default for SessionState {
             workflows: None,
             app_commands: Vec::new(),
             returned_prompt: None,
-            coordinator_threads: None,
+            coordinator_threads: Default::default(),
             side_chats: None,
             side_chat_of: None,
             secret_requests: None,
             relayed_answers: None,
             autopilot: None,
-            collab: None,
-            collab_guest: None,
+            collab: Default::default(),
+            collab_guest: Default::default(),
             agent_message_deliveries: None,
             screen_probed: false,
             cloud_box_asleep: false,
@@ -204,7 +204,7 @@ impl Default for SessionState {
             account_switch: Tri::Absent,
             api_retry: Tri::Absent,
             pending_model_selection: Tri::Absent,
-            queue_prompts: None,
+            queue_prompts: Default::default(),
             synced_draft: None,
             synced_draft_revision: 0,
             deliveries_recorded_revision: 0,

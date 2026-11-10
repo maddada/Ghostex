@@ -1227,7 +1227,7 @@ mod tests {
         // A chat opened later, or on the phone, sees the session's queued or recorded message.
         let mut state = draft_state();
         answered(&mut state, json!({}));
-        state.session.queue_prompts = Some(vec![json!({ "id": "q1", "text": "hi" })]);
+        *state.session.queue_prompts = Some(vec![json!({ "id": "q1", "text": "hi" })]);
         assert!(tray(&state).is_none());
         let mut state = draft_state();
         answered(&mut state, json!({}));

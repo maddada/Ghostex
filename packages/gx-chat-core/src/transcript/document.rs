@@ -73,23 +73,23 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.view_level = crate::transcript::view_level::view_level(view).to_string();
     into.verbose_override = view.verbose_override;
     into.simple_override = view.simple_override;
-    let askers;
-    (into.final_ids, into.answered_pages, askers) = if view.items.is_empty() {
+    // The projection's askers are only read for the withdrawn pages, so the held ones are not
+    // copied for it.
+    (into.final_ids, into.answered_pages, into.withdrawn_pages) = if view.items.is_empty() {
         let projection = presentation::build(state, context);
         (
             projection.final_ids,
             projection.answered_pages,
-            projection.askers,
+            crate::transcript::open_questions::withdrawn_pages(&projection.askers),
         )
     } else {
         (
             view.final_ids.clone(),
             view.answered_pages.clone(),
-            view.askers.clone(),
+            crate::transcript::open_questions::withdrawn_pages(&view.askers),
         )
     };
-    into.withdrawn_pages = crate::transcript::open_questions::withdrawn_pages(&askers);
-    into.deferred_work = view.deferred_work.clone();
+    into.deferred_work = crate::document::Shared(std::sync::Arc::clone(&view.deferred_work));
     into.workflow_cards = crate::transcript::workflow_card::workflow_cards(state, context).0;
     into.gbot_card_states = crate::transcript::gbot_cards::card_states(state);
     into.api_error_card = crate::transcript::api_errors::api_error_card(state, context);

@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::effect::Effect;
 use crate::questions::resource_index::ResourceEntry;
-use crate::state::{ChatContext, ChatState};
+use crate::state::{ChatContext, ChatState, Stamped};
 use crate::transcript::open_questions::{tag_target, Asker, AskerKind};
 use crate::transcript::page_answers::PageAnswers;
 
@@ -684,13 +684,13 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
 /// User: "ghostex app gets slower with time until it becomes super slow". Every event of the Main Coordinator chat listed its ~1,300 forms, pages and charts again for the ? pill and the Resources panel, a fifth of an idle event, though the list only moves with the questions themselves. The rows without their time fields read no clock, so they are kept while what they are built from is equal; the page shown is cut from them and given its time fields on every event, as before.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ListInputs {
-    askers: Vec<Asker>,
+    askers: Stamped<Vec<Asker>>,
     questions: crate::questions::forms::QuestionsInputs,
-    content: Vec<crate::questions::content::ContentItem>,
-    queue_prompts: Option<Vec<serde_json::Value>>,
-    resource_index: crate::questions::resource_index::ResourceIndex,
-    later_question_ids: Vec<String>,
-    removed_question_ids: Vec<String>,
+    content: Stamped<Vec<crate::questions::content::ContentItem>>,
+    queue_prompts: Stamped<Option<Vec<serde_json::Value>>>,
+    resource_index: Stamped<crate::questions::resource_index::ResourceIndex>,
+    later_question_ids: Stamped<Vec<String>>,
+    removed_question_ids: Stamped<Vec<String>>,
 }
 
 impl ListInputs {
@@ -706,14 +706,19 @@ impl ListInputs {
         }
     }
 
-    fn matches(&self, state: &ChatState) -> bool {
-        self.askers == state.transcript_view.askers
+    /// By stamp where it can, by value where a stamp moved ([`Stamped::same_as`]).
+    fn matches(&mut self, state: &ChatState) -> bool {
+        self.askers.same_as(&state.transcript_view.askers)
             && self.questions.matches(&state.questions)
-            && self.content == state.questions.content.items
-            && self.queue_prompts == state.session.queue_prompts
-            && self.resource_index == state.session.resource_index
-            && self.later_question_ids == state.session.later_question_ids
-            && self.removed_question_ids == state.session.removed_question_ids
+            && self.content.same_as(&state.questions.content.items)
+            && self.queue_prompts.same_as(&state.session.queue_prompts)
+            && self.resource_index.same_as(&state.session.resource_index)
+            && self
+                .later_question_ids
+                .same_as(&state.session.later_question_ids)
+            && self
+                .removed_question_ids
+                .same_as(&state.session.removed_question_ids)
     }
 }
 
@@ -747,8 +752,11 @@ pub fn project_with(
     CDXC:SessionChat 2026-11-04 WHY:
     This runs on every chat event (each streamed token) to learn whether the document changed, and it listed every form, page and chart with its time labels and copied each row twice to keep the first page: on a coordinator chat with hundreds of them that was the chat worker's main cost while a visible chat streamed (issues-1027/macos-perf). Rows are listed without their time fields, moved rather than copied, and only the rows on the page get their time fields (`label_row`), which reads them exactly as listing them would.
     */
-    let all = match kept.as_ref().filter(|(inputs, _)| inputs.matches(state)) {
-        Some((_, all)) => std::sync::Arc::clone(all),
+    let reused = kept
+        .as_mut()
+        .and_then(|(inputs, all)| inputs.matches(state).then(|| std::sync::Arc::clone(all)));
+    let all = match reused {
+        Some(all) => all,
         None => {
             let all = std::sync::Arc::new(list_rows(state, context, false));
             *kept = Some((ListInputs::of(state), std::sync::Arc::clone(&all)));
@@ -1193,7 +1201,7 @@ mod tests {
                 .unwrap(),
             );
         }
-        state.transcript_view.askers = askers;
+        *state.transcript_view.askers = askers;
         state
     }
 
@@ -1258,7 +1266,7 @@ mod tests {
             asker("page", AskerKind::Page, Some(2_000)),
             asker("asked-again", AskerKind::Form, Some(3_000)),
         ]);
-        state.session.resource_index = vec![
+        *state.session.resource_index = vec![
             indexed("form", "form", "answered", 1_000),
             indexed("page", "page", "answered", 2_000),
             indexed("asked-again", "form", "withdrawn", 3_000),
@@ -1283,7 +1291,7 @@ mod tests {
             .transcript_view
             .askers
             .push(asker("old", AskerKind::Form, Some(1_000)));
-        state.session.resource_index = vec![indexed("old", "form", "waiting", 1_000)].into();
+        *state.session.resource_index = vec![indexed("old", "form", "waiting", 1_000)].into();
         assert_eq!(project(&state, &ChatContext::default()).count, 1);
         let effects = previous(&mut state, &ChatContext::default());
         assert!(!effects.is_empty(), "the click loads the older window");
@@ -1405,7 +1413,7 @@ mod tests {
             .transcript_view
             .askers
             .push(asker("b", AskerKind::Form, Some(2_000)));
-        state.session.later_question_ids = vec!["a".to_string()];
+        *state.session.later_question_ids = vec!["a".to_string()];
         let pill = project(&state, &ChatContext::default());
         assert_eq!(pill.count, 1, "only b waits");
         assert_eq!(pill.newest.as_deref(), Some("b"));
@@ -1431,7 +1439,7 @@ mod tests {
         let mut answered = asker("a", AskerKind::Page, Some(1_000));
         answered.answered = true;
         state.transcript_view.askers.push(answered);
-        state.session.later_question_ids = vec!["a".to_string()];
+        *state.session.later_question_ids = vec!["a".to_string()];
         let pill = project(&state, &ChatContext::default());
         assert_eq!(section(&pill, "earlier"), vec!["a"]);
         assert_eq!(with_status(&pill, "answered"), vec!["a"]);
@@ -1457,7 +1465,7 @@ mod tests {
             .map(|(id, at)| asker(id, AskerKind::Form, Some(at)))
             .to_vec(),
         );
-        state.session.later_question_ids = vec!["q193".to_string(), "q191".to_string()];
+        *state.session.later_question_ids = vec!["q193".to_string(), "q191".to_string()];
         let pill = project(&state, &ChatContext::default());
         assert_eq!(
             section(&pill, "unanswered"),
@@ -1478,7 +1486,7 @@ mod tests {
             asker("b", AskerKind::Page, Some(2_000)),
             asker("c", AskerKind::Form, Some(3_000)),
         ]);
-        state.session.later_question_ids = vec!["a".to_string(), "b".to_string()];
+        *state.session.later_question_ids = vec!["a".to_string(), "b".to_string()];
         let pill = project(&state, &ChatContext::default());
         assert_eq!(pill.summary, "1 unanswered \u{b7} 2 for later");
         assert_eq!(section(&pill, "unanswered"), vec!["c", "a", "b"]);
@@ -1499,7 +1507,7 @@ mod tests {
         assert!(later_waiting(&state).iter().all(|id| id != "a"));
 
         // The wire agrees: the pending removal settles and the row stays under Earlier.
-        state.session.removed_question_ids = vec!["a".to_string()];
+        *state.session.removed_question_ids = vec!["a".to_string()];
         crate::questions::later::settle(&mut state);
         assert!(state.questions.later.removing.is_empty());
         let pill = project(&state, &ChatContext::default());
@@ -1520,7 +1528,7 @@ mod tests {
             asker("old", AskerKind::Form, Some(1_000)),
             asker("new", AskerKind::Form, Some(2_000)),
         ]);
-        state.session.removed_question_ids = vec!["new".to_string()];
+        *state.session.removed_question_ids = vec!["new".to_string()];
         assert_eq!(pool_ids(&state), ["old"]);
         assert_eq!(clicked(&mut state).as_deref(), Some("old"));
         assert_eq!(
@@ -1533,7 +1541,7 @@ mod tests {
     #[test]
     fn an_answer_after_a_removal_still_reads_as_answered() {
         let mut state = chat_asking(vec![answered("a", AskerKind::Form, 1_000)]);
-        state.session.removed_question_ids = vec!["a".to_string()];
+        *state.session.removed_question_ids = vec!["a".to_string()];
         let pill = project(&state, &ChatContext::default());
         assert_eq!(with_status(&pill, "answered"), vec!["a"]);
     }
@@ -1797,7 +1805,7 @@ mod tests {
         let mut loaded = asker("loaded", AskerKind::Form, Some(9_000));
         loaded.answered = true;
         state.transcript_view.askers.push(loaded);
-        state.session.resource_index = vec![
+        *state.session.resource_index = vec![
             indexed("old-open", "form", "waiting", 1_000),
             indexed("old-done", "form", "answered", 2_000),
             indexed("old-page", "page", "other", 3_000),
@@ -1822,14 +1830,14 @@ mod tests {
         let html = pill.filters.iter().find(|f| f.id == "html").unwrap();
         assert_eq!(html.count, 1);
         // The reader's marks apply to indexed rows too.
-        state.session.later_question_ids = vec!["old-open".to_string()];
+        *state.session.later_question_ids = vec!["old-open".to_string()];
         let pill = project(&state, &ChatContext::default());
         assert_eq!(
             (pill.count, pill.summary.as_str()),
             (0, "0 unanswered · 1 for later")
         );
         assert_eq!(with_status(&pill, "later"), vec!["old-open"]);
-        state.session.removed_question_ids = vec!["old-open".to_string()];
+        *state.session.removed_question_ids = vec!["old-open".to_string()];
         assert_eq!(
             with_status(&project(&state, &ChatContext::default()), "canceled"),
             vec!["old-open"]
@@ -1840,7 +1848,7 @@ mod tests {
     #[test]
     fn a_chat_with_nothing_loaded_still_counts_the_whole_conversation() {
         let mut state = ChatState::default();
-        state.session.resource_index = (0..300)
+        *state.session.resource_index = (0..300)
             .map(|n| {
                 indexed(
                     &format!("r{n}"),
@@ -1871,7 +1879,7 @@ mod tests {
         let mut page = indexed("tp", "page", "other", 7_000);
         page["thread"] =
             serde_json::json!({"title": "Fix the sidebar", "projectId": "p", "sessionId": "s"});
-        state.session.resource_index = vec![page].into();
+        *state.session.resource_index = vec![page].into();
         let pill = project(&state, &ChatContext::default());
         assert_eq!(pill.total, 2);
         let ids: Vec<&str> = pill.sections.iter().map(|s| s.id.as_str()).collect();
@@ -1889,7 +1897,7 @@ mod tests {
         let mut thread_page = indexed("tp", "page", "other", 1);
         thread_page["thread"] =
             serde_json::json!({"title": "T", "projectId": "p", "sessionId": "s"});
-        state.session.resource_index = vec![
+        *state.session.resource_index = vec![
             indexed("own-page", "page", "other", 2),
             thread_page,
             indexed("old-form", "form", "waiting", 3),
@@ -1940,7 +1948,7 @@ mod tests {
     #[test]
     fn a_waiting_record_with_no_place_is_not_counted() {
         let mut state = ChatState::default();
-        state.session.resource_index = vec![no_place("gone", "waiting", 5)].into();
+        *state.session.resource_index = vec![no_place("gone", "waiting", 5)].into();
         let pill = project(&state, &ChatContext::default());
         assert_eq!(pill.count, 0);
         assert_eq!(with_status(&pill, "withdrawn"), vec!["gone"]);
@@ -2032,11 +2040,11 @@ mod paged_labels_tests {
     fn an_index_that_changes_in_place_is_read_again() {
         let entry = |status: &str| serde_json::json!({"id": "r1", "kind": "form", "title": "One", "atMs": 5, "status": status, "offset": 1});
         let mut state = ChatState::default();
-        state.session.resource_index = vec![entry("answered")].into();
+        *state.session.resource_index = vec![entry("answered")].into();
         assert_eq!(project(&state, &ChatContext::default()).count, 0);
-        state.session.resource_index = vec![entry("waiting")].into();
+        *state.session.resource_index = vec![entry("waiting")].into();
         assert_eq!(project(&state, &ChatContext::default()).count, 1);
-        state.session.resource_index = vec![entry("answered")].into();
+        *state.session.resource_index = vec![entry("answered")].into();
         assert_eq!(project(&state, &ChatContext::default()).count, 0);
         state.session.resource_index.clear();
         assert_eq!(project(&state, &ChatContext::default()).total, 0);
@@ -2047,7 +2055,7 @@ mod paged_labels_tests {
         let now = 1_762_300_000_000_i64;
         let kinds = ["form", "page", "chart"];
         let mut state = ChatState::default();
-        state.session.resource_index = (0..120)
+        *state.session.resource_index = (0..120)
             .map(|n| {
                 serde_json::json!({
                     "id": format!("r{n}"),
@@ -2081,7 +2089,7 @@ mod paged_labels_tests {
                 at: Some(now - n * 60_000),
             });
         }
-        state.session.later_question_ids = vec!["a1".to_string(), "r14".to_string()];
+        *state.session.later_question_ids = vec!["a1".to_string(), "r14".to_string()];
         let context = ChatContext {
             now_ms: now as f64,
             utc_offset_minutes: 240,

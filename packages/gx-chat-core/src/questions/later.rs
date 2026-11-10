@@ -150,12 +150,23 @@ pub fn rpc_settled(
 
 /// Forgets the changes the wire now carries.
 pub fn settle(state: &mut ChatState) {
-    let later = &mut state.questions.later;
     let wire = &state.session.later_question_ids;
+    let removed = &state.session.removed_question_ids;
+    // Runs on every event: the state is only borrowed mutably when a mark actually settles, so its
+    // stamp (`state::Stamped`) stays put otherwise.
+    let later = &state.questions.later;
+    if !later
+        .pending
+        .iter()
+        .any(|(id, (later, _))| wire.contains(id) == *later)
+        && !later.removing.keys().any(|id| removed.contains(id))
+    {
+        return;
+    }
+    let later = &mut state.questions.later;
     later
         .pending
         .retain(|id, (later, _)| wire.contains(id) != *later);
-    let removed = &state.session.removed_question_ids;
     later.removing.retain(|id, _| !removed.contains(id));
 }
 
@@ -172,7 +183,7 @@ mod tests {
         // A frame from before the write still says nothing: the mark stays.
         settle(&mut state);
         assert!(later_ids(&state).contains("page-a"));
-        state.session.later_question_ids = vec!["page-a".to_string()];
+        *state.session.later_question_ids = vec!["page-a".to_string()];
         settle(&mut state);
         assert!(state.questions.later.pending.is_empty());
         assert!(later_ids(&state).contains("page-a"));
@@ -214,7 +225,7 @@ mod tests {
             removed_ids(&state).contains("page-a"),
             "a frame from before the write"
         );
-        state.session.removed_question_ids = vec!["page-a".to_string()];
+        *state.session.removed_question_ids = vec!["page-a".to_string()];
         settle(&mut state);
         assert!(state.questions.later.removing.is_empty());
         assert!(

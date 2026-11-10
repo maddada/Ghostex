@@ -15,6 +15,17 @@ use crate::state::{ChatContext, ChatState};
 /// `selectedOptions` is folded by family a, which merges by evidence priority and `detectedAt`;
 /// publishing it is family e's, because the pills decide what a weaker capture may overwrite.
 pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
+    document_with(state, context, into, &mut None);
+}
+
+/// [`document`], keeping the model menu while what it is projected from holds
+/// ([`crate::menus::picker::document::KeptModelMenu`]).
+pub fn document_with(
+    state: &ChatState,
+    context: &ChatContext,
+    into: &mut Document,
+    model_menu: &mut Option<crate::menus::picker::document::KeptModelMenu>,
+) {
     let now_ms = context.now_millis();
     let options = compute_native_chat_options(state, context);
 
@@ -95,7 +106,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     // One build of the menu inputs for both halves: each half building its own recomputed the
     // options and swept every provider's model catalog again, twice per document.
     let inputs = crate::menus::picker::inputs::menu_inputs_from(state, &options);
-    crate::menus::picker::document::document_with(state, context, &inputs, into);
+    crate::menus::picker::document::document_with(state, context, &inputs, into, model_menu);
     crate::menus::context::document::document_with_icon(
         state,
         context,

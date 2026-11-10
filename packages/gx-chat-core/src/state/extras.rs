@@ -21,7 +21,7 @@ pub struct ExtrasState {
     /// The working strip's stint word and which stint it belongs to.
     pub working_word: WorkingWordState,
     /// The two folds above the composer.
-    pub panels: PanelsState,
+    pub panels: crate::state::Stamped<PanelsState>,
     /// The loading run the two stage one-shots were armed for.
     ///
     /// `trackTranscriptLoading` calls `setTimeout` ONCE per run, and the indicator's delay is 0 ms.

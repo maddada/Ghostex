@@ -950,7 +950,7 @@ fn queue_rpc(
 /// user dropped it rather than a round trip later, and the ids the strip shows are only the
 /// VISIBLE ones: `sessionChatFullQueueOrder` folds them back into the whole queue.
 fn reorder_optimistically(state: &mut ChatState, visible: &[String]) -> Vec<String> {
-    let Some(queue) = state.session.queue_prompts.clone() else {
+    let Some(queue) = (*state.session.queue_prompts).clone() else {
         return visible.to_vec();
     };
     let order = crate::session::startup_sends::full_queue_order(&queue, visible);
@@ -963,7 +963,7 @@ fn reorder_optimistically(state: &mut ChatState, visible: &[String]) -> Vec<Stri
             next = move_queue_row(&next, from as isize, target as isize);
         }
     }
-    state.session.queue_prompts = Some(next);
+    *state.session.queue_prompts = Some(next);
     // `setQueuePrompts((current) => { let next = [...current]; ... })`: a copy either way.
     state.messages.new_composition_identity();
     order

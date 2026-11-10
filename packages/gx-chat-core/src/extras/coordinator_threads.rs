@@ -114,7 +114,7 @@ pub fn set_step(panels: &mut PanelsState, step: u32) {
 /// revision the latest frame names. A gxserver that sends no revision sends every thread on its
 /// frames, so there is nothing to read.
 pub fn read_all_threads(
-    panels: &mut PanelsState,
+    panels: &mut crate::state::Stamped<PanelsState>,
     threads: Option<&Value>,
     next_request_id: impl FnOnce() -> u64,
 ) -> Option<Effect> {

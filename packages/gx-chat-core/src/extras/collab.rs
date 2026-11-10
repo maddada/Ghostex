@@ -406,7 +406,7 @@ pub fn pill(state: &ChatState) -> Option<crate::document::ChatPill> {
 
 /// `setCollabGuest`: this page is a Ghostex Collab guest's (`{ viewerId, name }`).
 pub fn set_guest(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
-    state.session.collab_guest = Some(json!({
+    *state.session.collab_guest = Some(json!({
         "viewerId": action.param("viewerId").cloned().unwrap_or(Value::Null),
         "name": action.param("name").cloned().unwrap_or(Value::Null),
     }));
@@ -546,8 +546,8 @@ mod held_answers_tests {
     #[test]
     fn held_answers_show_as_an_answers_card() {
         let mut state = ChatState::default();
-        state.session.collab_guest = Some(json!({"viewerId": "v1", "name": "Sam"}));
-        state.session.collab = Some(json!({
+        *state.session.collab_guest = Some(json!({"viewerId": "v1", "name": "Sam"}));
+        *state.session.collab = Some(json!({
             "shared": true, "owner": "Mohamad", "mode": "approve", "viewers": [],
             "held": [
                 {"id": "held_1", "viewerId": "v1", "name": "Sam", "text": ANSWERS},
@@ -564,7 +564,7 @@ mod held_answers_tests {
         assert!(waiting[1]["answers"].is_null());
         assert_eq!(waiting[1]["text"], "Hello");
 
-        state.session.collab_guest = None;
+        *state.session.collab_guest = None;
         let cards = project(&state)["cards"].clone();
         assert_eq!(cards[0]["answers"]["by"], "Sam");
     }

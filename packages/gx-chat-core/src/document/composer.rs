@@ -67,7 +67,7 @@ pub struct Draft {
     /// The latest draft gxserver reported, from any device.
     ///
     /// Free-form for now: the draft record belongs to family d.
-    pub synced: Option<Value>,
+    pub synced: Option<crate::document::SharedValue>,
 }
 
 /// Timings both renderers must agree on, shipped so neither hard-codes them.

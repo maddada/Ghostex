@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::document::ChatPill;
-use crate::state::{ChatContext, ChatState};
+use crate::state::{ChatContext, ChatState, Stamped};
 
 /// The pill's id; its renderers open the board instead of a pill menu.
 pub const BOARD_PILL: &str = "board";
@@ -1078,13 +1078,13 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
 /// User: "ghostex app gets slower with time until it becomes super slow". The board was projected and written out to JSON on every event of a coordinator chat, a large part of each event's document. It reads the clock only for its rows' ages, which move in whole minutes (`age_label`), so a kept board stands until the first of its rows' next minute, or until anything else it reads changes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BoardInputs {
-    threads: Option<Value>,
-    panels: crate::state::PanelsState,
-    askers: Vec<crate::transcript::open_questions::Asker>,
+    threads: Stamped<Option<Value>>,
+    panels: Stamped<crate::state::PanelsState>,
+    askers: Stamped<Vec<crate::transcript::open_questions::Asker>>,
     questions: crate::questions::forms::QuestionsInputs,
-    resource_index: crate::questions::resource_index::ResourceIndex,
-    later_question_ids: Vec<String>,
-    removed_question_ids: Vec<String>,
+    resource_index: Stamped<crate::questions::resource_index::ResourceIndex>,
+    later_question_ids: Stamped<Vec<String>>,
+    removed_question_ids: Stamped<Vec<String>>,
 }
 
 impl BoardInputs {
@@ -1100,14 +1100,19 @@ impl BoardInputs {
         }
     }
 
-    fn matches(&self, state: &ChatState) -> bool {
-        self.threads == state.session.coordinator_threads
-            && self.panels == state.extras.panels
-            && self.askers == state.transcript_view.askers
+    /// By stamp where it can, by value where a stamp moved ([`Stamped::same_as`]).
+    fn matches(&mut self, state: &ChatState) -> bool {
+        self.threads.same_as(&state.session.coordinator_threads)
+            && self.panels.same_as(&state.extras.panels)
+            && self.askers.same_as(&state.transcript_view.askers)
             && self.questions.matches(&state.questions)
-            && self.resource_index == state.session.resource_index
-            && self.later_question_ids == state.session.later_question_ids
-            && self.removed_question_ids == state.session.removed_question_ids
+            && self.resource_index.same_as(&state.session.resource_index)
+            && self
+                .later_question_ids
+                .same_as(&state.session.later_question_ids)
+            && self
+                .removed_question_ids
+                .same_as(&state.session.removed_question_ids)
     }
 }
 
@@ -1164,7 +1169,7 @@ pub fn project_kept(
     kept: &mut Option<KeptBoard>,
 ) -> crate::document::SharedValue {
     let now_ms = context.now_millis();
-    if let Some((inputs, built_at, changes_at, board)) = kept.as_ref() {
+    if let Some((inputs, built_at, changes_at, board)) = kept.as_mut() {
         if now_ms >= *built_at && changes_at.is_none_or(|at| now_ms < at) && inputs.matches(state) {
             return board.clone();
         }
@@ -1576,7 +1581,7 @@ mod tests {
 
     fn state_with(board: Value) -> ChatState {
         let mut state = ChatState::default();
-        state.session.coordinator_threads =
+        *state.session.coordinator_threads =
             Some(json!({"threads": [], "total": 0, "board": board}));
         state
     }
@@ -1758,7 +1763,7 @@ mod tests {
         let mut withdrawn = asker("gone", "Q3", 3);
         link.answered = true;
         withdrawn.obsolete = true;
-        state.transcript_view.askers = vec![link, form, withdrawn];
+        *state.transcript_view.askers = vec![link, form, withdrawn];
         let pill = crate::questions::open_questions::project(&state, &context());
         let board = coordinator_board(&state, &context()).unwrap();
         let rows = &board.groups[0].rows;
@@ -1992,7 +1997,7 @@ mod tests {
     fn no_board_no_pill() {
         let mut state = ChatState::default();
         assert!(coordinator_board(&state, &context()).is_none());
-        state.session.coordinator_threads = Some(json!({"threads": [], "total": 0}));
+        *state.session.coordinator_threads = Some(json!({"threads": [], "total": 0}));
         assert!(coordinator_board(&state, &context()).is_none());
         assert!(pill(&Value::Null).is_none());
     }

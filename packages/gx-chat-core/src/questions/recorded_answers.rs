@@ -123,10 +123,10 @@ mod tests {
     /// A chat whose loaded rows end at a form's turn, with the index recording its answers later.
     fn window_without_the_answers() -> (ChatState, String) {
         let mut state = ChatState::default();
-        state.transcript_view.question_forms =
+        *state.transcript_view.question_forms =
             crate::transcript::question_forms::question_forms(&[reply("m", FORM)]);
         let id = state.transcript_view.question_forms[0].id.clone();
-        state.session.resource_index = vec![json!({
+        *state.session.resource_index = vec![json!({
             "id": id, "kind": "form", "status": "answered", "offset": 100, "answersOffset": 200
         })]
         .into();

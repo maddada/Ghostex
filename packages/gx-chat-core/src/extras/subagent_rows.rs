@@ -166,8 +166,8 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
     view.items = std::sync::Arc::new(crate::transcript::items::TranscriptItems::from_items(items));
     view.final_ids = projection.final_ids;
     view.answered_pages = projection.answered_pages;
-    view.question_forms = projection.question_forms;
-    view.page_answers = projection.page_answers;
+    *view.question_forms = projection.question_forms;
+    *view.page_answers = projection.page_answers;
     view.backfill = projection.backfill;
     if view.backfill.is_empty() {
         view.backfilled.clear();

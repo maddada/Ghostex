@@ -44,7 +44,7 @@ fn served_catalog() -> Value {
 fn claude_draft() -> ChatState {
     let mut state = ChatState::default();
     state.identity.session_key = "project:draft".into();
-    state.menus.model_catalog = bundled_agent_model_catalog().unwrap();
+    *state.menus.model_catalog = bundled_agent_model_catalog().unwrap();
     state.session.agent = Some("claude".into());
     state.session.session_agent_id = Some("claude".into());
     state.session.available_agents = Some(json!([

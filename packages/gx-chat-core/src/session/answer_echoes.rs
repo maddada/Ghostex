@@ -271,7 +271,7 @@ pub(crate) fn observe_loaded(state: &mut ChatState) {
     if state.questions.form_answer_index.key != state.messages.boundaried_key {
         let mut index = AnswerIndex::from_rows(&state.messages.boundaried);
         index.key = state.messages.boundaried_key.clone();
-        state.questions.form_answer_index = index;
+        *state.questions.form_answer_index = index;
     }
     if state.questions.form_answer_index.pages.is_empty() {
         return;

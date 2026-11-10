@@ -17,7 +17,7 @@ use crate::document::QuestionDraft;
 use crate::effect::Effect;
 use crate::event::StorageKey;
 use crate::questions::drafts::{decode_drafts, encode_drafts, form_drafts_key, AnswerDrafts};
-use crate::state::{ChatContext, ChatState, FormSend, FormState, PendingSend};
+use crate::state::{ChatContext, ChatState, FormSend, FormState, PendingSend, Stamped};
 use crate::transcript::question_forms::{
     answers_message, notes_key, takes_notes, QuestionForm, NOTE_SUFFIX, OTHER_CHOICE, SKIPPED,
 };
@@ -577,7 +577,7 @@ pub fn rpc_settled(
             // The queue answers with its whole new strip, which carries the answers' row: the card
             // the send drew keeps its place instead of waiting for the queue's broadcast.
             if let Some(queue) = result.get("queue").and_then(Value::as_array) {
-                state.session.queue_prompts = Some(queue.clone());
+                *state.session.queue_prompts = Some(queue.clone());
                 state.messages.new_composition_identity();
             }
             Some(Vec::new())
@@ -632,16 +632,27 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
         )
         .collect();
     let index = state.session.resource_index.view();
-    for (id, entry) in state.questions.forms.iter_mut() {
-        let in_transcript = answered.contains(id.as_str()) || index.answered_in_transcript(id);
-        if !entry.cleared && in_transcript {
+    // Runs on every event: the forms are only borrowed mutably for the ones that change, so their
+    // stamp (`state::Stamped`) stays put otherwise.
+    let cleared: Vec<String> = state
+        .questions
+        .forms
+        .iter()
+        .filter(|(id, entry)| {
+            !entry.cleared && (answered.contains(id.as_str()) || index.answered_in_transcript(id))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    drop(answered);
+    for id in cleared {
+        if let Some(entry) = state.questions.forms.get_mut(&id) {
             entry.cleared = true;
-            effects.push(Effect::WriteStorage {
-                key: form_drafts_key(&session_key, id),
-                value: None,
-                durable: false,
-            });
         }
+        effects.push(Effect::WriteStorage {
+            key: form_drafts_key(&session_key, &id),
+            value: None,
+            durable: false,
+        });
     }
     let open_forms: Vec<(String, usize)> = all_forms(state)
         .filter(|form| {
@@ -652,10 +663,15 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
         .map(|form| (form.id.clone(), form.questions.len()))
         .collect();
     for (id, count) in open_forms {
-        let entry = state.questions.forms.entry(id.clone()).or_default();
-        if entry.load_requested {
+        if state
+            .questions
+            .forms
+            .get(&id)
+            .is_some_and(|entry| entry.load_requested)
+        {
             continue;
         }
+        let entry = state.questions.forms.entry(id.clone()).or_default();
         entry.load_requested = true;
         entry.drafts = vec![QuestionDraft::default(); count];
         effects.push(Effect::ReadStorage {
@@ -731,12 +747,12 @@ fn notes_from_answers(form: &QuestionForm, answers: &Value) -> String {
 /// with every reply and every keystroke in a question card.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct QuestionsInputs {
-    forms: BTreeMap<String, FormState>,
-    form_answer_index: crate::session::answer_echoes::AnswerIndex,
-    inline_answers: crate::questions::inline_answers::InlineAnswersState,
-    later: crate::questions::later::LaterState,
-    recorded_answers: crate::questions::recorded_answers::RecordedAnswers,
-    resource_modal: Option<crate::questions::resource_modal::ResourceModal>,
+    forms: Stamped<BTreeMap<String, FormState>>,
+    form_answer_index: Stamped<crate::session::answer_echoes::AnswerIndex>,
+    inline_answers: Stamped<crate::questions::inline_answers::InlineAnswersState>,
+    later: Stamped<crate::questions::later::LaterState>,
+    recorded_answers: Stamped<crate::questions::recorded_answers::RecordedAnswers>,
+    resource_modal: Stamped<Option<crate::questions::resource_modal::ResourceModal>>,
 }
 
 impl QuestionsInputs {
@@ -751,30 +767,65 @@ impl QuestionsInputs {
         }
     }
 
-    pub(crate) fn matches(&self, questions: &crate::state::QuestionsState) -> bool {
-        self.forms == questions.forms
-            && self.form_answer_index == questions.form_answer_index
-            && self.inline_answers == questions.inline_answers
-            && self.later == questions.later
-            && self.recorded_answers == questions.recorded_answers
-            && self.resource_modal == questions.resource_modal
+    /// Whether `questions` holds exactly these inputs: their stamps first, the values only for a
+    /// stamp that moved ([`Stamped::same_as`]).
+    pub(crate) fn matches(&mut self, questions: &crate::state::QuestionsState) -> bool {
+        self.forms.same_as(&questions.forms)
+            && self.form_answer_index.same_as(&questions.form_answer_index)
+            && self.inline_answers.same_as(&questions.inline_answers)
+            && self.later.same_as(&questions.later)
+            && self.recorded_answers.same_as(&questions.recorded_answers)
+            && self.resource_modal.same_as(&questions.resource_modal)
+    }
+}
+
+/// The tags work items ask (`extras::work_cards::card_tags`), with the stamp of the coordinator
+/// threads they were read from, so they are read again only when those moved.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CardTags {
+    threads: u64,
+    tags: std::collections::BTreeSet<String>,
+}
+
+impl CardTags {
+    pub(crate) fn of(state: &ChatState) -> Self {
+        Self {
+            threads: state.session.coordinator_threads.stamp(),
+            tags: crate::extras::work_cards::card_tags(state),
+        }
+    }
+
+    pub(crate) fn matches(&mut self, state: &ChatState) -> bool {
+        let threads = state.session.coordinator_threads.stamp();
+        if self.threads == threads {
+            return true;
+        }
+        if self.tags != crate::extras::work_cards::card_tags(state) {
+            return false;
+        }
+        self.threads = threads;
+        true
+    }
+
+    pub(crate) fn tags(&self) -> &std::collections::BTreeSet<String> {
+        &self.tags
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FormsInputs {
-    question_forms: Vec<QuestionForm>,
-    askers: Vec<crate::transcript::open_questions::Asker>,
-    page_answers: Vec<crate::transcript::page_answers::PageAnswers>,
+    question_forms: Stamped<Vec<QuestionForm>>,
+    askers: Stamped<Vec<crate::transcript::open_questions::Asker>>,
+    page_answers: Stamped<Vec<crate::transcript::page_answers::PageAnswers>>,
     questions: QuestionsInputs,
-    queue_prompts: Option<Vec<Value>>,
-    resource_index: crate::questions::resource_index::ResourceIndex,
-    later_question_ids: Vec<String>,
-    removed_question_ids: Vec<String>,
-    collab: Option<Value>,
-    collab_guest: Option<Value>,
+    queue_prompts: Stamped<Option<Vec<Value>>>,
+    resource_index: Stamped<crate::questions::resource_index::ResourceIndex>,
+    later_question_ids: Stamped<Vec<String>>,
+    removed_question_ids: Stamped<Vec<String>>,
+    collab: Stamped<Option<Value>>,
+    collab_guest: Stamped<Option<Value>>,
     /// The tags work items ask, which cover a form (`extras::work_cards::card_tags`).
-    card_tags: std::collections::BTreeSet<String>,
+    card_tags: CardTags,
 }
 
 impl FormsInputs {
@@ -790,23 +841,31 @@ impl FormsInputs {
             removed_question_ids: state.session.removed_question_ids.clone(),
             collab: state.session.collab.clone(),
             collab_guest: state.session.collab_guest.clone(),
-            card_tags: crate::extras::work_cards::card_tags(state),
+            card_tags: CardTags::of(state),
         }
     }
 
-    /// Whether `state` holds exactly these inputs, compared where they are, without copies.
-    fn matches(&self, state: &ChatState) -> bool {
-        self.question_forms == state.transcript_view.question_forms
-            && self.askers == state.transcript_view.askers
-            && self.page_answers == state.transcript_view.page_answers
+    /// Whether `state` holds exactly these inputs, by stamp where it can and by value where a
+    /// stamp moved, without copies.
+    fn matches(&mut self, state: &ChatState) -> bool {
+        self.question_forms
+            .same_as(&state.transcript_view.question_forms)
+            && self.askers.same_as(&state.transcript_view.askers)
+            && self
+                .page_answers
+                .same_as(&state.transcript_view.page_answers)
             && self.questions.matches(&state.questions)
-            && self.queue_prompts == state.session.queue_prompts
-            && self.resource_index == state.session.resource_index
-            && self.later_question_ids == state.session.later_question_ids
-            && self.removed_question_ids == state.session.removed_question_ids
-            && self.collab == state.session.collab
-            && self.collab_guest == state.session.collab_guest
-            && self.card_tags == crate::extras::work_cards::card_tags(state)
+            && self.queue_prompts.same_as(&state.session.queue_prompts)
+            && self.resource_index.same_as(&state.session.resource_index)
+            && self
+                .later_question_ids
+                .same_as(&state.session.later_question_ids)
+            && self
+                .removed_question_ids
+                .same_as(&state.session.removed_question_ids)
+            && self.collab.same_as(&state.session.collab)
+            && self.collab_guest.same_as(&state.session.collab_guest)
+            && self.card_tags.matches(state)
     }
 }
 
@@ -815,7 +874,7 @@ pub fn project_kept(
     state: &ChatState,
     kept: &mut Option<(FormsInputs, crate::document::SharedForms)>,
 ) -> crate::document::SharedForms {
-    if let Some((inputs, forms)) = kept.as_ref() {
+    if let Some((inputs, forms)) = kept.as_mut() {
         if inputs.matches(state) {
             return forms.clone();
         }
@@ -1129,7 +1188,7 @@ mod canceled_tests {
     #[test]
     fn an_indexed_answer_keeps_a_reloaded_form_read_only() {
         let (mut state, id) = state_with_form();
-        state.session.resource_index = vec![json!({
+        *state.session.resource_index = vec![json!({
             "id": id, "kind": "form", "status": "answered", "answersOffset": 300
         })]
         .into();
@@ -1163,7 +1222,7 @@ mod canceled_tests {
             });
         assert_eq!(project(&state)[&id]["state"], "queued");
         assert_eq!(project(&state)[&id]["canSend"], false);
-        state.session.resource_index =
+        *state.session.resource_index =
             vec![json!({"id": id, "kind": "form", "status": "answered", "answersOffset": 900})]
                 .into();
         assert_eq!(
@@ -1178,12 +1237,12 @@ mod canceled_tests {
     #[test]
     fn an_answer_only_in_the_queue_reads_queued() {
         let (mut state, id) = state_with_form();
-        state.session.resource_index =
+        *state.session.resource_index =
             vec![json!({"id": id, "kind": "form", "status": "answered"})].into();
         let form = &state.transcript_view.question_forms[0];
         let text =
             crate::transcript::question_forms::answers_message(form, &json!({"Which?": "A"}));
-        state.session.queue_prompts = Some(vec![json!({"id": "q1", "text": text})]);
+        *state.session.queue_prompts = Some(vec![json!({"id": "q1", "text": text})]);
         let form = &project(&state)[&id];
         assert_eq!(form["state"], "queued", "sent from another client");
         assert_eq!(form["canSend"], false);
@@ -1311,8 +1370,8 @@ mod canceled_tests {
             ("edited", "open"),
         ] {
             let (mut state, id) = state_with_form();
-            state.session.collab_guest = Some(json!({"viewerId": "v", "name": "Sam"}));
-            state.session.collab =
+            *state.session.collab_guest = Some(json!({"viewerId": "v", "name": "Sam"}));
+            *state.session.collab =
                 Some(json!({"shared": true, "owner": "Mohamad", "mode": "approve", "held": []}));
             let context = ChatContext::default();
             let effects = send(&mut state, &context, &id);
@@ -1336,7 +1395,7 @@ mod canceled_tests {
             assert_eq!(form["heldFor"], "Mohamad");
             assert_eq!(form["canSend"], false);
 
-            state.session.collab = Some(json!({
+            *state.session.collab = Some(json!({
                 "shared": true, "owner": "Mohamad", "mode": "approve", "held": [],
                 "resolved": [{"id": "held_1", "outcome": outcome}],
             }));
@@ -1357,15 +1416,15 @@ mod canceled_tests {
         let form = state.transcript_view.question_forms[0].clone();
         let text =
             crate::transcript::question_forms::answers_message(&form, &json!({"Pick?": "Yes"}));
-        state.session.collab_guest = Some(json!({"viewerId": "v2", "name": "Sam"}));
-        state.session.collab = Some(json!({
+        *state.session.collab_guest = Some(json!({"viewerId": "v2", "name": "Sam"}));
+        *state.session.collab = Some(json!({
             "shared": true, "owner": "Mohamad", "mode": "approve",
             "held": [{"id": "held_1", "viewerId": "v1", "name": "Sam", "text": text}],
         }));
         let projected = &project(&state)[&id];
         assert_eq!(projected["state"], "held");
         assert_eq!(projected["canSend"], false);
-        state.session.collab = Some(json!({
+        *state.session.collab = Some(json!({
             "shared": true, "owner": "Mohamad", "mode": "approve", "held": [],
         }));
         assert_eq!(
@@ -1392,7 +1451,7 @@ mod canceled_tests {
                 result: json!({"queuedPromptId": "q"}),
             },
         );
-        state.session.queue_prompts = Some(vec![
+        *state.session.queue_prompts = Some(vec![
             json!({"id": "q", "text": answer_text, "state": "queued"}),
         ]);
         assert_eq!(project(&state)[&id]["state"], "queued");

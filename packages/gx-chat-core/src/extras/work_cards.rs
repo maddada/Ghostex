@@ -750,46 +750,96 @@ pub fn ages_change_at(cards: &Value, now_ms: i64) -> Option<i64> {
 /// that already has words) does not walk the transcript again.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WorkInputs {
+    /// The stamp of the coordinator threads `work` was read from.
+    threads: u64,
     work: Option<Value>,
     messages: usize,
     last_id: String,
     last_has_words: bool,
+    /// The stamp of the panels `answers` was read from.
+    panels: u64,
     answers: BTreeMap<String, String>,
+}
+
+/// Whether the chat's last message is a reply with words in it.
+fn last_has_words(state: &ChatState) -> bool {
+    state.messages.composed.last().is_some_and(|message| {
+        message.role == ChatRole::Assistant
+            && !crate::transcript::prose::prose_markdown(&message.blocks)
+                .trim()
+                .is_empty()
+    })
+}
+
+fn work_of(state: &ChatState) -> Option<&Value> {
+    state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
 }
 
 impl WorkInputs {
     fn of(state: &ChatState) -> Self {
         let last = state.messages.composed.last();
         Self {
-            work: state
-                .session
-                .coordinator_threads
-                .as_ref()
-                .and_then(|threads| threads.get("work"))
-                .cloned(),
+            threads: state.session.coordinator_threads.stamp(),
+            work: work_of(state).cloned(),
             messages: state.messages.composed.len(),
             last_id: last.map(|message| message.id.clone()).unwrap_or_default(),
-            last_has_words: last.is_some_and(|message| {
-                message.role == ChatRole::Assistant
-                    && !crate::transcript::prose::prose_markdown(&message.blocks)
-                        .trim()
-                        .is_empty()
-            }),
+            last_has_words: last_has_words(state),
+            panels: state.extras.panels.stamp(),
             answers: state.extras.panels.board_answers.clone(),
         }
+    }
+
+    /// Whether `state` holds these inputs: the threads and panels by stamp, and by value only
+    /// when their stamp moved, without copies.
+    fn matches(&mut self, state: &ChatState) -> bool {
+        if self.messages != state.messages.composed.len()
+            || self.last_id
+                != state
+                    .messages
+                    .composed
+                    .last()
+                    .map_or("", |message| message.id.as_str())
+            || self.last_has_words != last_has_words(state)
+        {
+            return false;
+        }
+        let threads = state.session.coordinator_threads.stamp();
+        if self.threads != threads {
+            if self.work.as_ref() != work_of(state) {
+                return false;
+            }
+            self.threads = threads;
+        }
+        let panels = state.extras.panels.stamp();
+        if self.panels != panels {
+            if self.answers != state.extras.panels.board_answers {
+                return false;
+            }
+            self.panels = panels;
+        }
+        true
     }
 }
 
 /// Kept cards: their inputs, the clock they were built at, the moment their first age changes,
 /// and the cards with the open asks.
-pub type KeptWork = (WorkInputs, i64, Option<i64>, (Value, Vec<OpenAsk>));
+pub type KeptWork = (
+    WorkInputs,
+    i64,
+    Option<i64>,
+    (crate::document::SharedValue, Vec<OpenAsk>),
+);
 
 /// [`project`], reused while its inputs hold and no age on it moved.
 pub fn project_kept(
     state: &ChatState,
     context: &ChatContext,
     kept: &mut Option<KeptWork>,
-) -> (Value, Vec<OpenAsk>) {
+) -> (crate::document::SharedValue, Vec<OpenAsk>) {
     // Not a coordinator, or a gxserver that sends no work: nothing to build or keep.
     if state
         .session
@@ -799,18 +849,18 @@ pub fn project_kept(
         .is_none()
     {
         *kept = None;
-        return (json!([]), Vec::new());
+        return (json!([]).into(), Vec::new());
     }
     let now_ms = context.now_millis();
-    let inputs = WorkInputs::of(state);
-    if let Some((was, built_at, changes_at, value)) = kept.as_ref() {
-        if *was == inputs && now_ms >= *built_at && changes_at.is_none_or(|at| now_ms < at) {
+    if let Some((was, built_at, changes_at, value)) = kept.as_mut() {
+        if now_ms >= *built_at && changes_at.is_none_or(|at| now_ms < at) && was.matches(state) {
             return value.clone();
         }
     }
-    let value = project(state, context);
-    let changes_at = ages_change_at(&value.0, now_ms);
-    *kept = Some((inputs, now_ms, changes_at, value.clone()));
+    let (cards, asks) = project(state, context);
+    let changes_at = ages_change_at(&cards, now_ms);
+    let value = (crate::document::SharedValue::from(cards), asks);
+    *kept = Some((WorkInputs::of(state), now_ms, changes_at, value.clone()));
     value
 }
 

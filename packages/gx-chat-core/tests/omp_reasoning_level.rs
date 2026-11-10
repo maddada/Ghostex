@@ -286,7 +286,7 @@ impl OpenChat {
         // gxserver publishes `pendingModelSelection` (null when none), which is what lets the chat
         // pick models at all.
         state.session.pending_model_selection = Tri::Null;
-        state.menus.model_catalog = catalog();
+        *state.menus.model_catalog = catalog();
         let options = session_option_catalog(&state.menus.model_catalog, Some("omp")).unwrap();
         state.menus.options = OptionStore::seeded(Some(&options), None, &OptionState::new(), 0);
         Self { state }

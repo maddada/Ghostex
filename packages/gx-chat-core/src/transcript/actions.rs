@@ -70,17 +70,13 @@ fn read_work_page(state: &mut ChatState, walk: DeferredWalk) -> Vec<Effect> {
 /// round trip at all, which is what the TypeScript's already-settled promise did.
 fn load_work(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let turn_id = text(action, "id");
-    state
-        .transcript_view
-        .deferred_work
+    std::sync::Arc::make_mut(&mut state.transcript_view.deferred_work)
         .insert(turn_id.clone(), work_row(None));
     state.transcript_view.detail_revision += 1;
     // `publish(controller.current())` before the await: the row spins on this turn.
     state.core.request_publish();
     let Some(walk) = DeferredWalk::begin(turn_id.clone(), param(action, "work")) else {
-        state
-            .transcript_view
-            .deferred_work
+        std::sync::Arc::make_mut(&mut state.transcript_view.deferred_work)
             .insert(turn_id, work_row(Some(WORK_HISTORY_UNREADABLE.to_string())));
         state.transcript_view.detail_revision += 1;
         return Vec::new();
@@ -90,7 +86,7 @@ fn load_work(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
             .transcript_view
             .deferred
             .insert(turn_id.clone(), messages);
-        state.transcript_view.deferred_work.remove(&turn_id);
+        std::sync::Arc::make_mut(&mut state.transcript_view.deferred_work).remove(&turn_id);
         state.transcript_view.detail_revision += 1;
         return Vec::new();
     }
@@ -426,12 +422,10 @@ pub fn settle_rpc(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) 
                     .transcript_view
                     .deferred
                     .insert(turn_id.clone(), messages);
-                state.transcript_view.deferred_work.remove(&turn_id);
+                std::sync::Arc::make_mut(&mut state.transcript_view.deferred_work).remove(&turn_id);
             }
             WalkStep::Failed { message } => {
-                state
-                    .transcript_view
-                    .deferred_work
+                std::sync::Arc::make_mut(&mut state.transcript_view.deferred_work)
                     .insert(turn_id, work_row(Some(message)));
             }
         }

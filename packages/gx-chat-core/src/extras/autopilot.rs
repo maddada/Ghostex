@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn the_pill_says_it_waits_for_the_network_while_offline() {
         let mut state = ChatState::default();
-        state.session.coordinator_threads = Some(json!({}));
+        *state.session.coordinator_threads = Some(json!({}));
         state.session.autopilot = Some(json!({"on": true, "covered": false, "offline": true}));
         let pill = pill(&state).expect("pill");
         assert_eq!(pill.label, "Offline: waiting for the network");
@@ -220,7 +220,7 @@ mod tests {
         state.session.autopilot = Some(json!({"on": false, "covered": false, "offline": true}));
         assert_eq!(super::pill(&state).expect("pill").label, "Autopilot off");
         // A session it covers says so too; one it leaves alone does not.
-        state.session.coordinator_threads = None;
+        *state.session.coordinator_threads = None;
         state.session.autopilot = Some(json!({"on": true, "covered": true, "offline": true}));
         assert_eq!(
             super::pill(&state).expect("pill").label,
@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn a_coordinator_s_menu_turns_autopilot_on_or_off() {
         let mut state = ChatState::default();
-        state.session.coordinator_threads = Some(json!({}));
+        *state.session.coordinator_threads = Some(json!({}));
         state.session.autopilot = Some(json!({"on": false, "covered": false}));
         assert_eq!(labels(&pill(&state).expect("pill"))[0], "Turn Autopilot on");
         state.session.autopilot = Some(json!({"on": true, "covered": false}));

@@ -14,6 +14,7 @@ mod pickers;
 mod questions;
 mod read_aloud;
 mod session;
+mod stamped;
 mod transcript_view;
 
 pub use crate::state::chat::{ChatState, CoreState, PublishAwait};
@@ -39,6 +40,7 @@ pub use crate::state::questions::{
 };
 pub use crate::state::read_aloud::{Notice, Playing, ReadAloudState};
 pub use crate::state::session::{SessionIdentity, SessionState};
+pub use crate::state::stamped::Stamped;
 pub use crate::state::transcript_view::{
     OpenRow, ProjectedMessage, ProjectionInputs, QuietCard, RewindRequest, TranscriptViewState,
     BACKFILL_BATCH, EAGER_TAIL_ITEMS, ROOT_AGENT_PATH,

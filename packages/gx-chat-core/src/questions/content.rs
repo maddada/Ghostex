@@ -31,7 +31,7 @@ pub struct ContentItem {
 pub struct ContentScan {
     rows: HashMap<String, (usize, Vec<ContentItem>)>,
     /// Every page that asks nothing and every chart, in transcript order.
-    pub items: Vec<ContentItem>,
+    pub items: crate::state::Stamped<Vec<ContentItem>>,
     /// The composition the scan last read (`compose_generation`, and its length).
     checked: Option<(u64, usize)>,
 }
@@ -128,7 +128,7 @@ pub fn refresh(state: &mut ChatState) {
     }
     scan.rows.retain(|id, _| seen.contains(id.as_str()));
     if scan.items != items {
-        scan.items = items;
+        *scan.items = items;
         state.core.request_publish();
     }
 }

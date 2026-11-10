@@ -27,6 +27,11 @@ pub struct AssembleCache {
     board: Option<crate::extras::coordinator_board::KeptBoard>,
     question_list: Option<crate::questions::open_questions::KeptList>,
     work: Option<crate::extras::work_cards::KeptWork>,
+    work_ask_tags: Option<(
+        crate::questions::forms::CardTags,
+        crate::document::SharedValue,
+    )>,
+    model_menu: Option<crate::menus::picker::document::KeptModelMenu>,
 }
 
 /// [`assemble`], reusing what `cache` kept: the same document, built once per change of inputs.
@@ -49,15 +54,26 @@ pub fn assemble_with(
         &open_asks,
     );
     document.work_cards = ghostex_gx_protocol::Tri::Value(work_cards);
-    document.work_ask_tags = ghostex_gx_protocol::Tri::Value(serde_json::json!(
-        crate::extras::work_cards::card_tags(state)
-    ));
+    document.work_ask_tags = ghostex_gx_protocol::Tri::Value(work_ask_tags(state, cache));
     composer::document(state, context, &mut document);
-    menus::document(state, context, &mut document);
+    menus::document_with(state, context, &mut document, &mut cache.model_menu);
     let board = crate::extras::coordinator_board::project_kept(state, context, &mut cache.board);
     extras::document_with_board(state, context, &mut document, board);
     crate::read_aloud::document(state, context, &mut document);
     document
+}
+
+/// The document's `workAskTags`, read again only when the coordinator threads moved.
+fn work_ask_tags(state: &ChatState, cache: &mut AssembleCache) -> crate::document::SharedValue {
+    if let Some((tags, value)) = cache.work_ask_tags.as_mut() {
+        if tags.matches(state) {
+            return value.clone();
+        }
+    }
+    let tags = crate::questions::forms::CardTags::of(state);
+    let value = crate::document::SharedValue::from(serde_json::json!(tags.tags()));
+    cache.work_ask_tags = Some((tags, value.clone()));
+    value
 }
 
 /// The parts of a frame that do not ride inside the document.

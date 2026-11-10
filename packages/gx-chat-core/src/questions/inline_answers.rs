@@ -622,7 +622,7 @@ mod tests {
         let (mut state, id) = state_with_question();
         let context = ChatContext::default();
         let first = sent_text(&pick(&mut state, &context, &id, 0));
-        state.session.queue_prompts = Some(vec![json!({"id": "p1", "text": first})]);
+        *state.session.queue_prompts = Some(vec![json!({"id": "p1", "text": first})]);
         state.questions.forms.get_mut(&id).unwrap().send = None;
         state.questions.forms.get_mut(&id).unwrap().sent = Some(json!({"Q9": "Yes"}));
         toggle_change(&mut state, &id);
@@ -671,7 +671,7 @@ mod tests {
                 state.transcript_view.question_forms.push(form);
             }
         }
-        state.transcript_view.askers = crate::transcript::open_questions::askers(&messages, &[]);
+        *state.transcript_view.askers = crate::transcript::open_questions::askers(&messages, &[]);
         state.messages.composed = messages;
         state
     }
@@ -782,7 +782,7 @@ mod tests {
                 title: old_form.title.clone(),
                 answers: json!({"Q1652": "Yes, build iOS too"}),
             });
-        state.transcript_view.askers =
+        *state.transcript_view.askers =
             crate::transcript::open_questions::askers(&state.messages.composed, &[old.clone()]);
         assert_eq!(
             owner(&state, &new),
@@ -828,7 +828,7 @@ mod tests {
                 title: form.title.clone(),
                 answers: json!({ key: "No" }),
             });
-        state.transcript_view.askers =
+        *state.transcript_view.askers =
             crate::transcript::open_questions::askers(&state.messages.composed, &[form.id.clone()]);
         let inline = state.transcript_view.question_forms[0].id.clone();
         let projected = crate::questions::forms::project(&state);

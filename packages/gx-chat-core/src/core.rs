@@ -458,11 +458,6 @@ impl ChatCore {
         if chain_continued && !requested {
             return;
         }
-        let mut probe = assemble_with(
-            &self.state,
-            &self.published_context,
-            &mut self.assemble_cache,
-        );
         // A rebuilt projection is a publish of its own: `update` rebuilds only when one of its
         // inputs changed identity, every one of those is a `useState` value the lifecycle
         // republishes on, and `take` then ships the new (if equal) array as a degenerate splice.
@@ -484,10 +479,20 @@ impl ChatCore {
                 .eq_slice(&self.parts.subagent_items)
             || crate::transcript::row_details(&self.state, &self.published_context)
                 != self.parts.row_details;
-        // `probe.reactive() != self.document.reactive()` without copying both documents: the one
-        // key `reactive` blanks is made equal on the probe, which is dropped right after.
-        probe.async_questions = self.document.async_questions.clone();
-        let state_moved = probe != self.document;
+        // CDXC:SessionChat 2026-11-10 WHY: the probe (the whole document assembled again at the published clock) only answers whether the state moved, and that answer is read twice below: by the gate, which a requested publish or moved parts pass anyway, and by the panel clock, which a render, a quiet action or a first publish decide on their own. When both are decided it is not built, which left one assembly instead of two on most events of a working chat (a frame asks for a render).
+        let decided = (requested || parts_moved)
+            && (rendered || self.state.core.quiet_action || !self.published_once);
+        let state_moved = decided || {
+            let mut probe = assemble_with(
+                &self.state,
+                &self.published_context,
+                &mut self.assemble_cache,
+            );
+            // `probe.reactive() != self.document.reactive()` without copying both documents: the
+            // one key `reactive` blanks is made equal on the probe, which is dropped right after.
+            probe.async_questions = self.document.async_questions.clone();
+            probe != self.document
+        };
         if !requested && !parts_moved && !state_moved {
             return;
         }

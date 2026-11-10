@@ -901,15 +901,17 @@ pub fn settle_request(
             // step that lost a race self-corrects on the next line instead of rolling back.
             if let Some(queue) = result.get("queue").and_then(Value::as_array) {
                 // `setQueuePrompts(result.queue)`: the answer's own array, equal or not.
-                state.session.queue_prompts = Some(queue.clone());
+                *state.session.queue_prompts = Some(queue.clone());
                 state.messages.new_composition_identity();
             }
             // `setSyncedDraft((current) => mergeSessionChatDraftState(current, result.draft))`:
             // the receipts union, and a newer local revision wins over the answer's body.
             if let Some(draft) = result.get("draft") {
-                state.session.synced_draft = Some(crate::session::fold::merge_draft_state(
-                    state.session.synced_draft.as_ref(),
-                    draft,
+                state.session.synced_draft = Some(crate::document::SharedValue::from(
+                    crate::session::fold::merge_draft_state(
+                        state.session.synced_draft.as_deref(),
+                        draft,
+                    ),
                 ));
                 state.session.synced_draft_revision += 1;
             }
@@ -1045,7 +1047,7 @@ pub fn settle_queue_mutation(
         crate::wire::RpcOutcome::Ok { result } => {
             if let Some(queue) = result.get("queue").and_then(Value::as_array) {
                 // `setQueuePrompts(result.queue)`: the answer's own array, equal or not.
-                state.session.queue_prompts = Some(queue.clone());
+                *state.session.queue_prompts = Some(queue.clone());
                 state.messages.new_composition_identity();
             }
             if let Some(removed) = removed.as_deref() {

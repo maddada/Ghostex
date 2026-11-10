@@ -462,7 +462,7 @@ fn effect_clock_index(state: &ChatState) -> usize {
 pub fn boot_read(state: &mut ChatState, read: &crate::event::ComposerBootRead) -> Vec<Effect> {
     // `adoptAgentModelCatalog` replaces the lineup outright, whatever its `updatedAt`.
     if let Some(parsed) = crate::menus::catalog::parse_agent_model_catalog(&read.model_catalog) {
-        state.menus.model_catalog = parsed;
+        *state.menus.model_catalog = parsed;
         state.menus.model_catalog_generation = state.menus.model_catalog_generation.wrapping_add(1);
     }
     state.menus.session_key = Some(read.session_key.clone());

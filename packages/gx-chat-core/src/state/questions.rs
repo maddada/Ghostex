@@ -89,26 +89,28 @@ pub struct QuestionsState {
 
     // ---- question forms ---------------------------------------------------
     /// The reader's side of each ```questions form, by form id (`crate::questions::forms`).
-    pub forms: std::collections::BTreeMap<String, FormState>,
+    pub forms: crate::state::Stamped<std::collections::BTreeMap<String, FormState>>,
     /// The real answer rows and send boundaries in the current loaded transcript.
-    pub form_answer_index: crate::session::answer_echoes::AnswerIndex,
+    pub form_answer_index: crate::state::Stamped<crate::session::answer_echoes::AnswerIndex>,
     /// One-click answers being changed (`crate::questions::inline_answers`).
-    pub inline_answers: crate::questions::inline_answers::InlineAnswersState,
+    pub inline_answers: crate::state::Stamped<crate::questions::inline_answers::InlineAnswersState>,
 
     // ---- unanswered questions --------------------------------------------
     /// The Previous question pill's place and the last jump (`crate::questions::open_questions`).
     pub open_questions: crate::questions::open_questions::OpenQuestionsState,
     /// The For later marks set here that gxserver has not confirmed yet (`crate::questions::later`).
-    pub later: crate::questions::later::LaterState,
+    pub later: crate::state::Stamped<crate::questions::later::LaterState>,
     /// The pages that ask nothing and the charts the ? pill's list names (`crate::questions::content`).
     pub content: crate::questions::content::ContentScan,
     /// The form or chart a Resources row opened in the floating modal (`crate::questions::resource_modal`).
-    pub resource_modal: Option<crate::questions::resource_modal::ResourceModal>,
+    pub resource_modal:
+        crate::state::Stamped<Option<crate::questions::resource_modal::ResourceModal>>,
     /// A "Go to chat" waiting for its item to be among the loaded rows.
     pub resource_go: Option<crate::questions::resource_modal::ResourceGo>,
     /// Loaded forms' answers read back from outside the loaded rows
     /// (`crate::questions::recorded_answers`).
-    pub recorded_answers: crate::questions::recorded_answers::RecordedAnswers,
+    pub recorded_answers:
+        crate::state::Stamped<crate::questions::recorded_answers::RecordedAnswers>,
 }
 
 /// One question form's picks while it is open, and its send.

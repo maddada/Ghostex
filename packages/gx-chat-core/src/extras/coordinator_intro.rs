@@ -245,7 +245,7 @@ mod tests {
 
     fn coordinator(threads: Value) -> ChatState {
         let mut state = ChatState::default();
-        state.session.coordinator_threads = Some(threads);
+        *state.session.coordinator_threads = Some(threads);
         state
     }
 

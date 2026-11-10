@@ -34,7 +34,7 @@ fn at(now_ms: f64) -> ChatContext {
 fn claude_with_queue(queue: Vec<Value>) -> ChatState {
     let mut state = ChatState::default();
     state.session.agent = Some("claude".into());
-    state.session.queue_prompts = Some(queue);
+    *state.session.queue_prompts = Some(queue);
     state
 }
 
@@ -61,7 +61,7 @@ fn opened_on_a_stale_row() -> ChatState {
     before_compose(&mut state, &at(OPENED));
     assert_eq!(delivery_state(&state), ["queued"]);
     assert!(!state.core.timers.is_armed(TIMER_LEFT_QUEUE));
-    state.session.queue_prompts = Some(Vec::new());
+    *state.session.queue_prompts = Some(Vec::new());
     before_compose(&mut state, &at(OPENED + 500.0));
     state
 }
@@ -106,9 +106,9 @@ fn answers_gxserver_indexed_as_answered_go_at_once() {
     // The user's own case: the file lost the answers, but the index saw them before that.
     let mut state = claude_with_queue(vec![queued_row("Q8f07", ANSWERS)]);
     before_compose(&mut state, &at(OPENED));
-    state.session.resource_index =
+    *state.session.resource_index =
         vec![json!({"id": PAGE, "kind": "form", "status": "answered"})].into();
-    state.session.queue_prompts = Some(Vec::new());
+    *state.session.queue_prompts = Some(Vec::new());
     before_compose(&mut state, &at(OPENED + 500.0));
     assert!(state.pending.sends.is_empty());
 }
@@ -118,7 +118,7 @@ fn a_held_row_is_not_confirmed_by_the_index() {
     let mut row = queued_row("Q2", ANSWERS);
     row["state"] = json!("failed");
     let mut state = claude_with_queue(vec![row]);
-    state.session.resource_index =
+    *state.session.resource_index =
         vec![json!({"id": PAGE, "kind": "form", "status": "answered"})].into();
     before_compose(&mut state, &at(OPENED));
     assert_eq!(delivery_state(&state), ["failed"], "Retry stays on offer");
@@ -143,7 +143,7 @@ fn a_send_older_than_the_loaded_rows_goes_quietly() {
     state.messages.list = vec![newer];
     state.messages.list_revision += 1;
     state.messages.has_more = true;
-    state.session.queue_prompts = Some(Vec::new());
+    *state.session.queue_prompts = Some(Vec::new());
     before_compose(&mut state, &at(OPENED));
     assert_eq!(delivery_state(&state), ["sending"]);
     before_compose(&mut state, &at(OPENED + LEFT_QUEUE_RETENTION_MS as f64));
@@ -264,7 +264,7 @@ fn removing_a_row_that_just_went_ends_the_card_without_an_error() {
 fn a_transcript_row_replaces_the_echo_inside_the_gap() {
     let mut state = claude_with_queue(vec![queued_row("Q8f07", ANSWERS)]);
     before_compose(&mut state, &at(OPENED));
-    state.session.queue_prompts = Some(Vec::new());
+    *state.session.queue_prompts = Some(Vec::new());
     before_compose(&mut state, &at(OPENED + 1_000.0));
     assert_eq!(delivery_state(&state), ["sending"]);
 
@@ -304,11 +304,11 @@ fn a_row_that_comes_back_restores_what_it_says() {
     // A stale read can miss a row that is still there.
     let mut state = claude_with_queue(vec![queued_row("Q1", ANSWERS)]);
     before_compose(&mut state, &at(OPENED));
-    state.session.queue_prompts = Some(Vec::new());
+    *state.session.queue_prompts = Some(Vec::new());
     before_compose(&mut state, &at(OPENED + 1_000.0));
     assert_eq!(delivery_state(&state), ["sending"]);
 
-    state.session.queue_prompts = Some(vec![queued_row("Q1", ANSWERS)]);
+    *state.session.queue_prompts = Some(vec![queued_row("Q1", ANSWERS)]);
     let later = OPENED + 1_000.0 + LEFT_QUEUE_RETENTION_MS as f64 * 3.0;
     before_compose(&mut state, &at(later));
     assert_eq!(delivery_state(&state), ["queued"]);

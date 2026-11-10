@@ -456,7 +456,7 @@ fn a_kept_card_never_outlives_what_it_describes() {
     );
     assert_eq!(chat.card()["heldCount"], json!(1));
     let state = chat.core.state_mut();
-    state.session.queue_prompts = Some(vec![
+    *state.session.queue_prompts = Some(vec![
         sso(),
         prompt("q-2", "Keep the window at 15 minutes.", false, "queued"),
     ]);

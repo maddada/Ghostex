@@ -44,7 +44,7 @@ pub fn settle(
     // draw every agent as "outside the catalog".
     if state.menus.model_catalog.agents.is_empty() {
         if let Some(bundled) = bundled_agent_model_catalog() {
-            state.menus.model_catalog = bundled;
+            *state.menus.model_catalog = bundled;
         }
     }
     // Family e1's `observe` has already rebuilt the option store this turn, so the scoped key is
@@ -71,7 +71,7 @@ pub fn settle(
             // the catalog this build bundles; adopting it outright hid the bundled Opus 5.5 200K
             // twin until GitHub caught up. The later `updatedAt` wins, as for every other copy.
             if let Some(parsed) = parse_agent_model_catalog(&read.model_catalog) {
-                state.menus.model_catalog = match bundled_agent_model_catalog() {
+                *state.menus.model_catalog = match bundled_agent_model_catalog() {
                     Some(bundled) => bundled.newer(parsed),
                     None => parsed,
                 };
@@ -92,7 +92,7 @@ pub fn settle(
         Event::ModelCatalogChanged { catalog } => {
             // The broker's `catalog` message is `adoptAgentModelCatalog(message.catalog)` too.
             if let Some(parsed) = parse_agent_model_catalog(catalog) {
-                state.menus.model_catalog = parsed;
+                *state.menus.model_catalog = parsed;
                 // `adoptAgentModelCatalog` parses into a fresh object and `replaceCatalog` swaps
                 // it in unconditionally, so the option store rebuilds even on an identical push.
                 state.menus.model_catalog_generation =

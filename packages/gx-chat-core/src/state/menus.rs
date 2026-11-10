@@ -35,7 +35,7 @@ pub struct DraftAgentSwitch {
 pub struct MenusState {
     /// The agent model catalog in effect, pushed in by the host. Empty until the first push, which
     /// is what leaves a session with no pills rather than pills naming models it cannot run.
-    pub model_catalog: AgentModelCatalog,
+    pub model_catalog: crate::state::Stamped<AgentModelCatalog>,
     /// How many times a catalog was ADOPTED, whatever its contents.
     ///
     /// `adoptAgentModelCatalog` parses into a fresh object and `replaceCatalog` swaps it in
@@ -127,7 +127,7 @@ pub struct MenusState {
 impl Default for MenusState {
     fn default() -> Self {
         Self {
-            model_catalog: AgentModelCatalog::default(),
+            model_catalog: Default::default(),
             model_catalog_generation: 0,
             session_key: None,
             latched_draft_agent: None,

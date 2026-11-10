@@ -125,14 +125,14 @@ pub struct TranscriptViewState {
     /// The published pages whose answers arrived (`transcript/page_answers.rs`).
     pub answered_pages: Vec<String>,
     /// The question forms the agent's replies hold (`transcript/question_forms.rs`).
-    pub question_forms: Vec<crate::transcript::question_forms::QuestionForm>,
+    pub question_forms: crate::state::Stamped<Vec<crate::transcript::question_forms::QuestionForm>>,
     /// The answers that arrived, for pages and forms alike.
-    pub page_answers: Vec<crate::transcript::page_answers::PageAnswers>,
+    pub page_answers: crate::state::Stamped<Vec<crate::transcript::page_answers::PageAnswers>>,
     /// The forms and question pages, oldest first (`transcript/open_questions.rs`).
-    pub askers: Vec<crate::transcript::open_questions::Asker>,
+    pub askers: crate::state::Stamped<Vec<crate::transcript::open_questions::Asker>>,
     /// The `loadWork` reads in flight or failed, keyed by the turn's user-message id. This is the
     /// document's `deferredWork`, which reports the READ's state, not the rows it brought back.
-    pub deferred_work: BTreeMap<String, DeferredWorkRow>,
+    pub deferred_work: std::sync::Arc<BTreeMap<String, DeferredWorkRow>>,
     /// Bumped whenever an open row's detail could have changed, so the next publish rebuilds it.
     pub detail_revision: u64,
     /// Details for the rows the renderer currently draws open.
@@ -297,10 +297,10 @@ impl Default for TranscriptViewState {
             worked_line: None,
             final_ids: Vec::new(),
             answered_pages: Vec::new(),
-            question_forms: Vec::new(),
-            page_answers: Vec::new(),
-            askers: Vec::new(),
-            deferred_work: BTreeMap::new(),
+            question_forms: Default::default(),
+            page_answers: Default::default(),
+            askers: Default::default(),
+            deferred_work: Default::default(),
             detail_revision: 0,
             row_details: RowDetails::new(),
             save_prompt_requests: BTreeMap::new(),

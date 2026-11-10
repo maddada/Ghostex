@@ -94,7 +94,7 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
         summary: state.transcript_view.summary_mode,
         detail_revision: state.transcript_view.detail_revision,
         backfill_revision: state.transcript_view.backfill_revision,
-        queue: state.session.queue_prompts.clone(),
+        queue: (*state.session.queue_prompts).clone(),
         answers_on_the_way: crate::questions::open_questions::answers_on_the_way(state)
             .into_iter()
             .map(|answers| answers.page_id)
@@ -158,9 +158,12 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
     view.items = std::sync::Arc::new(TranscriptItems::with_settled(&settled_rows, items));
     view.final_ids = projection.final_ids;
     view.answered_pages = projection.answered_pages;
-    view.question_forms = projection.question_forms;
-    view.page_answers = projection.page_answers;
-    view.askers = projection.askers;
+    // Written only when they differ, so their stamps (`state::Stamped`) keep the document's kept
+    // parts while a reply streams.
+    view.question_forms
+        .set_if_changed(projection.question_forms);
+    view.page_answers.set_if_changed(projection.page_answers);
+    view.askers.set_if_changed(projection.askers);
     view.backfill = projection.backfill;
     if view.backfill.is_empty() {
         // The run is over: a row that changes from here on queues again like any other.

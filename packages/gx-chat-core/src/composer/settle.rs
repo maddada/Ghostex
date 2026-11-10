@@ -88,9 +88,11 @@ fn settle_draft_push(
     state.composer.draft_pushes.remove(at);
     if let RpcOutcome::Ok { result } = outcome {
         if let Some(draft) = result.get("draft") {
-            state.session.synced_draft = Some(crate::session::fold::merge_draft_state(
-                state.session.synced_draft.as_ref(),
-                draft,
+            state.session.synced_draft = Some(crate::document::SharedValue::from(
+                crate::session::fold::merge_draft_state(
+                    state.session.synced_draft.as_deref(),
+                    draft,
+                ),
             ));
             state.session.synced_draft_revision += 1;
         }

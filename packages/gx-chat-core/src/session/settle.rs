@@ -38,7 +38,7 @@ pub fn before_compose(state: &mut ChatState, context: &ChatContext) {
     }
     // Keep hydrated sends until the transcript replaces them, including the gap between terminal
     // delivery and the agent flushing its transcript to disk, but no longer than that gap can last.
-    if let Some(queue) = state.session.queue_prompts.clone() {
+    if let Some(queue) = (*state.session.queue_prompts).clone() {
         let oldest_loaded = state
             .messages
             .has_more

@@ -73,22 +73,22 @@ pub fn apply_state_frame(
         state.session.retired_async_question_ids = ids;
     }
     if let Some(ids) = frame.state.later_question_ids.clone() {
-        state.session.later_question_ids = ids;
+        *state.session.later_question_ids = ids;
     }
     if let Some(modes) = frame.state.unavailable_modes.clone() {
         state.session.unavailable_modes = modes;
     }
     if let Some(ids) = frame.state.removed_question_ids.clone() {
-        state.session.removed_question_ids = ids;
+        *state.session.removed_question_ids = ids;
     }
     // An index equal to the one held keeps its lookups (`ResourceIndex`).
     if let Some(index) = frame
         .state
         .resource_index
         .as_ref()
-        .filter(|index| state.session.resource_index != **index)
+        .filter(|index| *state.session.resource_index != **index)
     {
-        state.session.resource_index = index.clone().into();
+        *state.session.resource_index = index.clone().into();
     }
     apply_selected_options(state, frame.state.selected_options.as_ref());
     state.session.terminal_notice = frame.state.terminal_notice.clone();
@@ -109,7 +109,10 @@ pub fn apply_state_frame(
         apply_returned_prompt(state, &prompt);
     }
     if let Some(threads) = frame.state.coordinator_threads.clone() {
-        state.session.coordinator_threads = Some(threads);
+        state
+            .session
+            .coordinator_threads
+            .set_if_changed(Some(threads));
         crate::extras::relayed_approvals::receive(state);
     }
     if let Some(side_chats) = frame.state.side_chats.clone() {
@@ -128,7 +131,7 @@ pub fn apply_state_frame(
         state.session.autopilot = Some(autopilot);
     }
     if let Some(collab) = frame.state.collab.clone() {
-        state.session.collab = Some(collab);
+        *state.session.collab = Some(collab);
         crate::extras::collab::settle_held_answers(state);
     }
     if let Some(deliveries) = frame.state.agent_message_deliveries.clone() {
@@ -175,10 +178,10 @@ pub fn apply_agent_identity(state: &mut ChatState, patch: &AgentIdentity) {
         session.async_questions_since = None;
         session.forked_at = None;
         session.retired_async_question_ids = Vec::new();
-        session.later_question_ids = Vec::new();
+        *session.later_question_ids = Vec::new();
         session.unavailable_modes = Vec::new();
-        session.removed_question_ids = Vec::new();
-        session.resource_index = Default::default();
+        *session.removed_question_ids = Vec::new();
+        *session.resource_index = Default::default();
     }
     if patch.agent.is_some() {
         session.agent = patch.agent.clone();
@@ -256,14 +259,16 @@ pub fn apply_queue_carriage(
         // Every state frame repeats the (usually empty) queue; only a real change replaces it, so
         // a new identity for the same rows cannot dirty every consumer down to the projection.
         if state.session.queue_prompts.as_ref() != Some(queue) {
-            state.session.queue_prompts = Some(queue.clone());
+            *state.session.queue_prompts = Some(queue.clone());
         }
     }
     if let Some(draft) = draft {
-        state.session.synced_draft = Some(merge_draft_state(
-            state.session.synced_draft.as_ref(),
-            draft,
-        ));
+        // Every state frame of an older gxserver repeats the draft: an equal merge keeps the value
+        // the document already shares (`document::SharedValue`).
+        let merged = merge_draft_state(state.session.synced_draft.as_deref(), draft);
+        if state.session.synced_draft.as_deref() != Some(&merged) {
+            state.session.synced_draft = Some(merged.into());
+        }
         state.session.synced_draft_revision += 1;
     }
 }
@@ -459,21 +464,21 @@ pub fn apply_authoritative(
         state.session.retired_async_question_ids = ids;
     }
     if let Some(ids) = result.state.later_question_ids.clone() {
-        state.session.later_question_ids = ids;
+        *state.session.later_question_ids = ids;
     }
     if let Some(modes) = result.state.unavailable_modes.clone() {
         state.session.unavailable_modes = modes;
     }
     if let Some(ids) = result.state.removed_question_ids.clone() {
-        state.session.removed_question_ids = ids;
+        *state.session.removed_question_ids = ids;
     }
     if let Some(index) = result
         .state
         .resource_index
         .as_ref()
-        .filter(|index| state.session.resource_index != **index)
+        .filter(|index| *state.session.resource_index != **index)
     {
-        state.session.resource_index = index.clone().into();
+        *state.session.resource_index = index.clone().into();
     }
     // The status machine decides whether this becomes the working strip's activity, a transient
     // status row, the streaming bubble or the pending tool row.
@@ -494,7 +499,10 @@ pub fn apply_authoritative(
         apply_returned_prompt(state, &prompt);
     }
     if let Some(threads) = result.state.coordinator_threads.clone() {
-        state.session.coordinator_threads = Some(threads);
+        state
+            .session
+            .coordinator_threads
+            .set_if_changed(Some(threads));
         crate::extras::relayed_approvals::receive(state);
     }
     if let Some(side_chats) = result.state.side_chats.clone() {
@@ -513,7 +521,7 @@ pub fn apply_authoritative(
         state.session.autopilot = Some(autopilot);
     }
     if let Some(collab) = result.state.collab.clone() {
-        state.session.collab = Some(collab);
+        *state.session.collab = Some(collab);
         crate::extras::collab::settle_held_answers(state);
     }
     if let Some(deliveries) = result.state.agent_message_deliveries.clone() {

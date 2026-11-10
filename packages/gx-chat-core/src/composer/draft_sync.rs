@@ -164,7 +164,7 @@ fn offer_synced_draft(state: &mut ChatState, context: &ChatContext) -> Vec<Effec
         .session
         .synced_draft
         .as_ref()
-        .and_then(|draft| serde_json::from_value::<SyncedDraft>(draft.clone()).ok())
+        .and_then(|draft| serde_json::from_value::<SyncedDraft>((**draft).clone()).ok())
     else {
         return Vec::new();
     };

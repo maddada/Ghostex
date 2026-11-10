@@ -625,7 +625,7 @@ mod tests {
         let mut state = ChatState::default();
         state.identity.project_id = "P1".to_string();
         state.identity.session_id = "G-coordinator".to_string();
-        state.session.coordinator_threads = Some(json!({ "approvals": approvals }));
+        *state.session.coordinator_threads = Some(json!({ "approvals": approvals }));
         state
     }
 

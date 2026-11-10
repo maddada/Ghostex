@@ -43,7 +43,10 @@ pub fn write_tasks_collapsed(collapsed: bool) -> Effect {
 }
 
 /// The fold reset a fresh plan gets: a new plan's done pile starts closed.
-pub fn settle_task_signature(panels: &mut PanelsState, tasks: Option<&Value>) {
+pub fn settle_task_signature(
+    panels: &mut crate::state::Stamped<PanelsState>,
+    tasks: Option<&Value>,
+) {
     let signature = tasks
         .and_then(|tasks| tasks.get("tasks"))
         .and_then(Value::as_array)

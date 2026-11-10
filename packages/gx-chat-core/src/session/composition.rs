@@ -255,7 +255,7 @@ pub fn compose_cached(state: &mut ChatState, preview_text: Option<&str>, working
         statuses: state.pending.terminal_status_messages.clone(),
         stream: state.pending.terminal_stream.clone(),
         visible_tool: visible_terminal_tool(state, working).cloned(),
-        queue: state.session.queue_prompts.clone(),
+        queue: (*state.session.queue_prompts).clone(),
         app_commands: state.session.app_commands.clone(),
         shell: state.pending.terminal_shell.clone(),
     };
@@ -328,7 +328,7 @@ fn compose_after(
         rebuilt = boundaried_transcript(state);
         &rebuilt
     };
-    let queue = state.session.queue_prompts.clone().unwrap_or_default();
+    let queue = (*state.session.queue_prompts).clone().unwrap_or_default();
     let mut startup_pending =
         pending_with_startup_sends(&state.pending.sends, &queue, state.session.agent.as_deref());
     // Messages this computer holds while the session's computer is offline.

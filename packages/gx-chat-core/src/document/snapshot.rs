@@ -102,7 +102,7 @@ pub struct Document {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub later_questions: Vec<String>,
     /// Per completed-work row: the read is in flight, or it failed and offers a retry.
-    pub deferred_work: BTreeMap<String, DeferredWorkRow>,
+    pub deferred_work: Shared<BTreeMap<String, DeferredWorkRow>>,
     /// Claude Code workflow runs drawn as cards, by Workflow call id
     /// (`transcript/workflow_card.rs`); a tool row's `workflow` names its card. Family b.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -216,7 +216,7 @@ pub struct Document {
     /// The model menu's inputs. Family e.
     pub model_menu_context: Tri<Value>,
     /// The projected model menu, or `null` when closed. Family e.
-    pub model_menu: Tri<Value>,
+    pub model_menu: Tri<SharedValue>,
     /// The provider the model pills belong to. Absent, not null, before the agent is known:
     /// `publish` spreads `computeNativeChatOptions(...)` in, and that object simply has no
     /// `modelProvider` key until there is one, so `JSON.stringify` leaves it out. Family e.
@@ -287,10 +287,10 @@ pub struct Document {
     /// A coordinator's work item cards (`extras::work_cards::project`), an array, empty when none:
     /// drawn under the reply each sits under (`anchorId`), the item's newest card in full and its
     /// earlier ones folded to one line. Family f.
-    pub work_cards: Tri<Value>,
+    pub work_cards: Tri<SharedValue>,
     /// The question tags work items ask (`extras::work_cards::card_tags`): a one-click question or
     /// form asking only these is drawn once, as the ask card. Family f.
-    pub work_ask_tags: Tri<Value>,
+    pub work_ask_tags: Tri<SharedValue>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,
@@ -421,6 +421,26 @@ impl std::ops::Deref for SharedForms {
 impl From<BTreeMap<String, Value>> for SharedForms {
     fn from(forms: BTreeMap<String, Value>) -> Self {
         Self(std::sync::Arc::new(forms))
+    }
+}
+
+/// A document part the state already holds behind an `Arc`, handed to every document as the same
+/// allocation rather than copied, compared or dropped part by part. Serialized as the value.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Shared<T>(pub std::sync::Arc<T>);
+
+impl<T: PartialEq> PartialEq for Shared<T> {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
+    }
+}
+
+impl<T> std::ops::Deref for Shared<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
     }
 }
 
