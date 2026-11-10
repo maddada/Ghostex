@@ -118,7 +118,14 @@ fn tick(state: &AppState) -> Vec<HealDue> {
             .collect::<Vec<_>>();
         read_cached_zmx_session_process_identities(&names, &state.paths.home_dir).ok()
     };
-    probe_working_sessions_without_agent(state, &sessions, &candidates, &live, &check, agents.as_ref());
+    probe_working_sessions_without_agent(
+        state,
+        &sessions,
+        &candidates,
+        &live,
+        &check,
+        agents.as_ref(),
+    );
     let sightings = candidates
         .into_iter()
         .map(|(key, zmx_name, working)| Sighting {
