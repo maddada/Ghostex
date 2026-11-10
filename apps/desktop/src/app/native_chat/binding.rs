@@ -2,6 +2,36 @@ use super::state::{NativeChatConfig, NativeChatEvent, NativeChatView};
 use crate::*;
 
 impl GhostexGpuiApp {
+    /// Runs a chat's host action on the app in `chat_window`, the window that chat is drawn in,
+    /// or, before it has drawn or once that window is gone, in the app's current window.
+    ///
+    /// CDXC:SessionChat 2026-11-11 WHY:
+    /// User: "i click here and the menu appears off screen pls fix", of the "30 suggested" links pill. A host action used to run through `update_in` from a spawned task, which takes the window GPUI last saw the app drawn in: the floating sidebar, a small panel at the screen's edge or any other window that reads the app. The links list measured the pill's anchor, which is in the chat's window, from that window's frame and opened far from the pill, mostly off screen. Every host action that places something (the links list, a visual page, a file in Browser) means the chat's own window.
+    pub(crate) fn update_in_chat_window(
+        this: &gpui::WeakEntity<Self>,
+        chat_window: Option<gpui::AnyWindowHandle>,
+        cx: &mut gpui::AsyncApp,
+        update: impl FnOnce(&mut Self, &mut gpui::Window, &mut gpui::Context<Self>),
+    ) {
+        let mut update = Some(update);
+        if let Some(handle) = chat_window {
+            let ran = handle.update(cx, |_, window, cx| {
+                this.update(cx, |this, cx| {
+                    if let Some(update) = update.take() {
+                        update(this, window, cx);
+                    }
+                })
+                .is_ok()
+            });
+            if ran.unwrap_or(false) {
+                return;
+            }
+        }
+        if let Some(update) = update.take() {
+            let _ = this.update_in(cx, update);
+        }
+    }
+
     /// CDXC:SessionChat 2026-09-21 DECISION:
     /// User: "remove the ability to switch between GPUI chat view and the React chat view in the settings, and take out the React chat view completely from the GPUI app". Desktop chat is GPUI only, superseding the 2026-09-17 GPUI/React toggle.
     pub(crate) fn ensure_native_chat(
@@ -115,22 +145,28 @@ impl GhostexGpuiApp {
                     }
                     NativeChatEvent::Host(message) => {
                         let message = message.clone();
+                        let chat_window = view.read(cx).main_window;
                         cx.spawn(async move |this, cx| {
-                            let _ = this.update_in(cx, |this, window, cx| {
-                                if this
-                                    .agents_chat_page_states
-                                    .get(&session_id)
-                                    .is_none_or(|state| state.generation != generation)
-                                {
-                                    return;
-                                }
-                                this.receive_session_chat_host_action(
-                                    session_id,
-                                    &message.to_string(),
-                                    window,
-                                    cx,
-                                );
-                            });
+                            Self::update_in_chat_window(
+                                &this,
+                                chat_window,
+                                cx,
+                                move |this, window, cx| {
+                                    if this
+                                        .agents_chat_page_states
+                                        .get(&session_id)
+                                        .is_none_or(|state| state.generation != generation)
+                                    {
+                                        return;
+                                    }
+                                    this.receive_session_chat_host_action(
+                                        session_id,
+                                        &message.to_string(),
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            );
                         })
                         .detach();
                     }

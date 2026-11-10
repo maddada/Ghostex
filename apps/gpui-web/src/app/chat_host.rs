@@ -466,7 +466,15 @@ impl GhostexGpuiApp {
             }
             // The working card's Links pill: the page's links card, as the sidebar row opens it.
             Some("sessionLinks") => {
-                self.open_session_links_card(row.clone(), cx);
+                let anchor = &message["anchor"];
+                match (anchor["x"].as_f64(), anchor["y"].as_f64()) {
+                    (Some(x), Some(y)) => self.toggle_session_links_card_at(
+                        row.clone(),
+                        gpui::point(gpui::px(x as f32), gpui::px(y as f32)),
+                        cx,
+                    ),
+                    _ => self.open_session_links_card(row.clone(), cx),
+                }
                 return true;
             }
             Some("sleep") => {
