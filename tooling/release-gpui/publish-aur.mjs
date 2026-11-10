@@ -275,7 +275,14 @@ export async function resolveSha256({ manifest, repo, sha256, version }) {
   return { source: 'downloaded release asset', value: await sha256FromDownload(version, repo) };
 }
 
-function publish({ outputDirectory, version }) {
+/*
+ * CDXC:Release 2026-11-10 DECISION:
+ * User: prove the AUR key works without publishing anything. `dryRun` runs every network step a
+ * publish runs (SSH, clone, the AUR's write-access check) and shows the diff the push would carry,
+ * but never commits: write access is proven by `git push --dry-run` of the AUR's own tip, which
+ * reaches aurweb's maintainer/co-maintainer check in git-serve and sends no objects or ref updates.
+ */
+function publish({ dryRun = false, outputDirectory, version }) {
   if (!process.env.SSH_AUTH_SOCK && !process.env.GIT_SSH_COMMAND && !hasSshIdentityFile()) {
     throw new Error(
       'No SSH identity is configured for aur.archlinux.org. In CI, install the AUR_SSH_PRIVATE_KEY secret into ' +
@@ -298,6 +305,10 @@ function publish({ outputDirectory, version }) {
    * rebuild or downgrade every Arch user's Ghostex for nothing.
    */
   const published = publishedPkgver(checkout);
+  if (dryRun) {
+    dryRunReport({ checkout, outputDirectory, published, version });
+    return;
+  }
   if (published && compareVersions(published, version) >= 0) {
     process.stdout.write(
       published === version
@@ -337,6 +348,36 @@ function publish({ outputDirectory, version }) {
   process.stdout.write(`Pushed ghostex-bin ${version} to the AUR.\n`);
 }
 
+function dryRunReport({ checkout, outputDirectory, published, version }) {
+  process.stdout.write(`Cloned ${aurRemote} over SSH; the AUR has ghostex-bin ${published ?? 'nothing yet'}.\n`);
+  const access = runGit(['push', '--dry-run', 'origin', 'HEAD:refs/heads/master'], {
+    allowFailure: true,
+    cwd: checkout,
+  });
+  if (access.status !== 0) {
+    throw new Error(
+      `The AUR refused write access to ghostex-bin: ${(access.stderr || access.stdout || 'unknown error').trim()}\n` +
+        'The key authenticates but its AUR account neither maintains nor co-maintains ghostex-bin.'
+    );
+  }
+  process.stdout.write('The AUR grants this key write access to ghostex-bin (git push --dry-run, nothing sent).\n');
+  for (const name of aurRepositoryFiles) {
+    copyFileSync(path.join(outputDirectory, name), path.join(checkout, name));
+  }
+  runGit(['add', ...aurRepositoryFiles], { cwd: checkout });
+  const diff = runGit(['diff', '--cached', '--stat', '--patch'], { cwd: checkout }).stdout.trim();
+  process.stdout.write(
+    diff ? `Diff against the AUR's ghostex-bin:\n${diff}\n` : 'The rendered package is identical to the AUR copy.\n'
+  );
+  const verdict =
+    published && compareVersions(published, version) >= 0
+      ? `A publish of ${version} would leave the AUR as it is (it has ${published}).`
+      : diff
+        ? `A publish of ${version} would commit "Update ghostex-bin to ${version}-1" and push this diff.`
+        : `A publish of ${version} would find nothing to push.`;
+  process.stdout.write(`Dry run, nothing committed or pushed. ${verdict}\n`);
+}
+
 /** The pkgver the AUR repository's .SRCINFO publishes now, or null for an empty repository. */
 function publishedPkgver(checkout) {
   const srcinfoPath = path.join(checkout, '.SRCINFO');
@@ -362,11 +403,15 @@ function hasSshIdentityFile() {
 }
 
 export function parseArguments(argv) {
-  const options = { publish: false, repo: defaultRepo };
+  const options = { dryRun: false, publish: false, repo: defaultRepo };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--publish') {
       options.publish = true;
+      continue;
+    }
+    if (argument === '--dry-run') {
+      options.dryRun = true;
       continue;
     }
     if (!argument.startsWith('--')) throw new Error(`Unexpected argument: ${argument}`);
@@ -375,6 +420,7 @@ export function parseArguments(argv) {
     options[argument.slice(2)] = value;
     index += 1;
   }
+  if (options.publish && options.dryRun) throw new Error('Pass --publish or --dry-run, not both');
   return options;
 }
 
@@ -401,8 +447,8 @@ async function main() {
   copyFileSync(path.join(packageDirectory, installFileName), path.join(outputDirectory, installFileName));
   process.stdout.write(`Rendered ${aurRepositoryFiles.join(', ')} into ${outputDirectory}\n`);
 
-  if (options.publish) publish({ outputDirectory, version });
-  else process.stdout.write('Pass --publish to push the rendered package to the AUR.\n');
+  if (options.publish || options.dryRun) publish({ dryRun: options.dryRun, outputDirectory, version });
+  else process.stdout.write('Pass --publish to push the rendered package to the AUR, or --dry-run to check it.\n');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

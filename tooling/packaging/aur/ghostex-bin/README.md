@@ -73,6 +73,11 @@ it up to date by hand until 11.2.x. The release pushes it as a co-maintainer
    (<https://aur.archlinux.org/packages/ghostex-bin>, _Manage Co-Maintainers_).
    Until then every push is refused and the release goes on without it.
 
+As set up on 10 Nov 2026, steps 1 and 4 were skipped: Alp added the public half
+(`ghostex-aur-release-bot`) as a second line of the _SSH Public Key_ field of
+his own AUR account, which maintains `ghostex-bin`, so the release pushes as
+Alp. If he ever removes that line, every release's AUR step is refused again.
+
 ## How the automated bump works
 
 `.github/workflows/release-gpui-publish.yml` runs two AUR steps at the end of
@@ -101,6 +106,24 @@ ghostex-bin: Pushed ghostex-bin X.Y.Z to the AUR.", "... already at X.Y.Z",
 or "... was NOT updated: <reason>"), and a failure also adds a warning
 annotation "AUR ghostex-bin not updated" to the run.
 
+## Checking the key without publishing
+
+The **AUR ghostex-bin dry run** workflow (`.github/workflows/release-aur-dry-run.yml`)
+runs the release's AUR step with the same secret and SSH setup
+(`tooling/release-gpui/aur-ssh-setup.sh`) but never commits or pushes:
+
+```sh
+gh workflow run release-aur-dry-run.yml --repo maddada/Ghostex        # latest release
+gh workflow run release-aur-dry-run.yml --repo maddada/Ghostex -f version=11.3.0
+```
+
+It prints the key's fingerprint, the AUR's `list-repos` for the key's account,
+clones `ghostex-bin` over SSH, proves write access with `git push --dry-run` of
+the AUR's own tip (this reaches the AUR's maintainer check and sends nothing),
+shows the diff a publish would push, and says what a publish would do. Then
+Arch's `makepkg` checks that its `.SRCINFO` matches ours and that every
+`sha256sums` entry verifies against the real release asset.
+
 ## Running the publisher manually
 
 Render only (no network writes, nothing pushed):
@@ -109,7 +132,13 @@ Render only (no network writes, nothing pushed):
 node tooling/release-gpui/publish-aur.mjs --version 7.7.1 --out /tmp/ghostex-aur
 ```
 
-Render and push to the AUR (requires the AUR SSH key to be loaded locally):
+Everything a publish does except the commit and push (`--dry-run`), then the real push
+(both need the AUR SSH key loaded locally):
+
+```sh
+node tooling/release-gpui/publish-aur.mjs --version 7.7.1 --dry-run
+```
+
 
 ```sh
 node tooling/release-gpui/publish-aur.mjs --version 7.7.1 --publish
@@ -120,8 +149,8 @@ node tooling/release-gpui/publish-aur.mjs --version 7.7.1 --publish
 The publisher resolves the tarball checksum in this order and prints which one
 it used:
 
-1. `--sha256 <hex>` — explicit override.
-2. `--manifest <path>` — the `manifest.json` written by the release pipeline
+1. `--sha256 <hex>`: explicit override.
+2. `--manifest <path>`: the `manifest.json` written by the release pipeline
    into `build/release-gpui/${version}/linux-tar-x64/`.
 3. The GitHub release asset's own `sha256:` digest, read with `gh release view`.
 4. Downloading the release asset and hashing it.
@@ -132,7 +161,7 @@ actually carries the Linux tarball.
 ## Updating the package metadata
 
 Edit `PKGBUILD.template` (or `ghostex-bin.install`) and commit it here. The next
-release picks the change up automatically — there is nothing to sync by hand.
+release picks the change up automatically; there is nothing to sync by hand.
 Two rules:
 
 - Keep `pkgver=@PKGVER@` and the `sha256sums` entry as `@SHA256@`; the renderer
@@ -174,7 +203,7 @@ each shared library. Keep the two in step when either changes.
 | `libxrandr2`                                         | `libxrandr`                                                                                |
 | `libxshmfence1`                                      | `libxshmfence`                                                                             |
 | `wmctrl` (Recommends)                                | `wmctrl` as `optdepends` (in `extra`); only used to raise an already running window on X11 |
-| —                                                    | `hicolor-icon-theme` (owns the theme directory this package's icon goes into)              |
+| (none)                                               | `hicolor-icon-theme` (owns the theme directory this package's icon goes into)              |
 
 ## Known caveats
 
@@ -187,8 +216,8 @@ each shared library. Keep the two in step when either changes.
   comparable package (`visual-studio-code-bin`, `cursor-bin`, `obsidian-bin`)
   follows the same convention. Renaming later means submitting a new AUR
   package and changing `pkgname` here plus `aurRemote` in `publish-aur.mjs`.
-- **License identifier.** The repository's root `LICENSE` — the file this
-  package installs — is MIT, so the template declares `license=('MIT')`. (The
+- **License identifier.** The repository's root `LICENSE` (the file this
+  package installs) is MIT, so the template declares `license=('MIT')`. (The
   rpm spec's `License: Proprietary` label predates this and is stale.)
 - **`arch=('x86_64')` only.** The Ghostex Linux desktop release is x64-only
   (`tooling/release-gpui/linux-stage.sh` refuses a non-`x86_64` runner). If an

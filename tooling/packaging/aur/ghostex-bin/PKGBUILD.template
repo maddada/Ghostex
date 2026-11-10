@@ -6,7 +6,7 @@
 # matching .SRCINFO by parsing this file, so the two can never diverge. Edit the
 # template, never the published copy.
 #
-# Keep every field above package() as a plain `key=value` or `key=(...)` line —
+# Keep every field above package() as a plain `key=value` or `key=(...)` line:
 # that is the only shape the .SRCINFO generator accepts.
 
 pkgname=ghostex-bin
