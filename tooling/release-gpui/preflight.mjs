@@ -249,9 +249,14 @@ if (platforms.android) {
  * an hour into the build.
  */
 const certumConfigured = Boolean(process.env.CERTUM_SIMPLYSIGN_EMAIL && process.env.CERTUM_SIMPLYSIGN_TOTP);
-if (signWindows && (platforms.windowsX64 || platforms.windowsArm64) && !certumConfigured && !process.env.SIGNPATH_API_TOKEN) {
+if (
+  signWindows &&
+  (platforms.windowsX64 || platforms.windowsArm64) &&
+  !certumConfigured &&
+  !process.env.SIGNPATH_API_TOKEN
+) {
   throw new Error(
-    'Windows signing was requested but neither the CERTUM_SIMPLYSIGN_EMAIL and CERTUM_SIMPLYSIGN_TOTP secrets nor SIGNPATH_API_TOKEN are set; dispatch with --windows-signing off only on the user\'s instruction.'
+    "Windows signing was requested but neither the CERTUM_SIMPLYSIGN_EMAIL and CERTUM_SIMPLYSIGN_TOTP secrets nor SIGNPATH_API_TOKEN are set; dispatch with --windows-signing off only on the user's instruction."
   );
 }
 
