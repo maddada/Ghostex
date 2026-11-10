@@ -726,10 +726,11 @@ project on every computer, recent ones first, with a search field and a chip for
 each computer, starting on the one you used last for that project. Tap a project
 and its remembered agent starts there (the computer's Settings > Agents >
 Remember the agent you pick decides whether that is the agent picked last in the
-project, in its Space or anywhere) in a new chat, where you can still change the
-agent, model, worktree, project or computer before you send the first message.
-An agent without chat opens its terminal instead. If that computer isn't
-connected, it says so. A project's "+" and the
+project, in its Space or anywhere). It opens in the view the phone's Settings >
+Chat > Default agent view picks, as a project's agent button does: in Chat, a new
+chat where you can still change the agent, model, worktree, project or computer
+before you send the first message; an agent without chat always opens its
+terminal. If that computer isn't connected, it says so. A project's "+" and the
 "+" on a project in the filter open the agent menu instead, which shows its
 project on top (tap it to pick any project) and the same computer chips.
 
