@@ -18,17 +18,25 @@ use std::{
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use super::records::{list_open_threads, sql_error, thread_from_row, THREAD_COLUMNS};
+use super::records::{sql_error, thread_from_row, THREAD_COLUMNS};
 use super::{SessionKey, ThreadRecord};
 use crate::domain::DomainStateError;
 
-/// The short columns of a resolved thread; any change to the thread changes one of them.
-const FINGERPRINT_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, resolvedAt, observedWorking, reportedAt, reportedPromptKey, pendingMessageAt, closedWithCoordinatorAt, createdAt, updatedAt";
+/// The short columns of a resolved thread; any change to the thread changes one of them. The
+/// `rowid` breaks `createdAt` ties the way `list_threads`' single `ORDER BY createdAt` does (table
+/// order), so threads started in the same millisecond keep their order when the two lists merge.
+const FINGERPRINT_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, resolvedAt, observedWorking, reportedAt, reportedPromptKey, pendingMessageAt, closedWithCoordinatorAt, createdAt, updatedAt, rowid";
+
+/// A thread and its `rowid`, for the merge order.
+type Placed = (i64, ThreadRecord);
+
+/// A resolved thread's key, its short columns as one text, and its `rowid`.
+type Fingerprint = (SessionKey, String, i64);
 
 #[derive(Default)]
 struct ResolvedThreads {
-    fingerprints: Vec<(SessionKey, String)>,
-    threads: Arc<Vec<ThreadRecord>>,
+    fingerprints: Vec<Fingerprint>,
+    threads: Arc<Vec<Placed>>,
 }
 
 fn resolved_cache() -> &'static Mutex<ResolvedThreads> {
@@ -38,11 +46,15 @@ fn resolved_cache() -> &'static Mutex<ResolvedThreads> {
 
 /// Every thread, oldest first, as `list_threads` returns them.
 pub(crate) struct AllThreads {
-    open: Vec<ThreadRecord>,
-    resolved: Arc<Vec<ThreadRecord>>,
+    open: Vec<Placed>,
+    resolved: Arc<Vec<Placed>>,
 }
 
 impl AllThreads {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.open.is_empty() && self.resolved.is_empty()
+    }
+
     /// Open and resolved threads merged back into `createdAt` order.
     pub(crate) fn ordered(&self) -> Vec<&ThreadRecord> {
         let mut merged = Vec::with_capacity(self.open.len() + self.resolved.len());
@@ -50,12 +62,16 @@ impl AllThreads {
             (self.open.iter().peekable(), self.resolved.iter().peekable());
         loop {
             let next = match (open.peek(), resolved.peek()) {
-                (Some(left), Some(right)) if right.created_at < left.created_at => resolved.next(),
+                (Some(left), Some(right))
+                    if (&right.1.created_at, right.0) < (&left.1.created_at, left.0) =>
+                {
+                    resolved.next()
+                }
                 (Some(_), _) => open.next(),
                 (None, Some(_)) => resolved.next(),
                 (None, None) => break,
             };
-            merged.extend(next);
+            merged.extend(next.map(|(_, thread)| thread));
         }
         merged
     }
@@ -70,23 +86,34 @@ pub(crate) fn read_all_threads(db: &Connection) -> Result<AllThreads, DomainStat
     } else {
         None
     };
-    let open = list_open_threads(db)?;
+    let open = {
+        let mut statement = db
+            .prepare_cached(&format!(
+                "SELECT rowid, {THREAD_COLUMNS} FROM coordinator_threads WHERE resolvedAt IS NULL ORDER BY createdAt, rowid"
+            ))
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get(0)?, thread_from_row(row)?)))
+            .map_err(sql_error)?;
+        rows.collect::<Result<Vec<Placed>, _>>()
+            .map_err(sql_error)?
+    };
     let resolved = read_resolved_threads(db)?;
     drop(snapshot);
     Ok(AllThreads { open, resolved })
 }
 
-fn read_resolved_threads(db: &Connection) -> Result<Arc<Vec<ThreadRecord>>, DomainStateError> {
+fn read_resolved_threads(db: &Connection) -> Result<Arc<Vec<Placed>>, DomainStateError> {
     let fingerprints = {
         let mut statement = db
             .prepare_cached(&format!(
-                "SELECT {FINGERPRINT_COLUMNS} FROM coordinator_threads WHERE resolvedAt IS NOT NULL ORDER BY createdAt"
+                "SELECT {FINGERPRINT_COLUMNS} FROM coordinator_threads WHERE resolvedAt IS NOT NULL ORDER BY createdAt, rowid"
             ))
             .map_err(sql_error)?;
         let rows = statement
             .query_map([], |row| {
                 let mut fingerprint = String::new();
-                for index in 0..12 {
+                for index in 0..13 {
                     match row.get_ref(index)? {
                         rusqlite::types::ValueRef::Null => fingerprint.push('\u{0}'),
                         rusqlite::types::ValueRef::Integer(value) => {
@@ -102,10 +129,14 @@ fn read_resolved_threads(db: &Connection) -> Result<Arc<Vec<ThreadRecord>>, Doma
                     }
                     fingerprint.push('\u{1f}');
                 }
-                Ok(((row.get(0)?, row.get(1)?), fingerprint))
+                Ok((
+                    (row.get(0)?, row.get(1)?),
+                    fingerprint,
+                    row.get::<_, i64>(12)?,
+                ))
             })
             .map_err(sql_error)?;
-        rows.collect::<Result<Vec<(SessionKey, String)>, _>>()
+        rows.collect::<Result<Vec<Fingerprint>, _>>()
             .map_err(sql_error)?
     };
     let Ok(mut cache) = resolved_cache().lock() else {
@@ -114,23 +145,23 @@ fn read_resolved_threads(db: &Connection) -> Result<Arc<Vec<ThreadRecord>>, Doma
     if cache.fingerprints == fingerprints {
         return Ok(cache.threads.clone());
     }
-    let known: HashMap<&SessionKey, (&String, &ThreadRecord)> = cache
+    let known: HashMap<&SessionKey, (&String, &Placed)> = cache
         .fingerprints
         .iter()
         .zip(cache.threads.iter())
-        .map(|((key, fingerprint), thread)| (key, (fingerprint, thread)))
+        .map(|((key, fingerprint, _), placed)| (key, (fingerprint, placed)))
         .collect();
     let mut threads = Vec::with_capacity(fingerprints.len());
-    for (key, fingerprint) in &fingerprints {
+    for (key, fingerprint, rowid) in &fingerprints {
         match known.get(key) {
-            Some((known_fingerprint, thread)) if *known_fingerprint == fingerprint => {
-                threads.push((*thread).clone());
+            Some((known_fingerprint, placed)) if *known_fingerprint == fingerprint => {
+                threads.push((*placed).clone());
             }
             _ => {
                 // A thread reopened or removed since the short read is simply left out until the
                 // next tick reads it again.
                 if let Some(thread) = read_thread(db, key)?.filter(ThreadRecord::is_resolved) {
-                    threads.push(thread);
+                    threads.push((*rowid, thread));
                 }
             }
         }
@@ -148,11 +179,15 @@ fn read_resolved_threads(db: &Connection) -> Result<Arc<Vec<ThreadRecord>>, Doma
 
 fn read_threads_by_key(
     db: &Connection,
-    fingerprints: &[(SessionKey, String)],
-) -> Result<Vec<ThreadRecord>, DomainStateError> {
+    fingerprints: &[Fingerprint],
+) -> Result<Vec<Placed>, DomainStateError> {
     let mut threads = Vec::with_capacity(fingerprints.len());
-    for (key, _) in fingerprints {
-        threads.extend(read_thread(db, key)?.filter(ThreadRecord::is_resolved));
+    for (key, _, rowid) in fingerprints {
+        threads.extend(
+            read_thread(db, key)?
+                .filter(ThreadRecord::is_resolved)
+                .map(|thread| (*rowid, thread)),
+        );
     }
     Ok(threads)
 }

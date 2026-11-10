@@ -36,13 +36,10 @@ pub fn read_presentation_snapshot(
     */
     let families = read_session_fork_families(db, server_id)?;
     let attention_event_ids = stored_attention_event_ids(&sessions);
-    let mut snapshot = project_snapshot_with_families(
-        repository.list_projects()?,
-        sessions,
-        &families,
-        read_presentation_revision(db)?,
-        sidebar_v2_selected,
-    );
+    let revision = read_presentation_revision(db)?;
+    let mut snapshot = repository.with_projects(|projects| {
+        project_snapshot_with_families(projects, sessions, &families, revision, sidebar_v2_selected)
+    })?;
     insert_attention_notification_ids_presentation_payload(
         &mut snapshot,
         db,
@@ -271,22 +268,41 @@ pub(crate) fn project_snapshot(
     closes.
     */
     let families = SessionForkFamilies::build(&sessions);
-    project_snapshot_with_families(projects, sessions, &families, revision, sidebar_v2_selected)
+    project_snapshot_with_families(
+        &projects,
+        sessions,
+        &families,
+        revision,
+        sidebar_v2_selected,
+    )
 }
 
 /// `project_snapshot` with the fork families supplied by the caller, for the
 /// case where `sessions` is a presentation-scoped subset of the registry the
 /// families were derived from.
 pub(crate) fn project_snapshot_with_families(
-    projects: Vec<Value>,
+    projects: &[Value],
     sessions: Vec<Value>,
     families: &SessionForkFamilies,
     revision: i64,
     sidebar_v2_selected: bool,
 ) -> Value {
     let generated_at = now_iso();
-    let mut projects_sorted = projects;
-    projects_sorted.sort_by_key(project_sort_key);
+    /*
+    CDXC:StateSync 2026-11-10 WHY:
+    The snapshot was 18% of gxserver's busy time with phones polling. It deep copied all 386
+    projects (with their restorable history) to show 29, and sorted them by a String key built
+    afresh for every comparison. The projects are now borrowed from the project cache, the parked
+    and hidden ones are dropped before sorting (filtering keeps the order of the rest), and each
+    key is built once (here, and `sort_by_cached_key` for a project's sessions). Both sorts are
+    stable like the `sort_by_key` they replace, so the order is the same.
+    */
+    let mut projects_sorted: Vec<(String, &Value)> = projects
+        .iter()
+        .filter(|project| should_include_presentation_project(project))
+        .map(|project| (project_sort_key(project), project))
+        .collect();
+    projects_sorted.sort_by(|left, right| left.0.cmp(&right.0));
     /*
     CDXC:StateSync 2026-10-23 WHY:
     Each project used to scan the whole session list and deep-copy its own rows out of it, so every connecting client's first snapshot held its hydrated rows twice (and walked them once per project). The rows are moved into their project's list once, in list order, which keeps each project's rows and their order exactly as the scan picked them.
@@ -301,29 +317,27 @@ pub(crate) fn project_snapshot_with_families(
     let mut presentation_projects = Vec::new();
     let mut groups = Vec::new();
     let mut presentation_sessions = Vec::new();
-    for project in projects_sorted {
-        /*
-        CDXC:Projects 2026-06-24-12:27:
-        Parked Recent Projects remain durable gxserver projects but are not
-        active sidebar presentation groups. The only sidebar drawer source for
-        them is `/api/listRecentProjects`, which returns explicit path-bearing
-        rows instead of deriving recency from inactive sessions or labels.
-        */
-        if !should_include_presentation_project(&project) {
-            continue;
-        }
-        let project_id = string_field(&project, "projectId").unwrap_or_default();
+    /*
+    CDXC:Projects 2026-06-24-12:27:
+    Parked Recent Projects remain durable gxserver projects but are not
+    active sidebar presentation groups. The only sidebar drawer source for
+    them is `/api/listRecentProjects`, which returns explicit path-bearing
+    rows instead of deriving recency from inactive sessions or labels.
+    (`should_include_presentation_project` above.)
+    */
+    for (project_sort, project) in projects_sorted {
+        let project_id = string_field(project, "projectId").unwrap_or_default();
         let group_id = default_group_id(&project_id);
         let mut project_sessions = sessions_by_project
             .remove(&Some(project_id.clone()))
             .unwrap_or_default();
         project_sessions = select_presentation_sessions(project_sessions);
-        project_sessions.sort_by_key(session_sort_key);
+        project_sessions.sort_by_cached_key(session_sort_key);
         let project_presentation_sessions = project_sessions
             .into_iter()
             .map(|session| {
                 let mut presentation_session =
-                    project_presentation_session(&project, &group_id, &session, &generated_at);
+                    project_presentation_session(project, &group_id, &session, &generated_at);
                 if let (Some(output), Some(session_id)) = (
                     presentation_session.as_object_mut(),
                     string_field(&session, "sessionId"),
@@ -340,10 +354,10 @@ pub(crate) fn project_snapshot_with_families(
                 .iter()
                 .filter_map(|session| string_field(session, "sessionId"))
                 .collect::<Vec<_>>(),
-            "sortKey": format!("{}:active", project_sort_key(&project)),
+            "sortKey": format!("{project_sort}:active"),
             "title": "Active",
         }));
-        presentation_projects.push(project_presentation_project(&project));
+        presentation_projects.push(project_presentation_project(project));
         presentation_sessions.extend(project_presentation_sessions);
     }
     json!({

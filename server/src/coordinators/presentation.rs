@@ -1,13 +1,11 @@
 //! The coordinator fields every client reads from a presentation session.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap};
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
-use super::records::{
-    list_coordinators, list_threads, read_coordinator, read_thread, SessionKey, ThreadRecord,
-};
+use super::records::{list_coordinators, read_coordinator, read_thread, SessionKey, ThreadRecord};
 use super::state::ThreadProgress;
 use crate::domain::DomainRepository;
 use crate::presentation::now_iso;
@@ -82,20 +80,29 @@ pub fn insert_coordinator_presentation_payload(
     let Ok(coordinators) = list_coordinators(db) else {
         return;
     };
-    let Ok(threads) = list_threads(db) else {
+    // CDXC:Coordinators 2026-11-10 WHY: every snapshot read all 1,104 thread rows (3.9 MB of
+    // text) for the few its sessions are; the resolved ones now come from memory unless one
+    // changed (thread_reads.rs).
+    let Ok(all_threads) = super::read_all_threads(db) else {
         return;
     };
-    if coordinators.is_empty() && threads.is_empty() {
+    if coordinators.is_empty() && all_threads.is_empty() {
         return;
     }
     let coordinator_keys = coordinators
         .iter()
         .map(|record| record.key())
         .collect::<BTreeSet<_>>();
-    let threads = threads
+    let threads = all_threads
+        .ordered()
         .into_iter()
-        .map(|thread| (thread.key(), thread))
-        .collect::<BTreeMap<_, _>>();
+        .map(|thread| {
+            (
+                (thread.project_id.as_str(), thread.session_id.as_str()),
+                thread,
+            )
+        })
+        .collect::<HashMap<_, _>>();
     let generated_at = now_iso();
     let chief = crate::chief::read_record(db).map(|record| record.key());
     let mains = super::main_coordinator::main_coordinators(db, repository);
@@ -104,7 +111,7 @@ pub fn insert_coordinator_presentation_payload(
     };
     for session in sessions {
         let key = session_key(session);
-        let thread = threads.get(&key);
+        let thread = threads.get(&(key.0.as_str(), key.1.as_str())).copied();
         let is_coordinator = coordinator_keys.contains(&key);
         if !is_coordinator && thread.is_none() {
             continue;

@@ -379,6 +379,15 @@ impl<'a> DomainRepository<'a> {
         rows.into_iter().map(project_from_row).collect()
     }
 
+    /// Every project as `list_projects` returns them, lent to `read` instead of copied out of the
+    /// cache (CDXC:StateSync 2026-11-10 in presentation/snapshot.rs).
+    pub(crate) fn with_projects<R>(&self, read: impl FnOnce(&[Value]) -> R) -> DomainResult<R> {
+        if let Some(set) = super::project_cache::cached_projects(self.db, true) {
+            return Ok(read(&set.projects));
+        }
+        Ok(read(&self.list_projects()?))
+    }
+
     /// `/api/listProjects`' result without copying the cached set (`ListProjectsResult`).
     pub(crate) fn list_projects_result(&self) -> DomainResult<super::ListProjectsResult> {
         if let Some(set) = super::project_cache::cached_projects(self.db, true) {

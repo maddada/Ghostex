@@ -5,11 +5,11 @@ use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
 use super::records::{
-    drop_thread_pending_message, link_thread, list_coordinators, list_threads, list_threads_for,
-    now_iso, read_coordinator, read_thread, set_thread_pending_message, set_thread_resolved,
-    unlink_thread, write_coordinator, CoordinatorMemoryNote, CoordinatorRecord, SessionKey,
-    ThreadRecord, COORDINATOR_GOAL_MAX_CHARS, COORDINATOR_INSTRUCTIONS_MAX_CHARS,
-    COORDINATOR_MEMORY_MAX_NOTES, COORDINATOR_MEMORY_NOTE_MAX_CHARS,
+    drop_thread_pending_message, link_thread, list_coordinators, list_threads_for, now_iso,
+    read_coordinator, read_thread, set_thread_pending_message, set_thread_resolved, unlink_thread,
+    write_coordinator, CoordinatorMemoryNote, CoordinatorRecord, SessionKey, ThreadRecord,
+    COORDINATOR_GOAL_MAX_CHARS, COORDINATOR_INSTRUCTIONS_MAX_CHARS, COORDINATOR_MEMORY_MAX_NOTES,
+    COORDINATOR_MEMORY_NOTE_MAX_CHARS,
 };
 use super::state::{ThreadProgress, ThreadState};
 use crate::domain::{DomainRepository, DomainStateError};
@@ -120,7 +120,9 @@ pub fn handle_coordinator_endpoint(
         }),
         "/api/listCoordinators" => {
             let project_id = text(params, "projectId");
-            let threads = list_threads(db)?;
+            // The resolved threads from memory unless one changed (thread_reads.rs).
+            let all_threads = super::read_all_threads(db)?;
+            let threads = all_threads.ordered();
             let mains = super::main_coordinator::main_coordinators(db, repository);
             let mut rows = Vec::new();
             for coordinator in list_coordinators(db)? {
