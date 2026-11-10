@@ -173,6 +173,47 @@ impl TailcatRuntime {
         version
     }
 
+    /// The helper file changed in place (an Update): its version is read again.
+    pub(crate) fn forget_binary_version(&self) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.binary_version = None;
+        }
+    }
+
+    /// Starts every running helper again from the saved state, on the helper file as it is now
+    /// (an Update replaced it under the same path, which `apply` alone sees as no change). The
+    /// keys, the allow-list, the ports and the devices let in on a knock stay as they are.
+    /// SEE-ALSO: server/src/tailcat/install.rs (`update`).
+    pub(crate) fn restart_helpers(&self, paths: &GxserverPaths, reason: &'static str) {
+        let Ok(db) = crate::storage::open_gxserver_database(paths) else {
+            return;
+        };
+        let Ok(state) = super::repository::read_tailcat_state_or_default(
+            &super::repository::TailcatRepository::new(&db),
+        ) else {
+            return;
+        };
+        if !state.enabled {
+            return;
+        }
+        {
+            let _one_at_a_time = self
+                .reconciling
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            for lane in [TailcatLane::Public, TailcatLane::Relay, TailcatLane::Door] {
+                let running = self
+                    .inner
+                    .lock()
+                    .is_ok_and(|mut inner| inner.lane(lane).spec.is_some());
+                if running {
+                    self.stop_lane(lane, reason);
+                }
+            }
+        }
+        self.apply(paths, &state);
+    }
+
     /*
     CDXC:RemotePairing 2026-09-01:
     One reconcile entry point for every trigger — enable/disable, a port or
@@ -201,13 +242,14 @@ impl TailcatRuntime {
         let Some(binary_path) = resolve_host_tailcat_binary(paths) else {
             self.stop_because("helperMissing");
             // CDXC:Notices 2026-11-06: Settings > Remote shows these to a person (Q1410); raw errors go to the log.
+            // CDXC:RemotePairing 2026-11-11 FIX: GitHub #559, the Mac app doesn't carry the helper, so "Reinstall Ghostex" could never bring it back; the pages offer Install for this state (server/src/tailcat/install.rs).
             eprintln!(
                 "[gxserver] tailcat binary not found (bundled, managed or GHOSTEX_TAILCAT_BIN)"
             );
             self.set_last_error(
                 TailcatLane::Public,
                 Some(
-                    "Part of Easy Connect is missing on this computer. Reinstall Ghostex to get it back."
+                    "The Easy Connect helper isn't installed on this computer yet. Install it from Settings > Remote or Connect a phone."
                         .to_string(),
                 ),
             );

@@ -70,6 +70,8 @@ async fn run(state: &AppState, id: &str, source: &'static str) {
         update_extension(state, extension).await
     } else if let Some(component) = id.strip_prefix(items::COMPONENT_ITEM_PREFIX) {
         update_component(component).await
+    } else if id == items::EASY_CONNECT_ITEM {
+        update_easy_connect(state).await
     } else if id == "app" {
         crate::app_update::request_app_update_install(state, source)
             .await
@@ -319,6 +321,45 @@ async fn update_component(component: &str) -> Result<(), Outcome> {
             }
         }
         _ => Err(failed("Ghostex doesn't know how to update this.")),
+    }
+}
+
+/// Settings > Remote's Install of the Easy Connect helper when it is missing, else its Update
+/// (server/src/tailcat/install.rs), followed until it ends.
+async fn update_easy_connect(state: &AppState) -> Result<(), Outcome> {
+    use crate::tailcat::install;
+    let paths = state.paths.clone();
+    let runtime = state.tailcat_runtime.clone();
+    let missing = {
+        let paths = paths.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::tailcat::resolve_host_tailcat_binary(&paths).is_none()
+        })
+        .await
+        .unwrap_or(true)
+    };
+    // An install or update that already runs (started in Settings > Remote) is followed below.
+    if missing {
+        install::start_installation(paths, runtime);
+    } else {
+        let _ = install::start_update(paths, runtime);
+    }
+    let started = Instant::now();
+    loop {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let status = install::installation_status();
+        if !status.running {
+            return match status.error {
+                Some(error) => Err(failed(error)),
+                None => Ok(()),
+            };
+        }
+        if let Some(progress) = status.progress.as_deref() {
+            store::set_phase(items::EASY_CONNECT_ITEM, progress);
+        }
+        if started.elapsed() > JOB_WAIT {
+            return Err(failed("The Easy Connect helper's update did not finish within 20 minutes."));
+        }
     }
 }
 
