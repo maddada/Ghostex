@@ -1032,10 +1032,17 @@ impl NativeChatView {
                     .into_any_element(),
             );
         }
+        // Reply and Open are buttons on the row when they show there (an answer, or the one button
+        // of a row with no answers), never a second time among the icons.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, of an opened page row with the Open button and an Open icon under it: "2 open
+        // buttons? seriously fam?".
+        let reply_shown = reply_answer.is_some() || action == Some("Reply");
+        let open_shown = action == Some("Open");
         let actions = json!({
-            // Reply is a button among the answers when it shows there.
-            "reply": if reply_answer.is_some() { Value::Null } else { row["reply"].clone() },
-            "open": row["open"],
+            "reply": if reply_shown { Value::Null } else { row["reply"].clone() },
+            "open": if open_shown { Value::Null } else { row["open"].clone() },
             "showInChat": row["showInChat"],
             "dismiss": row["dismiss"],
             "snooze": row["snooze"],
