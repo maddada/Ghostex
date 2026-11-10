@@ -82,6 +82,7 @@ impl GhostexGpuiApp {
         let key = view.read(cx).key();
         view.update(cx, |view, cx| view.set_hidden(true, cx));
         if let Some(native) = native_view(modal.window, cx) {
+            crate::app::ghostex_capture::platform::detach_from_parent(native);
             crate::app::ghostex_capture::platform::hide_window(native);
         }
         self.hidden_visual_pages.push(HiddenVisualPage {
@@ -118,7 +119,8 @@ impl GhostexGpuiApp {
         };
         page.view.update(cx, |view, cx| view.set_hidden(false, cx));
         crate::app::ghostex_capture::platform::show_window(native, true);
-        // Ordering a child window out takes it off its parent; it moves with the main window again.
+        // It was taken off the main window when hidden (`detach_from_parent`); it moves with the
+        // main window again.
         let main_window_native_view = self.parent_ns_view;
         let _ = page.window.update(cx, |_, window, _| {
             crate::app::window::attach_gpui_app_modal_window_to_main_window(

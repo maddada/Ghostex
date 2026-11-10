@@ -343,3 +343,13 @@ bool GhostexGpuiScreensHaveSeparateSpaces(void) {
 bool GhostexGpuiPrimaryMouseButtonDown(void) {
   return (NSEvent.pressedMouseButtons & 1) != 0;
 }
+
+/// Takes a child window off its parent, so ordering the parent front never shows it again while it
+/// is put aside (a hidden Ghostex page, app/visual_page_hidden.rs).
+void GhostexGpuiDetachChildWindow(void *native_view) {
+  NSWindow *window = GhostexGpuiCaptureWindowOfView(native_view);
+  NSWindow *parent = window.parentWindow;
+  if (window && parent) {
+    [parent removeChildWindow:window];
+  }
+}

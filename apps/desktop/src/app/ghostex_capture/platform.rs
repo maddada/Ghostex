@@ -68,6 +68,7 @@ unsafe extern "C" {
     fn GhostexGpuiCaptureFrontmostPid() -> i32;
     fn GhostexGpuiScreensHaveSeparateSpaces() -> bool;
     fn GhostexGpuiPrimaryMouseButtonDown() -> bool;
+    fn GhostexGpuiDetachChildWindow(native_view: *mut std::ffi::c_void);
     fn GhostexGpuiPointerScreenLocation(x: *mut f64, y: *mut f64) -> bool;
 }
 
@@ -192,6 +193,17 @@ pub(crate) fn primary_mouse_button_down() -> bool {
     {
         false
     }
+}
+
+/// Takes a child window off the window it belongs to (macOS), so the owner coming to the front
+/// never shows it while it is hidden. Elsewhere a hidden window stays hidden on its own.
+pub(crate) fn detach_from_parent(native: NativeWindow) {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        GhostexGpuiDetachChildWindow(native as *mut std::ffi::c_void)
+    };
+    #[cfg(not(target_os = "macos"))]
+    let _ = native;
 }
 
 /// Gives a keyable window the keyboard again.
