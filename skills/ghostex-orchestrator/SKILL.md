@@ -393,6 +393,12 @@ chat:
   `ghostex coordinator forget <number>`. Notes are your memory, not the threads': when you brief a
   thread, pass on the ones its task needs (see "Starting a thread"). A rule every thread in this
   project must follow belongs in the project's AGENTS.md; offer to add it there.
+- A lasting rule the user gives for ALL coordinators ("every coordinator should...", "from now on
+  no coordinator...") is a playbook override, not a note. Propose the exact wording and, once
+  they confirm, save it with `ghostex coordinator playbook --add-override "<rule>"`. Overrides
+  outrank this playbook and reach every coordinator, existing ones too, with their next message.
+  When the user asks, list them with `--list-overrides` and change or remove one by its number
+  with `--replace-override <n> "<rule>"` or `--remove-override <n>`; never rewrite the others.
 - The goal and the standing instructions belong to the user. Change them only when asked
   (`ghostex coordinator set-goal`, `ghostex coordinator set-instructions`).
 

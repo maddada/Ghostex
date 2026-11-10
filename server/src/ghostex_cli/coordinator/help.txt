@@ -61,6 +61,10 @@ USAGE
                               [--overrides | --text | --default] [--json]
   ghostex coordinator playbook --set-overrides (<text> | --body-file <path>) [--json]
   ghostex coordinator playbook --clear-overrides [--json]
+  ghostex coordinator playbook --list-overrides
+  ghostex coordinator playbook --add-override (<rule> | --body-file <path>)
+  ghostex coordinator playbook --replace-override <n> (<rule> | --body-file <path>)
+  ghostex coordinator playbook --remove-override <n>
   ghostex coordinator set-playbook (--use-ghostex | --reset | --off | --on)
                               [--project-id <id> | --this-project] [--json]
 
@@ -327,6 +331,18 @@ COORDINATOR PLAYBOOK
   --overrides prints them, --text prints the playbook in effect without them,
   --default prints Ghostex's playbook. --set-overrides saves the overrides
   (text, or --body-file <path>) and --clear-overrides removes them.
+  One override at a time: the overrides are paragraphs, one rule each.
+  --list-overrides numbers them; --add-override "<rule>" adds one at the end,
+  --replace-override <n> "<rule>" rewrites rule n and --remove-override <n>
+  removes it (the ones after it move up a number). A rule is saved as one
+  paragraph. The overrides stay under 20,000 characters: a change that would
+  go over is refused and says so. A coordinator saves them too, when the user
+  confirms a rule for every coordinator; each coordinator is told its
+  playbook changed with its next message. For example:
+    ghostex coordinator playbook --add-override "Never push without asking."
+    ghostex coordinator playbook --list-overrides
+    ghostex coordinator playbook --replace-override 1 "Never push or merge without asking."
+    ghostex coordinator playbook --remove-override 1
   Before overrides (Ghostex 11.0 and earlier) the user could save an edited
   full copy of the playbook, for all projects or for one project and its
   worktrees. Such a copy stays in use, without Ghostex's updates, until the
