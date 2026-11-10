@@ -274,6 +274,10 @@ pub(crate) struct NativeChatView {
         std::collections::HashMap<String, super::question_form::FormInput>,
     /// The modal is being drawn, so a form's boxes are looked up in `modal_form_inputs`.
     pub(super) form_in_modal: std::cell::Cell<bool>,
+    /// Dictations the core wrote into a form box's draft, by the box (modal's copy or not, and
+    /// its key), until that box's next draw shows them (`show_dictated` in dictation.rs).
+    pub(super) dictated_boxes:
+        std::collections::HashMap<(bool, String), super::dictation::Dictated>,
     /// The modal's window was asked for and not yet open, or the reader closed it and the core has
     /// not yet been told.
     pub(super) resource_modal_pending: bool,
@@ -599,6 +603,7 @@ impl NativeChatView {
             files_links_menu_pending: false,
             modal_form_inputs: Default::default(),
             form_in_modal: Default::default(),
+            dictated_boxes: Default::default(),
             resource_modal_pending: false,
             resource_modal_closing: false,
             session_details: Default::default(),
@@ -1139,6 +1144,7 @@ impl NativeChatView {
                         cx.emit(NativeChatEvent::Host(json!({"type": "toast", "level": level, "title": message})));
                     }
                 }
+                Some("dictationInserted") => self.dictation_inserted(&request["params"], cx),
                 Some("actionError") => { cx.notify(); }
                 Some("composer") => {
                     self.paste_tiles.inserted();

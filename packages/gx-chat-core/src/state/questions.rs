@@ -90,6 +90,13 @@ pub struct QuestionsState {
     // ---- question forms ---------------------------------------------------
     /// The reader's side of each ```questions form, by form id (`crate::questions::forms`).
     pub forms: std::collections::BTreeMap<String, FormState>,
+    /// Every dictation typed into a form's boxes, by form id and box, oldest first: what a copy of
+    /// the box that has not shown them yet is given again (`crate::questions::dictation::keep`).
+    /// A form's go when its answers are in the transcript (`crate::questions::forms::sync`).
+    pub dictations: std::collections::BTreeMap<
+        String,
+        std::collections::BTreeMap<String, Vec<crate::questions::dictation::Typed>>,
+    >,
     /// The real answer rows and send boundaries in the current loaded transcript.
     pub form_answer_index: crate::session::answer_echoes::AnswerIndex,
     /// One-click answers being changed (`crate::questions::inline_answers`).
@@ -151,6 +158,9 @@ pub struct FormState {
     pub error: Option<String>,
     /// The reader opened the answered form again (`formToggle`); answered forms start collapsed.
     pub expanded: bool,
+    /// The `rev` of each box that took a dictation, by box (a question's index, or `notes`): the
+    /// stamp of its newest one (`crate::questions::dictation`).
+    pub dictated: std::collections::BTreeMap<String, u64>,
 }
 
 /// A question form's answers on their way to the agent.

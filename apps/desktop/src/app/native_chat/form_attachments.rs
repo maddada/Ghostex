@@ -30,7 +30,7 @@ fn change_action(key: &str, text: &str) -> Option<Value> {
 }
 
 /// The byte offset of `units` UTF-16 code units into `text`.
-fn utf16_to_byte(text: &str, units: usize) -> usize {
+pub(super) fn utf16_to_byte(text: &str, units: usize) -> usize {
     let mut seen = 0;
     text.char_indices()
         .find_map(|(byte, ch)| {
@@ -98,15 +98,20 @@ impl NativeChatView {
             });
             match result.as_ref().and_then(|result| result["text"].as_str()) {
                 Some(text) => {
-                    let caret = utf16_to_byte(
-                        text,
-                        result.as_ref().unwrap()["caret"].as_u64().unwrap_or(0) as usize,
-                    );
+                    let units = result.as_ref().unwrap()["caret"].as_u64().unwrap_or(0);
+                    let caret = utf16_to_byte(text, units as usize);
                     input.update(cx, |input, cx| {
                         input.replace_all(text.to_owned(), window, cx);
                         input.set_selected_range(caret..caret, cx);
                     });
-                    if let Some(action) = change_action(&key, text) {
+                    // Like the box's own edits (`sync_form_input_in`), the write says which
+                    // dictations its text holds: the box can have taken one since `text` was read.
+                    let rev = self.inputs_mut(modal).get(&key).map(|entry| entry.rev);
+                    if let Some(mut action) = change_action(&key, text) {
+                        if let Some(rev) = rev {
+                            action["rev"] = json!(rev);
+                            action["caret"] = json!(units);
+                        }
                         self.invoke(action, cx);
                     }
                 }

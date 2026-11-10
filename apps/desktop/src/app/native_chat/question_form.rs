@@ -40,6 +40,12 @@ pub(super) struct FormInput {
     placeholder: String,
     /// It holds the reader's text: typed into, or filled from the saved draft once.
     pub(super) settled: bool,
+    /// The newest dictation the text it shows holds (the form's `dictated` in the document), sent
+    /// with each of the reader's edits.
+    pub(super) rev: u64,
+    /// The text the core just handed it (`show_dictated` in dictation.rs), until the input has
+    /// reported it: that report is not the reader's edit.
+    pub(super) adopted: Option<String>,
     /// Its height when it was last painted, for `form_input_reveal_sync`.
     painted_height: Rc<Cell<f32>>,
     /// Pasted images still being saved, and why the last paste failed (form_attachments.rs).
@@ -129,6 +135,16 @@ impl NativeChatView {
             }
         }
         self.form_inputs.retain(|key, _| wanted.contains(key));
+        if !self.dictated_boxes.is_empty() {
+            let modal_inputs = &self.modal_form_inputs;
+            self.dictated_boxes.retain(|(modal, key), _| {
+                if *modal {
+                    modal_inputs.contains_key(key)
+                } else {
+                    wanted.contains(key)
+                }
+            });
+        }
         self.sync_form_references(false, cx);
     }
 
@@ -167,15 +183,6 @@ impl NativeChatView {
             .iter()
             .find(|(_, entry)| entry.input.read(cx).focus_handle(cx).is_focused(window))
             .map(|(key, _)| key.clone())
-    }
-
-    /// The transcript's form box `key` names, while its form still takes answers: the boxes of a
-    /// form that was just sent or answered stay until the next draw drops them.
-    pub(super) fn open_form_box(&self, key: &str) -> Option<&FormInput> {
-        let (form, _) = key.rsplit_once(':')?;
-        (self.snapshot["questionForms"][form]["state"] == "open")
-            .then(|| self.form_inputs.get(key))
-            .flatten()
     }
 
     /// Gives the Resources modal's form its text boxes (made with the modal's `window`), and drops
@@ -254,6 +261,13 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // The newest dictation the box's draft holds, as of the document this text is from.
+        let rev = key
+            .rsplit_once(':')
+            .and_then(|(_, slot)| {
+                self.snapshot["questionForms"][form_id]["dictated"][slot].as_u64()
+            })
+            .unwrap_or(0);
         if let Some(entry) = self.inputs_mut(modal).get_mut(&key) {
             if entry.placeholder != hint {
                 entry.placeholder = hint.clone();
@@ -265,10 +279,12 @@ impl NativeChatView {
             // box was made; it fills the box once, never over what the reader typed.
             if !entry.settled && !value.is_empty() {
                 entry.settled = true;
+                entry.rev = rev;
                 entry
                     .input
                     .update(cx, |state, cx| state.set_value(value, window, cx));
             }
+            self.show_dictated(modal, &key, window, cx);
             return;
         }
         let settled = !value.is_empty();
@@ -286,10 +302,30 @@ impl NativeChatView {
             window,
             move |this, input, event: &InputEvent, window, cx| match event {
                 InputEvent::Change => {
-                    if let Some(entry) = this.inputs_mut(modal).get_mut(&typed_key) {
-                        entry.settled = true;
+                    let (value, caret) = {
+                        let input = input.read(cx);
+                        let value = input.value().to_string();
+                        let caret = value
+                            .get(..input.selected_range().end)
+                            .unwrap_or(&value)
+                            .encode_utf16()
+                            .count();
+                        (value, caret)
+                    };
+                    let Some(entry) = this.inputs_mut(modal).get_mut(&typed_key) else {
+                        return;
+                    };
+                    entry.settled = true;
+                    // The text the core handed the box (`show_dictated`) is not the reader's edit.
+                    if entry.adopted.take().is_some_and(|adopted| adopted == value) {
+                        return;
                     }
-                    this.invoke(change(input.read(cx).value().to_string()), cx)
+                    // `rev` and `caret` let the core keep a dictation this copy has not shown yet
+                    // (`keep` in gx-chat-core's questions/dictation.rs).
+                    let mut action = change(value);
+                    action["rev"] = json!(entry.rev);
+                    action["caret"] = json!(caret);
+                    this.invoke(action, cx)
                 }
                 // Ctrl+Shift+Enter (Cmd+Shift+Enter on macOS) skips the rest and sends; Ctrl+Enter
                 // (Cmd+Enter) sends the form from its note or text box.
@@ -314,6 +350,8 @@ impl NativeChatView {
                 _subscription: subscription,
                 placeholder: hint,
                 settled,
+                rev,
+                adopted: None,
                 painted_height: Rc::new(Cell::new(0.0)),
                 pending: 0,
                 paste_error: None,
@@ -971,9 +1009,9 @@ const DICTATED_INTO_GAP: f32 = 6.0;
 /// A question's note box, and the form's notes box: one look. `paste` takes a pasted image
 /// (form_attachments.rs). `dictated_into` marks the box a running dictation will type into: the
 /// chat box's focus colour on its border and a small microphone at its right end, inside the
-/// box, so the form's height stays as it is.
+/// box, in room the box keeps free at all times.
 ///
-/// CDXC:Dictate 2026-11-10 WHY: a line of words under the box was tried first; it made the form a line taller while a dictation ran, the transcript moved under the pointer, and the first press on the form's buttons was lost.
+/// CDXC:Dictate 2026-11-10 WHY: a line of words under the box was tried first; it made the form a line taller while a dictation ran, the transcript moved under the pointer, and the first press on the form's buttons was lost. Room made for the microphone only while it shows did the same to a long note, whose last word wrapped to a new line as the recording started and back as it ended. The box keeps that room whether the microphone shows or not, so only the border's colour and the microphone change.
 pub(super) fn note_box(
     input: &Entity<TextareaState>,
     label: &'static str,
@@ -985,11 +1023,9 @@ pub(super) fn note_box(
     div()
         .relative()
         .w_full()
-        .px(px(10.0 * s))
+        .pl(px(10.0 * s))
+        .pr(px((10.0 + DICTATED_INTO_GLYPH + DICTATED_INTO_GAP) * s))
         .py(px(6.0 * s))
-        .when(dictated_into, |this| {
-            this.pr(px((10.0 + DICTATED_INTO_GLYPH + DICTATED_INTO_GAP) * s))
-        })
         .rounded(px(9.0 * s))
         .border_1()
         .border_color(if dictated_into {
