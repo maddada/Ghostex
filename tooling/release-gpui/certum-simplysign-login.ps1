@@ -197,11 +197,13 @@ function Write-SimplySignText([string]$Label) {
         try {
             $Root = [System.Windows.Automation.AutomationElement]::FromHandle($Process.MainWindowHandle)
             $Names = $Root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) |
-                # Labels, buttons and messages only: SimplySign's fields also expose what
-                # was typed through other elements (seen in run 42736451973, masked by
-                # GitHub), so anything with an @ or a run of digits is dropped too.
+                # SimplySign's fields are not Edit elements to UI Automation and expose
+                # what was typed as element names (seen in run 42736451973, masked by
+                # GitHub), so any name with an @ or a run of digits is dropped: that
+                # keeps labels and messages ("Invalid user name or token") but never the
+                # e-mail or a code.
                 Where-Object {
-                    $_.Current.ControlType -in @([System.Windows.Automation.ControlType]::Text, [System.Windows.Automation.ControlType]::Button, [System.Windows.Automation.ControlType]::Window, [System.Windows.Automation.ControlType]::TitleBar) -and
+                    $_.Current.ControlType -ne [System.Windows.Automation.ControlType]::Edit -and
                     $_.Current.Name -and $_.Current.Name -notmatch '@|\d{4,}'
                 } |
                 ForEach-Object { $_.Current.Name } | Select-Object -Unique -First 25
