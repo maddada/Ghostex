@@ -880,7 +880,13 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
             } else {
                 row["kind"] = json!("form");
                 row["buttons"] = json!([]);
-                row["detail"] = json!([format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" })]);
+                // A page that asks nothing waits to be marked seen (`Asker::seen_only`).
+                let detail = if asker.seen_only {
+                    "Page, not seen yet".to_string()
+                } else {
+                    format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" })
+                };
+                row["detail"] = json!([detail]);
                 row["open"] = json!({ "type": "openResource", "id": asker.id });
             }
             (at, row)
