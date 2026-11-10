@@ -22,13 +22,13 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
      * hides the launcher rows until the next poll.
      */
     if flags.truthy("json") && flags.truthy("mobileSummary") {
-        // A repeat within two seconds is answered from the last run's printed text (summary_memo.rs).
-        let memo_key = summary_memo_key(args);
-        if let Some(printed) = read_summary_memo(&memo_key) {
+        // A repeat while gxserver's state is unchanged is answered from the last run's printed text
+        // (summary_memo.rs).
+        let run = begin_summary_run(args, should_use_local_gxserver_state_fallback(flags));
+        if let Some(printed) = run.as_ref().and_then(read_summary_memo) {
             print!("{printed}");
             return Ok(());
         }
-        let started_ms = now_ms();
         let result = fetch_session_list_result(flags, true)?;
         let settings = crate::ghostex_cli::settings::read_settings_file().unwrap_or_default();
         // The phone lists no Actions while the Actions extension is off on this computer.
@@ -51,7 +51,9 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
         }
         insert_built_in_features(&mut merged);
         let printed = format!("{}\n", render_json(&Value::Object(merged)));
-        write_summary_memo(&memo_key, started_ms, &printed);
+        if let Some(run) = &run {
+            write_summary_memo(run, &printed);
+        }
         print!("{printed}");
         return Ok(());
     }
