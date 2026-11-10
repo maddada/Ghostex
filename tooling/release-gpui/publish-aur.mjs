@@ -224,7 +224,8 @@ const gitNetworkTimeoutMs = 120_000;
 
 function runGit(args, options = {}) {
   const result = spawnSync('git', args, { cwd: options.cwd, encoding: 'utf8', timeout: gitNetworkTimeoutMs });
-  if (result.error?.code === 'ETIMEDOUT') {
+  const error = /** @type {NodeJS.ErrnoException | undefined} */ (result.error);
+  if (error?.code === 'ETIMEDOUT') {
     throw new Error(`git ${args.join(' ')} gave no answer within ${gitNetworkTimeoutMs / 1000} seconds`);
   }
   if (result.status !== 0 && !options.allowFailure) {
