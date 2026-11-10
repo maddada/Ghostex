@@ -48,9 +48,10 @@ fn page_id_param(body: &Value) -> Result<String, DomainStateError> {
         .ok_or_else(|| DomainStateError::bad_request("This call requires pageId."))
 }
 
-/// `/api/readVisualPageSource` `{pageId}`: `{pageId, refreshable, changed}`. `refreshable` says the
-/// page knows its file and the file is there; `changed` that the file changed since the page was
-/// published or last refreshed.
+/// `/api/readVisualPageSource` `{pageId}`: `{pageId, refreshable, changed, questionsLeft}`.
+/// `refreshable` says the page knows its file and the file is there; `changed` that the file
+/// changed since the page was published or last refreshed; `questionsLeft` that a question on it
+/// has no answer yet (`page_questions_left`; added 2026-11-11, so an older gxserver leaves it out).
 pub(crate) fn handle_read_http(
     state: &AppState,
     endpoint_path: String,
@@ -75,7 +76,12 @@ pub(crate) fn handle_read_http(
         StatusCode::OK,
         rpc_success(
             request_id,
-            json!({ "pageId": id, "refreshable": source.is_some(), "changed": changed }),
+            json!({
+                "pageId": id,
+                "refreshable": source.is_some(),
+                "changed": changed,
+                "questionsLeft": super::questions::page_questions_left(&state.paths.root_dir, &id),
+            }),
         ),
     )
 }

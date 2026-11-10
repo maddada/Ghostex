@@ -46,6 +46,30 @@ pub(crate) fn page_questions(
     Some((title, parse_questions(&html)))
 }
 
+/// Whether a question on the page still has no answer in the reader's draft: its kit writes every
+/// question's key into the draft (`collect()` in kit.rs), as `"skipped"` while a question has no
+/// pick and no text, so a key that is missing or skipped is a question left. False once the page
+/// was sent, and for a page with no questions. The desktop's page window reads it for the dot on a
+/// hidden page's tab in the chat header (apps/desktop/src/app/visual_page_hidden.rs).
+pub(crate) fn page_questions_left(gxserver_state_dir: &Path, id: &str) -> bool {
+    if page_answered(gxserver_state_dir, id) {
+        return false;
+    }
+    let Some((_, questions)) = page_questions(gxserver_state_dir, id) else {
+        return false;
+    };
+    let draft = read_record(gxserver_state_dir, id)
+        .and_then(|record| record.get("draft")?.get("kit").cloned())
+        .unwrap_or(serde_json::Value::Null);
+    questions
+        .iter()
+        .any(|question| match draft.get(&question.key) {
+            None => true,
+            Some(serde_json::Value::String(value)) => value == "skipped",
+            Some(_) => false,
+        })
+}
+
 /// Whether the page's answers were already sent (they may still wait in the session's queue).
 pub(crate) fn page_answered(gxserver_state_dir: &Path, id: &str) -> bool {
     read_record(gxserver_state_dir, id)
