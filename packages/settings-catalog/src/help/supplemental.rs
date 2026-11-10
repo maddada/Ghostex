@@ -13,7 +13,6 @@ pub(crate) type Tab = (&'static str, &'static str);
 pub(crate) const THEME: Tab = ("theme", "Interface");
 /// The Terminal page, one of the pages General split into (layout.rs).
 const TERMINAL: Tab = ("terminal", "Terminal");
-const CHAT: Tab = ("chat", "Chat");
 const EXTENSIONS: Tab = ("extensions", "Extensions");
 const AGENTS: Tab = ("agents", "Agents");
 const PROJECTS: Tab = ("projects", "Projects");
