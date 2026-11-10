@@ -1402,7 +1402,24 @@ impl NativeChatView {
                                         .build(window, cx)
                                 })
                             })
-                            .child(title.clone()),
+                            // A work ask's title links its references (`#562`) as the dock does.
+                            .map(|element| {
+                                if row["titleRuns"].is_array() {
+                                    element.child(self.ask_title(
+                                        &key,
+                                        &title,
+                                        &row["titleRuns"],
+                                        !expanded,
+                                        p.foreground,
+                                        TITLE_SIZE,
+                                        TITLE_SIZE * 1.45,
+                                        p,
+                                        cx,
+                                    ))
+                                } else {
+                                    element.child(title.clone())
+                                }
+                            }),
                     )
                     .children(agent_button)
                     .children(self.board_restore_button(row, p, cx)),
@@ -1412,16 +1429,7 @@ impl NativeChatView {
             // lines, then "more" (the dock row's rule, work_cards.rs `ask_detail`).
             let body = text(row, "body");
             if !body.is_empty() {
-                card = card.child(self.ask_detail(
-                    &key,
-                    &body,
-                    inner_width,
-                    p.card_muted,
-                    13.0,
-                    19.0,
-                    p,
-                    cx,
-                ));
+                card = card.child(self.ask_markdown(&key, &body, p.card_muted, 13.0, 19.0, p, cx));
             }
             // Its latest line (a thread's report or what it is on, an item's note), whole.
             let line = Some(text(row, "detail"))

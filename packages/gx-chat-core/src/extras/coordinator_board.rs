@@ -158,6 +158,10 @@ pub struct BoardRow {
     /// an opened card shows in the quieter colour; "" elsewhere.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub body: String,
+    /// A work item ask's title's links as word runs (`questions::form_links::word_runs`), null
+    /// when it has none.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub title_runs: Value,
     /// The card is open: it shows its whole line of work and its buttons (one card at a time).
     #[serde(default)]
     pub expanded: bool,
@@ -574,6 +578,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         answers,
         lead: String::new(),
         body: text(row, "body").to_string(),
+        title_runs: row.get("titleRuns").cloned().unwrap_or(Value::Null),
         key: text(row, "key").to_string(),
         title: title.to_string(),
         detail: text(row, "detail").to_string(),
@@ -862,6 +867,7 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         answers: Vec::new(),
                         lead: String::new(),
                         body: String::new(),
+                        title_runs: Value::Null,
                         // A question leaves by being answered, or put off For later in Resources.
                         remove: Value::Null,
                         restore: Value::Null,

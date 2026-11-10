@@ -108,6 +108,85 @@ fn dock_row_action(row: &Value) -> Option<&'static str> {
     }
 }
 
+/// A description's Markdown kept compact for a row (`ask_markdown`): every line break kept as a
+/// break, a heading as a bold line at the text's size, a table row and a picture as their plain
+/// text. Lists, emphasis, code and links stay as written.
+fn compact_markdown(words: &str) -> String {
+    // Each line, and whether it is code (a fence or inside one), which keeps its plain break.
+    let mut out: Vec<(String, bool)> = Vec::new();
+    let mut fenced = false;
+    for line in words.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") {
+            fenced = !fenced;
+            out.push((line.to_string(), true));
+            continue;
+        }
+        if fenced {
+            out.push((line.to_string(), true));
+            continue;
+        }
+        let heading = trimmed.trim_start_matches('#');
+        let line = if trimmed.starts_with('#') && heading.starts_with(' ') {
+            format!("**{}**", heading.trim())
+        } else if trimmed.starts_with('|') {
+            // A table's row as its words; its rule line goes.
+            let cells: Vec<&str> = trimmed
+                .trim_matches('|')
+                .split('|')
+                .map(str::trim)
+                .filter(|cell| !cell.is_empty())
+                .collect();
+            if cells
+                .iter()
+                .all(|cell| cell.chars().all(|c| matches!(c, '-' | ':' | ' ')))
+            {
+                continue;
+            }
+            cells.join(" \u{b7} ")
+        } else {
+            plain_pictures(line)
+        };
+        out.push((line, false));
+    }
+    // A single line break is kept as a break, not joined into the line before it.
+    let mut text = String::new();
+    for (index, (line, code)) in out.iter().enumerate() {
+        text.push_str(line);
+        if let Some((next, _)) = out.get(index + 1) {
+            let plain_break = *code || line.trim().is_empty() || next.trim().is_empty();
+            text.push_str(if plain_break { "\n" } else { "  \n" });
+        }
+    }
+    text
+}
+
+/// `![alt](src)` as its alt words, so a description never draws a picture.
+fn plain_pictures(line: &str) -> String {
+    let mut out = String::new();
+    let mut rest = line;
+    while let Some(start) = rest.find("![") {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 2..];
+        match after.find("](").and_then(|close| {
+            after[close + 2..]
+                .find(')')
+                .map(|end| (close, close + 2 + end))
+        }) {
+            Some((close, end)) => {
+                out.push_str(&after[..close]);
+                rest = &after[end + 1..];
+            }
+            None => {
+                out.push_str("![");
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 /// The dock's rows' fold, as the chat's disclosure motion knows it.
 const DOCK_MOTION_KEY: &str = "work-dock:rows";
 
@@ -363,16 +442,21 @@ impl NativeChatView {
         // Its rows' width, which decides what fits beside a question (`dock_row`); a change draws
         // the rows again at the new width.
         let width = self.board.dock_width.clone();
+        let chat = cx.weak_entity();
         Some(
             surface
                 .child(
                     gpui::canvas(
-                        move |bounds, window, _| {
+                        move |bounds, _, cx| {
                             top.set(Some(bounds.top()));
                             let inner = (bounds.size.width.as_f32() - 2.0) / s;
                             if (width.get() - inner).abs() > 0.5 {
                                 width.set(inner);
-                                window.refresh();
+                                // The chat's render is cached: tell it to lay the rows out again.
+                                let chat = chat.clone();
+                                cx.defer(move |cx| {
+                                    let _ = chat.update(cx, |_, cx| cx.notify());
+                                });
                             }
                         },
                         |_, _, _, _| {},
@@ -738,13 +822,38 @@ impl NativeChatView {
         let title_width =
             row_width - DOCK_LEAD - age_width - if beside { all_width + DOCK_GAP } else { 0.0 };
         let detail = text(row, "body");
+        let title_runs = &row["titleRuns"];
         let question = if !open {
             div()
                 .flex_1()
                 .min_w_0()
-                .text_color(body)
-                .truncate()
-                .child(title.to_string())
+                .child(self.ask_title(
+                    &key,
+                    &title,
+                    title_runs,
+                    true,
+                    body,
+                    PROSE_SIZE,
+                    PROSE_LINE_HEIGHT,
+                    p,
+                    cx,
+                ))
+                .into_any_element()
+        } else if detail.is_empty() && title_runs.is_array() {
+            div()
+                .flex_1()
+                .min_w_0()
+                .child(self.ask_title(
+                    &key,
+                    &title,
+                    title_runs,
+                    false,
+                    body,
+                    PROSE_SIZE,
+                    PROSE_LINE_HEIGHT,
+                    p,
+                    cx,
+                ))
                 .into_any_element()
         } else if detail.is_empty() {
             div()
@@ -768,16 +877,20 @@ impl NativeChatView {
                 .flex()
                 .flex_col()
                 .gap(px(2.0 * s))
-                .child(
-                    div()
-                        .whitespace_normal()
-                        .text_color(body)
-                        .child(title.to_string()),
-                )
-                .child(self.ask_detail(
+                .child(self.ask_title(
+                    &key,
+                    &title,
+                    title_runs,
+                    false,
+                    body,
+                    PROSE_SIZE,
+                    PROSE_LINE_HEIGHT,
+                    p,
+                    cx,
+                ))
+                .child(self.ask_markdown(
                     &format!("detail:{key}"),
                     &detail,
-                    title_width,
                     p.card_muted,
                     PROSE_SIZE,
                     PROSE_LINE_HEIGHT,
@@ -1096,6 +1209,161 @@ impl NativeChatView {
             );
         }
         parts
+    }
+
+    /// A work item ask's title: one plain line cut at its end (`one_line`, a closed row or card),
+    /// or wrapping (opened), with its references (`#562`, a Markdown link) clickable the way a
+    /// question's are (`link_words`, from the core's `titleRuns`); a click on a link opens it
+    /// only, never the row.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn ask_title(
+        &self,
+        key: &str,
+        title: &str,
+        runs: &Value,
+        one_line: bool,
+        color: gpui::Hsla,
+        size: f32,
+        line_height: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        if !runs.is_array() {
+            return div()
+                .min_w_0()
+                .text_size(px(size * s))
+                .line_height(px(line_height * s))
+                .text_color(color)
+                .when(one_line, |title| title.truncate())
+                .when(!one_line, |title| title.whitespace_normal())
+                .child(title.to_string())
+                .into_any_element();
+        }
+        let words = self.link_words(
+            &format!("ask-title:{key}"),
+            super::link_words::LinkWords {
+                plain: title.to_string(),
+                runs,
+                size,
+                line_height,
+                weight: FontWeight::NORMAL,
+                color,
+            },
+            p,
+            cx,
+        );
+        if !one_line {
+            return words;
+        }
+        // One line: the words past the row's width wrap out of sight below it.
+        div()
+            .min_w_0()
+            .h(px(line_height * s))
+            .overflow_hidden()
+            .child(words)
+            .into_any_element()
+    }
+
+    /// A work item ask's description as the chat renders a message's text (`text_view_look`, the
+    /// same Markdown view: its line breaks and paragraphs, bold, italic, code, links, lists, and
+    /// `#562` linking to the project's GitHub), in the quieter colour at `size`; four rendered
+    /// lines and then "more", which shows the rest. Headings are bold lines at the text's size,
+    /// and a table or picture shows as its plain text (`compact_markdown`).
+    ///
+    /// CDXC:Coordinators 2026-11-11 DECISION:
+    /// User, of an ask's description drawn as one flat run: "no new lines or markdown rendering
+    /// here which is wrong pls fix. also please make links like #562 clickable pls like we did in
+    /// regular chat (we have code for this already)".
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn ask_markdown(
+        &self,
+        id: &str,
+        words: &str,
+        color: gpui::Hsla,
+        size: f32,
+        line_height: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let more_key = format!("more:{id}");
+        // Its rendered height at its last paint, which says whether it runs past four lines.
+        let height = self
+            .disclosure_motion
+            .borrow_mut()
+            .height(&format!("ask-markdown:{id}"), "rendered");
+        let cap = DOCK_QUESTION_LINES as f32 * line_height * s;
+        let long = height.get() > cap + 2.0;
+        let whole = long && self.expanded.contains(&more_key);
+        let view = self.text_view_look(
+            format!("ask-markdown:{id}"),
+            compact_markdown(words),
+            &Value::Null,
+            p,
+            super::rich_markdown::TextLook {
+                color,
+                semibold: false,
+                size,
+                line_height,
+            },
+            cx,
+        );
+        let measured = height.clone();
+        let chat = cx.weak_entity();
+        let rendered = div().relative().w_full().min_w_0().child(view).child(
+            gpui::canvas(
+                move |bounds, _, cx| {
+                    let natural = bounds.size.height.as_f32();
+                    if (measured.get() - natural).abs() > 0.5 {
+                        measured.set(natural);
+                        // The chat's render is cached: tell it to draw again at this height.
+                        let chat = chat.clone();
+                        cx.defer(move |cx| {
+                            let _ = chat.update(cx, |_, cx| cx.notify());
+                        });
+                    }
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_full(),
+        );
+        let block = div()
+            .w_full()
+            .min_w_0()
+            .when(long && !whole, |block| {
+                block.max_h(px(cap)).overflow_hidden()
+            })
+            .child(rendered);
+        if !long {
+            return block.into_any_element();
+        }
+        div()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .child(block)
+            .child(
+                div()
+                    .id(gpui::SharedString::from(format!("more:{id}")))
+                    .role(gpui::Role::Button)
+                    .aria_expanded(whole)
+                    .text_size(px(size * s))
+                    .line_height(px(line_height * s))
+                    .text_color(p.muted)
+                    .chat_cursor_pointer()
+                    .hover(|style| style.text_color(p.foreground))
+                    .child(if whole { "less" } else { "more" })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        if !this.expanded.remove(&more_key) {
+                            this.expanded.insert(more_key.clone());
+                        }
+                        cx.notify();
+                    })),
+            )
+            .into_any_element()
     }
 
     /// Words that show four lines and then "more", which shows the rest ("less" folds them

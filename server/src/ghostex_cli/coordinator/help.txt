@@ -248,7 +248,9 @@ WORK ITEMS
   short plain question or instruction a person understands at a glance, about
   ten words, with no item names or code names ("Ship the new pairing screen
   today?"); everything else (why, what to check, where) goes in --detail, which
-  shows under the title when the user opens the row. One-click answers
+  shows under the title when the user opens the row. --detail takes Markdown
+  and line breaks (bold, code, links, lists; #562 links to the PR): write it as
+  a few short lines or bullets, not one long paragraph. One-click answers
   with --answers (commas split them; write \, for a comma inside an answer,
   or give each with --answer "Too small to read, simplify it"), the steps to
   follow with --steps, and --holds when the work

@@ -501,6 +501,8 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
                 "kind": "ask",
                 "status": card["status"],
                 "title": card["title"],
+                // Its title's links (`#562`, a Markdown link) as runs the renderers draw, or null.
+                "titleRuns": crate::questions::form_links::word_runs(text(ask, "text")),
                 "body": card["body"],
                 "age": card["age"],
                 // The line under it names only its own item (`chips`); whether it holds that item

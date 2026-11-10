@@ -215,6 +215,8 @@ fn ask_row(item: &Value, ask: &Value, now_ms: i64) -> Value {
         "askRow": true,
         "group": if !snoozed.is_empty() { "later" } else if holds { "blocked" } else { "needs" },
         "title": text(ask, "text"),
+        // Its title's links (`#562`, a Markdown link) as runs the renderers draw, or null.
+        "titleRuns": crate::questions::form_links::word_runs(text(ask, "text")),
         // Its longer explanation under the short title (`item ask --detail`).
         "body": text(ask, "detail"),
         "detail": detail,
