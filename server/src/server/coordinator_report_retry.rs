@@ -11,7 +11,7 @@ use super::coordinator_runtime::{now_ms, RETRY_DELAYS_MS};
 /// How long reports to one coordinator keep failing, the computer online, before Ghostex gives up.
 ///
 /// CDXC:Coordinators 2026-11-10 DECISION:
-/// Approved plan (coordinator report delivery): a coordinator whose reports keep failing is retried for 10 minutes of plain elapsed time, then Ghostex stops trying, with no timer and no backstop, and posts one red "Not sent" row in Notifications: "Coordinator stopped getting reports", "Ghostex tried for 10 minutes and stopped. Check what it is waiting on, then send it a message to try again." It never gives up while the computer is offline (it keeps retrying at the last step instead). A new message accepted for that coordinator (`request_report_retry`) or a gxserver restart makes it try again, and the row turns read only when a delivery round to it then ends with no failure. What waits is each thread's current report, as before: there is no outbox.
+/// Sebastian (Q29): Ghostex gives up on a coordinator's reports after 10 minutes of failed deliveries while the computer is online, and never gives up while it is offline: time offline doesn't count. An outage resets the whole window (`pause_for_outage`), failure time from before it included. Giving up means no timer and no backstop, and one red "Not sent" row in Notifications: "Coordinator stopped getting reports", "Ghostex tried for 10 minutes and stopped. Check what it is waiting on, then send it a message to try again." A new message accepted for that coordinator (`request_report_retry`) or a gxserver restart makes it try again, and the row turns read only when a delivery round to it then ends with no failure. What waits is each thread's current report, as before: there is no outbox.
 /// WHY: the retries used to go on every 60 seconds forever, and the user never heard that a coordinator was not getting its threads' reports.
 const GIVE_UP_AFTER_MS: i64 = 10 * 60_000;
 const REPORTS_NOTICE_TITLE: &str = "Coordinator stopped getting reports";
@@ -44,6 +44,18 @@ pub(crate) fn request_report_retry(key: &SessionKey) {
         given_up.remove(key);
     }
 }
+
+/// Restarts the clock of every run that has not given up, on each tick the computer is offline,
+/// open threads or none.
+///
+/// CDXC:Coordinators 2026-11-10 WHY:
+/// While offline the supervisor sends nothing, so no failure is counted, but a run's `failing_since` stayed where the outage found it: the first failure after more than 10 minutes offline gave up at once and posted the notice. Restarting the clock on every offline tick makes a run count only failures since the network came back.
+pub(super) fn pause_for_outage(retry: &mut HashMap<SessionKey, FailureStreak>, now: i64) {
+    for streak in retry.values_mut().filter(|streak| !streak.gave_up) {
+        streak.failing_since = now;
+    }
+}
+
 /// Whether the supervisor holds off on this coordinator for now: its last round failed and the
 /// next try is not due, or Ghostex gave up and nobody asked it to try again. An ask drops the run.
 pub(super) fn waits_for_retry(

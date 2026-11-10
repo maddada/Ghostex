@@ -17,7 +17,7 @@ use crate::presentation::effective_lifecycle_state;
 use crate::session_chat_queue_runtime::SessionChatTranscriptGate;
 
 use super::coordinator_report_retry::{
-    announce_round, record_failed_round, waits_for_retry, FailureStreak,
+    announce_round, pause_for_outage, record_failed_round, waits_for_retry, FailureStreak,
 };
 
 const TICK: Duration = Duration::from_secs(2);
@@ -482,6 +482,10 @@ fn supervise(
         .activity_read_at
         .retain(|key, _| open_keys.contains(key));
     memory.turns.retain(|key, _| open_keys.contains(key));
+    // Before the early return below: an outage with no open thread must not count either.
+    if crate::network_status::offline_since().is_some() {
+        pause_for_outage(&mut memory.retry, now_ms());
+    }
     let mut live: HashMap<SessionKey, coordinators::ThreadLive> = HashMap::new();
     if open.is_empty() {
         coordinators::replace_thread_live(live);
