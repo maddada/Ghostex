@@ -77,6 +77,16 @@ impl GhostexGpuiApp {
                         cx.stop_propagation();
                         app.dispatch_native_sidebar_ui(json!({"type": "toggleCoordinator", "sessionId": id}), cx);
                     }))
+                    // After the mouse-down above, so a press moves focus here before it stops.
+                    .map(|toggle| {
+                        self.sidebar_focus_stop(
+                            toggle,
+                            format!("coordinator-fold:{}", session.session_id),
+                            super::focus_order::SidebarStopPlace::List,
+                            appearance,
+                            cx,
+                        )
+                    })
             })
             .when(delayed || closing, |identity| identity.cursor_pointer().on_click(cx.listener(move |app, _, _, cx| {
                 cx.stop_propagation();
