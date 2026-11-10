@@ -876,7 +876,10 @@ fn spawn_tailcat_serve(spec: &TailcatServeSpec) -> std::io::Result<Child> {
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
     configure_process_group(&mut command);
-    command.spawn()
+    let child = command.spawn()?;
+    // CDXC:RemotePairing 2026-11-10 WHY: Windows does not end a child with its parent, so a gxserver that crashed or was ended from Task Manager left its `tailcat serve` helpers running: an address stayed served by a helper nobody supervises (an open pairing door among them, review of 4ac828ff7), and the next gxserver's helper with the same key shared the relay with it. The helper joins the job that ends with gxserver; a no-op on macOS and Linux, where the helper ends at its next log line once gxserver's end of its pipe is gone.
+    crate::platform::process::end_with_server(child.id());
+    Ok(child)
 }
 
 pub(super) fn configure_process_group(command: &mut Command) {

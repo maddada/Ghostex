@@ -509,18 +509,21 @@ fn spawn_client(spec: &ForwardSpec, key: Option<PathBuf>) -> std::io::Result<Chi
     }
     #[cfg(not(unix))]
     {
-        background_command(&spec.binary_path)
+        let child = background_command(&spec.binary_path)
             .args(arguments)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
-            .spawn()
+            .spawn()?;
+        #[cfg(windows)]
+        end_with_this_process(&child);
+        Ok(child)
     }
 }
 
 /*
 CDXC:RemotePairing 2026-11-10 WHY:
-A tailcat client does not exit while its tunnel stays up, so one whose owner died without stopping it (Ghostex crashed or was force-quit, a `ghostex` command was killed by a timeout) ran on for good, holding its key; the next client with that key then stalled every few seconds, because two clients with one key take turns starving each other (GitHub #526; seen again on 2026-11-10 when a killed test owner left its client behind and the next one was restarted as carrying nothing every 17 to 44 s). On macOS and Linux the helper now runs under a small shell that holds this process's pipe as its standard input and ends the helper the moment that pipe closes, which the system does when this process dies in any way. Windows has no such pipe trick here, so a client there still outlives a killed owner.
+A tailcat client does not exit while its tunnel stays up, so one whose owner died without stopping it (Ghostex crashed or was force-quit, a `ghostex` command was killed by a timeout) ran on for good, holding its key; the next client with that key then stalled every few seconds, because two clients with one key take turns starving each other (GitHub #526; seen again on 2026-11-10 when a killed test owner left its client behind and the next one was restarted as carrying nothing every 17 to 44 s). On macOS and Linux the helper now runs under a small shell that holds this process's pipe as its standard input and ends the helper the moment that pipe closes, which the system does when this process dies in any way. Windows does not end a child with its parent either and has no such pipe trick, so there the helper joins a job that only this process holds (`end_with_this_process`).
 */
 /// Runs `"$@"` (the helper and its arguments) and ends it when standard input closes; exits with
 /// the helper's status when the helper exits first.
@@ -534,6 +537,51 @@ wait "$child"
 status=$?
 kill "$reader" 2>/dev/null
 exit "$status""#;
+
+/// Ends `child` when this process ends, however it ends.
+///
+/// CDXC:RemotePairing 2026-11-10 WHY:
+/// The coordinator's brief for dependable device connections: "a Windows helper ends with its owner". Until now only macOS and Linux tied the helper to its owner (the lifeline above), so on Windows a Ghostex that crashed or was ended from Task Manager, or a `ghostex` command killed by a timeout, left its tailcat client running with its key, and the next client with that key was starved by it. The helper joins a job with kill-on-close whose only handle this process holds and never closes: when this process ends in any way, Windows closes the handle and ends the job's members. gxserver has ended its other helpers this way since 2026-10-24 (`end_with_server` in server/src/platform/process.rs, GitHub #289). The handle is not inheritable, so the helper itself cannot keep the job alive. A helper that could not join (the job could not be made) runs as before.
+#[cfg(windows)]
+fn end_with_this_process(child: &Child) {
+    use std::os::windows::io::AsRawHandle;
+    use std::sync::OnceLock;
+    use windows_sys::Win32::{
+        Foundation::CloseHandle,
+        System::JobObjects::{
+            AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+            SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        },
+    };
+    // Never closed here: the system closes it when this process ends.
+    static CLIENT_JOB: OnceLock<usize> = OnceLock::new();
+    let job = *CLIENT_JOB.get_or_init(|| unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+            return 0;
+        }
+        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        ) == 0
+        {
+            CloseHandle(job);
+            return 0;
+        }
+        job as usize
+    });
+    if job == 0 {
+        return;
+    }
+    unsafe {
+        AssignProcessToJobObject(job as _, child.as_raw_handle() as _);
+    }
+}
 
 fn end_child(child: &mut Child) {
     kill_pid(child.id());
