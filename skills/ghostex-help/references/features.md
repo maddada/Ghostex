@@ -296,7 +296,8 @@ view from the strip.
   you used last, and a computer's name in the search picks that computer
   ("ghostex windows"), so a search and Enter start a session. Cmd+Shift+T opens a new
   terminal, Cmd+T always opens a new browser tab, Cmd+Ctrl+Shift+F forks the
-  focused session, and Cmd+D splits. Cmd+R renames the focused session,
+  focused session, and Cmd+D splits (from a session in a sidebar folder, the new
+  session joins that folder). Cmd+R renames the focused session,
   Cmd+Shift+A (or Option+Shift+S) sleeps it, and Cmd+Shift+Backspace (or Cmd+W)
   closes it. On Windows and Linux use Ctrl for Cmd, except that fork is
   Ctrl+Alt+Shift+F and rename is Ctrl+Shift+R, because Ctrl+R belongs to the

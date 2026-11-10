@@ -159,6 +159,18 @@ impl GhostexGpuiApp {
             .detach();
             return;
         }
+        /*
+        CDXC:Workarea 2026-11-09 DECISION:
+        User: a Cmd+D split from a session that belongs to a sidebar folder must create the new session inside that same folder. The Agents workspace mirrors the active sidebar group, and selecting a session outside it switched the view to the project's own group, so the split collapsed into a lone tab. The new session joins the active user-made group before it opens, as a create from that folder's own row does.
+        */
+        let active_subgroup = match self.gx_store.core.focus().active_group.as_ref() {
+            Some(ghostex_gx_core::ActiveGroup::Subgroup { project, group_id })
+                if project.to_workspace_project_id() == project_id =>
+            {
+                Some((project.clone(), group_id.clone()))
+            }
+            _ => None,
+        };
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let result = background
@@ -175,6 +187,16 @@ impl GhostexGpuiApp {
                 .await;
             let _ = this.update(cx, |this, cx| match result {
                 Ok((key, plan)) => {
+                    if let Some((project, group_id)) = &active_subgroup
+                        && project.project_id == key.project_id
+                    {
+                        this.gx_store_place_created_session_in_subgroup(
+                            project,
+                            &key.session_id,
+                            group_id,
+                            cx,
+                        );
+                    }
                     #[cfg(target_os = "windows")]
                     {
                         /*
