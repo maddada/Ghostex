@@ -57,6 +57,9 @@ pub struct UnifiedCrew {
     pub older: u16,
     /// The user listed its older threads.
     pub older_shown: bool,
+    /// A search or filter keeps its matching threads drawn whatever the user's fold says, so
+    /// folding it only drops the saved preference.
+    pub held_open: bool,
     /// Its "N older threads" (or "Hide older threads") row is drawn after its threads: it is open
     /// on its own fold, not only on the way to a match, and has older threads.
     pub older_row: bool,
@@ -321,6 +324,7 @@ fn lay_out(
         listed: u16::try_from(listed).unwrap_or(u16::MAX),
         older: u16::try_from(total - listed).unwrap_or(u16::MAX),
         older_shown,
+        held_open: match_below && (narrowed || query),
         older_row: open && !narrowed && !forced && total > listed,
         badge: RowNesting {
             threads: tally,
