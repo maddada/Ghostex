@@ -5,9 +5,9 @@
 //!
 //! What tells this computer that something may be wrong: 10 s after a device's traffic stops arriving, the helper's WireGuard logs that it is sending a keepalive (and, when it had data waiting, that it stopped hearing back). That happens every time a device goes away too, so it is only a reason to look. Looking is one short run of the newest tailcat as a client, with a key of its own that is on no allow-list, saying hello to this computer's own address: a hello always goes through the relay, the helper logs every hello it hears before it turns the key away, and that line is the proof that the relay still delivers to it. The key lets nobody in and is never added anywhere: the helper refuses it like any stranger, and its hello is not a device knocking while a pairing code is shown (`observe` takes its lines out before `door.rs` sees them). If the client reached the relay and five seconds of hellos were not heard, the helper is started again. Measured on the same lab pair: silent for 21 s instead of 110 to 123 s.
 //!
-//! Kept cheap and safe on purpose: no check while a device's own hello was heard in the last minute (that is the same proof for free), none before this helper has logged a hello at all (an older tailcat that words it differently is never judged), a check that got an answer doubles the wait before the next one (one minute up to fifteen), a check that could not reach the relay itself decides nothing (this computer is offline), and one helper is started again for this at most once in ten minutes. The pairing door is not checked: it lives for a minute.
+//! Kept cheap and safe on purpose: no check while a device's own hello was heard in the last minute (that is the same proof for free), none before this helper has logged a hello at all (an older tailcat that words it differently is never judged), a check that got an answer doubles the wait before the next one (one minute up to fifteen), a check that could not reach the relay itself decides nothing (this computer is offline), and one lane's helper is started again for this at most once in ten minutes (the time is kept per lane by the supervisor, so a helper started again for another reason inherits it; it is not kept across a gxserver restart, which starts every helper anew anyway). The pairing door is not checked: it lives for a minute.
 //!
-//! With the helper's install and update (GitHub #559, `install.rs`): while an install or an update runs there is no check and no restart for one, since an update swaps the helper file and starts the helpers again itself (`TailcatRuntime::restart_helpers`), and a second restart beside it would cut the devices twice. Every restart for another reason (an update, a changed allow-list) makes a new `RelayCheck` for the new helper, so a check still in flight for the old one decides nothing; its key is read from its file when the check is made, so a hello of that late check is still taken out of the new helper's log and is never a knock.
+//! With the helper's install and update (GitHub #559, `install.rs`): while an install or an update runs there is no check and no restart for one, since an update swaps the helper file and starts the helpers again itself (`TailcatRuntime::restart_helpers`), and a second restart beside it would cut the devices twice. Every restart for another reason (an update, a changed allow-list) makes a new `RelayCheck` for the new helper, so a check still in flight for the old one decides nothing; its key is read from its file when the check is made, and again at the first hello while it is still unknown (a first-ever check may be making the key at that moment), so a hello of that late check is still taken out of the new helper's log and is never a knock.
 //! SEE-ALSO: supervisor.rs (`supervise` starts the helper again), link_log.rs (`follow_tailcat_log`), install.rs (`installation_status`), server/src/remote_access/computer_pairing.rs (`read_tailcat_client_key`).
 
 use std::{
@@ -69,7 +69,6 @@ struct State {
     checking: bool,
     next_check_after: Option<Instant>,
     gap: Duration,
-    last_restart: Option<Instant>,
     restart_wanted: bool,
 }
 
@@ -79,8 +78,14 @@ struct Inner {
     key_file: PathBuf,
     /// The helper's address, once it has published it.
     address: Box<dyn Fn() -> Option<String> + Send + Sync>,
+    /// When this lane's helper was last started again for a silent relay. Kept by the supervisor
+    /// per lane, so the limit holds across helpers that were started again for another reason.
+    last_restart: RelayRestartClock,
     context: LinkLogContext,
 }
+
+/// When a lane's helper was last started again by its relay check (`RESTART_GAP`).
+pub(crate) type RelayRestartClock = Arc<Mutex<Option<Instant>>>;
 
 /// The relay check of one of the two helpers paired devices dial.
 #[derive(Clone)]
@@ -90,6 +95,7 @@ impl RelayCheck {
     pub(crate) fn new(
         key_file: PathBuf,
         address: Box<dyn Fn() -> Option<String> + Send + Sync>,
+        last_restart: RelayRestartClock,
         context: LinkLogContext,
     ) -> Self {
         Self(Arc::new(Inner {
@@ -100,11 +106,11 @@ impl RelayCheck {
                 checking: false,
                 next_check_after: None,
                 gap: FIRST_CHECK_GAP,
-                last_restart: None,
                 restart_wanted: false,
             }),
             key_file,
             address,
+            last_restart,
             context,
         }))
     }
@@ -128,10 +134,14 @@ impl RelayCheck {
                 .unwrap_or_default()
                 .trim_end_matches(':');
             let mut state = self.state();
+            if state.check_key.is_none() {
+                // Another helper's check may have made the key since this one was set up.
+                state.check_key = saved_check_key(&self.0.key_file);
+            }
             if state.check_key.as_deref() == Some(key) {
-                if heard.is_some() {
-                    state.check_heard = Some(Instant::now());
-                }
+                // Either line says the helper heard it: a tailcat that words a refused hello
+                // with the refusal alone must not read as a silent relay.
+                state.check_heard = Some(Instant::now());
                 return true;
             }
             if heard.is_some() {
@@ -166,7 +176,12 @@ impl RelayCheck {
         let check = self.clone();
         thread::spawn(move || {
             let started = Instant::now();
-            let verdict = check.look();
+            let mut verdict = check.look();
+            // A helper that was replaced meanwhile (its address is gone here) heard the check, if
+            // at all, in a log this check does not read: nothing is known about it.
+            if verdict == Verdict::Silent && (check.0.address)().is_none() {
+                verdict = Verdict::Unknown;
+            }
             let restarting = {
                 let mut state = check.state();
                 let now = Instant::now();
@@ -181,12 +196,16 @@ impl RelayCheck {
                         state.gap = FIRST_CHECK_GAP;
                         state.next_check_after = Some(now + FIRST_CHECK_GAP);
                         // An update that began meanwhile starts the helpers again itself.
+                        let mut last_restart = check
+                            .0
+                            .last_restart
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
                         if !helper_is_being_replaced()
-                            && state
-                                .last_restart
+                            && last_restart
                                 .is_none_or(|at| now.saturating_duration_since(at) >= RESTART_GAP)
                         {
-                            state.last_restart = Some(now);
+                            *last_restart = Some(now);
                             state.restart_wanted = true;
                             restarting = true;
                         }

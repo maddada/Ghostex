@@ -81,6 +81,10 @@ pub(super) struct TailcatLaneState {
     last_error: Option<String>,
     /// Why gxserver is stopping this lane's helper now, for the log (`take_stop_reason`).
     stop_reason: Option<&'static str>,
+    /// When this lane's helper was last started again for a silent relay (`relay_check.rs`). It
+    /// outlives each helper, so the once-in-ten-minutes limit holds across restarts for other
+    /// reasons.
+    relay_restart: super::relay_check::RelayRestartClock,
 }
 
 #[derive(Default)]
@@ -664,6 +668,14 @@ impl TailcatRuntime {
         }
     }
 
+    /// The clock of `lane`'s relay check restarts, shared by every helper the lane has.
+    fn relay_restart_clock(&self, lane: TailcatLane) -> super::relay_check::RelayRestartClock {
+        self.inner
+            .lock()
+            .map(|mut inner| inner.lane(lane).relay_restart.clone())
+            .unwrap_or_default()
+    }
+
     /// The address the helper of `lane` published, while `generation` is still the current one.
     fn lane_token(&self, lane: TailcatLane, generation: u64) -> Option<String> {
         let mut inner = self.inner.lock().ok()?;
@@ -747,9 +759,11 @@ fn supervise(
     // lives for a minute and is not checked.
     let relay_check = (lane != TailcatLane::Door).then(|| {
         let runtime = runtime.clone();
+        let last_restart = runtime.relay_restart_clock(lane);
         super::relay_check::RelayCheck::new(
             spec.key_file.with_file_name("relay-check.private.json"),
             Box::new(move || runtime.lane_token(lane, generation)),
+            last_restart,
             link_context.clone(),
         )
     });
@@ -820,6 +834,11 @@ fn supervise(
                     Some(started_at.elapsed().as_millis() as u64),
                 );
                 super::link_log::record_links_ended(&link_context, &peers, "relayConnectionSilent");
+                // A stop that arrived meanwhile (a removed device, a changed allow-list) wins: the
+                // helper is not started again on the list it had.
+                if wait_for_stop(&stop_rx, Duration::ZERO) {
+                    return;
+                }
                 start_reason = "relayConnectionSilent";
                 continue 'helper;
             }
