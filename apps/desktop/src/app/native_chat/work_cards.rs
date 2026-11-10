@@ -25,7 +25,6 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, div, px, svg,
 };
 use serde_json::{Value, json};
-use std::{cell::Cell, rc::Rc};
 
 /// A status's glyph and colour, the board's (coordinator_board.rs `group_look`), so a card reads as
 /// its row in the Work panel does.
@@ -40,6 +39,17 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
     }
     let (icon, color) = super::coordinator_board::group_look(group);
     (icon, color.map_or(p.muted, |color| gpui::rgb(color).into()))
+}
+
+/// The thin divider that sets an opened row's Reply apart from its answers.
+fn answers_divider(p: &ChatAppearance) -> AnyElement {
+    div()
+        .flex_shrink_0()
+        .w(px(1.0))
+        .h(px(16.0 * p.scale))
+        .mx(px(3.0 * p.scale))
+        .bg(p.foreground.opacity(0.10))
+        .into_any_element()
 }
 
 /// A page row's ⋯ menu (`dock_row`): Show in chat, Dismiss and Snooze with its lengths, as the
@@ -91,8 +101,6 @@ const DOCK_GAP: f32 = 10.0;
 const DOCK_LEAD: f32 = 23.0;
 /// The rows' width before the dock has painted once (the chat box's own width).
 const DOCK_ROW_WIDTH_GUESS: f32 = 736.0;
-/// How many lines an opened row's question shows before its "more".
-pub(super) const DOCK_QUESTION_LINES: usize = 4;
 
 /// How wide `label` is in the chat's font at `size` (both unscaled).
 fn dock_text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
@@ -145,94 +153,6 @@ fn dock_row_action(row: &Value) -> Option<&'static str> {
     } else {
         None
     }
-}
-
-/// One block of a description (`description_blocks`): its Markdown, and whether it follows the
-/// block before it as the next item of the same list (a list's own small gap, not a paragraph's).
-struct DescriptionBlock {
-    text: String,
-    tight: bool,
-}
-
-/// A description's blocks, each drawn as its own Markdown view so its height can be counted in
-/// whole lines: every paragraph, every list item (with its continuation and nested lines) and every
-/// fenced code block. A numbered item keeps its own number, so a list split this way still counts
-/// 1, 2, 3.
-fn description_blocks(words: &str) -> Vec<DescriptionBlock> {
-    let item = |line: &str| {
-        let line = line.trim_start();
-        line.starts_with("- ")
-            || line.starts_with("* ")
-            || line.starts_with("+ ")
-            || line.split_once(['.', ')']).is_some_and(|(number, rest)| {
-                !number.is_empty()
-                    && number.len() <= 9
-                    && number.chars().all(|c| c.is_ascii_digit())
-                    && rest.starts_with(' ')
-            })
-    };
-    let mut blocks: Vec<DescriptionBlock> = Vec::new();
-    // The block being read: its lines, whether it is a list item, and whether it is tight.
-    let mut current: Option<(String, bool, bool)> = None;
-    let mut fenced = false;
-    let mut after_blank = true;
-    fn finish(current: &mut Option<(String, bool, bool)>, blocks: &mut Vec<DescriptionBlock>) {
-        if let Some((text, _, tight)) = current.take() {
-            if !text.trim().is_empty() {
-                blocks.push(DescriptionBlock { text, tight });
-            }
-        }
-    }
-    // Whether the last block read was a list item, so the next item follows it tight.
-    let mut last_item = false;
-    for line in words.lines() {
-        let trimmed = line.trim_start();
-        if fenced {
-            if let Some((text, _, _)) = current.as_mut() {
-                text.push('\n');
-                text.push_str(line);
-            }
-            if trimmed.starts_with("```") {
-                fenced = false;
-                finish(&mut current, &mut blocks);
-                last_item = false;
-                after_blank = false;
-            }
-            continue;
-        }
-        if trimmed.starts_with("```") {
-            finish(&mut current, &mut blocks);
-            current = Some((line.to_string(), false, false));
-            fenced = true;
-            continue;
-        }
-        if trimmed.is_empty() {
-            if let Some((_, is_item, _)) = &current {
-                last_item = *is_item;
-            }
-            finish(&mut current, &mut blocks);
-            after_blank = true;
-            continue;
-        }
-        let indented = line.starts_with("  ") || line.starts_with('\t');
-        if item(line) && !indented {
-            if let Some((_, is_item, _)) = &current {
-                last_item = *is_item;
-            }
-            let tight = last_item && !after_blank;
-            finish(&mut current, &mut blocks);
-            current = Some((line.to_string(), true, tight));
-        } else if let Some((text, _, _)) = current.as_mut() {
-            text.push('\n');
-            text.push_str(line);
-        } else {
-            current = Some((line.to_string(), false, false));
-            last_item = false;
-        }
-        after_blank = false;
-    }
-    finish(&mut current, &mut blocks);
-    blocks
 }
 
 /// A description's Markdown kept compact for a row (`ask_markdown`): every line break kept as a
@@ -840,10 +760,11 @@ impl NativeChatView {
 
     /// One dock row. Its first line is its status glyph, its question, the answers that fit
     /// beside it and its age, which stays at the top right open or closed. Closed it stays one
-    /// line: the answers that fit, then "+N" for the rest (a click opens the row). Opened, the
-    /// question shows four lines and then "more"; the answers stay beside it when they fit and go
-    /// under it when they do not; the last line holds the work item's name and what waits on it,
-    /// with the icon buttons at its right end.
+    /// line: the answers that fit, then "+N" for the rest (a click opens the row). Opened, it is
+    /// its own card (one open at a time): the title, the work it belongs to as a small label under
+    /// it, the whole description; the answers stay beside the title when they fit and go under it
+    /// when they do not, Reply after a divider, and one ⋯ menu at their right end for Show in
+    /// chat, Dismiss, Snooze and Mention.
     ///
     /// CDXC:Coordinators 2026-11-10 DECISION:
     /// User, picking on the dock rows page (rows-page.html) after a long question was squeezed
@@ -851,7 +772,8 @@ impl NativeChatView {
     /// when they fit, under it when they do not", where fit means they leave the question at least
     /// half the row (B); a closed row whose answers do not fit shows "the answers that fit, then
     /// +3" and stays one line (B); the icon buttons go "at the right end of the row's last line"
-    /// (A); a very long question shows "four lines, then more" (B). Also as drawn: the age stays
+    /// (A, superseded by the ⋯ menu); a very long question shows "four lines, then more" (B,
+    /// superseded: an opened row shows it whole). Also as drawn: the age stays
     /// at the top right, and the work item's name and "Nothing waits on it" share one line.
     fn dock_row(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
         let s = p.scale;
@@ -912,7 +834,9 @@ impl NativeChatView {
         // Reply always shows, so the answers give way to "+N" before it does: it is the one answer
         // that takes anything, so a closed row keeps it one click away.
         let reply_width = reply_answer.as_ref().map_or(0.0, |answer| {
-            dock_button_width(&text(answer, "label"), true, false, p, cx) + 6.0
+            dock_button_width(&text(answer, "label"), true, false, p, cx)
+                + 6.0
+                + if open { 13.0 } else { 0.0 }
         });
         let all_width = buttons_width(&widths) + reply_width;
         let fit = all_width <= beside_room;
@@ -963,6 +887,10 @@ impl NativeChatView {
             );
         }
         if let Some(answer) = &reply_answer {
+            // Opened, Reply stands apart from the answers after a thin divider.
+            if open {
+                buttons.push(answers_divider(p));
+            }
             buttons.extend(self.work_answer_buttons(
                 &format!("{key}:reply"),
                 std::slice::from_ref(answer),
@@ -972,10 +900,6 @@ impl NativeChatView {
             ));
         }
         let beside = !open || fit;
-        // The question: one cut line closed. Opened, the title whole and its detail under it in
-        // the quieter colour, four lines and then "more"; with no detail the title takes that rule.
-        let title_width =
-            row_width - DOCK_LEAD - age_width - if beside { all_width + DOCK_GAP } else { 0.0 };
         let detail = text(row, "body");
         let title_runs = &row["titleRuns"];
         let count = text(row, "count");
@@ -1017,39 +941,11 @@ impl NativeChatView {
                     cx,
                 ))
                 .into_any_element()
-        } else if detail.is_empty() && title_runs.is_array() {
-            div()
-                .flex_1()
-                .min_w_0()
-                .child(self.ask_title(
-                    &key,
-                    &title,
-                    title_runs,
-                    false,
-                    body,
-                    PROSE_SIZE,
-                    PROSE_LINE_HEIGHT,
-                    p,
-                    cx,
-                ))
-                .into_any_element()
-        } else if detail.is_empty() {
-            div()
-                .flex_1()
-                .min_w_0()
-                .child(self.ask_detail(
-                    &format!("title:{key}"),
-                    &title,
-                    title_width,
-                    body,
-                    PROSE_SIZE,
-                    PROSE_LINE_HEIGHT,
-                    p,
-                    cx,
-                ))
-                .into_any_element()
         } else {
-            div()
+            // Opened: the title whole, the work it belongs to as a small label under it, then the
+            // whole description (or where a line of work stands). Nothing is cut; the row's own
+            // open and shut hides it.
+            let mut column = div()
                 .flex_1()
                 .min_w_0()
                 .flex()
@@ -1065,8 +961,48 @@ impl NativeChatView {
                     PROSE_LINE_HEIGHT,
                     p,
                     cx,
-                ))
-                .child(self.ask_markdown(
+                ));
+            if row["waitedBy"].is_array() {
+                // An ask's own item, then the other items that wait on its answer: one line.
+                column = column.child(
+                    div()
+                        .w_full()
+                        .min_w_0()
+                        .flex()
+                        .items_center()
+                        .gap_x(px(6.0 * s))
+                        .overflow_hidden()
+                        .text_size(px(12.5 * s))
+                        .line_height(px(18.0 * s))
+                        .children(self.item_line(&key, row, p, cx)),
+                );
+            } else {
+                // A line of work's threads and links, wrapping, with no separator between them.
+                let chips: Vec<AnyElement> = row["chips"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .enumerate()
+                    .map(|(index, chip)| {
+                        self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx)
+                    })
+                    .collect();
+                if !chips.is_empty() {
+                    column = column.child(
+                        div()
+                            .w_full()
+                            .min_w_0()
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap_x(px(14.0 * s))
+                            .gap_y(px(2.0 * s))
+                            .children(chips),
+                    );
+                }
+            }
+            if !detail.is_empty() {
+                column = column.child(self.ask_markdown(
                     &format!("detail:{key}"),
                     &detail,
                     p.card_muted,
@@ -1074,8 +1010,25 @@ impl NativeChatView {
                     PROSE_LINE_HEIGHT,
                     p,
                     cx,
-                ))
-                .into_any_element()
+                ));
+            }
+            // Where a line of work stands, on lines of its own: no dot can be left at a line's end.
+            for line in row["detail"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .filter(|line| !line.is_empty())
+            {
+                column = column.child(
+                    div()
+                        .min_w_0()
+                        .whitespace_normal()
+                        .text_color(p.card_muted)
+                        .child(line.to_string()),
+                );
+            }
+            column.into_any_element()
         };
         let mut head = div()
             .id(gpui::SharedString::from(format!("dock-row-head:{key}")))
@@ -1100,19 +1053,26 @@ impl NativeChatView {
                     .child(svg().path(icon).size(px(13.0 * s)).text_color(color)),
             )
             .child(question);
+        // Opened, the row's other actions (Show in chat, Dismiss, Snooze, Mention) are one ⋯ menu
+        // at the right end of its answers.
+        let menu = (open && !page_row).then(|| self.row_menu_button(&key, row, p, cx));
         let mut under_answers = Vec::new();
+        let mut menu_under = None;
         if beside {
-            if !buttons.is_empty() {
+            if !buttons.is_empty() || menu.is_some() {
                 head = head.child(
                     div()
                         .flex_shrink_0()
                         .flex()
+                        .items_center()
                         .gap(px(6.0 * s))
-                        .children(buttons),
+                        .children(buttons)
+                        .children(menu),
                 );
             }
         } else {
             under_answers = buttons;
+            menu_under = menu;
         }
         if page_row {
             let hover = gpui::SharedString::from(format!("dock-page-row:{key}"));
@@ -1145,7 +1105,9 @@ impl NativeChatView {
                     .child(age.to_string()),
             )
             .on_click(cx.listener(move |this, _, _, cx| {
+                // One row open at a time: opening this one shuts the one that was open.
                 if !this.expanded.remove(&toggle) {
+                    this.expanded.retain(|key| !key.starts_with("dock-row:"));
                     this.expanded.insert(toggle.clone());
                 }
                 cx.notify();
@@ -1153,116 +1115,126 @@ impl NativeChatView {
         if !open {
             return div().w_full().child(head).into_any_element();
         }
-        // Opened: the answers that did not fit, then one last line with the work it belongs to and
-        // what waits on it, the icon buttons at its right end.
-        let mut under = div()
-            .w_full()
-            .min_w_0()
-            .flex()
-            .flex_col()
-            .gap(px(4.0 * s))
-            .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
-            .pr(px(DOCK_ROW_PAD_X * s))
-            .pb(px(8.0 * s));
-        if !under_answers.is_empty() {
-            under = under.child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .gap(px(6.0 * s))
-                    .children(under_answers),
-            );
-        }
-        // A work item ask's line is one line naming its own item, then the other items that wait
-        // on its answer; names give way with an ellipsis, its own item's last (`item_line`).
-        let item_line = row["waitedBy"].is_array();
-        let mut parts: Vec<AnyElement> = if item_line {
-            self.item_line(&key, row, p, cx)
-        } else {
-            row["chips"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .enumerate()
-                .map(|(index, chip)| {
-                    self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx)
-                })
-                .collect()
-        };
-        let said: Vec<String> = row["detail"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .filter(|line| !line.is_empty())
-            .map(str::to_owned)
-            .collect();
-        if !said.is_empty() {
-            if !parts.is_empty() {
-                parts.push(
-                    div()
-                        .text_color(p.muted)
-                        .opacity(0.6)
-                        .child("\u{b7}")
-                        .into_any_element(),
-                );
-            }
-            parts.push(
-                div()
-                    .min_w_0()
-                    .whitespace_normal()
-                    .text_color(p.card_muted)
-                    .child(said.join(" \u{b7} "))
-                    .into_any_element(),
-            );
-        }
-        // Reply and Open are buttons on the row when they show there (an answer, or the one button
-        // of a row with no answers), never a second time among the icons.
+        // Opened: its own card, a little lighter than the dock, with the answers that did not fit
+        // beside the title on a line under it and the ⋯ at that line's right end.
         //
         // CDXC:Coordinators 2026-11-11 DECISION:
-        // User, of an opened page row with the Open button and an Open icon under it: "2 open
-        // buttons? seriously fam?".
-        let reply_shown = reply_answer.is_some() || action == Some("Reply");
-        let open_shown = action == Some("Open");
-        let actions = json!({
-            "reply": if reply_shown { Value::Null } else { row["reply"].clone() },
-            "open": if open_shown { Value::Null } else { row["open"].clone() },
-            "showInChat": row["showInChat"],
-            "dismiss": row["dismiss"],
-            "snooze": row["snooze"],
-        });
-        let icons = self.work_action_icons(&key, &actions, &text(row, "mention"), false, p, cx);
-        if !parts.is_empty() || icons.is_some() {
-            under = under.child(
+        // User, picking on the opened row page (opened-row-page.html): "C. Answers and one menu"
+        // (only the answers stay buttons; Show in chat, Dismiss, Snooze and Mention are one ⋯ menu
+        // at the right end of the answers), Show more removed ("remove show more, they can
+        // collapse this item if they dont want to read it"), the work item's name as a small label
+        // under the title, Reply after a divider apart from the answers, and an opened row as its
+        // own card with only one open at a time.
+        let mut card = div()
+            .w_full()
+            .my(px(4.0 * s))
+            .rounded(px(10.0 * s))
+            .border_1()
+            .border_color(p.foreground.opacity(if p.light { 0.10 } else { 0.10 }))
+            .bg(if p.light {
+                gpui::white().opacity(0.6)
+            } else {
+                p.foreground.opacity(0.055)
+            })
+            .child(head);
+        if !under_answers.is_empty() || menu_under.is_some() {
+            card = card.child(
                 div()
                     .w_full()
                     .min_w_0()
                     .flex()
-                    .items_end()
-                    .gap(px(8.0 * s))
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
+                    .pr(px(DOCK_ROW_PAD_X * s))
+                    .pb(px(8.0 * s))
                     .child(
                         div()
                             .flex_1()
                             .min_w_0()
-                            .min_h(px(28.0 * s))
                             .flex()
-                            .when(!item_line, |line| line.flex_wrap())
-                            .when(item_line, |line| line.overflow_hidden())
+                            .flex_wrap()
                             .items_center()
-                            .gap_x(px(8.0 * s))
-                            .gap_y(px(4.0 * s))
-                            .children(parts),
+                            .gap(px(6.0 * s))
+                            .children(under_answers),
                     )
-                    .children(icons.map(|icons| div().flex_shrink_0().child(icons))),
+                    .children(menu_under),
             );
         }
+        card.into_any_element()
+    }
+
+    /// The opened row's ⋯: its menu (`row_menu`) in the app's dropdown, inside the window it was
+    /// pressed in.
+    fn row_menu_button(
+        &self,
+        key: &str,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let row = row.clone();
         div()
-            .w_full()
-            .rounded(px(8.0 * s))
-            .bg(p.foreground.opacity(0.03))
-            .child(head)
-            .child(under)
+            .id(gpui::SharedString::from(format!("dock-row-menu:{key}")))
+            .role(gpui::Role::Button)
+            .aria_label("More actions")
+            .flex_shrink_0()
+            .w(px(28.0 * s))
+            .h(px(28.0 * s))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(7.0 * s))
+            .chat_cursor_pointer()
+            .hover(|style| style.bg(p.foreground.opacity(0.08)))
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("More actions").build(window, cx)
+            })
+            .child(
+                svg()
+                    .path("titlebar/dots.svg")
+                    .size(px(16.0 * s))
+                    .text_color(p.muted),
+            )
+            .on_click(
+                cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    let rows = this.row_menu(&row, cx);
+                    this.show_dock_row_menu(rows, event.position(), window, cx);
+                }),
+            )
             .into_any_element()
+    }
+
+    /// An opened row's menu: Show in chat, Dismiss and Snooze (`page_row_menu`), then Mention,
+    /// which puts the item's reference in the chat box where the caret is now.
+    fn row_menu(&self, row: &Value, cx: &Context<Self>) -> Vec<Value> {
+        let mut rows = page_row_menu(row);
+        let mention = text(row, "mention");
+        if !mention.is_empty() {
+            let selection = self
+                .input
+                .as_ref()
+                .map(|input| input.read(cx).selected_range())
+                .unwrap_or(self.draft.len()..self.draft.len());
+            let utf16 = |at: usize| {
+                self.draft[..at.min(self.draft.len())]
+                    .encode_utf16()
+                    .count()
+            };
+            rows.push(json!({
+                "label": "Mention",
+                "command": {
+                    "type": "insertBoardReference",
+                    "reference": mention,
+                    "text": self.draft,
+                    "start": utf16(selection.start),
+                    "end": utf16(selection.end),
+                },
+            }));
+        }
+        rows
     }
 
     /// An opened ask row's line: its own work item's name, then, when one other item waits on
@@ -1476,14 +1448,9 @@ impl NativeChatView {
 
     /// A work item ask's description as the chat renders a message's text (`text_view_look`, the
     /// same Markdown view: its line breaks and paragraphs, bold, italic, code, links, lists, and
-    /// `#562` linking to the project's GitHub), in the quieter colour at `size`; four rendered
-    /// lines and then "more", which shows the rest. Headings are bold lines at the text's size,
-    /// and a table or picture shows as its plain text (`compact_markdown`).
-    ///
-    /// It is drawn as its blocks (each paragraph, list item and code block its own Markdown view,
-    /// `description_blocks`), each measured, so the cut counts whole lines: the blocks that fit in
-    /// four lines show whole, the next one is cut after its last whole line that fits, and "more"
-    /// is the next line under it. The gaps between blocks do not count as lines.
+    /// `#562` linking to the project's GitHub), in the quieter colour at `size`, whole. Headings
+    /// are bold lines at the text's size, and a table or picture shows as its plain text
+    /// (`compact_markdown`).
     ///
     /// CDXC:Coordinators 2026-11-11 DECISION:
     /// User, of an ask's description drawn as one flat run: "no new lines or markdown rendering
@@ -1491,10 +1458,9 @@ impl NativeChatView {
     /// regular chat (we have code for this already)".
     ///
     /// CDXC:Coordinators 2026-11-11 DECISION:
-    /// User, of the cut showing the top half of a line above "more": "please avoid the text
-    /// cutting above more?? make more part of the text for ex and cut at x lines then show more
-    /// on next line instead of doing what you're doing now". A height cap fell inside a line
-    /// whenever paragraph and list gaps came before it; the cut now falls between whole lines.
+    /// User, of the four-line cut and its Show more: "remove show more, they can collapse this
+    /// item if they dont want to read it". An opened row or card shows its whole description; its
+    /// own open and shut hides it. Supersedes the four lines then "more" rule.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn ask_markdown(
         &self,
@@ -1506,111 +1472,19 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let s = p.scale;
-        let more_key = format!("more:{id}");
-        let line = line_height * s;
-        let blocks = description_blocks(words);
-        // Each block's height at its last paint, as whole lines (`None` until measured).
-        let cells: Vec<Rc<Cell<f32>>> = blocks
-            .iter()
-            .enumerate()
-            .map(|(index, block)| {
-                self.disclosure_motion.borrow_mut().height(
-                    &format!("ask-markdown:{id}:{index}:{}", block.text.len()),
-                    "rendered",
-                )
-            })
-            .collect();
-        let lines: Vec<Option<usize>> = cells
-            .iter()
-            .map(|cell| {
-                let height = cell.get();
-                (height > 0.0).then(|| ((height / line).round() as usize).max(1))
-            })
-            .collect();
-        let total: Option<usize> = lines.iter().copied().sum();
-        let long = total.is_some_and(|total| total > DOCK_QUESTION_LINES);
-        let whole = long && self.expanded.contains(&more_key);
-        // How many lines each block shows: all, a whole number of its first ones, or none.
-        let mut budget = DOCK_QUESTION_LINES;
-        let shown: Vec<Option<usize>> = lines
-            .iter()
-            .map(|lines| {
-                let lines = lines.unwrap_or(usize::MAX);
-                if !long || whole {
-                    return Some(lines);
-                }
-                if budget == 0 {
-                    return None;
-                }
-                let take = lines.min(budget);
-                budget -= take;
-                Some(take)
-            })
-            .collect();
-        let chat = cx.weak_entity();
-        let mut column = div().w_full().min_w_0().flex().flex_col();
-        for (index, block) in blocks.iter().enumerate() {
-            let Some(take) = shown[index] else {
-                break;
-            };
-            let view = self.text_view_look(
-                format!("ask-markdown:{id}:{index}"),
-                compact_markdown(&block.text),
-                &Value::Null,
-                p,
-                super::rich_markdown::TextLook {
-                    color,
-                    semibold: false,
-                    size,
-                    line_height,
-                },
-                cx,
-            );
-            let measured = cells[index].clone();
-            let chat = chat.clone();
-            let rendered = div().relative().w_full().min_w_0().child(view).child(
-                gpui::canvas(
-                    move |bounds, _, cx| {
-                        let natural = bounds.size.height.as_f32();
-                        if (measured.get() - natural).abs() > 0.5 {
-                            measured.set(natural);
-                            // The chat's render is cached: tell it to draw again at this height.
-                            let chat = chat.clone();
-                            cx.defer(move |cx| {
-                                let _ = chat.update(cx, |_, cx| cx.notify());
-                            });
-                        }
-                    },
-                    |_, _, _, _| {},
-                )
-                .absolute()
-                .size_full(),
-            );
-            // A block cut after `take` of its lines shows exactly those lines.
-            let cut = lines[index].is_some_and(|lines| take < lines);
-            let gap = match index {
-                0 => 0.0,
-                _ if block.tight => 4.0 * s,
-                _ => super::markdown_style::paragraph_gap(p),
-            };
-            column = column.child(
-                div()
-                    .w_full()
-                    .min_w_0()
-                    .pt(px(gap))
-                    .when(cut, |part| {
-                        part.h(px(gap + take as f32 * line)).overflow_hidden()
-                    })
-                    .child(rendered),
-            );
-        }
-        if !long {
-            return column.into_any_element();
-        }
-        column
-            .child(self.show_more_pill(&format!("more:{id}"), more_key, whole, line_height, p, cx))
-            .into_any_element()
+        self.text_view_look(
+            format!("ask-markdown:{id}"),
+            compact_markdown(words),
+            &Value::Null,
+            p,
+            super::rich_markdown::TextLook {
+                color,
+                semibold: false,
+                size,
+                line_height,
+            },
+            cx,
+        )
     }
 
     /// A page row's right end: its age, and over it while the row is hovered the ⋯ that opens its
@@ -1720,129 +1594,6 @@ impl NativeChatView {
         cx.defer(move |cx| {
             let _ = chat.update(cx, |this, cx| this.invoke(action, cx));
         });
-    }
-
-    /// The control under a cut description or question: "Show more" with a down chevron, "Show
-    /// less" with an up one once open, as the chat's own expander says it (thinking.rs
-    /// `show_more_toggle`), but centred and drawn as a small pill in the quiet glass tones, so it
-    /// reads as a control and not as a word of the text. It sits one line under the last whole
-    /// line, in a line of its own (`line_height`).
-    ///
-    /// CDXC:Coordinators 2026-11-11 DECISION:
-    /// User, of the plain "more" under a description: "also please make more appear centered
-    /// and with better design to indicate that it's not part of the text? right now too bland i
-    /// think". The same pill in the dock row, the Work panel card and the Columns card.
-    pub(super) fn show_more_pill(
-        &self,
-        id: &str,
-        key: String,
-        open: bool,
-        line_height: f32,
-        p: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let s = p.scale;
-        div()
-            .w_full()
-            .min_h(px(line_height * s))
-            .pt(px(4.0 * s))
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(
-                div()
-                    .id(gpui::SharedString::from(id.to_string()))
-                    .role(gpui::Role::Button)
-                    .aria_expanded(open)
-                    .aria_label(if open { "Show less" } else { "Show more" })
-                    .h(px(20.0 * s))
-                    .px(px(9.0 * s))
-                    .flex()
-                    .items_center()
-                    .gap(px(4.0 * s))
-                    .rounded_full()
-                    .border_1()
-                    .border_color(p.foreground.opacity(0.08))
-                    .bg(p.foreground.opacity(0.05))
-                    .text_size(px(12.0 * s))
-                    .line_height(px(16.0 * s))
-                    .text_color(p.muted)
-                    .chat_cursor_pointer()
-                    .hover(|style| {
-                        style
-                            .bg(p.foreground.opacity(0.09))
-                            .text_color(p.foreground)
-                    })
-                    .child(
-                        svg()
-                            .path(if open {
-                                "titlebar/chevron-up.svg"
-                            } else {
-                                "titlebar/chevron-down.svg"
-                            })
-                            .size(px(12.0 * s))
-                            .flex_shrink_0()
-                            .text_color(p.muted),
-                    )
-                    .child(if open { "Show less" } else { "Show more" })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        if !this.expanded.remove(&key) {
-                            this.expanded.insert(key.clone());
-                        }
-                        cx.notify();
-                    })),
-            )
-            .into_any_element()
-    }
-
-    /// Words that show four lines and then "more", which shows the rest ("less" folds them
-    /// again): a work ask's detail under its title, or a long question with no detail, on a dock
-    /// row and on an opened Work panel or Columns card. `width` is the room the words wrap in
-    /// (unscaled), `size` and `line_height` their text's.
-    ///
-    /// CDXC:Coordinators 2026-11-10 DECISION:
-    /// User: an ask has a short title and a description ("please we need to tell the agent to
-    /// write a easy to understand title, and then the description can describe more"); the
-    /// opened row shows the title and the detail under it in the quieter colour, with the four
-    /// lines then "more" rule picked for a very long question.
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn ask_detail(
-        &self,
-        id: &str,
-        words: &str,
-        width: f32,
-        color: gpui::Hsla,
-        size: f32,
-        line_height: f32,
-        p: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let s = p.scale;
-        let more_key = format!("more:{id}");
-        let long = dock_text_width(words, size, p, cx)
-            > width.max(80.0) * (DOCK_QUESTION_LINES as f32 - 0.25);
-        let whole = long && self.expanded.contains(&more_key);
-        let text_block = div()
-            .min_w_0()
-            .whitespace_normal()
-            .text_size(px(size * s))
-            .line_height(px(line_height * s))
-            .text_color(color)
-            .when(long && !whole, |words| {
-                words.line_clamp(DOCK_QUESTION_LINES).text_ellipsis()
-            })
-            .child(words.to_string());
-        if !long {
-            return text_block.into_any_element();
-        }
-        div()
-            .min_w_0()
-            .flex()
-            .flex_col()
-            .child(text_block)
-            .child(self.show_more_pill(&format!("more:{id}"), more_key, whole, line_height, p, cx))
-            .into_any_element()
     }
 
     /// A column of cards, or `None` when there are none.
