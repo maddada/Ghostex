@@ -22,7 +22,7 @@
 
 use web_time::Instant;
 
-use ghostex_gx_core::{SORT_ACTIONS, owns_open_command, plan_open_action};
+use ghostex_gx_core::{SORT_ACTIONS, owns_open_command, plan_open_action, view_has_action_project};
 use serde_json::Value;
 
 use crate::GhostexGpuiApp;
@@ -83,7 +83,16 @@ impl GhostexGpuiApp {
             return false;
         }
         let started = Instant::now();
-        let Some(plan) = plan_open_action(self.gx_store.sidebar_list.view(), command) else {
+        // A Unified project menu can name a project the Project sidebar's list leaves out; the
+        // Unified sidebar's own list for that machine holds it.
+        let list = self.gx_store.sidebar_list.view();
+        let view = command
+            .get("groupId")
+            .and_then(Value::as_str)
+            .filter(|group_id| !view_has_action_project(list, group_id))
+            .and_then(|group_id| self.gx_store.unified_sidebar.view_holding_project(group_id))
+            .unwrap_or(list);
+        let Some(plan) = plan_open_action(view, command) else {
             return false;
         };
         let plan_us = started.elapsed().as_micros() as u64;

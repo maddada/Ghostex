@@ -31,7 +31,7 @@ use serde_json::{json, Map, Value};
 use crate::sidebar_view::SidebarView;
 
 use super::plan::{ActionEffect, SidebarActionPlan};
-use super::resolve::text_field;
+use super::resolve::{action_project, text_field};
 
 /// Whether this renderer command is the launcher's run or a bot's "+", without resolving anything.
 pub fn owns_agent_run_command(command: &Value) -> bool {
@@ -39,18 +39,16 @@ pub fn owns_agent_run_command(command: &Value) -> bool {
         && matches!(text_field(command, "action"), Some("agent" | "bot"))
 }
 
-/// What the run does. `Some(nothing)` when the group is not a drawn project, which is the
-/// TypeScript's own early return (`if (!group || !project) return`), the same answer Add Worktree
-/// and History give.
+/// What the run does. `Some(nothing)` when the group is neither a drawn project nor the copy a
+/// merged entry acts on (`action_project`), which is the TypeScript's own early return
+/// (`if (!group || !project) return`), the same answer Add Worktree and History give.
 pub fn plan_agent_run(view: &SidebarView, command: &Value) -> Option<SidebarActionPlan> {
     if !owns_agent_run_command(command) {
         return None;
     }
     let group_id = text_field(command, "groupId")?;
-    let Some(group) = view.group(group_id) else {
-        return Some(SidebarActionPlan::nothing());
-    };
-    let Some(project) = group.core.project_context.as_ref() else {
+    // A merged entry's Create Agent and launcher name the copy a session last started in.
+    let Some(project) = action_project(view, group_id).map(|target| target.project) else {
         return Some(SidebarActionPlan::nothing());
     };
     if text_field(command, "action") == Some("bot") {
