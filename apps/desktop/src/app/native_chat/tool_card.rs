@@ -695,7 +695,19 @@ impl NativeChatView {
         let mut row = div().w_full().min_w_0().flex().flex_col().child(trigger);
         if expanded || motion.is_some() {
             let body = match kind.as_str() {
-                "file" => self.file_entry_diff(&key, &source, p, cx),
+                // The card's edited files, for the diff's Review all (the turn's files fold,
+                // which had it, is not drawn where the card lists the edits; gx-chat-core
+                // `turn_files_fold`).
+                "file" => {
+                    let mut review: Vec<String> = Vec::new();
+                    for file in message["files"].as_array().into_iter().flatten() {
+                        let path = text(file, "path");
+                        if !path.is_empty() && !review.contains(&path) {
+                            review.push(path);
+                        }
+                    }
+                    self.file_entry_diff(&key, &source, review, p, cx)
+                }
                 _ => self.tool_detail_body(&key, message_id, index, &source, p, cx),
             };
             if let Some(body) = body {

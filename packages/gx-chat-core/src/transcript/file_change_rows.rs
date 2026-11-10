@@ -347,13 +347,11 @@ pub fn file_change_card(files: &[Value]) -> Value {
 /// What a finished turn's files fold ("Edited N files", "N files changed") shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TurnFilesFold {
-    /// No fold: the turn's card is closed, or the turn changed no files.
+    /// No fold: the turn's card is closed, the turn changed no files, its tool cards already list
+    /// every edit, or its rows are still on the server.
     Hidden,
     /// The fold, opening onto the turn's file change card.
     Files,
-    /// The fold over a turn whose rows are still on the server: only the changed paths are known,
-    /// so it opens onto the notice that reads them.
-    Unread,
 }
 
 /// CDXC:SessionChat 2026-11-08 DECISION:
@@ -365,29 +363,48 @@ pub enum TurnFilesFold {
 /// above the work log, and the fold itself starts collapsed; a closed card leaves the files to its
 /// "N files" pill. A file row still opens onto its diff as before. Supersedes the fold always
 /// drawn under the card (the 2026-10-11 decision on `file_change_card` above).
+///
+/// CDXC:SessionChat 2026-11-10 DECISION:
+/// User, of an opened turn showing "Edited 1 file" above its "Used 5 tools" card: "we don't need
+/// \"Edited 1 file\" there anymore since file edits are under the used 5 tools thingy". Where every
+/// row of the turn that wrote files draws a tool card (Tool call cards on, Agent work Default),
+/// each edit is already a row of that card that opens onto its diff, so the turn has no files
+/// fold. With Tool call cards off the rows hide their writes in a finished turn, so the fold stays
+/// the one place they show. A turn whose rows are still on the server has no fold either: opening
+/// the turn reads them (its notice says so in the log), and the fold comes with them if they draw
+/// no tool cards. Supersedes the fold over unread work that read it on open (`Unread`).
 /// SEE-ALSO: apps/desktop/src/app/native_chat/completed_work_row.rs,
 /// apps/mobile/app/src/chat/native/transcript/TranscriptItemRow.tsx (`CompletedWorkRow`).
 pub fn turn_files_fold(item: &crate::TranscriptItem, turn_open: bool) -> TurnFilesFold {
     let crate::TranscriptItem::CompletedWork {
-        files, deferred, ..
+        files,
+        work,
+        artifacts,
+        final_message,
+        ..
     } = item
     else {
         return TurnFilesFold::Hidden;
     };
-    if !turn_open {
+    if !turn_open || files.is_empty() {
         return TurnFilesFold::Hidden;
     }
-    if !files.is_empty() {
-        return TurnFilesFold::Files;
-    }
-    // An older turn arrives collapsed with only the paths its unread work changed.
-    let unread = deferred
-        .as_ref()
-        .and_then(|work| work["filePaths"].as_array())
-        .is_some_and(|paths| !paths.is_empty());
-    if unread {
-        TurnFilesFold::Unread
-    } else {
+    // Every row whose writes the turn gathers: its work, the rows kept in view and the reply.
+    let writers: Vec<&serde_json::Value> = work
+        .iter()
+        .chain(artifacts.iter())
+        .map(|row| &**row)
+        .chain(final_message.as_deref())
+        .filter(|row| {
+            row["files"]
+                .as_array()
+                .is_some_and(|files| !files.is_empty())
+        })
+        .collect();
+    let listed = !writers.is_empty() && writers.iter().all(|row| row["toolCard"].is_object());
+    if listed {
         TurnFilesFold::Hidden
+    } else {
+        TurnFilesFold::Files
     }
 }
