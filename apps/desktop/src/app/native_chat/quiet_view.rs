@@ -8,7 +8,9 @@
 use super::completed_work_row::{WorkTail, spaced_tail};
 use super::quiet_work::{QuietSegment, check, line_icon, loader, styled_segments};
 use super::{appearance::ChatAppearance, state::NativeChatView};
-use ghostex_gx_chat_core::transcript::quiet_view::{QuietStretch, QuietTail, QuietTurnTail};
+use ghostex_gx_chat_core::transcript::quiet_view::{
+    QuietAnswers, QuietStretch, QuietTail, QuietTurnTail,
+};
 use ghostex_gx_chat_core::{ProjectedMessage, TranscriptItem};
 use gpui::{AnyElement, Context, IntoElement, ParentElement as _, Styled as _, Window, div, px};
 use serde_json::Value;
@@ -25,12 +27,21 @@ pub(super) struct QuietLines {
     after: HashMap<usize, usize>,
     /// The work item lines the lines hold, which the replies no longer draw.
     cards: HashSet<String>,
+    /// The answers cards drawn shut as a line of their own, by row id (`<turn id>#questions` for a
+    /// turn's answered questions).
+    answers: HashMap<String, QuietAnswers>,
 }
 
 impl QuietLines {
     fn of(snapshot: &Value) -> Self {
         let lines: Vec<QuietStretch> =
             serde_json::from_value(snapshot["quietView"]["stretches"].clone()).unwrap_or_default();
+        let answers: Vec<QuietAnswers> =
+            serde_json::from_value(snapshot["quietView"]["answers"].clone()).unwrap_or_default();
+        let answers = answers
+            .into_iter()
+            .map(|card| (card.id.clone(), card))
+            .collect();
         let mut rows = HashMap::new();
         let mut after = HashMap::new();
         let mut cards = HashSet::new();
@@ -48,6 +59,7 @@ impl QuietLines {
             rows,
             after,
             cards,
+            answers,
         }
     }
 }
@@ -312,6 +324,38 @@ impl NativeChatView {
                     let mut drawn: Vec<(AnyElement, bool)> = Vec::new();
                     self.hide_file_changes = true;
                     for (key, artifacts, questions, sent, reply) in &kept {
+                        // The turn's answered questions are drawn shut as a line of their own.
+                        let turn = key.strip_prefix("work:").unwrap_or(key);
+                        let answers = self
+                            .quiet_lines()
+                            .answers
+                            .get(&format!("{turn}#questions"))
+                            .cloned();
+                        let questions: &[Value] = match &answers {
+                            Some(card) if !questions.is_empty() => {
+                                let open = self.is_expanded(&card.key, card.open);
+                                let mut part = vec![self.quiet_answers_line(card, open, p, cx)];
+                                if open
+                                    && let Some(cards) =
+                                        self.question_exchange_cards(key, questions, p, cx)
+                                {
+                                    part.push(
+                                        div().pt(px(4.0 * s)).child(cards).into_any_element(),
+                                    );
+                                }
+                                drawn.push((
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .w_full()
+                                        .children(part)
+                                        .into_any_element(),
+                                    false,
+                                ));
+                                &[]
+                            }
+                            _ => questions,
+                        };
                         drawn.extend(self.work_tail_parts(
                             WorkTail {
                                 key,
@@ -422,6 +466,42 @@ impl NativeChatView {
             line.key.clone(),
             spoken,
             icons,
+            styled_segments(segments),
+            open,
+            true,
+            Vec::new(),
+            p,
+            cx,
+        )
+    }
+
+    /// The answers card `card` stands for, under Quiet View, when the row `id` is one.
+    pub(super) fn quiet_answers(&self, id: &str) -> Option<QuietAnswers> {
+        self.quiet_lines().answers.get(id).cloned()
+    }
+
+    /// An answers card drawn shut as its own line (gx-chat-core `transcript/quiet_view.rs`
+    /// `QuietAnswers` has the user's words): the answered check, "You answered “…”" and its count,
+    /// and the chevron; opened, the card follows it.
+    pub(super) fn quiet_answers_line(
+        &self,
+        card: &QuietAnswers,
+        open: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let mut segments: Vec<QuietSegment> = vec![(card.text.clone(), None)];
+        if !card.count.is_empty() {
+            segments.push((format!(" \u{b7} {}", card.count), None));
+        }
+        let spoken = segments
+            .iter()
+            .map(|(piece, _)| piece.as_str())
+            .collect::<String>();
+        self.quiet_line(
+            card.key.clone(),
+            spoken,
+            vec![check(p)],
             styled_segments(segments),
             open,
             true,

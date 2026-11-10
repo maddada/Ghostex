@@ -498,6 +498,26 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        // Under Quiet View an answers card is its own shut line, opening onto the card
+        // (quiet_view.rs).
+        if !self.in_subagent
+            && let Some(card) = message["id"].as_str().and_then(|id| self.quiet_answers(id))
+        {
+            let open = self.is_expanded(&card.key, card.open);
+            let line = self.quiet_answers_line(&card, open, p, cx);
+            if !open {
+                return line;
+            }
+            return div()
+                .flex()
+                .flex_col()
+                .w_full()
+                .min_w_0()
+                .gap(px(4.0 * p.scale))
+                .child(line)
+                .child(self.message_row_drawn(message, p, window, cx))
+                .into_any_element();
+        }
         let row = self.message_row_drawn(message, p, window, cx);
         let row = match message["id"].as_str() {
             Some(id) if message["role"] == "assistant" => self.reply_arrival_row(id, row, window),

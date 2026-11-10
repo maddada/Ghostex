@@ -12,7 +12,7 @@
 //! the stretch's rows on a thin rail under an opened one.
 //!
 //! CDXC:SessionChat 2026-11-11 DECISION:
-//! The user picked on the coordinator quiet page: option B, "one line between two replies": everything that happens between two things the user reads becomes one quiet line, however many turns it took, saying what it holds in counts, and opening on a click to show all of it in order as the full view would. A running turn (option A) is one line that counts up while the agent works ("Working · 3 reports · 1 message sent · 3 tool calls so far"); its cards do not pile up live, and when the turn ends it becomes part of the quiet line. Never hidden (option A, exactly this list): the user's own messages, the agent's replies, Ghostex pages and forms, questions and asks, the user's answers, approval cards waiting on him, errors and "Not sent" cards. The line that says which work items a turn changed folds into the quiet line. Where it applies, his words: "can be applied on all chats from the view menu but it's applied for coordinators by default unless user toggles this off. for other threads they can apply this as Quiet View. Also let's add a toggle in settings to expand the last turn in quiet view. also we need a toggle to let people apply this view by default for regular threads if they want." So a chat's View menu has Quiet View for any chat, and the chat remembers its own choice over the defaults; coordinator chats start in it (`chatQuietViewCoordinators`, on), other chats when `chatQuietViewChats` is on (off), and `chatQuietViewExpandLast` (off) shows the newest stretch (after the last reply, or the running turn) open until a newer reply folds it. Of the pill: "no need for this pill except when the default is something different", so the chat box's row shows a "Quiet view" or "Full view" chip only while the chat's view differs from its default, and a click on it goes back to the default.
+//! The user picked on the coordinator quiet page: option B, "one line between two replies": everything that happens between two things the user reads becomes one quiet line, however many turns it took, saying what it holds in counts, and opening on a click to show all of it in order as the full view would. A running turn (option A) is one line that counts up while the agent works ("Working · 3 reports · 1 message sent · 3 tool calls so far"); its cards do not pile up live, and when the turn ends it becomes part of the quiet line. Never hidden (option A, exactly this list): the user's own messages, the agent's replies, Ghostex pages and forms, questions and asks, the user's answers, approval cards waiting on him, errors and "Not sent" cards. Later the same night the user changed that for his answers: an answers card (to a page, a form, or a question or ask) is drawn shut as one small line of its own and opens on a click (`QuietAnswers`, where his words are); his typed messages stay fully shown. The line that says which work items a turn changed folds into the quiet line. Where it applies, his words: "can be applied on all chats from the view menu but it's applied for coordinators by default unless user toggles this off. for other threads they can apply this as Quiet View. Also let's add a toggle in settings to expand the last turn in quiet view. also we need a toggle to let people apply this view by default for regular threads if they want." So a chat's View menu has Quiet View for any chat, and the chat remembers its own choice over the defaults; coordinator chats start in it (`chatQuietViewCoordinators`, on), other chats when `chatQuietViewChats` is on (off), and `chatQuietViewExpandLast` (off) shows the newest stretch (after the last reply, or the running turn) open until a newer reply folds it. Of the pill: "no need for this pill except when the default is something different", so the chat box's row shows a "Quiet view" or "Full view" chip only while the chat's view differs from its default, and a click on it goes back to the default.
 //!
 //! CDXC:SessionChat 2026-11-11 WHY:
 //! How it sits with the other looks. Summary view folds more than Quiet View does (earlier replies too), so a chat in Summary draws no quiet lines; its View menu still keeps the chat's Quiet View choice. Agent work Default and Reduced draw inside an opened line exactly as they draw without it. Agent work Quiet draws as Reduced while Quiet View is on (`TranscriptViewState::effective_chat_look`): its reply button and its hidden running work would hold the same work a second time, and hiding the running rows would leave the counting line nothing to count. Nothing on the never-hidden list is decided by those looks here: a row is judged on what it holds, so two looks at once never fold one of them away.
@@ -73,6 +73,128 @@ pub struct QuietViewDocument {
     /// The lines, oldest first; empty while Quiet View is off or the chat is in Summary view.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stretches: Vec<QuietStretch>,
+    /// The cards of the user's answers, each drawn shut as its own small line.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub answers: Vec<QuietAnswers>,
+}
+
+/// One answers card under Quiet View: a page's or a form's answers row (`id` is the row's), or a
+/// finished turn's answered questions (`id` is `<turn id>#questions`), drawn shut as one line of
+/// its own, "You answered “Sidebar picks”" and a short count, that opens onto the card.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User, of the full "You answered …" card listing every answer to a page under a quiet line: "let's hide this in quiet mode also fam (under a small section by itself basically, can expand it to see this)". In Quiet View an answers card (to a Ghostex page, a form, or a question or ask) is drawn shut as one small line of its own, never merged into the line of machinery since it is something he said: the answered mark, "You answered “<title>”" and a short count ("7 answers", "7 skipped" when all were skipped, or the one answer when there is only one and it is short); a click opens the card in place and another shuts it. With Expand the last turn on, the newest one shows open. His typed messages stay fully shown. Supersedes, for answers cards only, the 2026-11-11 pick that his answers are never hidden. The full view is unchanged.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuietAnswers {
+    pub id: String,
+    /// The line's disclosure key, `quiet-answers:<id>`.
+    pub key: String,
+    /// "You answered “Sidebar picks”".
+    pub text: String,
+    /// "7 answers", "7 skipped" or the one short answer.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub count: String,
+    /// Starts open (`chatQuietViewExpandLast`, the newest answers after the last reply).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub open: bool,
+}
+
+/// The longest single answer the shut line says in full.
+const SHORT_ANSWER: usize = 40;
+
+fn clip(text: &str, most: usize) -> String {
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if text.chars().count() <= most {
+        text
+    } else {
+        let cut: String = text.chars().take(most.saturating_sub(1)).collect();
+        format!("{}\u{2026}", cut.trim_end())
+    }
+}
+
+/// The short count after the title: the one short answer, "N skipped" when every one was, else
+/// "N answers".
+fn answers_count(values: &[String], total: usize) -> String {
+    if let Some(only) = values
+        .first()
+        .filter(|only| total == 1 && !only.is_empty() && only.chars().count() <= SHORT_ANSWER)
+    {
+        return only.clone();
+    }
+    if total > 0
+        && values.len() == total
+        && values
+            .iter()
+            .all(|value| value == "Skipped" || value == "Not answered")
+    {
+        return format!("{total} skipped");
+    }
+    plural(total, "answer", "answers")
+}
+
+/// A page's or a form's answers row, unless the user wrote words of his own with it.
+fn page_answers(row: &Value) -> Option<QuietAnswers> {
+    let card = &row["pageAnswers"];
+    if !card.is_object() || card["withText"] == true || row["role"] != "user" {
+        return None;
+    }
+    let id = row["id"].as_str()?.to_string();
+    let rows = card["rows"].as_array().map_or(&[][..], Vec::as_slice);
+    let values: Vec<String> = rows
+        .iter()
+        .map(|row| row["value"].as_str().unwrap_or_default().to_string())
+        .collect();
+    let total = rows.len() + card["more"].as_u64().unwrap_or(0) as usize;
+    Some(QuietAnswers {
+        key: format!("quiet-answers:{id}"),
+        text: format!(
+            "You answered \u{201c}{}\u{201d}",
+            clip(card["title"].as_str().unwrap_or("the page"), 60)
+        ),
+        count: answers_count(&values, total),
+        id,
+        open: false,
+    })
+}
+
+/// A finished turn's answered questions (`completed-work` `questions`).
+fn turn_answers(turn: &str, questions: &[Value]) -> Option<QuietAnswers> {
+    let first = questions.first()?;
+    let asked: Vec<&Value> = questions
+        .iter()
+        .flat_map(|exchange| exchange["questions"].as_array().into_iter().flatten())
+        .collect();
+    let values: Vec<String> = questions
+        .iter()
+        .flat_map(|exchange| exchange["answers"].as_array().into_iter().flatten())
+        .map(|answer| match answer {
+            Value::String(text) => text.clone(),
+            Value::Array(parts) => parts
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(", "),
+            Value::Null => "Skipped".to_string(),
+            other => other["text"]
+                .as_str()
+                .or_else(|| other["label"].as_str())
+                .unwrap_or_default()
+                .to_string(),
+        })
+        .collect();
+    let title = first["questions"][0]["question"]
+        .as_str()
+        .or_else(|| first["questions"][0]["header"].as_str())
+        .unwrap_or("the question");
+    let id = format!("{turn}#questions");
+    Some(QuietAnswers {
+        key: format!("quiet-answers:{id}"),
+        text: format!("You answered \u{201c}{}\u{201d}", clip(title, 60)),
+        count: answers_count(&values, asked.len().max(values.len())),
+        id,
+        open: false,
+    })
 }
 
 /// One quiet line and the rows it holds.
@@ -220,7 +342,7 @@ pub fn document(
 ) -> Option<QuietViewDocument> {
     let default_on = default_on(state)?;
     let on = chosen(state)?;
-    let stretches = if state.transcript_view.quiet_view_on {
+    let (stretches, answers) = if state.transcript_view.quiet_view_on {
         let items = crate::transcript::rows::rows_shared(state, context);
         stretches(
             items.iter(),
@@ -237,12 +359,13 @@ pub fn document(
             context,
         )
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
     Some(QuietViewDocument {
         on,
         default_on,
         stretches,
+        answers,
     })
 }
 
@@ -578,8 +701,11 @@ fn stretches<'a>(
     items: impl Iterator<Item = &'a TranscriptItem>,
     inputs: &Inputs,
     context: &ChatContext,
-) -> Vec<QuietStretch> {
+) -> (Vec<QuietStretch>, Vec<QuietAnswers>) {
     let mut built: Vec<(QuietStretch, Counts)> = Vec::new();
+    // The answers cards, with the row each is drawn in, and the newest row with a reply.
+    let mut answers: Vec<(QuietAnswers, usize)> = Vec::new();
+    let mut last_reply: Option<usize> = None;
     let mut open: Option<Open> = None;
     // The row each reply id is drawn in.
     let mut replies: Vec<(String, usize)> = Vec::new();
@@ -588,6 +714,10 @@ fn stretches<'a>(
         length = at + 1;
         for id in reply_ids(item) {
             replies.push((id, at));
+        }
+        answers.extend(answers_in(item).into_iter().map(|card| (card, at)));
+        if replies_in(item) {
+            last_reply = Some(at);
         }
         // A row read changes no count, so the counts below are the open line's either way.
         let mut counts = open
@@ -661,7 +791,7 @@ fn stretches<'a>(
             .iter()
             .rposition(|(line, _)| line.after.is_some_and(|row| row + 1 == length)),
     };
-    built
+    let lines: Vec<QuietStretch> = built
         .into_iter()
         .enumerate()
         .map(|(at, (mut line, counts))| {
@@ -669,7 +799,66 @@ fn stretches<'a>(
             words(&mut line, counts, inputs, context);
             line
         })
-        .collect()
+        .collect();
+    // Expand the last turn shows the newest answers card open, when no reply came after it.
+    let newest_answers = answers
+        .iter()
+        .rposition(|(_, row)| last_reply.is_none_or(|reply| *row >= reply));
+    let answers = answers
+        .into_iter()
+        .enumerate()
+        .map(|(at, (mut card, _))| {
+            card.open = inputs.expand_last && Some(at) == newest_answers;
+            card
+        })
+        .collect();
+    (lines, answers)
+}
+
+/// The answers cards a row draws (`QuietAnswers`).
+fn answers_in(item: &TranscriptItem) -> Vec<QuietAnswers> {
+    match item {
+        TranscriptItem::Message { message } => page_answers(message).into_iter().collect(),
+        TranscriptItem::CompletedWork {
+            id,
+            artifacts,
+            questions,
+            ..
+        } => artifacts
+            .iter()
+            .filter_map(|row| page_answers(row))
+            .chain(turn_answers(id, questions))
+            .collect(),
+        TranscriptItem::GroupedWork { turns, .. } => turns
+            .iter()
+            .flat_map(|turn| {
+                turn.artifacts
+                    .iter()
+                    .filter_map(|row| page_answers(row))
+                    .chain(turn_answers(&turn.id, &turn.questions))
+                    .collect::<Vec<_>>()
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Whether a row draws a reply of the agent's.
+fn replies_in(item: &TranscriptItem) -> bool {
+    let words = |row: &crate::document::ProjectedMessage| {
+        row["role"] == "assistant"
+            && row["text"]
+                .as_str()
+                .is_some_and(|text| !text.trim().is_empty())
+    };
+    match item {
+        TranscriptItem::Message { message } => words(message),
+        TranscriptItem::CompletedWork { final_message, .. } => final_message.iter().any(words),
+        TranscriptItem::GroupedWork { turns, .. } => turns
+            .iter()
+            .any(|turn| turn.final_message.iter().any(words)),
+        _ => false,
+    }
 }
 
 fn stretch(key: String, start: usize, end: usize, tail: Option<QuietTail>) -> QuietStretch {
@@ -787,6 +976,7 @@ pub fn closed_rows(
         cards: Vec::new(),
     };
     stretches(items.iter(), &inputs, context)
+        .0
         .into_iter()
         .filter(|line| !folds.open(&line.key, line.open))
         .map(|line| {
