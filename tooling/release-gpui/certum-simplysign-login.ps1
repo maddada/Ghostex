@@ -197,7 +197,13 @@ function Write-SimplySignText([string]$Label) {
         try {
             $Root = [System.Windows.Automation.AutomationElement]::FromHandle($Process.MainWindowHandle)
             $Names = $Root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) |
-                Where-Object { $_.Current.ControlType -ne [System.Windows.Automation.ControlType]::Edit -and $_.Current.Name } |
+                # Labels, buttons and messages only: SimplySign's fields also expose what
+                # was typed through other elements (seen in run 42736451973, masked by
+                # GitHub), so anything with an @ or a run of digits is dropped too.
+                Where-Object {
+                    $_.Current.ControlType -in @([System.Windows.Automation.ControlType]::Text, [System.Windows.Automation.ControlType]::Button, [System.Windows.Automation.ControlType]::Window, [System.Windows.Automation.ControlType]::TitleBar) -and
+                    $_.Current.Name -and $_.Current.Name -notmatch '@|\d{4,}'
+                } |
                 ForEach-Object { $_.Current.Name } | Select-Object -Unique -First 25
             Write-Host "[$Label] SimplySign window '$($Process.MainWindowTitle)' shows: $($Names -join ' | ')"
         }
@@ -249,9 +255,10 @@ function Test-SimplySignFocused {
 # Search held it in test run 42735522576): fill the e-mail and one-time code
 # fields and press Login through UI Automation, which needs no focus. The
 # fields are the editable ones, top to bottom, as the keyboard path tabs them.
-function Set-LoginByAutomation([string]$Email, [string]$Code) {
+# The login window's editable fields, top to bottom: the e-mail, then the code.
+function Get-LoginFields {
     $Window = Get-SimplySignWindow
-    if (-not $Window) { return $false }
+    if (-not $Window) { return @() }
     $Automation = [System.Windows.Automation.AutomationElement]
     $Root = $Automation::FromHandle($Window.MainWindowHandle)
     $EditCondition = [System.Windows.Automation.PropertyCondition]::new($Automation::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
@@ -260,10 +267,18 @@ function Set-LoginByAutomation([string]$Email, [string]$Code) {
         $Value = $null
         if ($Edit.Current.IsEnabled -and -not $Edit.Current.IsOffscreen -and
             $Edit.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$Value) -and -not $Value.Current.IsReadOnly) {
-            $Fields += [pscustomobject]@{ Value = $Value; Y = $Edit.Current.BoundingRectangle.Y; X = $Edit.Current.BoundingRectangle.X }
+            $Fields += [pscustomobject]@{ Element = $Edit; Value = $Value; Y = $Edit.Current.BoundingRectangle.Y; X = $Edit.Current.BoundingRectangle.X }
         }
     }
-    $Fields = @($Fields | Sort-Object Y, X)
+    return , @($Fields | Sort-Object Y, X)
+}
+
+function Set-LoginByAutomation([string]$Email, [string]$Code) {
+    $Window = Get-SimplySignWindow
+    if (-not $Window) { return $false }
+    $Automation = [System.Windows.Automation.AutomationElement]
+    $Root = $Automation::FromHandle($Window.MainWindowHandle)
+    $Fields = Get-LoginFields
     Write-Host "UI Automation found $($Fields.Count) editable field(s) in the SimplySign window"
     if ($Fields.Count -lt 2) { return $false }
     $ButtonCondition = [System.Windows.Automation.PropertyCondition]::new($Automation::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
@@ -405,10 +420,20 @@ function Invoke-Login {
         $Code = Get-TotpCode -Key $Key -Algorithm $Settings.Algorithm -Digits $Settings.Digits -Counter $Counter
         Add-Mask $Code
         if ($Focused) {
-            [System.Windows.Forms.SendKeys]::SendWait("^a")
+            # No modifier keys: on the ARM64 runner Ctrl+A arrived as a plain "a"
+            # in front of the e-mail (run 42736451973, "Invalid user name or
+            # token"). End plus Backspaces clears whatever an earlier attempt left.
+            # Start in the e-mail field even when a failed attempt left the
+            # caret in the code field.
+            $Fields = Get-LoginFields
+            Write-Host "UI Automation sees $($Fields.Count) editable field(s) in the SimplySign login window"
+            if ($Fields.Count -ge 2) {
+                try { $Fields[0].Element.SetFocus(); Start-Sleep -Milliseconds 300 } catch { }
+            }
+            [System.Windows.Forms.SendKeys]::SendWait("{END}{BACKSPACE 100}")
             Send-Text $Email
             [System.Windows.Forms.SendKeys]::SendWait("{TAB}")
-            [System.Windows.Forms.SendKeys]::SendWait("^a")
+            [System.Windows.Forms.SendKeys]::SendWait("{END}{BACKSPACE 20}")
             Send-Text $Code
             [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
         }
