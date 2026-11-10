@@ -7,10 +7,7 @@
 use serde_json::{json, Value};
 
 use crate::action::{ActionKind, UserAction};
-use crate::composer::layout::{
-    ComposerScrollInput, COMPOSER_BOTTOM_THRESHOLD_PX, COMPOSER_SCROLL_RESET_MS,
-    COMPOSER_SCROLL_THRESHOLD_PX,
-};
+use crate::composer::layout::ComposerWheel;
 use crate::composer::links::{classify_link_href, file_position_from_href, LinkTarget};
 use crate::composer::queue::{is_queue_row_busy, move_queue_row};
 use crate::composer::reference_pills::{composer_references, ReferenceKind};
@@ -315,40 +312,24 @@ fn scroll(state: &mut ChatState, action: &UserAction, context: &ChatContext) -> 
         return Vec::new();
     }
     let now = context.now_ms;
-    let composer = &mut state.composer;
-    if now - composer.scroll.last_event_at > COMPOSER_SCROLL_RESET_MS {
-        composer.scroll.reset();
-    }
+    let collapse = &mut state.composer.collapse;
     if action.kind == ActionKind::ComposerExpand {
-        if action.param("editor") == Some(&Value::Bool(true)) {
-            composer.scroll.suppress(now, COMPOSER_SCROLL_RESET_MS);
-        }
-        composer.collapsed = false;
+        collapse.expand(now, action.param("editor") == Some(&Value::Bool(true)));
         return Vec::new();
     }
-    let delta = action
-        .param("delta")
-        .and_then(Value::as_f64)
-        .unwrap_or_default();
-    let eligible = action.param("eligible") == Some(&Value::Bool(true));
-    let at_bottom = action
-        .param("distanceToEnd")
-        .and_then(Value::as_f64)
-        .unwrap_or_default()
-        <= COMPOSER_BOTTOM_THRESHOLD_PX;
-    if composer.scroll.record(&ComposerScrollInput {
-        now,
-        delta_px: delta.abs(),
-        collapse_threshold_px: COMPOSER_SCROLL_THRESHOLD_PX,
-        collapse_eligible: eligible && !composer.collapsed,
-        can_scroll_in_gesture_direction: action.param("canScroll") == Some(&Value::Bool(true)),
-        scrolls_toward_logical_end: delta < 0.0 && at_bottom,
-    }) {
-        composer.collapsed = true;
-    }
-    if !eligible || (delta < 0.0 && at_bottom) {
-        composer.collapsed = false;
-    }
+    collapse.wheel(&ComposerWheel {
+        now_ms: now,
+        delta_px: action
+            .param("delta")
+            .and_then(Value::as_f64)
+            .unwrap_or_default(),
+        distance_to_end_px: action
+            .param("distanceToEnd")
+            .and_then(Value::as_f64)
+            .unwrap_or_default(),
+        can_scroll: action.param("canScroll") == Some(&Value::Bool(true)),
+        eligible: action.param("eligible") == Some(&Value::Bool(true)),
+    });
     Vec::new()
 }
 

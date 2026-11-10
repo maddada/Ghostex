@@ -3,7 +3,6 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement, Styled, div, px,
 };
-use serde_json::json;
 
 impl NativeChatView {
     /// CDXC:SessionChat 2026-09-23 SEE-ALSO: `sessionChatKeepComposerExpanded` in `packages/shared/ghostex-settings/types.ts` (deleted 2026-10-01) holds the user's decision; a missing key reads as its default, off.
@@ -33,7 +32,85 @@ impl NativeChatView {
         if self.composer_height_constrained() {
             return self.composer_collapse_allowed() && !self.short_pane_composer_open;
         }
-        self.composer_collapse_eligible() && self.snapshot["composerCollapsed"] == true
+        self.composer_scroll_collapsed()
+    }
+
+    /// Collapsed by the scroll gesture, which is not a short pane's resting shape.
+    fn composer_scroll_collapsed(&self) -> bool {
+        !self.composer_height_constrained()
+            && self.composer_collapse_eligible()
+            && self.composer_collapse.collapsed
+    }
+
+    /// CDXC:SessionChat 2026-11-10 WHY: The collapse rule (`ComposerCollapse` in packages/gx-chat-core/src/composer/layout.rs) runs here, on the view's own copy, and the box moves in the frame of the wheel event or the press. As a `composerScroll` / `composerExpand` action it went to the chat host's thread and came back as a document, behind every other chat's events and one whole-chat pass per wheel event, so on a long chat on a busy computer the box stayed closed over the empty band for seconds after the reader reached the end.
+    ///
+    /// The box opens: a press or a keystroke in it (`editor`), a jump to the end, or the list
+    /// following its tail again.
+    pub(super) fn expand_composer(&mut self, editor: bool, cx: &mut Context<Self>) {
+        // The subagent transcript is modal: nothing behind it moves the main chat's box.
+        if self.snapshot["subagent"].is_object() {
+            return;
+        }
+        let was = self.composer_collapse.collapsed;
+        self.composer_collapse
+            .expand(crate::app::gx_chat::now_millis() as f64, editor);
+        if was {
+            cx.notify();
+        }
+    }
+
+    /// One wheel event over the transcript, measured before the list applies it.
+    fn composer_wheel(
+        &mut self,
+        delta: f32,
+        distance_to_end: f32,
+        can_scroll: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if self.snapshot["subagent"].is_object() {
+            return;
+        }
+        let was = self.composer_collapse.collapsed;
+        self.composer_collapse
+            .wheel(&ghostex_gx_chat_core::composer::layout::ComposerWheel {
+                now_ms: crate::app::gx_chat::now_millis() as f64,
+                delta_px: f64::from(delta),
+                distance_to_end_px: f64::from(distance_to_end),
+                can_scroll,
+                eligible: self.composer_collapse_eligible(),
+            });
+        if self.composer_collapse.collapsed != was {
+            cx.notify();
+        }
+    }
+
+    /// Paints nothing; placed after the list so its prepaint reads the layout this frame just made.
+    ///
+    /// CDXC:SessionChat 2026-11-10 WHY: A collapsed box holds the expanded box's height as the list's end padding (`ComposerFrame::transcript_inset`). The wheel opens the box as the last row comes into view, but the list also gets there without a wheel: a scrollbar drag, a key, a jump from the minimap or the search, rows that left. The box then stayed one line high under an empty band until the next wheel. A viewport that shows any of that band has reached the end, so the box opens. A wheel collapse never lands there: it needs the last row a whole band below the expanded box's viewport first.
+    pub(super) fn composer_band_sync(&self, cx: &Context<Self>) -> AnyElement {
+        if !self.composer_scroll_collapsed() {
+            return div().into_any_element();
+        }
+        let list = self.list.clone();
+        let inset = self.transcript_inset;
+        let chat = cx.weak_entity();
+        gpui::canvas(
+            move |_, window, cx| {
+                let past_rows = -list.scroll_px_offset_for_scrollbar().y.as_f32()
+                    - (list.max_offset_for_scrollbar().y.as_f32() - inset);
+                if past_rows <= 1.0 {
+                    return;
+                }
+                let chat = chat.clone();
+                window.defer(cx, move |_, cx| {
+                    let _ = chat.update(cx, |chat, cx| chat.expand_composer(false, cx));
+                });
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .size_0()
+        .into_any_element()
     }
 
     /// This frame's chat box tween. `render` reads it before it builds the transcript, whose end
@@ -107,6 +184,7 @@ impl NativeChatView {
             .child(self.transcript_scrollbar())
             .child(self.scroll_bottom_button(cx))
             .child(self.scroll_bottom_sync(cx))
+            .child(self.composer_band_sync(cx))
             .child(self.focused_field_hold_sync())
             .child(self.form_input_reveal_sync(&p))
             .child(
@@ -143,13 +221,12 @@ impl NativeChatView {
                                 {
                                     return;
                                 }
-                                chat.invoke(
-                                    json!({"type":"composerScroll", "delta":delta,
-                            "distanceToEnd":end_distance,
-                            "canScroll":if delta > 0.0 { offset > 0.0 } else { end_distance > 0.0 },
-                            "eligible":chat.composer_collapse_eligible()}),
-                                    cx,
-                                );
+                                let can_scroll = if delta > 0.0 {
+                                    offset > 0.0
+                                } else {
+                                    end_distance > 0.0
+                                };
+                                chat.composer_wheel(delta, end_distance, can_scroll, cx);
                             });
                         });
                     },

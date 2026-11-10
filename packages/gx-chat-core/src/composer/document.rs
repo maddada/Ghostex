@@ -92,7 +92,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.composer_collapse_eligible = collapse_eligible;
     // `publish` drops the collapse when the box is no longer eligible, so the document never
     // claims a collapsed composer whose space is already owned by something else.
-    into.composer_collapsed = collapse_eligible && composer.collapsed;
+    into.composer_collapsed = collapse_eligible && composer.collapse.collapsed;
 
     into.composer_overflow = composer.overflow.clone();
     // The actions read the host's own capability block, so a transport narrower than the

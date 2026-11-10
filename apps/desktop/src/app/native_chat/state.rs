@@ -380,6 +380,9 @@ pub(crate) struct NativeChatView {
     pub(super) composer_focused: bool,
     /// Whether the user opened the chat box of a short pane (composer_scroll.rs).
     pub(crate) short_pane_composer_open: bool,
+    /// Whether a scroll collapsed the chat box, and the wheel gesture deciding it: the chat
+    /// core's rule, run in this view so the box moves with the wheel (composer_scroll.rs).
+    pub(super) composer_collapse: ghostex_gx_chat_core::composer::layout::ComposerCollapse,
     pub(crate) focus_requested: bool,
     pub(crate) subscriptions: Vec<Subscription>,
     /// When this view last rendered; a parked chat keeps applying frames without redrawing the window.
@@ -452,8 +455,8 @@ impl NativeChatView {
             cx.defer(move |cx| {
                 let _ = chat.update(cx, |chat, cx| {
                     chat.transcript_scrolled_at = Some(instant::Instant::now());
-                    if chat.list.is_following_tail() && chat.snapshot["composerCollapsed"] == true {
-                        chat.invoke(json!({"type":"composerExpand"}), cx);
+                    if chat.list.is_following_tail() && chat.composer_collapse.collapsed {
+                        chat.expand_composer(false, cx);
                     }
                     chat.load_earlier_if_near_top(cx);
                     let now = chat.transcript_scrolled_to_top();
@@ -642,6 +645,7 @@ impl NativeChatView {
             pane_focused: false,
             composer_focused: false,
             short_pane_composer_open: false,
+            composer_collapse: Default::default(),
             focus_requested: false,
             subscriptions: Vec::new(),
             last_render: None,
@@ -710,7 +714,7 @@ impl NativeChatView {
                             if draft == this.draft {
                                 return;
                             }
-                            this.invoke(json!({"type":"composerExpand","editor":true}), cx);
+                            this.expand_composer(true, cx);
                             if this.composer_focused {
                                 this.short_pane_composer_open = true;
                             }
@@ -796,7 +800,7 @@ impl NativeChatView {
         super::focus::reclaim_keyboard_focus(window);
         self.composer_focused = true;
         self.sync_suggestion_window(cx);
-        self.invoke(json!({"type":"composerExpand","editor":true}), cx);
+        self.expand_composer(true, cx);
         cx.emit(NativeChatEvent::ComposerFocused);
         cx.notify();
     }

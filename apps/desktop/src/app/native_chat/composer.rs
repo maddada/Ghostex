@@ -575,7 +575,7 @@ impl NativeChatView {
                         .on_mouse_down(
                             gpui::MouseButton::Left,
                             cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
-                                this.invoke(json!({"type":"composerExpand","editor":true}), cx);
+                                this.expand_composer(true, cx);
                                 this.click_composer_reference(event, cx);
                             }),
                         )

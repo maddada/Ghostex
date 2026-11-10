@@ -460,7 +460,7 @@ impl NativeChatView {
         */
         if keystroke.key == "enter" && !modifiers.platform && !modifiers.control {
             self.short_pane_composer_open = true;
-            self.invoke(json!({"type":"composerExpand","editor":true}), cx);
+            self.expand_composer(true, cx);
             if modifiers.shift {
                 // The composer's key handling leaves Shift+Enter to the input's own newline, which a replay never reaches.
                 input.update(cx, |input, cx| {
@@ -476,7 +476,7 @@ impl NativeChatView {
         if let Some(text) = typed_text(keystroke) {
             let text = text.to_owned();
             self.short_pane_composer_open = true;
-            self.invoke(json!({"type":"composerExpand","editor":true}), cx);
+            self.expand_composer(true, cx);
             input.update(cx, |input, cx| {
                 input.focus(window, cx);
                 input.replace_text_in_range(None, &text, window, cx);

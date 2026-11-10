@@ -112,10 +112,7 @@ impl NativeChatView {
             return;
         }
         self.maximized_wanted = true;
-        self.invoke(
-            serde_json::json!({"type":"composerExpand","editor":true}),
-            cx,
-        );
+        self.expand_composer(true, cx);
         self.sync_maximized_window(cx);
     }
 

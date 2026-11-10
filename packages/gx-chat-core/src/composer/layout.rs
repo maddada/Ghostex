@@ -129,6 +129,69 @@ pub struct ComposerScrollInput {
     pub scrolls_toward_logical_end: bool,
 }
 
+/// One wheel event over the transcript, as its renderer measured it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ComposerWheel {
+    pub now_ms: f64,
+    /// Positive scrolls toward the start of the transcript, negative toward its end.
+    pub delta_px: f64,
+    /// How far the last row's end is below the viewport, before this event moves the list.
+    pub distance_to_end_px: f64,
+    /// Whether the list can still move in the event's direction.
+    pub can_scroll: bool,
+    /// Whether the box may collapse at all right now (`can_collapse_composer` and the renderer's
+    /// own reasons).
+    pub eligible: bool,
+}
+
+/// Whether the chat box is drawn one line high, and the wheel gesture that decides it.
+///
+/// CDXC:SessionChat 2026-11-10 WHY: The rule is a value of its own so the desktop and the web build run it in the wheel handler itself, on their own copy, and the box moves in the same frame. Sent to the chat host as an action per wheel event, the collapse and the expand waited behind every other chat's events on the host's one thread, and each event walked the whole chat first (2.3 ms on an 18,000-message coordinator chat on an idle Mac, 5 ms and up to 28 ms on a loaded one), so a fling to the bottom of a long chat left the box closed over an empty band for seconds. The phone still sends `composerExpand`, which runs the same rule on the core's copy.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ComposerCollapse {
+    pub collapsed: bool,
+    pub scroll: ComposerScrollGesture,
+}
+
+impl ComposerCollapse {
+    fn begin(&mut self, now_ms: f64) {
+        if now_ms - self.scroll.last_event_at > COMPOSER_SCROLL_RESET_MS {
+            self.scroll.reset();
+        }
+    }
+
+    /// The box opens. `editor` is a press or a keystroke in the box itself, which also cancels
+    /// the collapse of a wheel gesture still under way.
+    pub fn expand(&mut self, now_ms: f64, editor: bool) {
+        self.begin(now_ms);
+        if editor {
+            self.scroll.suppress(now_ms, COMPOSER_SCROLL_RESET_MS);
+        }
+        self.collapsed = false;
+    }
+
+    /// Folds one wheel event in: enough travel away from the end collapses the box, and a wheel
+    /// toward the end with the last row in view opens it again.
+    pub fn wheel(&mut self, wheel: &ComposerWheel) {
+        self.begin(wheel.now_ms);
+        let toward_end =
+            wheel.delta_px < 0.0 && wheel.distance_to_end_px <= COMPOSER_BOTTOM_THRESHOLD_PX;
+        if self.scroll.record(&ComposerScrollInput {
+            now: wheel.now_ms,
+            delta_px: wheel.delta_px.abs(),
+            collapse_threshold_px: COMPOSER_SCROLL_THRESHOLD_PX,
+            collapse_eligible: wheel.eligible && !self.collapsed,
+            can_scroll_in_gesture_direction: wheel.can_scroll,
+            scrolls_toward_logical_end: toward_end,
+        }) {
+            self.collapsed = true;
+        }
+        if !wheel.eligible || toward_end {
+            self.collapsed = false;
+        }
+    }
+}
+
 /// Whether the composer may collapse at all right now.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CollapseGate {

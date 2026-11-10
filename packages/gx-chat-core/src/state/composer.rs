@@ -13,7 +13,7 @@
 //! optimistic echoes; a send adds one through family a's helper rather than by pushing here).
 
 use crate::composer::history::ComposerHistory;
-use crate::composer::layout::ComposerScrollGesture;
+use crate::composer::layout::ComposerCollapse;
 use crate::composer::note::{ComposerChromeState, NoteState};
 use crate::composer::queue::{DraftVersion, TransportQueueMethods};
 use crate::composer::storage::StoredDraftRecord;
@@ -50,10 +50,10 @@ pub struct ComposerState {
     pub chrome: ComposerChromeState,
     /// Which toolbar controls the renderer could not fit.
     pub overflow: ComposerOverflow,
-    /// The box is drawn one line high.
-    pub collapsed: bool,
-    /// The in-flight wheel gesture over the composer.
-    pub scroll: ComposerScrollGesture,
+    /// Whether the box is drawn one line high, and the in-flight wheel gesture over the
+    /// transcript. A renderer that runs the rule itself (the desktop, the web build) leaves this
+    /// copy at rest.
+    pub collapse: ComposerCollapse,
     /// Attachment reads the host has started but not finished.
     pub pending_attachments: u32,
     /// The `importNativeAttachments` reads in flight, so their answers reach this family and the
