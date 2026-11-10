@@ -202,6 +202,18 @@ pub(crate) fn process_environment_value(pid: i64, name: &str) -> Option<String> 
     procargs_environment_value(ProcArgs::new().read_raw(pid)?, name)
 }
 
+/// When `pid` started (seconds, microseconds), from the kernel's process record; `None` once it is gone.
+pub(crate) fn process_start_time(pid: i64) -> Option<(u64, u64)> {
+    let pid = i32::try_from(pid).ok().filter(|pid| *pid > 0)?;
+    bsd_info(pid).map(|info| (info.pbi_start_tvsec, info.pbi_start_tvusec))
+}
+
+/// The argv `pid` runs, joined by spaces as `ps -o command` prints it.
+pub(crate) fn process_command(pid: i64) -> Option<String> {
+    let pid = i32::try_from(pid).ok().filter(|pid| *pid > 0)?;
+    ProcArgs::new().read(pid)
+}
+
 /// Every variable of the environment `pid` started with; `None` when it cannot be read.
 pub(crate) fn process_environment(pid: i64) -> Option<std::collections::HashMap<String, String>> {
     let pid = i32::try_from(pid).ok().filter(|pid| *pid > 0)?;

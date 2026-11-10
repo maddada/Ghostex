@@ -717,12 +717,74 @@ const ZMX_DAEMON_AUTH_TOKEN_FILE_ENV: &str = "GHOSTEX_GXSERVER_AUTH_TOKEN_FILE";
 struct VerifiedZmxDaemon {
     name: String,
     pid: i64,
+    /// The process's start time, read before and after its command and environment: pid and start time together name one process, so a reused pid never passes as this daemon.
+    started: ZmxProcessStart,
     socket_dir: Option<std::path::PathBuf>,
+}
+
+/// A process start time as the kernel records it (macOS seconds and microseconds, Linux clock ticks since boot).
+#[cfg(unix)]
+type ZmxProcessStart = (u64, u64);
+
+#[cfg(target_os = "macos")]
+fn zmx_process_start(pid: i64) -> Option<ZmxProcessStart> {
+    super::process_table_macos::process_start_time(pid)
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn zmx_process_start(pid: i64) -> Option<ZmxProcessStart> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    // Field 22 (starttime); the command name in field 2 may hold spaces and parentheses, so count from the last ')'.
+    let ticks = stat
+        .rsplit_once(')')?
+        .1
+        .split_whitespace()
+        .nth(19)?
+        .parse()
+        .ok()?;
+    Some((ticks, 0))
+}
+
+#[cfg(target_os = "macos")]
+fn zmx_process_command(pid: i64) -> Option<String> {
+    super::process_table_macos::process_command(pid)
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn zmx_process_command(pid: i64) -> Option<String> {
+    let arguments = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+    Some(
+        arguments
+            .split(|byte| *byte == 0)
+            .filter(|argument| !argument.is_empty())
+            .map(|argument| String::from_utf8_lossy(argument).into_owned())
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
+/// The session name of a `zmx run <name> …` command line, read the way `zmx_daemon_processes` reads `ps`.
+#[cfg(unix)]
+fn zmx_run_session_name(command: &str) -> Option<&str> {
+    let mut arguments = command.split_whitespace();
+    let executable = arguments.next()?;
+    (std::path::Path::new(executable).file_stem()?.to_str()? == "zmx" && arguments.next()? == "run")
+        .then(|| arguments.next())
+        .flatten()
+}
+
+/// Whether `pid` is still the process that was verified: same pid and same start time.
+#[cfg(unix)]
+fn is_same_zmx_process(pid: i64, started: ZmxProcessStart) -> bool {
+    zmx_process_start(pid) == Some(started)
 }
 
 #[cfg(unix)]
 enum ZmxDaemonOwnership {
-    Ours(Option<std::path::PathBuf>),
+    Ours {
+        started: ZmxProcessStart,
+        socket_dir: Option<std::path::PathBuf>,
+    },
     Kept {
         reason: &'static str,
         token_file: Option<String>,
@@ -769,18 +831,41 @@ fn zmx_daemon_socket_directory(
     fs::canonicalize(folder).ok()
 }
 
-/// Whether two token paths name the same file: resolved through links (the `legacy_dir/gxserver` compatibility link resolves to the current root), compared as written when either does not resolve.
+/// Whether two token paths name the same file, resolved through links (the `legacy_dir/gxserver` compatibility link resolves to the current root). A path that does not resolve proves nothing, so it never matches, even when the text is equal.
 #[cfg(unix)]
 fn same_token_file(daemon: &std::path::Path, own: &std::path::Path) -> bool {
-    match (fs::canonicalize(daemon), fs::canonicalize(own)) {
-        (Ok(daemon), Ok(own)) => daemon == own,
-        _ => daemon == own,
-    }
+    matches!(
+        (fs::canonicalize(daemon), fs::canonicalize(own)),
+        (Ok(daemon), Ok(own)) if daemon == own
+    )
 }
 
+/// Whether the `zmx run <name>` process `pid` is this server's. The start time is read before and after its command and environment, so all three belong to one process.
 #[cfg(unix)]
-fn zmx_daemon_ownership(pid: i64, own_token_file: &std::path::Path) -> ZmxDaemonOwnership {
-    let Ok(environment) = zmx_daemon_environment(pid) else {
+fn zmx_daemon_ownership(
+    pid: i64,
+    zmx_name: &str,
+    own_token_file: &std::path::Path,
+) -> ZmxDaemonOwnership {
+    let process_changed = ZmxDaemonOwnership::Kept {
+        reason: "processChanged",
+        token_file: None,
+    };
+    let Some(started) = zmx_process_start(pid) else {
+        return process_changed;
+    };
+    if zmx_process_command(pid)
+        .as_deref()
+        .and_then(zmx_run_session_name)
+        != Some(zmx_name)
+    {
+        return process_changed;
+    }
+    let environment = zmx_daemon_environment(pid);
+    if !is_same_zmx_process(pid, started) {
+        return process_changed;
+    }
+    let Ok(environment) = environment else {
         return ZmxDaemonOwnership::Kept {
             reason: "environmentUnreadable",
             token_file: None,
@@ -798,7 +883,10 @@ fn zmx_daemon_ownership(pid: i64, own_token_file: &std::path::Path) -> ZmxDaemon
             token_file: Some(token_file.clone()),
         };
     }
-    ZmxDaemonOwnership::Ours(zmx_daemon_socket_directory(&environment))
+    ZmxDaemonOwnership::Ours {
+        started,
+        socket_dir: zmx_daemon_socket_directory(&environment),
+    }
 }
 
 /// Ends the unowned names' daemons this server can prove it started, by pid, and logs every daemon and socket it keeps.
@@ -835,10 +923,14 @@ fn end_verified_unowned_zmx_session_daemons(
             continue;
         }
         for pid in pids {
-            match zmx_daemon_ownership(pid, auth_token_file) {
-                ZmxDaemonOwnership::Ours(socket_dir) => verified.push(VerifiedZmxDaemon {
+            match zmx_daemon_ownership(pid, zmx_name, auth_token_file) {
+                ZmxDaemonOwnership::Ours {
+                    started,
+                    socket_dir,
+                } => verified.push(VerifiedZmxDaemon {
                     name: zmx_name.clone(),
                     pid,
+                    started,
                     socket_dir,
                 }),
                 ZmxDaemonOwnership::Kept { reason, token_file } => {
@@ -865,15 +957,21 @@ fn end_verified_unowned_zmx_session_daemons(
         return;
     }
     let own_socket_dir = fs::canonicalize(super::zmx_socket_directory()).ok();
-    for (daemon, outcome) in verified.iter().zip(terminate_verified_zmx_session_daemons(
-        &verified,
-        auth_token_file,
-    )) {
+    for (daemon, outcome) in verified
+        .iter()
+        .zip(terminate_verified_zmx_session_daemons(&verified))
+    {
         if outcome.is_ok() {
             #[cfg(target_os = "macos")]
             cleanup_macos_zmx_launchd_job(&daemon.name);
             if daemon.socket_dir.is_some() && daemon.socket_dir == own_socket_dir {
-                remove_zmx_session_socket(&daemon.name);
+                if let Some(reason) =
+                    zmx_socket_now_serves_another_daemon(&daemon.name, own_socket_dir.as_deref())
+                {
+                    log_kept_zmx_socket(logger, server_id, &daemon.name, reason, None);
+                } else {
+                    remove_zmx_session_socket(&daemon.name);
+                }
             } else {
                 log_kept_zmx_socket(
                     logger,
@@ -886,6 +984,36 @@ fn end_verified_unowned_zmx_session_daemons(
         }
         log_unowned_zmx_session_daemon_outcome(logger, server_id, &daemon.name, &outcome);
     }
+}
+
+/// Why the socket an ended daemon left at `<own folder>/<name>` must not be removed, or `None` when it is only that daemon's leftover. A daemon of another profile can bind the same name in this folder once the ended one let it go, so the socket is kept while anything answers on it, or while any live `zmx run <name>` process resolves its socket folder to this one.
+#[cfg(unix)]
+fn zmx_socket_now_serves_another_daemon(
+    zmx_name: &str,
+    own_socket_dir: Option<&std::path::Path>,
+) -> Option<&'static str> {
+    let socket = super::zmx_session_socket_path(zmx_name);
+    if fs::symlink_metadata(&socket).is_err() {
+        return None;
+    }
+    match std::os::unix::net::UnixStream::connect(&socket) {
+        Ok(_) => return Some("socketAnswers"),
+        Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {}
+        Err(_) => return Some("socketUnchecked"),
+    }
+    let Ok(ps_output) = read_process_snapshot() else {
+        return Some("socketUnchecked");
+    };
+    zmx_daemon_processes(&ps_output)
+        .into_iter()
+        .filter(|(_, name)| name == zmx_name)
+        .any(|(pid, _)| match zmx_daemon_environment(pid) {
+            Ok(environment) => {
+                zmx_daemon_socket_directory(&environment).as_deref() == own_socket_dir
+            }
+            Err(()) => true,
+        })
+        .then_some("anotherDaemonUsesName")
 }
 
 #[cfg(unix)]
@@ -914,59 +1042,50 @@ fn log_kept_zmx_socket(
     });
 }
 
-/// Signals only verified pids. Each is re-checked first: a pid that now runs something else, or a daemon whose token file changed, is left alone (pid reuse between the check and the kill); a pid that is gone counts as ended.
+/// Signals only verified processes. Before every signal (SIGTERM, then SIGKILL after the grace) the pid is checked to still be the process that was verified (same pid and start time), so a pid reused after the daemon exited is never signalled; a process that is gone counts as ended. Only the moment between that check and `kill` itself is unguarded, since macOS has no pidfd.
 #[cfg(unix)]
 fn terminate_verified_zmx_session_daemons(
     daemons: &[VerifiedZmxDaemon],
-    auth_token_file: &std::path::Path,
 ) -> Vec<Result<String, String>> {
-    let processes = match read_process_snapshot() {
-        Ok(ps_output) => zmx_daemon_processes(&ps_output),
-        Err(error) => return daemons.iter().map(|_| Err(error.clone())).collect(),
+    let still_running =
+        |daemon: &VerifiedZmxDaemon| is_same_zmx_process(daemon.pid, daemon.started);
+    let signal = |daemon: &VerifiedZmxDaemon, signal: libc::c_int| {
+        if still_running(daemon) {
+            unsafe { libc::kill(daemon.pid as libc::pid_t, signal) };
+        }
     };
-    let alive = |pid: i64| unsafe { libc::kill(pid as libc::pid_t, 0) } == 0;
-    let mut outcomes: Vec<Option<Result<String, String>>> = Vec::with_capacity(daemons.len());
-    let mut signalled = Vec::new();
-    for daemon in daemons {
-        let still_ours = processes
-            .iter()
-            .any(|(pid, name)| *pid == daemon.pid && *name == daemon.name)
-            && matches!(
-                zmx_daemon_ownership(daemon.pid, auth_token_file),
-                ZmxDaemonOwnership::Ours(_)
-            );
-        if still_ours {
-            unsafe { libc::kill(daemon.pid as libc::pid_t, libc::SIGTERM) };
-            signalled.push(daemon.pid);
-            outcomes.push(None);
-        } else if alive(daemon.pid) {
-            outcomes.push(Some(Err(format!(
-                "process {} no longer is this server's zmx daemon, so it was left alone",
-                daemon.pid
-            ))));
-        } else {
-            outcomes.push(Some(Ok("exited".to_string())));
+    let wait = |grace: Duration| {
+        let deadline = Instant::now() + grace;
+        while daemons.iter().any(still_running) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    };
+    let mut signalled = vec![false; daemons.len()];
+    for (index, daemon) in daemons.iter().enumerate() {
+        if still_running(daemon) {
+            signal(daemon, libc::SIGTERM);
+            signalled[index] = true;
         }
     }
-    let mut running = wait_for_processes_exit(signalled, ZMX_DAEMON_TERMINATION_GRACE);
-    for process_id in &running {
-        unsafe { libc::kill(*process_id as libc::pid_t, libc::SIGKILL) };
+    wait(ZMX_DAEMON_TERMINATION_GRACE);
+    for daemon in daemons {
+        signal(daemon, libc::SIGKILL);
     }
-    running = wait_for_processes_exit(running, ZMX_DAEMON_TERMINATION_GRACE);
+    wait(ZMX_DAEMON_TERMINATION_GRACE);
     daemons
         .iter()
-        .zip(outcomes)
-        .map(|(daemon, outcome)| {
-            outcome.unwrap_or_else(|| {
-                if running.contains(&daemon.pid) {
-                    Err(format!(
-                        "the zmx daemon process {} did not exit after SIGTERM and SIGKILL",
-                        daemon.pid
-                    ))
-                } else {
-                    Ok("terminated".to_string())
-                }
-            })
+        .zip(signalled)
+        .map(|(daemon, signalled)| {
+            if still_running(daemon) {
+                Err(format!(
+                    "the zmx daemon process {} did not exit after SIGTERM and SIGKILL",
+                    daemon.pid
+                ))
+            } else if signalled {
+                Ok("terminated".to_string())
+            } else {
+                Ok("exited".to_string())
+            }
         })
         .collect()
 }
