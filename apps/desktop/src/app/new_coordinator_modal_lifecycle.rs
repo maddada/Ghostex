@@ -132,13 +132,26 @@ impl GhostexGpuiApp {
                                     GpuiAppModalKind::NewCoordinator,
                                     cx,
                                 ),
-                                // The dialog was closed while it waited: say it here instead.
-                                Some(refusal) if !delivered => app.gx_store_create_toast(
-                                    "warning",
-                                    "Coordinator not created",
-                                    Some(&refusal.message),
-                                    cx,
-                                ),
+                                // The dialog was closed while it waited: say it here instead,
+                                // with no picker to point at, and the computer's words behind
+                                // Copy details.
+                                Some(refusal) if !delivered => {
+                                    let description = if refusal.details.is_some() {
+                                        "The computer refused it. Open New Coordinator to try again."
+                                    } else {
+                                        refusal.message.as_str()
+                                    };
+                                    let mut toast = serde_json::json!({
+                                        "type": "toast",
+                                        "level": "warning",
+                                        "title": "Coordinator not created",
+                                        "description": description,
+                                    });
+                                    if let Some(details) = &refusal.details {
+                                        toast["copyText"] = serde_json::json!(details);
+                                    }
+                                    app.receive_gpui_app_toast_bridge_message(&toast, cx);
+                                }
                                 _ => {}
                             }
                         },

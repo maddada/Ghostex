@@ -15,8 +15,11 @@ use crate::app::helpers::*;
 use crate::app::window::RemoteModelCatalog;
 use crate::*;
 
-/// How long the read waits for the catalog before treating the computer as having none.
+/// How long the read waits for the computer to answer at all before treating it as not reached.
 const CATALOG_READ_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long a computer that answered may stay quiet before it counts as serving no catalog: every
+/// gxserver that has one sends it right after `eventStreamReady`, and an older one sends nothing.
+const CATALOG_QUIET_AFTER_READY: Duration = Duration::from_millis(1500);
 
 impl GhostexGpuiApp {
     /// The model catalog the connected computer `machine_id` serves: parsed, none served, or not
@@ -43,8 +46,9 @@ impl GhostexGpuiApp {
 }
 
 /// Opens the computer's event socket, waits for the catalog it sends as the socket connects, and
-/// closes it: `Some(Some(_))` the catalog, `Some(None)` it answered without one, `None` it was
-/// not reached in time.
+/// closes it: `Some(Some(_))` the catalog, `Some(None)` it answered without one (including a
+/// stream that goes quiet after it is ready, as an older gxserver's does), `None` it was not
+/// reached in time.
 fn read_remote_model_catalog(
     target: &GpuiRemoteGxserverRequestTarget,
 ) -> Option<Option<serde_json::Value>> {
@@ -60,11 +64,24 @@ fn read_remote_model_catalog(
     let mut liveness = GpuiRemoteGxserverPresentationLiveness::new();
     let mut ready = false;
     while !cancel.load(Ordering::SeqCst) {
-        match gpui_websocket_read_frame(&mut stream, target, &mut liveness, &cancel).ok()?? {
+        let frame = match gpui_websocket_read_frame(&mut stream, target, &mut liveness, &cancel) {
+            Ok(Some(frame)) => frame,
+            // Cancelled: by the overall timeout, or by the quiet window after readiness.
+            Ok(None) => break,
+            Err(_) => return None,
+        };
+        match frame {
             GpuiWebSocketFrame::Text(text) => {
                 let event = serde_json::from_str::<serde_json::Value>(text.trim()).ok()?;
                 match event.get("type").and_then(serde_json::Value::as_str) {
-                    Some("eventStreamReady") => ready = true,
+                    Some("eventStreamReady") if !ready => {
+                        ready = true;
+                        let cancel = cancel.clone();
+                        thread::spawn(move || {
+                            thread::sleep(CATALOG_QUIET_AFTER_READY);
+                            cancel.store(true, Ordering::SeqCst);
+                        });
+                    }
                     Some("agentModelCatalogChanged") => return Some(event.get("catalog").cloned()),
                     // The catalog comes right after the ready event or not at all.
                     _ if ready => return Some(None),
@@ -78,5 +95,7 @@ fn read_remote_model_catalog(
             GpuiWebSocketFrame::Pong | GpuiWebSocketFrame::Other => {}
         }
     }
-    None
+    // A computer that said it was ready and then sent nothing serves no catalog; one that never
+    // got that far was not reached.
+    ready.then_some(None)
 }
