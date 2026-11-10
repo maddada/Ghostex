@@ -729,6 +729,21 @@ pub fn item_value(item: &WorkItem, context: &WorkContext<'_>, history: usize) ->
     if item.untested {
         out["untested"] = json!(true);
     }
+    // Its link as the board showed it: a PR with its checks, an issue, a ticket or a file.
+    if !item.link.is_empty() {
+        if let Some(pr) = super::board::item_pr(&item.link) {
+            out["links"] = json!([{
+                "kind": "pr",
+                "label": format!("#{}", pr["number"]),
+                "state": pr["state"],
+                "checks": pr.get("checks").cloned().unwrap_or(Value::Null),
+                "url": item.link,
+            }]);
+            out["pr"] = pr;
+        } else {
+            out["links"] = json!([super::board::item_link(&item.link)]);
+        }
+    }
     if item.for_thread {
         out["forThread"] = json!(true);
     }

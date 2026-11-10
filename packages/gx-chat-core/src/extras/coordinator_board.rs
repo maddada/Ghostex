@@ -150,6 +150,10 @@ pub struct BoardRow {
     /// place of the links.
     #[serde(default)]
     pub answers: Vec<BoardAnswer>,
+    /// Muted words before the answers: the work a Work panel ask belongs to and whether it holds
+    /// it up ("iPhone push · Holds it up", work_panel.rs); "" elsewhere.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub lead: String,
     /// The card is open: it shows its whole line of work and its buttons (one card at a time).
     #[serde(default)]
     pub expanded: bool,
@@ -219,6 +223,10 @@ pub struct BoardGroup {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoordinatorBoard {
+    /// The panel's name: "Work" when it lists the coordinator's work items
+    /// (`extras::work_panel`), "Board" from a gxserver that sends only the board.
+    #[serde(default)]
+    pub title: String,
     pub groups: Vec<BoardGroup>,
     /// "2 need you · 1 blocked · 4 in progress", the panel's header line.
     pub meta: String,
@@ -430,6 +438,14 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         chip.title = format!("Tagged {}", text(look, "label"));
         tags.insert(0, chip);
     }
+    // A work item's own chips: who has the ball, its steps, what it asks (work_panel.rs).
+    for chip in row["workChips"].as_array().into_iter().flatten() {
+        tags.push(tag(
+            text(chip, "kind"),
+            text(chip, "label"),
+            text(chip, "tone"),
+        ));
+    }
     let open_thread = match text(row, "kind") {
         "thread" => open_thread_command,
         _ => Value::Null,
@@ -482,13 +498,24 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
                 command: if given.is_some() {
                     Value::Null
                 } else {
-                    json!({
-                        "type": "coordinatorBoardAnswer",
-                        "key": text(row, "key"),
-                        "item": text(row, "ref"),
-                        "label": label,
-                        "text": format!("{}: {label}", text(row, "ref")),
-                    })
+                    match text(row, "ask") {
+                        // A work item's ask names its tag (work_panel.rs, as its chat card does).
+                        "" => json!({
+                            "type": "coordinatorBoardAnswer",
+                            "key": text(row, "key"),
+                            "item": text(row, "ref"),
+                            "label": label,
+                            "text": format!("{}: {label}", text(row, "ref")),
+                        }),
+                        ask => json!({
+                            "type": "coordinatorBoardAnswer",
+                            "key": text(row, "key"),
+                            "item": text(row, "ref"),
+                            "ask": ask,
+                            "label": label,
+                            "text": format!("{} {ask}: {label}", text(row, "ref")),
+                        }),
+                    }
                 },
             }
         })
@@ -518,6 +545,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
             note => note.to_string(),
         },
         answers,
+        lead: String::new(),
         key: text(row, "key").to_string(),
         title: title.to_string(),
         detail: text(row, "detail").to_string(),
@@ -586,7 +614,7 @@ pub const CARD_KEY_PREFIX: &str = "card:";
 /// rarely, since the coordinator places cards (`ghostex coordinator board move` stays its verb).
 /// The same menu opens on a right-click, from the ⋯ that takes the age's place on a hovered card
 /// (Q1454), and on a long press on the phone (Q1455).
-fn card_menu(row: &BoardRow) -> Vec<BoardMenuItem> {
+fn card_menu(row: &BoardRow, work: bool) -> Vec<BoardMenuItem> {
     let mut menu = Vec::new();
     if row.open.is_object() {
         menu.push(BoardMenuItem {
@@ -626,7 +654,7 @@ fn card_menu(row: &BoardRow) -> Vec<BoardMenuItem> {
     }
     if row.remove.is_object() {
         menu.push(BoardMenuItem {
-            label: "Remove from board".to_string(),
+            label: if work { "Drop" } else { "Remove from board" }.to_string(),
             icon: "trash".to_string(),
             command: row.remove.clone(),
             destructive: true,
@@ -635,7 +663,7 @@ fn card_menu(row: &BoardRow) -> Vec<BoardMenuItem> {
     }
     if row.restore.is_object() {
         menu.push(BoardMenuItem {
-            label: "Restore to board".to_string(),
+            label: if work { "Restore" } else { "Restore to board" }.to_string(),
             icon: "arrow-back-up".to_string(),
             command: row.restore.clone(),
             ..BoardMenuItem::default()
@@ -803,6 +831,7 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         reference: String::new(),
                         note: String::new(),
                         answers: Vec::new(),
+                        lead: String::new(),
                         // A question leaves by being answered, or put off For later in Resources.
                         remove: Value::Null,
                         restore: Value::Null,
@@ -826,14 +855,28 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
 
 /// The board, or `None` on a chat that is not a coordinator or whose gxserver sends no board.
 pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<CoordinatorBoard> {
-    let board = state.session.coordinator_threads.as_ref()?.get("board")?;
+    let threads = state.session.coordinator_threads.as_ref()?;
+    // The work items, when gxserver sends them, laid out as the board was (work_panel.rs).
+    let work_mode = threads.get("work").is_some_and(Value::is_object);
+    let built;
+    let board = if work_mode {
+        built = crate::extras::work_panel::work_board(&threads["work"]);
+        &built
+    } else {
+        threads.get("board")?
+    };
     let groups = board.get("groups")?.as_array()?;
+    let group_list: &[(&str, &str)] = if work_mode {
+        &crate::extras::work_panel::WORK_GROUPS
+    } else {
+        &GROUPS
+    };
     let now_ms = context.now_millis();
     let panels = &state.extras.panels;
     let mut out = Vec::new();
     // How many of the Needs you rows are the chat's own open questions (`question_rows`).
     let mut asked = 0;
-    for (id, title) in GROUPS {
+    for &(id, title) in group_list {
         let sent = groups.iter().find(|group| text(group, "id") == id);
         let mut rows: Vec<BoardRow> = sent
             .and_then(|group| group.get("rows"))
@@ -853,6 +896,19 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
                     let chips = question_chips(state, row);
                     out.tags.splice(0..0, chips);
                 }
+                // A work item's ask is answered or done, never dropped, moved or tagged by itself:
+                // those act on its item (work_panel.rs).
+                if row["askRow"] == true {
+                    out.lead = text(row, "detail").to_string();
+                    // The lead says it; an opened card does not repeat it as its line.
+                    out.detail = String::new();
+                    out.note = String::new();
+                    out.remove = Value::Null;
+                    out.restore = Value::Null;
+                    out.done = Value::Null;
+                    out.move_to = Value::Null;
+                    out.set_tag = Value::Null;
+                }
                 out
             })
             .collect();
@@ -871,7 +927,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
                 && panels
                     .board_toggled
                     .contains(&format!("{CARD_KEY_PREFIX}{}", row.key));
-            row.menu = card_menu(row);
+            row.menu = card_menu(row, work_mode);
         }
         // A group shows only while it holds something.
         //
@@ -883,7 +939,12 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             continue;
         }
         let not_shown = total.saturating_sub(rows.len());
-        let open = folded_by_default(id) == panels.board_toggled.contains(id);
+        let folded = if work_mode {
+            crate::extras::work_panel::folded_by_default(id)
+        } else {
+            folded_by_default(id)
+        };
+        let open = folded == panels.board_toggled.contains(id);
         let expanded = panels.board_expanded.contains(id);
         let more_label = if rows.len() <= GROUP_ROWS {
             String::new()
@@ -914,21 +975,39 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     };
     let (needs, blocked, moving) = (count("needs"), count("blocked"), count("moving"));
     let mut meta = Vec::new();
-    if needs > 0 {
+    // The Work panel's header: "3 for you · 1 blocked · 2 moving" (the design page's words).
+    if work_mode {
+        if needs > 0 {
+            meta.push(format!("{needs} for you"));
+        }
+        if blocked > 0 {
+            meta.push(format!("{blocked} blocked"));
+        }
+        if moving > 0 {
+            meta.push(format!("{moving} moving"));
+        }
+        let later = count("later");
+        if meta.is_empty() && later > 0 {
+            meta.push(format!("{later} later"));
+        }
+    }
+    if needs > 0 && !work_mode {
         meta.push(format!(
             "{needs} {}",
             if needs == 1 { "needs you" } else { "need you" }
         ));
     }
-    if blocked > 0 {
-        meta.push(format!("{blocked} blocked"));
-    }
-    if moving > 0 {
-        meta.push(format!("{moving} in progress"));
-    }
-    let later = count("later");
-    if meta.is_empty() && later > 0 {
-        meta.push(format!("{later} to do"));
+    if !work_mode {
+        if blocked > 0 {
+            meta.push(format!("{blocked} blocked"));
+        }
+        if moving > 0 {
+            meta.push(format!("{moving} in progress"));
+        }
+        let later = count("later");
+        if meta.is_empty() && later > 0 {
+            meta.push(format!("{later} to do"));
+        }
     }
     // CDXC:Coordinators 2026-11-06 DECISION:
     // User, of the strip with the ? pill's pink dot and the Board pill's pink count: "if we show the
@@ -954,6 +1033,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
         .filter(|group| !matches!(group.id.as_str(), "ideas" | "removed"))
         .all(|group| group.count == 0);
     Some(CoordinatorBoard {
+        title: if work_mode { "Work" } else { "Board" }.to_string(),
         groups: out,
         meta: meta.join(" \u{b7} "),
         pill_counts,
@@ -1041,6 +1121,26 @@ fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
         .filter_map(|group| group.get("rows").and_then(Value::as_array))
         .flatten()
         .filter_map(|row| at_ms(text(row, "at")));
+    let work = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .and_then(|work| work.get("items"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .flat_map(|item| {
+            std::iter::once(text(item, "at")).chain(
+                item["asks"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|ask| text(ask, "askedAt")),
+            )
+        })
+        .filter_map(at_ms);
+    let board_rows = board_rows.chain(work);
     let questions = crate::questions::open_questions::unanswered(state)
         .into_iter()
         .filter_map(|asker| asker.at);
@@ -1088,18 +1188,22 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
         return None;
     }
     let meta = text(board, "meta").to_string();
+    let title = match text(board, "title") {
+        "" => "Board".to_string(),
+        title => title.to_string(),
+    };
     Some(ChatPill {
         switch: None,
         menu: Vec::new(),
         id: BOARD_PILL.to_string(),
-        label: "Board".to_string(),
+        label: title.clone(),
         count: String::new(),
         waiting: String::new(),
         running: false,
         aria_label: if meta.is_empty() {
-            "Board".to_string()
+            title.clone()
         } else {
-            format!("Board, {meta}")
+            format!("{title}, {meta}")
         },
         meta,
         // Needs you (pink) and In progress (amber), the order the board lists them; Blocked has its own

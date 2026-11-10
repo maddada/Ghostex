@@ -38,6 +38,7 @@ pub mod time;
 pub mod transcript_search;
 pub mod welcome;
 pub mod work_cards;
+pub mod work_panel;
 pub mod working_card;
 pub mod working_card_label;
 pub mod working_strip;

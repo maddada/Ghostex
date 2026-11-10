@@ -187,6 +187,9 @@ fn chip_icon(kind: &str) -> Option<&'static str> {
         "branch" => "titlebar/git-branch.svg",
         "link" => "titlebar/link.svg",
         "question" => "titlebar/help-circle.svg",
+        // A work item's chips (gx-chat-core work_panel.rs).
+        "owner" => "titlebar/user.svg",
+        "steps" => "titlebar/checklist.svg",
         _ => return None,
     })
 }
@@ -394,6 +397,15 @@ const FOCUS_RING_FOR: std::time::Duration = std::time::Duration::from_millis(220
 const REMOVE_ARMED_FOR: std::time::Duration = std::time::Duration::from_secs(3);
 
 impl NativeChatView {
+    /// The panel's name from the core: "Work" over the coordinator's work items, "Board" from a
+    /// gxserver that sends only the board.
+    fn board_title(&self) -> String {
+        match self.snapshot["coordinatorBoard"]["title"].as_str() {
+            Some(title) if !title.is_empty() => title.to_string(),
+            _ => "Board".to_string(),
+        }
+    }
+
     fn board_value(&self) -> Option<&Value> {
         Some(&self.snapshot["coordinatorBoard"]).filter(|board| board.is_object())
     }
@@ -813,7 +825,7 @@ impl NativeChatView {
             div()
                 .id("chat-coordinator-board-columns")
                 .role(gpui::Role::Group)
-                .aria_label("Board")
+                .aria_label(self.board_title())
                 .size_full()
                 .min_h_0()
                 .flex()
@@ -1125,6 +1137,22 @@ impl NativeChatView {
         if let Some(relayed) = &relayed {
             chips = chips.child(self.board_relay_buttons(relayed, CHIP_SIZE, p, cx));
         } else if !answers.is_empty() {
+            // A Work panel ask names the work it belongs to before its answers (gx-chat-core
+            // work_panel.rs).
+            // Only where the answers keep their room: a narrow column shows them alone.
+            let lead = text(row, "lead");
+            if !lead.is_empty() && inner_width >= 260.0 {
+                chips = chips.child(
+                    // It gives way before the answers do.
+                    div()
+                        .flex_shrink(8.0)
+                        .min_w(px(40.0 * s))
+                        .truncate()
+                        .text_size(px(CHIP_SIZE * s))
+                        .text_color(p.card_muted)
+                        .child(lead),
+                );
+            }
             chips = chips.child(self.board_answers(&key, &answers, p, cx));
         } else if tags.is_empty() && !expanded {
             chips = chips.child(
@@ -1968,8 +1996,11 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
+        // It gives way on a narrow card: each answer ends in an ellipsis rather than the pill
+        // running past the card's edge ("nothing clipped").
         let mut pill = div()
-            .flex_shrink_0()
+            .flex_shrink(1.0)
+            .min_w_0()
             .flex()
             .items_center()
             .h(px(22.0 * s))
@@ -1993,6 +2024,8 @@ impl NativeChatView {
                     .aria_label(format!("Answer {label}"))
                     .h_full()
                     .px(px(10.0 * s))
+                    .flex_shrink(1.0)
+                    .min_w(px(36.0 * s))
                     .flex()
                     .items_center()
                     .when(index > 0, |this| {
@@ -2015,7 +2048,7 @@ impl NativeChatView {
                                 .text_color(p.foreground),
                         )
                     })
-                    .child(label)
+                    .child(div().min_w_0().truncate().child(label.clone()))
                     .when(!locked, |this| {
                         this.chat_cursor_pointer()
                             .hover(|style| style.bg(p.foreground.opacity(0.08)))
@@ -2107,7 +2140,7 @@ impl NativeChatView {
         let column = div()
             .id("chat-coordinator-board-dock")
             .role(gpui::Role::Group)
-            .aria_label("Board")
+            .aria_label(self.board_title())
             .flex_shrink_0()
             .w(px(BOARD_WIDTH * s))
             .h_full()
@@ -2166,7 +2199,7 @@ impl NativeChatView {
             div()
                 .id("chat-coordinator-board-menu")
                 .role(gpui::Role::Group)
-                .aria_label("Board")
+                .aria_label(self.board_title())
                 .size_full()
                 .min_h_0()
                 .flex()
@@ -2296,7 +2329,7 @@ impl NativeChatView {
                 div()
                     .flex_shrink_0()
                     .text_color(p.foreground)
-                    .child("Board"),
+                    .child(self.board_title()),
             )
             .child(
                 div()

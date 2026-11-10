@@ -124,7 +124,7 @@ fn pr_tag(pr: &Value) -> Option<Value> {
     Some(tag)
 }
 
-fn item_pr(link: &str) -> Option<Value> {
+pub(crate) fn item_pr(link: &str) -> Option<Value> {
     let number = pull_request_number(link)?;
     let info = crate::work_mode::cached_work_pull_request("", link);
     let mut pr = json!({ "number": number, "url": link });
@@ -360,7 +360,7 @@ pub fn add_tag_looks(board: &mut Value, custom_tags: &Value) {
 
 /// An item's link that is not a PR: a GitHub issue, a Linear ticket, or any other URL or file,
 /// named by what it points at.
-fn item_link(link: &str) -> Value {
+pub(crate) fn item_link(link: &str) -> Value {
     if let Some((_, rest)) = link.split_once("/issues/") {
         let number = rest.split(['/', '?', '#']).next().unwrap_or_default();
         return json!({ "kind": "issue", "label": format!("#{number}"), "url": link });
