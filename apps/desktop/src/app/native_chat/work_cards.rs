@@ -17,7 +17,6 @@
 //! glass (the user's standing rule: no black fills on glass).
 
 use super::chat_text_look::{PROSE_LINE_HEIGHT, PROSE_SIZE};
-use super::tone_card::ToneButton;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
@@ -288,42 +287,9 @@ impl NativeChatView {
         let (icon, color) = status_look(&text(row, "status"), p);
         let body = p.strengthened(p.prose);
         let busy = row["busy"] == true;
-        let buttons: Vec<AnyElement> = row["buttons"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .enumerate()
-            .map(|(index, button)| {
-                let label = text(button, "label");
-                let command = button["command"].clone();
-                let picked = button["picked"] == true;
-                self.tone_button(
-                    gpui::SharedString::from(format!("dock-answer:{key}:{index}")),
-                    &label,
-                    picked.then_some("titlebar/check.svg"),
-                    ToneButton::Secondary,
-                    None,
-                    busy && !picked,
-                    p,
-                )
-                .when(button["recommended"] == true, |button| {
-                    button.aria_label(format!("{label}, Recommended")).child(
-                        svg()
-                            .path("titlebar/star-filled.svg")
-                            .size(px(10.0 * s))
-                            .flex_shrink_0()
-                            .text_color(super::ask_card::ask_color(p).opacity(0.75)),
-                    )
-                })
-                .when(!busy, |button| {
-                    button.on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.invoke(command.clone(), cx);
-                    }))
-                })
-                .into_any_element()
-            })
-            .collect();
+        // The dock's answers, the look every place shares (work_actions.rs).
+        let answers: Vec<Value> = row["buttons"].as_array().cloned().unwrap_or_default();
+        let buttons = self.work_answer_buttons(&key, &answers, busy, p, cx);
         let toggle = open_key.clone();
         let mut head = div()
             .id(gpui::SharedString::from(format!("dock-row-head:{key}")))
@@ -414,120 +380,17 @@ impl NativeChatView {
                     .children(chips),
             );
         }
-        let mut actions = div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap(px(6.0 * s))
-            .pt(px(2.0 * s));
-        let action = |id: String, label: &'static str| {
-            self.tone_button(
-                gpui::SharedString::from(id),
-                label,
-                None,
-                ToneButton::Secondary,
-                None,
-                false,
-                p,
-            )
-        };
-        let reply = row["reply"].clone();
-        if reply.is_object() {
-            actions = actions.child(action(format!("dock-reply:{key}"), "Reply").on_click(
-                cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
-                    cx.stop_propagation();
-                    let at = event.position();
-                    let command = json!({
-                        "question": reply.clone(),
-                        "at": [f32::from(at.x), f32::from(at.y)],
-                    });
-                    this.open_reply_popover(&command, window, cx);
-                }),
-            ));
+        // The actions every item repeats, as icon buttons (work_actions.rs).
+        let actions = json!({
+            "reply": row["reply"],
+            "open": row["open"],
+            "showInChat": row["showInChat"],
+            "dismiss": row["dismiss"],
+            "snooze": row["snooze"],
+        });
+        if let Some(icons) = self.work_action_icons(&key, &actions, &text(row, "mention"), p, cx) {
+            detail = detail.child(div().pt(px(2.0 * s)).child(icons));
         }
-        let open_command = row["open"].clone();
-        if open_command.is_object() {
-            actions = actions.child(action(format!("dock-open:{key}"), "Open").on_click(
-                cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.invoke(open_command.clone(), cx);
-                }),
-            ));
-        }
-        let mention = text(row, "mention");
-        if !mention.is_empty() {
-            actions = actions.child(action(format!("dock-mention:{key}"), "Mention").on_click(
-                cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.insert_board_reference(&mention, cx);
-                }),
-            ));
-        }
-        let show = row["showInChat"].clone();
-        if show.is_object() {
-            actions = actions.child(action(format!("dock-show:{key}"), "Show in chat").on_click(
-                cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.invoke(show.clone(), cx);
-                }),
-            ));
-        }
-        let dismiss = row["dismiss"].clone();
-        if dismiss.is_object() {
-            actions = actions.child(
-                action(format!("dock-dismiss:{key}"), "Dismiss")
-                    .tooltip(|window, cx| {
-                        gpui_component::tooltip::Tooltip::new(
-                            "Take it off for good and tell the agent",
-                        )
-                        .build(window, cx)
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.invoke(dismiss.clone(), cx);
-                    })),
-            );
-        }
-        // Snooze is one button that opens its three lengths, a temporary step apart from Dismiss.
-        let snooze: Vec<Value> = row["snooze"].as_array().cloned().unwrap_or_default();
-        let snooze_key = format!("dock-snooze-open:{key}");
-        let snooze_open = self.expanded.contains(&snooze_key);
-        if !snooze.is_empty() {
-            let toggle = snooze_key.clone();
-            actions = actions.child(
-                action(
-                    format!("dock-snooze:{key}"),
-                    if snooze_open { "Snooze for" } else { "Snooze" },
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    if !this.expanded.remove(&toggle) {
-                        this.expanded.insert(toggle.clone());
-                    }
-                    cx.notify();
-                })),
-            );
-        }
-        for (index, choice) in snooze.iter().enumerate().filter(|_| snooze_open) {
-            let command = choice["command"].clone();
-            let label = text(choice, "label");
-            actions = actions.child(
-                self.tone_button(
-                    gpui::SharedString::from(format!("dock-snooze:{key}:{index}")),
-                    &label,
-                    None,
-                    ToneButton::Secondary,
-                    None,
-                    false,
-                    p,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.invoke(command.clone(), cx);
-                })),
-            );
-        }
-        detail = detail.child(actions);
         div()
             .w_full()
             .rounded(px(8.0 * s))
@@ -685,54 +548,9 @@ impl NativeChatView {
             .map(|(index, chip)| self.work_card_part(chip, &format!("{key}:{index}"), p, cx))
             .collect();
         let busy = card["busy"] == true;
-        let buttons: Vec<AnyElement> = card["buttons"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .enumerate()
-            .map(|(index, button)| {
-                let label = text(button, "label");
-                let picked = button["picked"] == true;
-                let recommended = button["recommended"] == true;
-                let command = button["command"].clone();
-                self.tone_button(
-                    gpui::SharedString::from(format!("work-ask:{key}:{index}")),
-                    &label,
-                    if picked {
-                        Some("titlebar/check.svg")
-                    } else {
-                        None
-                    },
-                    ToneButton::Secondary,
-                    None,
-                    busy && !picked,
-                    p,
-                )
-                // The recommended answer carries the question forms' star after its label
-                // (ask_card.rs `recommended_mark`), "Recommended" as its tooltip and name.
-                .when(recommended, |button| {
-                    button
-                        .aria_label(format!("{label}, Recommended"))
-                        .tooltip(|window, cx| {
-                            gpui_component::tooltip::Tooltip::new("Recommended").build(window, cx)
-                        })
-                        .child(
-                            svg()
-                                .path("titlebar/star-filled.svg")
-                                .size(px(10.0 * s))
-                                .flex_shrink_0()
-                                .text_color(super::ask_card::ask_color(p).opacity(0.75)),
-                        )
-                })
-                .when(!busy, |button| {
-                    button.on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.invoke(command.clone(), cx);
-                    }))
-                })
-                .into_any_element()
-            })
-            .collect();
+        // The dock's answers, the look every place shares (work_actions.rs).
+        let answers: Vec<Value> = card["buttons"].as_array().cloned().unwrap_or_default();
+        let buttons = self.work_answer_buttons(&key, &answers, busy, p, cx);
         if !chips.is_empty() || !buttons.is_empty() {
             column = column.child(
                 div()
@@ -756,106 +574,12 @@ impl NativeChatView {
                     }),
             );
         }
-        if let Some(controls) = self.snooze_cancel_row(card, p, cx) {
-            column = column.child(div().pl(px(22.0 * s)).child(controls));
+        // Dismiss and Snooze as the icon buttons every place shares (work_actions.rs).
+        let actions = json!({ "dismiss": card["cancel"], "snooze": card["snooze"] });
+        if let Some(icons) = self.work_action_icons(&key, &actions, "", p, cx) {
+            column = column.child(div().pl(px(22.0 * s)).child(icons));
         }
         column.into_any_element()
-    }
-
-    /// Snooze (1 hour, 6 hours or 24 hours, opened from a quiet "Snooze") and Cancel, on a docked
-    /// ask, form or page (gx-chat-core work_cards.rs `snooze_choices`); `None` when it offers neither.
-    fn snooze_cancel_row(
-        &self,
-        card: &Value,
-        p: &ChatAppearance,
-        cx: &Context<Self>,
-    ) -> Option<AnyElement> {
-        let choices: Vec<Value> = card["snooze"].as_array().cloned().unwrap_or_default();
-        let cancel = card["cancel"].clone();
-        if choices.is_empty() && !cancel.is_object() {
-            return None;
-        }
-        let s = p.scale;
-        let key = text(card, "key");
-        let open_key = format!("snooze-open:{key}");
-        let open = self.expanded.contains(&open_key);
-        let quiet = |id: String, label: &str| {
-            div()
-                .id(gpui::SharedString::from(id))
-                .role(gpui::Role::Button)
-                .aria_label(label.to_string())
-                .flex_shrink_0()
-                .text_color(p.muted)
-                .chat_cursor_pointer()
-                .hover(|style| style.text_color(p.foreground))
-                .child(label.to_string())
-        };
-        let mut row = div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_x(px(14.0 * s))
-            .gap_y(px(4.0 * s))
-            .text_size(px(PROSE_SIZE * s))
-            .line_height(px(PROSE_LINE_HEIGHT * s));
-        if !choices.is_empty() {
-            let toggle = open_key.clone();
-            row = row.child(
-                quiet(
-                    format!("work-snooze:{key}"),
-                    if open { "Snooze for" } else { "Snooze" },
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    if !this.expanded.remove(&toggle) {
-                        this.expanded.insert(toggle.clone());
-                    }
-                    cx.notify();
-                })),
-            );
-            if open {
-                for (index, choice) in choices.iter().enumerate() {
-                    let command = choice["command"].clone();
-                    let close = open_key.clone();
-                    row = row.child(
-                        div()
-                            .id(gpui::SharedString::from(format!(
-                                "work-snooze:{key}:{index}"
-                            )))
-                            .role(gpui::Role::Button)
-                            .aria_label(format!("Snooze for {}", text(choice, "label")))
-                            .px(px(8.0 * s))
-                            .rounded(px(6.0 * s))
-                            .bg(p.foreground.opacity(0.06))
-                            .text_color(p.card_muted)
-                            .chat_cursor_pointer()
-                            .hover(|style| style.bg(p.foreground.opacity(0.1)))
-                            .child(text(choice, "label"))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.stop_propagation();
-                                this.expanded.remove(&close);
-                                this.invoke(command.clone(), cx);
-                            })),
-                    );
-                }
-            }
-        }
-        if cancel.is_object() {
-            row = row.child(
-                quiet(format!("work-cancel:{key}"), "Cancel")
-                    .tooltip(|window, cx| {
-                        gpui_component::tooltip::Tooltip::new(
-                            "Cancel it for good and tell the agent",
-                        )
-                        .build(window, cx)
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.invoke(cancel.clone(), cx);
-                    })),
-            );
-        }
-        Some(row.into_any_element())
     }
 
     /// One part of a card's bottom line (`chips` in gx-chat-core work_cards.rs `item_chips`).

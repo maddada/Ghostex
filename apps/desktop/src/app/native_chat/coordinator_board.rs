@@ -1228,9 +1228,9 @@ impl NativeChatView {
         let note = text(row, "note");
         if let Some(relayed) = &relayed {
             chips = chips.child(self.board_relay_buttons(relayed, CHIP_SIZE, p, cx));
-        } else if !answers.is_empty() {
+        } else if !answers.is_empty() && !expanded {
             // A Work panel ask names the work it belongs to before its answers (gx-chat-core
-            // work_panel.rs).
+            // work_panel.rs). Opened, its answers are the dock's buttons below (work_actions.rs).
             // Only where the answers keep their room: a narrow column shows them alone.
             let lead = text(row, "lead");
             if !lead.is_empty() && inner_width >= 260.0 {
@@ -1528,125 +1528,33 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let key = text(row, "key");
-        let button = |id: &str, label: String, icon: Option<String>| {
-            div()
-                .id(gpui::SharedString::from(format!("{id}:{key}")))
-                .role(gpui::Role::Button)
-                .aria_label(label.clone())
-                .flex_shrink_0()
-                .h(px(26.0 * s))
-                .px(px(10.0 * s))
-                .flex()
-                .items_center()
-                .gap(px(6.0 * s))
-                .rounded(px(7.0 * s))
-                .border(px(s))
-                .border_color(p.foreground.opacity(0.12))
-                .text_size(px(13.0 * s))
-                .text_color(p.foreground)
-                .chat_cursor_pointer()
-                .hover(|style| style.bg(p.foreground.opacity(0.08)))
-                .when_some(icon, |this, icon| {
-                    this.child(svg().path(icon).size(px(13.0 * s)).text_color(p.foreground))
-                })
-                .child(label)
-        };
         let reference = text(row, "reference");
-        let mut line = div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap(px(6.0 * s))
-            .min_w_0();
-        // The dock's actions (gx-chat-core work_cards.rs `panel_actions`): Reply, Open, Show in
-        // chat, Dismiss and Snooze, so an opened card offers the same here, in Columns and in the
-        // dock.
-        let actions = row["actions"].clone();
-        let reply = actions["reply"].clone();
-        if reply.is_object() {
-            line = line.child(
-                button("chat-board-card-reply", "Reply".to_string(), None).on_click(cx.listener(
-                    move |this, event: &gpui::ClickEvent, window, cx| {
-                        cx.stop_propagation();
-                        this.close_board_card_menu(cx);
-                        let at = event.position();
-                        let command = json!({
-                            "question": reply.clone(),
-                            "at": [f32::from(at.x), f32::from(at.y)],
-                        });
-                        this.open_reply_popover(&command, window, cx);
-                    },
-                )),
+        // An opened card offers what the dock's opened row does, drawn by the same code
+        // (work_actions.rs): its answers as the dock's filled buttons, then the actions every item
+        // repeats as icon buttons (Reply, Open, Show in chat, Dismiss, Snooze, Mention).
+        let answers: Vec<Value> = row["answers"].as_array().cloned().unwrap_or_default();
+        let icons = self.work_action_icons(&key, &row["actions"], &reference, p, cx);
+        let mut column = div().w_full().min_w_0().flex().flex_col().gap(px(6.0 * s));
+        if !answers.is_empty() {
+            column = column.child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap(px(6.0 * s))
+                    .children(self.work_answer_buttons(&key, &answers, false, p, cx)),
             );
         }
-        for (id, label, field) in [
-            ("chat-board-card-open", "Open", "open"),
-            ("chat-board-card-show", "Show in chat", "showInChat"),
-            ("chat-board-card-dismiss", "Dismiss", "dismiss"),
-        ] {
-            let command = actions[field].clone();
-            if command.is_object() {
-                line = line.child(button(id, label.to_string(), None).on_click(cx.listener(
-                    move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.close_board_card_menu(cx);
-                        this.invoke(command.clone(), cx);
-                    },
-                )));
-            }
-        }
-        let snooze: Vec<Value> = actions["snooze"].as_array().cloned().unwrap_or_default();
-        let snooze_key = format!("board-snooze-open:{key}");
-        let snooze_open = self.expanded.contains(&snooze_key);
-        if !snooze.is_empty() {
-            let toggle = snooze_key.clone();
-            line = line.child(
-                button(
-                    "chat-board-card-snooze",
-                    if snooze_open { "Snooze for" } else { "Snooze" }.to_string(),
-                    None,
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    if !this.expanded.remove(&toggle) {
-                        this.expanded.insert(toggle.clone());
-                    }
-                    cx.notify();
-                })),
-            );
-            if snooze_open {
-                for (index, choice) in snooze.iter().enumerate() {
-                    let command = choice["command"].clone();
-                    line = line.child(
-                        button(
-                            &format!("chat-board-card-snooze-{index}"),
-                            text(choice, "label"),
-                            None,
-                        )
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            cx.stop_propagation();
-                            this.invoke(command.clone(), cx);
-                        })),
-                    );
-                }
-            }
-        }
-        if !reference.is_empty() {
-            line = line.child(
-                button(
-                    "chat-board-card-mention",
-                    "Mention".to_string(),
-                    Some("titlebar/message-plus.svg".to_string()),
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.close_board_card_menu(cx);
-                    this.insert_board_reference(&reference, cx);
-                })),
-            );
-        }
-        line.child(div().flex_1())
-            .child(age_slot)
+        column
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0 * s))
+                    .min_w_0()
+                    .children(icons)
+                    .child(div().flex_1())
+                    .child(age_slot),
+            )
             .into_any_element()
     }
 

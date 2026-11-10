@@ -108,6 +108,7 @@ mod tool_run;
 mod tray_hotkeys;
 mod tray_layout;
 mod user_message_look;
+mod work_actions;
 mod work_cards;
 mod worktree_tray;
 
