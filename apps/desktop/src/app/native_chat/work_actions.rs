@@ -83,6 +83,93 @@ impl NativeChatView {
             .collect()
     }
 
+    /// An ask's answers at a closed Work panel card's size: the same neutral filled buttons as
+    /// [`Self::work_answer_buttons`], with less padding so the card keeps its two lines. Each gives
+    /// way with an ellipsis on a narrow card rather than running past its edge; the one sent from
+    /// here carries a check, and the others fade once it is answered.
+    pub(super) fn work_compact_answers(
+        &self,
+        key: &str,
+        answers: &[Value],
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        use super::appearance::ChatFilledButton as _;
+        let s = p.scale;
+        let mut row = div()
+            .flex_shrink(1.0)
+            .min_w_0()
+            .flex()
+            .items_center()
+            .gap(px(4.0 * s));
+        for (index, answer) in answers.iter().enumerate() {
+            let label = text(answer, "label");
+            let picked = answer["picked"] == true;
+            let recommended = answer["recommended"] == true;
+            let locked = answer["locked"] == true;
+            let command = answer["command"].clone();
+            row = row.child(
+                div()
+                    .id(gpui::SharedString::from(format!(
+                        "work-answer-compact:{key}:{index}"
+                    )))
+                    .role(gpui::Role::Button)
+                    .aria_label(if recommended {
+                        format!("{label}, Recommended")
+                    } else {
+                        label.clone()
+                    })
+                    .h(px(22.0 * s))
+                    .px(px(8.0 * s))
+                    .flex_shrink(1.0)
+                    .min_w(px(34.0 * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(4.0 * s))
+                    .rounded(px(7.0 * s))
+                    .border(px(s))
+                    .chat_filled(p.neutral_button_fills(), !locked)
+                    .text_size(px(12.5 * s))
+                    .text_color(p.foreground)
+                    .when(locked && !picked, |this| this.opacity(0.4))
+                    .when(picked, |this| {
+                        this.child(
+                            svg()
+                                .path("titlebar/check.svg")
+                                .size(px(11.0 * s))
+                                .text_color(p.foreground),
+                        )
+                    })
+                    .child(div().min_w_0().truncate().child(label))
+                    .when(recommended, |this| {
+                        this.child(
+                            svg()
+                                .path("titlebar/star-filled.svg")
+                                .size(px(9.0 * s))
+                                .flex_shrink_0()
+                                .text_color(super::ask_card::ask_color(p).opacity(0.75)),
+                        )
+                        .tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new("Recommended").build(window, cx)
+                        })
+                    })
+                    .when(!locked, |this| {
+                        this.chat_cursor_pointer()
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.invoke(command.clone(), cx);
+                            }))
+                    })
+                    // A locked answer still swallows the click, so the card behind it does not
+                    // take it as a click on the card.
+                    .when(locked, |this| {
+                        this.on_click(|_, _, cx| cx.stop_propagation())
+                    }),
+            );
+        }
+        row.into_any_element()
+    }
+
     /// One quiet icon button: the icon in the muted colour, brighter with a soft fill on hover, its
     /// name in the tooltip and to a screen reader.
     fn work_icon_button(

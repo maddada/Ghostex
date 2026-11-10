@@ -2084,8 +2084,8 @@ impl NativeChatView {
         cx.notify();
     }
 
-    /// A card's answers as one segmented pill, one click each; the answer sent from here stays
-    /// marked, and the recommended one is in the foreground.
+    /// A closed card's answers: the dock's filled answer buttons at the card's size
+    /// (work_actions.rs `work_compact_answers`), so no outlined segmented pill is left anywhere.
     fn board_answers(
         &self,
         key: &str,
@@ -2093,82 +2093,7 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let s = p.scale;
-        // It gives way on a narrow card: each answer ends in an ellipsis rather than the pill
-        // running past the card's edge ("nothing clipped").
-        let mut pill = div()
-            .flex_shrink(1.0)
-            .min_w_0()
-            .flex()
-            .items_center()
-            .h(px(22.0 * s))
-            .rounded(px(11.0 * s))
-            .border(px(s))
-            .border_color(p.foreground.opacity(0.14))
-            .overflow_hidden();
-        for (index, answer) in answers.iter().enumerate() {
-            let label = text(answer, "label");
-            let picked = answer["picked"] == true;
-            let recommended = answer["recommended"] == true;
-            // Answered: the pick stays marked and the others fade; none takes a click.
-            let locked = answer["locked"] == true;
-            let command = answer["command"].clone();
-            pill = pill.child(
-                div()
-                    .id(gpui::SharedString::from(format!(
-                        "chat-board-answer:{key}:{index}"
-                    )))
-                    .role(gpui::Role::Button)
-                    .aria_label(format!("Answer {label}"))
-                    .h_full()
-                    .px(px(10.0 * s))
-                    .flex_shrink(1.0)
-                    .min_w(px(36.0 * s))
-                    .flex()
-                    .items_center()
-                    .when(index > 0, |this| {
-                        this.border_l_1().border_color(p.foreground.opacity(0.14))
-                    })
-                    .text_size(px(CHIP_SIZE * s))
-                    .gap(px(4.0 * s))
-                    .text_color(if picked || (recommended && !locked) {
-                        p.foreground
-                    } else {
-                        p.card_muted
-                    })
-                    .when(picked, |this| this.bg(p.foreground.opacity(0.14)))
-                    .when(locked && !picked, |this| this.opacity(0.4))
-                    .when(picked, |this| {
-                        this.child(
-                            svg()
-                                .path("titlebar/check.svg")
-                                .size(px(11.0 * s))
-                                .text_color(p.foreground),
-                        )
-                    })
-                    .child(div().min_w_0().truncate().child(label.clone()))
-                    .when(!locked, |this| {
-                        this.chat_cursor_pointer()
-                            .hover(|style| style.bg(p.foreground.opacity(0.08)))
-                            .when(recommended, |this| {
-                                this.tooltip(|window, cx| {
-                                    gpui_component::tooltip::Tooltip::new("Recommended")
-                                        .build(window, cx)
-                                })
-                            })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.stop_propagation();
-                                this.invoke(command.clone(), cx);
-                            }))
-                    })
-                    // A locked answer still swallows the click, so the card behind it does not
-                    // take it as a click on the card.
-                    .when(locked, |this| {
-                        this.on_click(|_, _, cx| cx.stop_propagation())
-                    }),
-            );
-        }
-        pill.into_any_element()
+        self.work_compact_answers(key, answers, p, cx)
     }
 
     /// The docked board is on screen (its pill reads as pressed).
