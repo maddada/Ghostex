@@ -98,6 +98,9 @@ pub struct PanelsState {
     /// The coordinator board's groups the reader folded or unfolded against their default (Done and
     /// Ideas start folded), per chat (`extras::coordinator_board`).
     pub board_toggled: std::collections::BTreeSet<String>,
+    /// The finished-work cards the reader dismissed from the dock above the chat box, by card key
+    /// (`extras::work_cards::dock`).
+    pub work_dock_dismissed: std::collections::BTreeSet<String>,
     /// The board's groups showing every row instead of the first few.
     pub board_expanded: std::collections::BTreeSet<String>,
     /// The board changes in flight (a row moved to Removed or restored), whose refusal is toasted.
@@ -143,6 +146,7 @@ impl Default for PanelsState {
             secret_request_errors: Default::default(),
             background_tasks_open: false,
             board_toggled: Default::default(),
+            work_dock_dismissed: Default::default(),
             board_expanded: Default::default(),
             board_change_requests: Default::default(),
             board_answers: Default::default(),

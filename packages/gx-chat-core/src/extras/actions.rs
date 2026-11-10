@@ -104,6 +104,16 @@ pub fn handle_with_ids(
             );
             Vec::new()
         }
+        // A finished-work card leaves the dock (work_cards.rs `dock`).
+        ActionKind::DismissWorkDockCard => {
+            state
+                .extras
+                .panels
+                .work_dock_dismissed
+                .insert(text(action, "key").to_string());
+            state.core.request_publish();
+            Vec::new()
+        }
         ActionKind::CoordinatorBoardAnswer => {
             crate::extras::coordinator_board::answer(state, &action.params, next_request_id())
                 .into_iter()

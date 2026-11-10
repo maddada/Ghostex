@@ -389,6 +389,52 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
         }
     }
     cards.sort_by(|left, right| right.0.cmp(&left.0));
+    let mut cards: Vec<Value> = cards.into_iter().map(|(_, card)| card).collect();
+    // Then every blocked line of work that no holding ask already stands for (a stuck thread, or
+    // the coordinator's word), newest first.
+    let mut blocked: Vec<(i64, Value)> = items
+        .iter()
+        .filter(|item| text(item, "status") == "blocked")
+        .filter(|item| {
+            !item["asks"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|ask| ask["open"] == true && ask["holds"] == true)
+        })
+        .map(|item| {
+            let at = at_ms(text(item, "at")).unwrap_or(0);
+            (at, dock_item_card(item, now_ms, None))
+        })
+        .collect();
+    blocked.sort_by(|left, right| right.0.cmp(&left.0));
+    cards.extend(blocked.into_iter().map(|(_, card)| card));
+    // Then what finished in the latest turn that finished anything: the done cards, until a later
+    // turn finishes something else or the reader dismisses them.
+    let turns = turns(state);
+    let finished: Vec<(usize, &Value)> = items
+        .iter()
+        .filter(|item| text(item, "status") == "finished")
+        .filter_map(|item| {
+            let done_at = item["history"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|event| text(event, "kind") == "done")
+                .filter_map(|event| at_ms(text(event, "at")))
+                .max()?;
+            Some((turn_of(&turns, done_at)?, *item))
+        })
+        .collect();
+    if let Some(latest) = finished.iter().map(|(turn, _)| *turn).max() {
+        let dismissed = &state.extras.panels.work_dock_dismissed;
+        for (_, item) in finished.iter().filter(|(turn, _)| *turn == latest) {
+            let key = format!("work-dock:{}:{}:done", text(item, "ref"), turns[latest].id);
+            if !dismissed.contains(&key) {
+                cards.push(dock_item_card(item, now_ms, Some(key)));
+            }
+        }
+    }
     let board = crate::extras::work_panel::work_board(work);
     let total = |group: &str| {
         board["groups"]
@@ -412,9 +458,41 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
         }
     }
     json!({
-        "cards": cards.into_iter().map(|(_, card)| card).collect::<Vec<_>>(),
+        "cards": cards,
         "line": { "parts": parts },
     })
+}
+
+/// A line of work's card in the dock: blocked, or finished in the latest turn (`done_key`, with
+/// the command that dismisses it).
+fn dock_item_card(item: &Value, now_ms: i64, done_key: Option<String>) -> Value {
+    let status = text(item, "status");
+    let at = at_ms(text(item, "at")).unwrap_or(now_ms);
+    let mut line = text(item, "now").to_string();
+    if line.is_empty() {
+        if let Some(why) = item["owner"]["why"].as_str() {
+            line = why.to_string();
+        }
+    }
+    let key = done_key
+        .clone()
+        .unwrap_or_else(|| format!("work-dock:{}:{status}", text(item, "ref")));
+    let mut card = json!({
+        "key": key,
+        "kind": "item",
+        "ref": text(item, "ref"),
+        "title": text(item, "title"),
+        "status": status,
+        "statusLabel": status_label(status),
+        "line": line,
+        "chips": item_chips(item),
+        "age": crate::transcript::message_time::age_label(now_ms, at),
+        "at": at,
+    });
+    if let Some(key) = done_key {
+        card["dismiss"] = json!({ "type": "dismissWorkDockCard", "key": key });
+    }
+    card
 }
 
 /// The cards, in transcript order: `[{ key, kind ("item" | "ask"), anchorId, turnId, folded,

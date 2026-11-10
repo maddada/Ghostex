@@ -58,6 +58,33 @@ const MOVING_ITEM_COLUMN: f32 = 200.0;
 const MOVING_WHO_COLUMN: f32 = 110.0;
 const MOVING_AGE_COLUMN: f32 = 36.0;
 
+/// A list row's title, with a session name's dotted underline when the row opens its card.
+fn list_title(
+    row: &Value,
+    key: &str,
+    index: usize,
+    clickable: bool,
+    body: gpui::Hsla,
+    p: &ChatAppearance,
+) -> AnyElement {
+    div()
+        .relative()
+        .min_w_0()
+        .whitespace_normal()
+        .text_color(body)
+        .child(text(row, "title"))
+        .when(clickable, |title| {
+            title.child(super::inter_agent_message::session_name_underline(
+                format!("work-moving-underline:{key}:{index}"),
+                0.0,
+                0.0,
+                p.card_muted,
+                p.scale,
+            ))
+        })
+        .into_any_element()
+}
+
 /// Who has a line of work, as an icon: the thread's agent logo, GitHub's mark, the user, the
 /// coordinator's hat, or a clock for something else outside.
 fn who_icon(who: &Value, p: &ChatAppearance) -> AnyElement {
@@ -356,6 +383,37 @@ impl NativeChatView {
                     .child(right),
             );
         }
+        // A finished card in the dock goes away with its × (gx-chat-core `dock`).
+        let dismiss = card["dismiss"].clone();
+        if dismiss.is_object() {
+            top = top.child(
+                div()
+                    .id(gpui::SharedString::from(format!("work-dismiss:{key}")))
+                    .role(gpui::Role::Button)
+                    .aria_label("Dismiss")
+                    .flex_shrink_0()
+                    .size(px(20.0 * s))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(5.0 * s))
+                    .chat_cursor_pointer()
+                    .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                    .tooltip(|window, cx| {
+                        gpui_component::tooltip::Tooltip::new("Dismiss").build(window, cx)
+                    })
+                    .child(
+                        svg()
+                            .path("titlebar/x.svg")
+                            .size(px(12.0 * s))
+                            .text_color(p.muted),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(dismiss.clone(), cx);
+                    })),
+            );
+        }
         let mut column = div()
             .id(gpui::SharedString::from(format!("work-card:{key}")))
             .role(gpui::Role::Group)
@@ -493,12 +551,24 @@ impl NativeChatView {
         let state = text(chip, "state");
         let state_color = super::coordinator_board::tone_color(&text(chip, "tone"))
             .map_or(p.muted, |color| gpui::rgb(color).into());
+        // A part that opens something wears the dotted underline a session name has on a message
+        // card, faint at rest and full under the pointer (the user's "hovering on these kind of
+        // links should put dotted underline below them so it's clear they are clickable").
         let words = div()
+            .relative()
             .min_w_0()
             .whitespace_normal()
             .child(label.clone())
             .when(command.is_object(), |words| {
-                words.hover(|style| style.text_color(p.foreground).underline())
+                words.hover(|style| style.text_color(p.foreground)).child(
+                    super::inter_agent_message::session_name_underline(
+                        format!("work-chip-underline:{id}"),
+                        0.0,
+                        0.0,
+                        p.card_muted,
+                        s,
+                    ),
+                )
             });
         div()
             .id(gpui::SharedString::from(format!("work-chip:{id}")))
@@ -739,6 +809,7 @@ impl NativeChatView {
                 );
             }
             let command = row["command"].clone();
+            let clickable = command.is_object();
             let line = text(row, "line");
             let who = &row["who"];
             let mut drawn = div()
@@ -760,9 +831,8 @@ impl NativeChatView {
                         div()
                             .w(px(MOVING_ITEM_COLUMN * s))
                             .flex_shrink_0()
-                            .whitespace_normal()
-                            .text_color(body)
-                            .child(text(row, "title")),
+                            .flex()
+                            .child(list_title(row, &key, index, clickable, body, p)),
                     )
                     .child(
                         div()
@@ -814,9 +884,8 @@ impl NativeChatView {
                             .flex_col()
                             .child(
                                 div()
-                                    .whitespace_normal()
-                                    .text_color(body)
-                                    .child(text(row, "title")),
+                                    .flex()
+                                    .child(list_title(row, &key, index, clickable, body, p)),
                             )
                             .when(!line.is_empty(), |cell| {
                                 cell.child(

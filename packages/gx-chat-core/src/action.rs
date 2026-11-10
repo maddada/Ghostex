@@ -86,6 +86,7 @@ action_kinds! {
     CoordinatorBoardChange => "coordinatorBoardChange",
     CoordinatorBoardAnswer => "coordinatorBoardAnswer",
     JumpToWorkCard => "jumpToWorkCard",
+    DismissWorkDockCard => "dismissWorkDockCard",
     InsertBoardReference => "insertBoardReference",
     HideCoordinatorIntro => "hideCoordinatorIntro",
     ToggleAutopilot => "toggleAutopilot",
