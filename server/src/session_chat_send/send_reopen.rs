@@ -94,6 +94,23 @@ async fn recover_replayed_reopen(
         return response;
     }
     let ledger_key = SendRequestKey::new(&target.0, &target.1, &send_request_id);
+    // Replays of one recovered send take turns, so the first one's outcome is the one stored and
+    // answered: a second would find the thread already reopened and store "not reopened".
+    static RECOVERING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _turn = RECOVERING.lock().await;
+    if let Some(stored) =
+        crate::session_chat_send_requests::stored_send_result(&state.paths, &ledger_key)
+            .filter(|stored| stored.get(REOPEN_CHECKED) == Some(&json!(true)))
+    {
+        return edit_result(response, |result| {
+            for field in [REOPEN_CHECKED, "reopenedThread", "heldReport"] {
+                if let Some(value) = stored.get(field) {
+                    result.insert(field.to_string(), value.clone());
+                }
+            }
+        })
+        .await;
+    }
     let Some(send_ms) =
         crate::session_chat_send_requests::send_request_created_ms(&state.paths, &ledger_key)
     else {
@@ -120,14 +137,15 @@ fn is_message(body: &Value) -> bool {
     body.pointer("/params/key").is_none_or(Value::is_null)
 }
 
-/// What the delivery watch looks for: the message's text, whether it carried images (an
-/// image-only message has no text to find), and when it was sent.
-fn sent_message(body: &Value, sent_ms: i64) -> Option<(String, bool, i64)> {
-    let has_images = body
-        .pointer("/params/imagePaths")
-        .and_then(Value::as_array)
-        .is_some_and(|paths| !paths.is_empty());
-    Some((message_text(body), has_images, sent_ms))
+/// What the delivery watch keeps: the message's text, its `sendRequestId` (what the sender's
+/// confirmation names), and when it was sent.
+fn sent_message(body: &Value, sent_ms: i64) -> Option<(String, Option<String>, i64)> {
+    let send_id = body
+        .get("params")
+        .and_then(|params| params.get(SEND_REQUEST_ID_PARAM))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    Some((message_text(body), send_id, sent_ms))
 }
 
 fn target_key(body: &Value) -> Option<SessionKey> {
@@ -173,7 +191,7 @@ async fn plan_reopen(
 async fn run_reopen(
     state: &AppState,
     plan: ReopenPlan,
-    watch: Option<(String, bool, i64)>,
+    watch: Option<(String, Option<String>, i64)>,
 ) -> bool {
     let state = state.clone();
     tokio::task::spawn_blocking(move || {
@@ -183,7 +201,7 @@ async fn run_reopen(
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
         let watch = watch
             .as_ref()
-            .map(|(text, images, sent)| (text.as_str(), *images, *sent));
+            .map(|(text, send_id, sent)| (text.as_str(), send_id.as_deref(), *sent));
         let reopened = apply_reopen(&db, &repository, &plan, watch).unwrap_or(false);
         if reopened {
             let _ = crate::server::schedule_presentation_session_delta(

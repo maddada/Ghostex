@@ -130,7 +130,7 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
                 "coordinatorProjectId": sender["projectId"], "coordinatorSessionId": sender["sessionId"],
                 "projectId": recipient["projectId"], "sessionId": recipient["sessionId"],
                 "onlyIfCoordinator": true, "reopenOnly": true,
-                "pendingMessage": body, "sentAtMs": sent_at_ms,
+                "pendingMessage": body, "sentAtMs": sent_at_ms, "sendRequestId": send_request_id,
             }),
             &flags,
         ).ok())
@@ -182,7 +182,7 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         ("accepted", "Ghostex typed and submitted the message, but the recipient's transcript does not show it yet; a busy agent takes it at its next input boundary. Read its chat before sending it again.")
     };
     if status == "delivered" {
-        confirm_coordinator_delivery(&sender, &recipient, &body, &flags);
+        confirm_coordinator_delivery(&sender, &recipient, &send_request_id, &flags);
     } else {
         // The sender's chat card follows the message until it arrives (agent_message_deliveries.rs);
         // an older gxserver without the watch refuses the call and the card keeps this status.
@@ -216,12 +216,13 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
 }
 
 /// Tells gxserver a coordinator's message to its thread arrived, so its delivery watch stops
-/// (a no-op for any other sender or recipient, and for a gxserver without the watch). The message
-/// names which watch it confirms: an older message's confirmation leaves a newer one watched.
+/// (a no-op for any other sender or recipient, and for a gxserver without the watch). The send's
+/// `sendRequestId` names which watch it confirms: an older message's confirmation leaves a newer
+/// one watched.
 pub(crate) fn confirm_coordinator_delivery(
     sender: &Value,
     recipient: &Value,
-    message: &str,
+    send_request_id: &str,
     flags: &Flags,
 ) {
     let _ = call_gxserver_rpc(
@@ -230,7 +231,7 @@ pub(crate) fn confirm_coordinator_delivery(
             "coordinatorProjectId": sender["projectId"], "coordinatorSessionId": sender["sessionId"],
             "projectId": recipient["projectId"], "sessionId": recipient["sessionId"],
             "onlyIfCoordinator": true, "reopenOnly": true, "messageDelivered": true,
-            "pendingMessage": message,
+            "sendRequestId": send_request_id,
         }),
         flags,
     );

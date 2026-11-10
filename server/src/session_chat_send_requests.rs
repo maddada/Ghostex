@@ -314,6 +314,31 @@ pub(crate) fn send_request_created_ms(paths: &GxserverPaths, key: &SendRequestKe
     .flatten()
 }
 
+/// The result stored for a settled send, as a replay of it answers.
+pub(crate) fn stored_send_result(
+    paths: &GxserverPaths,
+    key: &SendRequestKey,
+) -> Option<Map<String, Value>> {
+    let db = open_gxserver_database(paths).ok()?;
+    let text: String = db
+        .query_row(
+            r#"
+            SELECT response FROM session_chat_send_requests
+            WHERE projectId = ?1 AND sessionId = ?2 AND sendRequestId = ?3 AND state = 'sent'
+            "#,
+            params![key.project_id, key.session_id, key.send_request_id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .flatten()?;
+    serde_json::from_str::<Value>(&text)
+        .ok()?
+        .as_object()
+        .cloned()
+}
+
 /// Settles an interrupted attempt the transcript proved arrived.
 pub(crate) fn mark_sent(paths: &GxserverPaths, key: &SendRequestKey, result: &Value) {
     if let Ok(db) = open_gxserver_database(paths) {

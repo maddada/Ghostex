@@ -401,7 +401,7 @@ fn watch(
     if crate::coordinators::delivery_needles(&excerpt).is_empty() {
         return Ok(());
     }
-    set_thread_pending_message(db, project, session_id, &excerpt, &sql_time_now())
+    set_thread_pending_message(db, project, session_id, &excerpt, &sql_time_now(), None)
 }
 
 fn limited(value: &str, max: usize, what: &str) -> Result<String, DomainStateError> {

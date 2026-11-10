@@ -28,28 +28,6 @@ pub fn holds_message(normalized_text: &str, needles: &[String]) -> bool {
             .all(|needle| normalized_text.contains(needle.as_str()))
 }
 
-/// What a thread record keeps for a message that carried only images: there is no text to find,
-/// so the watch looks for a user turn with an image instead (`records_message`), and an
-/// "undelivered" report quotes this.
-///
-/// CDXC:Coordinators 2026-11-10 WHY:
-/// A reply too fast for a supervisor tick to see is reported only through the watch's transcript match, which marks the thread seen working. An image-only message had no text to watch, so a done thread reopened by one lost the report of a quick reply. Its watch matches the first user turn with an image since it was sent.
-pub const IMAGE_ONLY_MESSAGE_EXCERPT: &str = "(an image, no text)";
-
-/// The excerpt a message is watched by: its text, or `IMAGE_ONLY_MESSAGE_EXCERPT` for one that
-/// carried only images. `None` when there is nothing to watch for.
-pub fn watched_message_excerpt(text: &str, has_images: bool) -> Option<String> {
-    let excerpt = pending_message_excerpt(text);
-    if !delivery_needles(&excerpt).is_empty() {
-        return Some(excerpt);
-    }
-    has_images.then(|| IMAGE_ONLY_MESSAGE_EXCERPT.to_string())
-}
-
-fn is_image_only_watch(needles: &[String]) -> bool {
-    needles == delivery_needles(IMAGE_ONLY_MESSAGE_EXCERPT).as_slice()
-}
-
 /// The start of a message as the thread record keeps it: one line, bounded.
 pub fn pending_message_excerpt(body: &str) -> String {
     body.split_whitespace()
@@ -150,22 +128,15 @@ fn records_message(
         && message
             .timestamp
             .is_none_or(|timestamp| timestamp >= earliest)
-        && (if is_image_only_watch(needles) {
-            message
+        && holds_message(
+            &message
                 .blocks
                 .iter()
-                .any(|block| matches!(block, SessionChatBlock::ImageRef { .. }))
-        } else {
-            holds_message(
-                &message
-                    .blocks
-                    .iter()
-                    .filter_map(|block| match block {
-                        SessionChatBlock::Text { text } => Some(normalize_delivery_text(text)),
-                        _ => None,
-                    })
-                    .collect::<String>(),
-                needles,
-            )
-        })
+                .filter_map(|block| match block {
+                    SessionChatBlock::Text { text } => Some(normalize_delivery_text(text)),
+                    _ => None,
+                })
+                .collect::<String>(),
+            needles,
+        )
 }

@@ -4,5 +4,8 @@
 -- way. `lastResolvedAt` is stamped by every Mark Done, and a message reopens a done thread only
 -- when that stamp is no later than the message (coordinators/reopen.rs).
 ALTER TABLE coordinator_threads ADD COLUMN lastResolvedAt TEXT;
+-- The `sendRequestId` of the watched message (`pendingMessage`), so the sender's confirmation that
+-- it arrived acknowledges that message and no other (coordinators/endpoint.rs).
+ALTER TABLE coordinator_threads ADD COLUMN pendingMessageSendId TEXT;
 
 PRAGMA user_version = 75;

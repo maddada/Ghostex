@@ -85,14 +85,14 @@ pub fn prepare_reopen(
 
 /// BLOCKING. Reopens the planned thread unless it was reopened, or marked done again, since the
 /// plan: checked again in one writer transaction, so a Mark Done landing meanwhile wins. With
-/// `watch` (`(message, carried images, sent_at_ms)`), the message gets the delivery watch, the one
-/// that reports a reply too fast for a supervisor tick to see (an image-only message is watched by
-/// its image). Returns whether it reopened the thread.
+/// `watch` (`(message, its sendRequestId, sent_at_ms)`), the message gets the delivery watch, the
+/// one that reports a reply too fast for a supervisor tick to see. Returns whether it reopened the
+/// thread.
 pub fn apply_reopen(
     db: &Connection,
     repository: &DomainRepository<'_>,
     plan: &ReopenPlan,
-    watch: Option<(&str, bool, i64)>,
+    watch: Option<(&str, Option<&str>, i64)>,
 ) -> Result<bool, DomainStateError> {
     let own_transaction = db.is_autocommit();
     let transaction = if own_transaction {
@@ -108,13 +108,18 @@ pub fn apply_reopen(
         Some(thread) if reopenable(&thread, plan.send_ms) => {
             set_thread_resolved(db, project_id, session_id, false)?;
             set_parked(repository, &plan.thread_key, false)?;
-            if let Some((message, has_images, sent_ms)) = watch {
-                if let Some(excerpt) = super::delivery::watched_message_excerpt(message, has_images)
-                {
+            if let Some((message, send_id, sent_ms)) = watch {
+                let excerpt = super::delivery::pending_message_excerpt(message);
+                // WHY: a message with no text (images only) gets no watch, as before: there is
+                // nothing in it to find in the transcript, so a reply to it too fast for a
+                // supervisor tick to see is not reported.
+                if !super::delivery::delivery_needles(&excerpt).is_empty() {
                     let sent_at = chrono::DateTime::from_timestamp_millis(sent_ms)
                         .unwrap_or_else(Utc::now)
                         .to_rfc3339_opts(SecondsFormat::Millis, true);
-                    set_thread_pending_message(db, project_id, session_id, &excerpt, &sent_at)?;
+                    set_thread_pending_message(
+                        db, project_id, session_id, &excerpt, &sent_at, send_id,
+                    )?;
                 }
             }
             true
