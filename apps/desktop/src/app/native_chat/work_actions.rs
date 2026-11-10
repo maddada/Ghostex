@@ -49,10 +49,19 @@ impl NativeChatView {
                 let picked = answer["picked"] == true;
                 let locked = answer["locked"] == true;
                 let command = answer["command"].clone();
+                // Reply (`reply_answer`): the reply box at the press, its words the answer.
+                let reply = answer["reply"].clone();
+                let icon = if picked {
+                    Some("titlebar/check.svg")
+                } else if reply.is_object() {
+                    Some("titlebar/arrow-back-up.svg")
+                } else {
+                    None
+                };
                 self.tone_button(
                     gpui::SharedString::from(format!("work-answer:{key}:{index}")),
                     &label,
-                    picked.then_some("titlebar/check.svg"),
+                    icon,
                     ToneButton::Secondary,
                     None,
                     (busy || locked) && !picked,
@@ -72,15 +81,55 @@ impl NativeChatView {
                                 .text_color(super::ask_card::ask_color(p).opacity(0.75)),
                         )
                 })
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    if !busy && !locked && command.is_object() {
-                        this.invoke(command.clone(), cx);
-                    }
-                }))
+                .on_click(
+                    cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                        cx.stop_propagation();
+                        if busy || locked {
+                            return;
+                        }
+                        if reply.is_object() {
+                            let at = event.position();
+                            let command = json!({
+                                "question": reply.clone(),
+                                "at": [f32::from(at.x), f32::from(at.y)],
+                            });
+                            this.open_reply_popover(&command, window, cx);
+                        } else if command.is_object() {
+                            this.invoke(command.clone(), cx);
+                        }
+                    }),
+                )
                 .into_any_element()
             })
             .collect()
+    }
+
+    /// Reply as one more of an ask's answers, last after them in their look (`work_answer_buttons`,
+    /// `work_compact_answers`): it opens the reply box, and the words sent are the ask's answer.
+    /// `replied` is those words once sent from here (the button then shows them with a check);
+    /// `locked` when another answer was picked.
+    ///
+    /// CDXC:Coordinators 2026-11-11 DECISION:
+    /// User: "when there's options for a needs you question in the cards then we also need to
+    /// show Reply as a button option (not a small button below) so i can click it and write
+    /// whatever and it should be like picking an option (mark that ask as answered)". The small
+    /// Reply icon under the row goes where this shows.
+    pub(super) fn reply_answer(reply: &Value, replied: &str, locked: bool) -> Value {
+        // The words it sent, cut short so the button stays a button.
+        let label = match replied.chars().count() {
+            0 => "Reply".to_string(),
+            count if count > 32 => format!(
+                "{}…",
+                replied.chars().take(31).collect::<String>().trim_end()
+            ),
+            _ => replied.to_string(),
+        };
+        json!({
+            "label": label,
+            "reply": reply,
+            "picked": !replied.is_empty(),
+            "locked": locked || !replied.is_empty(),
+        })
     }
 
     /// The one button a dock row with no answers shows in their place, in their look: Open for a
@@ -165,6 +214,7 @@ impl NativeChatView {
             let recommended = answer["recommended"] == true;
             let locked = answer["locked"] == true;
             let command = answer["command"].clone();
+            let reply = answer["reply"].clone();
             row = row.child(
                 div()
                     .id(gpui::SharedString::from(format!(
@@ -197,6 +247,15 @@ impl NativeChatView {
                                 .text_color(p.foreground),
                         )
                     })
+                    .when(reply.is_object() && !picked, |this| {
+                        this.child(
+                            svg()
+                                .path("titlebar/arrow-back-up.svg")
+                                .size(px(11.0 * s))
+                                .flex_shrink_0()
+                                .text_color(p.foreground),
+                        )
+                    })
                     .child(div().min_w_0().truncate().child(label))
                     .when(recommended, |this| {
                         this.child(
@@ -211,11 +270,21 @@ impl NativeChatView {
                         })
                     })
                     .when(!locked, |this| {
-                        this.chat_cursor_pointer()
-                            .on_click(cx.listener(move |this, _, _, cx| {
+                        this.chat_cursor_pointer().on_click(cx.listener(
+                            move |this, event: &gpui::ClickEvent, window, cx| {
                                 cx.stop_propagation();
-                                this.invoke(command.clone(), cx);
-                            }))
+                                if reply.is_object() {
+                                    let at = event.position();
+                                    let command = json!({
+                                        "question": reply.clone(),
+                                        "at": [f32::from(at.x), f32::from(at.y)],
+                                    });
+                                    this.open_reply_popover(&command, window, cx);
+                                } else {
+                                    this.invoke(command.clone(), cx);
+                                }
+                            },
+                        ))
                     })
                     // A locked answer still swallows the click, so the card behind it does not
                     // take it as a click on the card.

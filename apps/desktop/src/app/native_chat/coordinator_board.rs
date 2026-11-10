@@ -214,6 +214,22 @@ fn hex_color(hex: &str) -> Option<gpui::Hsla> {
         .map(|color| rgb(color).into())
 }
 
+/// A card's answers with Reply after them when it offers both (work_actions.rs `reply_answer`):
+/// locked once one is given, showing the words once a reply was sent from here (`replied`).
+fn with_reply(row: &Value, answers: &[Value]) -> Vec<Value> {
+    let mut all = answers.to_vec();
+    let reply = &row["actions"]["reply"];
+    if !answers.is_empty() && reply.is_object() {
+        let locked = answers.iter().any(|answer| answer["locked"] == true);
+        all.push(NativeChatView::reply_answer(
+            reply,
+            &text(row, "replied"),
+            locked,
+        ));
+    }
+    all
+}
+
 /// An open card's height (unscaled), estimated from its words: its title and latest line wrap at
 /// the list's width, then its chips and its buttons.
 fn expanded_card_height(row: &Value) -> f32 {
@@ -1251,7 +1267,7 @@ impl NativeChatView {
                 );
             }
             // Beside a lead the answers keep their width; alone on a narrow card they give way.
-            let answers_pill = self.board_answers(&key, &answers, p, cx);
+            let answers_pill = self.board_answers(&key, &with_reply(row, &answers), p, cx);
             chips = if !lead.is_empty() && inner_width >= 260.0 {
                 chips.child(div().flex_shrink_0().child(answers_pill))
             } else {
@@ -1556,7 +1572,13 @@ impl NativeChatView {
         // (work_actions.rs): its answers as the dock's filled buttons, then the actions every item
         // repeats as icon buttons (Reply, Open, Show in chat, Dismiss, Snooze, Mention).
         let answers: Vec<Value> = row["answers"].as_array().cloned().unwrap_or_default();
-        let icons = self.work_action_icons(&key, &row["actions"], &reference, true, p, cx);
+        let answers = with_reply(row, &answers);
+        // Reply is a button among the answers when it shows there, not an icon below them.
+        let mut actions = row["actions"].clone();
+        if answers.iter().any(|answer| answer["reply"].is_object()) {
+            actions["reply"] = Value::Null;
+        }
+        let icons = self.work_action_icons(&key, &actions, &reference, true, p, cx);
         let mut column = div().w_full().min_w_0().flex().flex_col().gap(px(6.0 * s));
         if !answers.is_empty() {
             column = column.child(

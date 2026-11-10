@@ -736,6 +736,9 @@ impl NativeChatView {
         // The answers, the look every place shares (work_actions.rs); a row with none shows what
         // it asks for in their place (Open or Reply).
         let answers: Vec<Value> = row["buttons"].as_array().cloned().unwrap_or_default();
+        // An ask with answers has Reply as its last answer (work_actions.rs `reply_answer`).
+        let reply_answer = (!answers.is_empty() && row["reply"].is_object())
+            .then(|| Self::reply_answer(&row["reply"], &text(row, "replied"), busy));
         let action = if answers.is_empty() && row["needs"] == true {
             dock_row_action(row)
         } else {
@@ -768,7 +771,12 @@ impl NativeChatView {
                 })
                 .collect(),
         };
-        let all_width = buttons_width(&widths);
+        // Reply always shows, so the answers give way to "+N" before it does: it is the one answer
+        // that takes anything, so a closed row keeps it one click away.
+        let reply_width = reply_answer.as_ref().map_or(0.0, |answer| {
+            dock_button_width(&text(answer, "label"), true, false, p, cx) + 6.0
+        });
+        let all_width = buttons_width(&widths) + reply_width;
         let fit = all_width <= beside_room;
         // Closed: the answers that fit, then "+N"; opened, all of them beside or under.
         let shown = if open || fit {
@@ -782,7 +790,7 @@ impl NativeChatView {
                 } else {
                     0.0
                 };
-                if buttons_width(&widths[..shown]) + chip <= beside_room {
+                if buttons_width(&widths[..shown]) + chip + reply_width <= beside_room {
                     break;
                 }
                 shown -= 1;
@@ -815,6 +823,15 @@ impl NativeChatView {
                 }))
                 .into_any_element(),
             );
+        }
+        if let Some(answer) = &reply_answer {
+            buttons.extend(self.work_answer_buttons(
+                &format!("{key}:reply"),
+                std::slice::from_ref(answer),
+                busy,
+                p,
+                cx,
+            ));
         }
         let beside = !open || fit;
         // The question: one cut line closed. Opened, the title whole and its detail under it in
@@ -1016,7 +1033,8 @@ impl NativeChatView {
             );
         }
         let actions = json!({
-            "reply": row["reply"],
+            // Reply is a button among the answers when it shows there.
+            "reply": if reply_answer.is_some() { Value::Null } else { row["reply"].clone() },
             "open": row["open"],
             "showInChat": row["showInChat"],
             "dismiss": row["dismiss"],

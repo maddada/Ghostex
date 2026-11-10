@@ -303,6 +303,24 @@ fn done_button(item: &Value, key: &str, picked: bool) -> Value {
     })
 }
 
+/// The words a Reply sent for an ask from here: this client's pick when it is none of the ask's
+/// own answers, "" otherwise.
+fn replied_words(ask: &Value, picked: Option<&str>) -> String {
+    let Some(picked) = picked else {
+        return String::new();
+    };
+    let preset = ask["answers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|answer| text(answer, "label") == picked);
+    if preset || (picked == "Done" && ask["answers"].as_array().is_none_or(Vec::is_empty)) {
+        String::new()
+    } else {
+        picked.to_string()
+    }
+}
+
 /// The other lines of work that wait on an ask's answer (`item wait W8 --on Q12`), as
 /// `[{title, ref, command}]` where the command shows that item in the Work panel.
 fn waited_by(items: &[&Value], own: &Value, tag: &str) -> Value {
@@ -517,6 +535,9 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
                 "waitedBy": waited_by(&items, item, text(ask, "tag")),
                 "buttons": card["buttons"],
                 "busy": card["busy"],
+                // The words sent from here as its Reply, which its Reply button shows until gxserver
+                // settles it (an answer picked from its buttons is marked on that button instead).
+                "replied": replied_words(ask, answers.get(&key).map(String::as_str)),
                 "reply": { "item": text(item, "ref"), "key": key, "tag": text(ask, "tag") },
                 "mention": mention_of(item),
                 "dismiss": card["cancel"],
