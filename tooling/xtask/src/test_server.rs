@@ -83,14 +83,19 @@ struct Server {
     name: String,
     port: u16,
     folder: PathBuf,
+    /// The zmx socket folder: the one a test server's record names when it has one (a server started before the folder moved to /tmp keeps its daemons reachable), otherwise the /tmp folder below.
+    zmx_dir: PathBuf,
 }
 
 impl Server {
     fn new(name: &str, port: u16) -> Self {
+        let folder = servers_root().join(name);
+        let zmx_dir = recorded_zmx_dir(&folder).unwrap_or_else(|| default_zmx_dir(name));
         Self {
             name: name.to_string(),
             port,
-            folder: servers_root().join(name),
+            folder,
+            zmx_dir,
         }
     }
 
@@ -131,11 +136,7 @@ impl Server {
     ///
     /// CDXC:Build 2026-11-09 WHY: a socket path is capped at 103 bytes, and on a computer whose home sits on another volume (`/Volumes/<disk>/<user>`) `<home>/zmx` was already too long for any `--name`, so no test server could start. The folder is in /tmp, named after the user id and the server (/tmp is shared by every account, and another account's 0700 folder of the same name would refuse this one), and removed with the server.
     fn zmx_dir(&self) -> PathBuf {
-        #[cfg(unix)]
-        let uid = unsafe { libc::getuid() }.to_string();
-        #[cfg(not(unix))]
-        let uid = std::env::var("USERNAME").unwrap_or_default();
-        PathBuf::from(format!("/tmp/gxts-{uid}-{}", self.name))
+        self.zmx_dir.clone()
     }
     fn identity_file(&self) -> PathBuf {
         self.home().join("state/gxserver/identity.json")
@@ -419,6 +420,21 @@ fn start(args: &[String]) -> Res<i32> {
     Ok(0)
 }
 
+/// The `zmxDir` a test server's record names, when it has one.
+fn recorded_zmx_dir(folder: &Path) -> Option<PathBuf> {
+    let text = fs::read_to_string(folder.join(RECORD_FILE)).ok()?;
+    let record: serde_json::Value = serde_json::from_str(&text).ok()?;
+    record["zmxDir"].as_str().map(PathBuf::from)
+}
+
+fn default_zmx_dir(name: &str) -> PathBuf {
+    #[cfg(unix)]
+    let uid = unsafe { libc::getuid() }.to_string();
+    #[cfg(not(unix))]
+    let uid = std::env::var("USERNAME").unwrap_or_default();
+    PathBuf::from(format!("/tmp/gxts-{uid}-{name}"))
+}
+
 /// CDXC:Build 2026-11-06 DECISION:
 /// User: test servers shared the real zmx socket folder, and one that drew the real server's id (S90; ids are `S` + digit + letter-or-digit, 360 in all) ended every real session as "unowned" each time it started (05:58, 06:09 and 06:17 on 2026-11-06). Each test server therefore gets its own ZMX_DIR and a server id no other gxserver here uses, and this refuses to launch one whose zmx folder is a default (shared) one or whose id is taken. gxserver also no longer ends unowned daemons from a shared folder (`zmx_socket_directory_is_shared`, server/src/zmx/screen_capture.rs).
 fn ensure_isolated(server: &Server) -> Res {
@@ -430,6 +446,15 @@ fn ensure_isolated(server: &Server) -> Res {
             .recursive(true)
             .mode(0o700)
             .create(&zmx_dir)?;
+        // /tmp is shared by every account: a folder another account made first, or a link to one, is not this server's private folder.
+        use std::os::unix::fs::MetadataExt;
+        let meta = fs::symlink_metadata(&zmx_dir)?;
+        if !meta.is_dir() || meta.uid() != unsafe { libc::getuid() } || meta.mode() & 0o077 != 0 {
+            bail!(
+                "Refusing to start: {} is not a private folder of this user (a link, another owner or open permissions). Remove it and start again.",
+                zmx_dir.display()
+            );
+        }
     }
     let canonical = fs::canonicalize(&zmx_dir)?;
     for shared in default_zmx_dirs() {
