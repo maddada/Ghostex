@@ -32,6 +32,27 @@ pub(crate) fn session_holds_prompt_card(session: &Value) -> bool {
     crate::agents::session_chat_prompt_setting(session).is_some()
 }
 
+/// Whether a session whose agent is missing from its live daemon needs the detection funnel's look
+/// even though it does not read working: it holds a card nothing can answer, or queued messages
+/// that wait on an agent that is gone (the queue sends them once the absence is confirmed,
+/// `transcript_lifecycle_is_working` in session_chat_queue_runtime/scheduler.rs).
+pub(crate) fn session_needs_gone_probe(state: &AppState, session: &Value) -> bool {
+    if session_holds_prompt_card(session) {
+        return true;
+    }
+    let (Some(project_id), Some(session_id)) = (
+        session.get("projectId").and_then(Value::as_str),
+        session.get("sessionId").and_then(Value::as_str),
+    ) else {
+        return false;
+    };
+    open_gxserver_database(&state.paths).is_ok_and(|db| {
+        crate::session_chat_queue::session_has_pending_session_chat_queue(
+            &db, project_id, session_id,
+        )
+    })
+}
+
 /// Runs [`retire_gone_agent_prompt`] off the probe's thread, at most once at a time per session,
 /// for the absence confirmed at `generation`.
 pub(crate) fn dispatch_gone_agent_prompt_retire(

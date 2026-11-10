@@ -167,7 +167,7 @@ impl Drop for GoneProbeInFlight {
 /// gets a fresh look through the chat detection funnel, so the gone-agent reconcile there
 /// (session_chat_agent_gone_activity.rs) also reaches a session nobody has open. Working only:
 /// the tick's own `working` counts attention too, and an attention is left alone unless it holds
-/// an approval or question card. The funnel's classifier decides whether the agent is gone; this
+/// an approval or question card or queued messages. The funnel's classifier decides whether the agent is gone; this
 /// only asks it to look.
 fn probe_working_sessions_without_agent(
     state: &AppState,
@@ -190,10 +190,11 @@ fn probe_working_sessions_without_agent(
         }) else {
             continue;
         };
-        // A stored card counts too: a killed agent's approval leaves the session in attention,
-        // and the funnel's look is what retires it (session_chat_agent_gone_prompt.rs).
+        // A stored card or queued messages count too: a killed agent's approval leaves the session
+        // in attention, and the funnel's look is what retires the card and lets the queue go
+        // (session_chat_agent_gone_prompt.rs).
         if !crate::agents::stored_activity_is_working(session)
-            && !crate::session_chat_agent_gone_prompt::session_holds_prompt_card(session)
+            && !crate::session_chat_agent_gone_prompt::session_needs_gone_probe(state, session)
         {
             continue;
         }
