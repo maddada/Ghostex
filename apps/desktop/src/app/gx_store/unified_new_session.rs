@@ -261,9 +261,7 @@ impl GhostexGpuiApp {
     pub(crate) fn gx_store_new_thread_picker_place(
         &mut self,
     ) -> Option<crate::app::window::NewThreadPickerPlace> {
-        use crate::app::window::{
-            NewThreadPickerMachine, NewThreadPickerPlace, NewThreadPickerProject,
-        };
+        use crate::app::window::NewThreadPickerPlace;
         // Recent reads the saved starts, which the Project sidebar never reads on its own.
         self.gx_store.unified_sidebar.ensure_saved_read();
         let choices = self.gx_store_project_choices();
@@ -271,27 +269,7 @@ impl GhostexGpuiApp {
             Some(start) => Some(start),
             None => self.gx_store_new_session_start(&choices),
         }?;
-        let mut projects: Vec<NewThreadPickerProject> = choices
-            .iter()
-            .map(|choice| NewThreadPickerProject {
-                repo_key: choice.repo_key.clone(),
-                label: choice.label.clone(),
-                has_sessions: choice.has_sessions,
-                recent: choice.recent,
-                machines: choice
-                    .machines
-                    .iter()
-                    .map(|machine| NewThreadPickerMachine {
-                        machine_id: machine.machine_id.clone(),
-                        label: machine.label.clone(),
-                        connected: machine.connected,
-                        project_id: machine.project_id.clone(),
-                    })
-                    .collect(),
-                start_machine: choice.selected,
-                detail: choice.detail.clone(),
-            })
-            .collect();
+        let mut projects = choices;
         let project = projects
             .iter()
             .position(|project| project.repo_key == start.repo_key)?;
