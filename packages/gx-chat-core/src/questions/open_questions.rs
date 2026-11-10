@@ -691,6 +691,9 @@ pub struct ListInputs {
     resource_index: Stamped<crate::questions::resource_index::ResourceIndex>,
     later_question_ids: Stamped<Vec<String>>,
     removed_question_ids: Stamped<Vec<String>>,
+    /// The tags work items ask, which take a question off the list (`waiting`); read from the
+    /// coordinator threads, so a work item that starts or stops asking a tag lists the rows again.
+    card_tags: crate::questions::forms::CardTags,
 }
 
 impl ListInputs {
@@ -703,12 +706,14 @@ impl ListInputs {
             resource_index: state.session.resource_index.clone(),
             later_question_ids: state.session.later_question_ids.clone(),
             removed_question_ids: state.session.removed_question_ids.clone(),
+            card_tags: crate::questions::forms::CardTags::of(state),
         }
     }
 
     /// By stamp where it can, by value where a stamp moved ([`Stamped::same_as`]).
     fn matches(&mut self, state: &ChatState) -> bool {
-        self.askers.same_as(&state.transcript_view.askers)
+        self.card_tags.matches(state)
+            && self.askers.same_as(&state.transcript_view.askers)
             && self.questions.matches(&state.questions)
             && self.content.same_as(&state.questions.content.items)
             && self.queue_prompts.same_as(&state.session.queue_prompts)
