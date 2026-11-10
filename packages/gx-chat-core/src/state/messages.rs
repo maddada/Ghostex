@@ -93,6 +93,9 @@ pub struct MessagesState {
     pub retained_saved_at_ms: f64,
     /// When the debounced retained write is due, or `None` when none is pending.
     pub persist_due_ms: Option<f64>,
+    /// The last retained write found the snapshot over the record bound, so the next one counts
+    /// it before keeping any of it (`session::persistence::flush_due`).
+    pub persisted_over_bound: bool,
     /// The fold the last [`crate::session::persistence::schedule`] was made for, so one fold asks
     /// for one write.
     pub persisted_revision: u64,

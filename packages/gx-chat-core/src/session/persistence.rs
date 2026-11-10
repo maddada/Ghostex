@@ -66,10 +66,108 @@ pub fn decode(value: Option<&str>, now_ms: f64) -> Option<StoredSnapshot> {
 /// did: an oversized snapshot is disposable, and slicing it would leave an invalid pagination
 /// cursor behind.
 pub fn encode(record: &StoredSnapshot) -> Option<String> {
-    if !fits_record_bound(&record.snapshot) {
+    write_record(
+        &record.key,
+        record.saved_at,
+        record.requested_window,
+        &record.snapshot,
+        false,
+    )
+}
+
+/// The head of a [`StoredSnapshot`]: every field before `snapshot`, in the same order and names.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordHead<'a> {
+    key: &'a str,
+    saved_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    requested_window: Option<u32>,
+}
+
+/// [`encode`] without a [`StoredSnapshot`] to hold the snapshot: the same bytes
+/// `serde_json::to_string` writes for the record, or `None` when the snapshot is over the bound.
+///
+/// CDXC:SessionChat 2026-11-10 WHY: a flush cloned the whole snapshot and wrote it out three times (measured by `fits_record_bound`, measured again by `encode`, then serialized), about 16% of a hidden chat's event in the memharness soak with nine agents working. The snapshot is now written once, counted as it is written and given up at the bound, straight after the record's head; the result is byte for byte what serializing the record wrote. A snapshot whose rows' own text already passes the bound is judged too large before anything is written ([`text_units`]), and that count sizes the buffer for the rest.
+fn write_record(
+    key: &str,
+    saved_at: i64,
+    requested_window: Option<u32>,
+    snapshot: &FoldedSnapshot,
+    count_first: bool,
+) -> Option<String> {
+    let limit = PERSISTED_MAX_RECORD_BYTES / 2;
+    let text = text_units(snapshot, limit);
+    if text > limit {
         return None;
     }
-    serde_json::to_string(record).ok()
+    // A chat that was over the bound last time likely still is: it is counted first without being
+    // kept, so a chat just over the bound does not copy a megabyte only to drop it.
+    if count_first && !fits_record_bound(snapshot) {
+        return None;
+    }
+    let mut head = Vec::with_capacity(text * 2);
+    serde_json::to_writer(
+        &mut head,
+        &RecordHead {
+            key,
+            saved_at,
+            requested_window,
+        },
+    )
+    .ok()?;
+    // `{"key":…,"savedAt":…}` loses its closing brace and takes the snapshot as its last field.
+    let mut writer = Utf16Counter {
+        units: 0,
+        limit,
+        out: Some(head),
+    };
+    let out = writer.out.as_mut()?;
+    out.pop();
+    out.extend_from_slice(b",\"snapshot\":");
+    serde_json::to_writer(&mut writer, snapshot).ok()?;
+    let mut out = writer.out?;
+    out.push(b'}');
+    String::from_utf8(out).ok()
+}
+
+/// The UTF-16 units of the rows' own text (ids, words, tool output), counted until they pass
+/// `limit`.
+///
+/// Each of those strings is written into the record at least once and never shorter than it is
+/// (an escape only lengthens it, and anything else is written as it stands), so a count over
+/// `limit` means the record is over the bound too; one under it decides nothing, and the snapshot
+/// is measured.
+fn text_units(snapshot: &FoldedSnapshot, limit: usize) -> usize {
+    let mut units = 0usize;
+    for message in &snapshot.result.messages {
+        units += utf16_units(message.id.as_bytes());
+        for block in &message.blocks {
+            units += match block {
+                ghostex_gx_protocol::chat::ChatBlock::Text { text } => utf16_units(text.as_bytes()),
+                ghostex_gx_protocol::chat::ChatBlock::ToolResult { output, .. } => {
+                    utf16_units(output.as_bytes())
+                }
+                _ => 0,
+            };
+        }
+        if units > limit {
+            break;
+        }
+    }
+    units
+}
+
+/// The UTF-16 code units of a UTF-8 string ([`Utf16Counter`]'s rule).
+fn utf16_units(bytes: &[u8]) -> usize {
+    bytes
+        .iter()
+        .map(|byte| match byte {
+            0x80..=0xBF => 0,
+            0xF0..=0xFF => 2,
+            _ => 1,
+        })
+        .sum()
 }
 
 /// The hydration read the store starts as soon as it is created.
@@ -137,21 +235,17 @@ pub fn flush_due(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
     let Some(snapshot) = state.messages.snapshot.as_ref() else {
         return Vec::new();
     };
-    // Measured before it is copied: an oversized snapshot deletes the record (`encode`).
-    if !fits_record_bound(snapshot) {
-        return vec![Effect::WriteRetainedSnapshot { value: None }];
-    }
-    let snapshot = snapshot.clone();
-    let record = StoredSnapshot {
-        key: state.messages.retained_key.clone(),
+    // An oversized snapshot deletes the record (`None`), as `encode` does.
+    let value = write_record(
+        &state.messages.retained_key,
         // `Date.now()` is an integer, and the record is read back by JavaScript.
-        saved_at: state.messages.retained_saved_at_ms as i64,
-        requested_window: Some(state.messages.limit),
+        state.messages.retained_saved_at_ms as i64,
+        Some(state.messages.limit),
         snapshot,
-    };
-    vec![Effect::WriteRetainedSnapshot {
-        value: encode(&record),
-    }]
+        state.messages.persisted_over_bound,
+    );
+    state.messages.persisted_over_bound = value.is_none();
+    vec![Effect::WriteRetainedSnapshot { value }]
 }
 
 /// Whether a stored record is still usable, which is the read-side half of the bound.
@@ -168,33 +262,33 @@ pub fn is_fresh(record: &StoredSnapshot, now_ms: f64) -> bool {
 /// CDXC:SessionChat 2026-11-08 WHY:
 /// The check serialized the whole snapshot to measure it, once a second while rows arrived. A chat scrolled far up holds tens of megabytes of rows, far over the bound, so every flush wrote out the whole transcript only to throw it away, which was a fifth of the chat worker's time per new row on a 19,000-row chat (the user's "gets slower with time until it becomes super slow"). The writer below counts as it goes and stops at the bound, so an oversized snapshot costs what the bound costs, and the answer is the same.
 pub fn fits_record_bound(snapshot: &FoldedSnapshot) -> bool {
+    let limit = PERSISTED_MAX_RECORD_BYTES / 2;
     let mut counter = Utf16Counter {
         units: 0,
-        limit: PERSISTED_MAX_RECORD_BYTES / 2,
+        limit,
+        out: None,
     };
-    serde_json::to_writer(&mut counter, snapshot).is_ok()
+    text_units(snapshot, limit) <= limit && serde_json::to_writer(&mut counter, snapshot).is_ok()
 }
 
-/// Counts the UTF-16 code units of the UTF-8 it is written, and fails once they pass `limit`.
+/// Counts the UTF-16 code units of the UTF-8 it is written, keeps it in `out` when given one,
+/// and fails once the units pass `limit`.
 struct Utf16Counter {
     units: usize,
     limit: usize,
+    out: Option<Vec<u8>>,
 }
 
 impl std::io::Write for Utf16Counter {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         // Each UTF-8 lead byte starts one character: a four-byte one (0xF0 and up) is two UTF-16
         // units, and continuation bytes (0b10xx_xxxx) add nothing, however the writes are split.
-        self.units += bytes
-            .iter()
-            .map(|byte| match byte {
-                0x80..=0xBF => 0,
-                0xF0..=0xFF => 2,
-                _ => 1,
-            })
-            .sum::<usize>();
+        self.units += utf16_units(bytes);
         if self.units > self.limit {
             return Err(std::io::Error::other("over the record bound"));
+        }
+        if let Some(out) = self.out.as_mut() {
+            out.extend_from_slice(bytes);
         }
         Ok(bytes.len())
     }
