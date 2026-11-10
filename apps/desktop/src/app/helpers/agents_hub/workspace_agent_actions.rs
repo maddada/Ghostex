@@ -145,9 +145,13 @@ pub(crate) struct AgentsWorkspaceTerminalLaunch {
     pub(crate) startup_text: String,
 }
 
-pub(crate) fn gpui_create_local_project_workspace_terminal_with_launch(
+/// Creates an extension's terminal session and its attach plan, calling `on_created` as soon as the
+/// session exists, before its terminal starts (agents_tab_create_and_split.rs places it in its
+/// sidebar folder there).
+pub(crate) fn gpui_create_local_project_workspace_terminal_with_launch_then(
     project_id: &str,
     launch: &AgentsWorkspaceTerminalLaunch,
+    on_created: impl FnOnce(&GpuiLocalWorkspaceSessionKey),
 ) -> Result<
     (
         GpuiLocalWorkspaceSessionKey,
@@ -191,6 +195,7 @@ pub(crate) fn gpui_create_local_project_workspace_terminal_with_launch(
         project_id: created_project_id,
         session_id,
     };
+    on_created(&key);
     match gpui_prepare_local_workspace_attach_terminal_plan_with_startup_text(
         &key,
         Some(&launch.startup_text),

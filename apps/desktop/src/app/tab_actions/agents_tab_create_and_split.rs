@@ -180,30 +180,44 @@ impl GhostexGpuiApp {
         };
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let result = background
-                .spawn(async move {
-                    if let Some(launch) = launch.as_ref() {
-                        gpui_create_local_project_workspace_terminal_with_launch(
-                            project_id.as_str(),
-                            launch,
-                        )
-                    } else {
-                        gpui_create_local_project_workspace_terminal(project_id.as_str())
-                    }
-                })
-                .await;
+            // The new session joins its folder as soon as gxserver created it, while its terminal
+            // is still starting: placed after the start, its row sat at the top of the project's
+            // list for the seconds the wake took (user, of #525: "it's showing the terminal at the
+            // top of sessions then moving it after few seconds").
+            let (created_tx, created_rx) = futures::channel::oneshot::channel();
+            let create = background.spawn(async move {
+                let on_created = move |key: &GpuiLocalWorkspaceSessionKey| {
+                    let _ = created_tx.send(key.clone());
+                };
+                if let Some(launch) = launch.as_ref() {
+                    gpui_create_local_project_workspace_terminal_with_launch_then(
+                        project_id.as_str(),
+                        launch,
+                        on_created,
+                    )
+                } else {
+                    gpui_create_local_project_workspace_terminal_then(
+                        project_id.as_str(),
+                        on_created,
+                    )
+                }
+            });
+            if let Ok(key) = created_rx.await
+                && let Some((project, group_id)) = &active_subgroup
+                && project.project_id == key.project_id
+            {
+                let _ = this.update(cx, |this, cx| {
+                    this.gx_store_place_created_session_in_subgroup(
+                        project,
+                        &key.session_id,
+                        group_id,
+                        cx,
+                    );
+                });
+            }
+            let result = create.await;
             let _ = this.update(cx, |this, cx| match result {
                 Ok((key, plan)) => {
-                    if let Some((project, group_id)) = &active_subgroup
-                        && project.project_id == key.project_id
-                    {
-                        this.gx_store_place_created_session_in_subgroup(
-                            project,
-                            &key.session_id,
-                            group_id,
-                            cx,
-                        );
-                    }
                     #[cfg(target_os = "windows")]
                     {
                         /*
