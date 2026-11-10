@@ -49,6 +49,9 @@ pub fn assemble_with(
         &open_asks,
     );
     document.work_cards = ghostex_gx_protocol::Tri::Value(work_cards);
+    document.work_ask_tags = ghostex_gx_protocol::Tri::Value(serde_json::json!(
+        crate::extras::work_cards::card_tags(state)
+    ));
     composer::document(state, context, &mut document);
     menus::document(state, context, &mut document);
     let board = crate::extras::coordinator_board::project_kept(state, context, &mut cache.board);

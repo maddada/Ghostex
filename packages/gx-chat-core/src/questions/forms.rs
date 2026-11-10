@@ -773,6 +773,8 @@ pub struct FormsInputs {
     removed_question_ids: Vec<String>,
     collab: Option<Value>,
     collab_guest: Option<Value>,
+    /// The tags work items ask, which cover a form (`extras::work_cards::card_tags`).
+    card_tags: std::collections::BTreeSet<String>,
 }
 
 impl FormsInputs {
@@ -788,6 +790,7 @@ impl FormsInputs {
             removed_question_ids: state.session.removed_question_ids.clone(),
             collab: state.session.collab.clone(),
             collab_guest: state.session.collab_guest.clone(),
+            card_tags: crate::extras::work_cards::card_tags(state),
         }
     }
 
@@ -803,6 +806,7 @@ impl FormsInputs {
             && self.removed_question_ids == state.session.removed_question_ids
             && self.collab == state.session.collab
             && self.collab_guest == state.session.collab_guest
+            && self.card_tags == crate::extras::work_cards::card_tags(state)
     }
 }
 
@@ -829,6 +833,7 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
 }
 
 fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
+    let card_tags = crate::extras::work_cards::card_tags(state);
     let later = crate::questions::open_questions::later_waiting(state);
     let removed = crate::questions::later::removed_ids(state);
     let index = state.session.resource_index.view();
@@ -925,6 +930,16 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
             let takes_notes = takes_notes(form);
             let mut value = linked_form(form);
             if let Some(object) = value.as_object_mut() {
+                // Its question is a work item's ask, drawn as that card: the renderers skip it
+                // (`extras::work_cards::card_tags`).
+                let tags: Vec<String> = form
+                    .questions
+                    .iter()
+                    .map(|question| question.tag.clone())
+                    .collect();
+                if crate::extras::work_cards::covered_by_cards(&tags, &card_tags) {
+                    object.insert("coveredByCard".to_string(), json!(true));
+                }
                 object.insert("state".to_string(), json!(phase));
                 object.insert("canSend".to_string(), json!(phase == "open"));
                 // CDXC:SessionChat 2026-10-12 DECISION: User: "i see the answer twice fam" (the answered form showed the picks and "Sent to the agent" while the answer message below repeated them); picked option c of docs/2026-10-12/handover-colors-and-answers/index.html: once the transcript carries a form's answers it collapses to one line (a check, the title, "Answered", a chevron) that opens the full read-only form and closes it again, collapsed by default and after a reload; the "You answered" card below stays as the record.

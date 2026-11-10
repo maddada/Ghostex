@@ -98,6 +98,13 @@ pub(super) fn show(parsed: &ParsedArgs) -> CliResult<()> {
     if parsed.flags.contains("setOverrides") || parsed.flags.truthy("clearOverrides") {
         return set_overrides(parsed);
     }
+    if parsed.flags.contains("addOverride")
+        || parsed.flags.contains("replaceOverride")
+        || parsed.flags.contains("removeOverride")
+        || parsed.flags.truthy("listOverrides")
+    {
+        return edit_overrides(parsed);
+    }
     let (project_id, flags, _) = target_project(parsed, true)?;
     let mut params = json!({});
     if let Some(project_id) = &project_id {
@@ -179,12 +186,8 @@ fn set_overrides(parsed: &ParsedArgs) -> CliResult<()> {
         ));
     }
     // The machine the calling session runs on, like `guide`: its coordinators read them.
-    let (_, flags, _) = target_project(parsed, true)?;
-    let view = call_gxserver_rpc(
-        "/api/setCoordinatorPlaybook",
-        &json!({ "overrides": text }),
-        &flags,
-    )?;
+    let (_, flags, caller) = target_project(parsed, true)?;
+    let view = save_overrides(&text, caller.as_ref(), &flags)?;
     if parsed.flags.truthy("json") {
         print_json(&view);
         return Ok(());
@@ -250,5 +253,117 @@ pub(super) fn set(parsed: &ParsedArgs) -> CliResult<()> {
         }
     }
     println!("Coordinators, existing ones too, read it at their next `ghostex coordinator guide`; the next message each one gets tells it the playbook changed.");
+    Ok(())
+}
+
+/// Saves the whole overrides text. A request from an agent session names that session: gxserver
+/// lets a session change the playbook only as itself (server/security_gates.rs
+/// `coordinator_refusal`), and before this the CLI named none, so every agent was refused.
+fn save_overrides(text: &str, caller: Option<&Value>, flags: &Flags) -> CliResult<Value> {
+    let mut params = json!({ "overrides": text });
+    if let Some(caller) = caller {
+        params["projectId"] = json!(agents::text(caller, "projectId"));
+        params["sessionId"] = json!(agents::text(caller, "sessionId"));
+    }
+    call_gxserver_rpc("/api/setCoordinatorPlaybook", &params, flags)
+}
+
+/// The overrides as numbered entries: each paragraph (lines with no blank line between them) is
+/// one rule.
+fn override_entries(text: &str) -> Vec<String> {
+    text.split("\n\n")
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// `playbook --list-overrides`, `--add-override "<rule>"`, `--replace-override <n> "<rule>"` and
+/// `--remove-override <n>`: one rule at a time, so an agent never rewrites the user's own text.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User: "we need agents to be able to modify the overrides for coordinators please. right now
+/// it's manual only". `--set-overrides` replaces the whole text, which an agent would use to
+/// clobber what the user wrote, so agents get numbered edits: list, add one rule to the end,
+/// replace or remove one by its number. Each saves the whole text through the same endpoint, so
+/// the 20,000 character limit and the note that tells every coordinator its playbook changed
+/// apply as they do to the Settings editor.
+fn edit_overrides(parsed: &ParsedArgs) -> CliResult<()> {
+    let (_, flags, caller) = target_project(parsed, true)?;
+    let view = call_gxserver_rpc("/api/readCoordinatorPlaybook", &json!({}), &flags)?;
+    let mut entries = override_entries(agents::text(&view["overrides"], "text"));
+    let number = |flag: &str| -> CliResult<usize> {
+        let words = flag_text(&parsed.flags, flag).unwrap_or_default();
+        let number: usize = words.trim().trim_start_matches('#').parse().map_err(|_| {
+            CliError::Other(format!(
+                "Name the override by its number (ghostex coordinator playbook --list-overrides shows them), not \"{words}\"."
+            ))
+        })?;
+        if number == 0 || number > entries.len() {
+            return Err(CliError::Other(format!(
+                "There is no override {number}: there {} {} (ghostex coordinator playbook --list-overrides).",
+                if entries.len() == 1 { "is" } else { "are" },
+                entries.len()
+            )));
+        }
+        Ok(number)
+    };
+    let rule = || -> CliResult<String> {
+        // `--body-file` wins; else `--add-override`'s own text; else the words after the number.
+        let rule = if flag_text(&parsed.flags, "bodyFile").is_some() {
+            text_or_file(parsed, "addOverride")?.unwrap_or_default()
+        } else if parsed.flags.contains("addOverride") {
+            flag_text(&parsed.flags, "addOverride").unwrap_or_else(|| parsed.rest.join(" "))
+        } else {
+            parsed.rest.join(" ")
+        };
+        // One rule is one paragraph: a blank line inside it would split it in two.
+        let rule = rule
+            .lines()
+            .map(str::trim_end)
+            .filter(|line| !line.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        if rule.is_empty() {
+            return Err(CliError::Other(
+                "Say the rule: --add-override \"<rule>\", or --replace-override <n> \"<rule>\" (--body-file <path> for a longer one).".into(),
+            ));
+        }
+        Ok(rule)
+    };
+    let done = if parsed.flags.contains("addOverride") {
+        entries.push(rule()?);
+        format!("Added override {}.", entries.len())
+    } else if parsed.flags.contains("replaceOverride") {
+        let at = number("replaceOverride")?;
+        entries[at - 1] = rule()?;
+        format!("Replaced override {at}.")
+    } else if parsed.flags.contains("removeOverride") {
+        let at = number("removeOverride")?;
+        entries.remove(at - 1);
+        format!("Removed override {at}; the ones after it moved up a number.")
+    } else {
+        if entries.is_empty() {
+            println!("No playbook overrides. --add-override \"<rule>\" adds one.");
+        }
+        for (index, entry) in entries.iter().enumerate() {
+            println!("{}. {}", index + 1, entry.replace('\n', "\n   "));
+        }
+        return Ok(());
+    };
+    let text = entries.join("\n\n");
+    let length = text.chars().count();
+    let limit = crate::coordinators::COORDINATOR_PLAYBOOK_OVERRIDES_MAX_CHARS;
+    if length > limit {
+        return Err(CliError::Other(format!(
+            "Not saved: the overrides would be {length} characters, over the {limit} character limit. Shorten the rule, or remove one first (--remove-override <n>)."
+        )));
+    }
+    let view = save_overrides(&text, caller.as_ref(), &flags)?;
+    if parsed.flags.truthy("json") {
+        print_json(&view);
+        return Ok(());
+    }
+    println!("{done} Every coordinator reads the overrides after the playbook, ranked above it; each one is told its playbook changed with its next message.");
     Ok(())
 }

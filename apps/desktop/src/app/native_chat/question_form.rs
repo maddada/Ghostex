@@ -368,6 +368,11 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> AnyElement {
         let form = &self.snapshot["questionForms"][id];
+        // Asked by a work item too: drawn once, as its ask card (gx-chat-core work_cards.rs
+        // `card_tags`).
+        if form["coveredByCard"] == true {
+            return gpui::div().into_any_element();
+        }
         if !form.is_object() {
             return self.text_view(
                 format!("question-form-source:{id}"),

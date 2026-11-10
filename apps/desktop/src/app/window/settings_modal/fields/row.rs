@@ -683,6 +683,30 @@ pub(crate) fn settings_list_item(
     detail: Option<AnyElement>,
     controls: Option<AnyElement>,
 ) -> AnyElement {
+    list_item(p, status, icon, title, detail, controls, false)
+}
+
+/// [`settings_list_item`] whose detail wraps onto as many lines as it needs instead of one
+/// ellipsized line: a setting whose explanation sits in the card, not in a tooltip (Settings >
+/// Security's approvals switch, CDXC:Security 2026-11-10 in tabs/security.rs).
+pub(crate) fn settings_list_item_wrapped(
+    p: &SettingsPalette,
+    title: impl IntoElement,
+    detail: AnyElement,
+    controls: Option<AnyElement>,
+) -> AnyElement {
+    list_item(p, None, None, title, Some(detail), controls, true)
+}
+
+fn list_item(
+    p: &SettingsPalette,
+    status: Option<ListItemStatus>,
+    icon: Option<AnyElement>,
+    title: impl IntoElement,
+    detail: Option<AnyElement>,
+    controls: Option<AnyElement>,
+    wrap: bool,
+) -> AnyElement {
     h_flex()
         .w_full()
         .min_h(px(ROW_MIN_HEIGHT))
@@ -728,9 +752,9 @@ pub(crate) fn settings_list_item(
                 .children(detail.map(|detail| {
                     div()
                         .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
+                        .when(!wrap, |line| {
+                            line.overflow_hidden().whitespace_nowrap().text_ellipsis()
+                        })
                         .text_size(px(13.0))
                         .line_height(px(18.2))
                         .text_color(hsla(p.muted))

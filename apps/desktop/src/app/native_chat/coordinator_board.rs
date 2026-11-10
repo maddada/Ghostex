@@ -67,6 +67,8 @@ const GROUP_HEIGHT: f32 = 34.0;
 const CARD_HEIGHT: f32 = 72.0;
 const CARD_GAP: f32 = 8.0;
 const MORE_HEIGHT: f32 = 28.0;
+/// The panel's padding under its list, which its height counts too.
+const LIST_BOTTOM: f32 = 16.0;
 /// The chat's body text size (render.rs), which the board's titles use; its chips one step down.
 const TITLE_SIZE: f32 = 14.0;
 const CHIP_SIZE: f32 = 12.5;
@@ -229,7 +231,9 @@ fn expanded_card_height(row: &Value) -> f32 {
 /// The board's content height (unscaled): its header, each group's line, an open group's rows
 /// and its "N more" line.
 pub(super) fn board_height(board: &Value) -> f32 {
-    let mut height = HEADER_HEIGHT + 8.0;
+    // The header, and room under the last group's line: the panel's own bottom padding cut the
+    // last line ("Finished today") when everything fit.
+    let mut height = HEADER_HEIGHT + 8.0 + LIST_BOTTOM;
     for group in board["groups"].as_array().into_iter().flatten() {
         height += GROUP_HEIGHT;
         for row in group["rows"].as_array().into_iter().flatten() {

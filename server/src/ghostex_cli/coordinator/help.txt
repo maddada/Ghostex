@@ -30,7 +30,8 @@ USAGE
                               [--release <name>] [--json]
   ghostex coordinator item now <W7> "<where it stands>" [--thread <thread-ref>]... [--json]
   ghostex coordinator item step <W7> "<step>" [--done] [--chore] [--json]
-  ghostex coordinator item ask <W7> "<what you ask>" [--answers "A,B" [--recommended B]]
+  ghostex coordinator item ask <W7> "<what you ask>" [--answers "A,B" | --answer "A" --answer "B"]
+                              [--recommended B]
                               [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex coordinator item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
   ghostex coordinator item wait <W7> --on <W8|Q12|"words">... [--until <when>] ["<line>"] [--json]
@@ -60,6 +61,10 @@ USAGE
                               [--overrides | --text | --default] [--json]
   ghostex coordinator playbook --set-overrides (<text> | --body-file <path>) [--json]
   ghostex coordinator playbook --clear-overrides [--json]
+  ghostex coordinator playbook --list-overrides
+  ghostex coordinator playbook --add-override (<rule> | --body-file <path>)
+  ghostex coordinator playbook --replace-override <n> (<rule> | --body-file <path>)
+  ghostex coordinator playbook --remove-override <n>
   ghostex coordinator set-playbook (--use-ghostex | --reset | --off | --on)
                               [--project-id <id> | --this-project] [--json]
 
@@ -234,14 +239,17 @@ WORK ITEMS
   --chore keeps a rebuild or test run out of sight: chores are never shown.
   ask puts something before the user, with a question tag (the next after the
   chat's, or --tag Q12 for one already asked in the chat): one-click answers
-  with --answers, the steps to follow with --steps, and --holds when the work
+  with --answers (commas split them; write \, for a comma inside an answer,
+  or give each with --answer "Too small to read, simplify it"), the steps to
+  follow with --steps, and --holds when the work
   stops until they do it. An ask settles when the user answers it (its card,
   or "Q12: yes" in the chat for a tag asked there), with --done Q12 when the
   user did it, or --withdraw Q12. wait replaces what it waits on: W8 (another
   item), Q12 (an ask) or words for something outside, with --until for when
   it's expected. done finishes it with the one line worth keeping and
-  withdraws its open asks; drop takes it off (restore brings it back for 7
-  days). edit renames it, attaches or detaches threads, or sets its status
+  withdraws its open questions; a task for the user stays under Needs you
+  until they mark it done. drop takes it off with everything it asks
+  (restore brings it back for 7 days). edit renames it, attaches or detaches threads, or sets its status
   (needs-you, blocked, moving, waiting, later, next, held, parked, backlog,
   finished). list prints the items by status with their asks, waits and
   threads (Finished and dropped with --all); list W7 prints one with its
@@ -323,6 +331,18 @@ COORDINATOR PLAYBOOK
   --overrides prints them, --text prints the playbook in effect without them,
   --default prints Ghostex's playbook. --set-overrides saves the overrides
   (text, or --body-file <path>) and --clear-overrides removes them.
+  One override at a time: the overrides are paragraphs, one rule each.
+  --list-overrides numbers them; --add-override "<rule>" adds one at the end,
+  --replace-override <n> "<rule>" rewrites rule n and --remove-override <n>
+  removes it (the ones after it move up a number). A rule is saved as one
+  paragraph. The overrides stay under 20,000 characters: a change that would
+  go over is refused and says so. A coordinator saves them too, when the user
+  confirms a rule for every coordinator; each coordinator is told its
+  playbook changed with its next message. For example:
+    ghostex coordinator playbook --add-override "Never push without asking."
+    ghostex coordinator playbook --list-overrides
+    ghostex coordinator playbook --replace-override 1 "Never push or merge without asking."
+    ghostex coordinator playbook --remove-override 1
   Before overrides (Ghostex 11.0 and earlier) the user could save an edited
   full copy of the playbook, for all projects or for one project and its
   worktrees. Such a copy stays in use, without Ghostex's updates, until the

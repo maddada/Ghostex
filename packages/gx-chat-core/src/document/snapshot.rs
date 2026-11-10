@@ -288,6 +288,9 @@ pub struct Document {
     /// drawn under the reply each sits under (`anchorId`), the item's newest card in full and its
     /// earlier ones folded to one line. Family f.
     pub work_cards: Tri<Value>,
+    /// The question tags work items ask (`extras::work_cards::card_tags`): a one-click question or
+    /// form asking only these is drawn once, as the ask card. Family f.
+    pub work_ask_tags: Tri<Value>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,

@@ -7,8 +7,9 @@
 //! SEE-ALSO: server/src/audit/ (the log and its check), packages/settings-catalog/src/pages/security.rs (its search rows), apps/desktop/src/app/gx_store/notifications/commands.rs (a security row in the bell opens this page).
 use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
-    ButtonVariant, FieldStates, ListItemStatus, RowSpec, SettingsPage, card_inset, settings_button,
-    settings_list_item, settings_section, static_note, toggle_field,
+    ButtonVariant, FieldStates, ListItemStatus, SettingsPage, card_inset, settings_button,
+    settings_list_item, settings_list_item_wrapped, settings_section, static_note, switch_control,
+    toggle_from_row,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -16,8 +17,8 @@ use super::super::palette::SettingsPalette;
 use super::super::rail::{rail_pages, render_no_matches};
 use super::super::store::{SettingsStore, store_gxserver_rpc};
 use gpui::{
-    AnyView, App, AppContext as _, Context, Div, Entity, IntoElement, ParentElement as _, Render,
-    Styled as _, Task, Window, div, px,
+    AnyElement, AnyView, App, AppContext as _, Context, Div, Entity, IntoElement,
+    ParentElement as _, Render, Styled as _, Task, Window, div, px,
 };
 use gpui_component::h_flex;
 use serde_json::{Value, json};
@@ -26,6 +27,7 @@ use std::time::Duration;
 const CALL_TIMEOUT: Duration = Duration::from_secs(10);
 const REFRESH_EVERY: Duration = Duration::from_secs(10);
 const SHOWN_ENTRIES: u64 = 200;
+const LOG_DESCRIPTION: &str = "Newest first. The important ones also show in the notification bell and on your paired phones.";
 
 pub(crate) fn security_tab_view(store: &Entity<SettingsStore>, cx: &mut App) -> AnyView {
     cx.new(|cx| SecurityTab::new(store.clone(), cx)).into()
@@ -38,6 +40,9 @@ pub(crate) struct SecurityTab {
     view: Option<Value>,
     error: Option<String>,
     was_active: bool,
+    /// The Security logs switch (`securityLogsEnabled`) as last seen: the log is read and shown only
+    /// while it is on.
+    logs_on: bool,
     _refresh: Option<Task<()>>,
 }
 
@@ -103,9 +108,12 @@ impl SecurityTab {
     fn new(store: Entity<SettingsStore>, cx: &mut Context<Self>) -> Self {
         cx.observe(&store, |page: &mut Self, store, cx| {
             let active = store.read(cx).active_tab() == SettingsTabId::Security;
-            if active && !page.was_active {
+            let logs_on = store.read(cx).security_logs_on();
+            if active && (!page.was_active || (logs_on && !page.logs_on)) {
+                page.logs_on = logs_on;
                 page.reload(cx);
             }
+            page.logs_on = logs_on;
             page.was_active = active;
             cx.notify();
         })
@@ -126,12 +134,13 @@ impl SecurityTab {
             view: None,
             error: None,
             was_active: true,
+            logs_on: false,
             _refresh: Some(refresh),
         }
     }
 
     fn reload(&mut self, cx: &mut Context<Self>) {
-        // The log shows only while Settings > Extensions > Experimental > Security logs is on.
+        // The log shows only while its switch (`securityLogsEnabled`, on this page) is on.
         if !self.store.read(cx).security_logs_on() {
             return;
         }
@@ -182,32 +191,58 @@ impl SecurityTab {
                 "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: Ghostex asks for your password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
             )
         };
+        /*
+        CDXC:Security 2026-11-10 DECISION:
+        User, looking at this page: "please move the text we have under the tool tip for that toggle to be inside the actual card instead of in the tooltip so the page doesn't look so empty". This row shows its explanation as a line under its label, inside the card (the list-item style Secrets and Sync use), with no tooltip; other Settings rows keep the 9 Sep "description only in the tooltip" rule (fields/row.rs `setting_row`).
+        */
         let key = "approvalsRequirePresence";
-        let (modified, checked) = {
-            let values = self.store.read(cx).values();
-            (values.is_modified(key), values.bool(key))
-        };
-        let row = toggle_field(
-            self,
+        let checked = self.store.read(cx).values().bool(key);
+        let switch = switch_control(
             p,
-            key,
-            RowSpec::new(label)
-                .description(description)
-                .modified(modified),
+            "approvalsRequirePresence-switch",
+            label,
             checked,
+            false,
+            None,
+            move |page: &mut Self, next, _window, cx| {
+                let store = page.store.clone();
+                store.update(cx, |store, cx| store.update_setting(key, json!(next), cx));
+            },
             cx,
+        );
+        let press = switch.press();
+        let row = toggle_from_row(
+            p,
+            "approvalsRequirePresence-row",
+            settings_list_item_wrapped(
+                p,
+                label,
+                div().child(description).into_any_element(),
+                Some(switch.into_any_element()),
+            ),
+            press,
         );
         settings_section(p, "Approvals", None, None, vec![row])
     }
 
     /// The chain check, then every entry, newest first.
-    fn log_section(&mut self, p: &SettingsPalette) -> Option<Div> {
-        let view = self.view.as_ref()?;
+    fn log_section(&mut self, p: &SettingsPalette, switch_row: AnyElement) -> Option<Div> {
+        let Some(view) = self.view.as_ref().filter(|_| self.logs_on) else {
+            return settings_section(
+                p,
+                "Security log",
+                Some(LOG_DESCRIPTION.into()),
+                None,
+                vec![switch_row],
+            );
+        };
         let check = &view["check"];
         let intact = check["intact"].as_bool() == Some(true);
         let count = check["entries"].as_u64().unwrap_or(0);
-        let mut rows = vec![if intact {
-            settings_list_item(
+        let mut rows = vec![
+            switch_row,
+            if intact {
+                settings_list_item(
                 p,
                 Some(ListItemStatus::Success),
                 None,
@@ -221,8 +256,8 @@ impl SecurityTab {
                 ),
                 None,
             )
-        } else {
-            settings_list_item(
+            } else {
+                settings_list_item(
                 p,
                 Some(ListItemStatus::Warning),
                 None,
@@ -240,7 +275,8 @@ impl SecurityTab {
                 ),
                 None,
             )
-        }];
+            },
+        ];
         let entries = view["entries"].as_array().cloned().unwrap_or_default();
         if entries.is_empty() {
             // In the row inset, as Secrets' notes are, not flush against the card's edges.
@@ -264,12 +300,84 @@ impl SecurityTab {
                 None,
             ));
         }
-        settings_section(
+        settings_section(p, "Security log", Some(LOG_DESCRIPTION.into()), None, rows)
+    }
+
+    /*
+    CDXC:Security 2026-11-10 DECISION:
+    User (Q2173): Settings > Security shows "What still asks": a short read-only list of what asks for an Approve under today's rule, one line each in the app's own words, and one closing line that everything else works without asking. The lines are `ghostex_gx_protocol::approval::STILL_ASKS`, the same list gxserver's rule reads (server/src/security/policy.rs), so the page can't drift from the code.
+    */
+    /// "What still asks": one row per line of `approval::STILL_ASKS`, then the closing line.
+    fn still_asks_section(&self, p: &SettingsPalette) -> Option<Div> {
+        use ghostex_gx_protocol::approval::{STILL_ASKS, STILL_ASKS_CLOSING};
+        let mut rows: Vec<AnyElement> = STILL_ASKS
+            .iter()
+            .map(|(_, _, line)| settings_list_item(p, None, None, line.to_string(), None, None))
+            .collect();
+        rows.push(card_inset(static_note(p, STILL_ASKS_CLOSING, false)));
+        settings_section(p, "What still asks", None, None, rows)
+    }
+
+    /*
+    CDXC:Security 2026-11-10 DECISION:
+    User (Q2173): the Security logs switch moves here from Settings > Extensions > Experimental, with Open log beside it; the log shows on this page only while it is on. Same key (`securityLogsEnabled`) and behaviour. Open log turns it on when it is off and scrolls to the log.
+    */
+    /// The Security logs switch with Open log beside it.
+    fn log_switch_row(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> AnyElement {
+        let key = "securityLogsEnabled";
+        let on = self.logs_on;
+        let switch = switch_control(
             p,
-            "Security log",
-            Some("Every sensitive action on this computer and who asked for it, newest first. The important ones also show in the notification bell and on your paired phones.".into()),
+            "securityLogsEnabled-switch",
+            "Show the security log",
+            on,
+            false,
             None,
-            rows,
+            move |page: &mut Self, next, _window, cx| {
+                let store = page.store.clone();
+                store.update(cx, |store, cx| store.update_setting(key, json!(next), cx));
+            },
+            cx,
+        );
+        let press = switch.press();
+        let open_log = settings_button(
+            p,
+            "security-open-log",
+            "Open log",
+            None,
+            ButtonVariant::Outline,
+            false,
+            None,
+            move |page: &mut Self, _window, cx| {
+                let store = page.store.clone();
+                store.update(cx, |store, cx| {
+                    if !store.security_logs_on() {
+                        store.update_setting(key, json!(true), cx);
+                    }
+                    store.scroll_to_section(SettingsTabId::Security, "log", cx);
+                });
+            },
+            cx,
+        );
+        toggle_from_row(
+            p,
+            "securityLogsEnabled-row",
+            settings_list_item_wrapped(
+                p,
+                "Show the security log",
+                div()
+                    .child("Every pairing, Easy Connect change, Collab share and approval on this computer, and who asked for it. The log is kept and its alerts arrive whether this is on or off.")
+                    .into_any_element(),
+                Some(
+                    h_flex()
+                        .gap(px(12.0))
+                        .items_center()
+                        .child(open_log)
+                        .child(switch.into_any_element())
+                        .into_any_element(),
+                ),
+            ),
+            press,
         )
     }
 }
@@ -300,59 +408,58 @@ impl Render for SecurityTab {
             )));
             return settings_page(&self.store, SettingsTabId::Security, &p, blocks, cx);
         }
+        self.logs_on = self.store.read(cx).security_logs_on();
         if let Some(section) = self.approvals_section(&p, cx) {
             blocks.push(PageBlock::section("approvals", section));
         }
-        if !self.store.read(cx).security_logs_on() {
-            return settings_page(&self.store, SettingsTabId::Security, &p, blocks, cx);
+        if let Some(section) = self.still_asks_section(&p) {
+            blocks.push(PageBlock::section("stillAsks", section));
         }
-        if self.error.as_deref().is_some_and(is_service_unreachable) {
-            blocks.push(PageBlock::plain(service_unreachable_state(
-                &p,
-                "security-unreachable",
-                |page: &mut Self, _window, cx| page.reload(cx),
-                cx,
-            )));
-        }
-        if let Some(error) = self
-            .error
-            .clone()
-            .filter(|error| !is_service_unreachable(error))
-        {
-            let retry = settings_button(
-                &p,
-                "security-retry",
-                "Try again",
-                Some("modals/settings/refresh.svg"),
-                ButtonVariant::Outline,
-                false,
-                None,
-                |page: &mut Self, _window, cx| page.reload(cx),
-                cx,
-            );
-            blocks.push(PageBlock::plain(
-                h_flex()
-                    .w_full()
-                    .gap(px(12.0))
-                    .items_center()
-                    .child(div().flex_1().min_w_0().child(static_note(&p, error, true)))
-                    .child(retry),
-            ));
-        }
-        if self.view.is_none() {
-            if self.error.is_none() {
-                blocks.push(PageBlock::plain(static_note(
+        let switch_row = self.log_switch_row(&p, cx);
+        if self.logs_on {
+            if self.error.as_deref().is_some_and(is_service_unreachable) {
+                blocks.push(PageBlock::plain(service_unreachable_state(
                     &p,
-                    "Reading the security log\u{2026}",
-                    false,
+                    "security-unreachable",
+                    |page: &mut Self, _window, cx| page.reload(cx),
+                    cx,
                 )));
             }
-            return settings_page(&self.store, SettingsTabId::Security, &p, blocks, cx);
+            if let Some(error) = self
+                .error
+                .clone()
+                .filter(|error| !is_service_unreachable(error))
+            {
+                let retry = settings_button(
+                    &p,
+                    "security-retry",
+                    "Try again",
+                    Some("modals/settings/refresh.svg"),
+                    ButtonVariant::Outline,
+                    false,
+                    None,
+                    |page: &mut Self, _window, cx| page.reload(cx),
+                    cx,
+                );
+                blocks.push(PageBlock::plain(
+                    h_flex()
+                        .w_full()
+                        .gap(px(12.0))
+                        .items_center()
+                        .child(div().flex_1().min_w_0().child(static_note(&p, error, true)))
+                        .child(retry),
+                ));
+            }
         }
-        if let Some(section) = self.log_section(&p) {
-            let mut block = PageBlock::section("log", section);
-            block.margin_top += 20.0;
-            blocks.push(block);
+        if let Some(section) = self.log_section(&p, switch_row) {
+            blocks.push(PageBlock::section("log", section));
+        }
+        if self.logs_on && self.view.is_none() && self.error.is_none() {
+            blocks.push(PageBlock::plain(static_note(
+                &p,
+                "Reading the security log\u{2026}",
+                false,
+            )));
         }
         settings_page(&self.store, SettingsTabId::Security, &p, blocks, cx)
     }

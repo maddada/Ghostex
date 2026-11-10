@@ -102,15 +102,10 @@ pub(crate) fn with_launch_notes(agent_id: &str, icon: Option<&str>, command: &st
         let pointer_arg = crate::coordinators::codex_developer_instructions_arg(
             crate::coordinators::GUIDE_POINTER_COORDINATOR_INSTRUCTIONS,
         );
+        // An older Codex coordinator keeps only its guide pointer: its work item cards take over
+        // the handover's sections (coordinators/role.rs `COORDINATOR_REPLY_FORMAT`).
         if command.contains(&pointer_arg) {
-            if orchestrator_plain_replies(&paths) {
-                return command.to_string();
-            }
-            let combined = format!(
-                "{}\n\n{MARKED_HANDOVERS_NOTE}",
-                crate::coordinators::GUIDE_POINTER_COORDINATOR_INSTRUCTIONS
-            );
-            return command.replace(&pointer_arg, &codex_note_arg(&combined));
+            return command.to_string();
         }
     }
     let Some(text) = super::current_launch_note_text(&paths) else {

@@ -27,15 +27,19 @@ CDXC:Security 2026-11-08 DECISION:
 impl SecurityState {
     /// Whether `caller` may do `action` without a card (see the decision above).
     pub fn skips_approval(&self, caller: &Principal, action: &ActionRequest) -> bool {
-        use SensitiveAction::*;
+        use ghostex_gx_protocol::approval::{asks_when, AsksWhen};
         let you = caller.is_owner_device();
-        match &action.action {
+        // The list Settings > Security shows is the rule (`approval::STILL_ASKS`).
+        match asks_when(&action.action) {
             // Someone new asks to come in: always a card.
-            PairingApproveDevice | CollabApproveGuestMessage => false,
+            Some(AsksWhen::Always) => false,
+            // Turning Easy Connect on asks an agent once, then is remembered.
+            Some(AsksWhen::AgentAsks) if action.action == SensitiveAction::EasyConnectEnable => {
+                you || self.is_remembered(EASY_CONNECT_ENABLE)
+            }
             // Lets someone new in when an agent does it; your own click is the approval.
-            EasyConnectEnable => you || self.is_remembered(EASY_CONNECT_ENABLE),
-            EasyConnectAllowList | CollabShareChat | CollabEnableSendMode => you,
-            _ => true,
+            Some(AsksWhen::AgentAsks) => you,
+            None => true,
         }
     }
 

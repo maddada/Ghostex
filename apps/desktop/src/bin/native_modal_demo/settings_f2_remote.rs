@@ -297,6 +297,15 @@ pub(super) fn rpc(path: &str, params: &Value) -> Result<Value, String> {
                     .retain(|device| device.get("id").and_then(Value::as_str) != Some(id));
                 Ok(json!({ "devices": fixture.devices }))
             }
+            // Settings > Security's log with the Security logs switch on (tabs/security.rs).
+            "/api/securityLog" => Ok(json!({
+                "check": { "intact": true, "entries": 3 },
+                "entries": [
+                    { "summary": "Pair an iPhone that calls itself \"Mo's iPhone\"", "outcome": "approved", "atMs": 1794268800000_i64, "actor": { "kind": "device", "label": "Mo's iPhone" } },
+                    { "summary": "Turn on Easy Connect", "outcome": "approved", "atMs": 1794265200000_i64, "actor": { "kind": "session", "label": "Fix login bug" } },
+                    { "summary": "Let one more device connect through Easy Connect", "outcome": "denied", "atMs": 1794261600000_i64, "actor": { "kind": "session", "label": "Release checks" } },
+                ],
+            })),
             other => Err(format!("Story gxserver has no handler for {other}.")),
         }
     })

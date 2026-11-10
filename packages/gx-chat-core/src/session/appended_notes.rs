@@ -17,14 +17,22 @@
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 
 /// Under a coordinator's next message after a Ghostex update changed its shipped playbook.
-pub const PLAYBOOK_CHANGED_BY_UPDATE_NOTE: &str = "Ghostex was updated and your playbook changed: run `ghostex coordinator guide` now and follow it from here on.";
+pub const PLAYBOOK_CHANGED_BY_UPDATE_NOTE: &str = "Ghostex was updated and your playbook changed: work items and their cards replace the board and your replies' status sections. Run `ghostex coordinator guide` now and follow it from here on.";
+
+/// The update note before the work items playbook (2026-11-10), still recognised under older
+/// messages.
+const PLAYBOOK_CHANGED_BY_UPDATE_NOTE_BEFORE_WORK_ITEMS: &str = "Ghostex was updated and your playbook changed: run `ghostex coordinator guide` now and follow it from here on.";
 
 /// Under a coordinator's next message after its project's (or all projects') playbook changed.
 pub const PLAYBOOK_CHANGED_NOTE: &str =
     "Your playbook changed: run `ghostex coordinator guide` now and follow it from here on.";
 
 /// Every note gxserver may add under a message the user sent from the chat.
-pub const APPENDED_NOTES: [&str; 2] = [PLAYBOOK_CHANGED_BY_UPDATE_NOTE, PLAYBOOK_CHANGED_NOTE];
+pub const APPENDED_NOTES: [&str; 3] = [
+    PLAYBOOK_CHANGED_BY_UPDATE_NOTE,
+    PLAYBOOK_CHANGED_NOTE,
+    PLAYBOOK_CHANGED_BY_UPDATE_NOTE_BEFORE_WORK_ITEMS,
+];
 
 /// `text` with `note` under it, a blank line apart: the shape gxserver types.
 pub fn with_note(text: &str, note: &str) -> String {

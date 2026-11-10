@@ -195,7 +195,7 @@ pub(super) fn session_pill_icon(
         rgb(0xffffff).into()
     };
     if coordinator {
-        // A pill's logo is about 13 px: the picture's thicker-lined copy for small sizes
+        // A pill's logo is about 13 px: the hat's thicker-lined copy for small sizes
         // (native_sidebar/threads.rs `captain_hat_asset`).
         return ("titlebar/coordinator-captain-hat-small.svg", plain);
     }

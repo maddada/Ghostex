@@ -581,10 +581,9 @@ pub fn derive(item: &WorkItem, context: &WorkContext<'_>) -> (&'static str, Valu
 
 /// An ask's stored answers ("Yes*,No") as choices: `{label, recommended}`.
 pub fn parse_answers(answers: &str) -> Vec<Value> {
-    answers
-        .split(',')
-        .map(str::trim)
-        .filter(|answer| !answer.is_empty() && *answer != "*")
+    split_answers(answers)
+        .into_iter()
+        .filter(|answer| !answer.is_empty() && answer != "*")
         .map(|answer| match answer.strip_suffix('*') {
             Some(label) => json!({ "label": label.trim(), "recommended": true }),
             None => json!({ "label": answer, "recommended": false }),
@@ -592,18 +591,50 @@ pub fn parse_answers(answers: &str) -> Vec<Value> {
         .collect()
 }
 
-/// The answers of a `--answers "A,B"` with `--recommended B` as stored ("A,B*").
+/// Stored answers split on their commas, a `\,` being a comma inside an answer, each trimmed.
+///
+/// CDXC:Coordinators 2026-11-10 WHY:
+/// `item ask --answers "Too small to read, simplify it,Looks fine"` made three buttons of two
+/// answers. An answer may hold a comma: the repeatable `--answer` flag takes it as is, and
+/// `--answers` takes `\,`; both are stored with the comma escaped.
+fn split_answers(answers: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current = String::new();
+    let mut chars = answers.chars().peekable();
+    while let Some(character) = chars.next() {
+        match character {
+            '\\' if chars.peek() == Some(&',') => {
+                current.push(',');
+                chars.next();
+            }
+            ',' => out.push(std::mem::take(&mut current).trim().to_string()),
+            _ => current.push(character),
+        }
+    }
+    out.push(current.trim().to_string());
+    out
+}
+
+/// The answers of a `--answers "A,B"` (a `\,` is a comma inside an answer) with `--recommended
+/// B`, as stored ("A,B*").
 pub fn mark_answers(answers: &str, recommended: &str) -> String {
+    mark_answer_list(&split_answers(answers), recommended)
+}
+
+/// A list of answers (`--answer` repeated, commas allowed) with the recommended one marked, as
+/// stored: commas escaped, joined with commas.
+pub fn mark_answer_list(answers: &[String], recommended: &str) -> String {
     answers
-        .split(',')
-        .map(str::trim)
+        .iter()
+        .map(|answer| answer.trim())
         .filter(|answer| !answer.is_empty())
         .map(|answer| {
             let answer = answer.trim_end_matches('*');
+            let escaped = answer.replace(',', "\\,");
             if !recommended.is_empty() && answer.eq_ignore_ascii_case(recommended.trim()) {
-                format!("{answer}*")
+                format!("{escaped}*")
             } else {
-                answer.to_string()
+                escaped
             }
         })
         .collect::<Vec<_>>()
@@ -864,7 +895,8 @@ pub fn work_value(threads: &[Value], items: &[WorkItem], all: bool, now: DateTim
     // The asks waiting on the user, each naming its item, for Needs you and Blocked.
     let asks: Vec<Value> = items
         .iter()
-        .filter(|item| item.finished_at.is_none() && item.dropped_at.is_none())
+        // A finished item's open task is still the user's (`withdraw_open_asks`).
+        .filter(|item| item.dropped_at.is_none())
         .flat_map(|item| {
             item.asks.iter().filter(|ask| ask.is_open()).map(|ask| {
                 let mut out = ask_value(ask);
@@ -949,9 +981,20 @@ fn highest_ask_tag(items: &[WorkItem]) -> u64 {
 }
 
 /// A finished or dropped item's threads leave it alone; anything else on it ends with it: its
-/// open asks are withdrawn.
-fn withdraw_open_asks(item: &mut WorkItem, at: &str) {
-    for ask in item.asks.iter_mut().filter(|ask| ask.is_open()) {
+/// open asks are withdrawn, except, when it finishes (`keep_tasks`), a task the user still has
+/// to do, which stays under Needs you until they mark it done.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User, through the coordinator, of "item done" withdrawing a "Remove the test app from Paired
+/// devices" task: item done must not silently withdraw an open ask that is a task for the user;
+/// it stays under Needs you until he marks it done. A question (an ask with answers) is moot once
+/// its work is finished and is withdrawn as before; dropping the work withdraws everything.
+fn withdraw_open_asks(item: &mut WorkItem, at: &str, keep_tasks: bool) {
+    for ask in item
+        .asks
+        .iter_mut()
+        .filter(|ask| ask.is_open() && !(keep_tasks && ask.answers.is_empty()))
+    {
         ask.settled_at = Some(at.to_string());
         ask.withdrawn = true;
     }
@@ -1149,13 +1192,13 @@ pub fn handle_work_request(
             item.status = "finished".to_string();
             item.finished_at = Some(now.clone());
             item.waits.clear();
-            withdraw_open_asks(&mut item, &now);
+            withdraw_open_asks(&mut item, &now, true);
             let words = item.now.clone();
             item.record("done", words, &now);
         }
         "drop" => {
             item.dropped_at = Some(now.clone());
-            withdraw_open_asks(&mut item, &now);
+            withdraw_open_asks(&mut item, &now, false);
             item.record("drop", "", &now);
         }
         "restore" => {
@@ -1350,7 +1393,8 @@ pub fn settle_answered_items(
     };
     let mut changed = false;
     for mut item in list_work_items(db, key)? {
-        if item.finished_at.is_some() || item.dropped_at.is_some() {
+        // A finished item's open task still settles when the user answers it.
+        if item.dropped_at.is_some() {
             continue;
         }
         let now = now_iso();
@@ -1426,4 +1470,17 @@ pub fn add_work_tag_looks(work: &mut Value, custom_tags: &Value) {
         }
     }
     work["tagOptions"] = json!(ghostex_gx_core::tag_choices(custom.as_ref()));
+}
+
+/// Every question tag the coordinator's work items ask, open or settled, uppercased: a form or
+/// one-click question in its chat with only these tags is that ask, counted once as its card
+/// (server/src/session_chat_open_questions.rs, gx-chat-core extras/work_cards.rs `card_tags`).
+pub fn ask_tags(db: &Connection, key: &SessionKey) -> std::collections::BTreeSet<String> {
+    list_work_items(db, key)
+        .unwrap_or_default()
+        .iter()
+        .flat_map(|item| item.asks.iter())
+        .map(|ask| ask.tag.to_ascii_uppercase())
+        .filter(|tag| !tag.is_empty())
+        .collect()
 }

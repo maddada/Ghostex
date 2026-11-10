@@ -30,7 +30,7 @@ pub(crate) const THREAD_INDENT: f32 = 16.0;
 const COORDINATOR_ICON: &str = "titlebar/users-group.svg";
 const WAITING_COLOR: u32 = 0x95d7f6;
 const COORDINATOR_ROW_ICON: &str = "titlebar/coordinator-captain-hat.svg";
-/// The same picture with its lines thickened for small sizes (coordinator-captain-hat.PROVENANCE.md).
+/// The same drawing with thicker lines for small sizes (coordinator-captain-hat.PROVENANCE.md).
 const COORDINATOR_ICON_SMALL: &str = "titlebar/coordinator-captain-hat-small.svg";
 /// Chief of Staff's row keeps the crown it had before coordinators took the captain's hat.
 const CHIEF_ROW_ICON: &str = "titlebar/coordinator-crown.svg";
@@ -164,7 +164,7 @@ pub(crate) fn is_coordinator(session: &NativeSidebarSession) -> bool {
 /// User: "please give coordinator agents a different logo in the sidebar of the app (not the agent's app logo)", a cool SVG instead of the Claude icon, bold enough to read at the row's 13px, drawn white on dark themes and black on light ones the way the Codex logo adapts (user: "make the crown white, not purple"), with the row's usual focus and hover dimming; its threads keep their agent logos, and the crew icon with the thread count stays beside it.
 ///
 /// CDXC:Coordinators 2026-11-10 DECISION:
-/// User: "Can we please show a captain hat icon for coordinators instead of crown? but make it same color as we have now", then, of a hand-drawn cap: "this one looks simpler and uglier please fix" and "im licensed to use that image pls use it directly". The mark is the user's own picture, traced (assets/titlebar/coordinator-captain-hat.PROVENANCE.md), in the crown's colours and dimming; at 17 px and below it draws the same picture with slightly thicker lines (`captain_hat_asset`). The user asked it "for coordinators", so Chief of Staff (`chief`) keeps the crown. The chat's pills, cards and work chips and the phone draw the same picture.
+/// User: "Can we please show a captain hat icon for coordinators instead of crown? but make it same color as we have now", then, of a hand-drawn cap: "this one looks simpler and uglier please fix" and "im licensed to use that image pls use it directly", then "keep the same hat exactly just make it shown from front I mean it will look better for the icon to be symmetrical" (he picked candidate A in Q2172). The mark is our own front-view drawing of his cap (assets/titlebar/coordinator-captain-hat.PROVENANCE.md), in the crown's colours and dimming; at 17 px and below it draws with slightly thicker lines (`captain_hat_asset`). The user asked it "for coordinators", so Chief of Staff (`chief`) keeps the crown. The chat's pills, cards and work chips and the phone draw the same picture.
 pub(crate) fn coordinator_icon(appearance: &SidebarAppearance, chief: bool) -> AnyElement {
     // The hat is wide and short, so it fills the row's 15 px icon slot to look as big as the agent
     // logos beside it; the crown stays 13 px.
@@ -214,7 +214,7 @@ pub(crate) fn main_coordinator_tag(
 }
 
 /// The captain's hat for a mark drawn `size` pixels tall: the thicker-lined copy at 17 px and below,
-/// where the picture's half-pixel lines go faint on a 1x screen, else the picture as traced.
+/// where the drawing's thin lines go faint on a 1x screen, else the drawing as it is.
 fn captain_hat_asset(size: f32) -> &'static str {
     if size <= 17.0 {
         COORDINATOR_ICON_SMALL

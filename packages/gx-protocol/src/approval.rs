@@ -117,6 +117,67 @@ open_string_enum! {
     }
 }
 
+/// Who an action in [`STILL_ASKS`] asks for: anyone, or only an agent (your own click is the
+/// approval for your own action).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AsksWhen {
+    /// Whoever asks: someone new is asking to come in.
+    Always,
+    /// Only when an agent's session token asks.
+    AgentAsks,
+}
+
+/*
+CDXC:Security 2026-11-10 DECISION:
+User (Q2140 = B, then Q2173 for Settings > Security's "What still asks"): only what lets someone new in asks for an Approve. This list is the rule: gxserver's `SecurityState::skips_approval` (server/src/security/policy.rs) asks for exactly these actions and nothing else, and Settings > Security shows each line as written here, so the page can't drift from the code. Add or remove an action here and both follow.
+*/
+/// Every action that still asks for an Approve under option B, with when it asks and the line
+/// Settings > Security shows for it.
+pub const STILL_ASKS: &[(SensitiveAction, AsksWhen, &str)] = &[
+    (
+        SensitiveAction::PairingApproveDevice,
+        AsksWhen::Always,
+        "A phone or computer asking to pair with this computer",
+    ),
+    (
+        SensitiveAction::CollabApproveGuestMessage,
+        AsksWhen::Always,
+        "A Collab guest's message, when the share is in Approve mode",
+    ),
+    (
+        SensitiveAction::EasyConnectEnable,
+        AsksWhen::AgentAsks,
+        "An agent turning on Easy Connect (the first time only)",
+    ),
+    (
+        SensitiveAction::EasyConnectAllowList,
+        AsksWhen::AgentAsks,
+        "An agent letting another device connect through Easy Connect",
+    ),
+    (
+        SensitiveAction::CollabShareChat,
+        AsksWhen::AgentAsks,
+        "An agent sharing a chat through Collab, or showing a share's link again",
+    ),
+    (
+        SensitiveAction::CollabEnableSendMode,
+        AsksWhen::AgentAsks,
+        "An agent letting a share's guests send messages without your approval",
+    ),
+];
+
+/// The line under the list: what doesn't ask.
+pub const STILL_ASKS_CLOSING: &str =
+    "Everything else works without asking, and your own clicks never ask.";
+
+/// When `action` asks for an Approve ([`STILL_ASKS`]); `None` when it never asks.
+pub fn asks_when(action: &SensitiveAction) -> Option<AsksWhen> {
+    STILL_ASKS
+        .iter()
+        .find(|(listed, ..)| listed == action)
+        .map(|(_, when, _)| *when)
+}
+
 open_string_enum! {
     /// Where an [`ApprovalRequest`] stands.
     ApprovalStatus {
