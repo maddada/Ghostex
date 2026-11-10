@@ -257,7 +257,15 @@ pub(super) struct Conversation {
     confirm: Option<OpenConfirm>,
     /// What the log says about the call (`client_trouble` and `finish`).
     diagnostics: CallDiagnostics,
+    /// The provider committed a turn the user spoke and no reply has started for it yet.
+    turn_unanswered: bool,
 }
+
+/// How long after a reply ends gxserver waits for the provider to answer a turn spoken during it
+/// before asking for the reply itself.
+///
+/// CDXC:VoiceMode 2026-11-10 WHY: User: "whenever I speak and send you a message, and you speak and reply to me at the same time, if I send the message at the same time, then you are not getting my messages" (seen on Android; every client). Speech that started while a reply was still being made only cut the reply's audio on the device: the provider kept making it, so the turn it then committed got no reply of its own (it refuses a second one, `conversation_already_has_active_response`, which is ignored below) and nothing asked again. Speech now cancels a running reply at the provider too, and a committed turn with no reply started for it gets one once the running reply ends.
+const UNANSWERED_TURN_GRACE: Duration = Duration::from_millis(400);
 
 /// A recorded turn shorter than this (a quarter second) holds no speech.
 const MIN_CLIP_BYTES: usize = 250 * BYTES_PER_MS;
@@ -354,6 +362,7 @@ impl Conversation {
             briefing_pending: focus.is_some(),
             focus,
             scope_changes: 0,
+            turn_unanswered: false,
             diagnostics: CallDiagnostics {
                 client: "unknown".to_string(),
                 client_remote,
@@ -862,6 +871,7 @@ impl Conversation {
 
     async fn create_response_now(&mut self) -> Result<(), Ended> {
         self.create_at = None;
+        self.turn_unanswered = false;
         self.outputs_waiting = false;
         self.announcing = false;
         self.set_state("thinking");
@@ -1069,6 +1079,12 @@ impl Conversation {
             "input_audio_buffer.speech_started" => {
                 self.user_speaking = true;
                 self.last_talk = Instant::now();
+                // The user talks over a reply still being made: it stops at the provider too, so the
+                // provider can answer this turn (`turn_unanswered`).
+                if self.response_active {
+                    self.provider_send(json!({"type": "response.cancel"}))
+                        .await?;
+                }
                 self.stop_playback(true).await?;
                 // The reply to this speech will see the tool results; a separate one would repeat it.
                 if self.create_at.take().is_some() {
@@ -1102,8 +1118,12 @@ impl Conversation {
                     self.to_client(json!({"type": "caption", "role": "user", "itemId": item_id, "text": text, "final": true}));
                 }
             }
+            "input_audio_buffer.committed" => self.turn_unanswered = true,
             "response.created" => {
                 self.response_active = true;
+                // This reply answers what is waiting: the user's turn, and any tool results.
+                self.turn_unanswered = false;
+                self.create_at = None;
                 if self.client_state != "speaking" {
                     self.set_state("thinking");
                 }
@@ -1266,6 +1286,12 @@ impl Conversation {
                     self.to_client(json!({"type": "error", "code": "providerError", "message": message, "fatal": false}));
                 }
                 self.schedule_response_after_tools();
+                // A turn the user spoke while this reply ran got no reply of its own (the provider
+                // refuses a second one): ask for it, unless the provider starts one in a moment.
+                if self.turn_unanswered && self.create_at.is_none() && self.pending_calls.is_empty()
+                {
+                    self.create_at = Some(Instant::now() + UNANSWERED_TURN_GRACE);
+                }
                 if !self.playing() && self.pending_calls.is_empty() && self.create_at.is_none() {
                     self.set_state("listening");
                 }
