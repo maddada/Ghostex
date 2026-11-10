@@ -23,6 +23,10 @@
 //! Remote machines tab with Macbook's setup failed: its tile's short status) and
 //! `remote-machine-failed-sheet` (Macbook's sheet with the status panel, Reinstall included). The page reads the other
 //! states from `preview_state` (settings_modal/tabs/remote/mod.rs `apply_preview_state`).
+//! Since the 2026-11-10 redesign (no tabs) the page draws the same states without picking a tab:
+//! `remote-this-computer`, `remote-ssh-off` and `remote-ssh-popover` open This computer, the
+//! Tailscale states open Tailscale, `remote-advanced` opens Advanced; `remote-easy-connect`,
+//! `remote-computer` and `remote-qr` draw the plain page.
 use serde_json::{Map, Value, json};
 use std::cell::RefCell;
 

@@ -6,7 +6,7 @@
 //! CDXC:RemotePairing 2026-09-03 DECISION:
 //! User: "please add a toggle for tailscale. if tailscale is disabled …" (the sentence was cut off; the off behaviour below is the assumed reading).
 //! The header switch sits in the same spot as Easy Connect's, beside the header button, so toggling never expands the card. It writes Settings.remoteTailscaleEnabled; nothing is sent to gxserver because Tailscale itself is not managed by Ghostex. Off: the card is collapsed and cannot be expanded (no chevron), it is dimmed like a hidden machine tile, the status badge reads Off, and no QR is rendered because the body never mounts.
-//! (Revised 2026-10-24: the card has its own tab and is always open; switched off, its header shows the Off badge and the body is a one-line note instead of the checklist and code.)
+//! (Revised 2026-10-24, then 2026-11-10: it sits behind the Remote page's Tailscale row, with the switch as the first row inside; switched off, the rest is a one-line note instead of the checklist and code.)
 //!
 //! CDXC:RemotePairing 2026-10-24 DECISION:
 //! User (about Easy Connect, applied here too): "let's please not show the real qr here", "this is so when im in settings we dont show my real QR until i click on "Show QR" which opens it in a pop up".
@@ -44,24 +44,29 @@ pub(super) fn tailscale_status_badge(
     })
 }
 
-pub(super) fn tailscale_card(
+/// The Tailscale row's line: what was found, and that it is another way in.
+pub(super) fn tailscale_summary(tab: &RemoteTab, cx: &gpui::App) -> String {
+    match tailscale_status_badge(tab, cx) {
+        Some(("Off", _)) => "Off. Another way in, if you already use it.".to_string(),
+        Some((label, _)) => format!("{label}. Another way in, if you already use it."),
+        None => "Another way in, if you already use it.".to_string(),
+    }
+}
+
+/// What the Tailscale row opens to: its switch, then the checklist and code (or a note while off).
+pub(super) fn tailscale_panel(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
     let enabled = tab.store.read(cx).bool("remoteTailscaleEnabled");
-    let detected = tailscale_status_badge(tab, cx);
-    let mut badges = vec![badge(t, "If you already use it", BadgeTone::Plain, false)];
-    if let Some((label, tone)) = detected {
-        badges.push(badge(t, label, tone, false));
-    }
     let head = path_head(
         t,
         "remote-tailscale-toggle",
         ICON_SHIELD,
         false,
-        "Tailscale",
-        badges,
+        "Offer Tailscale",
+        Vec::new(),
     );
     let switch = switch_control(
         &t.p,
@@ -81,7 +86,7 @@ pub(super) fn tailscale_card(
             .text_size(px(13.0))
             .line_height(px(19.5))
             .text_color(hsla(t.muted))
-            .child("Tailscale is off. Turn it on to connect your phone over your tailnet; nothing is installed or changed on this computer.")
+            .child("Tailscale is off. Turn it on to connect your phone over your tailnet; nothing is installed or changed on this machine.")
             .into_any_element()
     });
     path_card(t, "remote-tailscale-card", head, switch, body)
@@ -197,7 +202,7 @@ fn tailscale_body(
         }
         Some(_) => "Install Tailscale on this computer and sign in.".to_string(),
     };
-    // SSH access is set in the Current machine card above the tabs; the step links there
+    // SSH access is set behind the This computer row; the step links there
     // (CDXC:RemotePairing 2026-11-08 in current_machine.rs).
     let ssh_step_children =
         (!ssh_on).then(|| super::current_machine::ssh_status_line(tab, t, "tailscale-ssh", cx));

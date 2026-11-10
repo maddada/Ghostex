@@ -1,22 +1,15 @@
-//! "Current machine": the card above the Remote page's tab strip with what belongs to the computer
-//! you're on (its name, its short name, its SSH access), and the one-line SSH status the Easy
-//! Connect and Tailscale setup steps show instead of their own SSH controls.
+//! "This computer": what belongs to the computer you're on (its name, its short name, its SSH
+//! access), behind its row on the Remote page, and the one-line SSH status the Tailscale steps show
+//! instead of their own SSH controls.
 //!
-//! CDXC:RemotePairing 2026-11-08 DECISION:
-//! User, about "This computer's short name" sitting in the Remote machines card with no gap above
-//! the tiles: "doesn't make sense this one's placement man, no gap below it wtf!", then "just please
-//! give a section specifically for the current machine above remote machines section and call it
-//! Current machine and add there settings related to the machine we're on like this one and others
-//! if there are any". From the decision page: the card sits above the tab strip on every Remote tab
-//! (Q1970 B), below the Pair again notice; it holds the computer's name (read-only, from the OS:
-//! Q1973), its short name (moved out of the Remote machines card) and SSH access (Q1971). The Easy
-//! Connect and Tailscale setup steps no longer carry their own SSH controls: they show "SSH access
-//! is on", or "SSH access is off" with a link that scrolls to this card and highlights its SSH
-//! access row (Q1972).
+//! The 2026-11-08 "Current machine" card above the tabs (Q1970 to Q1973) became this row on
+//! 2026-11-10 (CDXC:RemotePairing 2026-11-10 in mod.rs). What it holds stays as the user decided
+//! then: the name read-only from the OS, the short name, SSH access; the Tailscale steps show "SSH
+//! access is on", or "SSH access is off" with a link that opens this row and highlights its SSH
+//! access row.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::settings_icon;
 use super::RemoteTab;
-use super::easy_connect::path_head;
 use super::paired_devices::remote_row;
 use super::style::*;
 use gpui::prelude::FluentBuilder as _;
@@ -61,20 +54,53 @@ fn row_value(t: &RemoteTokens) -> gpui::Div {
         .text_color(hsla(t.muted))
 }
 
-/// The card.
-pub(super) fn current_machine_card(
+/// The computer's name: the one gxserver reports (the one phones and computers pair with), else
+/// this app's.
+fn computer_name(tab: &RemoteTab) -> String {
+    tab.access
+        .as_ref()
+        .map(|access| access.computer_name.clone())
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(crate::host_name::local_computer_name)
+}
+
+/// The row's one line: "Mohamad's Laptop · short name MM · SSH access on".
+pub(super) fn this_computer_summary(tab: &RemoteTab, cx: &gpui::App) -> String {
+    let mut settings = serde_json::Map::new();
+    settings.insert(
+        "remoteMachines".to_string(),
+        Value::Array(tab.remote_machines(cx)),
+    );
+    settings.insert(
+        "localMachineShortName".to_string(),
+        tab.store.read(cx).value("localMachineShortName"),
+    );
+    let short = ghostex_gx_core::machine_short_names::short_names_by_machine_id(
+        &crate::host_name::local_computer_name(),
+        &settings,
+    )
+    .remove(ghostex_gx_core::LOCAL_MACHINE_ID)
+    .unwrap_or_default();
+    let mut parts = vec![computer_name(tab)];
+    if !short.is_empty() {
+        parts.push(format!("short name {short}"));
+    }
+    match tab.access.as_ref().map(|access| access.ssh.enabled) {
+        Some(true) => parts.push("SSH access on".to_string()),
+        Some(false) => parts.push("SSH access off".to_string()),
+        None => {}
+    }
+    parts.join(" · ")
+}
+
+/// The rows behind "This computer": its name, its short name and SSH access, under hairlines.
+pub(super) fn this_computer_rows(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
     window: &mut Window,
     cx: &mut Context<RemoteTab>,
-) -> AnyElement {
-    // The name gxserver reports (the one phones and computers pair with), else this app's.
-    let name = tab
-        .access
-        .as_ref()
-        .map(|access| access.computer_name.clone())
-        .filter(|name| !name.trim().is_empty())
-        .unwrap_or_else(crate::host_name::local_computer_name);
+) -> Vec<AnyElement> {
+    let name = computer_name(tab);
     let name_row = remote_row(
         row_main(
             t,
@@ -89,43 +115,14 @@ pub(super) fn current_machine_card(
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_ellipsis()
-                        .child(name.clone()),
+                        .child(name),
                 )
                 .into_any_element(),
         ),
     );
     let short_row = short_name_row(tab, t, &crate::host_name::local_computer_name(), window, cx);
     let ssh_row = ssh_row(tab, t, window, cx);
-    let head = path_head(
-        t,
-        "remote-current-machine-head",
-        ICON_DEVICE_LAPTOP,
-        false,
-        "Current machine",
-        Vec::new(),
-    );
-    // The rows sit straight in the card under hairlines, like the other Settings section cards
-    // (Colours, Transparency), not in a second bordered box inside it.
-    let divider = t.edge(0.70);
-    v_flex()
-        .id("remote-current-machine-card")
-        .w_full()
-        .min_w_0()
-        .overflow_hidden()
-        .rounded(px(MODAL_RADIUS_CONTROL))
-        .border_1()
-        .border_color(hsla(t.edge(0.76)))
-        .bg(hsla(t.card(0.18)))
-        .child(h_flex().w_full().items_center().pr(px(12.0)).child(head))
-        .children([name_row, short_row, ssh_row].into_iter().map(|row| {
-            div()
-                .w_full()
-                .min_w_0()
-                .border_t_1()
-                .border_color(hsla(divider))
-                .child(row)
-        }))
-        .into_any_element()
+    vec![name_row, short_row, ssh_row]
 }
 
 /// This computer's short name (`localMachineShortName`); empty uses the one made from the name,
@@ -229,7 +226,7 @@ fn ssh_row(
     let main = row_main(
         t,
         "SSH access",
-        "Lets your phone and other computers sign in to this one. Easy Connect and Tailscale need it.",
+        "Lets your phone and other computers sign in to this machine. Easy Connect and Tailscale need it.",
     );
     let content = match ssh {
         None => remote_row(
@@ -287,8 +284,8 @@ fn ssh_row(
         .into_any_element()
 }
 
-/// The setup steps' SSH line: "SSH access is on", or "SSH access is off" with a link to the
-/// Current machine card.
+/// The setup steps' SSH line: "SSH access is on", or "SSH access is off" with a link that opens
+/// This computer.
 pub(super) fn ssh_status_line(
     tab: &RemoteTab,
     t: &RemoteTokens,
@@ -330,7 +327,7 @@ pub(super) fn ssh_status_line(
                 .cursor_pointer()
                 .text_color(hsla(link_color))
                 .underline()
-                .child("turn it on in Current machine")
+                .child("turn it on in This computer")
                 .on_click(cx.listener(|tab: &mut RemoteTab, _, _window, cx| {
                     tab.show_current_machine_ssh(cx);
                 })),

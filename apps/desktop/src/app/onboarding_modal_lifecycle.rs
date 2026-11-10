@@ -423,14 +423,11 @@ impl GhostexGpuiApp {
                         }
                         self.open_app_modal_from_bridge(message, cx);
                     }
+                    // The sidebar menu's Connect a phone window, where that menu now leads
+                    // (CDXC:RemotePairing 2026-11-10 in window/connect_device_modal.rs).
                     FinishTarget::RemoteSettings => {
                         self.open_app_modal_from_bridge(
-                            serde_json::json!({
-                                "initialRemoteSection": "easyConnect",
-                                "initialTab": "remote",
-                                "modal": "settings",
-                                "type": "open",
-                            }),
+                            serde_json::json!({ "modal": "remoteSetup", "type": "open" }),
                             cx,
                         );
                     }

@@ -25,7 +25,7 @@ pub const PAGE_INTROS: &[(&str, &str)] = &[
     ("secrets", "Where Ghostex reads keys from (1Password), and how agents ask you for a secret privately."),
     ("security", "How you approve requests for this computer: with one click, or with Touch ID, Windows Hello, your password or your phone's Face ID first."),
     ("integrations", "What Ghostex adds to your agents and computer: the ghostex CLI, skills, Floating Capture and permissions."),
-    ("remote", "Reach this computer from your phone or another computer, and add remote machines."),
+    ("remote", "Your phone and your other computers."),
     ("sync", "Carry Spaces, settings, skills and agents between your computers."),
     ("projects", "Per-project worktree command, ticket key, docs folders and cloud box choices."),
     ("about", "Your version, links and privacy."),

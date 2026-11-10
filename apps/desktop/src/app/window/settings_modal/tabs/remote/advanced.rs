@@ -1,15 +1,15 @@
 //! The Advanced collapsible at the bottom of Settings > Remote (remote-advanced.tsx (deleted 2026-10-01)).
 //!
-//! (Since 2026-10-24 it is the page's Advanced tab, always open; see CDXC:RemotePairing 2026-10-24 in mod.rs.)
+//! (Since 2026-11-10 it sits behind the page's Advanced row, with the Relay picker moved in from
+//! the Easy Connect card; see CDXC:RemotePairing 2026-11-10 in mod.rs.)
 //!
 //! CDXC:RemotePairing 2026-09-03:
 //! One collapsible for the controls a regular user never needs: the ports Easy Connect serves, the raw allowed client key list (Paired devices above is its friendly face), the bare pairing address for pasting by hand, the binary, the local gxserver endpoint, and the raw sidecar status for bug reports.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
-    FieldStates, full_value_tooltip, icon, settings_textarea, short_id, short_path, short_version,
+    FieldStates, full_value_tooltip, settings_textarea, short_id, short_path, short_version,
 };
 use super::RemoteTab;
-use super::easy_connect::{path_card, path_head};
 use super::model::*;
 use super::paired_devices::{remote_row, rows_frame};
 use super::style::*;
@@ -171,44 +171,22 @@ fn row_value(t: &RemoteTokens, mono: bool) -> gpui::Div {
         .when(mono, |this| this.font_family(MODAL_MONO_FONT))
 }
 
-/// The Advanced tab: the same path card as the other tabs, always open.
-pub(super) fn advanced_card(
+/// What the Advanced row opens to: the Relay picker, then the ports, keys, pairing address, binary,
+/// gxserver and raw status rows.
+pub(super) fn advanced_panel(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
+    rpc: bool,
     window: &mut Window,
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
-    let head = path_head(
-        t,
-        "remote-advanced-head",
-        icon::INFO_CIRCLE,
-        false,
-        "Advanced",
-        Vec::new(),
-    );
-    let body = v_flex()
+    v_flex()
         .w_full()
         .min_w_0()
         .gap(px(10.0))
-        .child(
-            div()
-                .w_full()
-                .text_size(px(13.0))
-                .line_height(px(19.5))
-                .text_color(hsla(t.muted))
-                .child(
-                    "Easy Connect ports and keys, gxserver, and the raw status for bug reports.",
-                ),
-        )
+        .child(super::relay::relay_section(tab, t, rpc, window, cx))
         .child(advanced_rows(tab, t, window, cx))
-        .into_any_element();
-    path_card(
-        t,
-        "remote-advanced-card",
-        head,
-        div().into_any_element(),
-        Some(body),
-    )
+        .into_any_element()
 }
 
 fn advanced_rows(

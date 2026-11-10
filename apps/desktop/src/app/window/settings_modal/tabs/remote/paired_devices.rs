@@ -57,13 +57,12 @@ pub(super) fn remote_row(main: AnyElement, value: Option<AnyElement>) -> AnyElem
         .into_any_element()
 }
 
-/// The paired and waiting devices; `easy_connect_on` adds Easy Connect's "Only paired devices can
-/// connect" row.
-pub(super) fn paired_devices_list(
+/// The waiting and paired devices, waiting first, whether Easy Connect is on or off: a phone that
+/// signs in over Tailscale or SSH pairs too (06c0253b8, Gregg's report).
+pub(super) fn device_rows(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
     rpc: bool,
-    easy_connect_on: bool,
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
     // A confirmation for a device that went away is dropped.
@@ -83,7 +82,7 @@ pub(super) fn paired_devices_list(
         Some(devices) if devices.is_empty() => vec![remote_row(
             detail(
                 t,
-                "No devices yet. Scan the code with the Ghostex app and it appears here.",
+                "None yet. Click Connect a phone and scan the code with the Ghostex app.",
                 false,
             )
             .into_any_element(),
@@ -226,15 +225,7 @@ pub(super) fn paired_devices_list(
         }
         rows.splice(0..0, pending);
     }
-    let paired_only = easy_connect_on.then(|| paired_only_row(tab, t, rpc, cx));
-    v_flex()
-        .w_full()
-        .min_w_0()
-        .gap(px(6.0))
-        .child(section_label(t, "Paired devices"))
-        .child(rows_frame(t, rows))
-        .children(paired_only.map(|row| rows_frame(t, vec![row])))
-        .into_any_element()
+    rows_frame(t, rows)
 }
 
 /*
@@ -372,45 +363,4 @@ fn pending_kind_label(platform: &str) -> &'static str {
         "mobile" | "phone" => "phone",
         _ => "computer",
     }
-}
-
-/*
-CDXC:RemotePairing 2026-11-08 DECISION:
-User (GitHub #495 security decision): an empty Easy Connect allow-list means closed, replacing the 2026-10-25 on/off switch that was here (its "off" emptied the list, which let in anyone with the code). "Only paired devices can connect" is now always so: the row says it and has no switch. Every paired phone's key goes on the list when its pairing is approved; a computer that connects with Easy Connect needs its key added under Advanced; phones paired before 11.0.1 must pair again. New phones still get in while the QR is showing (CDXC:RemotePairing in server/src/tailcat/supervisor.rs).
-*/
-fn paired_only_row(
-    tab: &RemoteTab,
-    t: &RemoteTokens,
-    _rpc: bool,
-    _cx: &mut Context<RemoteTab>,
-) -> AnyElement {
-    let devices = tab.paired_devices.clone().unwrap_or_default();
-    let without_key: Vec<String> = devices
-        .iter()
-        .filter(|device| device.tailcat_client_key.is_none() && !device.legacy)
-        .map(|device| device.name.clone())
-        .collect();
-    let detail_text: SharedString = if without_key.is_empty() {
-        "Easy Connect lets in only paired phones and the keys listed under Advanced. A new phone gets in while the QR is showing; a computer that connects with Easy Connect needs its key added under Advanced.".into()
-    } else {
-        format!(
-            "Easy Connect lets in only paired phones and the keys listed under Advanced. {} paired with an older Ghostex app and can't connect; pair {} again.",
-            without_key.join(", "),
-            if without_key.len() == 1 { "it" } else { "them" },
-        )
-        .into()
-    };
-    let main = v_flex()
-        .min_w_0()
-        .gap(px(3.0))
-        .child(
-            div()
-                .text_size(px(14.0))
-                .line_height(px(20.0))
-                .text_color(hsla(t.foreground))
-                .child("Only paired devices can connect"),
-        )
-        .child(detail(t, detail_text, true))
-        .into_any_element();
-    remote_row(main, None)
 }

@@ -17,7 +17,7 @@ use gpui::{
     radians, rgb,
 };
 use gpui_component::input::{Input, InputState};
-use gpui_component::{Sizable as _, Size as ComponentSize, h_flex};
+use gpui_component::{Sizable as _, Size as ComponentSize, h_flex, v_flex};
 use std::time::Duration;
 
 pub(super) const ICON_ALERT: &str = "modals/settings/alert-triangle.svg";
@@ -778,3 +778,59 @@ pub(super) fn dialog_overlay<V: 'static>(
     .with_priority(2)
     .into_any_element()
 }
+
+/// One of the page's bottom rows (This computer, Tailscale, Advanced): its title, one line under it
+/// and a chevron; the whole row opens or closes what it holds in place.
+pub(super) fn fold_row<V: 'static>(
+    t: &RemoteTokens,
+    id: &'static str,
+    title: &'static str,
+    line: String,
+    open: bool,
+    on_press: impl Fn(&mut V, &mut Window, &mut Context<V>) + 'static,
+    cx: &mut Context<V>,
+) -> AnyElement {
+    let wash = switch_row_wash(t.foreground);
+    h_flex()
+        .id(SharedString::from(format!("remote-fold-{id}")))
+        .role(gpui::Role::Button)
+        .aria_label(title)
+        .aria_expanded(open)
+        .w_full()
+        .min_w_0()
+        .min_h(px(52.0))
+        .px(px(12.0))
+        .py(px(8.0))
+        .gap(px(12.0))
+        .items_center()
+        .cursor_pointer()
+        .hover(move |this| this.bg(hsla(wash)))
+        .on_press(cx, on_press)
+        .child(
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .gap(px(3.0))
+                .child(
+                    div()
+                        .text_size(px(14.0))
+                        .line_height(px(20.0))
+                        .text_color(hsla(t.foreground))
+                        .child(title),
+                )
+                .child(detail(t, line, false)),
+        )
+        .child(settings_icon(
+            if open {
+                ICON_FOLD_OPEN
+            } else {
+                ICON_FOLD_CLOSED
+            },
+            16.0,
+            t.muted,
+        ))
+        .into_any_element()
+}
+
+const ICON_FOLD_CLOSED: &str = "modals/settings/chevron-right.svg";
+const ICON_FOLD_OPEN: &str = "modals/settings/chevron-down.svg";
