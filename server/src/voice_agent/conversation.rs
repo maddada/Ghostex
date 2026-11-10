@@ -266,7 +266,7 @@ pub(super) struct Conversation {
 /// How long after a reply ends gxserver waits for the provider to answer a turn spoken during it
 /// before asking for the reply itself.
 ///
-/// CDXC:VoiceMode 2026-11-10 WHY: User: "whenever I speak and send you a message, and you speak and reply to me at the same time, if I send the message at the same time, then you are not getting my messages" (seen on Android; every client). Speech that started while a reply was still being made only cut the reply's audio on the device: the provider kept making it, so the turn it then committed got no reply of its own (it refuses a second one, `conversation_already_has_active_response`, which is ignored below) and nothing asked again. Speech now cancels a running reply at the provider too, and a committed turn with no reply started for it gets one once the running reply ends.
+/// CDXC:VoiceMode 2026-11-10 WHY: User: "whenever I speak and send you a message, and you speak and reply to me at the same time, if I send the message at the same time, then you are not getting my messages" (seen on Android; every client). Speech that started while a reply was still being made only cut the reply's audio on the device: the provider kept making it, so the turn it then committed got no reply of its own (it refuses a second one, `conversation_already_has_active_response`, which is ignored below) and nothing asked again. Speech now cancels a running reply at the provider too, and a committed turn with no reply started for it gets one once the running reply ends. The user then saw it in push-to-talk (2026-11-10): a held turn's reply that the provider refuses marks the turn too, since the provider may not confirm a manual commit.
 const UNANSWERED_TURN_GRACE: Duration = Duration::from_millis(400);
 
 /// A recorded turn shorter than this (a quarter second) holds no speech.
@@ -1316,6 +1316,16 @@ impl Conversation {
                     );
                     self.voice_answer(&change.voice, "nextConversation", "refused");
                     return Ok(());
+                }
+                // A reply gxserver asked for (a push-to-talk turn, a typed one, a tool follow-up) was
+                // refused because another was still running: it is asked for again once that one
+                // ends, or now when it already has. The provider may not confirm a manual commit
+                // (`input_audio_buffer.committed`), so the refusal is what marks the turn.
+                if code == "conversation_already_has_active_response" {
+                    self.turn_unanswered = true;
+                    if !self.response_active && self.create_at.is_none() {
+                        self.create_at = Some(Instant::now() + UNANSWERED_TURN_GRACE);
+                    }
                 }
                 // Cancelling a reply that just finished is harmless.
                 if code != "response_cancel_not_active"
