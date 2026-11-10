@@ -90,12 +90,15 @@ pub(crate) fn agent_left_conversation(
 ) -> bool {
     let key = format!("{project_id}:{session_id}");
     let shell_prompt = agent_start_failure_notice(screen_text).is_some();
-    let watches = || AGENT_GONE.lock().unwrap_or_else(|error| error.into_inner());
-    let watch = watches().get(&key).copied();
-    // Nothing seen yet and the agent's screen is up: no read at all.
-    if watch.is_none() && !shell_prompt {
-        return false;
+    {
+        let mut watches = agent_gone_watches();
+        forget_untouched(&mut watches, Instant::now());
+        // Nothing seen yet and the agent's screen is up: no read at all.
+        if !watches.contains_key(&key) && !shell_prompt {
+            return false;
+        }
     }
+    // The reads run without the lock; the step below applies them to the record as it is then.
     let session = repository
         .get_session(project_id, session_id)
         .ok()
@@ -106,7 +109,7 @@ pub(crate) fn agent_left_conversation(
         .map(conversation_file)
         .filter(|(transcript, _)| *transcript == Transcript::Written);
     let (Some(session), Some((_, path))) = (session, conversation) else {
-        watches().remove(&key);
+        agent_gone_watches().remove(&key);
         return false;
     };
     let reading = GoneReading {
@@ -116,16 +119,87 @@ pub(crate) fn agent_left_conversation(
             .and_then(|path| std::fs::metadata(path).ok())
             .map(|metadata| metadata.len()),
     };
-    let (next, gone) = advance_gone_watch(watch, reading, Instant::now());
-    match next {
-        Some(next) => watches().insert(key, next),
-        None => watches().remove(&key),
-    };
-    gone
+    record_reading(&mut agent_gone_watches(), key, reading, Instant::now())
+}
+
+/// Whether this session's agent is confirmed gone: what a probe that could not read the screen
+/// (the capture failed or was cut) says, so a confirmed absence outlives it.
+pub(crate) fn agent_gone_confirmed(project_id: &str, session_id: &str) -> bool {
+    agent_gone_watches()
+        .get(&format!("{project_id}:{session_id}"))
+        .is_some_and(|stored| stored.watch.confirmed_at.is_some())
+}
+
+/// Drops the session's record: its agent was started again or the session went away.
+pub(crate) fn forget_agent_gone(project_id: &str, session_id: &str) {
+    agent_gone_watches().remove(&format!("{project_id}:{session_id}"));
+}
+
+/// Test seam: records the session's agent as confirmed gone, as a probe past the settle would.
+#[cfg(test)]
+pub(crate) fn confirm_agent_gone_for_test(project_id: &str, session_id: &str) {
+    let now = Instant::now();
+    agent_gone_watches().insert(
+        format!("{project_id}:{session_id}"),
+        StoredWatch {
+            watch: GoneWatch {
+                since: now,
+                confirmed_at: Some(None),
+            },
+            touched: now,
+        },
+    );
 }
 
 /// Per session, `project:session`: an agent seen gone, waiting out the settle or confirmed.
-static AGENT_GONE: LazyLock<Mutex<HashMap<String, GoneWatch>>> = LazyLock::new(Default::default);
+static AGENT_GONE: LazyLock<Mutex<HashMap<String, StoredWatch>>> = LazyLock::new(Default::default);
+
+fn agent_gone_watches() -> std::sync::MutexGuard<'static, HashMap<String, StoredWatch>> {
+    AGENT_GONE.lock().unwrap_or_else(|error| error.into_inner())
+}
+
+/// How long a record outlives the last probe of its session. A followed chat whose agent died is
+/// probed every few seconds; a session nobody probes for this long has ended or is not watched,
+/// and a probe after that reads it afresh.
+const AGENT_GONE_UNTOUCHED: Duration = Duration::from_secs(60 * 60);
+
+#[derive(Clone, Copy, Debug)]
+struct StoredWatch {
+    watch: GoneWatch,
+    touched: Instant,
+}
+
+fn forget_untouched(watches: &mut HashMap<String, StoredWatch>, now: Instant) {
+    watches.retain(|_, stored| now.duration_since(stored.touched) < AGENT_GONE_UNTOUCHED);
+}
+
+/// Applies one probe's reading to the session's record as it stands now, under the lock, so probes
+/// that overlap never move a confirmed absence back: only evidence in the reading itself (an agent
+/// process, a grown conversation) releases it, and the answer is the record's own.
+fn record_reading(
+    watches: &mut HashMap<String, StoredWatch>,
+    key: String,
+    reading: GoneReading,
+    now: Instant,
+) -> bool {
+    let current = watches.get(&key).map(|stored| stored.watch);
+    let (next, gone) = advance_gone_watch(current, reading, now);
+    match next {
+        Some(watch) => {
+            watches.insert(
+                key,
+                StoredWatch {
+                    watch,
+                    touched: now,
+                },
+            );
+        }
+        None => {
+            watches.remove(&key);
+        }
+    }
+    gone
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct GoneWatch {
@@ -345,6 +419,57 @@ mod tests {
         assert!(gone);
         let (watch, gone) = step(watch, reading(false, Some(false), 140), 30);
         assert!(!gone && watch.is_none());
+    }
+
+    /// Two probes overlap: the slower one read the screen while the absence was still settling (a
+    /// command typed at the shell since), and lands after the faster one confirmed it. The
+    /// confirmed absence stands and the slower probe answers with it.
+    #[test]
+    fn an_overlapping_probe_never_moves_a_confirmed_absence_back() {
+        let start = Instant::now();
+        let mut watches = HashMap::new();
+        let key = || "P:S".to_string();
+        assert!(!record_reading(
+            &mut watches,
+            key(),
+            reading(true, Some(false), 5),
+            start
+        ));
+        let slow = reading(false, Some(false), 5);
+        let fast = reading(true, Some(false), 5);
+        assert!(record_reading(
+            &mut watches,
+            key(),
+            fast,
+            start + Duration::from_secs(9)
+        ));
+        assert!(
+            record_reading(&mut watches, key(), slow, start + Duration::from_secs(9)),
+            "the slower probe answers with the confirmed absence"
+        );
+        assert!(watches[&key()].watch.confirmed_at.is_some());
+    }
+
+    /// A record nobody probed for an hour goes; one probed keeps going.
+    #[test]
+    fn records_of_sessions_nobody_probes_are_forgotten() {
+        let start = Instant::now();
+        let mut watches = HashMap::new();
+        record_reading(
+            &mut watches,
+            "P:A".into(),
+            reading(true, Some(false), 1),
+            start,
+        );
+        let later = start + AGENT_GONE_UNTOUCHED;
+        record_reading(
+            &mut watches,
+            "P:B".into(),
+            reading(true, Some(false), 1),
+            later,
+        );
+        forget_untouched(&mut watches, later);
+        assert!(!watches.contains_key("P:A") && watches.contains_key("P:B"));
     }
 
     /// The prompt goes before the settle time: nothing is held.

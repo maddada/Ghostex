@@ -1,5 +1,6 @@
 //! An agent gone with no notice saying so (`agentGone`) wakes a long-polling reader: the
-//! `readSessionChat` fingerprint moves when the flag turns on, so a phone over SSH reads it.
+//! `readSessionChat` fingerprint moves when the flag turns on, so a phone over SSH reads it; and a
+//! confirmed absence outlives a probe whose screen capture failed.
 
 use serde_json::json;
 
@@ -74,4 +75,53 @@ fn the_read_fingerprint_moves_when_the_agent_is_gone() {
         running,
         "a running agent keeps the fingerprint it had"
     );
+}
+
+/// A probe that could not read the screen (here there is no zmx session to capture) keeps a
+/// confirmed absence instead of answering that the agent runs.
+#[test]
+fn a_failed_capture_keeps_a_confirmed_absence() {
+    let temp = tempfile::tempdir().unwrap();
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let state = test_app_state(paths.clone());
+    let db = open_gxserver_database(&paths).unwrap();
+    let repository = DomainRepository::new(&db, &state.metadata.server_id);
+    let project = repository
+        .create_project(
+            json!({"name":"Agent gone","path":temp.path()})
+                .as_object()
+                .unwrap(),
+        )
+        .unwrap();
+    let project_id = project["projectId"].as_str().unwrap().to_string();
+    let session = repository
+        .create_session(
+            json!({"projectId":project_id,"kind":"agent","agentId":"claude","cwd":temp.path(),
+                "lifecycleState":"running"})
+            .as_object()
+            .unwrap(),
+            false,
+        )
+        .unwrap();
+    let session_id = session["sessionId"].as_str().unwrap().to_string();
+    let detect = || {
+        crate::session_chat_options::detect_session_chat_terminal_state(
+            &repository,
+            &crate::session_chat_options::session_chat_hook_state_directory(&paths),
+            &project_id,
+            &session_id,
+            Some("claude"),
+        )
+    };
+    let unread = detect();
+    assert!(!unread.captured && !unread.agent_gone, "{unread:?}");
+    crate::session_chat_start_failure::confirm_agent_gone_for_test(&project_id, &session_id);
+    let failed = detect();
+    assert!(!failed.captured, "the capture failed: {failed:?}");
+    assert!(
+        failed.agent_gone,
+        "the confirmed absence stands: {failed:?}"
+    );
+    crate::session_chat_start_failure::forget_agent_gone(&project_id, &session_id);
+    assert!(!detect().agent_gone, "a restarted agent is no longer gone");
 }
