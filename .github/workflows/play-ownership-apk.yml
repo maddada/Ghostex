@@ -1,0 +1,244 @@
+name: Play package ownership APK
+
+# One-off APK for Google Play's Android developer verification package-name
+# ownership check. It does not publish a product release and does not change
+# the release workflows: it downloads ghostex-android.apk from v11.3.0, inserts
+# assets/adi-registration.properties, and signs that APK again with the same
+# Android release keystore the GPUI Android release workflow uses.
+
+on:
+  push:
+    branches:
+      - cursor/play-ownership-apk-cb0a
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: play-ownership-apk
+  cancel-in-progress: true
+
+jobs:
+  sign:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SOURCE_RELEASE_TAG: v11.3.0
+      ADI_REGISTRATION_TOKEN: DGWOCTER63GK2AAAAAAAAAAAAA
+      EXPECTED_CERT_SHA256: f57defeb8767f5373d959be8b2273272ee8703f6f63cc520029c18d4ef098712
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17.0.19+10'
+      - name: Install Android build-tools
+        run: |
+          set -euo pipefail
+          if [[ -z "${ANDROID_HOME:-}" || ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]]; then
+            echo "ANDROID_HOME cmdline-tools are not installed" >&2
+            exit 1
+          fi
+          # sdkmanager closes stdin before `yes` exits, so pipefail would report
+          # yes's SIGPIPE (141) even when the install succeeded.
+          set +o pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;37.0.0"
+          sdk_status=${PIPESTATUS[1]}
+          set -o pipefail
+          if [[ "$sdk_status" -ne 0 ]]; then
+            echo "sdkmanager failed: $sdk_status" >&2
+            exit "$sdk_status"
+          fi
+          test -x "$ANDROID_HOME/build-tools/37.0.0/zipalign"
+          test -x "$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          test -x "$ANDROID_HOME/build-tools/37.0.0/aapt"
+      - name: Download the v11.3.0 release APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "$SOURCE_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern ghostex-android.apk --output "$RUNNER_TEMP/original.apk"
+          test -s "$RUNNER_TEMP/original.apk"
+      - name: Restore the Android release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${KEYSTORE_BASE64}" ]]; then
+            echo "ANDROID_RELEASE_KEYSTORE_BASE64 is empty" >&2
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/ghostex-release.jks"
+          chmod 600 "$RUNNER_TEMP/ghostex-release.jks"
+          test -s "$RUNNER_TEMP/ghostex-release.jks"
+      - name: Add the ownership file, align, and sign
+        env:
+          GHOSTEX_ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          GHOSTEX_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          GHOSTEX_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${GHOSTEX_ANDROID_SIGNING_STORE_PASSWORD:?Missing Android release keystore password}"
+          : "${GHOSTEX_ANDROID_SIGNING_KEY_ALIAS:?Missing Android release key alias}"
+          : "${GHOSTEX_ANDROID_SIGNING_KEY_PASSWORD:?Missing Android release key password}"
+          if [[ "$ADI_REGISTRATION_TOKEN" == *$'\n'* || "$ADI_REGISTRATION_TOKEN" == *$'\r'* ]]; then
+            echo "Ownership token must be a single line" >&2
+            exit 1
+          fi
+
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/37.0.0"
+          UNSIGNED="$RUNNER_TEMP/unsigned.apk"
+          ALIGNED="$RUNNER_TEMP/aligned.apk"
+          SIGNED="$GITHUB_WORKSPACE/play-ownership.apk"
+          STORE="$RUNNER_TEMP/ghostex-release.jks"
+
+          python3 - "$RUNNER_TEMP/original.apk" "$UNSIGNED" <<'PY'
+          import struct
+          import sys
+
+          src, dst = sys.argv[1], sys.argv[2]
+          data = open(src, "rb").read()
+          eocd_sig = b"PK\x05\x06"
+          magic = b"APK Sig Block 42"
+          start = max(0, len(data) - (22 + 65535))
+          eocd = data.rfind(eocd_sig, start)
+          if eocd < 0:
+              raise SystemExit("ZIP end of central directory not found")
+          cd_size, cd_offset = struct.unpack_from("<II", data, eocd + 12)
+          if cd_offset == 0xFFFFFFFF or cd_size == 0xFFFFFFFF:
+              raise SystemExit("ZIP64 APK is not supported")
+          if cd_offset < 16 or cd_offset > len(data):
+              raise SystemExit("central directory offset is out of range")
+          if data[cd_offset - 16:cd_offset] != magic:
+              raise SystemExit("APK signing block magic not found; refusing to edit a signed APK in place")
+          size_after = struct.unpack_from("<Q", data, cd_offset - 24)[0]
+          block_start = cd_offset - (size_after + 8)
+          if block_start < 0 or block_start >= cd_offset:
+              raise SystemExit("APK signing block bounds are invalid")
+          size_before = struct.unpack_from("<Q", data, block_start)[0]
+          if size_before != size_after:
+              raise SystemExit("APK signing block size fields disagree")
+          out = bytearray(data[:block_start])
+          out += data[cd_offset:]
+          eocd_in_out = block_start + (eocd - cd_offset)
+          struct.pack_into("<I", out, eocd_in_out + 16, block_start)
+          open(dst, "wb").write(out)
+          print(f"stripped APK signing block ({cd_offset - block_start} bytes)")
+          PY
+
+          # v2/v3-only APKs have no v1 signature entries; zip exits 12 then.
+          if ! zip -d "$UNSIGNED" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 'META-INF/MANIFEST.MF'; then
+            status=$?
+            if [[ "$status" -ne 12 ]]; then
+              exit "$status"
+            fi
+            echo "No v1 signature entries to remove"
+          fi
+
+          stage="$RUNNER_TEMP/ownership-stage"
+          rm -rf "$stage"
+          mkdir -p "$stage/assets"
+          printf '%s' "$ADI_REGISTRATION_TOKEN" > "$stage/assets/adi-registration.properties"
+          (cd "$stage" && zip -0 -X "$UNSIGNED" assets/adi-registration.properties)
+          zip -T "$UNSIGNED"
+
+          "$BUILD_TOOLS/zipalign" -p -f 4 "$UNSIGNED" "$ALIGNED"
+          "$BUILD_TOOLS/zipalign" -c -p 4 "$ALIGNED"
+
+          umask 077
+          printf '%s' "$GHOSTEX_ANDROID_SIGNING_STORE_PASSWORD" > "$RUNNER_TEMP/store.pass"
+          printf '%s' "$GHOSTEX_ANDROID_SIGNING_KEY_PASSWORD" > "$RUNNER_TEMP/key.pass"
+          chmod 600 "$RUNNER_TEMP/store.pass" "$RUNNER_TEMP/key.pass"
+
+          keystore_cert="$(keytool -exportcert -keystore "$STORE" -storepass "$GHOSTEX_ANDROID_SIGNING_STORE_PASSWORD" -alias "$GHOSTEX_ANDROID_SIGNING_KEY_ALIAS" | sha256sum | awk '{print $1}')"
+          if [[ "$keystore_cert" != "$EXPECTED_CERT_SHA256" ]]; then
+            echo "Keystore certificate SHA-256 does not match the Ghostex release key" >&2
+            exit 1
+          fi
+
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$STORE" \
+            --ks-pass "file:$RUNNER_TEMP/store.pass" \
+            --ks-key-alias "$GHOSTEX_ANDROID_SIGNING_KEY_ALIAS" \
+            --key-pass "file:$RUNNER_TEMP/key.pass" \
+            --out "$SIGNED" \
+            "$ALIGNED"
+          test -s "$SIGNED"
+
+          unzip -p "$SIGNED" assets/adi-registration.properties > "$RUNNER_TEMP/token.bin"
+          printf '%s' "$ADI_REGISTRATION_TOKEN" > "$RUNNER_TEMP/expected.bin"
+          cmp "$RUNNER_TEMP/token.bin" "$RUNNER_TEMP/expected.bin"
+          echo "assets/adi-registration.properties: $(cat "$RUNNER_TEMP/token.bin")"
+
+          badging="$("$BUILD_TOOLS/aapt" dump badging "$SIGNED" | head -n 1)"
+          echo "$badging"
+          [[ "$badging" == *"name='io.ghostex'"* ]]
+
+          "$BUILD_TOOLS/apksigner" verify "$SIGNED"
+          "$BUILD_TOOLS/apksigner" verify --print-certs "$SIGNED" | tee "$RUNNER_TEMP/certs.txt"
+          CERTS="$RUNNER_TEMP/certs.txt" python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+          import sys
+
+          text = pathlib.Path(os.environ["CERTS"]).read_text()
+          expected = os.environ["EXPECTED_CERT_SHA256"]
+          digests = re.findall(r"certificate SHA-256 digest: ([0-9a-fA-F:]+)", text)
+          normalized = []
+          for digest in digests:
+              hex_digest = digest.replace(":", "").lower()
+              if len(hex_digest) != 64 or any(char not in "0123456789abcdef" for char in hex_digest):
+                  raise SystemExit(f"unrecognized certificate digest: {digest}")
+              normalized.append(hex_digest)
+          if not normalized:
+              raise SystemExit("apksigner printed no certificate SHA-256 digest")
+          if any(digest != expected for digest in normalized) or len(set(normalized)) != 1:
+              raise SystemExit(f"certificate SHA-256 mismatch: {normalized}")
+          colon = ":".join(expected[index:index + 2] for index in range(0, 64, 2)).upper()
+          print(f"certificate SHA-256: {colon}")
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as handle:
+                  handle.write("## Play ownership APK\n\n")
+                  handle.write("- Package: `io.ghostex`\n")
+                  handle.write(f"- Certificate SHA-256: `{colon}`\n\n")
+                  handle.write("```\n")
+                  handle.write(text.rstrip() + "\n")
+                  handle.write("```\n")
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: play-ownership-apk
+          path: play-ownership.apk
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish the prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          notes="$(cat <<'EOF'
+          Signed APK for Google Play's package-name ownership check.
+
+          Package io.ghostex, from the v11.3.0 ghostex-android.apk with assets/adi-registration.properties added, signed with the Ghostex Android release key. This is not a product release.
+          EOF
+          )"
+          if gh release view play-ownership-apk --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload play-ownership-apk play-ownership.apk --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create play-ownership-apk play-ownership.apk \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "play-ownership-apk" \
+              --prerelease \
+              --target "$GITHUB_SHA" \
+              --notes "$notes" \
+              || gh release upload play-ownership-apk play-ownership.apk --repo "$GITHUB_REPOSITORY" --clobber
+          fi
+          gh release view play-ownership-apk --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,url,assets \
+            --jq '{tag:.tagName,prerelease:.isPrerelease,url:.url,assets:[.assets[].name]}'
