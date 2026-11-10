@@ -308,6 +308,8 @@ pub struct GhostexGpuiApp {
     pub(crate) remote_browser: crate::app::remote_browser::RemoteBrowserRuntime,
     pub(crate) remote_gxserver_connect_generations: HashMap<String, u64>,
     pub(crate) remote_gxserver_watchdog_probe_in_flight: bool,
+    /// When each computer's link came up or was dropped, for the remote log (helpers/remote/link_log.rs).
+    pub(crate) remote_link_log: crate::app::helpers::GpuiRemoteLinkLog,
     /*
     CDXC:RemoteMachines 2026-06-24-19:54:
     Live remote presentation streams are owned by Rust beside the saved-machine tunnel. Use a runtime generation counter plus per-connection cancel flag so reconnect/disconnect prevents stale WebSocket snapshots or deltas from mutating a newer machine-scoped sidebar cache.

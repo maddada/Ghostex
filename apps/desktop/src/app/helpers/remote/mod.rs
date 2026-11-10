@@ -18,6 +18,7 @@ pub(crate) mod easy_connect_forward;
 pub(crate) mod editor_daemon;
 pub(crate) mod ide_open;
 pub(crate) mod install;
+pub(crate) mod link_log;
 #[cfg(target_os = "linux")]
 pub(crate) mod linux_credentials;
 pub(crate) mod machine_urls;
@@ -55,6 +56,7 @@ pub(crate) use easy_connect_forward::*;
 pub(crate) use editor_daemon::*;
 pub(crate) use ide_open::*;
 pub(crate) use install::*;
+pub(crate) use link_log::*;
 #[cfg(target_os = "linux")]
 pub(crate) use linux_credentials::*;
 pub(crate) use machine_urls::*;
