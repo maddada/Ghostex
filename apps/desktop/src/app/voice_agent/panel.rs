@@ -39,6 +39,8 @@ use crate::*;
 mod confirm_card;
 #[path = "panel_controls.rs"]
 pub(crate) mod controls;
+#[path = "panel_copy.rs"]
+mod copy;
 // The card reads its frame's data as `super::rows`.
 use super::rows;
 #[path = "panel_focus_strip.rs"]
@@ -208,6 +210,8 @@ pub(crate) struct VoicePanelWindow {
     speed_trigger: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     /// Where the gear button last painted, for its menu.
     settings_trigger: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    /// Focused by a press on the transcript, so Cmd+C reaches the panel (`panel_copy.rs`).
+    focus: gpui::FocusHandle,
 }
 
 /// "1×", "1.2×", … "2×".
@@ -399,7 +403,7 @@ impl GhostexGpuiApp {
                 panel_window.set_background_corner_radius(px(RESOURCE_PANEL_RADIUS));
                 apply_frosted_menu_blur(panel_window);
                 remove_gpui_app_toast_popup_window_chrome(panel_window, main_window_native_view);
-                cx.new(|_| {
+                cx.new(|cx| {
                     let scroll = ScrollHandle::new();
                     scroll.scroll_to_bottom();
                     VoicePanelWindow {
@@ -413,6 +417,7 @@ impl GhostexGpuiApp {
                         holding_talk: false,
                         speed_trigger: Default::default(),
                         settings_trigger: Default::default(),
+                        focus: cx.focus_handle(),
                     }
                 })
             })
@@ -1445,7 +1450,7 @@ impl VoicePanelWindow {
         })
     }
 
-    fn row(row: &VoiceRow, colors: &PanelColors) -> AnyElement {
+    fn row(at: usize, row: &VoiceRow, colors: &PanelColors) -> AnyElement {
         match row {
             VoiceRow::Caption {
                 role,
@@ -1480,12 +1485,16 @@ impl VoicePanelWindow {
                             } else {
                                 colors.text
                             })
-                            .children(parts.into_iter().enumerate().map(|(at, part)| {
-                                div().child(if *cut && at == last {
-                                    format!("{part}…")
-                                } else {
-                                    part
-                                })
+                            .children(parts.into_iter().enumerate().map(|(part_at, part)| {
+                                div().child(Self::selectable_part(
+                                    at,
+                                    part_at,
+                                    if *cut && part_at == last {
+                                        format!("{part}…")
+                                    } else {
+                                        part
+                                    },
+                                ))
                             })),
                     )
                     .into_any_element()
@@ -1561,9 +1570,16 @@ impl VoicePanelWindow {
             .gap(px(14.0))
             .px(px(12.0))
             .py(px(10.0))
-            .children(snapshot.rows.iter().map(|row| match row {
+            .on_mouse_down(MouseButton::Left, {
+                let focus = self.focus.clone();
+                move |_, window, cx| Self::take_keyboard(&focus, window, cx)
+            })
+            .children(snapshot.rows.iter().enumerate().map(|(at, row)| match row {
                 VoiceRow::Confirm(card) => self.confirm_row(card, colors, cx),
-                row => Self::row(row, colors),
+                VoiceRow::Caption { text, .. } => {
+                    self.copyable_line(Self::row(at, row, colors), at, text.clone(), cx)
+                }
+                row => Self::row(at, row, colors),
             }));
         let empty = snapshot.rows.is_empty() && snapshot.problem.is_none();
         let memory = self.memory_block(snapshot, colors, cx);
@@ -1984,6 +2000,10 @@ impl Render for VoicePanelWindow {
             .id("voice-panel")
             .role(gpui::Role::Group)
             .aria_label(SharedString::new_static("Voice agent"))
+            .track_focus(&self.focus)
+            .on_key_down(cx.listener(|_, event: &gpui::KeyDownEvent, window, cx| {
+                Self::copy_key(event, window, cx)
+            }))
             .size_full()
             .overflow_hidden()
             .rounded(px(RESOURCE_PANEL_RADIUS))
@@ -1991,6 +2011,7 @@ impl Render for VoicePanelWindow {
             .border_color(colors.edge)
             .bg(colors.background)
             .font_family(crate::ui_fonts::UI_FONT)
+            .child(gpui_base::TextSelectionLayer)
             .child(self.header(snapshot, &colors, cx))
             .children(self.focus_strip(snapshot, &colors, cx))
             .child(self.body(snapshot, &colors, cx))

@@ -33,6 +33,11 @@ const GROK_VOICES: &[&str] = &[
     "Orion", "Perseus", "Rigel", "Sirius", "Ursa", "Zagan", "Zenith",
 ];
 
+/// A caption's words, selectable and copied with Cmd+C as in the panel (`panel_copy.rs`).
+fn caption(id: &'static str, text: &'static str) -> gpui_base::SelectableText {
+    gpui_base::SelectableText::new(id, text)
+}
+
 struct VoicePanelDemo {
     state: String,
     held: bool,
@@ -133,7 +138,7 @@ impl Render for VoicePanelDemo {
         let mut lines: Vec<gpui::AnyElement> = vec![
             div()
                 .text_color(colors.muted)
-                .child("You: What is the Find port doing?")
+                .child(caption("you-1", "You: What is the Find port doing?"))
                 .into_any_element(),
             h_flex()
                 .gap(px(6.0))
@@ -144,7 +149,7 @@ impl Render for VoicePanelDemo {
                 .into_any_element(),
             div()
                 .text_color(colors.text)
-                .child("It finished: ranking passes and the phone screens are next. Want me to start them?")
+                .child(caption("agent-1", "It finished: ranking passes and the phone screens are next. Want me to start them?"))
                 .into_any_element(),
         ];
         if held {
@@ -159,13 +164,13 @@ impl Render for VoicePanelDemo {
             lines.push(
                 div()
                     .text_color(colors.muted)
-                    .child("You: Yes, start them.")
+                    .child(caption("you-2", "You: Yes, start them."))
                     .into_any_element(),
             );
             lines.push(
                 div()
                     .text_color(colors.text)
-                    .child("Done. I asked it to build the phone screens on the same matcher, and it is starting with the list view now.")
+                    .child(caption("agent-2", "Done. I asked it to build the phone screens on the same matcher, and it is starting with the list view now."))
                     .into_any_element(),
             );
         }
