@@ -24,7 +24,11 @@ export function windowsSigningDecision(mode, secrets, signPathPolicy) {
         `Windows signing requires repository secrets: ${CERTUM_SIGNING_SECRETS.join(' and ')} (Certum), or SIGNPATH_API_TOKEN (SignPath)`
       );
     }
-    return { signed: true, signer: 'signpath', reason: `--windows-signing required (SignPath policy ${signPathPolicy()})` };
+    return {
+      signed: true,
+      signer: 'signpath',
+      reason: `--windows-signing required (SignPath policy ${signPathPolicy()})`,
+    };
   }
   if (!signPath) {
     return { signed: false, signer: 'none', reason: 'no Certum or SignPath secrets are configured' };
@@ -41,4 +45,3 @@ export function windowsSigningDecision(mode, secrets, signPathPolicy) {
   }
   return { signed: true, signer: 'signpath', reason: 'SignPath policy is release-signing' };
 }
-

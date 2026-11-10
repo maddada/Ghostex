@@ -5,7 +5,8 @@
 //! moment. It posts one of two messages, and what those messages DO is in `order_write.rs`. The
 //! planner's whole job is the SET and the ORDER, computed against the projection's membership
 //! (`inventory.rs`) and not against the drawn list, plus the four guards the TypeScript applies
-//! before it: a pinned row may only be dropped next to another pinned row of its own group, an
+//! before it: a pinned row may only be dropped next to another pinned row of its own group (or
+//! into another group of its project, CDXC:Sidebar 2026-11-10 in `plan_session_move`), an
 //! unpinned one may be reordered inside its group only while the sort mode is Manual, a remote row
 //! not at all, and a browser row not at all. A row moved to another group must stay in its own
 //! project, which the order write enforces too.
@@ -132,7 +133,12 @@ pub fn plan_session_move(
         .find(|row| row.sidebar_session_id == session_id)
         .expect("group_of_session answers only for a group holding the row");
 
-    if source_row.is_pinned {
+    // CDXC:Sidebar 2026-11-10 WHY:
+    // A pinned row may move into another group of its own project (a session group, or out of one back to the project's list) and keeps its pin there; only its place among pinned rows is limited to its own group. Refusing it left a pinned session with no drag into or out of a session group (user: "allow dragging into and out of this pls").
+    let into_other_group_of_project = source.group_id != target.group_id
+        && SessionKey::parse_sidebar_session_id(session_id)
+            .is_some_and(|session| target.project.as_ref() == Some(&session.project_key()));
+    if source_row.is_pinned && !into_other_group_of_project {
         return Some(plan_pinned_move(
             &source,
             &target,

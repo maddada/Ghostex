@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use crate::tailcat::{DoorAddress, LanesAdmitting, TailcatRelayMode, TailcatStatusPayload};
+use crate::tailcat::{TailcatRelayMode, TailcatStatusPayload};
 
 /// How the log and the phone name the public relays' address.
 pub const PUBLIC_RELAY_LABEL: &str = "tailcat.dev";
@@ -25,6 +25,10 @@ pub struct EasyConnectAddress {
 CDXC:RemotePairing 2026-11-06 DECISION:
 User (approved plan): a paired phone asks `/api/easyConnectAddresses` with its device token and gets both addresses, ours first, then dials them in that order; `/api/pairDevice` answers with the same list so a phone paired from the QR (which carries one address) has the fallback at once. The second address is listed while its helper runs, even when its relay missed the last check, because the phone checks the relay itself before dialing it; the public one is always last.
 SEE-ALSO: apps/mobile/app/src/machines/easyConnectAddresses.ts (the phone's dial order), server/src/tailcat/supervisor.rs.
+*/
+/*
+CDXC:RemotePairing 2026-11-10 WHY:
+This list never names the door a new phone pairs through (tailcat/door.rs): the door stops when the pairing window closes, and a phone dials its saved list in order and waits 20 s on an address that no longer answers before it tries the next. Both helpers below admit a device from the moment it is approved, so they are all it needs; the phone keeps the door's address only as the one it scanned, which it tries last.
 */
 pub fn easy_connect_addresses(status: &TailcatStatusPayload) -> Vec<EasyConnectAddress> {
     let mut addresses = Vec::new();
@@ -52,51 +56,6 @@ pub fn easy_connect_addresses(status: &TailcatStatusPayload) -> Vec<EasyConnectA
         });
     }
     addresses
-}
-
-/*
-CDXC:RemotePairing 2026-11-10 WHY:
-A device approved while other devices were connected is not on the two helpers above until they next start (they are not restarted for it, tailcat/door.rs), so dialing them first would cost it a ten second wait at each before it reached the door, the one address that lets it in. Its list therefore puts the addresses that admit its key first and names the door among them when neither main helper does; the two main addresses stay on the list behind them, since they admit it from the helpers' next start. A device both helpers admit gets the list exactly as before, without the door. Phones from 11.2.1 dial a list in its order and keep any address, so the longer list changes nothing for them.
-*/
-/// The addresses for the device that dials with `key`, best first. `admits` says which running
-/// helpers let that key in and `door` is the door's address while it runs.
-pub fn easy_connect_addresses_for(
-    status: &TailcatStatusPayload,
-    admits: LanesAdmitting,
-    door: Option<DoorAddress>,
-) -> Vec<EasyConnectAddress> {
-    let listed = easy_connect_addresses(status);
-    let admitted = |address: &EasyConnectAddress| {
-        if address.kind == "public" {
-            admits.public
-        } else {
-            admits.relay
-        }
-    };
-    if listed.iter().all(admitted) {
-        return listed;
-    }
-    let (mut first, later): (Vec<_>, Vec<_>) = listed.into_iter().partition(admitted);
-    if let (true, true, Some(door)) = (first.is_empty(), admits.door, door) {
-        let (relay, kind) = match door.relay_host {
-            Some(host) => (
-                host,
-                match status.relay.mode {
-                    TailcatRelayMode::Custom => "custom",
-                    _ => "ghostex",
-                },
-            ),
-            None => (PUBLIC_RELAY_LABEL.to_string(), "public"),
-        };
-        first.push(EasyConnectAddress {
-            address: door.address,
-            relay,
-            kind,
-            reachable: None,
-        });
-    }
-    first.extend(later);
-    first
 }
 
 /*

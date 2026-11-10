@@ -58,7 +58,7 @@ pub(super) fn selected_voice(paths: &GxserverPaths, provider: Provider) -> Strin
 pub(super) const CALL_MODE_SETTING: &str = "voiceAgentCallMode";
 
 /// Whether new calls are push-to-talk (`voiceAgentCallMode` is `pushToTalk`); the default `regular`
-/// call listens hands-free. Read when a call starts; a change applies to the next call.
+/// call listens hands-free. Read when a call starts; a change also switches the calls already running (`Conversation::set_call_mode`).
 pub(super) fn push_to_talk_calls(paths: &GxserverPaths) -> bool {
     read_settings(paths)
         .get(CALL_MODE_SETTING)

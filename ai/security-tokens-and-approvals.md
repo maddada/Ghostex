@@ -313,8 +313,9 @@ Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairi
   `easyConnect.helper` log lines) runs open and the QR carries its address; the two helpers paired
   devices are on are never opened and are not restarted for it. The text code names the first
   helper, where a new key is let in when it knocks (that one helper starts again with it). An
-  approved key is withheld from a helper that carries links until it next starts, and the door
-  admits it meanwhile; a removed key still restarts the helpers at once.
+  approved key goes on the allow-list of both helpers at once (they start again once with it), no
+  saved address list names the door, and the door stops when the window closes; a removed key
+  still restarts the helpers at once.
 - `/api/pairDevice` (public) takes `deviceKey` (P-256, `ecdsaP256Sha256`) and optionally the
   phone's `approverKey`, consumes the code, and answers `{ status: "pending", pendingId, words }`.
   It creates a `pairingApproveDevice` approval request (target: the pending id; the detail names

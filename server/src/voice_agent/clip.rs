@@ -138,6 +138,69 @@ async fn handle(body: &Value) -> Result<Value, DomainStateError> {
     Ok(json!({"received": received, "sent": true}))
 }
 
+/// The longest typed turn `/api/voiceAgentText` takes, in characters (a long paragraph).
+const MAX_TEXT_CHARS: usize = 4_000;
+
+/// `/api/voiceAgentText` `{conversationId, text}`: a typed turn for a running call, for a client
+/// whose call socket can't carry a `text` frame. It goes to the call as `Input::Text`, which shows
+/// it as the user's caption, cuts a reply being spoken and answers it. Answers `{sent: true}`.
+///
+/// CDXC:VoiceMode 2026-11-10 WHY: The phone's new text box sends typed turns on a normal call, but the phone's native call socket (GhostexVoice.kt / .swift, app 11.2.1) forwards only fixed frames, so JavaScript cannot put a `text` frame on it. This route is the way in; it is gated exactly like `/api/voiceAgentClip` (the same `remote_allowed` entry in protocol.rs and no other principal check), and phones that never call it are unchanged.
+/// SEE-ALSO: apps/mobile/app/src/voice/conversation.ts (`sendNativeCallText`), ~/.local/share/agent-work/Ghostex/voice-text-input/contract.md.
+async fn handle_text(body: &Value) -> Result<Value, DomainStateError> {
+    let params = read_domain_rpc_params(body)?;
+    let conversation_id = params
+        .get("conversationId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| failure("badRequest", "conversationId is required."))?
+        .to_string();
+    let text = params
+        .get("text")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+    if text.is_empty() {
+        return Err(failure("badRequest", "text is required."));
+    }
+    if text.chars().count() > MAX_TEXT_CHARS {
+        return Err(failure(
+            "badRequest",
+            format!("A typed turn may be at most {MAX_TEXT_CHARS} characters."),
+        ));
+    }
+    let Some(tx) = registry::sender(&conversation_id) else {
+        return Err(failure(
+            "notFound",
+            "That voice conversation has ended. Start a new one.",
+        ));
+    };
+    tx.send(Input::Text(text.to_string())).map_err(|_| {
+        failure(
+            "notFound",
+            "That voice conversation has ended. Start a new one.",
+        )
+    })?;
+    Ok(json!({"sent": true}))
+}
+
+pub(crate) async fn handle_voice_agent_text_http(
+    _state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    match handle_text(body).await {
+        Ok(result) => routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, result),
+        ),
+        Err(error) => domain_error_response(endpoint_path, request_id, error),
+    }
+}
+
 pub(crate) async fn handle_voice_agent_clip_http(
     _state: &AppState,
     endpoint_path: String,

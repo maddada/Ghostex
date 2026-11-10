@@ -72,11 +72,18 @@ pub fn plan_session_drop(
         SessionHandoffCheck::Refused(_) => return None,
         SessionHandoffCheck::NotAcross => {}
     }
-    // A section heading of another project aims at that project and at nothing else.
-    if command.get("handoffOnly").and_then(Value::as_bool) == Some(true) {
-        return None;
-    }
     let mut command = command.clone();
+    // A section heading of another project aims at that project and at nothing else; one of
+    // another group of the row's own project takes the row into that group.
+    if command.get("handoffOnly").and_then(Value::as_bool) == Some(true) {
+        if !heading_takes_row_into_group(core, inputs, &command, session_id) {
+            return None;
+        }
+        if let Some(object) = command.as_object_mut() {
+            object.remove("handoffOnly");
+            object.remove("headingSection");
+        }
+    }
     if let (Some(group_id), Some(hovered)) = (
         command.get("groupId").and_then(Value::as_str),
         command.get("targetSessionId").and_then(Value::as_str),
@@ -109,6 +116,32 @@ pub fn plan_session_drop(
         command,
         handoff: None,
     })
+}
+
+/// Whether a session dropped on a section heading of `groupId` moves into that group: the heading
+/// is one of another group than the row's own (the project's when the row is in one of its session
+/// groups, a session group's when it is not), and not Pinned or Parked, whose flag the move would
+/// not give. The move itself is the group header's (`plan_session_move`), which keeps the row in
+/// its project.
+///
+/// CDXC:Sidebar 2026-11-10 WHY:
+/// User, of a session group drawn under a project's collapsed Sessions heading: "allow dragging into and out of this pls". Dropping a session on a heading of its own project's other group did nothing: the heading was treated as another project's, which only hands a session over. With the project's Sessions heading collapsed, that heading was the only place outside the group to drop on.
+fn heading_takes_row_into_group(
+    core: &Core,
+    inputs: &SidebarInputs,
+    command: &Value,
+    session_id: &str,
+) -> bool {
+    let Some(group_id) = command.get("groupId").and_then(Value::as_str) else {
+        return false;
+    };
+    if matches!(
+        command.get("headingSection").and_then(Value::as_str),
+        Some("pinned" | "parked")
+    ) {
+        return false;
+    }
+    group_of_session(core, inputs, session_id).is_some_and(|source| source.group_id != group_id)
 }
 
 /// A `moveSession` of a pinned row onto another pinned row drawn in the same Pinned section:

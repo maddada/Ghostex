@@ -251,6 +251,12 @@ fn diagnostic_value_present(value: &serde_json::Value) -> bool {
     }
 }
 
+/// Appends an event that is kept whatever the debug switches say, for the few lines a later
+/// reader needs to see that something happened at all (a connect that started and how it ended).
+pub fn append_always(log: GpuiSupportLog, event: &str, details: serde_json::Value) {
+    append_unconditionally(log, event, details);
+}
+
 fn append_unconditionally(log: GpuiSupportLog, event: &str, details: serde_json::Value) {
     write_entry(log, event, sanitize_json_value(details, 0));
 }

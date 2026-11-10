@@ -16,7 +16,7 @@ How to use this file:
 - **Default view for compatible agents** `preferredAgentInterface` (one of terminal | chat; default chat): Automatically switch to chat as soon as Ghostex detects that an agent session supports it. Option labels: terminal = Terminal, chat = Chat.
 - **Close empty sessions when starting a new one** `closeEmptySessionsOnNew` (boolean, default false) [advanced]: When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.
 - **Custom transcript width (set with Transcript width)** `sessionChatCustomTranscriptWidthEnabled` (boolean, default false) [advanced]: On once Transcript width is dragged to a percentage; off keeps Auto, where the transcript matches the prompt composer's width.
-- **Transcript width** `sessionChatTranscriptWidthPercent` (number 50 to 100 step 5 default 75) [advanced]: The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.
+- **Transcript width** `sessionChatTranscriptWidthPercent` (number 50 to 100 step 5 default 75) [advanced]: The widest the centered transcript gets. Auto matches the prompt composer; drag to set a percentage of the window instead. Side panels you open take the empty space beside it first, so the text only narrows once none is left. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.
 - **Show file edit previews** `sessionChatFileEditPreviews` (boolean, default false): Show the first seven code lines in each file edit. Turn off to show only the path and change counts.
 - **Tool call cards (preview)** `chatToolCallCards` (boolean, default false): Show each run of tool calls as one line that says which call is running now; click it to see every call with its result, time and the reason for any failure. Off keeps the current look. Agent work's Reduced and Quiet replace these cards.
 - **Message layout** `chatMessageLayout` (one of default | left; default default) [advanced]: Default puts your messages on the right as bubbles. Left aligned starts every message at the same left edge. Option labels: default = Default, left = Left aligned.
@@ -32,7 +32,7 @@ How to use this file:
 - **Send when you pick an answer** `chatSendOnPick` (boolean, default false) [advanced]: When a question card asks one question, picking an answer sends it right away, without Send answers. Cards with several questions, multiple-choice questions, Other and text answers still wait for Send.
 - **Wait for turn end before sending form answers** `chatAnswersWaitForIdle` (boolean, default false) [advanced]: Send answers from Ghostex forms and Ghostex pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.
 - **Open Ghostex pages in** `chatPageOpenTarget` (one of popup | files | system-browser; default popup): Where a Ghostex page (gx page) an agent shows in chat, such as a mockup or a comparison, opens when you click its card: a popup over the chat, the Files view, or your default web browser. Answers you send from the page reach the agent the same way in all three. The phone always opens pages in its own viewer. Option labels: popup = Popup, files = Files, system-browser = System browser.
-- **Coordinator board opens as** `coordinatorBoardView` (one of list | columns; default list): What the Board pill above a coordinator's chat box opens: its lines of work as a list beside the chat, or as columns over the chat, one per group. The switch at the top of either view changes this too. Option labels: list = Side list, columns = Columns.
+- **Coordinator board opens as** `coordinatorBoardView` (one of list | columns; default list): What the Work pill above a coordinator's chat box opens: its lines of work as a list beside the chat, or as columns over the chat, one per group. The switch at the top of either view changes this too. Option labels: list = Side list, columns = Columns.
 - **Tell agents about Ghostex** `agentGhostexNote` (boolean, default true): Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show Ghostex pages, forms and visuals in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.
 - **Every effort level in coordinator pickers** `orchestratorAllEfforts` (boolean, default false) [advanced]: Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh.
 - **Coordinator playbook** `orchestratorPlaybook` (Settings UI row without a settings key; use `ghostex settings open`): How your coordinators work: Ghostex's playbook, then your overrides, which they follow over it.
@@ -137,7 +137,7 @@ How to use this file:
 - **Copy on select** `terminalCopyOnSelect` (one of false | true | clipboard; default false) [advanced]: Copy selected terminal text automatically. On macOS both options also copy to the system clipboard. Option labels: false = Off, true = Copy to clipboard, clipboard = System and selection clipboard.
 - **Confirm close** `terminalConfirmCloseSurface` (one of true | always | false; default true) [advanced]: Confirm before closing terminal surfaces. Option labels: true = Smart confirmation, always = Always confirm, false = Do not confirm.
 - **Trim trailing spaces on copy** `terminalClipboardTrimTrailingSpaces` (boolean, default true) [advanced]: Trim trailing whitespace when copying terminal text.
-- **Paste protection** `terminalClipboardPasteProtection` (boolean, default true) [advanced, not agent-writable]: Ask before pasting text Ghostty considers unsafe.
+- **Paste protection** `terminalClipboardPasteProtection` (boolean, default true) [advanced]: Ask before pasting text Ghostty considers unsafe.
 - **Paste images as preview links** `terminalPastePreviewableImages` (boolean, default true) [advanced]: Paste clipboard images as previewable Markdown links with ⌘V. Hold ⌘ over the linked path to preview it in the terminal, and see the same image preview in the ⌃G Rich Prompt Editor.
 - **Hide mouse while typing** `terminalMouseHideWhileTyping` (boolean, default false) [advanced]: Hide the pointer while typing in the terminal.
 - **Scrollbar** `terminalScrollbar` (one of system | never; default system) [advanced]: Control whether Ghostty shows its native scrollback scrollbar. Option labels: system = System, never = Never.
@@ -393,11 +393,11 @@ How to use this file:
 - **Title Generation Agent** `titleGenerationAgent` (Settings UI row without a settings key; use `ghostex settings open`): Choose the headless agent Ghostex uses for first-prompt session title generation. Hover the info icon to see the exact command Ghostex sends.
 - **Custom Title Command** `customTitleCommand` (Settings UI row without a settings key; use `ghostex settings open`): Run this command with the title prompt on stdin. It should print only the title.
 - **Agent approvals** `acceptAll` (Settings UI row without a settings key; use `ghostex settings open`): Choose whether supported agents ask before editing files or running commands. Per-agent settings can override this default.
-- **Trust project folders automatically** `trustProjectFoldersAutomatically` (boolean, default true) [not agent-writable]: Mark each project and worktree folder as trusted before its agent starts, so no session stops at a "Do you trust this folder?" prompt. Turn it off to answer that prompt yourself.
-- **Agent approvals: accept all** `agentAcceptAllEnabled` (boolean, default false) [not agent-writable]: Start supported agents with approvals turned off (full access) by default. Off keeps each agent CLI default approval mode. Projects can override it.
+- **Trust project folders automatically** `trustProjectFoldersAutomatically` (boolean, default true): Mark each project and worktree folder as trusted before its agent starts, so no session stops at a "Do you trust this folder?" prompt. Turn it off to answer that prompt yourself.
+- **Agent approvals: accept all** `agentAcceptAllEnabled` (boolean, default false): Start supported agents with approvals turned off (full access) by default. Off keeps each agent CLI default approval mode. Projects can override it.
 - **Default Prompt Agent** `defaultPromptAgentId` (text, default codex): Agent id used when Ghostex sends a prompt on your behalf (for example PR review). Use an id from the configured agents.
 - **Title Generation Agent** `sessionTitleGenerationAgent` (one of codex | cursor | claude | grok | pi | antigravity | empryo | custom; default codex): Headless agent Ghostex uses for first-prompt session title generation. Option labels: codex = Codex, cursor = Cursor CLI, claude = Claude, grok = Grok Build, pi = Pi Agent, antigravity = Antigravity CLI, empryo = Empryo, custom = Custom.
-- **Custom Title Command** `customSessionTitleGenerationCommand` (text, default (empty)) [not agent-writable]: Custom command run with the title prompt on stdin when Title Generation Agent is custom. It should print only the title.
+- **Custom Title Command** `customSessionTitleGenerationCommand` (text, default (empty)): Custom command run with the title prompt on stdin when Title Generation Agent is custom. It should print only the title.
 ### Session resume hooks
 
 - **Session resume hooks** `agentResumeHooks` (Settings UI row without a settings key; use `ghostex settings open`): Hooks let Ghostex capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart. Install one agent's hook from its row, fix every agent that is on with Fix all, install every missing hook with Install all (shown only when a hook is missing), or remove every Ghostex hook with Uninstall all in the ⋯ menu.
@@ -406,7 +406,7 @@ How to use this file:
 
 - **Show Main Hub on all Spaces** `chiefShowOnAllSpaces` (boolean, default false): Show Main Hub and your home folder's sessions at the top of every Space. Off, they stay at the top of the Space you moved them to.
 - **Ask before New Chat** `chiefConfirmNewChat` (boolean, default true): Ask before New Chat or Change Agent starts a new chat with Chief of Staff. Your earlier chats stay in Main Hub either way.
-- **Chief of Staff may add GBots on its own** `gbotsChiefAddsOnItsOwn` (boolean, default true) [not agent-writable]: With GBots on, Chief of Staff adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one. Only you can change this, not an agent.
+- **Chief of Staff may add GBots on its own** `gbotsChiefAddsOnItsOwn` (boolean, default true): With GBots on, Chief of Staff adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one.
 - **Folders agents can't read in your home folder** `homeSecretFolders` (structured value; change it in Settings, not with `ghostex settings set`): Agents Ghostex starts in your home folder are kept out of these folders and files. Claude Code's file tools and every Codex command are held to the list; Claude's shell commands and other agents are not.
 ## Integrations (tab `integrations`)
 
@@ -438,7 +438,7 @@ How to use this file:
 
 - **Stop idle boxes after** `cloudBoxesIdleStopMinutes` (number 1 to 1440 step 1 one of 5 | 10 | 15 | 30 | 60 | 120; default 15): A box with no agent working and no terminal open pauses (Instabox) or stops (Boat) after this long. Sending a message wakes it. Option labels: 5 = 5 minutes, 10 = 10 minutes, 15 = 15 minutes, 30 = 30 minutes, 60 = 1 hour, 120 = 2 hours.
 - **Delete archived boxes after** `cloudBoxesDeleteStoppedAfterDays` (number 1 to 365 step 1 one of 1 | 3 | 7 | 14 | 30; default 7): When every session on a box is archived, the box stops and is deleted after this many days. A box with unpushed work is kept until you push or delete it. Option labels: 1 = 1 day, 3 = 3 days, 7 = 7 days, 14 = 14 days, 30 = 30 days.
-- **Start boxes from your phone** `cloudBoxesPhoneStartEnabled` (boolean, default false) [not agent-writable]: Keep your provider key, agent logins, Default snapshots and picked secrets on your paired phones, so they can start a box while this computer is off.
+- **Start boxes from your phone** `cloudBoxesPhoneStartEnabled` (boolean, default false): Keep your provider key, agent logins, Default snapshots and picked secrets on your paired phones, so they can start a box while this computer is off.
 ### Your boxes
 
 - **Your boxes** `cloudBoxesBoxes` (Settings UI row without a settings key; use `ghostex settings open`): Every box with its state, project, age and cost. Stop a box, or delete it; a box with unpushed work asks first.
@@ -539,24 +539,23 @@ How to use this file:
 - **Extensions** `extensionsButton` (Settings UI row without a settings key; use `ghostex settings open`): An entry in the work area header’s ⋯ menu that lists your installed extensions.
 - **Hide Bots** `botsHidden` (boolean, default true): Stop offering Bots, the sidebar mode with one row per Hermes profile. Hidden by default; offered only where the Hermes CLI is installed.
 - **GBots** `gbotsEnabled` (boolean, default false): Turn GBots on or off: your own team of bots under Chief of Staff in Main Hub, running on your Claude Code or Codex. Needs Main Hub. Off by default.
-- **Hide Bot automations** `botAutomationsHidden` (boolean, default true) [not agent-writable]: Stop offering Bot automations, the Automations row in the Bots sidebar that opens a feed of every Hermes cron run. Hidden by default; needs Bots.
+- **Hide Bot automations** `botAutomationsHidden` (boolean, default true): Stop offering Bot automations, the Automations row in the Bots sidebar that opens a feed of every Hermes cron run. Hidden by default; needs Bots.
 - **Turn off Actions** `actionsHidden` (boolean, default true): Turn off Actions everywhere: the Start button, the Actions page in Settings, Actions pinned to project rows, the Start Action hotkeys and the Quick Access rows. Off by default; your saved actions are kept.
 - **Turn off Open In** `openInTitlebarButtonHidden` (boolean, default false): Turn off Open In everywhere: the Open button, the Open In page in Settings and the Open In menus. Your apps and custom commands are kept.
 - **Spaces** `sidebarSpacesEnabled` (boolean, default false): Turn on Spaces: a row of Space icons at the top of the sidebar, Space menus, and the Space settings. Off by default; your saved Spaces are kept while it is off.
 - **Cloud Boxes** `cloudBoxesEnabled` (boolean, default true): Turn Cloud Boxes on or off everywhere: the Cloud Boxes page in Settings, the Cloud Box choice of a new chat, the Run on choice of a new thread, Run in a Box in the Select Agent menu and the cloud and agentbox commands. On by default; your boxes and box settings are kept while it is off.
-- **Turn off Workspaces** `workspacesHidden` (boolean, default true) [not agent-writable]: Turn off Workspaces everywhere: the workspace button, Move to workspace, the Workspaces page in Settings, the team backend and Slack, and the workspace, team and slack commands. Issues Workflow stays on without it. Off by default; your workspaces, keys and team connections are kept.
+- **Turn off Workspaces** `workspacesHidden` (boolean, default true): Turn off Workspaces everywhere: the workspace button, Move to workspace, the Workspaces page in Settings, the team backend and Slack, and the workspace, team and slack commands. Issues Workflow stays on without it. Off by default; your workspaces, keys and team connections are kept.
 - **Turn off Read aloud** `readAloudHidden` (boolean, default true): Turn off Read aloud everywhere: Read aloud on replies, Auto-read in the chat's ⋯ menu, the Read aloud rows on Settings > Chat and the Read aloud hotkeys, on this computer and in the phone app and browser connected to it. Experimental, off by default; your Voice and Speed are kept.
 - **Turn off the Session details panel** `sessionDetailsPanelHidden` (boolean, default false): Turn off the Session details panel (beta): the context ring at the top right of the window, the panel beside Claude chats, and the Claude task list row on Settings > Chat. On by default.
 - **Turn off Session notes** `sessionNotesHidden` (boolean, default true): Turn off Session notes: Note in a session's menu and hover buttons, the note dot on its card, Session note in the chat's More actions, the Session Note hotkey and the ghostex session-note command, here and in the phone app. Off by default; notes you wrote are kept and come back when you turn it on.
 - **Turn off Claude** `claudeWebHidden` (boolean, default true): Turn off Claude: the Claude button in the header and the Claude view, which shows claude.ai with a bar to switch between your saved Claude accounts. Off by default; each account's claude.ai sign-in is kept.
 - **Turn off Grok Bot** `grokWebHidden` (boolean, default true): Turn off Grok Bot: the Grok Bot button in the header and the Grok Bot view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.
-- **Turn off Connectors** `connectorsHidden` (boolean, default true) [not agent-writable]: Turn off Connectors everywhere: the Connectors page in Settings, the apps your agents get and the ghostex connectors commands. Experimental, off by default; your sign-ins and connected apps are kept.
+- **Turn off Connectors** `connectorsHidden` (boolean, default true): Turn off Connectors everywhere: the Connectors page in Settings, the apps your agents get and the ghostex connectors commands. Experimental, off by default; your sign-ins and connected apps are kept.
 - **Turn off OS Integration** `osIntegrationHidden` (boolean, default true): Leave the OS Integration page out of Settings. Experimental, off by default.
 - **Keep Awake** `keepAwakeEnabled` (boolean, default false): Turn Keep Awake on or off: Keep Awake in the ⋯ menu, its button at the top of the window and the Power settings. macOS only. Experimental, off by default. Only on macOS.
 - **All Automations** `allAutomationsEnabled` (boolean, default false): Turn All Automations on or off: automations that belong to no project, in Automate's All Automations board, which shows that it is coming soon while this is off. Experimental, off by default.
 - **Faster rendering** `fasterRendering` (boolean, default false): Redraw only the parts of a window that changed, so Ghostex uses less CPU while agents stream and you scroll; it applies at once. Turn it off if part of a window stops updating. Experimental, off by default.
 - **Tool call lines** `chatToolCallLines` (boolean, default false): Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows. Settings > Chat > Agent work set to Reduced or Quiet replaces these lines. Experimental, off by default.
-- **Security logs** `securityLogsEnabled` (boolean, default false): Shows the Security page in Settings: the log of every sensitive action on this computer. The log is kept and its alerts arrive whether this is on or off. Experimental, off by default.
 - **Terminal shaders** `terminalShadersEnabled` (boolean, default false): Apply the shaders from Ghostex's terminal config in order. macOS with Metal only; tested on Apple Silicon. Turn off to restore ordinary rendering in the same sessions. Experimental, off by default. Only on macOS.
 - **Turn off Debugging** `debuggingHidden` (boolean, default false): Leave the Debugging page out of Settings. On by default.
 - **Turn off the voice agent** `voiceAgentHidden` (boolean, default false): Turn off the voice agent everywhere: the headset at the top of the window and its arrow menu, voice calls about one session, the call rows on Settings > Voice and the voice agent hotkeys, on this computer and in the phone app connected to it. A call that is running ends. Dictate keeps working, and the xAI and OpenAI keys stay on Settings > Voice. On by default; your voice settings are kept.
@@ -598,7 +597,7 @@ How to use this file:
 ### Default editor
 
 - **Default editor** `defaultEditorCommand` (one of code | code-insiders | zed | zeditor | cursor | windsurf | codium | subl | other; default code): Editor command used by Open In and `ghostex edit` when no other target is chosen. Option labels: code = VS Code (code), code-insiders = VS Code Insiders (code-insiders), zed = Zed (zed), zeditor = Zed alternate (zeditor), cursor = Cursor (cursor), windsurf = Windsurf (windsurf), codium = VSCodium (codium), subl = Sublime Text (subl), other = Other.
-- **Custom editor command** `customDefaultEditorCommand` (text, default (empty)) [not agent-writable]: Command used when Default editor is set to other.
+- **Custom editor command** `customDefaultEditorCommand` (text, default (empty)): Command used when Default editor is set to other.
 ## OS Integration (tab `osIntegration`)
 
 ### Defaults
@@ -624,7 +623,7 @@ How to use this file:
 - **Additional docs folders** `manageAdditionalDocsFolders` (text, default (empty)): Extra folders (one per line) the Files view lists in every project.
 ### Global Defaults
 
-- **Global worktree command** `globalWorktreeCommand` (text, default (empty)) [not agent-writable]: Worktree command every project uses unless it sets its own.
+- **Global worktree command** `globalWorktreeCommand` (text, default (empty)): Worktree command every project uses unless it sets its own.
 - **Global ticket key** `globalTicketKey` (Settings UI row without a settings key; use `ghostex settings open`): Ticket key every project uses unless it sets its own.
 - **Global Beads directory** `globalBeadsDirectory` (text, default (empty)): Beads directory every project uses unless it sets its own.
 - **Global Docs directory** `globalDocsDirectory` (text, default (empty)): Extra folder the Files view shows in every project, alongside that project's own docs.
@@ -641,28 +640,26 @@ How to use this file:
 - **Send to the box** `projectCloudBoxSecrets` (Settings UI row without a settings key; use `ghostex settings open`): Tick the project's .env files and name the variables a Cloud Box gets at start. Their values are read from this computer each time and never saved in a snapshot.
 ## Remote (tab `remote`)
 
-### Current machine
+### This computer
 
 - **Name** `computerName` (Settings UI row without a settings key; use `ghostex settings open`): This computer's name, set by the system; your phone and other computers show it.
 - **Short name** `computerShortName` (Settings UI row without a settings key; use `ghostex settings open`): This computer's 2-character name on the sidebar's computer pills; empty uses one made from its name.
-- **SSH access** `sshAccess` (Settings UI row without a settings key; use `ghostex settings open`): Lets your phone and other computers sign in to this one; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt.
+- **SSH access** `sshAccess` (Settings UI row without a settings key; use `ghostex settings open`): Lets your phone and other computers sign in to this machine; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt.
 - **Short name** `localMachineShortName` (text, default (empty)) [not agent-writable]: Up to 2 characters on the sidebar's computer pills; empty uses one made from the computer's name.
-### Easy Connect
+### Phones and computers that can reach this machine
 
-- **Easy Connect** `easyConnectEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Connect a phone or a remote machine. Install the Tailcat CLI helper with one click.
-- **Pairing code** `pairingCode` (Settings UI row without a settings key; use `ghostex settings open`): Connect a Phone with a QR, or Connect a Remote machine with Copy Easy Connect code and its SSH username and password.
-- **Paired devices** `pairedDevices` (Settings UI row without a settings key; use `ghostex settings open`): Phones and computers paired with this computer; remove one to unpair it and revoke its access.
-- **Only paired devices can connect** `pairedDevicesOnly` (Settings UI row without a settings key; use `ghostex settings open`): Easy Connect lets in only paired phones and the keys listed under Advanced; a new phone can still pair while the QR is showing.
-- **Relay** `easyConnectRelay` (Settings UI row without a settings key; use `ghostex settings open`): Where phones meet this computer: Ghostex's relay first with Tailscale's public relays as fallback, public relays only, or a relay you run.
+- **Easy Connect** `easyConnectEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Reach this machine from anywhere; only the devices in the list get in. Connect a phone turns it on by itself.
+- **Connect a phone** `pairingCode` (Settings UI row without a settings key; use `ghostex settings open`): Opens the Connect a phone window with the code to scan; Connect a computer shows the code another computer pastes.
+- **Paired devices** `pairedDevices` (Settings UI row without a settings key; use `ghostex settings open`): Phones and computers that can reach this machine, and any waiting for Approve; remove one to cut it off.
 ### Tailscale
 
-- **Tailscale on or off** `tailscaleEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Offer the Tailscale path; off keeps its card collapsed and hides it from Remote Setup.
+- **Tailscale on or off** `tailscaleEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Offer the Tailscale path; off leaves it out of the Connect a phone window.
 - **Tailscale checklist** `tailscaleSteps` (Settings UI row without a settings key; use `ghostex settings open`): Reach this computer over your tailnet: Tailscale running, SSH access on, the app on your phone.
 - **Tailscale code** `tailscaleCode` (Settings UI row without a settings key; use `ghostex settings open`): Scan the Tailscale code with the Ghostex app, or type the host, IP and username.
 - **Tailscale on or off** `remoteTailscaleEnabled` (boolean, default true) [not agent-writable]: Offer the Tailscale path in Remote setup.
-### Remote machines
+### Computers this machine connects to
 
-- **Add a machine** `addMachine` (Settings UI row without a settings key; use `ghostex settings open`): Add a computer by SSH details or an Easy Connect code; saved machines appear as sidebar sections.
+- **Add a computer** `addMachine` (Settings UI row without a settings key; use `ghostex settings open`): Add a computer by SSH details or its code; saved computers appear as sidebar sections.
 - **Show in sidebar** `showInSidebar` (Settings UI row without a settings key; use `ghostex settings open`): Hide a saved remote machine from the sidebar without deleting it.
 - **Short names** `shortName` (Settings UI row without a settings key; use `ghostex settings open`): Each remote machine's 2-character name on the sidebar's computer pills, set in its settings.
 - **SSH host** `sshHost` (Settings UI row without a settings key; use `ghostex settings open`): Remote machine SSH host.
@@ -674,6 +671,7 @@ How to use this file:
 - **Install / Connect gxserver** `installGxserver` (Settings UI row without a settings key; use `ghostex settings open`): Install, update, or connect gxserver on a saved remote machine.
 ### Advanced
 
+- **Relay** `easyConnectRelay` (Settings UI row without a settings key; use `ghostex settings open`): Where phones meet this computer: Ghostex's relay first with Tailscale's public relays as fallback, public relays only, or a relay you run.
 - **Easy Connect served ports** `servedPorts` (Settings UI row without a settings key; use `ghostex settings open`): Local ports Easy Connect exposes to paired phones.
 - **Allowed client keys** `allowedClientKeys` (Settings UI row without a settings key; use `ghostex settings open`): Client keys allowed to connect; empty allows any device that scanned the code.
 - **Pairing address** `pairingAddress` (Settings UI row without a settings key; use `ghostex settings open`): The raw Easy Connect address inside the QR, for pasting by hand.
@@ -712,10 +710,17 @@ How to use this file:
 - **Private secret requests** `secretRequests` (Settings UI row without a settings key; use `ghostex settings open`): When an agent needs a password, API key or token, it asks in a private card above the chat box instead of in the chat. What you type goes to a private file only that agent's commands can read, deleted after 24 hours; it never appears in the chat or reaches the model. With a 1Password account added, you can answer with an op:// reference instead.
 ## Security (tab `security`)
 
+### Approvals
+
+- **Require Touch ID or your password to approve** `approvalsRequirePresence` (boolean, default false): Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: your computer asks for Touch ID, Windows Hello or your password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.
+### What still asks
+
+- **What still asks** `stillAsks` (Settings UI row without a settings key; use `ghostex settings open`): What asks for an Approve on this computer: a phone or computer asking to pair, a Collab guest's message in Approve mode, and, when an agent asks, turning on Easy Connect, letting a device connect through it, sharing a chat or turning on Send mode. Everything else works without asking, and your own clicks never ask.
 ### Security log
 
 - **Security log check** `securityLogCheck` (Settings UI row without a settings key; use `ghostex settings open`): Whether the security log is intact. Each entry is chained to the one before it, so an entry that was changed or removed after it was written shows here.
 - **Security log** `securityLog` (Settings UI row without a settings key; use `ghostex settings open`): Every sensitive action on this computer, newest first: pairing a phone, Easy Connect changes, sharing a chat in Collab, letting a connected computer's agents in, Autopilot answering an approval, and attempts to change settings only you can change. Each says who asked, when and how it ended. The important ones also show in the notification bell and on your paired phones: anything that opens this computer to other people or devices (turning on Collab, sharing a chat, pairing a phone, turning on or widening Easy Connect, letting a computer in), a new owner or approver key, a protection turned off, anything an agent, a phone, another computer or a Collab guest did, the same request refused three times, and an edited log. `ghostex security log` reads the same list.
+- **Show the security log** `securityLogsEnabled` (boolean, default false): Shows this computer's security log below: pairing phones and computers, Easy Connect changes, Collab shares, approvals and who asked for each. The log is kept and its alerts arrive whether this is on or off. Off by default.
 ## Workspaces (tab `workspaces`)
 
 ### Workspaces

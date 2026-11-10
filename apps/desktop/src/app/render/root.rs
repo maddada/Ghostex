@@ -1103,6 +1103,9 @@ impl Render for GhostexGpuiApp {
                     this.set_voice_agent_speed(f32::from(action.hundredths) / 100.0, cx);
                 }),
             )
+            .on_action(cx.listener(|_, action: &CopyVoiceAgentText, _window, cx| {
+                gpui_copy_to_clipboard(ClipboardItem::new_string(action.text.clone()), cx);
+            }))
             .on_action(cx.listener(
                 |this, action: &SetBrowserDeviceView, _window, cx| {
                     this.set_browser_device_view_for_pane(

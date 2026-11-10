@@ -21,6 +21,15 @@ const MAX_BACKOFF: Duration = Duration::from_secs(60);
 /// crash restarts fast instead of inheriting the previous crash loop's delay.
 const STABLE_UPTIME: Duration = Duration::from_secs(30);
 const STOP_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long an answer gets to leave through a helper before that helper starts again
+/// (`TailcatRuntime::answer_before_restart`).
+const ANSWER_HEAD_START: Duration = Duration::from_secs(1);
+
+thread_local! {
+    /// `Some` while this thread is inside `TailcatRuntime::answer_before_restart`, and `Some(true)`
+    /// once a reconcile was asked for there.
+    static RECONCILE_AFTER_ANSWER: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
 
 /// The Easy Connect helpers: the first address, on the public relays, which every phone paired
 /// so far holds; the second, on the relay Settings picked (Ghostex's own by default); and the door
@@ -70,11 +79,6 @@ pub(super) struct TailcatLaneState {
     pub(super) running: bool,
     pub(super) token: Option<String>,
     last_error: Option<String>,
-    /// The devices the running helper has carried a link for (`link_log.rs`).
-    pub(super) peers: Option<super::link_log::LinkPeers>,
-    /// When a helper of this lane that carried links was last stopped: its devices are on their
-    /// way back, so the lane still counts as carrying them for a while (`door.rs`).
-    pub(super) links_cut_at: Option<Instant>,
     /// Why gxserver is stopping this lane's helper now, for the log (`take_stop_reason`).
     stop_reason: Option<&'static str>,
 }
@@ -88,7 +92,7 @@ pub(super) struct TailcatRuntimeInner {
     /// While set and in the future, a pairing code is shown or a device waits as Pending: the door
     /// runs open and a key turned away at a helper is let in (`door.rs`).
     pub(super) pairing_open_until: Option<Instant>,
-    /// Which saved keys each main helper does not serve yet, and which knocked (`door.rs`).
+    /// The unsaved keys each main helper let in on a knock (`door.rs`).
     pub(super) admission: super::door::Admission,
     /// The relay the running door's key is pinned to; `None` on the public relays.
     pub(super) door_relay_host: Option<String>,
@@ -177,6 +181,10 @@ impl TailcatRuntime {
     actually differs; an unrelated settings save must not drop live tunnels.
     */
     pub(crate) fn apply(&self, paths: &GxserverPaths, state: &TailcatState) {
+        // Asked for inside `answer_before_restart`: the saved state is reconciled after the answer.
+        if RECONCILE_AFTER_ANSWER.with(|held| held.replace(held.get().map(|_| true)).is_some()) {
+            return;
+        }
         let _one_at_a_time = self
             .reconciling
             .lock()
@@ -236,58 +244,75 @@ impl TailcatRuntime {
             &saved,
         );
         self.apply_relay(paths, state, &saved);
-        self.apply_door(paths, state, &saved);
+        self.apply_door(paths, state);
     }
 
-    /// Brings one of the two main helpers in line with `spec` and the saved allow-list. It keeps
-    /// running when the keys it serves are the saved ones it is not withheld (a device approved
-    /// while it carried links, `door.rs`) plus the ones that knocked; when it has to start again
-    /// for any reason it serves every saved key from then on.
+    /*
+    CDXC:RemotePairing 2026-11-10 WHY:
+    A paired phone registers a key of its own for this computer through the tunnel it is connected by (`/api/registerEasyConnectClientKey`), and taking that key means starting the helpers again, which ends that tunnel. Done before the answer was sent, the answer was lost every time: measured with a lab phone on the phone's own bridge, the request failed after 6 s, the phone kept its shared key, sat 6.7 s without a connection and had to ask a second time. The change is saved at once and the helpers start again a moment after the answer went out, so the phone hears "accepted", dials again on its new key, and its hello (repeated every second) is let in as soon as the helpers are back.
+    SEE-ALSO: server/src/remote_access/http.rs (the endpoint), apps/mobile/app/src/machines/easyConnectLinkKey.ts.
+    */
+    /// Runs `work` with the reconciles it asks for on this thread held back, and runs one from the
+    /// saved state `ANSWER_HEAD_START` after it returned.
+    pub fn answer_before_restart<T>(&self, paths: &GxserverPaths, work: impl FnOnce() -> T) -> T {
+        struct Held;
+        impl Drop for Held {
+            fn drop(&mut self) {
+                RECONCILE_AFTER_ANSWER.with(|held| held.set(None));
+            }
+        }
+        RECONCILE_AFTER_ANSWER.with(|held| held.set(Some(false)));
+        let held = Held;
+        let result = work();
+        let asked = RECONCILE_AFTER_ANSWER.with(|held| held.get()) == Some(true);
+        drop(held);
+        if asked {
+            let runtime = self.clone();
+            let paths = paths.clone();
+            thread::spawn(move || {
+                thread::sleep(ANSWER_HEAD_START);
+                super::status::start_tailcat_from_persisted_state(&paths, &runtime);
+            });
+        }
+        result
+    }
+
+    /// Brings one of the two main helpers in line with `spec` and the saved allow-list: it serves
+    /// every saved key plus the ones that knocked at it (`door.rs`), and starts again when that
+    /// list or anything else on its command line changed.
     fn reconcile_main_lane(&self, mut spec: TailcatServeSpec, saved: &[String]) {
         let lane = spec.lane;
-        let kept = self
+        let served = self
             .inner
             .lock()
-            .map(|mut inner| inner.admission.kept_list(lane, saved))
+            .map(|mut inner| inner.admission.served_list(lane, saved))
             .unwrap_or_default();
-        spec.allowed_client_keys = served_allow_list(kept);
-        if self.is_current_spec(&spec) {
-            return;
-        }
-        let all = self
-            .inner
-            .lock()
-            .map(|mut inner| inner.admission.serve_all(lane, saved))
-            .unwrap_or_default();
-        spec.allowed_client_keys = served_allow_list(all);
+        spec.allowed_client_keys = served_allow_list(served);
         self.reconcile_lane(spec);
     }
 
-    /// Runs the door while a pairing code is shown (open) or an approved device is still served
-    /// by neither main helper (those keys only), and stops it otherwise (`door.rs`).
-    fn apply_door(&self, paths: &GxserverPaths, state: &TailcatState, saved: &[String]) {
-        let open = self.pairing_window_open();
-        let (waiting, running, relay_host) = {
+    /// Runs the door, open, while a pairing code is shown or a device waits as Pending, and stops
+    /// it otherwise (`door.rs`). No saved address list names it, so stopping it cuts nobody.
+    fn apply_door(&self, paths: &GxserverPaths, state: &TailcatState) {
+        if !self.pairing_window_open() {
+            self.stop_lane(TailcatLane::Door, "doorNotNeeded");
+            return;
+        }
+        let (running, relay_host) = {
             let Ok(mut inner) = self.inner.lock() else {
                 return;
             };
-            let relay_runs = inner.relay.spec.is_some();
             let relay_ready = inner.relay.running
                 && matches!(
                     (&inner.relay_host, &inner.relay_reachable),
                     (Some(host), Some((probed, true))) if host == probed
                 );
             (
-                inner.admission.door_list(saved, relay_runs),
                 inner.lane(TailcatLane::Door).spec.clone(),
                 inner.relay_host.clone().filter(|_| relay_ready),
             )
         };
-        if !open && waiting.is_empty() {
-            self.stop_lane(TailcatLane::Door, "doorNotNeeded");
-            return;
-        }
-        // A running door keeps its key: the devices it serves hold that address.
+        // A running door keeps its key: the code on screen names that address.
         let (binary_path, key_file) = match running {
             Some(spec) => (spec.binary_path, spec.key_file),
             None => {
@@ -307,7 +332,7 @@ impl TailcatRuntime {
         self.reconcile_lane(TailcatServeSpec {
             lane: TailcatLane::Door,
             addr_file: super::door::tailcat_door_address_file(paths),
-            allowed_client_keys: if open { Vec::new() } else { waiting },
+            allowed_client_keys: Vec::new(),
             binary_path,
             key_file,
             ports: tailcat_served_ports(state),
@@ -496,9 +521,6 @@ impl TailcatRuntime {
             state.spec = None;
             state.running = false;
             state.token = None;
-            if state.peers.take().is_some_and(|peers| !peers.is_empty()) {
-                state.links_cut_at = Some(Instant::now());
-            }
             state.stop_tx.take()
         };
         let Some(stop_tx) = stop_tx else {
@@ -521,8 +543,7 @@ impl TailcatRuntime {
 
     fn start(&self, spec: TailcatServeSpec, reason: &'static str) {
         let (stop_tx, stop_rx) = mpsc::channel();
-        // The devices this helper carries, so its end can be logged for each of them and a
-        // helper that carries none can start again freely (`door.rs`).
+        // The devices this helper carries, so its end can be logged for each of them.
         let peers = super::link_log::LinkPeers::default();
         let (generation, logger) = {
             let Ok(mut inner) = self.inner.lock() else {
@@ -536,7 +557,6 @@ impl TailcatRuntime {
             state.running = false;
             state.token = None;
             state.last_error = None;
-            state.peers = Some(peers.clone());
             (state.generation, logger)
         };
         if spec.lane == TailcatLane::Relay {
@@ -805,17 +825,11 @@ reason, so a pairing that keeps failing and retrying shows as what it is.
 fn restart_reason(previous: Option<&TailcatServeSpec>, next: &TailcatServeSpec) -> &'static str {
     let Some(previous) = previous else {
         return match next.lane {
-            TailcatLane::Door if next.allowed_client_keys.is_empty() => "pairingCodeShown",
-            TailcatLane::Door => "newDeviceWaitsForMainHelpers",
+            TailcatLane::Door => "pairingCodeShown",
             _ => "turnedOn",
         };
     };
-    let open = |spec: &TailcatServeSpec| spec.allowed_client_keys.is_empty();
-    if !open(previous) && open(next) {
-        "pairingCodeShown"
-    } else if open(previous) && !open(next) {
-        "pairingWindowClosed"
-    } else if previous.allowed_client_keys != next.allowed_client_keys {
+    if previous.allowed_client_keys != next.allowed_client_keys {
         "allowListChanged"
     } else if previous.ports != next.ports {
         "portsChanged"
@@ -862,7 +876,10 @@ fn spawn_tailcat_serve(spec: &TailcatServeSpec) -> std::io::Result<Child> {
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
     configure_process_group(&mut command);
-    command.spawn()
+    let child = command.spawn()?;
+    // CDXC:RemotePairing 2026-11-10 WHY: Windows does not end a child with its parent, so a gxserver that crashed or was ended from Task Manager left its `tailcat serve` helpers running: an address stayed served by a helper nobody supervises (an open pairing door among them, review of 4ac828ff7), and the next gxserver's helper with the same key shared the relay with it. The helper joins the job that ends with gxserver; a no-op on macOS and Linux, where the helper ends at its next log line once gxserver's end of its pipe is gone.
+    crate::platform::process::end_with_server(child.id());
+    Ok(child)
 }
 
 pub(super) fn configure_process_group(command: &mut Command) {

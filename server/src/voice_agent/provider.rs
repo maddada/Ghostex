@@ -110,7 +110,7 @@ impl Provider {
     /// `openai_transcription_prompt`). A push-to-talk call has no turn detection: the user holds Talk, and
     /// gxserver commits the audio and asks for the reply when Talk is released.
     ///
-    /// CDXC:VoiceMode 2026-10-21 WHY: xAI documents "Sessions using the default `server_vad` turn detection are billed for session duration" and "Push-to-talk sessions are billed only for audio sent and received"; its realtime schema gives `turn_detection.type` as "`server_vad` for automatic detection, `null` for manual turns". Measured 2026-10-21 (`usage.billable_audio_seconds`): a session that starts with `{"type": null}` billed 2 s over a 15 s quiet gap, but turning server_vad off mid-call kept billing the whole duration (17 s), so the mode is fixed when the call starts and never switched mid-call.
+    /// CDXC:VoiceMode 2026-10-21 WHY: xAI documents "Sessions using the default `server_vad` turn detection are billed for session duration" and "Push-to-talk sessions are billed only for audio sent and received"; its realtime schema gives `turn_detection.type` as "`server_vad` for automatic detection, `null` for manual turns". Measured 2026-10-21 (`usage.billable_audio_seconds`): a session that starts with `{"type": null}` billed 2 s over a 15 s quiet gap, but turning server_vad off mid-call kept billing the whole duration (17 s), so a call that switches from push-to-talk to Regular mid-call is billed for its whole duration from then on (the user asked for switching on 2026-11-10, `Conversation::set_call_mode`).
     pub(super) fn session_update(
         self,
         voice: &str,
@@ -177,6 +177,29 @@ impl Provider {
         match self {
             Self::Xai => update["session"]["voice"] = json!(voice),
             Self::OpenAi => update["session"]["audio"]["output"]["voice"] = json!(voice),
+        }
+        update
+    }
+
+    /// The conversation's `session.update` with the other call mode's turn detection (none for
+    /// push-to-talk, the provider's own for a Regular call), for a mode switched mid-call.
+    pub(super) fn with_call_mode(self, session_update: &Value, push_to_talk: bool) -> Value {
+        let mut update = session_update.clone();
+        match self {
+            Self::Xai => {
+                update["session"]["turn_detection"] = if push_to_talk {
+                    json!({"type": null})
+                } else {
+                    json!({"type": "server_vad"})
+                }
+            }
+            Self::OpenAi => {
+                update["session"]["audio"]["input"]["turn_detection"] = if push_to_talk {
+                    Value::Null
+                } else {
+                    json!({"type": "semantic_vad", "create_response": true, "interrupt_response": true})
+                }
+            }
         }
         update
     }

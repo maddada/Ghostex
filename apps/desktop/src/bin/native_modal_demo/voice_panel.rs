@@ -7,7 +7,9 @@
 //! about: the confirm card for one session), `confirm-many` (the card for several), `resized`
 //! (the panel resized larger, its size held by the panel's own limits), `voices` (the voice list
 //! opened on Ursa, far down Grok's list), `scrolled` (the reader scrolled up: the Scroll to bottom
-//! pill). Pressing the hold button holds it.
+//! pill), `typed` (a muted call where the user typed a turn: the text box under the transcript,
+//! as `panel_input.rs` draws it, holding a draft), `mode-switched` (a push-to-talk call the gear
+//! menu just switched to Regular: the strip's notice). Pressing the hold button holds it.
 use super::rows;
 use super::voice_confirm_card as confirm_card;
 use super::voice_panel_controls::{self as controls, ControlColors, HoldLook, StripContent};
@@ -33,6 +35,11 @@ const GROK_VOICES: &[&str] = &[
     "Orion", "Perseus", "Rigel", "Sirius", "Ursa", "Zagan", "Zenith",
 ];
 
+/// A caption's words, selectable and copied with Cmd+C as in the panel (`panel_copy.rs`).
+fn caption(id: &'static str, text: &'static str) -> gpui_base::SelectableText {
+    gpui_base::SelectableText::new(id, text)
+}
+
 struct VoicePanelDemo {
     state: String,
     held: bool,
@@ -41,6 +48,8 @@ struct VoicePanelDemo {
     voice_scroll: ScrollHandle,
     /// The transcript's scroll, scrolled up in the `scrolled` state.
     scroll: ScrollHandle,
+    /// The text box under the transcript, in the `typed` state.
+    text_box: Option<gpui::Entity<gpui_component::input::TextareaState>>,
 }
 
 impl VoicePanelDemo {
@@ -93,15 +102,15 @@ impl Render for VoicePanelDemo {
         let colors = self.colors();
         let state = self.state.as_str();
         let held = self.held || state == "holding";
-        let muted = state == "muted";
-        let regular = state == "regular";
+        let muted = matches!(state, "muted" | "typed");
+        let regular = matches!(state, "regular" | "mode-switched");
         let (dot, label): (Hsla, &str) = if held {
             (rgba(0x38bdf8ff).into(), "Hearing you")
         } else {
             match state {
                 "speaking" => (rgba(0xa78bfaff).into(), "Speaking"),
-                "muted" => (colors.muted, "Muted"),
-                "regular" => (rgba(0x4ade80ff).into(), "Listening"),
+                "muted" | "typed" => (colors.muted, "Muted"),
+                "regular" | "mode-switched" => (rgba(0x4ade80ff).into(), "Listening"),
                 _ => (rgba(0x4ade80ff).into(), "Hold to talk"),
             }
         };
@@ -128,12 +137,13 @@ impl Render for VoicePanelDemo {
             "speaking" => StripContent::StopTalking,
             "tap" => StripContent::Hint("Hold to talk, then let go to send".into()),
             "muted" => StripContent::Hint("Unmute to talk".into()),
+            "mode-switched" => StripContent::Hint("Microphone is open: regular mode".into()),
             _ => StripContent::Empty,
         };
         let mut lines: Vec<gpui::AnyElement> = vec![
             div()
                 .text_color(colors.muted)
-                .child("You: What is the Find port doing?")
+                .child(caption("you-1", "You: What is the Find port doing?"))
                 .into_any_element(),
             h_flex()
                 .gap(px(6.0))
@@ -144,7 +154,7 @@ impl Render for VoicePanelDemo {
                 .into_any_element(),
             div()
                 .text_color(colors.text)
-                .child("It finished: ranking passes and the phone screens are next. Want me to start them?")
+                .child(caption("agent-1", "It finished: ranking passes and the phone screens are next. Want me to start them?"))
                 .into_any_element(),
         ];
         if held {
@@ -159,13 +169,30 @@ impl Render for VoicePanelDemo {
             lines.push(
                 div()
                     .text_color(colors.muted)
-                    .child("You: Yes, start them.")
+                    .child(caption("you-2", "You: Yes, start them."))
                     .into_any_element(),
             );
             lines.push(
                 div()
                     .text_color(colors.text)
-                    .child("Done. I asked it to build the phone screens on the same matcher, and it is starting with the list view now.")
+                    .child(caption("agent-2", "Done. I asked it to build the phone screens on the same matcher, and it is starting with the list view now."))
+                    .into_any_element(),
+            );
+        }
+        if state == "typed" {
+            lines.push(
+                div()
+                    .text_color(colors.muted)
+                    .child(caption(
+                        "you-typed",
+                        "You: Which sessions are waiting on me?",
+                    ))
+                    .into_any_element(),
+            );
+            lines.push(
+                div()
+                    .text_color(colors.text)
+                    .child(caption("agent-typed", "Two are: the sidebar fix wants you to pick a row height, and the release thread is waiting on your approval."))
                     .into_any_element(),
             );
         }
@@ -284,6 +311,26 @@ impl Render for VoicePanelDemo {
             .child(controls::status_strip(strip, colors, |_, _| {
                 eprintln!("stop talking")
             }))
+            .children(self.text_box.as_ref().map(|text_box| {
+                div().flex_shrink_0().px(px(12.0)).pb(px(8.0)).child(
+                    div()
+                        .rounded(px(8.0))
+                        .border_1()
+                        .border_color(colors.border)
+                        .bg(colors.raised)
+                        .px(px(8.0))
+                        .py(px(4.0))
+                        .text_size(px(12.5))
+                        .text_color(colors.text)
+                        .child(
+                            gpui_component::input::Textarea::new(text_box)
+                                .appearance(false)
+                                .bordered(false)
+                                .caret_color(colors.text)
+                                .text_size(px(12.5)),
+                        ),
+                )
+            }))
             .child(
                 h_flex()
                     .h(px(44.0))
@@ -368,16 +415,30 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     if state == "scrolled" {
         scroll.set_offset(point(px(0.0), px(-20.0)));
     }
+    // A typed turn just arrived: the transcript follows its end, as the panel's does.
+    if state == "typed" {
+        scroll.scroll_to_bottom();
+    }
     let _ = super::open_modal_window(
         panel.width.as_f32(),
         panel.height.as_f32(),
-        move |_, cx| {
+        move |window, cx| {
+            let text_box = (state == "typed").then(|| {
+                cx.new(|cx| {
+                    let mut input = gpui_component::input::TextareaState::new(window, cx)
+                        .auto_grow(1, 5)
+                        .placeholder("Type to the voice agent…");
+                    input.set_value("And start the release notes", window, cx);
+                    input
+                })
+            });
             cx.new(|_| VoicePanelDemo {
                 state,
                 held: false,
                 light,
                 voice_scroll,
                 scroll,
+                text_box,
             })
         },
         cx,

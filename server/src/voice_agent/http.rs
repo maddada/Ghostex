@@ -74,6 +74,9 @@ pub(crate) async fn handle_read_voice_agent_http(
         "idleHangupMs": super::conversation::IDLE_HANGUP.as_millis() as u64,
         "speed": keys::selected_speed(paths),
         "callMode": if keys::push_to_talk_calls(paths) { "pushToTalk" } else { "regular" },
+        // Saving the call mode switches every running call at once (`callMode` frames, as `ready`'s
+        // `callModeLive` says), so Settings can say so before any call.
+        "callModeLive": true,
         "speedOptions": keys::SPEEDS,
         "memory": memory::client_view(paths),
         "memorySummaryPending": memory::summary_pending(paths),

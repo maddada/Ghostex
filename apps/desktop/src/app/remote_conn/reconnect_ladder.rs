@@ -1,5 +1,6 @@
 //! Connecting the saved remote machines at start-up and after Settings enable one, and retrying a
-//! dropped machine on a ladder of 2s, 5s, 15s, 30s, then every 60s.
+//! dropped machine: after 2 s and 5 s, then every 15 s for its first ten minutes gone and every
+//! 60 s after that (`reconnect_schedule.rs`).
 //!
 //! CDXC:RemoteMachines 2026-07-21:
 //! Rust-owned SSH tunnels are process-local and therefore never survive an app restart. Reconnect
@@ -20,14 +21,20 @@
 //! apps/desktop/src/app/os_integration/toast_and_status_dispatch.rs (the status funnel).
 
 use std::collections::{HashMap, HashSet};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use super::reconnect_schedule::{RetryCause, wait_before_next_try};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::gpui_remote_machine_id_from_value;
 use crate::shared_settings;
 
-/// `GPUI_REMOTE_MACHINE_RECONNECT_DELAYS_MS`; the last step repeats.
-const RECONNECT_LADDER_MS: [u64; 5] = [2_000, 5_000, 15_000, 30_000, 60_000];
+/// Whether a retry state means this computer could not even try (`reconnect_schedule.rs`).
+fn retry_cause(state: &str) -> RetryCause {
+    match state {
+        "keychainFailed" | "tokenUnavailable" => RetryCause::LocalFault,
+        _ => RetryCause::ComputerGone,
+    }
+}
 
 /// States after which the machine is retried.
 fn is_retry_state(state: &str) -> bool {
@@ -81,6 +88,11 @@ pub(crate) struct RemoteReconnectLadder {
     /// cancelled.
     timers: HashMap<String, u64>,
     timer_generation: u64,
+    /// When each machine that is being retried was lost: its first failure since it last
+    /// connected.
+    lost_at: HashMap<String, Instant>,
+    /// When the attempt that is running for a machine started.
+    attempt_started: HashMap<String, Instant>,
 }
 
 impl RemoteReconnectLadder {
@@ -88,6 +100,8 @@ impl RemoteReconnectLadder {
         self.timers.remove(machine_id);
         self.attempts.remove(machine_id);
         self.in_flight.remove(machine_id);
+        self.lost_at.remove(machine_id);
+        self.attempt_started.remove(machine_id);
     }
 }
 
@@ -191,6 +205,9 @@ impl GhostexGpuiApp {
         }
         ladder.timers.remove(machine_id);
         ladder.in_flight.insert(machine_id.to_string());
+        ladder
+            .attempt_started
+            .insert(machine_id.to_string(), Instant::now());
         true
     }
 
@@ -209,13 +226,24 @@ impl GhostexGpuiApp {
             ladder.timers.remove(machine_id);
         } else if is_retry_state(state) {
             ladder.in_flight.remove(machine_id);
-            self.remote_reconnect_schedule(machine_id, cx);
+            let last_try_took = ladder
+                .attempt_started
+                .remove(machine_id)
+                .map(|started| started.elapsed())
+                .unwrap_or_default();
+            self.remote_reconnect_schedule(machine_id, retry_cause(state), last_try_took, cx);
         }
     }
 
-    /// `scheduleRemoteReconnect`: arms the next step of the ladder, unless an attempt or a timer is
-    /// already pending or the machine is no longer an enabled saved machine.
-    fn remote_reconnect_schedule(&mut self, machine_id: &str, cx: &mut gpui::Context<Self>) {
+    /// `scheduleRemoteReconnect`: arms the next try (`reconnect_schedule.rs` says when), unless an
+    /// attempt or a timer is already pending or the machine is no longer an enabled saved machine.
+    fn remote_reconnect_schedule(
+        &mut self,
+        machine_id: &str,
+        cause: RetryCause,
+        last_try_took: Duration,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let ladder = &mut self.gx_store.remote_reconnect;
         if ladder.in_flight.contains(machine_id) || ladder.timers.contains_key(machine_id) {
             return;
@@ -228,15 +256,18 @@ impl GhostexGpuiApp {
             return;
         }
         let attempts = ladder.attempts.get(machine_id).copied().unwrap_or(0);
-        let delay = RECONNECT_LADDER_MS[attempts.min(RECONNECT_LADDER_MS.len() - 1)];
+        let gone_for = ladder
+            .lost_at
+            .entry(machine_id.to_string())
+            .or_insert_with(Instant::now)
+            .elapsed();
+        let delay = wait_before_next_try(cause, attempts, gone_for, last_try_took);
         ladder.timer_generation += 1;
         let generation = ladder.timer_generation;
         ladder.timers.insert(machine_id.to_string(), generation);
         let machine_id = machine_id.to_string();
         cx.spawn(async move |this, cx| {
-            cx.background_executor()
-                .timer(Duration::from_millis(delay))
-                .await;
+            cx.background_executor().timer(delay).await;
             let _ = this.update(cx, |this, cx| {
                 let ladder = &mut this.gx_store.remote_reconnect;
                 if ladder.timers.get(&machine_id) != Some(&generation) {

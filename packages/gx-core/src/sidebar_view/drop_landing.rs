@@ -48,10 +48,10 @@ impl SidebarViewModel {
     ) -> Option<DropLanding> {
         let (build, inputs) = self.cached_group(&writes.group_id)?;
         let mut rows: Vec<SessionView> = build.store_rows.clone();
-        if !rows
+        let joins = !rows
             .iter()
-            .any(|session| session.row.sidebar_session_id == moved)
-        {
+            .any(|session| session.row.sidebar_session_id == moved);
+        if joins {
             let carried = self.cached_groups().find_map(|other| {
                 other
                     .store_rows
@@ -94,7 +94,10 @@ impl SidebarViewModel {
             now_ms,
         );
         let sections = &laid_out.layout.sections;
-        let unchanged = same_drawn_rows(sections, &core.sections);
+        // A row joining from another group always moves, even into a collapsed section, where
+        // the drawn rows stay the same (a session group's row dropped on its project's folded
+        // Sessions heading).
+        let unchanged = !joins && same_drawn_rows(sections, &core.sections);
         let section_id = laid_out
             .sessions
             .iter()

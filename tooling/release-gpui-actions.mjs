@@ -468,7 +468,8 @@ function windowsSigningPolicy() {
 
 /* SEE-ALSO: CDXC:Release 2026-11-09 DECISION in tooling/release-gpui/windows-signing.mjs. */
 function resolveWindowsSigning(options, secrets) {
-  if (!options.windowsX64 && !options.windowsArm64) return { signed: false, signer: 'none', reason: 'no Windows platform in scope' };
+  if (!options.windowsX64 && !options.windowsArm64)
+    return { signed: false, signer: 'none', reason: 'no Windows platform in scope' };
   return windowsSigningDecision(options.windowsSigning, secrets, windowsSigningPolicy);
 }
 

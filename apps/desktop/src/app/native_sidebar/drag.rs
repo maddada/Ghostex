@@ -179,13 +179,15 @@ impl GhostexGpuiApp {
             return;
         }
         if target_kind == "section" {
-            // A heading of another project takes no section move from this row, but it is still
-            // that project: the drop hands the session over (gx-core `check_session_handoff`).
+            // A heading of another group takes no section move from this row, but it is still
+            // that group: the drop hands the session over to another project (gx-core
+            // `check_session_handoff`) or moves it into its own project's other group, a session
+            // group or the project's list (gx-core `heading_takes_row_into_group`).
             if source.kind == "session"
                 && let Some(group_id) = group_id
             {
                 self.set_native_sidebar_session_drop(
-                    Some(json!({"type": "moveSession", "sessionId": source.id, "groupId": group_id, "position": "before", "handoffOnly": true})),
+                    Some(json!({"type": "moveSession", "sessionId": source.id, "groupId": group_id, "position": "before", "handoffOnly": true, "headingSection": target_id})),
                     cx,
                 );
                 return;
