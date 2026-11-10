@@ -875,7 +875,9 @@ Advanced > Move to New Sessions Group. Once the project has a sessions group, th
 session menu's Advanced > Move to Group page lists the project's groups: pick
 one to move the session there, or Remove from Group to put it back in the
 project's own list. Dragging a session onto another of its project's groups,
-or onto the project's list, does the same, and dropping it in the empty space
+or onto the project's list, does the same (its header, its rows, or a heading
+such as the project's Sessions heading, even while that heading is collapsed;
+a pinned session stays pinned), and dropping it in the empty space
 at the bottom of the sidebar puts it in the last session group when that group
 belongs to the session's project; the group that would take it lights up while
 you drag. A session stays within its own project's groups. A project's session
