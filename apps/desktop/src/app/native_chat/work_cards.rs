@@ -25,6 +25,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, div, px, svg,
 };
 use serde_json::{Value, json};
+use std::{cell::Cell, rc::Rc};
 
 /// A status's glyph and colour, the board's (coordinator_board.rs `group_look`), so a card reads as
 /// its row in the Work panel does.
@@ -122,6 +123,94 @@ fn dock_row_action(row: &Value) -> Option<&'static str> {
     } else {
         None
     }
+}
+
+/// One block of a description (`description_blocks`): its Markdown, and whether it follows the
+/// block before it as the next item of the same list (a list's own small gap, not a paragraph's).
+struct DescriptionBlock {
+    text: String,
+    tight: bool,
+}
+
+/// A description's blocks, each drawn as its own Markdown view so its height can be counted in
+/// whole lines: every paragraph, every list item (with its continuation and nested lines) and every
+/// fenced code block. A numbered item keeps its own number, so a list split this way still counts
+/// 1, 2, 3.
+fn description_blocks(words: &str) -> Vec<DescriptionBlock> {
+    let item = |line: &str| {
+        let line = line.trim_start();
+        line.starts_with("- ")
+            || line.starts_with("* ")
+            || line.starts_with("+ ")
+            || line.split_once(['.', ')']).is_some_and(|(number, rest)| {
+                !number.is_empty()
+                    && number.len() <= 9
+                    && number.chars().all(|c| c.is_ascii_digit())
+                    && rest.starts_with(' ')
+            })
+    };
+    let mut blocks: Vec<DescriptionBlock> = Vec::new();
+    // The block being read: its lines, whether it is a list item, and whether it is tight.
+    let mut current: Option<(String, bool, bool)> = None;
+    let mut fenced = false;
+    let mut after_blank = true;
+    fn finish(current: &mut Option<(String, bool, bool)>, blocks: &mut Vec<DescriptionBlock>) {
+        if let Some((text, _, tight)) = current.take() {
+            if !text.trim().is_empty() {
+                blocks.push(DescriptionBlock { text, tight });
+            }
+        }
+    }
+    // Whether the last block read was a list item, so the next item follows it tight.
+    let mut last_item = false;
+    for line in words.lines() {
+        let trimmed = line.trim_start();
+        if fenced {
+            if let Some((text, _, _)) = current.as_mut() {
+                text.push('\n');
+                text.push_str(line);
+            }
+            if trimmed.starts_with("```") {
+                fenced = false;
+                finish(&mut current, &mut blocks);
+                last_item = false;
+                after_blank = false;
+            }
+            continue;
+        }
+        if trimmed.starts_with("```") {
+            finish(&mut current, &mut blocks);
+            current = Some((line.to_string(), false, false));
+            fenced = true;
+            continue;
+        }
+        if trimmed.is_empty() {
+            if let Some((_, is_item, _)) = &current {
+                last_item = *is_item;
+            }
+            finish(&mut current, &mut blocks);
+            after_blank = true;
+            continue;
+        }
+        let indented = line.starts_with("  ") || line.starts_with('\t');
+        if item(line) && !indented {
+            if let Some((_, is_item, _)) = &current {
+                last_item = *is_item;
+            }
+            let tight = last_item && !after_blank;
+            finish(&mut current, &mut blocks);
+            current = Some((line.to_string(), true, tight));
+        } else if let Some((text, _, _)) = current.as_mut() {
+            text.push('\n');
+            text.push_str(line);
+        } else {
+            current = Some((line.to_string(), false, false));
+            last_item = false;
+        }
+        after_blank = false;
+    }
+    finish(&mut current, &mut blocks);
+    blocks
 }
 
 /// A description's Markdown kept compact for a row (`ask_markdown`): every line break kept as a
@@ -1312,10 +1401,21 @@ impl NativeChatView {
     /// lines and then "more", which shows the rest. Headings are bold lines at the text's size,
     /// and a table or picture shows as its plain text (`compact_markdown`).
     ///
+    /// It is drawn as its blocks (each paragraph, list item and code block its own Markdown view,
+    /// `description_blocks`), each measured, so the cut counts whole lines: the blocks that fit in
+    /// four lines show whole, the next one is cut after its last whole line that fits, and "more"
+    /// is the next line under it. The gaps between blocks do not count as lines.
+    ///
     /// CDXC:Coordinators 2026-11-11 DECISION:
     /// User, of an ask's description drawn as one flat run: "no new lines or markdown rendering
     /// here which is wrong pls fix. also please make links like #562 clickable pls like we did in
     /// regular chat (we have code for this already)".
+    ///
+    /// CDXC:Coordinators 2026-11-11 DECISION:
+    /// User, of the cut showing the top half of a line above "more": "please avoid the text
+    /// cutting above more?? make more part of the text for ex and cut at x lines then show more
+    /// on next line instead of doing what you're doing now". A height cap fell inside a line
+    /// whenever paragraph and list gaps came before it; the cut now falls between whole lines.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn ask_markdown(
         &self,
@@ -1329,62 +1429,107 @@ impl NativeChatView {
     ) -> AnyElement {
         let s = p.scale;
         let more_key = format!("more:{id}");
-        // Its rendered height at its last paint, which says whether it runs past four lines.
-        let height = self
-            .disclosure_motion
-            .borrow_mut()
-            .height(&format!("ask-markdown:{id}"), "rendered");
-        let cap = DOCK_QUESTION_LINES as f32 * line_height * s;
-        let long = height.get() > cap + 2.0;
-        let whole = long && self.expanded.contains(&more_key);
-        let view = self.text_view_look(
-            format!("ask-markdown:{id}"),
-            compact_markdown(words),
-            &Value::Null,
-            p,
-            super::rich_markdown::TextLook {
-                color,
-                semibold: false,
-                size,
-                line_height,
-            },
-            cx,
-        );
-        let measured = height.clone();
-        let chat = cx.weak_entity();
-        let rendered = div().relative().w_full().min_w_0().child(view).child(
-            gpui::canvas(
-                move |bounds, _, cx| {
-                    let natural = bounds.size.height.as_f32();
-                    if (measured.get() - natural).abs() > 0.5 {
-                        measured.set(natural);
-                        // The chat's render is cached: tell it to draw again at this height.
-                        let chat = chat.clone();
-                        cx.defer(move |cx| {
-                            let _ = chat.update(cx, |_, cx| cx.notify());
-                        });
-                    }
-                },
-                |_, _, _, _| {},
-            )
-            .absolute()
-            .size_full(),
-        );
-        let block = div()
-            .w_full()
-            .min_w_0()
-            .when(long && !whole, |block| {
-                block.max_h(px(cap)).overflow_hidden()
+        let line = line_height * s;
+        let blocks = description_blocks(words);
+        // Each block's height at its last paint, as whole lines (`None` until measured).
+        let cells: Vec<Rc<Cell<f32>>> = blocks
+            .iter()
+            .enumerate()
+            .map(|(index, block)| {
+                self.disclosure_motion.borrow_mut().height(
+                    &format!("ask-markdown:{id}:{index}:{}", block.text.len()),
+                    "rendered",
+                )
             })
-            .child(rendered);
-        if !long {
-            return block.into_any_element();
+            .collect();
+        let lines: Vec<Option<usize>> = cells
+            .iter()
+            .map(|cell| {
+                let height = cell.get();
+                (height > 0.0).then(|| ((height / line).round() as usize).max(1))
+            })
+            .collect();
+        let total: Option<usize> = lines.iter().copied().sum();
+        let long = total.is_some_and(|total| total > DOCK_QUESTION_LINES);
+        let whole = long && self.expanded.contains(&more_key);
+        // How many lines each block shows: all, a whole number of its first ones, or none.
+        let mut budget = DOCK_QUESTION_LINES;
+        let shown: Vec<Option<usize>> = lines
+            .iter()
+            .map(|lines| {
+                let lines = lines.unwrap_or(usize::MAX);
+                if !long || whole {
+                    return Some(lines);
+                }
+                if budget == 0 {
+                    return None;
+                }
+                let take = lines.min(budget);
+                budget -= take;
+                Some(take)
+            })
+            .collect();
+        let chat = cx.weak_entity();
+        let mut column = div().w_full().min_w_0().flex().flex_col();
+        for (index, block) in blocks.iter().enumerate() {
+            let Some(take) = shown[index] else {
+                break;
+            };
+            let view = self.text_view_look(
+                format!("ask-markdown:{id}:{index}"),
+                compact_markdown(&block.text),
+                &Value::Null,
+                p,
+                super::rich_markdown::TextLook {
+                    color,
+                    semibold: false,
+                    size,
+                    line_height,
+                },
+                cx,
+            );
+            let measured = cells[index].clone();
+            let chat = chat.clone();
+            let rendered = div().relative().w_full().min_w_0().child(view).child(
+                gpui::canvas(
+                    move |bounds, _, cx| {
+                        let natural = bounds.size.height.as_f32();
+                        if (measured.get() - natural).abs() > 0.5 {
+                            measured.set(natural);
+                            // The chat's render is cached: tell it to draw again at this height.
+                            let chat = chat.clone();
+                            cx.defer(move |cx| {
+                                let _ = chat.update(cx, |_, cx| cx.notify());
+                            });
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full(),
+            );
+            // A block cut after `take` of its lines shows exactly those lines.
+            let cut = lines[index].is_some_and(|lines| take < lines);
+            let gap = match index {
+                0 => 0.0,
+                _ if block.tight => 4.0 * s,
+                _ => super::markdown_style::paragraph_gap(p),
+            };
+            column = column.child(
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .pt(px(gap))
+                    .when(cut, |part| {
+                        part.h(px(gap + take as f32 * line)).overflow_hidden()
+                    })
+                    .child(rendered),
+            );
         }
-        div()
-            .min_w_0()
-            .flex()
-            .flex_col()
-            .child(block)
+        if !long {
+            return column.into_any_element();
+        }
+        column
             .child(
                 div()
                     .id(gpui::SharedString::from(format!("more:{id}")))
