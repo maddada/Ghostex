@@ -51,6 +51,12 @@ const ROWS: &[RowAvailability] = &[
         only_on: &[Platform::MacOs],
         hidden_while: None,
     },
+    // CDXC:AppModal 2026-11-10 DECISION in apps/desktop/src/app/window/round_close_button.rs: User: "show this setting only on mac". Windows and Linux keep their close buttons on the right, so there is nothing to switch there.
+    RowAvailability {
+        key: "closeButtonsOnRight",
+        only_on: &[Platform::MacOs],
+        hidden_while: None,
+    },
     // CDXC:ManagedTools 2026-10-14 DECISION: User: "SpaceO is macOS-only for now"; its Integrations rows leave Settings, its search and the Help files on Windows and Linux.
     RowAvailability {
         key: "spaceo",

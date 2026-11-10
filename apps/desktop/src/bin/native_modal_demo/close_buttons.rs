@@ -1,8 +1,10 @@
 //! Preview of the round close (×) buttons: the board card's remove button and the toast's dismiss
 //! button, drawn from the shared `round_close_button` module. Run it with
 //! `GHOSTEX_NATIVE_MODAL_DEMO=close-buttons` and `GHOSTEX_NATIVE_MODAL_DEMO_THEME=dark|light`; the
-//! window draws both over a frosted-looking backdrop, at 1x and enlarged 4x beside it.
+//! window draws both over a frosted-looking backdrop, at 1x and enlarged 4x beside it. The toast's ×
+//! sits on the side the app puts it (`close_buttons_on_left`: the top left on macOS).
 use super::round_close_button::*;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     App, AppContext as _, Context, Hsla, IntoElement, ParentElement as _, Render, Styled as _,
     Window, div, px, rgb,
@@ -45,7 +47,7 @@ impl Render for CloseButtonsDemo {
                 rgb(0xe7e7ea).into(),
             )
         };
-        let row = |label: &'static str| {
+        let row = |label: &'static str, on_left: bool| {
             div()
                 .flex()
                 .items_center()
@@ -68,7 +70,13 @@ impl Render for CloseButtonsDemo {
                             div()
                                 .absolute()
                                 .top(px(-7.0))
-                                .right(px(-7.0))
+                                .map(|corner| {
+                                    if on_left {
+                                        corner.left(px(-7.0))
+                                    } else {
+                                        corner.right(px(-7.0))
+                                    }
+                                })
                                 .child(button(light, 1.0)),
                         ),
                 )
@@ -81,8 +89,8 @@ impl Render for CloseButtonsDemo {
             .flex()
             .flex_col()
             .gap(px(28.0))
-            .child(row("Board card remove"))
-            .child(row("Toast dismiss"))
+            .child(row("Board card remove", false))
+            .child(row("Toast dismiss", close_buttons_on_left()))
     }
 }
 

@@ -235,4 +235,5 @@ pub(crate) mod helpers {
 
 pub(crate) mod window {
     pub(crate) use crate::native_modal_kit;
+    pub(crate) use crate::round_close_button;
 }

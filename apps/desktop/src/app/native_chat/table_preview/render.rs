@@ -122,6 +122,15 @@ pub(crate) fn table_preview_content(
         .child(table);
     // A sideways swipe over the page, off the table, is not a vertical scroll.
     body.style().restrict_scroll_to_axis = Some(true);
+    let close = rich_markdown::table_action("close-table-preview", "titlebar/x.svg", p, close);
+    // The X leads the header on macOS, before the title, and ends it elsewhere (CDXC:AppModal
+    // 2026-11-10 in window/round_close_button.rs).
+    let (leading_close, trailing_close) =
+        if crate::app::window::round_close_button::close_buttons_on_left() {
+            (Some(close), None)
+        } else {
+            (None, Some(close))
+        };
     let header = div()
         .flex()
         .flex_shrink_0()
@@ -132,9 +141,16 @@ pub(crate) fn table_preview_content(
         .pb(px(12.0 * s))
         .child(
             div()
-                .text_size(px(18.0 * s))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .child("Table"),
+                .flex()
+                .items_center()
+                .gap(px(8.0 * s))
+                .children(leading_close)
+                .child(
+                    div()
+                        .text_size(px(18.0 * s))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child("Table"),
+                ),
         )
         .child(
             div()
@@ -163,12 +179,7 @@ pub(crate) fn table_preview_content(
                         );
                     },
                 ))
-                .child(rich_markdown::table_action(
-                    "close-table-preview",
-                    "titlebar/x.svg",
-                    p,
-                    close,
-                )),
+                .children(trailing_close),
         );
     let table = div().relative().flex_1().min_h_0().child(body).child(
         Scrollbar::vertical(scroll)

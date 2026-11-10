@@ -55,6 +55,8 @@ pub(crate) fn theming(platform: Platform) -> Section {
             row("workAreaFrame", "Frame the work area", "Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge."),
             // CDXC:Settings 2026-11-08 DECISION: User: "please add setting under this [Frame the work area] to show traffic lights on macos when sidebar is collapsed (default to yes). only show this sub setting on macos. also please move this whole setting under a new advanced area in the interface page in settings". Both rows sit in the Interface page's Advanced fold (`ADVANCED_MAIN_SETTING_KEYS`).
             row("showWindowButtonsWhenSidebarCollapsed", "Show the window buttons when the sidebar is collapsed", "Keep the red, yellow and green window buttons in the window's top left while the sidebar is collapsed. Off hides them until you open the floating sidebar, which carries them in its top row. Full screen keeps its own title bar either way."),
+            // CDXC:AppModal 2026-11-10 DECISION in apps/desktop/src/app/window/round_close_button.rs: on macOS the close X of dialogs and toasts sits at their top left; this macOS-only row in the Interface page's Advanced fold puts it back on the right.
+            row("closeButtonsOnRight", "Close buttons on the right", "Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button."),
     ];
     if platform == Platform::Linux {
         // CDXC:PlatformSupport 2026-11-08 DECISION: User (issue #503): a Linux-only Display scale row under Scale areas separately (interface_scale.rs has the full decision).

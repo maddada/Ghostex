@@ -61,24 +61,26 @@ pub(crate) fn popup(
                     inset_shadow(white(0.045), 0.0, 1.0, 0.0, 0.0, s),
                 ])
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .mb(s.px(10.0))
-                        .child(tracked_text(
-                            s,
-                            title.to_string(),
-                            MANROPE,
-                            700.0,
-                            19.0,
-                            19.0 * LH_MANROPE,
-                            -0.01,
-                            hex(0xeef1f7),
-                        ))
-                        .child(close),
-                )
+                .child({
+                    let title = tracked_text(
+                        s,
+                        title.to_string(),
+                        MANROPE,
+                        700.0,
+                        19.0,
+                        19.0 * LH_MANROPE,
+                        -0.01,
+                        hex(0xeef1f7),
+                    );
+                    let head = div().flex().items_center().mb(s.px(10.0));
+                    // The X leads the header on macOS, the title after it (CDXC:AppModal
+                    // 2026-11-10 in window/round_close_button.rs).
+                    if super::super::round_close_button::close_buttons_on_left() {
+                        head.gap(s.px(10.0)).child(close).child(title)
+                    } else {
+                        head.justify_between().child(title).child(close)
+                    }
+                })
                 .children(body),
         )
         .into_any_element()

@@ -615,7 +615,10 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:Security 2026-11-09 DECISION:
 /// Security logs (Extensions > Experimental) is held the same way; its help, and the help that names Settings > Security, wait in the held help patch.
-pub const HELD_FROM_HELP_FILES: &[&str] = &[];
+///
+/// CDXC:AppModal 2026-11-10 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so Close buttons on the right (Settings > Interface > Advanced, macOS) is held the same way; its hand-written paragraph waits in the held help patch (release-11.3.1/help/close-buttons-left.patch).
+pub const HELD_FROM_HELP_FILES: &[&str] = &["closeButtonsOnRight"];
 
 /// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
 /// `agentWritable` (CDXC:Security 2026-11-10 above `number_range`).

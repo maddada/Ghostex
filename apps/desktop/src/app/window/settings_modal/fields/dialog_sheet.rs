@@ -246,7 +246,15 @@ fn dialog_sheet<V: 'static>(
         )
         .absolute()
         .top(px(-half))
-        .right(px(-half))
+        .map(|close| {
+            // The top-left corner on macOS (CDXC:AppModal 2026-11-10 in
+            // window/round_close_button.rs).
+            if crate::app::window::round_close_button::close_buttons_on_left() {
+                close.left(px(-half))
+            } else {
+                close.right(px(-half))
+            }
+        })
         .size(px(MODAL_CORNER_CLOSE_SIZE))
         // The half outside the sheet sits over the backdrop, whose press would close the sheet
         // on mouse-down instead of on the button's own click.

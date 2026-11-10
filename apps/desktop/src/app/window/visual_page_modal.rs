@@ -581,11 +581,24 @@ impl GpuiVisualPageModalWindow {
                         .child("Click outside again to close"),
                 )
             });
+        let close = control_button("visual-page-close", ICON_CLOSE, "Close", glass)
+            .on_click(cx.listener(|this, _, _, cx| (this.host)(VisualPageModalCommand::Close, cx)));
+        // The X sits in the band's left corner on macOS, before the status, and ends the right
+        // corner's controls elsewhere (CDXC:AppModal 2026-11-10 in window/round_close_button.rs).
+        let (leading_close, trailing_close) = if super::round_close_button::close_buttons_on_left()
+        {
+            (Some(close), None)
+        } else {
+            (None, Some(close))
+        };
         h_flex()
             .flex_shrink_0()
             .h(px(TOP_BAND_HEIGHT))
             .w_full()
             .items_center()
+            .when_some(leading_close, |band, close| {
+                band.child(div().flex_shrink_0().pl(px(CONTROL_INSET)).child(close))
+            })
             .child(
                 crate::app::render::window_drag_region::window_drag_region(
                     div().id("visual-page-drag-band"),
@@ -616,13 +629,7 @@ impl GpuiVisualPageModalWindow {
                             (this.host)(VisualPageModalCommand::OpenInBrowser { url }, cx);
                         })),
                     )
-                    .child(
-                        control_button("visual-page-close", ICON_CLOSE, "Close", glass).on_click(
-                            cx.listener(|this, _, _, cx| {
-                                (this.host)(VisualPageModalCommand::Close, cx)
-                            }),
-                        ),
-                    ),
+                    .children(trailing_close),
             )
     }
 }
