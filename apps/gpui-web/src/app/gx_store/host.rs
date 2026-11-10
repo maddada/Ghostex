@@ -246,8 +246,15 @@ impl GhostexGpuiApp {
 
     fn gx_store_stream_event(&mut self, event: StreamEvent, cx: &mut gpui::Context<Self>) {
         match event {
-            StreamEvent::Open => self.gx_store_subscribe(true),
+            StreamEvent::Open => {
+                self.gx_store_subscribe(true);
+                self.gx_store_read_shared_settings(cx);
+            }
             StreamEvent::Frame(text) => {
+                if text.contains(super::shared_settings_sync::SHARED_SETTINGS_CHANGED_FRAME) {
+                    self.gx_store_read_shared_settings(cx);
+                    return;
+                }
                 // Older gxservers send one per HTTP request any client makes; nothing reads it.
                 if text.contains("\"type\":\"apiRequestHandled\"") || text.contains("\"sessionChat")
                 {

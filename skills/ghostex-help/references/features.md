@@ -720,10 +720,19 @@ On the phone, Unified hides the computer tabs: Computers in the menu at the top
 of the Sessions list picks a computer, adds one or opens Manage computers. A
 computer that can't connect shows its name and the problem over the list, with
 Reconnect and Remote Settings. Add project asks which computer when you have
-several. On the phone the agent menu that starts a session shows its project on
-top (tap it to pick any project, recent ones first) and a row of computer chips
-starting on the last one used for that project; New session, a project's "+"
-and the "+" on a project in the filter all open it.
+several. On the phone, the pencil at the top of the Sessions list (New session,
+next to the bell, in both the Unified and the Project layout) lists every
+project on every computer, recent ones first, with a search field and a chip for
+each computer, starting on the one you used last for that project. Tap a project
+and its remembered agent starts there (the computer's Settings > Agents >
+Remember the agent you pick decides whether that is the agent picked last in the
+project, in its Space or anywhere). It opens in the view the phone's Settings >
+Chat > Default agent view picks, as a project's agent button does: in Chat, a new
+chat where you can still change the agent, model, worktree, project or computer
+before you send the first message; an agent without chat always opens its
+terminal. If that computer isn't connected, it says so. A project's "+" and the
+"+" on a project in the filter open the agent menu instead, which shows its
+project on top (tap it to pick any project) and the same computer chips.
 
 The Unified sidebar has its own hover strip (`unifiedSessionCardHoverButtons`):
 by default Snooze, Park and Close always show on a hovered card and the chevron
@@ -912,7 +921,12 @@ sessions keep their own sections (`groupWorkingSessions`).
 `sidebarHideProjectsWithoutSessions`) leaves projects with no session in any state
 out of the Project sidebar. The open project always stays, and a Show all projects
 row at the end of the list brings the rest back in their places until you press it
-again. On the same Sort & Filter page, the tag rows sit under the heading "Show only
+again. A project whose sessions run in its worktrees (or in a merged copy of the
+repository) counts as having sessions. The phone has its own switch for the Project
+list, Hide Projects Without Sessions in the computer menu (hold the computer's tab)
+and in Settings > Sessions list: it starts as the computer has it, and once you
+change it on the phone the phone keeps its own value, and the computer is never
+changed. On the same Sort & Filter page, the tag rows sit under the heading "Show only
 sessions tagged"; when nothing matches, the list says "No sessions tagged X.
 Right-click a session > Tag As" with a Clear filter button.
 

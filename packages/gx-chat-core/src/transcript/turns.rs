@@ -392,13 +392,35 @@ pub(crate) fn report_lands_mid_response(messages: &[ChatMessage], at: usize) -> 
 /// ([`report_lands_mid_response`]), or a background task's end that gxserver handed back holding
 /// the rows after it (`deferredWork`), which opens a turn here so those rows still load.
 ///
-/// CDXC:SessionChat 2026-11-09 WHY: gxserver's collapsed history cuts a turn at every user row, so a task notification after a subagent's report holds the rest of the response in its own `deferredWork`; read as one of the turn's calls, that section was never loaded and the line's steps stopped at the notification. Default still reads it the old way.
+/// CDXC:SessionChat 2026-11-09 WHY: gxserver's collapsed history cuts a turn at every user row, so a task notification after a subagent's report holds the rest of the response in its own `deferredWork`; read as one of the turn's calls, that section was never loaded and the line's steps stopped at the notification. Default keeps the notification as one of the turn's calls and reads its section with the turn's own instead (`turn_section`).
 fn work_lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
     report_lands_mid_response(messages, at)
         || messages.get(at).is_some_and(|row| {
             is_background_task_row(row)
                 && row.deferred_work.is_some()
                 && lands_mid_response(messages, at)
+        })
+}
+
+/// Whether the words in `rows[0]` introduce a question the agent asks after them (its
+/// `AskUserQuestion` and the like, in the same row or a later one): they are not the turn's reply.
+///
+/// CDXC:SessionChat 2026-11-09 WHY: the turn's Completed can reach the chat before the reply the agent wrote after the answer, and for that moment the turn read as finished with the question's sentence as its reply. Under Reduced and Quiet the turn's tail draws its answered card, and the sentence's row drew the same card again, so a second answered card and the sentence showed for about a second until the reply landed.
+fn introduces_question(rows: &[ChatMessage]) -> bool {
+    let Some((first, later)) = rows.split_first() else {
+        return false;
+    };
+    let after_words = first
+        .blocks
+        .iter()
+        .rposition(|block| matches!(block, ChatBlock::Text { .. } | ChatBlock::ImageRef { .. }))
+        .map_or(&first.blocks[..], |at| &first.blocks[at + 1..]);
+    after_words
+        .iter()
+        .chain(later.iter().flat_map(|row| row.blocks.iter()))
+        .any(|block| {
+            matches!(block, ChatBlock::ToolCall { name, .. }
+                if crate::questions::exchange::is_question_tool_name(name))
         })
 }
 
@@ -574,9 +596,14 @@ pub fn completed_work_render_items(
         let opener_is_work = message.role != ChatRole::User
             || is_background_task_row(message)
             || (grouped && is_subagent_report(message));
-        // Reduced and Quiet: words a subagent's report cut short are not a reply.
+        // Reduced and Quiet: words a subagent's report cut short are not a reply, nor are the
+        // words that introduce a question.
         let final_index = match final_index {
-            Some(at) if grouped && work_lands_mid_response(messages, next_user_index) => {
+            Some(at)
+                if grouped
+                    && (work_lands_mid_response(messages, next_user_index)
+                        || introduces_question(&turn_messages[at..])) =>
+            {
                 demoted.push(turn_messages[at].id.clone());
                 None
             }
@@ -644,7 +671,7 @@ pub fn completed_work_render_items(
                 .cloned()
                 .collect(),
             final_message,
-            section: section.clone(),
+            section: turn_section(section.as_ref(), turn_messages),
             // Only a wake-up's turn takes its rows from the same section.
             next_opener: (next_user_index < messages.len()
                 && opens_omp_turn(messages, next_user_index))
@@ -658,6 +685,42 @@ pub fn completed_work_render_items(
         index = next_user_index;
     }
     (items, demoted)
+}
+
+/// The section a turn loads when opened: its opener's (`section`), reaching on to the end of the
+/// last section a background task's end inside the turn holds, so one walk reads all of them.
+///
+/// CDXC:SessionChat 2026-11-09 WHY: gxserver's collapsed history cuts a turn at every user row, so a task notification that lands mid-response and stays one of the turn's calls (Agent work Default) holds the rest of the response in its own `deferredWork`; loading only the opener's section drew the turn up to the notification and lost everything after it. The rows between the sections are the turn's own, so a walk from the first section's start to the last one's end reads exactly the turn. Reduced and Quiet open a turn at such a row instead (`work_lands_mid_response`).
+fn turn_section(
+    section: Option<&DeferredWork>,
+    turn_messages: &[ChatMessage],
+) -> Option<DeferredWork> {
+    turn_messages
+        .iter()
+        .filter(|row| is_background_task_row(row))
+        .filter_map(|row| row.deferred_work.as_ref())
+        .fold(section.cloned(), |merged, later| {
+            Some(match merged {
+                None => later.clone(),
+                Some(mut merged) => {
+                    merged.before_offset = later.before_offset;
+                    merged.end_id = later.end_id.clone();
+                    merged.completed_at = later.completed_at.or(merged.completed_at);
+                    merged.message_count += later.message_count + 1;
+                    for path in &later.file_paths {
+                        if !merged.file_paths.contains(path) {
+                            merged.file_paths.push(path.clone());
+                        }
+                    }
+                    for path in &later.image_paths {
+                        if !merged.image_paths.contains(path) {
+                            merged.image_paths.push(path.clone());
+                        }
+                    }
+                    merged
+                }
+            })
+        })
 }
 
 /// `stickySessionChatTranscriptWorking` in `packages/shared/session-chat-presentation/turns.ts`:

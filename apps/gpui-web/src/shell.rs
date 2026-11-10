@@ -339,9 +339,19 @@ impl Render for GhostexGpuiApp {
         );
         let surface: Option<AnyElement> = open.as_ref().and_then(|session| {
             if shows_terminal {
-                self.terminals
-                    .get(session)
-                    .map(|view| view.clone().into_any_element())
+                // The desktop's Agents pane frame (render/terminal_body_slot.rs): the terminal
+                // padding and Terminal width (Full, Custom, Match chat width) from Settings.
+                let (horizontal_padding, vertical_padding, width) =
+                    crate::shared_settings::shared_sidebar_settings_snapshot()
+                        .terminal_pane_layout(true);
+                self.terminals.get(session).map(|view| {
+                    crate::app::render::terminal_content_layout::terminal_content_frame(
+                        div().size_full().child(view.clone()),
+                        horizontal_padding,
+                        vertical_padding,
+                        width,
+                    )
+                })
             } else {
                 self.native_chats
                     .get(session)

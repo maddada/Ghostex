@@ -25,6 +25,8 @@ pub(crate) struct CachedSessionChatScreenState {
     /// CDXC:AgentScreenDetection 2026-08-22: whether the cache entry these
     /// came from was backed by a whole capture at all.
     pub(crate) probed: bool,
+    /// The agent is gone with no notice saying so (`agentGone`).
+    pub(crate) agent_gone: bool,
 }
 
 impl CachedSessionChatScreenState {
@@ -37,6 +39,7 @@ impl CachedSessionChatScreenState {
             tasks: self.tasks.as_ref(),
             workflows: self.workflows.as_ref(),
             probed: self.probed,
+            agent_gone: self.agent_gone,
         }
     }
 }
@@ -46,7 +49,7 @@ pub(crate) fn cached_session_chat_screen_state(
     project_id: &str,
     session_id: &str,
 ) -> CachedSessionChatScreenState {
-    let (prompt, screen_notice, activity, fleet, tasks, workflows, probed) = state
+    let (prompt, screen_notice, activity, fleet, tasks, workflows, probed, agent_gone) = state
         .session_chat_option_cache
         .lock()
         .ok()
@@ -62,6 +65,7 @@ pub(crate) fn cached_session_chat_screen_state(
                         entry.value.tasks.clone(),
                         entry.value.workflows.clone(),
                         entry.value.attempted,
+                        entry.value.agent_gone,
                     )
                 })
         })
@@ -78,6 +82,7 @@ pub(crate) fn cached_session_chat_screen_state(
         tasks,
         workflows,
         probed,
+        agent_gone,
     }
 }
 
@@ -166,7 +171,7 @@ pub(super) fn publish_cached_session_chat_screen_state(
     session_id: &str,
 ) {
     let key = session_observer_key(project_id, session_id);
-    let (options, prompt, screen_notice, activity, fleet, tasks, workflows, captured) =
+    let (options, prompt, screen_notice, activity, fleet, tasks, workflows, captured, agent_gone) =
         option_cache
             .lock()
             .ok()
@@ -181,6 +186,7 @@ pub(super) fn publish_cached_session_chat_screen_state(
                         entry.value.tasks.clone(),
                         entry.value.workflows.clone(),
                         entry.value.attempted,
+                        entry.value.agent_gone,
                     )
                 })
             })
@@ -206,6 +212,7 @@ pub(super) fn publish_cached_session_chat_screen_state(
             tasks: tasks.as_ref(),
             workflows: workflows.as_ref(),
             probed: captured,
+            agent_gone,
         },
     );
 }
@@ -246,6 +253,8 @@ pub(crate) fn forget_session_chat_options(state: &AppState, project_id: &str, se
     if let Ok(mut cache) = state.session_chat_option_cache.lock() {
         cache.remove(&session_observer_key(project_id, session_id));
     }
+    // A restarted or woken agent is no longer the one seen gone.
+    crate::session_chat_start_failure::forget_agent_gone(project_id, session_id);
     // Sleeping/stopped sessions have no live screen. Clear the durable
     // compaction projection with the cache so waking cannot resurrect an old
     // working status from a run that ended while the provider was stopped.

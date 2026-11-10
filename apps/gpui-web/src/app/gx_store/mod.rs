@@ -29,6 +29,7 @@ mod quick_access_files;
 mod rpc;
 mod rpc_types;
 mod runtime_facts;
+mod shared_settings_sync;
 /// The desktop's readers of the HUD's agent and Saved Action lists for the menus (`sidebar_menus.rs`).
 #[allow(dead_code)]
 mod menu_host_lifted {

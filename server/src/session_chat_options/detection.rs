@@ -668,6 +668,17 @@ pub fn detect_session_chat_terminal_state(
     yet", so the model pill keeps its loading skeleton instead of flashing a
     bare "Model" label until the statusline draws.
     */
+    // An agent that left without a notice saying so: the chat stops waiting on it, silently.
+    // A capture that failed or was cut reads nothing new: a confirmed absence stands through it.
+    let agent_gone = match screen {
+        Some(capture) => crate::session_chat_start_failure::agent_left_conversation(
+            repository,
+            project_id,
+            session_id,
+            &capture.text,
+        ),
+        None => crate::session_chat_start_failure::agent_gone_confirmed(project_id, session_id),
+    };
     let attempted = capture.is_none()
         || options.is_some()
         || notice.is_some()
@@ -689,6 +700,7 @@ pub fn detect_session_chat_terminal_state(
         workflows,
         captured: screen.is_some(),
         attempted,
+        agent_gone,
     }
 }
 

@@ -176,6 +176,7 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
     // Prompt semantics: a carrier that can hold it and does not has CLEARED it.
     folded.result.state.prompt = side.prompt.clone();
     folded.result.state.terminal_notice = side.terminal_notice.clone();
+    folded.result.state.agent_gone = side.agent_gone;
     folded.result.state.terminal_activity = side.terminal_activity.clone();
     folded.result.state.agent_fleet = side.agent_fleet.clone();
     folded.result.state.agent_tasks = side.agent_tasks.clone();

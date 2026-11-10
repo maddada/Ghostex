@@ -275,7 +275,7 @@ pub struct TurnLifecycle {
 ///
 /// | Key | Absent means |
 /// | --- | --- |
-/// | `prompt`, `terminalNotice`, `terminalActivity`, `agentFleet`, `agentTasks` | CLEARED |
+/// | `prompt`, `terminalNotice`, `terminalActivity`, `agentFleet`, `agentTasks`, `agentGone` | CLEARED |
 /// | `selectedOptions`, `draft`, `appCommands`, `returnedPrompt`, `coordinatorThreads`, `sideChats`, `agentMessageDeliveries`, `secretRequests` | UNCHANGED |
 /// | `queue` | the daemon has no queue support (present even when empty otherwise) |
 /// | `screenProbed` | not probed yet (sticky once true) |
@@ -307,6 +307,11 @@ pub struct ChatSideState {
     pub workflows: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub screen_probed: Option<bool>,
+    /// The agent wrote its conversation and is gone from its terminal, with no notice saying so
+    /// (server/src/session_chat_start_failure.rs `agent_left_conversation`). Written only when
+    /// true; absent means it runs (CLEARED, like `terminalNotice`). Nothing draws it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_gone: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue: Option<Vec<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

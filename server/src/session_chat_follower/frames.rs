@@ -130,6 +130,10 @@ pub struct SessionChatScreenState<'a> {
     this comes from: only a capture that succeeded whole counts.
     */
     pub probed: bool,
+    /// The agent is gone from the session with no notice saying so
+    /// (`session_chat_start_failure::agent_left_conversation`). Written only when true, so an
+    /// omitted `agentGone` means it runs, like the rest of this value.
+    pub agent_gone: bool,
 }
 
 pub(crate) fn insert_screen_state(
@@ -151,6 +155,9 @@ pub(crate) fn insert_screen_state(
     }
     if screen.probed {
         frame.insert("screenProbed".to_string(), Value::Bool(true));
+    }
+    if screen.agent_gone {
+        frame.insert("agentGone".to_string(), Value::Bool(true));
     }
 }
 

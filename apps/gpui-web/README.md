@@ -17,7 +17,7 @@ Live Windows verification (2026-09-25) covers sending messages, asynchronous que
 
 Chat sending, model picks and question answers were run against throwaway sessions on 2026-09-25, and so were row focus, New Terminal, New Agent, Rename, Sleep, Wake, Close, Delayed Send schedule and cancel, New Group and group Rename, the Git menu, Add Worktree and Quick Access (app runtime port, step 4).
 
-What a page cannot do, and answers with a toast or a disabled control instead of a fake: anything on a remote machine (its tunnel is an SSH port forward the desktop app owns, so the page draws only this computer's tab); the commit review, Settings, Configure Agents and every other dialog that exists only as a CEF page (Commit, Push and Create PR open the review, so they toast); Finder, Open In, a terminal app and a native folder or file picker (Add Project, a missing folder's Locate, worktree images); Handoff / Export (it writes a file); Keep Awake and the status item; Split Right and the pane workspace; Settings writes (gxserver has no settings endpoint, so the page composes with the defaults).
+What a page cannot do, and answers with a toast or a disabled control instead of a fake: anything on a remote machine (its tunnel is an SSH port forward the desktop app owns, so the page draws only this computer's tab); the commit review, Settings, Configure Agents and every other dialog that exists only as a CEF page (Commit, Push and Create PR open the review, so they toast); Finder, Open In, a terminal app and a native folder or file picker (Add Project, a missing folder's Locate, worktree images); Handoff / Export (it writes a file); Keep Awake and the status item; Split Right and the pane workspace; Settings writes (the page reads the settings but cannot save them).
 
 ## Run it
 
@@ -116,13 +116,13 @@ All are no-ops for native builds; `cargo check --bins` of the desktop crate pass
 - Colour emoji draw as a missing glyph; SVGs with `color(display-p3 ...)` fills fall back to black in resvg.
 - The terminal has no context menu, and Cmd+C / Cmd+V go through gpui_web's clipboard, which cannot read outside a paste event.
 - A terminal attached here is a visible zmx client with its own grid, so a desktop pane showing the same session reflows while both are open.
-- Settings are empty (gxserver has no settings read), so the chat, the HUD and the menus use their defaults for theme, zoom, width, the default agent view and the Open In targets. A test can hand the page some with `?settings=<url-encoded JSON object>` (for example `{"sessionChatTheme":"light","markedHandovers":true,"markedHandoversStyle":"badge"}`), which `lib.rs` installs before the app starts.
+- Settings are read, not written: the page reads this computer's settings from gxserver (`/api/readSharedSettings`) when its event stream opens and again on each `sharedSettingsChanged` frame (gxserver checks the settings file every second), so a change made in the app's Settings or with `ghostex settings set` reaches the page within about two seconds (`app/gx_store/shared_settings_sync.rs`). A test can lay values over them with `?settings=<url-encoded JSON object>` (for example `{"sessionChatTheme":"light","markedHandovers":true,"markedHandoversStyle":"badge"}`), which `lib.rs` installs before the app starts; those, and what the page changes itself (a zoom chord), stay on top of every later read until the page reloads. The Open In targets stay empty.
 - Remote machines are not drawn: the page reaches only the daemon that served it.
 - The commit review and every other CEF-only dialog answer with a toast; Commit, Push and Create PR need the review, so the Git menu's commit flow is the desktop's for now. Sync, Release and the Git workflows that start an agent run.
 
 ## What is next
 
-1. Settings from gxserver (a read the page can call), and the commit review as a native dialog, which would give the page the commit, push and pull request flow.
+1. The commit review as a native dialog, which would give the page the commit, push and pull request flow.
 2. The desktop's real work area header and view tab strip (`render/workarea_header/`, `view_tab_strip.rs`) in place of the one written here.
 3. Reconnect handling for the terminal socket, and parked / chat visibility states when the surface is switched away.
 4. Promote the symlinks and `extracted-items.txt` into a shared crate once the set is stable, so the two builds cannot drift and the build-time extraction can go.
