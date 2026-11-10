@@ -74,10 +74,16 @@ pub fn run(args: &[String]) -> Res<i32> {
                         );
                     }
                 }
-            } else if !folder.is_dir() {
+            } else if !folder.is_dir() && fs::symlink_metadata(tmp_home(name)).is_err() {
                 bail!("No test server named {name} ({}).", folder.display());
+            } else {
+                // CDXC:Build 2026-11-10 WHY: a start that died after it made /tmp/gxts-<uid>-<name> but before its record was written leaves that home with no record to name it; `remove` clears it here (it is derived from the name, and only removed while it is a private folder of this user), so the name is free again and nothing lingers in /tmp.
+                #[cfg(unix)]
+                remove_private_home(&tmp_home(name))?;
             }
-            fs::remove_dir_all(&folder)?;
+            if folder.is_dir() {
+                fs::remove_dir_all(&folder)?;
+            }
             println!("Removed {}.", folder.display());
             Ok(0)
         }
