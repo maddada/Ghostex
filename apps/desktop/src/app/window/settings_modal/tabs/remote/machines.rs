@@ -14,11 +14,10 @@ use super::super::super::fields::{
     settings_icon, settings_icon_button, short_version, tooltip_text,
 };
 use super::super::super::model::SettingsTabId;
-use super::easy_connect::{path_card, path_head};
-use super::model::BadgeTone;
+use super::RemoteTab;
+use super::easy_connect::path_card;
 use super::model::*;
 use super::style::*;
-use super::{HEADER_GAP, RemoteTab};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, AppContext as _, ClickEvent, Context, Entity, FocusHandle, FontWeight,
@@ -420,7 +419,7 @@ impl RemoteTab {
                     }
                     (Some("denied"), _) => {
                         dialog.pairing = Some(ComputerPairing::Failed(
-                            "The other computer denied this one. Show a new code there and try again.".to_string(),
+                            "The other computer denied this machine. Show a new code there and try again.".to_string(),
                         ));
                         dialog.pairing_poll = None;
                     }
@@ -744,8 +743,8 @@ pub(super) fn preview_paste_easy_connect_code(
     tab.dialog_field_changed(DraftField::Code, payload, input, window, cx);
 }
 
-/// "Remote machines": the header and the tile grid. This computer's own short name is in the
-/// Current machine card above the tabs (CDXC:RemotePairing 2026-11-08 in current_machine.rs).
+/// "Computers this machine connects to": its head with how many are connected, and the tiles with
+/// Add a computer last. This computer's own short name is behind the page's This computer row.
 pub(super) fn machines_section(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
@@ -779,12 +778,11 @@ pub(super) fn machines_section(
     {
         tab.machine_dialog = None;
     }
-    let mut tiles = vec![add_tile(t, cx)];
-    tiles.extend(
-        machines
-            .iter()
-            .map(|machine| machine_tile(tab, t, machine, &short_names, cx)),
-    );
+    let mut tiles: Vec<AnyElement> = machines
+        .iter()
+        .map(|machine| machine_tile(tab, t, machine, &short_names, cx))
+        .collect();
+    tiles.push(add_tile(t, cx));
     let mut rows = Vec::new();
     let mut tiles = tiles.into_iter().peekable();
     while tiles.peek().is_some() {
@@ -806,43 +804,24 @@ pub(super) fn machines_section(
         }
         rows.push(row);
     }
-    // The same path card as the Easy Connect and Tailscale tabs.
     let (connected, saved) = tab.connected_machine_count(cx);
-    let status = if saved == 0 {
-        badge(t, "None saved", BadgeTone::Plain, false)
+    let line = if saved == 0 {
+        "None yet. Add one over SSH or with its code.".to_string()
     } else {
-        badge(
-            t,
-            format!("{connected}/{saved} connected"),
-            if connected > 0 {
-                BadgeTone::Active
-            } else {
-                BadgeTone::Disabled
-            },
-            false,
-        )
+        format!("{connected} of {saved} connected")
     };
-    let head = path_head(
+    let head = super::reach::section_head(
         t,
         "remote-machines-head",
         ICON_DEVICE_DESKTOP,
-        connected > 0,
-        "Remote machines",
-        vec![status],
+        "Computers this machine connects to",
+        line,
     );
     let body = v_flex()
         .w_full()
         .min_w_0()
-        .gap(px(HEADER_GAP))
-        .child(
-            div()
-                .w_full()
-                .text_size(px(13.0))
-                .line_height(px(19.5))
-                .text_color(hsla(t.muted))
-                .child("Other computers this one connects to, over SSH or with an Easy Connect code. Their projects show up as separate sidebar sections; the switch hides a machine from the sidebar without deleting it."),
-        )
-        .child(v_flex().w_full().gap(px(8.0)).children(rows))
+        .gap(px(8.0))
+        .children(rows)
         .into_any_element();
     path_card(
         t,
@@ -944,8 +923,8 @@ fn add_tile(t: &RemoteTokens, cx: &mut Context<RemoteTab>) -> AnyElement {
         .child(tile_icon(t, icon::PLUS))
         .child(tile_text(
             t,
-            "Add a machine".to_string(),
-            "SSH details or an Easy Connect code".to_string(),
+            "Add a computer".to_string(),
+            "SSH details or a code".to_string(),
         ))
         .into_any_element()
 }
@@ -1089,7 +1068,7 @@ pub(super) fn machine_dialog(
     let focus = dialog.focus.clone();
     let machine_id = dialog.machine_id.clone();
     let title = if is_new {
-        "Add a machine".to_string()
+        "Add a computer".to_string()
     } else {
         dialog.machine_name.clone()
     };
@@ -1198,7 +1177,7 @@ pub(super) fn machine_dialog(
             &colors,
             "Easy Connect code",
             input(&code_input, window, cx),
-            Some("On the other computer, open Settings → Remote → Easy Connect → Connect a Remote machine and click \"Copy Easy Connect code\"."),
+            Some("On the other computer, open Settings → Remote, click Connect a computer, then Copy the code."),
             message,
         ));
     }
@@ -1574,7 +1553,7 @@ pub(super) fn machine_dialog(
             if pairing_busy {
                 "Waiting for approval…"
             } else if is_new {
-                "Add machine"
+                "Add computer"
             } else {
                 "Save"
             },
@@ -1818,7 +1797,7 @@ fn computer_pairing_panel(t: &RemoteTokens, pairing: &ComputerPairing) -> AnyEle
         .border_color(hsla(t.edge(0.70)));
     match pairing {
         ComputerPairing::Starting => frame
-            .child(detail(t, "Asking the other computer to let this one in…", true))
+            .child(detail(t, "Asking the other computer to let this machine in…", true))
             .into_any_element(),
         ComputerPairing::Waiting {
             words, computer, ..

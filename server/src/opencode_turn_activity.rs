@@ -149,7 +149,16 @@ fn refresh(state: &AppState, seen: &mut HashMap<String, Seen>) {
                 Some(next) => seen.insert(key.clone(), next),
                 None => seen.remove(&key),
             };
-            if send {
+            // CDXC:SessionStatus 2026-11-10 WHY:
+            // The read above can be up to 15 seconds old (mirror.rs `freshness`). A `SessionBusy` sent from a read that predates the turn's end would start a working stint after OpenCode's idle time, which the `Stop` above never ends (it only ends a stint the idle time is not older than), and hold a finished thread as working. So the service is asked again, uncached, right before it is sent.
+            let still_running = send && {
+                crate::session_chat_opencode::invalidate(&conversation);
+                crate::session_chat_opencode::snapshot(&conversation).is_ok_and(|fresh| {
+                    let fresh = lead_state(&fresh);
+                    fresh.active && !fresh.waiting_on_user
+                })
+            };
+            if still_running {
                 report(
                     state,
                     &db,

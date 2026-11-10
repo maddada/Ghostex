@@ -611,15 +611,15 @@ pub(super) async fn route_sessions_http(
                 ),
             }
         }
-        "/api/promoteCoordinator" => handle_domain_http(
-            &state,
-            endpoint.path,
-            request_id,
-            &body_json,
-            |repository, db, params, _| {
-                coordinator_runtime::promote_coordinator(&state, db, repository, params)
-            },
-        ),
+        "/api/promoteCoordinator" => {
+            coordinator_runtime::handle_promote_coordinator_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/toggleCloseAfterDone" => handle_domain_http(
             &state,
             endpoint.path,

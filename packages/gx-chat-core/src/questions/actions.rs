@@ -158,6 +158,21 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .unwrap_or(true);
             effects.extend(crate::questions::later::set(state, id, later));
         }
+        ActionKind::SnoozeQuestion => {
+            let id = action
+                .param("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let hours = action.param("hours").and_then(Value::as_u64).unwrap_or(1);
+            effects.extend(crate::questions::later::snooze(state, id, hours));
+        }
+        ActionKind::CancelQuestion => {
+            let id = action
+                .param("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            effects.extend(crate::questions::later::cancel(state, id));
+        }
         ActionKind::QuestionRemove => {
             let id = action
                 .param("id")

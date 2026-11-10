@@ -142,7 +142,7 @@ fn relay_detail(relay: &TailcatRelay, custom_open: bool) -> String {
     }
 }
 
-/// The Relay row, below Paired devices while Easy Connect is on.
+/// The Relay row, at the top of Advanced.
 pub(super) fn relay_section(
     tab: &mut RemoteTab,
     t: &RemoteTokens,

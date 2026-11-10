@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use ghostex_gx_core::SessionRow;
 use ghostex_gx_core::unified_sidebar::{
-    UnifiedBranchLine, UnifiedFilter, UnifiedFilterOptions, UnifiedShelf, UnifiedStatus,
+    UnifiedBranchLine, UnifiedCrew, UnifiedFilter, UnifiedFilterOptions, UnifiedShelf,
+    UnifiedStatus,
 };
 
 use crate::app::native_sidebar::model::NativeSidebarSession;
@@ -30,6 +31,40 @@ pub(crate) struct UnifiedCard {
     pub(crate) branch_line: UnifiedBranchLine,
     /// It sits under its project's header, which names the project.
     pub(crate) in_group: bool,
+    /// Set on a row with threads under it: its fold, crew count and folded dots (gx-core
+    /// `UnifiedCrew`).
+    pub(crate) crew: Option<UnifiedCrew>,
+    /// On a card: the thread rows drawn under it now, in order (gx-core `drawn_lines`). Empty on a
+    /// thread row, whose own threads are lines of its card.
+    pub(crate) lines: Vec<UnifiedCardLine>,
+    /// On a card: the status of every session under it, drawn or folded away, for a folded
+    /// project header's dot.
+    pub(crate) statuses_below: Vec<UnifiedStatus>,
+}
+
+/// One line under a card.
+#[derive(Clone, Debug)]
+pub(crate) enum UnifiedCardLine {
+    Thread {
+        card: Box<UnifiedCard>,
+        /// 1 for the card's own threads.
+        depth: u8,
+        /// Its branch, when it is not the card's.
+        branch: Option<String>,
+        /// Its pull request number, when the card does not show it.
+        pull_request: Option<u64>,
+        /// The short name of the computer that runs it, when that is not the card's computer (this
+        /// computer included).
+        machine: Option<String>,
+    },
+    /// The "N older threads" / "Hide older threads" row of a coordinator.
+    Older {
+        /// gx-core `unified_coordinator_key`.
+        key: String,
+        older: u16,
+        shown: bool,
+        depth: u8,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -80,6 +115,8 @@ pub(crate) struct UnifiedSidebarSnapshot {
     /// The name of the Space the list is scoped to, while Spaces is on (gx-core
     /// `unified_space_scope`).
     pub(crate) space: Option<String>,
+    /// When the list is next built again on its own (gx-core `UnifiedSidebarView::deadline_ms`).
+    pub(crate) deadline_ms: Option<i64>,
 }
 
 impl UnifiedSidebarSnapshot {
@@ -102,6 +139,12 @@ impl UnifiedSidebarSnapshot {
                     .iter()
                     .chain(group.shelves.iter().flat_map(|shelf| shelf.cards.iter()))
             }))
-            .any(|card| card.status == Some(UnifiedStatus::Working))
+            .any(|card| {
+                card.status == Some(UnifiedStatus::Working)
+                    || card.lines.iter().any(|line| {
+                        matches!(line, UnifiedCardLine::Thread { card, .. }
+                            if card.status == Some(UnifiedStatus::Working))
+                    })
+            })
     }
 }

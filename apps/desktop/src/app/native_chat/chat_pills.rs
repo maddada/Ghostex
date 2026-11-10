@@ -342,7 +342,7 @@ impl NativeChatView {
         self.open_question_pill_text()?;
         let s = p.scale;
         let label = text(open, "accessibilityLabel");
-        let count = open["count"].as_u64().unwrap_or(0);
+        let count = open["pillCount"].as_u64().unwrap_or(0);
         // The ? and, while questions wait, the pink dot and their count inside the pill, as every
         // pill flags (`inline_dots`).
         Some(
@@ -500,7 +500,10 @@ impl NativeChatView {
         } else {
             String::new()
         };
-        let dots = (!dots.is_empty()).then(|| inline_dots(&dots, p));
+        // The Work pill says its counts in words while it has its label ("Work · 4 need you · 7
+        // in progress", gx-chat-core `coordinator_board::pill`); the coloured counts stand in for
+        // them once a tight row drops the label.
+        let dots = (!dots.is_empty() && (collapsed || !board)).then(|| inline_dots(&dots, p));
         // A pill with no label (Blocked) is drawn like the ? pill: its icon and dot, its word in
         // the tooltip.
         let name = text(pill, "label");

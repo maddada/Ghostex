@@ -575,6 +575,18 @@ async fn a_thread_on_another_computer_reports_its_turns_to_the_coordinator_here(
         coordinator_row["coordinatorRemoteThreads"][0]["serverId"],
         "S5t"
     );
+    // The phone's summary carries it through both whitelists, so its Unified list nests the thread
+    // too (CDXC:Sidebar 2026-11-09 in gx-core unified_sidebar/tree.rs).
+    let summary = crate::ghostex_cli::sessions::mobile_summary_for_session(
+        &json!({ "projectId": coordinator.0, "sessionId": coordinator.1 }),
+        &json!({ "projectId": coordinator.0 }),
+        &coordinator_row,
+    );
+    assert_eq!(summary["coordinatorRemoteThreads"][0]["serverId"], "S5t");
+    assert_eq!(
+        summary["coordinatorRemoteThreads"][0]["sessionId"],
+        thread.1.as_str()
+    );
     crate::connected_computers::tests::reset();
 }
 

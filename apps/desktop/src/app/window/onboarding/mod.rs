@@ -97,7 +97,7 @@ pub(crate) enum FinishTarget {
     None,
     /// Settings, optionally on one of its pages (`theme`).
     Settings(Option<&'static str>),
-    /// Settings -> Remote -> Easy Connect ("Configure my phone after this flow").
+    /// The Connect a phone window ("Configure my phone after this flow").
     RemoteSettings,
 }
 

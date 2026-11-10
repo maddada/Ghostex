@@ -202,8 +202,26 @@ pub(crate) fn gpui_command_terminal_create_session_params(
     serde_json::Value::Object(params)
 }
 
+/// Windows' project-heading terminal (workspace_events.rs).
+#[cfg(target_os = "windows")]
 pub(crate) fn gpui_create_local_project_workspace_terminal(
     project_id: &str,
+) -> Result<
+    (
+        GpuiLocalWorkspaceSessionKey,
+        GpuiLocalWorkspaceAttachTerminalPlan,
+    ),
+    String,
+> {
+    gpui_create_local_project_workspace_terminal_then(project_id, |_| {})
+}
+
+/// `gpui_create_local_project_workspace_terminal`, calling `on_created` as soon as the session
+/// exists, before its terminal is woken (agents_tab_create_and_split.rs places it in its sidebar
+/// folder there). On Windows the create and the start are one operation, so it runs after both.
+pub(crate) fn gpui_create_local_project_workspace_terminal_then(
+    project_id: &str,
+    on_created: impl FnOnce(&GpuiLocalWorkspaceSessionKey),
 ) -> Result<
     (
         GpuiLocalWorkspaceSessionKey,
@@ -272,6 +290,7 @@ pub(crate) fn gpui_create_local_project_workspace_terminal(
         project_id: created_project_id,
         session_id,
     };
+    on_created(&key);
     #[cfg(target_os = "windows")]
     let plan = gpui_local_workspace_attach_terminal_plan_from_result(&result, None, None)?;
     /*

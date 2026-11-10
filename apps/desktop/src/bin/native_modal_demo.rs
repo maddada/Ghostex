@@ -67,6 +67,10 @@ mod chief_row_demo;
 mod chief_row_view;
 #[path = "native_modal_demo/close_buttons.rs"]
 mod close_buttons_demo;
+#[path = "native_modal_demo/connect_device.rs"]
+mod connect_device_demo;
+#[path = "../app/window/connect_device_modal.rs"]
+mod connect_device_modal;
 #[path = "native_modal_demo/coordinator_details.rs"]
 mod coordinator_details_demo;
 #[path = "../app/window/coordinator_details_modal.rs"]
@@ -127,10 +131,6 @@ mod popup_dismissal;
 mod remote_gxserver_install_demo;
 #[path = "../app/window/remote_gxserver_install_modal.rs"]
 mod remote_gxserver_install_modal;
-#[path = "native_modal_demo/remote_setup.rs"]
-mod remote_setup_demo;
-#[path = "../app/window/remote_setup_modal.rs"]
-mod remote_setup_modal;
 #[path = "native_modal_demo/rename_session.rs"]
 mod rename_session_demo;
 #[path = "../app/window/rename_session_modal.rs"]
@@ -732,7 +732,7 @@ fn main() {
                 "jobs-popover" => jobs_popover_demo::open(&demo, cx),
                 "start-menu" => start_menu_demo::open(&demo, cx),
                 "start-menu-click" => start_menu_click_demo::open(&demo, cx),
-                "remote-setup" => remote_setup_demo::open(&demo, cx),
+                "connect-device" | "remote-setup" => connect_device_demo::open(&demo, cx),
                 "delayed-send" => delayed_send_demo::open(&demo, cx),
                 "space-editor" => space_editor_demo::open(&demo, cx),
                 "settings" => settings_demo::open(&demo, cx),

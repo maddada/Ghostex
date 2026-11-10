@@ -77,6 +77,10 @@ pub(crate) fn outcome_words(outcome: &str) -> (&'static str, ListItemStatus) {
         "refused" => ("Refused", ListItemStatus::Warning),
         "failed" => ("Failed", ListItemStatus::Warning),
         "allowed" => ("Allowed", ListItemStatus::Neutral),
+        // How an approval request ended (server/security_http.rs `note_request_event`).
+        "expired" => ("Expired", ListItemStatus::Neutral),
+        "replaced" => ("Replaced", ListItemStatus::Neutral),
+        "withdrawn" => ("Withdrawn", ListItemStatus::Neutral),
         _ => ("Recorded", ListItemStatus::Neutral),
     }
 }
@@ -84,16 +88,21 @@ pub(crate) fn outcome_words(outcome: &str) -> (&'static str, ListItemStatus) {
 /// One line under an entry's title: how it ended, who asked, what it was about, when.
 pub(crate) fn entry_detail(entry: &Value) -> String {
     let (outcome, _) = outcome_words(entry["outcome"].as_str().unwrap_or_default());
-    let mut parts = vec![
-        outcome.to_string(),
-        format!(
+    let mut parts = vec![outcome.to_string()];
+    // A request's own outcome line (`approval.*`) says how it ended in its reason; who asked is
+    // on the request's own line.
+    if !entry["action"]
+        .as_str()
+        .is_some_and(|action| action.starts_with("approval."))
+    {
+        parts.push(format!(
             "asked by {}",
             entry
                 .pointer("/actor/label")
                 .and_then(Value::as_str)
                 .unwrap_or("unknown")
-        ),
-    ];
+        ));
+    }
     if let Some(target) = entry["target"].as_str() {
         parts.push(target.to_string());
     }

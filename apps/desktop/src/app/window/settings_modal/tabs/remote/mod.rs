@@ -1,25 +1,13 @@
 //! Settings > Remote (packages/core-ui/settings-modal/tabs/remote.tsx (deleted 2026-10-01) and its `remote-*` parts).
 //!
-//! CDXC:RemotePairing 2026-09-03:
-//! Settings → Remote reads top to bottom as: this computer from a phone (the Easy Connect and Tailscale path cards), this computer reaching other machines (the compact saved-machine grid), then one Advanced collapsible. The Remote Setup modal deep-links into a path card through `initialRemoteSection`, which expands and scrolls to that card; `initialRemoteMachineId` scrolls to a saved machine's tile and opens its edit dialog.
-//!
-//! CDXC:RemotePairing 2026-09-03 DECISION:
-//! User: "make easy connect and tailscale 2 options that are above each other vertically in that section, not next to each other", shown "as expandible cards so the user clicks to expand the one they want to use".
-//! The two cards stack full width, both start collapsed unless a deep link names one, and opening one collapses the other so a single QR code is visible at a time.
+//! CDXC:RemotePairing 2026-11-10 DECISION:
+//! User, on the pairing design page (Q2188, Settings > Remote as a whole: the suggested screen), knowing it undoes the four tabs (2026-10-24, "i don't like scrolling so much") and the Current machine card on top (2026-11-08), both of which answered a page that was too long; this one fits without scrolling. His wording rule with it: "that can reach this machine", not "this one", and the same on the other side: never "this one", always "this machine". The page reads top to bottom: the card "Phones and computers that can reach this machine" (Easy Connect's switch in its head, one line on what that means, Connect a phone and Connect a computer, which open the Connect a phone window, then every waiting and paired device, a waiting one first with its words and Approve, whether Easy Connect is on or off); the card "Computers this machine connects to" (how many are connected, the saved computers' tiles, Add a computer last); then three rows that open in place: This computer (name, short name, SSH access; SSH off also puts a warning line with Turn on in the top card), Tailscale, and Advanced (the Relay picker, ports, allowed keys, the pairing address, the binary, gxserver, raw status). Gone: the tab strip and its status words, the Recommended and Running pills, the hidden code tile with its steps and fine print on Easy Connect, the phone or computer switcher, the "Only paired devices can connect" box (the card's line says it) and the four-step computer guide. This supersedes the 2026-10-24 tabs decisions that were here and the 2026-11-08 Current machine card (current_machine.rs).
 //!
 //! CDXC:RemotePairing 2026-10-16 DECISION:
-//! User: "i want reopening settings to always reopen to the exact same spot i was in before (same scroll pos too and same open modals if possible)", and asked whether the open path card should be remembered too, picked "Remember it too" (supersedes the 2026-09-03 "The open card is plain UI state and is not persisted"). The expanded card (Easy Connect or Tailscale) is saved with the page's open machine dialog (`open_form`, CDXC:Settings 2026-10-16 in settings_modal/restore.rs) and reopens with Settings; an `initialRemoteSection` deep link still picks the card, and a machine dialog that open keeps closed is carried to the next open instead of being forgotten.
+//! User: "i want reopening settings to always reopen to the exact same spot i was in before (same scroll pos too and same open modals if possible)", and asked whether the open path card should be remembered too, picked "Remember it too" (supersedes the 2026-09-03 "The open card is plain UI state and is not persisted"). The expanded card (Easy Connect or Tailscale) is saved with the page's open machine dialog (`open_form`, CDXC:Settings 2026-10-16 in settings_modal/restore.rs) and reopens with Settings; an `initialRemoteSection` deep link still picks the card, and a machine dialog that open keeps closed is carried to the next open instead of being forgotten. (Since 2026-11-10 what is remembered is the open row: This computer, Tailscale or Advanced.)
 //!
-//! CDXC:RemotePairing 2026-10-24 DECISION:
-//! User: "pls make tailscale and easy connect 2 tabs here instead of 2 collapsible areas cuz it's easier to switch between the 2 that way. also the already connected machines needs to be a 3rd tab there. i don't like scrolling so much in this page to get to stuff".
-//! Supersedes the 2026-09-03 expandable cards. The page opens with one tab strip (the shared `modal_bordered_segmented_control`): Easy Connect, Tailscale and Remote machines. Each tab shows its content straight away (the card's header row with its switch and badges, then its body; the saved machines and the Add tile), with Advanced below whichever tab is open. The "Connect to this computer" heading is folded into the tabs. Easy Connect is the default; the last tab is remembered the way the open card was (`open_form`'s `card`, now also `remoteMachines`). A Settings search that matches nothing on the open tab switches to the first tab with a match; deep links pick their tab.
-//!
-//! CDXC:RemotePairing 2026-10-24 DECISION:
-//! User: "for remote tab please move advanced to a new tab", "please make the machines tab show similar card as the 2 other tabs (make it styled the same)" and "also please show the status for each on the tabs bar".
-//! Advanced is a fourth tab (always open inside it, no disclosure) instead of sitting under every tab, and a search for one of its rows lands on it. The Remote machines tab draws the same path card as Easy Connect and Tailscale (icon, title, a connected-count badge, then the description and the tiles). Each tab in the strip carries its status: Easy Connect and Tailscale a dot in their card badge's colour plus the badge's word, Remote machines "connected/saved" from the connection states the app sends (`remoteMachineConnectStates`), Advanced an amber dot and "Unsaved" only while a ports or keys edit is pending.
-//!
-//! One owner (this page) reads everything the Remote page shows from the daemon, so the Easy
-//! Connect card, the Tailscale card and Advanced render the same snapshot: while Remote is the
+//! One owner (this page) reads everything the Remote page shows from the daemon, so the top card,
+//! Tailscale and Advanced render the same snapshot: while Remote is the
 //! active page, a fast poll (4s: the Easy Connect status and the pairing code, which rotates after
 //! a phone pairs) and a slow one (10s: SSH access, Tailscale and the paired devices, which shell
 //! out on the daemon), each guarded so a slow daemon never stacks requests; both stop as soon as
@@ -49,14 +37,13 @@ mod machines;
 mod model;
 mod pair_again;
 mod paired_devices;
+mod reach;
 mod relay;
 mod ssh_row;
 mod style;
 mod tailscale;
 
-use super::super::super::native_modal_kit::{
-    ModalRailItem, capture_child_bounds, modal_bordered_segmented_control,
-};
+use super::super::super::native_modal_kit::capture_child_bounds;
 use super::super::fields::{FieldStates, QrGrid, SettingsPage};
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -88,8 +75,6 @@ const ENABLE_SSH_TIMEOUT: Duration = Duration::from_secs(300);
 const REMOVE_PAIRED_DEVICE_TIMEOUT: Duration = Duration::from_secs(300);
 /// Starting or stopping the sidecar.
 const UPDATE_TAILCAT_TIMEOUT: Duration = Duration::from_secs(60);
-/// The Easy Connect helper install downloads and may build.
-const INSTALL_TAILCAT_TIMEOUT: Duration = Duration::from_secs(900);
 /// How long a copy button shows its check.
 const COPIED_FLASH: Duration = Duration::from_millis(1200);
 /// How often the paired devices' "connected now" is re-read against the clock.
@@ -121,66 +106,35 @@ impl PathCard {
     }
 }
 
-/// The Remote page's tabs: the two ways in (`SettingsRemoteSection`) and the saved machines.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) enum RemoteSection {
-    #[default]
-    EasyConnect,
+/// The rows at the bottom of the page that open in place.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RemoteFold {
+    ThisComputer,
     Tailscale,
-    Machines,
     Advanced,
 }
 
-impl RemoteSection {
-    const ALL: [Self; 4] = [
-        Self::EasyConnect,
-        Self::Tailscale,
-        Self::Machines,
-        Self::Advanced,
-    ];
+impl RemoteFold {
+    const ALL: [Self; 3] = [Self::ThisComputer, Self::Tailscale, Self::Advanced];
 
-    fn from_section(section: &str) -> Option<Self> {
-        match section {
-            "easyConnect" => Some(Self::EasyConnect),
-            "tailscale" => Some(Self::Tailscale),
-            "remoteMachines" => Some(Self::Machines),
-            "remoteAdvanced" => Some(Self::Advanced),
-            _ => None,
-        }
-    }
-
-    /// The tab's id, which is also its Settings search section.
+    /// The row's Settings search section, also what an open row is remembered as.
     fn anchor(self) -> &'static str {
         match self {
-            Self::EasyConnect => "easyConnect",
+            Self::ThisComputer => "currentMachine",
             Self::Tailscale => "tailscale",
-            Self::Machines => "remoteMachines",
             Self::Advanced => "remoteAdvanced",
         }
     }
 
-    fn label(self) -> &'static str {
+    fn from_anchor(anchor: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|fold| fold.anchor() == anchor)
+    }
+
+    fn title(self) -> &'static str {
         match self {
-            Self::EasyConnect => "Easy Connect",
+            Self::ThisComputer => "This computer",
             Self::Tailscale => "Tailscale",
-            Self::Machines => "Remote machines",
             Self::Advanced => "Advanced",
-        }
-    }
-
-    fn index(self) -> usize {
-        Self::ALL
-            .iter()
-            .position(|section| *section == self)
-            .unwrap_or(0)
-    }
-}
-
-impl From<PathCard> for RemoteSection {
-    fn from(card: PathCard) -> Self {
-        match card {
-            PathCard::EasyConnect => Self::EasyConnect,
-            PathCard::Tailscale => Self::Tailscale,
         }
     }
 }
@@ -220,10 +174,8 @@ pub(crate) struct RemoteTab {
     clock: Option<Task<()>>,
     pub(super) now: i64,
     // ---- page state -----------------------------------------------------------------------------
-    /// The open tab.
-    pub(super) section: RemoteSection,
-    /// `phone` or `computer` (the Connect segmented control).
-    pub(super) connection_device: &'static str,
+    /// The bottom row that is open (This computer, Tailscale or Advanced), if any.
+    pub(super) open_fold: Option<RemoteFold>,
     /// The Show QR dialog open, and which card's pairing code it shows.
     pub(super) qr_preview: Option<PathCard>,
     pub(super) qr_preview_focus: FocusHandle,
@@ -246,11 +198,9 @@ pub(crate) struct RemoteTab {
     /// The machine dialog the last visit left open, kept closed by this open's deep link and
     /// carried to the next open until another machine dialog opens.
     pub(super) kept_machine_form: Option<Value>,
-    /// The path cards' and the machine tiles' bounds last frame, for the deep-link scrolls.
-    card_bounds: [Rc<Cell<Option<Bounds<Pixels>>>>; 2],
+    /// The saved computers' card and the bottom rows' bounds last frame, for the deep-link scrolls.
     machines_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
-    /// The Current machine card's bounds last frame, for a setup step's "turn it on" link.
-    current_machine_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    folds_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// When a setup step's link last brought you to the Current machine card's SSH access row,
     /// which stays highlighted for `current_machine::SSH_HIGHLIGHT`.
     pub(super) ssh_highlight: Option<std::time::Instant>,
@@ -289,13 +239,13 @@ impl super::HoldsUnsavedInput for RemoteTab {
 }
 
 impl super::open_forms::RemembersOpenForm for RemoteTab {
-    /// The open tab (when it isn't the default Easy Connect) and the Add a machine / edit dialog
-    /// (or the one a deep link kept closed on this open).
+    /// The open bottom row and the Add a computer / edit dialog (or the one a deep link kept
+    /// closed on this open).
     fn open_form(&self, _cx: &gpui::App) -> Option<Value> {
         let machine = self
             .open_machine_form()
             .or_else(|| self.kept_machine_form.clone());
-        let card = (self.section != RemoteSection::EasyConnect).then(|| self.section.anchor());
+        let card = self.open_fold.map(RemoteFold::anchor);
         if machine.is_none() && card.is_none() {
             return None;
         }
@@ -400,8 +350,7 @@ impl RemoteTab {
             polling: None,
             clock: None,
             now: now_ms(),
-            section: RemoteSection::default(),
-            connection_device: "phone",
+            open_fold: None,
             qr_preview: None,
             qr_preview_focus: cx.focus_handle(),
             manual_open: false,
@@ -416,9 +365,8 @@ impl RemoteTab {
             machine_dialog: None,
             local_short_name: None,
             kept_machine_form: None,
-            card_bounds: [Rc::new(Cell::new(None)), Rc::new(Cell::new(None))],
             machines_bounds: Rc::new(Cell::new(None)),
-            current_machine_bounds: Rc::new(Cell::new(None)),
+            folds_bounds: Rc::new(Cell::new(None)),
             ssh_highlight: None,
             ssh_highlight_task: None,
             pending_scroll: None,
@@ -467,12 +415,13 @@ impl RemoteTab {
             self.kept_machine_form = machine;
             return;
         }
-        if let Some(section) = form
+        // A tab remembered before 2026-11-10 (Easy Connect, Remote machines) opens no row.
+        if let Some(fold) = form
             .get("card")
             .and_then(Value::as_str)
-            .and_then(RemoteSection::from_section)
+            .and_then(RemoteFold::from_anchor)
         {
-            self.section = section;
+            self.open_fold = Some(fold);
         }
         if let Some(machine) = machine {
             self.restore_machine_dialog(&machine, window, cx);
@@ -661,6 +610,34 @@ impl RemoteTab {
         );
     }
 
+    /// Not my phone on a waiting phone or computer: denies its request, as the Connect a phone
+    /// window and the notice do, so the phone hears "The computer said no".
+    pub(super) fn deny_pending_device(&mut self, approval_id: String, cx: &mut Context<Self>) {
+        if approval_id.is_empty() || !self.rpc_available(cx) {
+            return;
+        }
+        self.removing_device = self
+            .pending_devices
+            .iter()
+            .find(|device| device.approval_id == approval_id)
+            .map(|device| device.id.clone());
+        cx.notify();
+        self.rpc(
+            "/api/denyApprovalRequest",
+            json!({ "id": approval_id }),
+            RPC_TIMEOUT,
+            cx,
+            |this, result, cx| {
+                this.removing_device = None;
+                if let Err(error) = result {
+                    this.request_error = Some(error);
+                }
+                this.refresh_pending_devices(cx);
+                cx.notify();
+            },
+        );
+    }
+
     /// The phones waiting for approval, while the Show QR sheet is open.
     pub(super) fn refresh_pending_devices(&mut self, cx: &mut Context<Self>) {
         self.rpc(
@@ -816,35 +793,6 @@ impl RemoteTab {
         );
     }
 
-    /// `installEasyConnect`: one request at a time; the status the daemon returns carries the
-    /// progress line while it installs.
-    pub(super) fn install_easy_connect(&mut self, cx: &mut Context<Self>) {
-        let installing = self
-            .easy_connect
-            .as_ref()
-            .is_some_and(|status| status.installing);
-        if !self.rpc_available(cx) || self.install_pending || installing {
-            return;
-        }
-        self.install_pending = true;
-        self.install_request_error = None;
-        cx.notify();
-        self.rpc(
-            "/api/installTailcat",
-            json!({}),
-            INSTALL_TAILCAT_TIMEOUT,
-            cx,
-            |this, result, cx| {
-                this.install_pending = false;
-                match result.and_then(|value| read_tailcat_status_result(&value)) {
-                    Ok(status) => this.easy_connect = Some(status),
-                    Err(error) => this.install_request_error = Some(error),
-                }
-                cx.notify();
-            },
-        );
-    }
-
     /// `removePairedDevice`: also drops the device's SSH key on the daemon.
     pub(super) fn remove_paired_device(&mut self, device_id: String, cx: &mut Context<Self>) {
         if !self.rpc_available(cx) {
@@ -873,8 +821,9 @@ impl RemoteTab {
         );
     }
 
-    pub(super) fn select_section(&mut self, section: RemoteSection, cx: &mut Context<Self>) {
-        self.section = section;
+    /// Opens a bottom row, or closes it when it is the open one.
+    pub(super) fn toggle_fold(&mut self, fold: RemoteFold, cx: &mut Context<Self>) {
+        self.open_fold = (self.open_fold != Some(fold)).then_some(fold);
         cx.notify();
     }
 
@@ -906,10 +855,11 @@ impl RemoteTab {
         cx.notify();
     }
 
-    /// A setup step's "turn it on in Current machine": scroll up to the card and highlight its SSH
-    /// access row for a moment.
+    /// A setup step's "turn it on in This computer": open that row, scroll to it and highlight its
+    /// SSH access row for a moment.
     pub(super) fn show_current_machine_ssh(&mut self, cx: &mut Context<Self>) {
-        self.pending_scroll = Some(ScrollTarget::CurrentMachine);
+        self.open_fold = Some(RemoteFold::ThisComputer);
+        self.pending_scroll = Some(ScrollTarget::Folds);
         self.ssh_highlight = Some(std::time::Instant::now());
         self.ssh_highlight_task = Some(cx.spawn(async move |this, cx| {
             cx.background_executor()
@@ -922,6 +872,11 @@ impl RemoteTab {
             });
         }));
         cx.notify();
+    }
+
+    /// Opens the Connect a phone window (`device`: `phone` or `computer`), which closes Settings.
+    pub(super) fn open_connect_device(&self, device: &str, cx: &mut App) {
+        self.post(json!({ "type": "openConnectDevice", "device": device }), cx);
     }
 
     pub(super) fn post(&self, message: Value, cx: &mut App) {
@@ -1021,7 +976,7 @@ impl RemoteTab {
 
     // ---- deep links and preview states --------------------------------------------------------------
 
-    /// `initialRemoteSection` opens its tab and scrolls to its card, `initialRemoteMachineId` opens that
+    /// `initialRemoteSection` scrolls to the top card or opens Tailscale, `initialRemoteMachineId` opens that
     /// machine's edit dialog; each applies once per visit to the page.
     fn apply_deep_links(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.is_active(cx) {
@@ -1034,19 +989,18 @@ impl RemoteTab {
                 request.initial_remote_machine_id.clone(),
             )
         };
+        // `easyConnect` is the top of the page; `tailscale` opens its row.
         if let Some(section) = section
             && self.targeted_section.as_deref() != Some(section.as_str())
-            && let Some(card) = PathCard::from_section(&section)
+            && PathCard::from_section(&section).is_some()
         {
+            self.pending_scroll = Some(if section == "tailscale" {
+                self.open_fold = Some(RemoteFold::Tailscale);
+                ScrollTarget::Folds
+            } else {
+                ScrollTarget::Top
+            });
             self.targeted_section = Some(section);
-            self.section = card.into();
-            // Measured again after the tab opens.
-            self.card_bounds[match card {
-                PathCard::EasyConnect => 0,
-                PathCard::Tailscale => 1,
-            }]
-            .set(None);
-            self.pending_scroll = Some(ScrollTarget::Card(card));
         }
         if let Some(machine_id) = machine_id
             && self.targeted_machine.as_deref() != Some(machine_id.as_str())
@@ -1056,7 +1010,6 @@ impl RemoteTab {
             });
             if let Some(machine) = machine {
                 self.targeted_machine = Some(machine_id);
-                self.section = RemoteSection::Machines;
                 self.open_machine_dialog(Some(&machine), window, cx);
                 self.pending_scroll = Some(ScrollTarget::Machines);
             }
@@ -1072,57 +1025,28 @@ impl RemoteTab {
 
     /// The preview binary's page states (dialogs, popovers and disclosures no open message reaches).
     fn apply_preview_state(&mut self, state: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if matches!(
-            state,
-            "remote-easy-connect"
-                | "remote-computer"
-                | "remote-qr"
-                | "remote-ssh-off"
-                | "remote-ssh-popover"
-                | "remote-ec-off"
-                | "remote-paired-confirm"
-        ) {
-            self.section = RemoteSection::EasyConnect;
-        }
-        if matches!(
-            state,
-            "remote-tailscale"
-                | "remote-tailscale-manual"
-                | "remote-tailscale-qr"
-                | "remote-ssh-link"
-        ) {
-            self.section = RemoteSection::Tailscale;
-        }
-        if matches!(
-            state,
-            "remote-machines"
-                | "remote-add-machine"
-                | "remote-add-ec"
-                | "remote-edit-machine"
-                | "remote-edit-machine-advanced"
-                | "remote-machine-failed"
-                | "remote-machine-failed-sheet"
-        ) {
-            self.section = RemoteSection::Machines;
-        }
         match state {
-            "remote-computer" => self.connection_device = "computer",
-            "remote-qr" | "remote-tailscale-qr" => {
-                self.qr_preview = Some(if state == "remote-qr" {
-                    PathCard::EasyConnect
-                } else {
-                    PathCard::Tailscale
-                });
+            "remote-this-computer" | "remote-ssh-off" => {
+                self.open_fold = Some(RemoteFold::ThisComputer);
+            }
+            "remote-tailscale" => self.open_fold = Some(RemoteFold::Tailscale),
+            "remote-tailscale-qr" => {
+                self.open_fold = Some(RemoteFold::Tailscale);
+                self.qr_preview = Some(PathCard::Tailscale);
                 self.qr_preview_focus.focus(window, cx);
             }
             "remote-ssh-popover" => {
+                self.open_fold = Some(RemoteFold::ThisComputer);
                 self.os_popover = Some(("current-machine-ssh".into(), "windows"));
             }
-            "remote-tailscale-manual" => self.manual_open = true,
+            "remote-tailscale-manual" => {
+                self.open_fold = Some(RemoteFold::Tailscale);
+                self.manual_open = true;
+            }
             "remote-ssh-link" => self.show_current_machine_ssh(cx),
             "remote-paired-confirm" => self.confirming_device = Some("dev-1".to_string()),
             "remote-advanced" => {
-                self.section = RemoteSection::Advanced;
+                self.open_fold = Some(RemoteFold::Advanced);
                 self.advanced.raw_open = true;
             }
             "remote-add-machine" => self.open_machine_dialog(None, window, cx),
@@ -1168,57 +1092,59 @@ impl Render for RemoteTab {
                 },
             )));
         } else {
-            // Each tab answers the Settings search on its own; a search that matches nothing on the
-            // open tab lands on the first tab that has a match.
-            let shown = RemoteSection::ALL
-                .map(|section| should_show_section(&search.section(section.anchor()), None));
-            if searching
-                && !shown[self.section.index()]
-                && let Some(first) = RemoteSection::ALL
-                    .into_iter()
-                    .find(|section| shown[section.index()])
-            {
-                self.section = first;
-            }
             let rpc = self.rpc_available(cx);
+            let shows = |anchor: &str| should_show_section(&search.section(anchor), None);
             // `.settings-management-layout`: the sections 16px apart in one column.
             let mut layout = v_flex().w_full().min_w_0().gap(px(SECTION_GAP));
             if self.pair_again_waiting > 0 {
                 layout = layout.child(pair_again::pair_again_line(&t, self.pair_again_waiting, cx));
             }
-            // The Current machine card sits above the tab strip on every tab (CDXC:RemotePairing
-            // 2026-11-08 in current_machine.rs); a search shows it only when it matches.
-            if !searching || should_show_section(&search.section("currentMachine"), None) {
-                let card = current_machine::current_machine_card(self, &t, window, cx);
-                layout = layout.child(
-                    div()
-                        .w_full()
-                        .on_children_prepainted(capture_child_bounds(
-                            self.current_machine_bounds.clone(),
-                            0,
-                        ))
-                        .child(card),
-                );
+            if !searching || shows("easyConnect") {
+                layout = layout.child(if rpc {
+                    reach::reach_card(self, &t, rpc, cx)
+                } else {
+                    no_server_line(&t)
+                });
             }
-            layout = layout.child(self.section_tabs(&t, window, cx));
-            layout = layout.child(match self.section {
-                RemoteSection::EasyConnect | RemoteSection::Tailscale => {
-                    self.connect_section(&t, rpc, window, cx)
-                }
-                RemoteSection::Machines => {
-                    let section = machines::machines_section(self, &t, window, cx);
+            if !searching || shows("remoteMachines") {
+                let card = machines::machines_section(self, &t, window, cx);
+                layout = layout.child(
                     div()
                         .w_full()
                         .on_children_prepainted(capture_child_bounds(
                             self.machines_bounds.clone(),
                             0,
                         ))
-                        .child(section)
-                        .into_any_element()
-                }
-                RemoteSection::Advanced if rpc => advanced::advanced_card(self, &t, window, cx),
-                RemoteSection::Advanced => no_server_line(&t),
-            });
+                        .child(card),
+                );
+            }
+            // A search opens every row it matches (the Relay row is listed under Easy Connect
+            // and lives in Advanced) and hides the rest.
+            let relay_matches = searching
+                && search
+                    .section("easyConnect")
+                    .visible_keys
+                    .contains("easyConnectRelay");
+            let folds: Vec<(RemoteFold, bool)> = RemoteFold::ALL
+                .into_iter()
+                .filter_map(|fold| {
+                    if !searching {
+                        return Some((fold, self.open_fold == Some(fold)));
+                    }
+                    let matches =
+                        shows(fold.anchor()) || (fold == RemoteFold::Advanced && relay_matches);
+                    matches.then_some((fold, true))
+                })
+                .collect();
+            if !folds.is_empty() {
+                let frame = self.folds_frame(&t, rpc, &folds, window, cx);
+                layout = layout.child(
+                    div()
+                        .w_full()
+                        .on_children_prepainted(capture_child_bounds(self.folds_bounds.clone(), 0))
+                        .child(frame),
+                );
+            }
             blocks.push(PageBlock {
                 anchor: Some("remote".to_string()),
                 element: layout.into_any_element(),
@@ -1248,20 +1174,18 @@ impl Render for RemoteTab {
 
 /// `.settings-management-layout { gap: 16px }`.
 const SECTION_GAP: f32 = 16.0;
-/// `.settings-remote-from-phone { gap: 12px }` (and the machines section's).
-const HEADER_GAP: f32 = 12.0;
 /// The space above the page's column (`.settings-tab-scroll`'s top padding).
 const FIRST_BLOCK_MARGIN: f32 = 12.0;
 
 /// Where a deep link scrolls once the page is laid out.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ScrollTarget {
-    /// `scrollIntoView({ block: 'start' })` on a path card.
-    Card(PathCard),
-    /// `scrollIntoView({ block: 'center' })` on the machine tiles.
+    /// The top card (`initialRemoteSection: easyConnect`).
+    Top,
+    /// `scrollIntoView({ block: 'center' })` on the saved computers' card.
     Machines,
-    /// The Current machine card, from a setup step's "turn it on in Current machine" link.
-    CurrentMachine,
+    /// The bottom rows, with Tailscale or This computer open.
+    Folds,
 }
 
 impl RemoteTab {
@@ -1276,104 +1200,62 @@ impl RemoteTab {
         (connected, machines.len())
     }
 
-    /// The tab strip: each tab's name and its status (the card badge's dot and word for Easy
-    /// Connect and Tailscale, "connected/saved" for Remote machines, "Unsaved" for Advanced while an
-    /// edit is pending).
-    fn section_tabs(
-        &mut self,
-        t: &RemoteTokens,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) -> gpui::AnyElement {
-        let (connected, saved) = self.connected_machine_count(cx);
-        // CDXC:RemoteMachines 2026-11-08 WHY: in a narrow Settings window "Easy Connect · Running"
-        // filled its quarter of the strip edge to edge (the remote tile audit, finding 10). Below
-        // this width Easy Connect and Tailscale keep their status dot and drop the word.
-        let compact = window.viewport_size().width < px(1060.0);
-        let tailscale = tailscale::tailscale_status_badge(self, cx);
-        let easy_connect = easy_connect_status_badge(self.easy_connect.as_ref());
-        let items: Vec<ModalRailItem> = RemoteSection::ALL
-            .iter()
-            .map(|section| {
-                let (trailing, dot): (Option<SharedString>, Option<gpui::Rgba>) = match section {
-                    RemoteSection::EasyConnect => (
-                        (!compact).then(|| easy_connect.0.into()),
-                        Some(t.tone(easy_connect.1)),
-                    ),
-                    RemoteSection::Tailscale => tailscale
-                        .map(|(label, tone)| ((!compact).then(|| label.into()), Some(t.tone(tone))))
-                        .unwrap_or((None, None)),
-                    RemoteSection::Machines => (
-                        (saved > 0).then(|| format!("{connected}/{saved}").into()),
-                        None,
-                    ),
-                    RemoteSection::Advanced => {
-                        if self.advanced.has_draft() {
-                            (Some("Unsaved".into()), Some(t.tone(BadgeTone::NeedsSetup)))
-                        } else {
-                            (None, None)
-                        }
-                    }
-                };
-                ModalRailItem {
-                    label: section.label().into(),
-                    trailing,
-                    dot,
-                }
-            })
-            .collect();
-        modal_bordered_segmented_control(
-            t.foreground,
-            t.edge(0.90),
-            t.muted,
-            "remote-section-tabs",
-            &items,
-            self.section.index(),
-            |tab: &mut Self, index, _window, cx| {
-                if let Some(section) = RemoteSection::ALL.get(index) {
-                    tab.select_section(*section, cx);
-                }
-            },
-            cx,
-        )
-        .w_full()
-        .into_any_element()
-    }
-
-    /// The Easy Connect or Tailscale tab: its card, open, and the request error.
-    fn connect_section(
+    /// The three bottom rows (This computer, Tailscale, Advanced), each with its line and a
+    /// chevron, the open ones followed by what they hold, under hairlines in one frame.
+    fn folds_frame(
         &mut self,
         t: &RemoteTokens,
         rpc: bool,
+        folds: &[(RemoteFold, bool)],
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
-        let mut section = v_flex().w_full().min_w_0().gap(px(HEADER_GAP));
-        if !rpc {
-            section = section.child(no_server_line(t));
-        } else {
-            let (card, bounds) = if self.section == RemoteSection::Tailscale {
-                (
-                    tailscale::tailscale_card(self, t, cx),
-                    self.card_bounds[1].clone(),
-                )
-            } else {
-                (
-                    easy_connect::easy_connect_card(self, t, window, cx),
-                    self.card_bounds[0].clone(),
-                )
+        let mut rows: Vec<gpui::AnyElement> = Vec::new();
+        for (fold, open) in folds.iter().copied() {
+            let line = match fold {
+                RemoteFold::ThisComputer => current_machine::this_computer_summary(self, cx),
+                RemoteFold::Tailscale => tailscale::tailscale_summary(self, cx),
+                RemoteFold::Advanced => {
+                    "Relay, ports, allowed keys, the pairing address, raw status".to_string()
+                }
             };
-            section = section.child(
-                div()
-                    .w_full()
-                    .on_children_prepainted(capture_child_bounds(bounds, 0))
-                    .child(card),
-            );
+            rows.push(style::fold_row(
+                t,
+                fold.anchor(),
+                fold.title(),
+                line,
+                open,
+                move |tab: &mut Self, _window, cx| tab.toggle_fold(fold, cx),
+                cx,
+            ));
+            if !open {
+                continue;
+            }
+            match fold {
+                RemoteFold::ThisComputer => {
+                    rows.extend(current_machine::this_computer_rows(self, t, window, cx));
+                }
+                RemoteFold::Tailscale => rows.push(
+                    div()
+                        .w_full()
+                        .p(px(12.0))
+                        .child(tailscale::tailscale_panel(self, t, cx))
+                        .into_any_element(),
+                ),
+                RemoteFold::Advanced => rows.push(
+                    div()
+                        .w_full()
+                        .p(px(12.0))
+                        .child(if rpc {
+                            advanced::advanced_panel(self, t, rpc, window, cx)
+                        } else {
+                            no_server_line(t)
+                        })
+                        .into_any_element(),
+                ),
+            }
         }
-        if let Some(error) = self.request_error.clone() {
-            section = section.child(style::error_line(t, error));
-        }
-        section.into_any_element()
+        paired_devices::rows_frame(t, rows)
     }
 
     /// Scrolls a deep link's card or tiles into view once the page shows them, the way React ran
@@ -1382,23 +1264,28 @@ impl RemoteTab {
         let Some(target) = self.pending_scroll else {
             return;
         };
-        let cell = match target {
-            ScrollTarget::Card(PathCard::EasyConnect) => self.card_bounds[0].clone(),
-            ScrollTarget::Card(PathCard::Tailscale) => self.card_bounds[1].clone(),
-            ScrollTarget::Machines => self.machines_bounds.clone(),
-            ScrollTarget::CurrentMachine => self.current_machine_bounds.clone(),
-        };
-        let Some(bounds) = cell.get() else {
-            cx.on_next_frame(window, |_, _, cx| cx.notify());
-            return;
-        };
-        self.pending_scroll = None;
         let (handle, tracker) = self.store.update(cx, |store, _| {
             (
                 store.scroll_handle(SettingsTabId::Remote),
                 store.tracker(SettingsTabId::Remote),
             )
         });
+        let cell = match target {
+            ScrollTarget::Top => {
+                self.pending_scroll = None;
+                let offset = handle.offset();
+                tracker.borrow_mut().smooth = Some(SmoothScroll::new(-f32::from(offset.y), 0.0));
+                window.request_animation_frame();
+                return;
+            }
+            ScrollTarget::Machines => self.machines_bounds.clone(),
+            ScrollTarget::Folds => self.folds_bounds.clone(),
+        };
+        let Some(bounds) = cell.get() else {
+            cx.on_next_frame(window, |_, _, cx| cx.notify());
+            return;
+        };
+        self.pending_scroll = None;
         let viewport = handle.bounds();
         let offset = handle.offset();
         let content_top = bounds.origin.y - viewport.origin.y - offset.y;
@@ -1406,7 +1293,7 @@ impl RemoteTab {
             ScrollTarget::Machines => {
                 content_top - (viewport.size.height - bounds.size.height) / 2.0
             }
-            ScrollTarget::Card(_) | ScrollTarget::CurrentMachine => content_top,
+            ScrollTarget::Top | ScrollTarget::Folds => content_top,
         };
         let to = f32::from(target_top.max(px(0.0)).min(handle.max_offset().y));
         tracker.borrow_mut().smooth = Some(SmoothScroll::new(-f32::from(offset.y), to));
@@ -1414,7 +1301,7 @@ impl RemoteTab {
     }
 }
 
-/// The line a pairing tab shows when the page has no gxserver to talk to.
+/// The line the page shows where it needs gxserver and has none to talk to.
 fn no_server_line(t: &RemoteTokens) -> gpui::AnyElement {
     div()
         .w_full()

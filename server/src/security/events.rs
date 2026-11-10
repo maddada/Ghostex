@@ -27,6 +27,12 @@ pub enum SecurityEvent {
     ApprovalExpired {
         request: ApprovalRequest,
     },
+    /// Withdrawn before anyone answered, because what asked went away (`why`: "the session that
+    /// asked was closed"). Cards treat it as expired.
+    ApprovalWithdrawn {
+        request: ApprovalRequest,
+        why: String,
+    },
     /// An approval was spent: the action it covers is about to run.
     SensitiveActionAuthorized {
         action: SensitiveAction,

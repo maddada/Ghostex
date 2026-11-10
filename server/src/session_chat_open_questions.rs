@@ -51,6 +51,34 @@ const RUNTIME_KEY: &str = "sessionChatOpenQuestions";
 /// answerable but leave the count, so no pink dot, no `answer requested (n)` and no notification
 /// (the SessionStatus 2026-10-27 DECISION in gx-chat-core's questions/later.rs).
 const LATER_KEY: &str = "sessionChatQuestionsForLater";
+/// When each snoozed form or page comes back (epoch ms), by id; one put off For later with no end
+/// is not in it.
+///
+/// CDXC:SessionChat 2026-11-10 DECISION:
+/// User: "for any ask i should be able to click 'Snooze' and snooze it for 1h 6h 24h or cancel it".
+/// Snooze is For later with an end: the form or page leaves the counts until then and comes back by
+/// itself, also after a restart (the lists below leave out an end that has passed).
+const LATER_UNTIL_KEY: &str = "sessionChatQuestionsForLaterUntil";
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_millis() as i64)
+}
+
+/// The ids whose snooze has run out, from a `LATER_UNTIL_KEY` object.
+fn expired(until: Option<&Value>) -> HashSet<String> {
+    let now = now_ms();
+    until
+        .and_then(Value::as_object)
+        .map(|map| {
+            map.iter()
+                .filter(|(_, at)| at.as_i64().is_some_and(|at| at <= now))
+                .map(|(id, _)| id.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
 /// Where the forms and pages the user removed without answering are kept (form or page ids). They
 /// no longer wait, count or notify (the SessionChat 2026-10-30 DECISION in gx-chat-core's
 /// questions/later.rs).
@@ -134,12 +162,14 @@ pub(crate) fn open_question_count(session: &Value) -> usize {
 
 /// The forms and pages this session's user put off For later, as last recorded.
 pub(crate) fn later_ids(session: &Value) -> Vec<String> {
+    let expired = expired(session.pointer(&format!("/runtimeSettings/{LATER_UNTIL_KEY}")));
     session
         .pointer(&format!("/runtimeSettings/{LATER_KEY}"))
         .and_then(Value::as_array)
         .map(|ids| {
             ids.iter()
                 .filter_map(Value::as_str)
+                .filter(|id| !expired.contains(*id))
                 .map(str::to_string)
                 .collect()
         })
@@ -166,7 +196,47 @@ pub(crate) fn read_later_ids(
     project_id: &str,
     session_id: &str,
 ) -> Vec<String> {
+    let expired = expired(Some(&read_until(db, project_id, session_id)));
     read_id_list(db, project_id, session_id, LATER_KEY)
+        .into_iter()
+        .filter(|id| !expired.contains(id))
+        .collect()
+}
+
+/// The snoozes' ends (`LATER_UNTIL_KEY`), an object.
+fn read_until(db: &rusqlite::Connection, project_id: &str, session_id: &str) -> Value {
+    let value: Option<String> = db
+        .query_row(
+            &format!(
+                "SELECT json_extract(runtimeSettingsJson, '$.{LATER_UNTIL_KEY}') FROM sessions WHERE projectId = ?1 AND sessionId = ?2"
+            ),
+            rusqlite::params![project_id, session_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .flatten();
+    value
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .filter(Value::is_object)
+        .unwrap_or_else(|| json!({}))
+}
+
+fn write_until(
+    db: &rusqlite::Connection,
+    project_id: &str,
+    session_id: &str,
+    until: &Value,
+) -> anyhow::Result<()> {
+    db.execute(
+        &format!(
+            r#"UPDATE sessions SET runtimeSettingsJson = json_set(runtimeSettingsJson, '$.{LATER_UNTIL_KEY}', json(?3))
+            WHERE projectId = ?1 AND sessionId = ?2"#
+        ),
+        rusqlite::params![project_id, session_id, serde_json::to_string(until)?],
+    )?;
+    Ok(())
 }
 
 /// [`removed_ids`] read straight from the database, for the chat's frames (`removedQuestionIds`).
@@ -256,11 +326,55 @@ pub(crate) fn set_later(
     session_id: &str,
     id: &str,
     later: bool,
+    hours: Option<u64>,
 ) -> anyhow::Result<()> {
     let db = open_gxserver_database(&state.paths)?;
-    let mut ids = read_later_ids(&db, project_id, session_id);
+    // A snooze's end, or none for For later with no end; back to unanswered forgets it.
+    let mut until = read_until(&db, project_id, session_id);
+    let ends_at = hours
+        .filter(|_| later)
+        .map(|hours| now_ms() + hours as i64 * 3_600_000);
+    if let Some(map) = until.as_object_mut() {
+        map.retain(|_, at| at.as_i64().is_some_and(|at| at > now_ms()));
+        match ends_at {
+            Some(at) => {
+                map.insert(id.to_string(), json!(at));
+            }
+            None => {
+                map.remove(id);
+            }
+        }
+    }
+    write_until(&db, project_id, session_id, &until)?;
+    if let Some(at) = ends_at {
+        // It comes back by itself: the count and every client's list are brought up to date at
+        // its end (after a restart, the lists leave out an end that has passed).
+        let (state, project_id, session_id) = (
+            state.clone(),
+            project_id.to_string(),
+            session_id.to_string(),
+        );
+        std::thread::spawn(move || {
+            let wait = (at - now_ms()).max(0) as u64;
+            std::thread::sleep(Duration::from_millis(wait + 500));
+            if let Ok(db) = open_gxserver_database(&state.paths) {
+                let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+                if let Ok(Some(session)) = repository.get_session(&project_id, &session_id) {
+                    crate::session_chat_interactive::emit_session_chat_prompt_state_frame(
+                        &state, &session,
+                    );
+                }
+            }
+            refresh(&state, &project_id, &session_id, None);
+        });
+    }
+    let mut ids = read_id_list(&db, project_id, session_id, LATER_KEY);
     let known = ids.iter().any(|known| known == id);
     if known == later {
+        // A snooze again on one already put off still updates its end above; tell the clients.
+        if ends_at.is_some() {
+            refresh(state, project_id, session_id, None);
+        }
         return Ok(());
     }
     if later {

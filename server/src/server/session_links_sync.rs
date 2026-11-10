@@ -480,6 +480,25 @@ fn refresh_link_caches(
             }
         }
     }
+    // The PRs and issues work items link to, read like an idle session's links
+    // (coordinators/board.rs `note_item_github_link`).
+    for url in crate::coordinators::item_github_links() {
+        let pull_request = url.contains("/pull/");
+        let Some(read) = GithubRead::of_url(&url, pull_request) else {
+            continue;
+        };
+        let finished = if pull_request {
+            cached_work_pull_request("", &read.selector)
+                .is_some_and(|info| info.state.disposition() == PullRequestDisposition::Finished)
+        } else {
+            cached_work_github_issue_url(&read.selector)
+                .is_some_and(|info| info.state.as_deref() == Some("closed"))
+        };
+        want(
+            read,
+            (!finished).then(|| github_read_max_age(pull_request, true, false)),
+        );
+    }
     for (fingerprint, identifiers) in &linear {
         if linear_budget == 0 {
             break;

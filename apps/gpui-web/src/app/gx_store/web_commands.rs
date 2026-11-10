@@ -277,6 +277,11 @@ impl GhostexGpuiApp {
         if self.web_shows_terminal(&session) {
             self.ensure_terminal(&session, cx);
         }
+        // The desktop reveals what it focuses (`gx_store_apply_sidebar_reveal`), which the web build
+        // does not compile; the Unified half opens what folds the row away, so a thread opened
+        // from a Workers list or a link unfolds its coordinator (CDXC:Sidebar 2026-11-09 in gx-core
+        // unified_sidebar/tree.rs).
+        self.gx_store_unified_reveal_session(&session, cx);
         self.gx_store_handle(
             Event::Intent(Intent::FocusSession {
                 session,

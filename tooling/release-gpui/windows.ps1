@@ -45,6 +45,16 @@
 # Re-signing after `vpk pack` would change the nupkg bytes its feed and delta
 # already hashed, which is why the binaries are signed in between two packs.
 # `package` stays the unsigned all-in-one packaging used without a SignPath token.
+# CDXC:Release 2026-11-09 WHY:
+# Certum (the user's own "Open Source Code Signing in the Cloud" certificate)
+# signs with a local signtool once SimplySign Desktop is logged in
+# (certum-simplysign-login.ps1), so it needs no round trips: with
+# GHOSTEX_WINDOWS_SIGNER=certum the single `package` phase signs in place.
+# The staged app binaries are signed and build-identity.json re-sealed before
+# `vpk pack`; Velopack's sign hook (certum-sign.ps1 -VelopackHook) signs the
+# Update.exe and launcher stub it generates; the inner Setup.exe is signed after
+# its package is stored uncompressed; the customer-facing installer is signed
+# after bundling. Same files, same order as the SignPath rounds above.
 param(
     [Parameter(Mandatory = $true)][string]$Version,
     [ValidateSet("x64", "arm64")][string]$Arch = "x64",
@@ -62,6 +72,10 @@ $RunPack = $Phase -in @("all", "package", "package-pack")
 $RunBundle = $Phase -in @("all", "package", "package-bundle")
 $RunFinalize = $Phase -in @("all", "package", "package-finalize")
 $SignedPhases = $Phase -in @("package-collect", "package-pack", "package-bundle", "package-finalize")
+$CertumSigning = $env:GHOSTEX_WINDOWS_SIGNER -eq "certum"
+if ($CertumSigning -and $Phase -notin @("all", "package")) {
+    throw "Certum signing runs in the package (or all) phase, not $Phase"
+}
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
     throw "Version must be MAJOR.MINOR.PATCH, got $Version"
 }
@@ -245,6 +259,8 @@ $InstallerDir = Join-Path $SigningRoot "installer"
 $InstallerSignedDir = Join-Path $SigningRoot "installer-signed"
 $VpkSignHook = Join-Path $ScriptDir "vpk-signpath-hook.ps1"
 $VpkSignTemplate = "pwsh -NoProfile -NonInteractive -File `"$VpkSignHook`" {{file}}"
+$CertumSign = Join-Path $ScriptDir "certum-sign.ps1"
+$CertumSignTemplate = "pwsh -NoProfile -NonInteractive -File `"$CertumSign`" -VelopackHook {{file}}"
 # The native editor (code-server, VS Code server, Node.js and their native
 # modules) is third-party code: SignPath Foundation signs only the project's
 # own binaries, so it ships as its upstream authors built it.
@@ -262,7 +278,7 @@ function Assert-SignPathSignature([string]$Path) {
     }
 }
 
-function Invoke-VelopackPack([string]$PackOutput, [bool]$WithSignHook) {
+function Invoke-VelopackPack([string]$PackOutput, [string]$SignTemplate) {
     $Changelog = Get-Content -Raw (Join-Path $RepoRoot "CHANGELOG.md")
     $ReleaseNotesMatch = [regex]::Match(
         $Changelog,
@@ -274,7 +290,7 @@ function Invoke-VelopackPack([string]$PackOutput, [bool]$WithSignHook) {
     $ReleaseNotesPath = Join-Path $Output "release-notes.md"
     $ReleaseNotesMatch.Value.Trim() | Set-Content -Encoding UTF8 $ReleaseNotesPath
     $SignArgs = @()
-    if ($WithSignHook) { $SignArgs = @("--signTemplate", $VpkSignTemplate, "--signExclude", $VpkSignExclude) }
+    if ($SignTemplate) { $SignArgs = @("--signTemplate", $SignTemplate, "--signExclude", $VpkSignExclude) }
     # CDXC:Release 2026-10-23 DECISION: the user stopped publishing the Windows portable zip ("i dont want portable anymore for any release"), so Velopack makes none. Copies people already unpacked keep updating in place from the same feed and update packages, so the app's portable-mode code stays; the release checks that read the zip read the full update package instead (assemble.mjs, amend-existing.mjs).
     & $Vpk.Source pack `
         --channel $Channel `
@@ -301,7 +317,7 @@ if ($RunCollect) {
     New-Item -ItemType Directory -Force -Path $CollectDir, $CollectPackOutput | Out-Null
     $env:GHOSTEX_VPK_SIGN_MODE = "collect"
     $env:GHOSTEX_VPK_SIGN_DIR = $CollectDir
-    Invoke-VelopackPack -PackOutput $CollectPackOutput -WithSignHook $true
+    Invoke-VelopackPack -PackOutput $CollectPackOutput -SignTemplate $VpkSignTemplate
     Remove-Item Env:GHOSTEX_VPK_SIGN_MODE, Env:GHOSTEX_VPK_SIGN_DIR
     Remove-Item -Recurse -Force $CollectPackOutput
     $Collected = @(Get-ChildItem $CollectDir -Recurse -File)
@@ -343,6 +359,24 @@ if ($RunPack) {
         }
         & (Join-Path $RepoRoot "apps/desktop/scripts/write-windows-native-identity.ps1") -AppDir $AppDir
     }
+    elseif ($CertumSigning) {
+        # Sign the app's own binaries in the staged app before packing, then
+        # re-seal build-identity.json (signing changes gxserver.exe and wmx.exe,
+        # whose hashes it fingerprints). Files their vendors already signed keep
+        # that signature; the native editor is excluded as with SignPath.
+        $UnsignedBinaries = @(Get-ChildItem $AppDir -Recurse -File | Where-Object {
+                $_.Extension -in @(".exe", ".dll", ".node") -and $_.FullName -notmatch $VpkSignExclude -and
+                -not (Get-AuthenticodeSignature -LiteralPath $_.FullName).SignerCertificate
+            })
+        foreach ($required in @("Ghostex.exe", "ghostex-gpui-runtime.exe", "ghostex-gpui-cef-helper.exe", "GhostexEditor.exe", "gxserver.exe", "wmx.exe")) {
+            if (-not ($UnsignedBinaries | Where-Object { $_.Name -eq $required })) {
+                throw "Certum signing expected an unsigned $required in the staged app"
+            }
+        }
+        Write-Host "Signing $($UnsignedBinaries.Count) staged Windows $Arch binaries with Certum"
+        & $CertumSign -Path @($UnsignedBinaries | ForEach-Object { $_.FullName })
+        & (Join-Path $RepoRoot "apps/desktop/scripts/write-windows-native-identity.ps1") -AppDir $AppDir
+    }
 
     # Seed the output with the previous release when one exists so Velopack can
     # generate its normal delta package. A brand-new architecture/channel has no
@@ -370,7 +404,8 @@ if ($RunPack) {
         $env:GHOSTEX_VPK_SIGN_MODE = "replace"
         $env:GHOSTEX_VPK_SIGN_DIR = $CollectSignedDir
     }
-    Invoke-VelopackPack -PackOutput $VpkOutput -WithSignHook $SignedPhases
+    $PackSignTemplate = if ($SignedPhases) { $VpkSignTemplate } elseif ($CertumSigning) { $CertumSignTemplate } else { "" }
+    Invoke-VelopackPack -PackOutput $VpkOutput -SignTemplate $PackSignTemplate
     Remove-Item Env:GHOSTEX_VPK_SIGN_MODE, Env:GHOSTEX_VPK_SIGN_DIR -ErrorAction SilentlyContinue
     Remove-Item Env:VPK_TOKEN -ErrorAction SilentlyContinue
 
@@ -381,6 +416,9 @@ if ($RunPack) {
     # Before SignPath signs it: rewriting the package afterwards would break the signature.
     & $InstallerPackTool store $GeneratedInstaller.FullName
     if ($LASTEXITCODE -ne 0) { throw "Storing the Velopack Setup.exe package uncompressed failed" }
+    if ($CertumSigning) {
+        & $CertumSign -Path $GeneratedInstaller.FullName
+    }
     if ($SignedPhases) {
         New-Item -ItemType Directory -Force -Path $SetupDir | Out-Null
         Move-Item $GeneratedInstaller.FullName (Join-Path $SetupDir $InnerInstallerName)
@@ -453,6 +491,9 @@ if ($SignedPhases) {
     Assert-SignPathSignature $SignedInstaller
     Move-Item -Force $SignedInstaller $Installer
 }
+elseif ($CertumSigning) {
+    & $CertumSign -Path $Installer
+}
 $InstallerCheckStream = [IO.File]::OpenRead($Installer)
 try {
     $TailLength = [Math]::Min([Int64](1024 * 1024), $InstallerCheckStream.Length)
@@ -469,6 +510,12 @@ finally {
 }
 
 $CurrentPackagePattern = "^$([regex]::Escape($PackId))-$EscapedVersion-$([regex]::Escape($Channel))-(full|delta)\.nupkg$"
+if ($CertumSigning) {
+    # The last gate before the manifest (CDXC:Release 2026-11-10 in certum-verify-package.ps1).
+    $FullPackage = Get-ChildItem $Output -File -Filter "*-full.nupkg" | Where-Object { $_.Name -match $CurrentPackagePattern } | Select-Object -First 1
+    if (-not $FullPackage) { throw "No full update package to check the Certum signatures in" }
+    & (Join-Path $ScriptDir "certum-verify-package.ps1") -Package $FullPackage.FullName -Installer $Installer -WorkDir (Join-Path $SigningRoot "signature-check")
+}
 $UpdateArtifacts = @(Get-ChildItem $Output -File -Filter "*.nupkg" | Where-Object { $_.Name -match $CurrentPackagePattern } | ForEach-Object { $_.FullName })
 foreach ($feed in @($FeedName, "assets.$Channel.json", "RELEASES-$Channel")) {
     $path = Join-Path $Output $feed

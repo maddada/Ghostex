@@ -27,7 +27,11 @@ use crate::extras::work_cards::{owner_words, waits_line};
 pub const WORK_GROUPS: [(&str, &str); 6] = [
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
-    ("moving", "Moving"),
+    // CDXC:Coordinators 2026-11-10 DECISION:
+    // User: "Please don't say Moving say In Progress. Moving isn't clear to me" (and on 2026-11-07, of
+    // the board: "rename to in progress please"). Wherever the user reads it, the `moving` status is
+    // "In progress"; the stored value stays `moving` and `--status` takes `moving` or `in-progress`.
+    ("moving", "In progress"),
     ("hold", "Waiting"),
     ("later", "Later"),
     ("done", "Finished today"),
@@ -183,13 +187,18 @@ fn ask_row(item: &Value, ask: &Value) -> Value {
         detail.push_str(" \u{b7} Holds it up");
     }
     let steps = text(ask, "steps");
+    // Snoozed: under Later, quietly saying until when (work.rs `snooze`).
+    let snoozed = text(ask, "snoozedUntilLabel");
+    if !snoozed.is_empty() {
+        detail = format!("{detail} \u{b7} Snoozed until {snoozed}");
+    }
     json!({
         "key": format!("work-ask:{reference}:{tag}"),
         "kind": "item",
         "ref": reference,
         "ask": tag,
         "askRow": true,
-        "group": if holds { "blocked" } else { "needs" },
+        "group": if !snoozed.is_empty() { "later" } else if holds { "blocked" } else { "needs" },
         "title": text(ask, "text"),
         "detail": detail,
         "note": if steps.is_empty() { detail.clone() } else { format!("{detail} \u{b7} Steps: {steps}") },
@@ -278,7 +287,9 @@ pub fn work_board(work: &Value) -> Value {
             .collect();
         for ask in &open_asks {
             push(
-                if ask["holds"] == true {
+                if ask.get("snoozedUntil").is_some() {
+                    "later"
+                } else if ask["holds"] == true {
                     "blocked"
                 } else {
                     "needs"

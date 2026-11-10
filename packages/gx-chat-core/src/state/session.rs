@@ -87,6 +87,10 @@ pub struct SessionState {
     /// A coordinator's threads (`{ threads }`); present only for a coordinator.
     /// Unchanged on omission.
     pub coordinator_threads: Option<Value>,
+    /// The thread list exactly as the socket last carried it: the base a `coordinatorThreadsPatch`
+    /// applies to (`session/thread_patch.rs`). Reads never touch it, so it matches what gxserver
+    /// remembers sending this socket even when a read set `coordinator_threads` meanwhile.
+    pub coordinator_threads_wire: Option<Value>,
     /// This session's side chats (`[{ projectId, sessionId, title, ... }]`); unchanged on omission.
     pub side_chats: Option<Value>,
     /// For a side chat, its main session (`{ sessionId, title }`); unchanged on omission.
@@ -185,6 +189,7 @@ impl Default for SessionState {
             app_commands: Vec::new(),
             returned_prompt: None,
             coordinator_threads: None,
+            coordinator_threads_wire: None,
             side_chats: None,
             side_chat_of: None,
             secret_requests: None,

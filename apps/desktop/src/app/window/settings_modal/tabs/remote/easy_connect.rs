@@ -1,18 +1,9 @@
-//! The Easy Connect path card (remote-easy-connect.tsx (deleted 2026-10-01)) and its Show QR dialog
-//! (remote-pairing-qr-preview.tsx (deleted 2026-10-01)).
-//!
-//! CDXC:RemotePairing 2026-09-03 DECISION:
-//! User: show Easy Connect and Tailscale "as expandible cards so the user clicks to expand the one they want to use. i dont want the user confused by seeing 2 qr codes in front of themselves".
-//! The card is collapsed to its header row (icon, title, badges, the enable switch, a chevron) until expanded; the QR, SSH row, and paired devices only render inside the open body. (Superseded 2026-10-24: the card has its own tab on the Remote page and is always open; see CDXC:RemotePairing 2026-10-24 in mod.rs.) The switch sits beside the header button, not inside it, so toggling Easy Connect never expands or collapses the card.
-//!
-//! CDXC:RemotePairing 2026-09-05 DECISION:
-//! User: explain why the Tailcat CLI is needed and install it with one click; separate Connect a Phone (compact QR) from Connect a Remote machine (copy button only), and explain the SSH login on the other device.
-//!
-//! CDXC:RemotePairing 2026-09-06 DECISION:
-//! User: show phone and computer connection choices as two tabs at the top, with only the selected instructions visible instead of both numbered sections.
-//!
-//! CDXC:RemotePairing 2026-09-06 DECISION:
-//! User: add an enlarge button for the pairing QR that opens a 250×250 preview with a backdrop over the whole Settings dialog.
+//! The Remote page's card frame (`path_card`, `path_head`) and the hidden code tile with its Show
+//! QR popup (remote-pairing-qr-preview.tsx (deleted 2026-10-01)). Since 2026-11-10 only the
+//! Tailscale code uses the tile and the popup: Easy Connect's code shows in the Connect a phone
+//! window (CDXC:RemotePairing 2026-11-10 in window/connect_device_modal.rs), and the Easy Connect
+//! card, its phone and computer panels, its steps and its "Only paired devices" box are gone from
+//! the page (CDXC:RemotePairing 2026-11-10 in mod.rs).
 //!
 //! CDXC:RemotePairing 2026-10-24 DECISION:
 //! User: "let's please not show the real qr here", "this is so when im in settings we dont show my real QR until i click on "Show QR" which opens it in a pop up", "also pls make that pop up that shows qr bigger by 20%", "make qr 20% bigger more so text above it is 1 line pls and qr is bigger", and "I want this area to look better also please".
@@ -27,11 +18,10 @@ use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::RowControl;
 use super::super::super::fields::{
     ButtonSize, ButtonVariant, icon, qr_code, settings_button_sized, settings_icon,
-    settings_icon_button, switch_control,
+    settings_icon_button,
 };
-use super::model::easy_connect_status_badge;
 use super::style::*;
-use super::{PathCard, RemoteTab, paired_devices};
+use super::{PathCard, RemoteTab};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, ClickEvent, Context, FontWeight, InteractiveElement as _, IntoElement,
@@ -39,7 +29,6 @@ use gpui::{
     Window, div, px,
 };
 use gpui_component::{h_flex, v_flex};
-use serde_json::json;
 
 /// `.settings-remote-path-card`: the bordered card with its header row (the accordion handle
 /// and the switch beside it) and, while open, its body.
@@ -124,229 +113,6 @@ pub(super) fn path_head(
                 .gap(px(6.0))
                 .children(badges),
         )
-        .into_any_element()
-}
-
-pub(super) fn easy_connect_card(
-    tab: &mut RemoteTab,
-    t: &RemoteTokens,
-    window: &mut Window,
-    cx: &mut Context<RemoteTab>,
-) -> AnyElement {
-    let rpc = tab.rpc_available(cx);
-    let status = tab.easy_connect.clone();
-    let (badge_label, badge_tone) = easy_connect_status_badge(status.as_ref());
-    let binary_found = status.as_ref().is_some_and(|status| status.binary_found);
-    let is_on = status.as_ref().is_some_and(|status| status.enabled);
-    let head = path_head(
-        t,
-        "remote-easy-connect-toggle",
-        ICON_QRCODE,
-        is_on,
-        "Easy Connect",
-        vec![
-            badge(t, "Recommended", super::model::BadgeTone::Plain, true),
-            badge(t, badge_label, badge_tone, false),
-        ],
-    );
-    let switch_disabled = !rpc || status.is_none() || !binary_found;
-    let switch = switch_control(
-        &t.p,
-        "remote-easy-connect-switch",
-        "Easy Connect",
-        is_on,
-        switch_disabled,
-        None,
-        |tab: &mut RemoteTab, checked, _window, cx| {
-            tab.set_easy_connect_state(json!({ "enabled": checked, "kind": "setEnabled" }), cx);
-        },
-        cx,
-    );
-    let body = Some(easy_connect_body(tab, t, rpc, window, cx));
-    path_card(t, "remote-easy-connect-card", head, switch, body)
-}
-
-fn easy_connect_body(
-    tab: &mut RemoteTab,
-    t: &RemoteTokens,
-    rpc: bool,
-    window: &mut Window,
-    cx: &mut Context<RemoteTab>,
-) -> AnyElement {
-    let status = tab.easy_connect.clone();
-    let binary_found = status.as_ref().is_some_and(|status| status.binary_found);
-    let is_on = status.as_ref().is_some_and(|status| status.enabled);
-    let mut body = v_flex().w_full().min_w_0().gap(px(10.0)).child(
-        div()
-            .w_full()
-            .text_size(px(13.0))
-            .line_height(px(19.5))
-            .text_color(hsla(t.muted))
-            .child(if is_on {
-                "Reach this computer from your phone or another computer. No VPN setup or account needed."
-            } else {
-                "Reach this computer from your phone or another computer. Turn on Easy Connect to get a pairing code."
-            }),
-    );
-    if let Some(status) = status
-        .as_ref()
-        .filter(|status| !status.binary_found || status.installing)
-    {
-        body = body.child(install_block(
-            tab,
-            t,
-            rpc,
-            status.install_progress.clone(),
-            cx,
-        ));
-    }
-    let install_error = tab.install_request_error.clone().or_else(|| {
-        status
-            .as_ref()
-            .and_then(|status| status.install_error.clone())
-    });
-    if let Some(error) = install_error {
-        body = body.child(error_line(t, error));
-    }
-    // SSH access is set in the Current machine card above the tabs; this step only says whether
-    // it is on (CDXC:RemotePairing 2026-11-08 in current_machine.rs).
-    body = body.child(super::current_machine::ssh_status_line(
-        tab,
-        t,
-        "easy-connect-ssh",
-        cx,
-    ));
-    body = if is_on {
-        body.child(connect_sections(tab, t, cx))
-    } else {
-        body.child(off_block(t, rpc && status.is_some() && binary_found, cx))
-    };
-    if let Some(error) = status.as_ref().and_then(|status| status.last_error.clone()) {
-        body = body.child(error_line(t, error));
-    }
-    if is_on {
-        body = body.child(paired_devices::paired_devices_list(tab, t, rpc, cx));
-        body = body.child(super::relay::relay_section(tab, t, rpc, window, cx));
-    }
-    body.into_any_element()
-}
-
-/// `.settings-remote-install`: why the helper is needed, the one-click install and its progress.
-fn install_block(
-    tab: &RemoteTab,
-    t: &RemoteTokens,
-    rpc: bool,
-    progress: Option<String>,
-    cx: &mut Context<RemoteTab>,
-) -> AnyElement {
-    let installing = tab.install_pending
-        || tab
-            .easy_connect
-            .as_ref()
-            .is_some_and(|status| status.installing);
-    let leading = if installing {
-        spinner("remote-install-spinner", 16.0, t.p.foreground, 1000)
-    } else {
-        settings_icon(icon::DOWNLOAD, 16.0, t.p.foreground).into_any_element()
-    };
-    v_flex()
-        .w_full()
-        .min_w_0()
-        .gap(px(10.0))
-        .p(px(12.0))
-        .rounded(px(MODAL_RADIUS_CONTROL))
-        .border_1()
-        .border_color(hsla(t.edge(0.70)))
-        .bg(hsla(t.card(0.18)))
-        .child(
-            v_flex()
-                .min_w_0()
-                .gap(px(3.0))
-                .child(
-                    div()
-                        .min_w_0()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(px(14.0))
-                        .line_height(px(20.0))
-                        .text_color(hsla(t.foreground))
-                        .child("Install the Easy Connect helper"),
-                )
-                .child(detail(
-                    t,
-                    "Easy Connect uses the Tailcat CLI to carry your SSH connection through an encrypted tunnel, so your devices can reach this computer across networks. Ghostex installs and manages the helper for you.",
-                    true,
-                )),
-        )
-        .child(div().flex().child(compact_button(
-            &t.p,
-            "remote-install-easy-connect",
-            if installing {
-                "Installing Easy Connect…"
-            } else {
-                "Install Easy Connect"
-            },
-            Some(leading),
-            Look::Filled,
-            28.0,
-            14.0,
-            None,
-            !rpc || installing,
-            None,
-            |tab: &mut RemoteTab, _window, cx| tab.install_easy_connect(cx),
-            cx,
-        )))
-        .child(detail(
-            t,
-            progress.unwrap_or_else(|| {
-                "One-time setup. Any required build tools are downloaded automatically. No terminal commands needed.".to_string()
-            }),
-            true,
-        ))
-        .into_any_element()
-}
-
-/// The two connection tabs and the selected one's instructions.
-fn connect_sections(
-    tab: &mut RemoteTab,
-    t: &RemoteTokens,
-    cx: &mut Context<RemoteTab>,
-) -> AnyElement {
-    let segmented = raised_segmented(
-        &t.p,
-        "remote-connect-device",
-        &[
-            Segment {
-                value: "phone",
-                label: "Connect a phone",
-                icon: Some(ICON_DEVICE_MOBILE),
-            },
-            Segment {
-                value: "computer",
-                label: "Connect a computer",
-                icon: Some(ICON_DEVICE_DESKTOP),
-            },
-        ],
-        tab.connection_device,
-        false,
-        |tab: &mut RemoteTab, value, _window, cx| {
-            tab.connection_device = value;
-            cx.notify();
-        },
-        cx,
-    );
-    let panel = if tab.connection_device == "phone" {
-        phone_panel(tab, t, cx)
-    } else {
-        computer_panel(tab, t, cx)
-    };
-    v_flex()
-        .w_full()
-        .min_w_0()
-        .gap(px(12.0))
-        .child(segmented)
-        .child(panel)
         .into_any_element()
 }
 
@@ -469,9 +235,14 @@ fn qr_placeholder(
         .focus_visible(move |this| this.border_color(hsla(focus_border)))
         .tooltip(super::super::super::fields::tooltip_text("Show QR"))
         .on_click(cx.listener(move |tab, _: &ClickEvent, window, cx| {
+            // Easy Connect's code shows in the Connect a phone window (CDXC:RemotePairing
+            // 2026-11-10 in window/connect_device_modal.rs); the Tailscale code keeps its popup.
+            if card == PathCard::EasyConnect {
+                tab.open_connect_device("phone", cx);
+                return;
+            }
             tab.qr_preview = Some(card);
             tab.qr_preview_focus.focus(window, cx);
-            // Ask at once, so a locked Easy Connect opens to the new phone without a poll's wait.
             tab.refresh_fast(cx);
             cx.notify();
         }))
@@ -577,295 +348,6 @@ pub(super) fn hidden_qr(
         .into_any_element()
 }
 
-fn phone_panel(tab: &mut RemoteTab, t: &RemoteTokens, cx: &mut Context<RemoteTab>) -> AnyElement {
-    let code = tab
-        .pairing
-        .as_ref()
-        .and_then(|pairing| pairing.easy_connect.clone());
-    let left = match &code {
-        Some(_) => hidden_qr(
-            tab,
-            t,
-            "remote-show-qr",
-            "remote-copy-text",
-            PathCard::EasyConnect,
-            cx,
-        ),
-        None => qr_pending(t, QR_PLACEHOLDER_SIZE, "Waiting for the address…"),
-    };
-    let mut steps: Vec<Vec<(&str, Emph)>> = vec![
-        vec![
-            ("On your phone, open Ghostex → ", Emph::Plain),
-            ("Connect your computer", Emph::Em),
-            (" → ", Emph::Plain),
-            ("Scan code", Emph::Em),
-            (".", Emph::Plain),
-        ],
-        vec![
-            (
-                "Click the QR here and point the phone at it. If it can’t scan, click ",
-                Emph::Plain,
-            ),
-            ("Copy Easy Connect code", Emph::Strong),
-            (
-                " under the QR and paste the code on the phone.",
-                Emph::Plain,
-            ),
-        ],
-    ];
-    if let Some(code) = &code {
-        steps.push(vec![
-            ("It pairs as ", Emph::Plain),
-            (&code.user, Emph::Strong),
-            (" on ", Emph::Plain),
-            (&code.name, Emph::Strong),
-            (". Nothing to type on the phone.", Emph::Plain),
-        ]);
-    }
-    let meta = qr_meta(t)
-        .gap(px(10.0))
-        .child(
-            div()
-                .text_size(px(14.0))
-                .line_height(px(20.0))
-                .text_color(hsla(t.foreground))
-                .child("Scan with your phone"),
-        )
-        .child(numbered_steps(t, &steps))
-        .child(
-            div()
-                .pt(px(10.0))
-                .border_t_1()
-                .border_color(hsla(t.edge(0.60)))
-                .text_size(px(12.0))
-                .line_height(px(17.0))
-                .child(if paired_only(tab) {
-                    "Only paired devices can connect, so Easy Connect lets a new phone in while the QR is showing. Remove a paired phone below to disconnect it."
-                } else {
-                    "The QR refreshes after pairing. Remove a paired phone below to disconnect it."
-                }),
-        );
-    qr_block(t, left, meta.into_any_element())
-}
-
-/// A numbered list of rich-text steps: a small round number badge, then the step.
-fn numbered_steps(t: &RemoteTokens, steps: &[Vec<(&str, Emph)>]) -> AnyElement {
-    v_flex()
-        .w_full()
-        .gap(px(8.0))
-        .children(steps.iter().enumerate().map(|(index, parts)| {
-            h_flex()
-                .w_full()
-                .items_start()
-                .gap(px(10.0))
-                .child(
-                    div()
-                        .mt(px(0.75))
-                        .size(px(18.0))
-                        .flex_shrink_0()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded_full()
-                        .border_1()
-                        .border_color(hsla(t.edge(0.90)))
-                        .bg(hsla(t.card(0.40)))
-                        .text_size(px(11.0))
-                        .line_height(px(18.0))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(hsla(t.foreground))
-                        .child(format!("{}", index + 1)),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .child(rich_text(t.foreground, parts)),
-                )
-        }))
-        .into_any_element()
-}
-
-fn computer_panel(
-    tab: &mut RemoteTab,
-    t: &RemoteTokens,
-    cx: &mut Context<RemoteTab>,
-) -> AnyElement {
-    let code = tab
-        .pairing
-        .as_ref()
-        .and_then(|pairing| pairing.easy_connect.clone());
-    let user = code.as_ref().map(|code| code.user.to_string());
-    let step_three: Vec<(&str, Emph)> = match &user {
-        Some(user) => vec![
-            ("Confirm this computer’s SSH username (", Emph::Plain),
-            (user.as_str(), Emph::Strong),
-            (
-                ") and enter its SSH password. If you use an SSH key, choose it under Advanced instead.",
-                Emph::Plain,
-            ),
-        ],
-        None => vec![(
-            "Confirm this computer’s SSH username and enter its SSH password. If you use an SSH key, choose it under Advanced instead.",
-            Emph::Plain,
-        )],
-    };
-    let steps: Vec<Vec<(&str, Emph)>> = vec![
-        vec![
-            ("Click ", Emph::Plain),
-            ("Show QR", Emph::Strong),
-            (" below, then ", Emph::Plain),
-            ("Copy Easy Connect code", Emph::Strong),
-            (". The code works once, for 5 minutes.", Emph::Plain),
-        ],
-        vec![
-            (
-                "On the other computer, open Ghostex → Settings → Remote → Add a machine (or that computer’s entry), choose ",
-                Emph::Plain,
-            ),
-            ("Easy Connect code", Emph::Strong),
-            (" and paste it.", Emph::Plain),
-        ],
-        step_three,
-        vec![
-            ("Click ", Emph::Plain),
-            ("Add machine", Emph::Strong),
-            (
-                ". Both screens show three words: approve the other computer here, under Paired devices, if they match.",
-                Emph::Plain,
-            ),
-        ],
-    ];
-    let list = v_flex()
-        .w_full()
-        .gap(px(6.0))
-        .my(px(4.0))
-        .children(steps.iter().enumerate().map(|(index, parts)| {
-            h_flex()
-                .w_full()
-                .items_start()
-                .child(
-                    div()
-                        .w(px(20.0))
-                        .flex_shrink_0()
-                        .flex()
-                        .justify_end()
-                        .pr(px(5.0))
-                        .child(format!("{}.", index + 1)),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .child(rich_text(t.foreground, parts)),
-                )
-        }));
-    let mut meta = qr_meta(t)
-        .child(
-            div()
-                .text_color(hsla(t.foreground))
-                .child("Use a code on your other computer"),
-        )
-        .child(
-            "To add this computer on another computer, give it this computer’s Easy Connect code.",
-        )
-        .child(list);
-    // Pairing v2 (CDXC:RemotePairing 2026-11-08 in server/src/remote_access/computer_pairing.rs):
-    // the other computer pairs like a phone, with the code from this computer's Show QR sheet, the
-    // only place the code carries its one-time secret (CDXC:RemotePairing 2026-11-08 FIX above).
-    if code.is_some() {
-        let button = settings_button_sized(
-            &t.p,
-            "remote-computer-show-qr",
-            "Show QR",
-            Some(ICON_QRCODE),
-            ButtonVariant::Primary,
-            ButtonSize::Sm,
-            false,
-            None,
-            move |tab: &mut RemoteTab, window, cx| {
-                tab.qr_preview = Some(PathCard::EasyConnect);
-                tab.qr_preview_focus.focus(window, cx);
-                // Ask at once, so the code with its secret is there when the sheet opens.
-                tab.refresh_fast(cx);
-                cx.notify();
-            },
-            cx,
-        );
-        meta = meta.child(h_flex().mt(px(2.0)).gap(px(8.0)).child(button));
-    }
-    div()
-        .w_full()
-        .min_w_0()
-        .p(px(14.0))
-        .rounded(px(MODAL_RADIUS_CONTROL))
-        .border_1()
-        .border_color(hsla(t.edge(0.70)))
-        .bg(hsla(t.card(0.18)))
-        .child(meta)
-        .into_any_element()
-}
-
-/// "Only paired devices can connect": always, since an empty allow-list is closed
-/// (CDXC:RemotePairing 2026-11-08 in server/src/tailcat/supervisor.rs).
-pub(super) fn paired_only(_tab: &RemoteTab) -> bool {
-    true
-}
-
-/// `.settings-remote-off-block`: the faded QR placeholder and the Turn on button.
-fn off_block(t: &RemoteTokens, can_turn_on: bool, cx: &mut Context<RemoteTab>) -> AnyElement {
-    h_flex()
-        .w_full()
-        .min_w_0()
-        .items_center()
-        .gap(px(14.0))
-        .p(px(16.0))
-        .rounded(px(MODAL_RADIUS_CONTROL))
-        .border_1()
-        .border_color(hsla(t.edge(0.70)))
-        .bg(hsla(t.card(0.18)))
-        .child(
-            div()
-                .flex_shrink_0()
-                .size(px(120.0))
-                .bg(hsla(gpui::rgb(0xf4f4f5)))
-                .opacity(0.15),
-        )
-        .child(
-            v_flex()
-                .flex_1()
-                .min_w_0()
-                .items_start()
-                .gap(px(8.0))
-                .text_size(px(13.0))
-                .line_height(px(18.57))
-                .text_color(hsla(t.foreground))
-                .child("Turn on Easy Connect to get a pairing code")
-                .child(detail(
-                    t,
-                    "Ghostex keeps it running while the app is open. You can turn it off any time; paired phones and computers stop being able to reach this computer.",
-                    true,
-                ))
-                .child(compact_button(
-                    &t.p,
-                    "remote-turn-on-easy-connect",
-                    "Turn on Easy Connect",
-                    Some(settings_icon(ICON_POWER, 16.0, t.p.foreground).into_any_element()),
-                    Look::Filled,
-                    28.0,
-                    14.0,
-                    None,
-                    !can_turn_on,
-                    None,
-                    |tab: &mut RemoteTab, _window, cx| {
-                        tab.set_easy_connect_state(json!({ "enabled": true, "kind": "setEnabled" }), cx);
-                    },
-                    cx,
-                )),
-        )
-        .into_any_element()
-}
-
 /// The Show QR dialog: the only place the real pairing QR renders, 360px over the whole Settings
 /// window.
 pub(super) fn qr_preview_dialog(
@@ -903,11 +385,6 @@ pub(super) fn qr_preview_dialog(
     };
     let grid = tab.qr_for(tailscale, &payload);
     let copy = copy_text_button(tab, t, "remote-qr-copy-text", card, cx);
-    // Pairing v2 (GitHub #495): a phone that scanned this code waits here with its three words.
-    let waiting = (!tailscale)
-        .then(|| tab.pending_devices.first().cloned())
-        .flatten();
-    let approving = tab.approving_device.is_some();
     let qr_size = QR_PREVIEW_SIZE
         .min(window.viewport_size().height.as_f32() - QR_PREVIEW_CHROME_HEIGHT)
         .max(QR_PLACEHOLDER_SIZE)
@@ -1013,54 +490,6 @@ pub(super) fn qr_preview_dialog(
                 )
                 .children(copy.map(|button| div().pt(px(8.0)).child(button))),
         )
-        .children(waiting.map(|device| {
-            v_flex()
-                .w_full()
-                .items_center()
-                .gap(px(4.0))
-                .p(px(12.0))
-                .rounded(px(MODAL_RADIUS_CONTROL))
-                .border_1()
-                .border_color(hsla(colors.border))
-                .text_center()
-                .child(
-                    div()
-                        .text_color(hsla(colors.muted))
-                        .child(format!("{} is waiting. Check it shows:", device.name)),
-                )
-                .child(
-                    div()
-                        .text_size(px(18.0))
-                        .line_height(px(26.0))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(hsla(colors.foreground))
-                        .child(device.words.join(" · ")),
-                )
-                .child(
-                    div()
-                        .text_size(px(13.0))
-                        .line_height(px(18.57))
-                        .text_color(hsla(colors.muted))
-                        .child("If they match, approve it. If the words differ, deny it under Paired devices."),
-                )
-                .child({
-                    let approval_id = device.approval_id.clone();
-                    settings_button_sized(
-                        &t.p,
-                        "remote-qr-approve-pending",
-                        if approving { "Approving…" } else { "Approve" },
-                        None,
-                        ButtonVariant::Default,
-                        ButtonSize::Default,
-                        approving,
-                        None,
-                        move |tab: &mut RemoteTab, _window, cx| {
-                            tab.approve_pending_device(approval_id.clone(), cx)
-                        },
-                        cx,
-                    )
-                })
-        }))
         .into_any_element();
     Some(dialog_overlay(
         "remote-qr-preview-overlay",

@@ -242,10 +242,16 @@ if (platforms.android) {
     'GHOSTEX_MOBILE_DEPLOY_KEY',
   ]);
 }
-/* The Windows jobs package unsigned with a notice when the SignPath token is missing (release-gpui-windows.yml). */
-if (signWindows && (platforms.windowsX64 || platforms.windowsArm64) && !process.env.SIGNPATH_API_TOKEN) {
-  console.log(
-    '::warning::Windows signing was requested but SIGNPATH_API_TOKEN is not set; the Windows packages will be unsigned.'
+/*
+ * CDXC:Release 2026-11-10 DECISION ("windows has to be signed release please!"): a release that asked for
+ * Windows signing never ships unsigned. The Windows jobs sign with Certum when both of its secrets exist,
+ * else SignPath, and fail when neither is configured (release-gpui-windows.yml), so stop here instead of
+ * an hour into the build.
+ */
+const certumConfigured = Boolean(process.env.CERTUM_SIMPLYSIGN_EMAIL && process.env.CERTUM_SIMPLYSIGN_TOTP);
+if (signWindows && (platforms.windowsX64 || platforms.windowsArm64) && !certumConfigured && !process.env.SIGNPATH_API_TOKEN) {
+  throw new Error(
+    'Windows signing was requested but neither the CERTUM_SIMPLYSIGN_EMAIL and CERTUM_SIMPLYSIGN_TOTP secrets nor SIGNPATH_API_TOKEN are set; dispatch with --windows-signing off only on the user\'s instruction.'
   );
 }
 

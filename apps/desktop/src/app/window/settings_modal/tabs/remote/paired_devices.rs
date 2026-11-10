@@ -57,7 +57,9 @@ pub(super) fn remote_row(main: AnyElement, value: Option<AnyElement>) -> AnyElem
         .into_any_element()
 }
 
-pub(super) fn paired_devices_list(
+/// The waiting and paired devices, waiting first, whether Easy Connect is on or off: a phone that
+/// signs in over Tailscale or SSH pairs too (06c0253b8, Gregg's report).
+pub(super) fn device_rows(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
     rpc: bool,
@@ -80,7 +82,7 @@ pub(super) fn paired_devices_list(
         Some(devices) if devices.is_empty() => vec![remote_row(
             detail(
                 t,
-                "No devices yet. Scan the code with the Ghostex app and it appears here.",
+                "None yet. Click Connect a phone and scan the code with the Ghostex app.",
                 false,
             )
             .into_any_element(),
@@ -223,15 +225,7 @@ pub(super) fn paired_devices_list(
         }
         rows.splice(0..0, pending);
     }
-    let paired_only = paired_only_row(tab, t, rpc, cx);
-    v_flex()
-        .w_full()
-        .min_w_0()
-        .gap(px(6.0))
-        .child(section_label(t, "Paired devices"))
-        .child(rows_frame(t, rows))
-        .child(rows_frame(t, vec![paired_only]))
-        .into_any_element()
+    rows_frame(t, rows)
 }
 
 /*
@@ -245,15 +239,73 @@ fn pending_device_row(
     device: PendingDevice,
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
-    let glyph = if is_phone_platform(&device.platform) {
+    // The same request reads the same everywhere on the computer: the device, its three words,
+    // one sentence, Not my phone beside Approve (CDXC:RemotePairing 2026-11-10 in
+    // window/connect_device_modal.rs).
+    let phone = is_phone_platform(&device.platform);
+    let glyph = if phone {
         ICON_DEVICE_MOBILE
     } else {
         ICON_DEVICE_LAPTOP
     };
+    let kind_label = pending_kind_label(&device.platform);
     let removing = tab.removing_device.as_deref() == Some(device.id.as_str());
-    let main = v_flex()
+    let id: SharedString = device.id.clone().into();
+    let deny_id = device.approval_id.clone();
+    let approving = tab.approving_device.as_deref() == Some(device.approval_id.as_str());
+    let approve_id = device.approval_id.clone();
+    let approve = compact_button(
+        &t.p,
+        SharedString::from(format!("remote-pending-{id}-approve")),
+        "Approve",
+        approving.then(|| {
+            spinner(
+                SharedString::from(format!("remote-pending-{id}-approve-spinner")),
+                14.0,
+                t.muted,
+                900,
+            )
+        }),
+        Look::Filled,
+        28.0,
+        14.0,
+        None,
+        !rpc || tab.approving_device.is_some() || removing,
+        None,
+        move |tab: &mut RemoteTab, _window, cx| {
+            tab.approve_pending_device(approve_id.clone(), cx);
+        },
+        cx,
+    );
+    let deny = compact_button(
+        &t.p,
+        SharedString::from(format!("remote-pending-{id}-deny")),
+        pairing_deny_label(phone),
+        removing.then(|| {
+            spinner(
+                SharedString::from(format!("remote-pending-{id}-spinner")),
+                14.0,
+                t.muted,
+                900,
+            )
+        }),
+        Look::Filled,
+        28.0,
+        14.0,
+        Some(t.muted),
+        !rpc || removing || tab.approving_device.is_some(),
+        None,
+        move |tab: &mut RemoteTab, _window, cx| {
+            tab.deny_pending_device(deny_id.clone(), cx);
+        },
+        cx,
+    );
+    v_flex()
+        .w_full()
         .min_w_0()
-        .gap(px(3.0))
+        .gap(px(10.0))
+        .px(px(12.0))
+        .py(px(12.0))
         .child(
             h_flex()
                 .items_center()
@@ -270,128 +322,45 @@ fn pending_device_row(
                 .child(detail(
                     t,
                     if device.over_ssh {
-                        "· signs in over SSH · waiting for your approval"
+                        format!("· {kind_label} · signs in over SSH")
                     } else {
-                        "· waiting for your approval"
+                        format!("· {kind_label}")
                     },
                     false,
-                )),
+                ))
+                .child(div().flex_1())
+                .child(detail(t, pairing_question(phone), false)),
         )
+        .child(pairing_words(&t.p.modal, &device.words, true))
         .child(
-            div()
-                .text_size(px(15.0))
-                .line_height(px(22.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(hsla(t.foreground))
-                .child(device.words.join(" · ")),
+            h_flex()
+                .w_full()
+                .min_w_0()
+                .items_center()
+                .gap(px(12.0))
+                .child(div().flex_1().min_w_0().child(detail(
+                    t,
+                    pairing_words_sentence(phone),
+                    true,
+                )))
+                .child(
+                    h_flex()
+                        .flex_shrink_0()
+                        .gap(px(6.0))
+                        .child(deny)
+                        .child(approve),
+                ),
         )
-        .child(detail(
-            t,
-            if is_phone_platform(&device.platform) {
-                "Approve only if the phone shows the same three words. Deny it if you didn't just scan the code."
-            } else {
-                "A computer asks to connect through Easy Connect. Approve only if it shows the same three words. Deny it if you didn't just paste this computer's code there."
-            },
-            true,
-        ))
-        .into_any_element();
-    let id: SharedString = device.id.clone().into();
-    let deny_id = device.id.clone();
-    let approving = tab.approving_device.as_deref() == Some(device.approval_id.as_str());
-    let approve_id = device.approval_id.clone();
-    let approve = compact_button(
-        &t.p,
-        SharedString::from(format!("remote-pending-{id}-approve")),
-        "Approve",
-        approving.then(|| {
-            spinner(
-                SharedString::from(format!("remote-pending-{id}-approve-spinner")),
-                14.0,
-                t.muted,
-                900,
-            )
-        }),
-        Look::Filled,
-        24.0,
-        14.0,
-        None,
-        !rpc || tab.approving_device.is_some() || removing,
-        None,
-        move |tab: &mut RemoteTab, _window, cx| {
-            tab.approve_pending_device(approve_id.clone(), cx);
-        },
-        cx,
-    );
-    let deny = compact_button(
-        &t.p,
-        SharedString::from(format!("remote-pending-{id}-deny")),
-        "Deny",
-        removing.then(|| {
-            spinner(
-                SharedString::from(format!("remote-pending-{id}-spinner")),
-                14.0,
-                t.muted,
-                900,
-            )
-        }),
-        Look::Filled,
-        24.0,
-        14.0,
-        Some(t.muted),
-        !rpc || removing,
-        None,
-        move |tab: &mut RemoteTab, _window, cx| {
-            tab.remove_paired_device(deny_id.clone(), cx);
-        },
-        cx,
-    );
-    let value = h_flex()
-        .flex_shrink_0()
-        .items_center()
-        .gap(px(6.0))
-        .child(approve)
-        .child(deny)
-        .into_any_element();
-    remote_row(main, Some(value))
+        .into_any_element()
 }
 
-/*
-CDXC:RemotePairing 2026-11-08 DECISION:
-User (GitHub #495 security decision): an empty Easy Connect allow-list means closed, replacing the 2026-10-25 on/off switch that was here (its "off" emptied the list, which let in anyone with the code). "Only paired devices can connect" is now always so: the row says it and has no switch. Every paired phone's key goes on the list when its pairing is approved; a computer that connects with Easy Connect needs its key added under Advanced; phones paired before 11.0.1 must pair again. New phones still get in while the QR is showing (CDXC:RemotePairing in server/src/tailcat/supervisor.rs).
-*/
-fn paired_only_row(
-    tab: &RemoteTab,
-    t: &RemoteTokens,
-    _rpc: bool,
-    _cx: &mut Context<RemoteTab>,
-) -> AnyElement {
-    let devices = tab.paired_devices.clone().unwrap_or_default();
-    let without_key: Vec<String> = devices
-        .iter()
-        .filter(|device| device.tailcat_client_key.is_none() && !device.legacy)
-        .map(|device| device.name.clone())
-        .collect();
-    let detail_text: SharedString = if without_key.is_empty() {
-        "Easy Connect lets in only paired phones and the keys listed under Advanced. A new phone gets in while the QR is showing; a computer that connects with Easy Connect needs its key added under Advanced.".into()
-    } else {
-        format!(
-            "Easy Connect lets in only paired phones and the keys listed under Advanced. {} paired with an older Ghostex app and can't connect; pair {} again.",
-            without_key.join(", "),
-            if without_key.len() == 1 { "it" } else { "them" },
-        )
-        .into()
-    };
-    let main = v_flex()
-        .min_w_0()
-        .gap(px(3.0))
-        .child(
-            div()
-                .text_size(px(14.0))
-                .line_height(px(20.0))
-                .text_color(hsla(t.foreground))
-                .child("Only paired devices can connect"),
-        )
-        .child(detail(t, detail_text, true))
-        .into_any_element();
-    remote_row(main, None)
+/// What a waiting device says it is, in the user's words.
+fn pending_kind_label(platform: &str) -> &'static str {
+    match platform.trim().to_lowercase().as_str() {
+        "ios" | "iphone" => "iPhone",
+        "ipad" => "iPad",
+        "android" => "Android",
+        "mobile" | "phone" => "phone",
+        _ => "computer",
+    }
 }

@@ -43,13 +43,18 @@ impl Render for UnifiedGroupDrag {
     }
 }
 
-/// The most urgent status under a folded header, which its dot shows.
+/// The most urgent status under a folded header, which its dot shows: its cards' and every thread
+/// under them, folded away or not, so a collapsed project still shows a thread's approval.
 fn most_urgent(group: &UnifiedGroupView) -> Option<UnifiedStatus> {
     let statuses: Vec<UnifiedStatus> = group
         .cards
         .iter()
         .chain(group.shelves.iter().flat_map(|shelf| shelf.cards.iter()))
-        .filter_map(|card: &UnifiedCard| card.status)
+        .flat_map(|card: &UnifiedCard| {
+            card.status
+                .into_iter()
+                .chain(card.statuses_below.iter().copied())
+        })
         .collect();
     [
         UnifiedStatus::Approval,

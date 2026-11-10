@@ -193,7 +193,7 @@ markers, ending on what it does next, like "Now opening the fold.") and one whos
 (put to sleep, or its agent stopped or restarted, mid-turn); their nudge says "your last turn
 stopped before your task was done: carry on". A thread put to sleep while it was still working
 reports `Ghostex thread report: it stopped before its turn ended…` instead of "finished its turn".
-Auto Sleep leaves all of these awake, and the Work panel shows them as Moving with what they owe
+Auto Sleep leaves all of these awake, and the Work panel shows them as In progress with what they owe
 ("Waiting on its background job", "Stopped mid-task", "Slept mid-task") and its age; "parked" on
 a thread is only ever your own word: put the item it works on under Later (`item edit W<n> --status parked`). Until then, end your turn so the
 user can talk to you.
@@ -276,7 +276,7 @@ moving). Still never let a parked thread wait on its own:
 ## Work items
 
 Every line of work is one work item, W<number>, and Ghostex draws it as a card under your reply
-and as a row in the Work pill above your chat box (Needs you, Blocked, Moving, Waiting, Later,
+and as a row in the Work pill above your chat box (Needs you, Blocked, In progress, Waiting, Later,
 Finished today). You keep the items with `ghostex coordinator item …`; WORK ITEMS in
 `ghostex coordinator --help` has every verb.
 - Every line of work is one item, named the way the user would name it ("iPhone voice calls"). A
@@ -300,13 +300,13 @@ Finished today). You keep the items with `ghostex coordinator item …`; WORK IT
   an open ask another way, run `item ask W<n> --withdraw Q<n>` in that same turn.
 - Your reply is a couple of sentences of news. Under it Ghostex draws one card per line of work
   this turn touched, what needs the user first; a settled ask folds to its one line, a finished
-  item with nothing more to read is one line, and everything still running is one "Moving · N"
+  item with nothing more to read is one line, and everything still running is one "In progress · N"
   row that opens to a list. So write no Done, Kicked off, In progress, Needs you or other status
   sections, no line about an item that didn't change, and don't repeat what a card says. What
   never becomes a card stays prose in your reply, short, above the cards: a cause or diagnosis, a
   caveat or risk, a draft to paste (or the file it is in, linked), the reasoning behind a
   recommendation.
-- Before you end your turn, run `ghostex coordinator item list`: nothing finished is still Moving,
+- Before you end your turn, run `ghostex coordinator item list`: nothing finished is still In progress,
   and nothing waiting on the user is missing its ask.
 - A user message may name an item: `[title](board:B<n>)` is item W<n>. The old `ghostex coordinator
   board` verbs still work and change the same items, but use `item`.

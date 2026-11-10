@@ -233,7 +233,10 @@ pub(super) const BADGE_TEXT_SIZE: f32 = 13.55;
 /// A coordinator looks like any other session of its agent otherwise, and its thread rows alone do not say which row they hang from once the list scrolls (or once the tree is folded). What the numbers mean is gx-core's `RowNesting::coordinator_badge`.
 ///
 /// CDXC:Coordinators 2026-10-29 DECISION:
-/// User, of an idle coordinator's lone crew icon: "remove this icon when no workers are active pls". The badge shows only while a thread under the coordinator waits for approval, waits on the user or works; an idle coordinator (gx-core's `Idle` tone, the neutral recent-threads count) draws no badge at all. The phone's SessionRow.tsx follows.
+/// User, of an idle coordinator's lone crew icon: "remove this icon when no workers are active pls". The Project sidebar's coordinator row shows the badge only while a thread under it waits for approval, waits on the user or works; an idle coordinator (gx-core's `Idle` tone) draws none there. The phone's SessionRow.tsx follows.
+///
+/// CDXC:Coordinators 2026-11-09 WHY:
+/// On a Unified card with threads the crew count is the fold toggle (the user's 2026-11-09 decision on #528 in gx-core `unified_sidebar/tree.rs`), so it always shows there, grey while idle, with the number of its threads (`unified/threads.rs`; the phone's Unified card follows); the decision above holds for the Project sidebar.
 pub(crate) fn coordinator_badge(
     session: &NativeSidebarSession,
     appearance: &SidebarAppearance,
@@ -241,42 +244,63 @@ pub(crate) fn coordinator_badge(
     if !is_coordinator(session) {
         return None;
     }
-    let scale = appearance.scale;
     let threads = session.details.get("coordinatorThreads");
     let count = threads
         .and_then(|threads| threads.get("count"))
         .and_then(Value::as_u64)
         .unwrap_or(0);
-    let tint = match threads
+    let tone = match threads
         .and_then(|threads| threads.get("tone"))
         .and_then(Value::as_str)
     {
-        Some("approval") => rgb(super::status::APPROVAL_COLOR).into(),
-        Some("waiting") => rgb(WAITING_COLOR).into(),
-        Some("working") => rgb(super::status::WORKING_COLOR).into(),
+        Some("approval") => ghostex_gx_core::CoordinatorBadgeTone::Approval,
+        Some("waiting") => ghostex_gx_core::CoordinatorBadgeTone::Waiting,
+        Some("working") => ghostex_gx_core::CoordinatorBadgeTone::Working,
         _ => return None,
     };
-    Some(
-        div()
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .gap(px(2.0 * scale))
-            .child(titlebar_svg_icon(
-                COORDINATOR_ICON,
-                BADGE_TEXT_SIZE * scale,
-                tint,
-            ))
-            .when(count > 0, |badge| {
-                badge.child(
-                    div()
-                        .text_size(px(BADGE_TEXT_SIZE * scale))
-                        .text_color(tint)
-                        .child(count.to_string()),
-                )
-            })
-            .into_any_element(),
-    )
+    Some(crew_badge(count, crew_tint(tone, appearance), appearance).into_any_element())
+}
+
+/// The crew count's colour for a gx-core badge tone; grey while idle (drawn only on a Unified card).
+pub(crate) fn crew_tint(
+    tone: ghostex_gx_core::CoordinatorBadgeTone,
+    appearance: &SidebarAppearance,
+) -> gpui::Hsla {
+    match tone {
+        ghostex_gx_core::CoordinatorBadgeTone::Approval => {
+            rgb(super::status::APPROVAL_COLOR).into()
+        }
+        ghostex_gx_core::CoordinatorBadgeTone::Waiting => rgb(WAITING_COLOR).into(),
+        ghostex_gx_core::CoordinatorBadgeTone::Working => rgb(super::status::WORKING_COLOR).into(),
+        ghostex_gx_core::CoordinatorBadgeTone::Idle => appearance.muted,
+    }
+}
+
+/// The crew icon and its number (none for `0`), in `tint`.
+pub(crate) fn crew_badge(
+    count: u64,
+    tint: gpui::Hsla,
+    appearance: &SidebarAppearance,
+) -> gpui::Div {
+    let scale = appearance.scale;
+    div()
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .gap(px(2.0 * scale))
+        .child(titlebar_svg_icon(
+            COORDINATOR_ICON,
+            BADGE_TEXT_SIZE * scale,
+            tint,
+        ))
+        .when(count > 0, |badge| {
+            badge.child(
+                div()
+                    .text_size(px(BADGE_TEXT_SIZE * scale))
+                    .text_color(tint)
+                    .child(count.to_string()),
+            )
+        })
 }
 
 /// The computer a thread runs on, after its title, for a thread drawn under a coordinator on

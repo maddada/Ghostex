@@ -215,6 +215,7 @@ impl GhostexGpuiApp {
         self.gx_store_sync_remote_clients(true, cx);
         self.remote_reconnect_on_status(remote_machine_id, state, cx);
         if state == GpuiRemoteGxserverConnectState::Connected.wire_status_state() {
+            self.note_gpui_remote_link_connected(remote_machine_id);
             self.attach_surfaced_remote_workspace_terminals(remote_machine_id, cx);
         }
         self.refresh_session_chat_runtime_endpoints(false, cx);

@@ -49,6 +49,9 @@ pub struct UnifiedRevealSpot {
     pub shelf: UnifiedShelf,
     /// [`super::RepoIdentity::key`] of the project group it sits under.
     pub repo_key: String,
+    /// For a thread: the coordinators above it, outermost first ([`super::unified_coordinator_key`]),
+    /// which a reveal unfolds as the Project sidebar's does (CDXC:Sidebar 2026-11-09 in tree.rs).
+    pub ancestors: Vec<String>,
 }
 
 /// Opens whatever folds the card at `spot` away. `grouped` is Group by Project. Returns whether
@@ -61,6 +64,9 @@ pub fn open_unified_reveal(
     // Drafts stay above every group, so only the other shelves and cards sit inside one.
     let in_group = grouped && spot.shelf != UnifiedShelf::Drafts;
     let mut changed = in_group && saved.folded_groups.remove(&spot.repo_key);
+    for coordinator in &spot.ancestors {
+        changed |= saved.unfolded_coordinators.insert(coordinator.clone());
+    }
     // Pinned and Sessions are no shelves: their cards are drawn whenever their group is.
     if matches!(spot.shelf, UnifiedShelf::Pinned | UnifiedShelf::Active) {
         return changed;
@@ -75,11 +81,37 @@ pub fn open_unified_reveal(
     changed
 }
 
-/// The row of `sidebar_session_id` in a built list, and where it sits.
+/// A row found in a built list: the card it is drawn on, and for a thread the coordinators above it.
+#[derive(Clone, Debug)]
+pub struct UnifiedFound<'a> {
+    /// The card: the row itself, or the top of the tree the thread is in.
+    pub card: &'a UnifiedRow,
+    pub row: &'a UnifiedRow,
+    /// [`super::unified_coordinator_key`]s, outermost first; empty for a card.
+    pub ancestors: Vec<String>,
+}
+
+impl UnifiedFound<'_> {
+    /// Where it is drawn: its card's shelf and project group, and the coordinators to unfold.
+    pub fn reveal_spot(&self) -> UnifiedRevealSpot {
+        UnifiedRevealSpot {
+            shelf: self.card.shelf,
+            repo_key: self.card.repo.key.clone(),
+            ancestors: self.ancestors.clone(),
+        }
+    }
+
+    /// Whether the row is drawn as the list is laid out now (its card's shelf and group aside).
+    pub fn is_drawn(&self) -> bool {
+        super::tree::is_drawn(self.card, &self.row.session.row.sidebar_session_id)
+    }
+}
+
+/// The row of `sidebar_session_id` in a built list, a card or a thread under one.
 pub fn find_unified_row<'a>(
     view: &'a UnifiedSidebarView,
     sidebar_session_id: &str,
-) -> Option<&'a UnifiedRow> {
+) -> Option<UnifiedFound<'a>> {
     view.drafts
         .iter()
         .chain(&view.pinned)
@@ -87,16 +119,18 @@ pub fn find_unified_row<'a>(
         .chain(&view.working)
         .chain(&view.snoozed)
         .chain(&view.parked)
-        .find(|row| row.session.row.sidebar_session_id == sidebar_session_id)
-}
-
-impl UnifiedRow {
-    pub fn reveal_spot(&self) -> UnifiedRevealSpot {
-        UnifiedRevealSpot {
-            shelf: self.shelf,
-            repo_key: self.repo.key.clone(),
-        }
-    }
+        .find_map(|card| {
+            let ancestors = super::tree::ancestors_of(card, sidebar_session_id)?;
+            let row = card
+                .rows_in_tree()
+                .into_iter()
+                .find(|row| row.session.row.sidebar_session_id == sidebar_session_id)?;
+            Some(UnifiedFound {
+                card,
+                row,
+                ancestors,
+            })
+        })
 }
 
 impl UnifiedFilter {

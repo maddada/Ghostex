@@ -15,6 +15,7 @@ pub mod powershell;
 pub mod same_folder;
 pub mod settings_file;
 pub mod tailcat;
+pub mod tailcat_forward;
 pub mod tool_path;
 
 #[cfg(not(target_os = "windows"))]

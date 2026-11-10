@@ -1,6 +1,7 @@
 //! Preview host for the notice modal: every toast that used to carry a button, in the words the
 //! app raises it with. States: `approval-remote` (default, a plain Approve), `approval-local`,
-//! `approval-presence` (Settings > Security's switch on), `account`,
+//! `approval-presence` (Settings > Security's switch on), `approval-pairing` (a phone asking to
+//! pair, drawn like the Connect a phone window), `account`,
 //! `views-off`, `files-off`, `sync-undo`, `chief-undo`, `homebrew`, `remote-copy-path`,
 //! `display-scale`, `linux-update`, `terminal-error`, `git-error`, `gxserver-failed`, `queue`
 //! (three waiting: "1 of 3"), `copied` (Copy details just pressed). Every click is printed and the
@@ -26,6 +27,7 @@ fn item(
         action_label: action.map(str::to_string),
         copy_text: copy.map(str::to_string),
         hint: None,
+        pairing: None,
     }
 }
 
@@ -42,7 +44,7 @@ fn approval(id: &str, message: &str, asker: &str, computer: &str, hint: &str) ->
             NoticeModalTone::Approval,
             // As the app titles them (owner_security/ui.rs `approval_title`).
             if message.starts_with("Pair ") {
-                "Approve this phone?"
+                "Is this your phone?"
             } else {
                 "Approval needed"
             },
@@ -71,6 +73,26 @@ fn case(state: &str) -> NoticeModalItem {
             "This computer",
             "Approve asks for Touch ID or your password first.",
         ),
+        // A phone asking to pair while the Connect a phone window is closed (notice_modal_host.rs
+        // `pairing_of` reads this from gxserver's summary).
+        "approval-pairing" => NoticeModalItem {
+            source: Vec::new(),
+            message: None,
+            pairing: Some(NoticeModalPairing {
+                name: "Mo's iPhone".to_string(),
+                kind_label: "iPhone".to_string(),
+                phone: true,
+                words: vec!["harbor".into(), "koala".into(), "angle".into()],
+            }),
+            ..item(
+                "approval-pairing",
+                Approval,
+                "Is this your phone?",
+                "",
+                Some("Approve"),
+                None,
+            )
+        },
         "account" => item(
             "account",
             Warning,

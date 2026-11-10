@@ -40,10 +40,12 @@ fn approval_title(request: &ApprovalRequest) -> &'static str {
     if request.action != SensitiveAction::PairingApproveDevice {
         return "Approval needed";
     }
+    // The same question the Connect a phone window asks (CDXC:RemotePairing 2026-11-10 in
+    // window/connect_device_modal.rs).
     if request.summary.starts_with("Pair ") {
-        "Approve this phone?"
+        "Is this your phone?"
     } else {
-        "Approve this computer?"
+        "Is this your computer?"
     }
 }
 
@@ -80,7 +82,51 @@ impl GhostexGpuiApp {
         if super::asked_by_this_app(&request) || super::asks_for_this_app(&request) {
             return;
         }
+        // The Connect a phone window shows a pairing request itself, words and Approve included:
+        // one place for one request (CDXC:RemotePairing 2026-11-10 in
+        // window/connect_device_modal.rs). Its notice comes back if the window closes first.
+        if machine_id.is_none()
+            && request.action
+                == ghostex_gx_protocol::approval::SensitiveAction::PairingApproveDevice
+            && self.native_app_modal_kind()
+                == Some(crate::app::model::GpuiAppModalKind::RemoteSetup)
+        {
+            return;
+        }
         self.owner_security_show_card(machine_id, request, cx);
+    }
+
+    /// Takes down this computer's notice for request `request_id` (the Connect a phone window shows
+    /// it now); it is still waiting, so it comes back when that window closes.
+    pub(crate) fn owner_security_hide_local_card(
+        &mut self,
+        request_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.remove_gpui_app_toast(&card_id(None, request_id), cx);
+    }
+
+    /// This computer's pairing requests still waiting show as notices: the Connect a phone window,
+    /// which showed them, went away.
+    pub(crate) fn owner_security_show_pending_pairing_requests(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let listed = cx
+            .background_executor()
+            .spawn(async move { super::pending_requests(&Transport::Local) });
+        cx.spawn(async move |this, cx| {
+            let requests = listed.await.unwrap_or_default();
+            let _ = this.update(cx, |this, cx| {
+                for request in requests.into_iter().filter(|request| {
+                    request.action
+                        == ghostex_gx_protocol::approval::SensitiveAction::PairingApproveDevice
+                }) {
+                    this.owner_security_on_approval_change(None, "requested", Some(request), cx);
+                }
+            });
+        })
+        .detach();
     }
 
     /// A computer's stream went live (`machine_id: None` for this one): its requests still

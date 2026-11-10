@@ -223,18 +223,19 @@ WORK ITEMS
     Needs you  the user has something to do or decide (an open ask)
     Blocked    the work stops until the user acts: an ask with --holds, or a
                thread still not moving after Ghostex's nudge
-    Moving     the coordinator or a thread is on it
+    In progress  the coordinator or a thread is on it (stored, and accepted
+               by --status, as moving or in-progress)
     Waiting    on another item, an ask, or something outside
     Later      nobody is on it yet (next, held for a release, parked, backlog)
     Finished   done; today's show, older ones leave after 14 days
-  Ghostex works the status out: a working thread makes its item Moving, a
+  Ghostex works the status out: a working thread makes its item In progress, a
   thread waiting on a question or approval makes it Needs you, and a wait on
   another item or an ask clears itself once that finishes or is answered (the
   coordinator has the ball again). Who has the ball (You, the coordinator, a
   thread, what it waits on) follows from the status.
-  add starts an item (Later until something moves it; --now starts it Moving)
+  add starts an item (Later until something moves it; --now starts it In progress)
   and prints its W number; --thread attaches a thread (repeat it for more).
-  now replaces the line saying where it stands and makes it Moving: never
+  now replaces the line saying where it stands and makes it In progress: never
   append, say where it stands now. step records a step (--done when it is);
   --chore keeps a rebuild or test run out of sight: chores are never shown.
   ask puts something before the user, with a question tag (the next after the

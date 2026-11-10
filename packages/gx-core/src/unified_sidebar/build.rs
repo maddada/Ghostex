@@ -197,13 +197,18 @@ pub fn no_source_control(group: &GroupView, session: &SessionView) -> bool {
             .is_some_and(|project| !project.git_work_tree)
 }
 
-/// One drawn row.
+/// One drawn row: a card, or a thread under one (`threads`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnifiedRow {
+    /// The machine that runs the session.
     pub machine: MachineId,
+    /// The machine whose list holds the drawn row: `machine`, except for a thread on another
+    /// computer, drawn from the copy its coordinator's computer borrows (`is_borrowed_thread`).
+    pub lane: MachineId,
     /// The machine's name, for a row of another machine; `None` for this computer.
     pub machine_label: Option<String>,
-    /// The group the row came from, which its menus and hover buttons are built against.
+    /// The project group of the session on `machine`, which its menus, hover buttons and icon are
+    /// built against (a borrowed thread's own computer's project, not its coordinator's).
     pub group: GroupView,
     pub session: SessionView,
     pub repo: RepoIdentity,
@@ -216,6 +221,69 @@ pub struct UnifiedRow {
     pub came_back_ms: i64,
     /// [`no_source_control`]: the card says its folder is not under git.
     pub no_source_control: bool,
+    /// The threads nested under it (`tree.rs`), busy first; empty for every other row.
+    pub threads: Vec<UnifiedRow>,
+    /// On a thread: drawn while its coordinator is open (listed, its older threads shown, or on
+    /// the way to a search match). Always set on a card.
+    pub shown: bool,
+    /// The row itself passes the filter and search.
+    pub matched: bool,
+    /// A row under it, or itself, passes the filter and search.
+    pub subtree_matched: bool,
+    /// Set on a row with threads under it.
+    pub crew: Option<super::tree::UnifiedCrew>,
+}
+
+impl UnifiedRow {
+    /// The threads drawn under it now, in order, each with its depth below this row (1 for its
+    /// own threads); a row whose older threads wait behind their row is followed by
+    /// [`UnifiedTreeLine::Older`].
+    pub fn drawn_lines(&self) -> Vec<UnifiedTreeLine<'_>> {
+        let mut lines = Vec::new();
+        drawn_lines_into(self, 1, &mut lines);
+        lines
+    }
+
+    /// The row and every row under it, depth first.
+    pub fn rows_in_tree(&self) -> Vec<&UnifiedRow> {
+        let mut out = Vec::new();
+        super::tree::walk_tree(self, &mut out);
+        out
+    }
+}
+
+/// One line under a card.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnifiedTreeLine<'a> {
+    Thread {
+        row: &'a UnifiedRow,
+        depth: u8,
+    },
+    /// The "N older threads" (or "Hide older threads") row at the end of `coordinator`'s threads.
+    Older {
+        coordinator: &'a UnifiedRow,
+        depth: u8,
+    },
+}
+
+fn drawn_lines_into<'a>(row: &'a UnifiedRow, depth: u8, lines: &mut Vec<UnifiedTreeLine<'a>>) {
+    let Some(crew) = row.crew.as_ref().filter(|crew| crew.open) else {
+        return;
+    };
+    for child in row.threads.iter().filter(|child| child.shown) {
+        // Drawn no deeper than the Project sidebar's tree; the tree itself goes on.
+        lines.push(UnifiedTreeLine::Thread {
+            row: child,
+            depth: depth.min(crate::sidebar_view::MAX_THREAD_DEPTH),
+        });
+        drawn_lines_into(child, depth.saturating_add(1), lines);
+    }
+    if crew.older_row {
+        lines.push(UnifiedTreeLine::Older {
+            coordinator: row,
+            depth: depth.min(crate::sidebar_view::MAX_THREAD_DEPTH),
+        });
+    }
 }
 
 /// One choice of the filter menu.
@@ -250,6 +318,9 @@ pub struct UnifiedSidebarView {
     /// Rows before the filter, so an empty list can tell "nothing here" from "nothing left"; inside
     /// the active Space while one scopes the list.
     pub total: usize,
+    /// When a nested thread stops being recent or a snoozed one wakes, so the list is built again
+    /// then (`tree.rs`).
+    pub deadline_ms: Option<i64>,
 }
 
 impl UnifiedSidebarView {
@@ -450,49 +521,6 @@ struct RepoOption {
     project_group_ids: BTreeSet<String>,
 }
 
-/// The sessions a coordinator in the list started (its workers), at any depth, wherever they run.
-///
-/// CDXC:Sidebar 2026-11-04 DECISION:
-/// User: "in the unified sidebar, i still see worker threads showing there even tho i think we agreed we shouldn't show those??". The Unified list shows a coordinator's card and none of its workers, on this computer or another: they are reached from the Workers list in the coordinator's chat and from the Project sidebar, which nests them under it, and the coordinator's card carries the crew badge the Project sidebar's coordinator row draws (working, waiting or approval count). A worker is known by the link the Project sidebar nests it by (`coordinator_parent`); a worker on another computer carries none on its own computer's row, so the copy its coordinator's computer borrows (`is_borrowed_thread`) names it. A worker shows again as its own card only when its coordinator is not in any machine's list (closed, or its machine gone), so a session the user started themselves, which has no link, is never left out. Shelf counts, the filter's total and the project headers count cards, so they leave workers out too; the computer tabs, Quick Access and the Running Agents panel count sessions, workers included, as they do with the Project sidebar.
-fn worker_keys(machines: &[UnifiedMachineInput<'_>]) -> HashSet<SessionKey> {
-    let mut parents: HashMap<&SessionKey, &SessionKey> = HashMap::new();
-    let mut present: HashSet<&SessionKey> = HashSet::new();
-    for machine in machines {
-        for group in &machine.view.groups {
-            for session in &group.core.sessions {
-                let row = &session.row;
-                let Some(key) = row.key.as_ref() else {
-                    continue;
-                };
-                if let Some(parent) = row.coordinator_parent.as_ref() {
-                    parents.insert(key, parent);
-                }
-                if !row.is_browser && !row.is_borrowed_thread() {
-                    present.insert(key);
-                }
-            }
-        }
-    }
-    // A loop (two coordinators that are each other's worker) never reaches a top coordinator; its
-    // rows stay cards, as the Project sidebar keeps them top-level.
-    let reaches_top = |key: &SessionKey| {
-        let mut at = key;
-        for _ in 0..=parents.len() {
-            match parents.get(at) {
-                Some(parent) if *parent == key => return false,
-                Some(parent) => at = parent,
-                None => return true,
-            }
-        }
-        false
-    };
-    parents
-        .iter()
-        .filter(|(key, parent)| present.contains(*parent) && reaches_top(key))
-        .map(|(key, _)| (*key).clone())
-        .collect()
-}
-
 /// Builds the list.
 pub fn build_unified_sidebar(
     machines: &[UnifiedMachineInput<'_>],
@@ -503,10 +531,7 @@ pub fn build_unified_sidebar(
     build_unified_sidebar_scoped(machines, settings, filter, None, now_ms)
 }
 
-/// [`build_unified_sidebar`] with the list scoped to the active Space (`unified_space_scope`).
-///
-/// CDXC:Spaces 2026-11-05 DECISION:
-/// The active Space scopes the list and the header's filter narrows inside it. Only the scope's machine is scoped: its projects outside the Space leave the list, the filter's Projects and Remove, the shelves, Drafts and the total, as if that machine had only the Space's projects, so an empty Space says so instead of "nothing matches". That machine's Spaces leave the filter menu, because the Space row above the list is how one is picked now and a second Space pick could only empty the list; a saved pick of one stays saved and narrows again once Spaces is off. Other machines are not scoped: their Spaces are theirs, no row on screen shows which one they are on, and hiding their sessions would leave the Unified sidebar no way to reach them, so they stay in every Space with their machine's name on the card, and their Spaces stay in the filter menu to narrow them. That is Separate by machine only: in the one list (the default since 2026-11-05) the Spaces are shared by every machine (`settings_sync`), so every machine's cards are scoped by the one active Space, and no machine's Spaces stay in the filter menu. Drafts are scoped like any card: a draft is a session of a project, and it shows in its project's Space.
+/// [`build_unified_sidebar_scoped`] with every coordinator folded and no older threads listed.
 pub fn build_unified_sidebar_scoped(
     machines: &[UnifiedMachineInput<'_>],
     settings: UnifiedSettings,
@@ -514,12 +539,46 @@ pub fn build_unified_sidebar_scoped(
     scope: Option<&UnifiedSpaceScope>,
     now_ms: u64,
 ) -> UnifiedSidebarView {
+    build_unified_sidebar_folded(
+        machines,
+        settings,
+        filter,
+        scope,
+        &super::tree::UnifiedFolds::default(),
+        now_ms,
+    )
+}
+
+/// [`build_unified_sidebar`] with the list scoped to the active Space (`unified_space_scope`).
+///
+/// CDXC:Spaces 2026-11-05 DECISION:
+/// The active Space scopes the list and the header's filter narrows inside it. Only the scope's machine is scoped: its projects outside the Space leave the list, the filter's Projects and Remove, the shelves, Drafts and the total, as if that machine had only the Space's projects, so an empty Space says so instead of "nothing matches". That machine's Spaces leave the filter menu, because the Space row above the list is how one is picked now and a second Space pick could only empty the list; a saved pick of one stays saved and narrows again once Spaces is off. Other machines are not scoped: their Spaces are theirs, no row on screen shows which one they are on, and hiding their sessions would leave the Unified sidebar no way to reach them, so they stay in every Space with their machine's name on the card, and their Spaces stay in the filter menu to narrow them. That is Separate by machine only: in the one list (the default since 2026-11-05) the Spaces are shared by every machine (`settings_sync`), so every machine's cards are scoped by the one active Space, and no machine's Spaces stay in the filter menu. Drafts are scoped like any card: a draft is a session of a project, and it shows in its project's Space.
+///
+/// `folds` are the coordinators the user unfolded and whose older threads they listed.
+pub fn build_unified_sidebar_folded(
+    machines: &[UnifiedMachineInput<'_>],
+    settings: UnifiedSettings,
+    filter: &UnifiedFilter,
+    scope: Option<&UnifiedSpaceScope>,
+    folds: &super::tree::UnifiedFolds,
+    now_ms: u64,
+) -> UnifiedSidebarView {
     let mut rows: Vec<UnifiedRow> = Vec::new();
     let mut repo_machines: BTreeMap<String, RepoOption> = BTreeMap::new();
     let mut options = UnifiedFilterOptions::default();
     let views: Vec<&SidebarView> = machines.iter().map(|machine| machine.view).collect();
     let mut merged_repos = merged_repos_of(&views).into_iter();
-    let workers = worker_keys(machines);
+    // A thread on another computer is drawn from the copy its coordinator's computer borrows
+    // (CDXC:Sidebar 2026-11-09 in tree.rs); its own computer's copy only lends it its project.
+    let borrowed: HashSet<SessionKey> = machines
+        .iter()
+        .flat_map(|machine| machine.view.groups.iter())
+        .flat_map(|group| group.core.sessions.iter())
+        .filter(|session| session.row.is_borrowed_thread() && !session.row.is_browser)
+        .filter_map(|session| session.row.key.clone())
+        .collect();
+    let mut borrowed_rows: Vec<(MachineId, SessionView)> = Vec::new();
+    let mut own_copies: HashMap<SessionKey, usize> = HashMap::new();
     for machine in machines {
         options.machines.push(UnifiedFilterOption {
             key: machine_key(&machine.machine).to_string(),
@@ -613,19 +672,22 @@ pub fn build_unified_sidebar_scoped(
                 .as_ref()
                 .map(|space_id| space_filter_key(&machine.machine, space_id));
             for session in &group.core.sessions {
-                // A coordinator's worker is no card of its own (`worker_keys`).
-                if session.row.is_browser
-                    || session.row.is_borrowed_thread()
-                    || session
-                        .row
-                        .key
-                        .as_ref()
-                        .is_none_or(|key| workers.contains(key))
-                {
+                let Some(key) = session.row.key.as_ref() else {
                     continue;
+                };
+                if session.row.is_browser {
+                    continue;
+                }
+                if session.row.is_borrowed_thread() {
+                    borrowed_rows.push((machine.machine.clone(), session.clone()));
+                    continue;
+                }
+                if borrowed.contains(key) {
+                    own_copies.insert(key.clone(), rows.len());
                 }
                 rows.push(UnifiedRow {
                     machine: machine.machine.clone(),
+                    lane: machine.machine.clone(),
                     machine_label: machine_label.clone(),
                     group: group.clone(),
                     session: session.clone(),
@@ -635,9 +697,34 @@ pub fn build_unified_sidebar_scoped(
                     status: unified_status(&session.row),
                     came_back_ms: came_back_ms(&session.row),
                     no_source_control: no_source_control(group, session),
+                    threads: Vec::new(),
+                    shown: true,
+                    matched: false,
+                    subtree_matched: false,
+                    crew: None,
                 });
             }
         }
+    }
+    // Each borrowed thread takes its own computer's row's place, with that row's project, Space
+    // and branch; one whose own row is out of the list (another Space, hidden) is not drawn.
+    for (lane, session) in borrowed_rows {
+        let Some(index) = session
+            .row
+            .key
+            .as_ref()
+            .and_then(|key| own_copies.get(key).copied())
+        else {
+            continue;
+        };
+        let own = &mut rows[index];
+        own.lane = lane;
+        own.shelf = unified_shelf(&session, settings, is_unified_draft(&session.row), now_ms);
+        own.status = unified_status(&session.row);
+        own.came_back_ms = came_back_ms(&session.row);
+        // The group stays its own computer's project (its icon, its worktree): only the drawn row
+        // comes from the coordinator's lane.
+        own.session = session;
     }
     options.repos = repo_machines
         .into_iter()
@@ -689,13 +776,15 @@ pub fn build_unified_sidebar_scoped(
             row.repo.label.clone_from(&option.label);
         }
     }
+    let rows = super::tree::nest_unified_rows(rows, folds, filter, settings, now_ms);
     let total = rows.len();
     let mut view = UnifiedSidebarView {
         options,
         total,
+        deadline_ms: super::tree::tree_deadline_ms(&rows, now_ms),
         ..Default::default()
     };
-    for row in rows.into_iter().filter(|row| filter.keeps(row)) {
+    for row in rows.into_iter().filter(|row| row.subtree_matched) {
         match row.shelf {
             UnifiedShelf::Drafts => view.drafts.push(row),
             UnifiedShelf::Pinned => view.pinned.push(row),

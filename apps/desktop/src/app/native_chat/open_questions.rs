@@ -53,7 +53,8 @@ impl NativeChatView {
     /// The pill's text while the chat has unanswered questions.
     pub(super) fn open_question_pill_text(&self) -> Option<String> {
         let open = &self.snapshot["openQuestions"];
-        (open["count"].as_u64().unwrap_or(0) > 0)
+        // What the dock above the box cannot show (gx-chat-core `pill_count`): one place per question.
+        (open["pillCount"].as_u64().unwrap_or(0) > 0)
             .then(|| open["text"].as_str().map(str::to_string))
             .flatten()
     }

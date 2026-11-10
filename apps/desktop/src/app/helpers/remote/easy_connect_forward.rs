@@ -6,16 +6,15 @@
 use std::{
     collections::HashMap,
     env, fs,
-    io::{BufRead, BufReader, Read, Write},
-    net::{Shutdown, TcpListener, TcpStream},
+    net::TcpListener,
     path::{Path, PathBuf},
     process::Stdio,
     sync::{
-        Arc, Condvar, Mutex,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
-    thread::{self, JoinHandle},
-    time::{Duration, Instant},
+    thread,
+    time::Duration,
 };
 
 use crate::app::helpers::*;
@@ -23,96 +22,33 @@ use crate::*;
 use ghostex_paths::tailcat::{
     TAILCAT_MIN_VERSION, bundled_tailcat_binary, managed_tailcat_binary, tailcat_version_supported,
 };
+use ghostex_paths::tailcat_forward::{
+    ClientEnd, ForwardEvent, ForwardProbe, ForwardSpec, TailcatForward,
+};
 
 /*
 CDXC:RemotePairing 2026-09-03:
 An Easy Connect machine has no reachable SSH host. Its pairing code carries a
 tailcat address blob, so this module runs one loopback listener per machine
 and relays every accepted connection to that machine's one tailcat client
-(`tailcat forward`, CDXC:RemotePairing 2026-11-10 below). Everything else in `helpers/remote/` then dials a
+(`ghostex_paths::tailcat_forward`, which gxserver's own tunnels run too). Everything else in `helpers/remote/` then dials a
 plain `127.0.0.1:<port>` exactly as it would dial an SSH host: the config
 builder reads the port from the registry here, so the SSH tunnel, command
 runner, terminal attach, and VS Code launch all go through the same forwarder.
 
-Lifecycle: `gpui_start_easy_connect_forward` is called by the connect flow
-before the first SSH command, and `gpui_stop_easy_connect_forward` by the
-same paths that terminate the machine's gxserver connection (disconnect,
-watchdog, app quit) and by a failed connect. A machine whose forwarder is not
-running resolves to an empty SSH host, which is deliberately not dialable.
-
 The binary is the first of: explicit override, the helper Ghostex installs (Settings), the one the Linux packages ship beside their gxserver, PATH, `~/go/bin`, then Homebrew, that is at least `TAILCAT_MIN_VERSION` (`gpui_resolve_easy_connect_binary`).
+
+CDXC:RemotePairing 2026-11-10 WHY:
+A user reported "a lot of reconnects" between app and remote. The forwarder was stopped with every drop of the machine's gxserver connection and before every connect, automatic ones included, so a reconnect for any reason (the far gxserver restarting for an update, a slow health check) also cut every terminal attached to that machine, which ride the forwarder with SSH connections of their own; and since the registry here is one per app while each window keeps its own connection, one window's reconnect ended the other windows' tunnels, which then did the same back. The forwarder now lives for as long as the machine is saved with the same address: `gpui_start_easy_connect_forward` reuses it, and only a changed address or SSH port, the machine being turned off or removed, and the app quitting stop it. A forwarder whose machine cannot be reached simply fails the SSH dial through it, as an unreachable host would.
 */
 
 pub(crate) const GPUI_EASY_CONNECT_FORWARD_HOST: &str = "127.0.0.1";
 pub(crate) const GPUI_EASY_CONNECT_DEFAULT_SSH_PORT: u16 = 22;
 
-/// How long the accept loop sleeps between non-blocking accepts; this is also
-/// the worst-case delay before the listener is released after a stop.
-const ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(25);
-const PIPE_BUFFER_BYTES: usize = 32 * 1024;
-/// How long an accepted connection waits for the machine's tailcat client to be listening.
-const FORWARD_READY_TIMEOUT: Duration = Duration::from_secs(30);
-/// How often the supervisor looks at its tailcat client and the stop flag.
-const FORWARD_POLL_INTERVAL: Duration = Duration::from_millis(100);
-const FORWARD_RESTART_MIN: Duration = Duration::from_millis(500);
-const FORWARD_RESTART_MAX: Duration = Duration::from_secs(10);
-/// A tailcat client that ran this long was healthy: its next restart starts the backoff over.
-const FORWARD_STABLE_AFTER: Duration = Duration::from_secs(30);
-/// The forwarded port is SSH, whose server speaks first: a fresh connection that hears nothing
-/// this long went through a tailcat client that carries nothing, which is started again.
-const FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(20);
-
-/// Both sockets of one relayed connection, so `stop` can end it.
-struct LiveConnection {
-    client: TcpStream,
-    upstream: TcpStream,
-}
-
-type SharedConnections = Arc<Mutex<HashMap<u64, LiveConnection>>>;
-
-/// The machine's tailcat client: the loopback port `tailcat forward` listens on while it runs,
-/// and a restart a connection asked for.
-#[derive(Default)]
-struct TailcatClientState {
-    port: Option<u16>,
-    restart: bool,
-}
-
-type SharedTailcatClient = Arc<(Mutex<TailcatClientState>, Condvar)>;
-
 struct EasyConnectForward {
-    local_port: u16,
-    shutdown: Arc<AtomicBool>,
-    connections: SharedConnections,
-    client: SharedTailcatClient,
-    accept_thread: JoinHandle<()>,
-    supervisor_thread: JoinHandle<()>,
-}
-
-impl EasyConnectForward {
-    fn stop(self) {
-        self.shutdown.store(true, Ordering::SeqCst);
-        self.client.1.notify_all();
-        // Unblocks both pumps of every in-flight connection so their threads can finish.
-        if let Ok(mut connections) = self.connections.lock() {
-            for (_, connection) in connections.drain() {
-                let _ = connection.client.shutdown(Shutdown::Both);
-                let _ = connection.upstream.shutdown(Shutdown::Both);
-            }
-        }
-        /*
-        The listener is owned by the accept thread and only closes when that
-        thread returns (within one ACCEPT_POLL_INTERVAL of the flag). Joining
-        here makes the port free by the time `stop` returns, so an immediate
-        reconnect can bind the same preferred port instead of moving to a new
-        one and stranding attach terminals that poll the old one. The
-        supervisor kills the tailcat client within one FORWARD_POLL_INTERVAL,
-        so none outlives the app (a tailcat client does not exit by itself
-        while its tunnel link stays up).
-        */
-        let _ = self.accept_thread.join();
-        let _ = self.supervisor_thread.join();
-    }
+    address_blob: String,
+    remote_port: u16,
+    forward: TailcatForward,
 }
 
 struct EasyConnectForwardRegistry {
@@ -141,20 +77,34 @@ pub(crate) fn gpui_easy_connect_forward_port(remote_machine_id: &str) -> Option<
         registry
             .running
             .get(remote_machine_id)
-            .map(|forward| forward.local_port)
+            .map(|forward| forward.forward.local_port())
     })
 }
 
-/// Starts (or reuses) the machine's forwarder and returns the loopback port to dial.
+/// Starts the machine's forwarder to `remote_port` there, or reuses the one running for the same
+/// address and port, and returns the loopback port to dial. `probe` is how the link checks itself
+/// (`ghostex_paths::tailcat_forward`): by what the far port is, SSH or a box's gxserver.
 pub(crate) fn gpui_start_easy_connect_forward(
     remote_machine_id: &str,
     address_blob: &str,
-    remote_ssh_port: u16,
+    remote_port: u16,
+    probe: ForwardProbe,
 ) -> Result<u16, String> {
-    if let Some(port) = gpui_easy_connect_forward_port(remote_machine_id) {
-        return Ok(port);
-    }
     let address_blob = address_blob.trim();
+    let running = with_registry(|registry| {
+        registry.running.get(remote_machine_id).map(|forward| {
+            (
+                forward.forward.local_port(),
+                forward.address_blob == address_blob && forward.remote_port == remote_port,
+            )
+        })
+    });
+    match running {
+        Some((port, true)) => return Ok(port),
+        // The machine was paired again or its port changed: the old link goes.
+        Some((_, false)) => gpui_stop_easy_connect_forward(remote_machine_id),
+        None => {}
+    }
     if address_blob.is_empty() || address_blob.chars().any(char::is_whitespace) {
         return Err("The saved Easy Connect address is invalid.".to_string());
     }
@@ -178,57 +128,99 @@ pub(crate) fn gpui_start_easy_connect_forward(
     let preferred_port =
         with_registry(|registry| registry.last_ports.get(remote_machine_id).copied());
     let listener = gpui_bind_easy_connect_listener(preferred_port)?;
-    let local_port = listener
-        .local_addr()
-        .map_err(|_| "Could not read the Easy Connect forwarder port.".to_string())?
-        .port();
-    // Non-blocking accepts are what let the loop observe the stop flag and
-    // release the port instead of parking forever inside `accept`.
-    listener
-        .set_nonblocking(true)
-        .map_err(|_| "Could not start the Easy Connect forwarder.".to_string())?;
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let connections: SharedConnections = Arc::new(Mutex::new(HashMap::new()));
-    let client: SharedTailcatClient = Arc::new((Mutex::default(), Condvar::new()));
-    let spec = EasyConnectConnectionSpec {
-        address_blob: address_blob.to_string(),
+    let spec = ForwardSpec {
         binary_path,
-        remote_port: remote_ssh_port,
+        address_blob: address_blob.to_string(),
+        remote_port,
+        probe,
     };
-    let supervisor_thread = {
-        let shutdown = Arc::clone(&shutdown);
-        let client = Arc::clone(&client);
-        thread::spawn(move || supervise_tailcat_client(spec, shutdown, client))
-    };
-    let accept_thread = {
-        let shutdown = Arc::clone(&shutdown);
-        let connections = Arc::clone(&connections);
-        let client = Arc::clone(&client);
-        thread::spawn(move || accept_loop(listener, shutdown, connections, client))
-    };
-    let forward = EasyConnectForward {
-        local_port,
-        shutdown,
-        connections,
-        client,
-        accept_thread,
-        supervisor_thread,
-    };
+    let key_address = address_blob.to_string();
+    let event_machine_id = remote_machine_id.to_string();
+    let forward = TailcatForward::start(
+        listener,
+        spec,
+        Arc::new(move || easy_connect_link_key(&key_address)),
+        Arc::new(move |event| log_easy_connect_forward_event(&event_machine_id, event)),
+    )
+    .map_err(|_| "Could not start the Easy Connect forwarder.".to_string())?;
+    let local_port = forward.local_port();
     with_registry(|registry| {
         registry
             .last_ports
             .insert(remote_machine_id.to_string(), local_port);
-        registry
-            .running
-            .insert(remote_machine_id.to_string(), forward);
+        registry.running.insert(
+            remote_machine_id.to_string(),
+            EasyConnectForward {
+                address_blob: address_blob.to_string(),
+                remote_port,
+                forward,
+            },
+        );
     });
     Ok(local_port)
 }
 
-/// Stops the machine's forwarder and its tailcat client.
+/// One line in the remote log when a machine's Easy Connect helper ends for a reason of its own
+/// (`helperExited`, `carriedNothing`, `neverCarried`, `helperDidNotStart`), with how long it ran
+/// and how many connections went with it. Written whatever the Diagnostic logs switches say: it is
+/// why a machine's terminals and tunnel just reconnected.
+fn log_easy_connect_forward_event(remote_machine_id: &str, event: ForwardEvent) {
+    let ForwardEvent::ClientEnded {
+        reason,
+        uptime,
+        connections_cut,
+    } = event
+    else {
+        return;
+    };
+    if matches!(reason, ClientEnd::Stopped | ClientEnd::Refreshed) {
+        return;
+    }
+    support_logs::append(
+        support_logs::GpuiSupportLog::RemoteGxserverInstall,
+        "gpui.remoteGxserver.easyConnectHelperEnded",
+        serde_json::json!({
+            "level": "warning",
+            "machineId": remote_machine_id,
+            "reason": reason.as_str(),
+            "uptimeMs": uptime.as_millis() as u64,
+            "connectionsCut": connections_cut,
+        }),
+    );
+}
+
+/// Stops the machine's forwarder and its tailcat client, and waits for its port to be free. Only
+/// for a machine that is turned off, removed or given another address, and a failed first connect.
 pub(crate) fn gpui_stop_easy_connect_forward(remote_machine_id: &str) {
     if let Some(forward) = with_registry(|registry| registry.running.remove(remote_machine_id)) {
-        forward.stop();
+        /*
+        Waiting makes the port free by the time this returns, so an immediate reconnect can bind
+        the same preferred port instead of moving to a new one and stranding attach terminals that
+        poll the old one, and no tailcat client outlives the app (one does not exit by itself
+        while its tunnel link stays up).
+        */
+        forward.forward.stop_and_wait();
+    }
+}
+
+/// Stops the forwarder of every saved machine that `settings` turned off or no longer holds,
+/// connected or not. A Cloud Box's forwarder (gx_store/cloud_boxes.rs) is no saved machine and
+/// stays.
+pub(crate) fn gpui_stop_easy_connect_forwards_of_unsaved_machines(
+    settings: &serde_json::Map<String, serde_json::Value>,
+) {
+    let running: Vec<String> = with_registry(|registry| registry.running.keys().cloned().collect());
+    let disabled = gpui_disabled_remote_machine_ids(settings);
+    for machine_id in running {
+        if ghostex_gx_core::protocol::cloud_box::cloud_box_id_from_machine_id(&machine_id).is_some()
+        {
+            continue;
+        }
+        if disabled.contains(&machine_id)
+            || !gpui_settings_object_has_remote_machine_id(settings, &machine_id)
+        {
+            gpui_stop_easy_connect_forward(&machine_id);
+        }
     }
 }
 
@@ -241,7 +233,7 @@ pub(crate) fn gpui_stop_all_easy_connect_forwards() {
             .collect()
     });
     for forward in forwards {
-        forward.stop();
+        forward.forward.stop_and_wait();
     }
 }
 
@@ -256,10 +248,20 @@ pub(crate) fn gpui_remote_machine_config_with_easy_connect_forward(
     let Some(address) = config.easy_connect_address.clone() else {
         return Err("The saved machine is missing its Easy Connect address.".to_string());
     };
+    // A connect through a forwarder nothing rides on (no terminal of this machine, no tunnel)
+    // dials with a fresh helper, as every connect did before the forwarder outlived its connection:
+    // an unused helper may have lost the machine with nothing to show it.
+    with_registry(|registry| {
+        if let Some(forward) = registry.running.get(config.remote_machine_id.as_str()) {
+            forward.forward.refresh_idle_client();
+        }
+    });
     let local_port = gpui_start_easy_connect_forward(
         config.remote_machine_id.as_str(),
         address.as_str(),
         config.easy_connect_ssh_port,
+        // The forwarded port is SSH, whose server speaks first.
+        ForwardProbe::ServerSpeaksFirst,
     )?;
     config.ssh_host = GPUI_EASY_CONNECT_FORWARD_HOST.to_string();
     config.ssh_port = Some(local_port);
@@ -449,47 +451,9 @@ fn is_executable_file(path: &Path) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// The machine's one tailcat client, and the relay from each accepted connection.
+// The key the machine's one tailcat client dials with.
 // ---------------------------------------------------------------------------
 
-/*
-CDXC:RemotePairing 2026-11-10 WHY:
-GitHub #526: a MacBook's Easy Connect remote machine kept dropping and its terminals reattaching. This forwarder spawned one `tailcat <address> <port>` client per accepted connection (the gxserver tunnel, every terminal attach, every command), and since computer pairing (11.1.0) every one of them dials with tailcat's one `client-default` key. Two tailcat clients with one key to one server stall each other: when a new one starts the older one stops receiving and its connection is never closed (#526's reproduction, and measured again on 2026-11-10 on Ghostex's relay). Each machine now has one long-lived `tailcat forward` client on a loopback port of its own that carries every connection, so a machine's connections never compete for its key. The key stays `client-default`, the one every computer already has on its allow-list, so a remote on any version accepts it exactly as before.
-SEE-ALSO: server/src/ghostex_cli/tailcat_tunnel.rs (gxserver's own tunnels to connected computers follow the same rule).
-*/
-#[derive(Clone)]
-struct EasyConnectConnectionSpec {
-    address_blob: String,
-    binary_path: PathBuf,
-    remote_port: u16,
-}
-
-/// Runs the machine's `tailcat forward` until the forwarder stops, starting it again (after a
-/// backoff) whenever it exits or a connection found it carrying nothing.
-fn supervise_tailcat_client(
-    spec: EasyConnectConnectionSpec,
-    shutdown: Arc<AtomicBool>,
-    client: SharedTailcatClient,
-) {
-    let mut backoff = FORWARD_RESTART_MIN;
-    while !shutdown.load(Ordering::SeqCst) {
-        let started = Instant::now();
-        run_tailcat_client_once(&spec, &shutdown, &client);
-        set_tailcat_client_port(&client, None);
-        if started.elapsed() >= FORWARD_STABLE_AFTER {
-            backoff = FORWARD_RESTART_MIN;
-        }
-        let deadline = Instant::now() + backoff;
-        while Instant::now() < deadline && !shutdown.load(Ordering::SeqCst) {
-            thread::sleep(FORWARD_POLL_INTERVAL);
-        }
-        backoff = (backoff * 2).min(FORWARD_RESTART_MAX);
-    }
-}
-
-/// One run of `tailcat forward --bind=127.0.0.1 <address> 0:<port>`: its loopback port is
-/// published once it prints it, and the run ends when it exits, the forwarder stops, or a
-/// connection asks for a restart.
 /// How long the forwarder waits for gxserver to name its key for a machine: the first ask registers
 /// the keys there, which takes a tunnel's rendezvous and an answer, for each port it tries.
 const LINK_KEY_TIMEOUT: Duration = Duration::from_secs(40);
@@ -512,284 +476,4 @@ fn easy_connect_link_key(address: &str) -> Option<PathBuf> {
     let answer: serde_json::Value = serde_json::from_str(&body).ok()?;
     let path = PathBuf::from(answer.pointer("/result/keyPath")?.as_str()?);
     path.is_file().then_some(path)
-}
-
-fn run_tailcat_client_once(
-    spec: &EasyConnectConnectionSpec,
-    shutdown: &Arc<AtomicBool>,
-    client: &SharedTailcatClient,
-) {
-    let mut command = gpui_background_command(&spec.binary_path);
-    if let Some(key) = easy_connect_link_key(&spec.address_blob) {
-        command.arg(format!("--key={}", key.display()));
-    }
-    let child = command
-        .arg("forward")
-        .arg(format!("--bind={GPUI_EASY_CONNECT_FORWARD_HOST}"))
-        .arg(&spec.address_blob)
-        .arg(format!("0:{}", spec.remote_port))
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn();
-    let Ok(mut child) = child else {
-        return;
-    };
-    // tailcat prints "forwarding 127.0.0.1:<port> -> remote …" once it listens, then its log;
-    // the reader keeps draining it so the pipe never fills.
-    let reader = child.stderr.take().map(|stderr| {
-        let client = Arc::clone(client);
-        thread::spawn(move || {
-            for line in BufReader::new(stderr).lines() {
-                let Ok(line) = line else { return };
-                if let Some(port) = tailcat_forward_listen_port(&line) {
-                    set_tailcat_client_port(&client, Some(port));
-                }
-            }
-        })
-    });
-    loop {
-        if shutdown.load(Ordering::SeqCst) || take_tailcat_client_restart(client) {
-            let _ = child.kill();
-            let _ = child.wait();
-            break;
-        }
-        if matches!(child.try_wait(), Ok(Some(_)) | Err(_)) {
-            break;
-        }
-        thread::sleep(FORWARD_POLL_INTERVAL);
-    }
-    if let Some(reader) = reader {
-        let _ = reader.join();
-    }
-}
-
-/// The loopback port in tailcat forward's "forwarding 127.0.0.1:<port> -> …" line.
-fn tailcat_forward_listen_port(line: &str) -> Option<u16> {
-    let rest = line.split("forwarding ").nth(1)?;
-    let address = rest.split_whitespace().next()?;
-    address.rsplit(':').next()?.parse().ok()
-}
-
-fn set_tailcat_client_port(client: &SharedTailcatClient, port: Option<u16>) {
-    let (state, ready) = &**client;
-    let mut state = state
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    state.port = port;
-    ready.notify_all();
-}
-
-fn take_tailcat_client_restart(client: &SharedTailcatClient) -> bool {
-    let mut state = client
-        .0
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    std::mem::take(&mut state.restart)
-}
-
-fn request_tailcat_client_restart(client: &SharedTailcatClient) {
-    let mut state = client
-        .0
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    state.restart = true;
-}
-
-/// The tailcat client's loopback port, waiting up to `FORWARD_READY_TIMEOUT` for it to listen.
-fn wait_for_tailcat_client(client: &SharedTailcatClient, shutdown: &AtomicBool) -> Option<u16> {
-    let deadline = Instant::now() + FORWARD_READY_TIMEOUT;
-    let (state, ready) = &**client;
-    let mut state = state
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    loop {
-        if shutdown.load(Ordering::SeqCst) {
-            return None;
-        }
-        if let Some(port) = state.port {
-            return Some(port);
-        }
-        let now = Instant::now();
-        if now >= deadline {
-            return None;
-        }
-        let wait = (deadline - now).min(Duration::from_millis(200));
-        state = ready
-            .wait_timeout(state, wait)
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .0;
-    }
-}
-
-fn accept_loop(
-    listener: TcpListener,
-    shutdown: Arc<AtomicBool>,
-    connections: SharedConnections,
-    client: SharedTailcatClient,
-) {
-    let mut next_id: u64 = 0;
-    loop {
-        if shutdown.load(Ordering::SeqCst) {
-            return;
-        }
-        match listener.accept() {
-            Ok((stream, _)) => {
-                let id = next_id;
-                next_id = next_id.wrapping_add(1);
-                let shutdown = Arc::clone(&shutdown);
-                let connections = Arc::clone(&connections);
-                let client = Arc::clone(&client);
-                thread::spawn(move || serve_connection(id, stream, shutdown, connections, client));
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                thread::sleep(ACCEPT_POLL_INTERVAL);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(_) => return,
-        }
-    }
-}
-
-fn serve_connection(
-    id: u64,
-    stream: TcpStream,
-    shutdown: Arc<AtomicBool>,
-    connections: SharedConnections,
-    client: SharedTailcatClient,
-) {
-    // Accepted sockets inherit the listener's non-blocking mode on macOS, so
-    // the pumps must put this one back into blocking mode before reading.
-    if stream.set_nonblocking(false).is_err() {
-        return;
-    }
-    let Some(port) = wait_for_tailcat_client(&client, &shutdown) else {
-        let _ = stream.shutdown(Shutdown::Both);
-        return;
-    };
-    let Ok(upstream) = TcpStream::connect((GPUI_EASY_CONNECT_FORWARD_HOST, port)) else {
-        // The client went away between printing its port and this connect; the supervisor starts
-        // it again.
-        let _ = stream.shutdown(Shutdown::Both);
-        return;
-    };
-    let (Ok(registered_client), Ok(registered_upstream)) =
-        (stream.try_clone(), upstream.try_clone())
-    else {
-        let _ = stream.shutdown(Shutdown::Both);
-        let _ = upstream.shutdown(Shutdown::Both);
-        return;
-    };
-    connections
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .insert(
-            id,
-            LiveConnection {
-                client: registered_client,
-                upstream: registered_upstream,
-            },
-        );
-    // `stop` sets the flag before draining the registry, so a connection that
-    // registered after the drain sees the flag here and tears itself down.
-    if shutdown.load(Ordering::SeqCst) {
-        reap_connection(&connections, id);
-        return;
-    }
-    if !pump_connection(stream, upstream) {
-        request_tailcat_client_restart(&client);
-    }
-    reap_connection(&connections, id);
-}
-
-fn reap_connection(connections: &SharedConnections, id: u64) {
-    let removed = connections
-        .lock()
-        .ok()
-        .and_then(|mut live| live.remove(&id));
-    if let Some(connection) = removed {
-        let _ = connection.client.shutdown(Shutdown::Both);
-        let _ = connection.upstream.shutdown(Shutdown::Both);
-    }
-}
-
-/// Relays one connection both ways until either side ends. Returns false when the remote said
-/// nothing within `FIRST_BYTE_TIMEOUT` of a fresh connection (a tailcat client carrying nothing).
-fn pump_connection(stream: TcpStream, upstream: TcpStream) -> bool {
-    let (Ok(mut client_reader), Ok(mut upstream_writer)) =
-        (stream.try_clone(), upstream.try_clone())
-    else {
-        let _ = stream.shutdown(Shutdown::Both);
-        let _ = upstream.shutdown(Shutdown::Both);
-        return true;
-    };
-    let uploader = thread::spawn(move || {
-        copy_stream(&mut client_reader, &mut upstream_writer);
-        // Half close: the client is done sending, and the far side sees the
-        // same end-of-request it would have seen on a direct socket.
-        let _ = upstream_writer.shutdown(Shutdown::Write);
-    });
-    let mut upstream_reader = upstream;
-    let mut downstream = stream;
-    let carried = relay_first_bytes(&mut upstream_reader, &mut downstream);
-    if carried {
-        copy_stream(&mut upstream_reader, &mut downstream);
-    }
-    let _ = downstream.shutdown(Shutdown::Write);
-    // Nothing more can travel in either direction; closing both read halves
-    // releases the uploader if it is still parked on `read`.
-    let _ = downstream.shutdown(Shutdown::Both);
-    let _ = upstream_reader.shutdown(Shutdown::Both);
-    let _ = uploader.join();
-    carried
-}
-
-/// Waits up to `FIRST_BYTE_TIMEOUT` for the remote's first bytes and relays them. False when
-/// none came in time; true otherwise, including a remote that closed at once (what the tailcat
-/// client does for a machine it cannot reach, which is no reason to start it again).
-fn relay_first_bytes(upstream: &mut TcpStream, downstream: &mut TcpStream) -> bool {
-    if upstream.set_read_timeout(Some(FIRST_BYTE_TIMEOUT)).is_err() {
-        return true;
-    }
-    let mut buffer = vec![0u8; PIPE_BUFFER_BYTES];
-    let carried = loop {
-        match upstream.read(&mut buffer) {
-            Ok(0) => break true,
-            Ok(count) => {
-                let _ = downstream.write_all(&buffer[..count]);
-                break true;
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                ) =>
-            {
-                break false;
-            }
-            Err(_) => break true,
-        }
-    };
-    let _ = upstream.set_read_timeout(None);
-    carried
-}
-
-fn copy_stream(reader: &mut impl Read, writer: &mut impl Write) {
-    let mut buffer = vec![0u8; PIPE_BUFFER_BYTES];
-    loop {
-        match reader.read(&mut buffer) {
-            Ok(0) => return,
-            Ok(count) => {
-                if writer.write_all(&buffer[..count]).is_err() {
-                    return;
-                }
-                if writer.flush().is_err() {
-                    return;
-                }
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(_) => return,
-        }
-    }
 }

@@ -602,7 +602,8 @@ pub(crate) mod approvals {
                     }
                     Ok(
                         crate::security::SecurityEvent::ApprovalDenied { request, .. }
-                        | crate::security::SecurityEvent::ApprovalExpired { request },
+                        | crate::security::SecurityEvent::ApprovalExpired { request }
+                        | crate::security::SecurityEvent::ApprovalWithdrawn { request, .. },
                     ) => forget(&request.id),
                     Ok(_) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}

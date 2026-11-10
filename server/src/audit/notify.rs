@@ -114,6 +114,10 @@ pub(crate) fn notifies(entry: &StoredEntry, earlier: &[StoredEntry]) -> bool {
         "pending" => false,
         // A refusal on its own is the gate working; only a repeat (above) is news.
         "refused" => false,
+        // How a request ended (approved, expired, replaced, withdrawn) is for reading the log;
+        // the change an approval allowed notifies on its own (CDXC:Security 2026-11-10 in
+        // server/security_http.rs `note_request_event`).
+        _ if entry.action.starts_with("approval.") => false,
         // CDXC:Chief 2026-11-08 DECISION: Coordinator, on the user's behalf: Chief's approval-free steering goes into the security log with a quiet outcome and never reaches the bell or the phone, although it is done with an agent's session token (which otherwise always notifies).
         "allowed" if HEAD_STEERING_ACTIONS.contains(&entry.action.as_str()) => false,
         _ if OTHER_ACTORS.contains(&entry.actor.kind.as_str()) => true,

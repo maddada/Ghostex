@@ -76,6 +76,9 @@ pub struct WorkAsk {
     /// Answered, done or withdrawn.
     pub settled_at: Option<String>,
     pub withdrawn: bool,
+    /// Snoozed by the user until this moment (ISO): out of the dock and the Needs you count until
+    /// then, still listed in the Work panel (`snooze` below).
+    pub snoozed_until: Option<String>,
 }
 
 impl WorkAsk {
@@ -403,7 +406,11 @@ pub fn status_heading(status: &str) -> &'static str {
     match status {
         "needs" => "Needs you",
         "blocked" => "Blocked",
-        "moving" => "Moving",
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User: "Please don't say Moving say In Progress. Moving isn't clear to me" (and on 2026-11-07, of
+        // the board: "rename to in progress please"). Wherever the user reads it, the `moving` status is
+        // "In progress"; the stored value stays `moving` and `--status` takes `moving` or `in-progress`.
+        "moving" => "In progress",
         "waiting" => "Waiting",
         "later" => "Later",
         "finished" => "Finished",
@@ -661,6 +668,20 @@ fn ask_value(ask: &WorkAsk) -> Value {
     if ask.withdrawn {
         out["withdrawn"] = json!(true);
     }
+    // A snooze still running; one that has ended reads as if there was none.
+    if let Some((until, at)) = ask.snoozed_until.as_deref().and_then(|until| {
+        let at = DateTime::parse_from_rfc3339(until).ok()?.with_timezone(&Local);
+        (at.with_timezone(&Utc) > Utc::now()).then_some((until, at))
+    }) {
+        out["snoozedUntil"] = json!(until);
+        // "3:40 PM", or "Tue 9:40 AM" past today, as the Work panel says it.
+        let label = if at.date_naive() == Local::now().date_naive() {
+            at.format("%-I:%M %p").to_string()
+        } else {
+            at.format("%a %-I:%M %p").to_string()
+        };
+        out["snoozedUntilLabel"] = json!(label);
+    }
     out
 }
 
@@ -762,6 +783,7 @@ pub fn item_value(item: &WorkItem, context: &WorkContext<'_>, history: usize) ->
     }
     // Its link as the board showed it: a PR with its checks, an issue, a ticket or a file.
     if !item.link.is_empty() {
+        super::board::note_item_github_link(&item.link);
         if let Some(pr) = super::board::item_pr(&item.link) {
             out["links"] = json!([{
                 "kind": "pr",
@@ -1262,6 +1284,41 @@ pub fn handle_work_request(
             let tag = ask.tag.clone();
             item.record("answer", format!("{tag}: {given}").trim_start_matches(": ").to_string(), &now);
             finish_if_only_asking(&mut item, &now);
+        }
+        // The user snoozed an open ask for `hours` from its card (1, 6 or 24), or cancelled it:
+        // cancelled, it is withdrawn for good and the client tells the coordinator so, as it sends
+        // an answer (gx-chat-core `coordinator_board::answer`).
+        //
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User: "for any ask i should be able to click 'Snooze' and snooze it for 1h 6h 24h or
+        // cancel it". A snoozed ask leaves the dock and the Needs you count until its end and comes
+        // back by itself (`snoozedUntil` is read against the clock); the Work panel keeps it under
+        // a quiet "Snoozed until".
+        "snooze" | "cancel" => {
+            let tag = param_text(params, "ask").and_then(|tag| question_tag(&tag));
+            let ask = item
+                .asks
+                .iter_mut()
+                .filter(|ask| ask.is_open())
+                .find(|ask| tag.as_ref().is_none_or(|tag| ask.tag == *tag))
+                .ok_or_else(|| bad(format!("{name} has no open ask{}.", tag.as_ref().map(|tag| format!(" {tag}")).unwrap_or_default())))?;
+            if op == "cancel" {
+                ask.settled_at = Some(now.clone());
+                ask.withdrawn = true;
+                let words = format!("{} cancelled by the user", ask.tag);
+                item.record("settle", words.trim().to_string(), &now);
+                finish_if_only_asking(&mut item, &now);
+            } else {
+                let hours = params
+                    .get("hours")
+                    .and_then(Value::as_u64)
+                    .filter(|hours| (1..=24 * 14).contains(hours))
+                    .ok_or_else(|| bad("Say for how many hours (1 to 336)."))?;
+                ask.snoozed_until = Some(
+                    (Utc::now() + chrono::Duration::hours(hours as i64))
+                        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                );
+            }
         }
         // An ask the user did (a task's Mark done, `item ask W7 --done Q12`) or the coordinator
         // withdrew (`--withdraw`).

@@ -47,7 +47,7 @@ pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     // CDXC:Coordinators 2026-11-07 FIX: `ghostex coordinator promote <ref> --computer <name>`
     // (Discord: "why orchestrator cannot be promoted to a session in a remote machine from the
     // desktop app?"). The other computer records the coordinator, installs its own bundled
-    // orchestrator skill and queues the playbook prompt: no more than `queueSessionChatPrompt`
+    // orchestrator skill and sends the playbook message: no more than `sendSessionChatMessage`
     // above already lets an agent do, plus the role.
     "/api/promoteCoordinator",
     // `ghostex agent-hooks status|install|uninstall --computer <name>`: Ghostex's own session

@@ -338,6 +338,11 @@ impl SessionChatTranscriptGate {
                         &path,
                     );
                 }
+                // CDXC:Coordinators 2026-11-10 WHY:
+                // So is OpenCode's (session_chat_opencode/mirror.rs, written from OpenCode's service on each read). On 11.2.2 nothing read the service for a thread whose TUI plugin was silent, so after its turn ended the mirror still said working, the coordinator's supervisor kept the thread Working and reported "no new output" 8 minutes later instead of its finished turn (GitHub #538, a comment from 2026-11-10). The read is cached and refetched only when OpenCode reports a change.
+                if transcript_agent == crate::session_chat::SessionChatTranscriptAgent::OpenCode {
+                    crate::session_chat_opencode::refresh_for_path(&path);
+                }
                 Some(path)
             }
             None => resolve_session_chat_transcript_path(

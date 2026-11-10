@@ -255,12 +255,32 @@ carries the approval and reads as `approved`. Routes whose handlers keep no entr
 (prompt answers, terminal input, settings, GBots on) get one `approved` entry from the gate. The
 log names `gxs_` callers as the session and `gxo_` callers as the owner.
 
+How each request ended is its own entry, against its id (`approval.id`), written by
+`note_request_event` (server/src/server/security_http.rs) and never sent to the bell:
+`approval.approved` (outcome `approved`, actor the approving caller, reason the kind of device:
+the app's owner session, a paired phone, or the token file), `approval.expired` (`expired`:
+"Nobody answered within 10 minutes", or "Approved, but the change wasn't made within 2 minutes"),
+`approval.replaced` (`replaced`: "Replaced by the newer request apr_…"), `approval.withdrawn`
+(`withdrawn`: the session that asked was closed; its waiting requests go with its token). A denial
+keeps its entry under the request's own action (`denied`). A phone's `pairing.request` entry
+carries its request id. No new field: old log files and old readers stay as they were (an unknown
+outcome shows as "Recorded"). Every lapse is announced, whichever call found it
+(`ApprovalStore::expire` drains them every 15 seconds).
+
+gxserver.jsonl keeps an info line (`log_record`, written whatever the diagnostics switches say)
+for each `approvalRequested`, `approvalApproved`, `approvalDenied`, `approvalEnded { outcome,
+replacedBy?, why? }`, `approvalSpent { caller }` (the gate spent it on the call it was made for)
+and `approvalRead { answer, caller }` (only when the answer for that id changed): ids, actions,
+statuses and caller kinds, no summaries, tokens or keys. A connected computer's renewal makes no
+request and writes nothing here.
+
 ## Security events (in-process stream)
 
 `state.security.subscribe()` returns a `tokio::sync::broadcast::Receiver<SecurityEvent>`; a slow
 subscriber loses the oldest events (`Lagged`) and never blocks gxserver. Events (`type` tag,
 camelCase): `approvalRequested`, `approvalApproved { keyId }`, `approvalDenied { by }`,
-`approvalExpired`, `sensitiveActionAuthorized { action, target, approvalId, caller }` (an approval
+`approvalExpired` (a replaced request too, with `replacedBy`), `approvalWithdrawn { why }`,
+`sensitiveActionAuthorized { action, target, approvalId, caller }` (an approval
 was spent; the action is about to run), `sensitiveActionPerformed { action, target, caller, ok }`
 (from `record_performed`), `sessionTokenMinted`, `sessionTokenRevoked`, `approverKeyAdded`,
 `approverKeyRemoved { by }`. The audit-log thread owns the hash-chained log and the notification

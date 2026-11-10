@@ -593,3 +593,77 @@ pub(crate) fn modal_text_area_with_paste(
         )
         .into_any_element()
 }
+
+/// A pairing's three words, side by side in raised boxes, as the biggest thing on screen: the one
+/// drawing of them on the computer, for the Connect a phone window, the approval notice and the
+/// waiting row in Settings > Remote (CDXC:RemotePairing 2026-11-10 in
+/// window/connect_device_modal.rs). `compact` is the Settings row's smaller size.
+pub(crate) fn pairing_words(p: &ModalPalette, words: &[String], compact: bool) -> AnyElement {
+    let (height, size, line) = if compact {
+        (40.0, 17.0, 22.0)
+    } else {
+        (64.0, 24.0, 30.0)
+    };
+    h_flex()
+        .w_full()
+        .gap(px(8.0))
+        .children(words.iter().map(|word| {
+            div()
+                .flex_1()
+                .flex_basis(px(0.0))
+                .min_w_0()
+                .h(px(height))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(MODAL_RADIUS_CONTROL))
+                .border_1()
+                .border_color(hsla(p.hairline))
+                .bg(hsla(p.raised))
+                .text_size(px(size))
+                .line_height(px(line))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(hsla(p.foreground))
+                .overflow_hidden()
+                .child(word.clone())
+        }))
+        .into_any_element()
+}
+
+/// "Your phone shows three words. Approve only if they are the same as these." (or computer): the
+/// one sentence under the words wherever they show.
+pub(crate) fn pairing_words_sentence(phone: bool) -> String {
+    format!(
+        "Your {} shows three words. Approve only if they are the same as these.",
+        if phone { "phone" } else { "computer" }
+    )
+}
+
+/// "Not my phone" / "Not my computer": the answer beside Approve wherever the words show.
+pub(crate) fn pairing_deny_label(phone: bool) -> &'static str {
+    if phone {
+        "Not my phone"
+    } else {
+        "Not my computer"
+    }
+}
+
+/// "Is this your phone?" / "Is this your computer?".
+pub(crate) fn pairing_question(phone: bool) -> &'static str {
+    if phone {
+        "Is this your phone?"
+    } else {
+        "Is this your computer?"
+    }
+}
+
+/// The line under Approve when it asks for Touch ID, Windows Hello or the password first.
+pub(crate) fn approve_presence_hint() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "Approve asks for Windows Hello first."
+    } else if cfg!(target_os = "macos") {
+        "Approve asks for Touch ID or your password first."
+    } else {
+        "Approve asks for your password first."
+    }
+}

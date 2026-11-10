@@ -3,7 +3,8 @@
 //! coordinator's computer reports, and keeps its key on the other computer, so clicking it opens
 //! the session there. The Running Agents panel, which takes each computer's list as that computer's
 //! own sessions, leaves that copy to the thread's own computer; the Unified sidebar draws no card
-//! for the thread at all, only its coordinator's (CDXC:Sidebar 2026-11-04 in unified_sidebar/build.rs).
+//! for the thread, only its coordinator's, with the thread nested under it (CDXC:Sidebar 2026-11-09
+//! in unified_sidebar/tree.rs).
 
 use ghostex_gx_core::indicators::{indicator_candidates, neutral_indicator_inputs};
 use ghostex_gx_core::unified_sidebar::{
@@ -200,7 +201,7 @@ fn lanes(core: &Core) -> Vec<(MachineId, SidebarViewModel)> {
 }
 
 #[test]
-fn the_unified_sidebar_draws_the_coordinator_and_no_card_for_its_thread() {
+fn the_unified_sidebar_nests_the_thread_under_its_coordinators_card() {
     let core = core();
     let lanes = lanes(&core);
     let machines: Vec<UnifiedMachineInput<'_>> = lanes
@@ -235,6 +236,17 @@ fn the_unified_sidebar_draws_the_coordinator_and_no_card_for_its_thread() {
         "the thread is reached from its coordinator, in neither computer's lane"
     );
     assert!(cards.contains(&Some(SessionKey::local("L1", "LC"))));
+    let coordinator = [&view.active, &view.working, &view.pinned]
+        .into_iter()
+        .flatten()
+        .find(|card| card.session.row.key == Some(SessionKey::local("L1", "LC")))
+        .expect("the coordinator's card");
+    let thread = coordinator
+        .threads
+        .iter()
+        .find(|thread| thread.session.row.key == Some(SessionKey::remote(MACHINE, "R1", "RT")))
+        .expect("the thread nested under its coordinator's card");
+    assert!(thread.lane.is_local(), "drawn from the copy this computer borrows");
 }
 
 #[test]

@@ -93,15 +93,42 @@ pub fn handle_with_ids(
         ActionKind::UseCoordinatorIntroExample => {
             crate::extras::coordinator_intro::use_example(&action.params)
         }
-        // A row of the Moving list goes to that item's newest card (work_cards.rs).
+        // A row of the In progress list shows its line of work in the Work panel, the chat staying
+        // where it is (`open_questions::show`).
         ActionKind::JumpToWorkCard => {
-            crate::questions::open_questions::jump_to_row(
-                state,
-                context,
-                text(action, "anchorId"),
-                text(action, "key"),
-                None,
-            );
+            crate::extras::coordinator_board::focus_row(state, text(action, "key"))
+        }
+        // A work ask snoozed from its card: out of the dock and the counts until its end
+        // (server/src/coordinators/work.rs `snooze`).
+        ActionKind::SnoozeWorkAsk => {
+            let request_id = next_request_id();
+            state.extras.panels.board_change_requests.insert(request_id);
+            let key = text(action, "key").to_string();
+            let hours = action.param("hours").and_then(Value::as_u64).unwrap_or(1);
+            let until = context.now_millis() + hours as i64 * 3_600_000;
+            state.extras.panels.work_snoozed.insert(key, until);
+            state.core.request_publish();
+            vec![crate::effect::Effect::SendRpc {
+                request_id,
+                method: crate::wire::ChatRpcMethod::CoordinatorBoard,
+                params: Box::new(serde_json::json!({
+                    "projectId": state.identity.project_id,
+                    "sessionId": state.identity.session_id,
+                    "op": "snooze",
+                    "item": text(action, "item"),
+                    "ask": text(action, "ask"),
+                    "hours": hours,
+                })),
+            }]
+        }
+        // A finished-work card leaves the dock (work_cards.rs `dock`).
+        ActionKind::DismissWorkDockCard => {
+            state
+                .extras
+                .panels
+                .work_dock_dismissed
+                .insert(text(action, "key").to_string());
+            state.core.request_publish();
             Vec::new()
         }
         ActionKind::CoordinatorBoardAnswer => {

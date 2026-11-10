@@ -291,6 +291,9 @@ pub struct Document {
     /// The question tags work items ask (`extras::work_cards::card_tags`): a one-click question or
     /// form asking only these is drawn once, as the ask card. Family f.
     pub work_ask_tags: Tri<Value>,
+    /// The dock above a coordinator's chat box (`extras::work_cards::dock`): `{cards, line}`, or
+    /// `null` for a chat with no work. Family f.
+    pub work_dock: Tri<Value>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,

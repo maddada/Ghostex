@@ -868,18 +868,20 @@ mod tests {
             .unwrap();
         assert_eq!(row.status, "answered");
 
-        // A fresh chat with only an old waiting question: the pill goes to it.
+        // A fresh chat with only an old waiting question: the pill opens it in the popup, read
+        // back from the transcript, and the chat stays where it is.
         let mut state = ChatState::default();
         state.session.resource_index = vec![index_entry(&id, "form", Some(7_000))].into();
-        match &crate::questions::open_questions::previous(&mut state, &context)[..] {
-            [Effect::SendRpc {
-                method: ChatRpcMethod::ReadSessionChat,
-                params,
-                ..
-            }] => {
-                assert_eq!(params["beforeOffset"], 7_000 + JUMP_CONTEXT_BYTES);
-            }
-            other => panic!("{other:?}"),
-        }
+        let effects = crate::questions::open_questions::previous(&mut state, &context);
+        assert!(
+            matches!(&effects[..], [Effect::SendRpc { .. }]),
+            "{effects:?}"
+        );
+        assert!(state
+            .questions
+            .resource_modal
+            .as_ref()
+            .is_some_and(|modal| modal.id == id && modal.loading));
+        assert!(state.questions.resource_go.is_none(), "nothing scrolls");
     }
 }

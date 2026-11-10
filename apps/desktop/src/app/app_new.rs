@@ -268,6 +268,7 @@ impl GhostexGpuiApp {
                 remote_browser: Default::default(),
                 remote_gxserver_connect_generations: HashMap::new(),
                 remote_gxserver_watchdog_probe_in_flight: false,
+                remote_link_log: Default::default(),
                 remote_gxserver_presentation_stream_generation: 0,
                 source_code_server_runtime: SourceCodeServerRuntimeOwner::new(),
                 pending_source_file_open: None,

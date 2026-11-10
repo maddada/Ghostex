@@ -35,6 +35,8 @@ const ICON_WARNING: &str = "modals/settings/alert-triangle.svg";
 const ICON_ERROR: &str = "modals/settings/circle-x.svg";
 const ICON_COPY: &str = "modals/settings/copy.svg";
 const ICON_COPIED: &str = "modals/settings/circle-check.svg";
+const ICON_PHONE: &str = "modals/settings/device-mobile.svg";
+const ICON_COMPUTER: &str = "modals/settings/device-desktop.svg";
 
 /// What kind of notice it is: its icon, and whether its buttons are Deny and Approve.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,6 +66,20 @@ pub(crate) struct NoticeModalItem {
     pub(crate) copy_text: Option<String>,
     /// A small line under the rest: what Approve does next (the system prompt).
     pub(crate) hint: Option<String>,
+    /// A phone or computer asking to pair: drawn like the Connect a phone window, with its name,
+    /// its three words and Not my phone beside Approve (CDXC:RemotePairing 2026-11-10 in
+    /// window/connect_device_modal.rs).
+    pub(crate) pairing: Option<NoticeModalPairing>,
+}
+
+/// The pairing a notice asks about.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NoticeModalPairing {
+    pub(crate) name: String,
+    /// "iPhone", "Android", "phone" or "computer".
+    pub(crate) kind_label: String,
+    pub(crate) phone: bool,
+    pub(crate) words: Vec<String>,
 }
 
 /// What a click asks the app to do with the notice `id`.
@@ -247,6 +263,46 @@ impl GpuiNoticeModalWindow {
             .into_any_element()
     }
 
+    /// A pairing: the device, its three words and the sentence, as in the Connect a phone window.
+    fn pairing(&self, item: &NoticeModalItem) -> Option<AnyElement> {
+        let pairing = item.pairing.as_ref()?;
+        let p = self.palette;
+        Some(
+            v_flex()
+                .w_full()
+                .gap(px(NOTICE_CONTENT_GAP))
+                .child(
+                    h_flex()
+                        .gap(px(8.0))
+                        .items_center()
+                        .child(modal_icon(
+                            if pairing.phone {
+                                ICON_PHONE
+                            } else {
+                                ICON_COMPUTER
+                            },
+                            16.0,
+                            p.foreground,
+                        ))
+                        .child(pairing.name.clone())
+                        .child(Self::text(
+                            13.0,
+                            19.0,
+                            p.muted,
+                            format!("· {}", pairing.kind_label),
+                        )),
+                )
+                .child(pairing_words(&p, &pairing.words, false))
+                .child(Self::text(
+                    13.0,
+                    19.0,
+                    p.muted,
+                    pairing_words_sentence(pairing.phone),
+                ))
+                .into_any_element(),
+        )
+    }
+
     /// Who asked and where, as label and value rows in a panel.
     fn source(&self, item: &NoticeModalItem) -> Option<AnyElement> {
         if item.source.is_empty() {
@@ -356,7 +412,9 @@ impl GpuiNoticeModalWindow {
                 modal_action_button(
                     &p,
                     "notice-modal-deny",
-                    "Deny",
+                    item.pairing
+                        .as_ref()
+                        .map_or("Deny", |pairing| pairing_deny_label(pairing.phone)),
                     None,
                     ModalButtonTone::Neutral,
                     false,
@@ -420,6 +478,7 @@ impl Render for GpuiNoticeModalWindow {
             return div().id("ghostex-gpui-notice-modal").size_full();
         };
         let mut content = vec![self.header(&item)];
+        content.extend(self.pairing(&item));
         content.extend(self.source(&item));
         content.extend(
             item.hint

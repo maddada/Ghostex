@@ -234,6 +234,8 @@ impl GhostexGpuiApp {
                 cx,
             );
         }
+        // A machine that is turned off or removed gives up its Easy Connect forwarder too.
+        gpui_stop_easy_connect_forwards_of_unsaved_machines(next_settings);
     }
 
     pub(crate) fn handle_gpui_save_remote_machine_password_message(
