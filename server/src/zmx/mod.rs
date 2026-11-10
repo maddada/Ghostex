@@ -3,9 +3,9 @@ mod bash_startup;
 mod codex_wrapper;
 pub mod endpoint;
 pub mod env;
-mod foreground_job;
 #[cfg(not(windows))]
 mod fish_startup;
+mod foreground_job;
 mod grok_startup;
 #[cfg(unix)]
 pub(crate) mod ipc_frame;
