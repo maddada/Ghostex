@@ -386,8 +386,10 @@ impl NativeChatView {
         // The last transcript row's own gap is the space above the card (working_card.rs).
         footer = footer
             .when(card_above_box, |this| this.pt_0())
-            .children(computer_card)
-            .children(working_card);
+            .children(computer_card);
+        // The working card joins the stack under the dock (below), so it can sit between the dock
+        // and the box.
+        let mut working_card = working_card;
         // What stacks between the card and the box.
         let mut waiting: Vec<AnyElement> = Vec::new();
         // A draft saved elsewhere is offered by the Saved draft pill in the box's pill strip
@@ -451,7 +453,12 @@ impl NativeChatView {
             if self.snapshot["prompt"]["kind"] == "question" {
                 return self
                     .composer_row()
-                    .child(footer.children(waiting).child(prompt))
+                    .child(
+                        footer
+                            .children(working_card)
+                            .children(waiting)
+                            .child(prompt),
+                    )
                     .into_any_element();
             }
             waiting.push(prompt.into_any_element());
@@ -462,11 +469,22 @@ impl NativeChatView {
         if let Some(card) = self.render_catch_up(p, window, cx) {
             waiting.push(card.into_any_element());
         }
-        // A coordinator's dock: its open asks and the status line, right above the box
-        // (work_cards.rs).
-        if !maximized && let Some(dock) = self.render_work_dock(p, cx) {
-            waiting.push(dock);
-        }
+        // A coordinator's dock (work_cards.rs) sits above the working card, which says how long
+        // the turn took and what it changed, so the order over the box is the transcript, the
+        // dock, that card, then the box. With no dock (none, stepped aside for a long message, or
+        // the Work panel docked beside the chat) the card stays where it always was.
+        //
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User, of the "Worked for 34s · ... updated" bar above the dock: "please i beg you. move
+        // this bar which shows how long we worked for etc to be below the work items cards
+        // please". The gaps stay the stack's own.
+        let dock = if maximized {
+            None
+        } else {
+            self.render_work_dock(p, cx)
+        };
+        let dock_shown = dock.is_some();
+        footer = footer.children(dock).children(working_card.take());
         self.sync_files_links_menu(window, cx);
         self.sync_resource_modal_menu(window, cx);
         if maximized && let Some(suggestions) = self.inline_suggestions(window, cx) {
@@ -671,6 +689,8 @@ impl NativeChatView {
             0.0
         } else if card_above_box {
             super::working_card::WORKING_CARD_GAP - 8.0
+        } else if dock_shown {
+            0.0
         } else {
             8.0
         };
