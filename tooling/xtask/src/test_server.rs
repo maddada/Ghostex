@@ -64,7 +64,15 @@ pub fn run(args: &[String]) -> Res<i32> {
                 }
                 if !server.zmx_dir.starts_with(&folder) && !server.zmx_dir.starts_with(&server.home)
                 {
-                    remove_private_home(&server.zmx_dir)?;
+                    // A separate socket folder goes only when it is empty: sockets left in it belong to daemons that may still run (stop could not list them), and deleting the folder would make them unreachable.
+                    if is_private_directory(&server.zmx_dir).unwrap_or(false)
+                        && fs::remove_dir(&server.zmx_dir).is_err()
+                    {
+                        println!(
+                            "Kept {}: it still holds zmx sockets of sessions that may be running.",
+                            server.zmx_dir.display()
+                        );
+                    }
                 }
             } else if !folder.is_dir() {
                 bail!("No test server named {name} ({}).", folder.display());
