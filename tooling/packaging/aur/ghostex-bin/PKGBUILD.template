@@ -62,11 +62,11 @@ provides=("ghostex=${pkgver}")
 conflicts=('ghostex')
 options=('!strip' '!debug')
 install="ghostex-bin.install"
-# LICENSE is a local file kept in this AUR repository, copied there from the
-# Ghostex repository root (MIT) by the publisher. Arch expects MIT license text
-# to be installed, and the release tarball carries none.
+# Arch expects the MIT license text installed, and the release tarball carries
+# none, so it is the release tag's own LICENSE. The AUR repository's LICENSE is
+# the 0BSD license of this packaging (Alp's) and is never touched by the publisher.
 source=(
-  'LICENSE'
+  "ghostex-${pkgver}-LICENSE::https://raw.githubusercontent.com/maddada/Ghostex/v${pkgver}/LICENSE"
   "https://github.com/maddada/Ghostex/releases/download/v${pkgver}/ghostex-${pkgver}-linux-x64.tar.zst"
 )
 sha256sums=(
@@ -81,5 +81,5 @@ package() {
   # symlink and preserves the payload's executable bits.
   cp -a "${srcdir}/opt" "${pkgdir}/opt"
   cp -a "${srcdir}/usr" "${pkgdir}/usr"
-  install -Dm644 "${srcdir}/LICENSE" -t "${pkgdir}/usr/share/licenses/${pkgname}/"
+  install -Dm644 "${srcdir}/ghostex-${pkgver}-LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
 }

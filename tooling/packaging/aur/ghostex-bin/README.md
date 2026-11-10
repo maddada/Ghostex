@@ -23,13 +23,15 @@ on an `ubuntu-24.04` GitHub runner, which is why the `.SRCINFO` is generated in
 JavaScript instead. The field order and the tab indentation it emits mirror
 `srcinfo_write_global()` in pacman's `scripts/libmakepkg/srcinfo.sh.in`.
 
-The published AUR repository therefore holds four files: `PKGBUILD`, `.SRCINFO`,
-`ghostex-bin.install`, and `LICENSE`. Arch expects MIT license text to be
-installed into `/usr/share/licenses/$pkgname/`, and
-the release tarball carries none, so the publisher copies the Ghostex
-repository's root `LICENSE` into the AUR repo as a local `source` entry and
-hashes it at render time. There is deliberately no second copy of it under
-`tooling/packaging/`.
+The publisher writes three files into the AUR repository: `PKGBUILD`,
+`.SRCINFO` and `ghostex-bin.install`. The repository's `LICENSE` is Alp's 0BSD
+license for the packaging itself, and the publisher never touches it (user
+decision, 10 Nov 2026). Arch expects the MIT license text of Ghostex installed
+into `/usr/share/licenses/$pkgname/`, and the release tarball carries none, so
+the PKGBUILD downloads the release tag's own `LICENSE` as
+`ghostex-${pkgver}-LICENSE` and installs it there as `LICENSE`. The publisher
+hashes that same download at render time, so the checksum is the tag's file
+even when the release runs from a newer checkout.
 
 ## What the package installs
 

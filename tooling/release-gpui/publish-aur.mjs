@@ -21,15 +21,16 @@ const packageDirectory = path.join(repoRoot, 'tooling/packaging/aur/ghostex-bin'
 const templatePath = path.join(packageDirectory, 'PKGBUILD.template');
 const installFileName = 'ghostex-bin.install';
 /*
- * Arch expects MIT license text to be installed into
- * /usr/share/licenses/$pkgname/, and the release tarball carries none. The
- * repository's own LICENSE is shipped as a local `source` entry instead of being
- * duplicated under tooling/packaging/, so there is only ever one copy to keep current.
+ * CDXC:Release 2026-11-10 DECISION:
+ * User: leave Alp's 0BSD LICENSE in the AUR repository untouched. That file licenses the packaging;
+ * the Ghostex MIT license the package installs is a `source` download of the release tag's own
+ * LICENSE (ghostex-${pkgver}-LICENSE), hashed here from that same download rather than from the
+ * checkout, which a later recovery run may take from a newer main. So the publisher writes only
+ * these files into the AUR repo.
  */
-const licenseSourcePath = path.join(repoRoot, 'LICENSE');
-// Every file the AUR repository holds. `.SRCINFO` and `PKGBUILD` are rendered;
-// the rest are copied verbatim.
-const aurRepositoryFiles = ['PKGBUILD', '.SRCINFO', installFileName, 'LICENSE'];
+// Every file the publisher writes into the AUR repository. `.SRCINFO` and `PKGBUILD` are rendered;
+// the install scriptlet is copied verbatim. Anything else there (Alp's LICENSE) is left as it is.
+const aurRepositoryFiles = ['PKGBUILD', '.SRCINFO', installFileName];
 const aurRemote = 'ssh://aur@aur.archlinux.org/ghostex-bin.git';
 const defaultRepo = 'maddada/Ghostex';
 const sha256Pattern = /^[0-9a-f]{64}$/u;
@@ -102,6 +103,10 @@ export function releaseAssetName(version) {
 
 export function releaseAssetUrl(version, repo = defaultRepo) {
   return `https://github.com/${repo}/releases/download/v${version}/${releaseAssetName(version)}`;
+}
+
+export function licenseUrl(version, repo = defaultRepo) {
+  return `https://raw.githubusercontent.com/${repo}/v${assertVersion(version)}/LICENSE`;
 }
 
 export function renderPkgbuild(template, { licenseSha256, sha256, version }) {
@@ -251,7 +256,10 @@ function sha256FromGitHubMetadata(version, repo) {
 }
 
 async function sha256FromDownload(version, repo) {
-  const url = releaseAssetUrl(version, repo);
+  return sha256OfUrl(releaseAssetUrl(version, repo));
+}
+
+async function sha256OfUrl(url) {
   process.stdout.write(`Hashing ${url}\n`);
   const response = await fetch(url, { redirect: 'follow' });
   if (!response.ok || !response.body) {
@@ -436,14 +444,12 @@ async function main() {
   });
   process.stdout.write(`${releaseAssetName(version)} sha256=${sha256} (from ${source})\n`);
 
-  const license = readFileSync(licenseSourcePath);
-  const licenseSha256 = createHash('sha256').update(license).digest('hex');
+  const licenseSha256 = await sha256OfUrl(licenseUrl(version, options.repo));
   const pkgbuild = renderPkgbuild(readFileSync(templatePath, 'utf8'), { licenseSha256, sha256, version });
   const srcinfo = renderSrcinfo(pkgbuild);
   mkdirSync(outputDirectory, { recursive: true });
   writeFileSync(path.join(outputDirectory, 'PKGBUILD'), pkgbuild);
   writeFileSync(path.join(outputDirectory, '.SRCINFO'), srcinfo);
-  writeFileSync(path.join(outputDirectory, 'LICENSE'), license);
   copyFileSync(path.join(packageDirectory, installFileName), path.join(outputDirectory, installFileName));
   process.stdout.write(`Rendered ${aurRepositoryFiles.join(', ')} into ${outputDirectory}\n`);
 
