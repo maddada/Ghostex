@@ -98,6 +98,12 @@ impl GhostexPaths {
         paths
     }
 
+    /// The default profile's directories, as `resolve` gives them without `GHOSTEX_HOME` or a
+    /// portable copy, so a separate profile can see what the default one already owns.
+    pub fn default_profile() -> Self {
+        Self::platform_defaults(user_home_dir())
+    }
+
     /// Preserve the historical explicit-home behavior used by isolated daemon
     /// runs without consulting or mutating the real user's platform stores.
     pub fn for_explicit_home(home_dir: PathBuf) -> Self {

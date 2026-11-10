@@ -41,16 +41,32 @@ pub fn ensure_gxserver_identity(paths: &GxserverPaths) -> Result<GxserverIdentit
 
 /// A fresh id that no live zmx session socket uses yet: two profiles with one id share session
 /// names, and each would treat the other's daemons as its own (CDXC:ServerDaemon 2026-11-06 in
-/// zmx/screen_capture.rs). Ids are short (360 of them), so a clash is a real chance.
+/// zmx/screen_capture.rs). Ids are short (360 of them), so a clash is a real chance. A separate
+/// profile also avoids the default profile's id, whose daemons may simply not be running now.
 fn new_server_id() -> String {
     #[cfg(unix)]
-    let taken = crate::zmx::server_ids_with_live_zmx_sockets();
+    let mut taken = crate::zmx::server_ids_with_live_zmx_sockets();
     #[cfg(not(unix))]
-    let taken = std::collections::HashSet::<String>::new();
+    let mut taken = std::collections::HashSet::<String>::new();
+    if ghostex_paths::uses_separate_profile() {
+        taken.extend(default_profile_server_id());
+    }
     (0..1_000)
         .map(|_| ids::create_server_id())
         .find(|id| !taken.contains(id))
         .unwrap_or_else(ids::create_server_id)
+}
+
+fn default_profile_server_id() -> Option<String> {
+    let identity_file = ghostex_paths::GhostexPaths::default_profile()
+        .gxserver_state_dir()
+        .join("identity.json");
+    let parsed: Value = serde_json::from_str(&fs::read_to_string(identity_file).ok()?).ok()?;
+    parsed
+        .get("serverId")
+        .and_then(Value::as_str)
+        .filter(|server_id| ids::is_gxserver_server_id(server_id))
+        .map(str::to_string)
 }
 
 fn read_gxserver_identity(paths: &GxserverPaths) -> Result<Option<GxserverIdentityFile>> {
