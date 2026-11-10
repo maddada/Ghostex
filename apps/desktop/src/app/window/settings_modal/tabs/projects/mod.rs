@@ -114,6 +114,20 @@ struct ProjectDrafts {
     docs_directory: String,
 }
 
+/// What the selected project's drafts are seeded from: its id and its saved values. Nothing else
+/// about the project (its name, path or icon) reseeds them, so an icon that arrives later keeps
+/// what the user typed.
+type DraftSeed = (String, ProjectDrafts);
+
+fn draft_seed(project: Option<&ProjectItem>) -> Option<DraftSeed> {
+    project.map(|project| {
+        (
+            project.project_id.clone(),
+            ProjectDrafts::from_project(project),
+        )
+    })
+}
+
 impl ProjectDrafts {
     fn from_project(project: &ProjectItem) -> Self {
         Self {
@@ -247,8 +261,8 @@ pub(crate) struct ProjectsTab {
     selected_project_id: String,
     pub(crate) picker: SearchableList,
     drafts: ProjectDrafts,
-    /// The saved project the drafts were seeded from; a change reseeds them.
-    seeded_from: Option<ProjectItem>,
+    /// The project and saved values the drafts were seeded from; a change reseeds them.
+    seeded_from: Option<DraftSeed>,
     /// The view drafts of the selected project, by view id (reset when the project changes).
     view_drafts: HashMap<String, ViewDraft>,
     view_drafts_project: String,
@@ -552,7 +566,7 @@ impl super::HoldsUnsavedInput for ProjectsTab {
         if self
             .seeded_from
             .as_ref()
-            .is_some_and(|project| ProjectDrafts::from_project(project) != self.drafts)
+            .is_some_and(|(_, saved)| *saved != self.drafts)
         {
             return true;
         }
@@ -636,12 +650,13 @@ impl Render for ProjectsTab {
             .find(|project| project.project_id == self.selected_project_id)
             .cloned();
         // Reseed the drafts when the project or its saved values change.
-        if selected != self.seeded_from {
-            self.drafts = selected
+        let seed = draft_seed(selected.as_ref());
+        if seed != self.seeded_from {
+            self.drafts = seed
                 .as_ref()
-                .map(ProjectDrafts::from_project)
+                .map(|(_, saved)| saved.clone())
                 .unwrap_or_default();
-            self.seeded_from = selected.clone();
+            self.seeded_from = seed;
             let drafts = self.drafts.clone();
             self.set_input_text("project-worktree-command", &drafts.command, window, cx);
             self.set_input_text("project-ticket-key", &drafts.beads_display_key, window, cx);
@@ -1046,5 +1061,35 @@ impl ProjectsTab {
             ));
         }
         sections
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn project(id: &str, command: &str, icon: Option<&str>) -> ProjectItem {
+        ProjectItem {
+            project_id: id.to_string(),
+            name: "Ghostex".to_string(),
+            path: "/Users/you/dev/ghostex".to_string(),
+            worktree_command: command.to_string(),
+            beads_display_key: "ZMX".to_string(),
+            beads_directory: String::new(),
+            docs_directory: String::new(),
+            worktree_parent_project_id: None,
+            icon_data_url: icon.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn only_the_project_and_its_saved_values_reseed_the_drafts() {
+        let seeded = draft_seed(Some(&project("p1", "bun install", None)));
+        let icon_arrived = project("p1", "bun install", Some("data:image/png;base64,AA=="));
+        assert_eq!(draft_seed(Some(&icon_arrived)), seeded);
+        let saved_elsewhere = project("p1", "pnpm install", None);
+        assert_ne!(draft_seed(Some(&saved_elsewhere)), seeded);
+        let other_project = project("p2", "bun install", None);
+        assert_ne!(draft_seed(Some(&other_project)), seeded);
     }
 }
