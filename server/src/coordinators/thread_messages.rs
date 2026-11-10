@@ -59,9 +59,7 @@ pub fn read_agent_session_write_check(
             ),
         )?;
         let refusal = thread
-            .filter(|thread| {
-                thread.resolved_at.is_none() && thread.coordinator_key() == target
-            })
+            .filter(|thread| thread.resolved_at.is_none() && thread.coordinator_key() == target)
             .map(|_| THREAD_TO_ORCHESTRATOR_REFUSAL);
         return Ok(json!({ "refusal": refusal }));
     }

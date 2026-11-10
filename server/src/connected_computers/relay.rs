@@ -212,7 +212,10 @@ pub(crate) async fn relay(
 fn is_chat_message(body: &[u8]) -> bool {
     serde_json::from_slice::<serde_json::Value>(body)
         .ok()
-        .is_some_and(|body| body.pointer("/params/key").is_none_or(serde_json::Value::is_null))
+        .is_some_and(|body| {
+            body.pointer("/params/key")
+                .is_none_or(serde_json::Value::is_null)
+        })
 }
 
 /// Why nothing reaches `computer` while its Agent access is off, naming whose switch it is.
