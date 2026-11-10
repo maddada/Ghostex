@@ -762,7 +762,9 @@ pub(super) fn dialog_overlay<V: 'static>(
                     .occlude()
                     .w(viewport.width)
                     .h(viewport.height)
-                    .bg(hsla(modal_rgba(0x000000, 0.65)))
+                    .bg(hsla(super::super::super::fields::nested_backdrop(
+                        window, 0.65,
+                    )))
                     .flex()
                     .items_center()
                     .justify_center()

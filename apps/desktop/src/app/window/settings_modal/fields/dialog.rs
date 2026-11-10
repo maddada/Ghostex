@@ -186,7 +186,10 @@ pub(crate) fn settings_dialog<V: 'static>(
                     .items_center()
                     .justify_center()
                     .when(spec.backdrop, |this| {
-                        this.bg(hsla(modal_rgba(0x000000, BACKDROP_ALPHA)))
+                        this.bg(hsla(super::nested_glass::nested_backdrop(
+                            window,
+                            BACKDROP_ALPHA,
+                        )))
                     })
                     .occlude()
                     .child(panel),
