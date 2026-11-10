@@ -426,7 +426,7 @@ pub(crate) struct GeneralSearch {
     pub(crate) query: String,
     /// The rows this copy of the search shows (`RowTier`); `None` for every row.
     pub(crate) tier: Option<RowTier>,
-    /// Rows of a built-in extension that is off (the Space rows while Spaces is off).
+    /// Rows of a built-in extension that is off, and the Space rows while Spaces is off.
     pub(crate) hidden_keys: Vec<&'static str>,
     /// `settingsSearch[sectionId]`.
     pub(crate) sections: HashMap<String, SectionSearch>,

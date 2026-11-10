@@ -648,11 +648,52 @@ pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[];
 ///
 /// CDXC:Security 2026-11-10 DECISION:
 /// User (Q2173): the Security logs switch moves from Settings > Extensions > Experimental to Settings > Security; installed copies keep reading it where they have it until the release that ships the move empties this list and regenerates (security-b/release-steps.md).
-pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
+///
+/// CDXC:Spaces 2026-11-10 DECISION:
+/// The coordinator, for the user: Spaces moved from Settings > Extensions to its own section on Sidebar & Sessions (spaces.rs); its switch and its two rows stay where installed copies have them until the release that ships the move (release-11.3.1/help/spaces-setting.patch).
+pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[
+    (
+        "sidebarSpaceSwitchBehavior",
+        ("sidebar", "Sidebar & Sessions"),
+        ("sidebar", "Sidebar"),
+        "When switching to a Space",
+        "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Shown while the Spaces extension is on.",
+        "unifiedGroupByProject",
+    ),
+    (
+        "sidebarSpaceFollowActiveSession",
+        ("sidebar", "Sidebar & Sessions"),
+        ("sidebar", "Sidebar"),
+        "Switch Space when opening a session from another Space",
+        "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Shown while the Spaces extension is on.",
+        "sidebarSpaceSwitchBehavior",
+    ),
+    (
+        "sidebarSpacesEnabled",
+        ("extensions", "Extensions"),
+        ("official", "Built-in"),
+        "Spaces",
+        "Turn on Spaces: a row of Space icons at the top of the sidebar, Space menus, and the Space settings. Off by default; your saved Spaces are kept while it is off.",
+        "openInTitlebarButtonHidden",
+    ),
+];
+
+/// Settings UI rows (no settings key) that were removed, kept in the committed Help files until a
+/// release ships the removal, in [`HELD_ROW_PLACEMENT`]'s shape.
+///
+/// CDXC:Spaces 2026-11-10 DECISION: the Spaces card of Settings > Extensions (above).
+pub const HELD_REMOVED_ROWS: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[(
+    "spaces",
+    ("extensions", "Extensions"),
+    ("official", "Built-in"),
+    "Spaces",
+    "Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping.",
+    "openIn",
+)];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`],
-/// with [`HELD_ROW_WORDING`]'s rows as they read before, and [`HELD_ROW_PLACEMENT`]'s rows back
-/// where they were.
+/// with [`HELD_ROW_WORDING`]'s rows as they read before, [`HELD_ROW_PLACEMENT`]'s rows back
+/// where they were and [`HELD_REMOVED_ROWS`] put back.
 pub fn published_catalog() -> Catalog {
     let mut catalog = catalog();
     for (key, (tab, tab_title), (section, section_title), title, subtitle, after) in
@@ -674,6 +715,38 @@ pub fn published_catalog() -> Catalog {
             .position(|entry| entry.key == *after)
             .map_or(catalog.settings.len(), |found| found + 1);
         catalog.settings.insert(to, entry);
+    }
+    for (key, (tab, tab_title), (section, section_title), title, subtitle, after) in
+        HELD_REMOVED_ROWS
+    {
+        let to = catalog
+            .settings
+            .iter()
+            .position(|entry| entry.key == *after)
+            .map_or(catalog.settings.len(), |found| found + 1);
+        catalog.settings.insert(
+            to,
+            CatalogEntry {
+                key: (*key).to_string(),
+                title: (*title).to_string(),
+                subtitle: (*subtitle).to_string(),
+                tab: (*tab).to_string(),
+                tab_title: (*tab_title).to_string(),
+                group: None,
+                group_title: None,
+                section: (*section).to_string(),
+                section_title: (*section_title).to_string(),
+                value_type: ValueType::Ui,
+                default: None,
+                options: Vec::new(),
+                range: None,
+                advanced: false,
+                agent_writable: false,
+                platform_defaults: Vec::new(),
+                availability: None,
+                runtime_options: None,
+            },
+        );
     }
     catalog
         .settings

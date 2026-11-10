@@ -21,6 +21,20 @@ pub(crate) fn session_cards() -> Section {
     )
 }
 
+/// CDXC:Spaces 2026-11-10 DECISION (spaces.rs): Spaces is a normal setting, its own section on
+/// Sidebar & Sessions right under Sidebar, with its switch first and the two Space rows it shows.
+pub(crate) fn spaces() -> Section {
+    section(
+        "spaces",
+        "Spaces",
+        vec![
+            row("sidebarSpacesEnabled", "Spaces", "Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping. Off by default; your saved Spaces are kept while it is off."),
+            row("sidebarSpaceSwitchBehavior", "When switching to a Space", "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Shown while Spaces is on.").options(SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS),
+            row("sidebarSpaceFollowActiveSession", "Switch Space when opening a session from another Space", "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Shown while Spaces is on."),
+        ],
+    )
+}
+
 pub(crate) fn sidebar() -> Section {
     section(
         "sidebar",
@@ -33,8 +47,6 @@ pub(crate) fn sidebar() -> Section {
             row("sidebarMergeRepositoryCopies", "Merge copies of the same repository", "Show two folders on this computer that are copies of the same repository (the same git remote, opened at the same folder inside it) as one project, with the sessions of both. Turn off to give each folder its own project with only its own sessions. Copies on different computers are one project either way. The phone follows this. Shown while Separate by machine is off."),
             row("unifiedWorkingSection", "Moving section", "Fold sessions whose agent is working or still running something in the background into a Moving section at the bottom of the list. They return to the top of the list when they need you. Shown while the Unified sidebar is selected."),
             row("unifiedGroupByProject", "Group by project", "Put every machine's sessions of one repository under one header, with its Moving, Snoozed and Parked sections inside it. Drag the headers to arrange them. Drafts stay above the groups. Also in the sidebar's Sort & Filter menu. Shown while the Unified sidebar is selected."),
-            row("sidebarSpaceSwitchBehavior", "When switching to a Space", "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Shown while the Spaces extension is on.").options(SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS),
-            row("sidebarSpaceFollowActiveSession", "Switch Space when opening a session from another Space", "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Shown while the Spaces extension is on."),
             row("projectSwitchKeepAliveMinutes", "Keep the last project running for", "After you switch to another project or Space, keep the terminals, chats, and view that were open in the previous project running for this many minutes so switching back is instant. 0 releases them right away. Keep views loaded (Auto Sleep) keeps every side panel view until its Auto Sleep time instead."),
             // CDXC:Settings 2026-10-29 DECISION (wording Q23): shown as the switch Remember sidebar per view; Same in every view is off, Remembered per view is on.
             row("sidebarVisibilityMemory", "Remember sidebar per view", "Off: hiding the sidebar hides it everywhere. On: Agents and the wide views (Browser, Code, Files, Kanban, Automate) each keep their own open or hidden sidebar; the Commands pane follows the same split.").options(SIDEBAR_VISIBILITY_MEMORY_OPTIONS),

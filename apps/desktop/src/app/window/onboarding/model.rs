@@ -191,7 +191,7 @@ pub(crate) fn computer_use_state(
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct OnboardingSettings {
     pub(crate) view_hidden: [bool; 5],
-    /// The Spaces extension (`sidebarSpacesEnabled`, off by default): Settings > Extensions writes the same key.
+    /// Spaces (`sidebarSpacesEnabled`, off by default): Settings > Sidebar & Sessions > Spaces writes the same key.
     pub(crate) spaces_on: bool,
     pub(crate) notify: bool,
     /// Floating Capture (`ghostexCaptureEnabled`).

@@ -436,17 +436,6 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         user_only: false,
     },
     Supplemental {
-        key: "sidebarSpacesEnabled",
-        tab: EXTENSIONS,
-        group: None,
-        section: "official",
-        section_title: "Built-in",
-        title: "Spaces",
-        subtitle: "Turn on Spaces: a row of Space icons at the top of the sidebar, Space menus, and the Space settings. Off by default; your saved Spaces are kept while it is off.",
-        options: &[],
-        user_only: false,
-    },
-    Supplemental {
         key: "cloudBoxesEnabled",
         tab: EXTENSIONS,
         group: None,

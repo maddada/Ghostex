@@ -652,11 +652,11 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             args,
         ),
         "read-sidebar-spaces" => {
-            require_built_in(ghostex_settings_catalog::built_in_extensions::SPACES)?;
+            require_spaces()?;
             run_bridge_action("readSidebarSpaces", Parser::None, fail_on_not_ok, args)
         }
         "update-sidebar-spaces" => {
-            require_built_in(ghostex_settings_catalog::built_in_extensions::SPACES)?;
+            require_spaces()?;
             run_bridge_action(
                 "updateSidebarSpaces",
                 Parser::SidebarSpacesState,
@@ -1069,10 +1069,21 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
     }
 }
 
-/// A verb of a built-in extension that is off (Actions, Spaces, Cloud Boxes, Workspaces) answers
+/// A verb of a built-in extension that is off (Actions, Cloud Boxes, Workspaces) answers
 /// "turned off".
 fn require_built_in(id: &str) -> CliResult<()> {
     built_in_extensions::require_built_in_extension(id)
+}
+
+/// `Ok` while Spaces is on for this machine; otherwise where to turn it on (spaces.rs).
+fn require_spaces() -> CliResult<()> {
+    let settings = settings::read_settings_file().unwrap_or_default();
+    if ghostex_settings_catalog::spaces::enabled(&settings) {
+        return Ok(());
+    }
+    Err(CliError::Other(
+        ghostex_settings_catalog::spaces::turned_off_message(),
+    ))
 }
 
 fn require_actions() -> CliResult<()> {

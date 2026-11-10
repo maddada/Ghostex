@@ -37,7 +37,7 @@ pub const GENERAL_GROUPS: &[GeneralGroup] = &[
     group(
         "sidebar",
         "Sidebar & Sessions",
-        &["sidebar", "sessionCards", "sidebarTags", "sleepingSessions"],
+        &["sidebar", "spaces", "sessionCards", "sidebarTags", "sleepingSessions"],
     ),
     group(
         "terminal",

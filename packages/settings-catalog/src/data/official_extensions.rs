@@ -255,20 +255,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("title", J::Str("Open In")),
         ("settingsPages", J::Arr(&[J::Str("openTargets")])),
     ]),
-    // CDXC:Extensions 2026-10-01 DECISION:
-    // User: Spaces becomes a built-in extension on the same page, default off, "the app's defaults simpler". Off hides everything about Spaces (the sidebar row, Space menus and drop targets, Space settings, Quick Access rows) and views behave as if there were one Space; saved Spaces are kept. It reuses `sidebarSpacesEnabled`, which already meant "Spaces on" and defaulted to off, so the switch's saved value carries over.
-    J::Obj(&[
-        ("description", J::Str("Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping.")),
-        ("category", J::Str("features")),
-        ("id", J::Str("spaces")),
-        ("placement", J::Str("feature")),
-        ("settingsKey", J::Str("sidebarSpacesEnabled")),
-        ("settingsKeyEnables", J::Bool(true)),
-        ("appWide", J::Bool(true)),
-        ("title", J::Str("Spaces")),
-        ("settingKeys", J::Arr(&[J::Str("sidebarSpaceSwitchBehavior"), J::Str("sidebarSpaceFollowActiveSession")])),
-        ("hotkeys", J::Arr(&[J::Str("goToSpace1"), J::Str("goToSpace2"), J::Str("goToSpace3"), J::Str("goToSpace4"), J::Str("goToSpace5"), J::Str("goToSpace6"), J::Str("goToSpace7"), J::Str("goToSpace8"), J::Str("goToSpace9")])),
-    ]),
+    // CDXC:Spaces 2026-11-10 DECISION: Spaces is no longer a built-in extension; its switch is a normal setting on Settings > Sidebar & Sessions > Spaces (spaces.rs).
     // CDXC:CloudBoxes 2026-11-02 DECISION:
     // User (D11 "on everywhere"): Cloud Boxes is on by default on every desktop platform, Windows included, because boxes run Linux. This supersedes the 2026-10-06 AgentBox decision ("keep it off by default and only show it on linux/macos"); the switch stays, so it can still be turned off. The settings file stores every default, so the saved `cloudBoxesHidden: true` would have kept it off: the switch moved to a new key, `cloudBoxesEnabled` (default on, `settingsKeyEnables`), and the old key is no longer read. The agentbox part (Settings > Cloud Boxes > Advanced) still needs macOS or Linux and says so on Windows. Saved boxes, provider logins and `agentboxDefaultLocation` are kept while it is off.
     J::Obj(&[

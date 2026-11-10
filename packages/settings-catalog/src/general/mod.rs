@@ -19,6 +19,7 @@ pub fn sections(platform: Platform) -> Vec<Section> {
         system::power(),
         sidebar::session_cards(),
         sidebar::sidebar(),
+        sidebar::spaces(),
         theme::theming(platform),
         chat::chat(),
         chat::marked_handovers(),

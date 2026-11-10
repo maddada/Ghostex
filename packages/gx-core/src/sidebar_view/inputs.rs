@@ -427,10 +427,9 @@ impl SidebarSettings {
                 "enableSessionParking",
                 defaults.enable_session_parking,
             ),
-            sidebar_spaces_enabled: built_in_extensions::enabled_in_value(
-                Some(settings),
-                built_in_extensions::SPACES,
-            ),
+            sidebar_spaces_enabled: ghostex_settings_catalog::spaces::enabled_in_value(Some(
+                settings,
+            )),
             sidebar_space_follow_active_session: boolean(
                 "sidebarSpaceFollowActiveSession",
                 defaults.sidebar_space_follow_active_session,
