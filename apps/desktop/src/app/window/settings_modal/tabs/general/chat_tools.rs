@@ -821,9 +821,9 @@ fn marked_handovers_section(
     }
     let s = "markedHandovers";
     let mut rows: Vec<AnyElement> = Vec::new();
-    rows.extend(page.toggle(g, s, "markedHandovers", "Marked handovers in every session", "Coordinators and their threads start each part of the message they hand back with a marker such as ✅ Done or 🧪 Untested, and end it with what needs you (⚠️ Read this, 🛑 Blocked, 💡 Suggestions, ❓ Needs you), so you never miss it. Turn this on to have every other agent session do the same. Applies to sessions started or resumed after you change it.", false, cx));
+    rows.extend(page.toggle(g, s, "markedHandovers", "Marked handovers in every session", "A coordinator's threads start each part of the report they hand back with a marker such as ✅ Done or 🧪 Untested, and end it with what needs you (⚠️ Read this, 🛑 Blocked, 💡 Suggestions, ❓ Needs you), so you never miss it. Turn this on to have your coordinators and every other agent session do the same. A coordinator follows a change from the next message it gets, other sessions once they are started or resumed.", false, cx));
     rows.extend(page.marked_sections_style_row(g, s, window, cx));
-    rows.extend(page.toggle(g, s, "orchestratorPlainReplies", "Coordinators answer without markers", "Coordinators answer normally, without marking the sections of their handovers. Their threads still mark the reports they send to the coordinator. Applies to coordinators started or resumed after you change it.", false, cx));
+    rows.extend(page.toggle(g, s, "orchestratorPlainReplies", "Coordinators answer without markers", "While Marked handovers is on, coordinators still answer in plain prose, without sections or markers. Their threads still mark the reports they send to the coordinator. A coordinator follows a change from the next message it gets.", false, cx));
     settings_section(
         &g.p,
         g.section_title("markedHandovers", "Marked handovers"),

@@ -16,12 +16,14 @@
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 
-/// Under a coordinator's next message after a Ghostex update changed its shipped playbook.
-pub const PLAYBOOK_CHANGED_BY_UPDATE_NOTE: &str = "Ghostex was updated and your playbook changed: work items and their cards replace the board and your replies' status sections. Run `ghostex coordinator guide` now and follow it from here on.";
+/// Under a coordinator's next message after its shipped guide changed (a Ghostex update, or the
+/// Marked handovers setting, which picks the guide's reply format). It names no change: the guide
+/// says what holds now. Every client, the phone apps already out included, recognises this text.
+pub const PLAYBOOK_CHANGED_BY_UPDATE_NOTE: &str = "Ghostex was updated and your playbook changed: run `ghostex coordinator guide` now and follow it from here on.";
 
-/// The update note before the work items playbook (2026-11-10), still recognised under older
-/// messages.
-const PLAYBOOK_CHANGED_BY_UPDATE_NOTE_BEFORE_WORK_ITEMS: &str = "Ghostex was updated and your playbook changed: run `ghostex coordinator guide` now and follow it from here on.";
+/// The update note of 2026-11-10 and 11.3.0, which said work items replace a coordinator's status
+/// sections (no longer true while Marked handovers is on), still recognised under older messages.
+const PLAYBOOK_CHANGED_BY_UPDATE_NOTE_NAMING_WORK_ITEMS: &str = "Ghostex was updated and your playbook changed: work items and their cards replace the board and your replies' status sections. Run `ghostex coordinator guide` now and follow it from here on.";
 
 /// Under a coordinator's next message after its project's (or all projects') playbook changed.
 pub const PLAYBOOK_CHANGED_NOTE: &str =
@@ -31,7 +33,7 @@ pub const PLAYBOOK_CHANGED_NOTE: &str =
 pub const APPENDED_NOTES: [&str; 3] = [
     PLAYBOOK_CHANGED_BY_UPDATE_NOTE,
     PLAYBOOK_CHANGED_NOTE,
-    PLAYBOOK_CHANGED_BY_UPDATE_NOTE_BEFORE_WORK_ITEMS,
+    PLAYBOOK_CHANGED_BY_UPDATE_NOTE_NAMING_WORK_ITEMS,
 ];
 
 /// `text` with `note` under it, a blank line apart: the shape gxserver types.

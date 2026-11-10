@@ -267,11 +267,11 @@ release, a vendor, CI, another item) is Waiting, never Blocked. Say "In progress
 
 Your reply:
 
-- A couple of sentences of news, then only what the dock and the Work panel cannot hold: a cause or
-  diagnosis, a caveat or risk, a draft to paste (or its file, linked), the reasoning behind a
-  recommendation.
-- Write no status sections (Done, Kicked off, In progress, Needs you), no line about an item that
-  did not change, and nothing the dock or the Work panel already says.
+- The reply format at the end of the guide decides its shape (marked sections with bullets, or a few
+  sentences of news): follow it.
+- Keep it short. Say what the dock and the Work panel cannot: a cause or diagnosis, a caveat or
+  risk, a draft to paste (or its file, linked), the reasoning behind a recommendation.
+- Write no line about an item that did not change, and never repeat an ask that is in the dock.
 - Name threads by title. Never mention a thread that is idle or kept open: that is your bookkeeping,
   not news.
 - Link everything the user could open (a PR, issue, commit, file, page, thread), in replies and

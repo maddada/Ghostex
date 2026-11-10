@@ -542,7 +542,7 @@ fn coordinator_session_start_context(
     .is_some();
     let paths = crate::paths::get_gxserver_paths(None);
     let marked = if coordinator {
-        !super::orchestrator_plain_replies(&paths)
+        super::coordinator_marks_replies(&paths)
     } else {
         thread || super::marked_handovers_enabled(&paths)
     };
