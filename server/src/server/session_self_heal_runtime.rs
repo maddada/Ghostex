@@ -118,6 +118,7 @@ fn tick(state: &AppState) -> Vec<HealDue> {
             .collect::<Vec<_>>();
         read_cached_zmx_session_process_identities(&names, &state.paths.home_dir).ok()
     };
+    probe_working_sessions_without_agent(state, &sessions, &candidates, &live, &check, agents.as_ref());
     let sightings = candidates
         .into_iter()
         .map(|(key, zmx_name, working)| Sighting {
@@ -136,6 +137,60 @@ fn tick(state: &AppState) -> Vec<HealDue> {
     }
     publish_attention(state, &db, &repository);
     outcome.heals
+}
+
+/// Sessions with a probe from [`probe_working_sessions_without_agent`] running, so a slow capture
+/// is never stacked.
+static GONE_PROBES_IN_FLIGHT: std::sync::LazyLock<Mutex<std::collections::HashSet<SessionKey>>> =
+    std::sync::LazyLock::new(Default::default);
+
+/// A session that reads working while this tick's process check found no agent in its live daemon
+/// gets a fresh look through the chat detection funnel, so the gone-agent reconcile there
+/// (session_chat_agent_gone_activity.rs) also reaches a session nobody has open. Working only:
+/// the tick's own `working` counts attention too, and an attention is left alone. The funnel's
+/// classifier decides whether the agent is gone; this only asks it to look.
+fn probe_working_sessions_without_agent(
+    state: &AppState,
+    sessions: &[Value],
+    candidates: &[(SessionKey, String, bool)],
+    live: &std::collections::HashSet<String>,
+    checked: &[SessionKey],
+    agents: Option<&HashMap<String, crate::zmx::ZmxProcessIdentity>>,
+) {
+    let Some(agents) = agents else {
+        return;
+    };
+    for (key, zmx_name, _) in candidates {
+        if !checked.contains(key) || !live.contains(zmx_name) || agents.contains_key(zmx_name) {
+            continue;
+        }
+        let Some(session) = sessions.iter().find(|session| {
+            text_field(session, "projectId").as_deref() == Some(key.0.as_str())
+                && text_field(session, "sessionId").as_deref() == Some(key.1.as_str())
+        }) else {
+            continue;
+        };
+        if !crate::agents::stored_activity_is_working(session) {
+            continue;
+        }
+        if !GONE_PROBES_IN_FLIGHT
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .insert(key.clone())
+        {
+            continue;
+        }
+        let detector = crate::session_chat_options::SessionChatOptionDetector::new(state);
+        let agent = crate::session_chat_composer::session_chat_composer_agent_id(session);
+        let key = key.clone();
+        tokio::task::spawn_blocking(move || {
+            detector.detect_blocking(&key.0, &key.1, agent.as_deref(), true);
+            GONE_PROBES_IN_FLIGHT
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .remove(&key);
+        });
+    }
 }
 
 /// Shows every session Ghostex gave up on as needing attention: the red dot and one notification
