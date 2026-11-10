@@ -70,6 +70,13 @@ pub fn show_command(args: &[String]) -> CliResult<()> {
     if let Some(session_ref) = calling_session_ref() {
         params["sessionRef"] = Value::String(session_ref);
     }
+    // A page that asks nothing waits until the reader marks it seen (CDXC:SessionChat 2026-11-11
+    // DECISION in server/src/visual_pages/publish.rs).
+    let question_tags = page_question_tags(&source);
+    let awaits_seen = question_tags.is_none();
+    if awaits_seen {
+        params["awaitsSeen"] = Value::Bool(true);
+    }
     let target = resolve_gxserver_server_target(&parsed.flags, &params)?;
     let result = request_gxserver_rpc(
         &target,
@@ -98,7 +105,8 @@ pub fn show_command(args: &[String]) -> CliResult<()> {
         &url,
         &file_name,
         popup,
-        page_question_tags(&source).as_deref(),
+        question_tags.as_deref(),
+        awaits_seen,
     );
     let hint = old_layout_hint(&source);
     let visual_page_check::ShowFindings { phone, picks } = if parsed.flags.contains("no-check") {
@@ -247,13 +255,19 @@ fn visual_page_block(
     file: &str,
     popup: bool,
     questions: Option<&[String]>,
+    awaits_seen: bool,
 ) -> String {
     let open = if popup { ",\"open\":\"popup\"" } else { "" };
     let questions = questions
         .map(|tags| format!(",\"questions\":{}", json!(tags)))
         .unwrap_or_default();
+    let seen = if awaits_seen {
+        ",\"awaitsSeen\":true"
+    } else {
+        ""
+    };
     format!(
-        "```visual\n{{\"page\":{{\"title\":{},\"url\":{},\"file\":{}{open}{questions}}}}}\n```",
+        "```visual\n{{\"page\":{{\"title\":{},\"url\":{},\"file\":{}{open}{questions}{seen}}}}}\n```",
         json_string(title),
         json_string(url),
         json_string(file)

@@ -49,11 +49,17 @@ pub(crate) fn page_questions(
 /// Whether a question on the page still has no answer in the reader's draft: its kit writes every
 /// question's key into the draft (`collect()` in kit.rs), as `"skipped"` while a question has no
 /// pick and no text, so a key that is missing or skipped is a question left. False once the page
-/// was sent, and for a page with no questions. The desktop's page window reads it for the dot on a
+/// was sent, and for a page with no questions unless it waits to be marked seen. The desktop's page window reads it for the dot on a
 /// hidden page's tab in the chat header (apps/desktop/src/app/visual_page_hidden.rs).
 pub(crate) fn page_questions_left(gxserver_state_dir: &Path, id: &str) -> bool {
     if page_answered(gxserver_state_dir, id) {
         return false;
+    }
+    // A page that asks nothing but waits to be marked seen (publish.rs) is left until it is.
+    if read_record(gxserver_state_dir, id).and_then(|record| record.get("awaitsSeen")?.as_bool())
+        == Some(true)
+    {
+        return true;
     }
     let Some((_, questions)) = page_questions(gxserver_state_dir, id) else {
         return false;

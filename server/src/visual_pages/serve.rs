@@ -221,6 +221,16 @@ pub(super) fn with_page_state(
             "draftEditedAt": record.as_ref().and_then(|record| record.get("draftEditedAt")).cloned(),
         }),
     };
+    // A page that asks nothing and waits to be marked seen ends with the kit's Mark as seen
+    // footer (publish.rs), answered or not.
+    if record
+        .as_ref()
+        .and_then(|record| record.get("awaitsSeen"))
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
+    {
+        state["awaitsSeen"] = serde_json::Value::Bool(true);
+    }
     // A page written without the v2 marker shows the page API's old-layout notice until the
     // reader closes it (version.rs, notice.rs).
     if !is_current_layout(&html) {
