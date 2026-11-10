@@ -420,9 +420,39 @@ impl NativeChatView {
             let blocked = rows.iter().filter(|row| row["kind"] == "blocked").count() as u64;
             vec![("needs", needs), ("blocked", blocked)]
         };
+        let counts: Vec<(&str, u64)> = counts.into_iter().filter(|(_, count)| *count > 0).collect();
+        let name_of = |group: &str| match group {
+            "needs" => "need you",
+            "blocked" => "blocked",
+            _ => "in progress",
+        };
+        // Each mark takes its name after its count when the header has room for all of them, and
+        // none does when it has not; the tooltips stay either way.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, of the header's marks: "make the icons on the left show name of each when there's
+        // space and not show name when no space". All switch together, never one named alone.
+        let room = match self.board.dock_width.get() {
+            width if width > 0.0 => width,
+            _ => DOCK_ROW_WIDTH_GUESS,
+        } - 12.0
+            - 5.0
+            - 8.0
+            - if board.is_object() { 26.0 + 6.0 } else { 0.0 }
+            - if collapsible { 24.0 + 6.0 } else { 0.0 };
+        let named_width: f32 = counts
+            .iter()
+            .map(|(group, count)| {
+                14.0 + 5.0
+                    + dock_text_width(&count.to_string(), 13.0, p, cx)
+                    + 4.0
+                    + dock_text_width(name_of(group), 13.0, p, cx)
+            })
+            .sum::<f32>()
+            + 12.0 * counts.len().saturating_sub(1) as f32;
+        let named = named_width <= room;
         let marks: Vec<AnyElement> = counts
             .into_iter()
-            .filter(|(_, count)| *count > 0)
             .map(|(group, count)| {
                 let (icon, color) = super::coordinator_board::group_look(group);
                 let color = color.map_or(p.muted, |color| gpui::rgb(color).into());
@@ -455,6 +485,9 @@ impl NativeChatView {
                             .font_features(gpui::FontFeatures(vec![("tnum".into(), 1)].into()))
                             .child(count.to_string()),
                     )
+                    .when(named, |mark| {
+                        mark.child(div().ml(px(-1.0 * s)).child(name_of(group)))
+                    })
                     .into_any_element()
             })
             .collect();
