@@ -686,6 +686,7 @@ pub(crate) fn log_agent_activity_transition(
         "/api/ingestAgentHookEvent" => "agentHook",
         "/api/ingestTerminalTitleEvent" => "terminalTitle",
         "/api/updateAgentActivity" => "activityRpc",
+        crate::agents::SETTLE_GONE_AGENT_ACTIVITY_ENDPOINT => "agentGone",
         _ => return,
     };
     let Some(previous) = result.get("previousActivity").and_then(Value::as_str) else {

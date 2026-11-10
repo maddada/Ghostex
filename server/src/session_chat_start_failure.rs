@@ -79,9 +79,9 @@ pub(crate) fn agent_start_failure(
 /// not the agent coming back. The process read is the shared cached snapshot, since a dead agent
 /// whose Working never cleared is probed about every second.
 ///
-/// CDXC:SessionChat 2026-11-09 WHY:
-/// The contributor (sebastianarena, PR #540) chose a silent signal for an agent that dies without the "agent exited" notice (killed, crashed): gxserver tells the chat the agent is not running and Agent work Quiet shows the words it held back, as it does on that notice. No card, no notice and nothing new on screen, and it must not reach the account recovery that keys off the "agent exited" notice, so it is not one.
-/// SEE-ALSO: packages/gx-chat-core/src/session/working.rs (`agent_exited` reads `agentGone`), packages/gx-protocol/src/chat.rs (`ChatSideState::agent_gone`).
+/// CDXC:SessionChat 2026-11-10 WHY:
+/// The contributor (sebastianarena, PR #540) chose a silent signal for an agent that dies without the "agent exited" notice (killed, crashed): gxserver tells the chat the agent is not running and Agent work Quiet shows the words it held back, as it does on that notice. No card, no notice and nothing new on screen, and it must not reach the account recovery that keys off the "agent exited" notice, so it is not one. Since 2026-11-10 the same reading also ends the session's stored working claim, as idle (session_chat_agent_gone_activity.rs), which supersedes leaving the hook state to a Stop that never comes.
+/// SEE-ALSO: packages/gx-chat-core/src/session/working.rs (`agent_exited` reads `agentGone`), packages/gx-protocol/src/chat.rs (`ChatSideState::agent_gone`), server/src/session_chat_agent_gone_activity.rs.
 pub(crate) fn agent_left_conversation(
     repository: &DomainRepository<'_>,
     project_id: &str,
@@ -90,8 +90,10 @@ pub(crate) fn agent_left_conversation(
 ) -> bool {
     let key = format!("{project_id}:{session_id}");
     let shell_prompt = agent_start_failure_notice(screen_text).is_some();
+    let generation;
     {
         let mut watches = agent_gone_watches();
+        generation = agent_generation(&key);
         forget_untouched(&mut watches, Instant::now());
         // Nothing seen yet and the agent's screen is up: no read at all.
         if !watches.contains_key(&key) && !shell_prompt {
@@ -119,7 +121,12 @@ pub(crate) fn agent_left_conversation(
             .and_then(|path| std::fs::metadata(path).ok())
             .map(|metadata| metadata.len()),
     };
-    record_reading(&mut agent_gone_watches(), key, reading, Instant::now())
+    let mut watches = agent_gone_watches();
+    // An agent started since these reads began is not the one they saw: they say nothing about it.
+    if agent_generation(&key) != generation {
+        return false;
+    }
+    record_reading(&mut watches, key, reading, Instant::now())
 }
 
 /// Whether this session's agent is confirmed gone: what a probe that could not read the screen
@@ -135,9 +142,30 @@ pub(crate) fn agent_gone_confirmed(project_id: &str, session_id: &str) -> bool {
         })
 }
 
-/// Drops the session's record: its agent was started again or the session went away.
+/// Drops the session's record: its agent was started again or the session went away. It also
+/// moves the session's agent generation, so a probe whose reads began before this cannot record
+/// what it saw of the agent that is gone.
 pub(crate) fn forget_agent_gone(project_id: &str, session_id: &str) {
-    agent_gone_watches().remove(&format!("{project_id}:{session_id}"));
+    let key = format!("{project_id}:{session_id}");
+    let mut watches = agent_gone_watches();
+    watches.remove(&key);
+    let mut generations = AGENT_GENERATIONS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    *generations.entry(key).or_insert(0) += 1;
+}
+
+/// Per session, `project:session`: how many times its agent was started again or forgotten.
+/// Taken after the [`AGENT_GONE`] lock, never before it.
+static AGENT_GENERATIONS: LazyLock<Mutex<HashMap<String, u64>>> = LazyLock::new(Default::default);
+
+fn agent_generation(key: &str) -> u64 {
+    AGENT_GENERATIONS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .get(key)
+        .copied()
+        .unwrap_or(0)
 }
 
 /// Test seam: records the session's agent as confirmed gone, as a probe past the settle would.

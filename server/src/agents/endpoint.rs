@@ -66,6 +66,7 @@ pub fn dispatch_agent_endpoint(
             | "/api/cancelFirstPromptAutoTitle"
             | "/api/ingestTerminalTitleEvent"
             | "/api/updateAgentActivity"
+            | SETTLE_GONE_AGENT_ACTIVITY_ENDPOINT
             | "/api/ingestAgentHookEvent"
     );
     let transaction = (updates_session_metadata && db.is_autocommit())
@@ -178,6 +179,16 @@ pub fn dispatch_agent_endpoint(
             let result = update_agent_activity_endpoint(repository, &lifecycle, params)?;
             AgentEndpointOutput {
                 presentation_session: Some((lifecycle.project_id, lifecycle.session_id)),
+                result,
+            }
+        }
+        SETTLE_GONE_AGENT_ACTIVITY_ENDPOINT => {
+            let lifecycle = read_lifecycle(params)?;
+            let result = settle_gone_agent_activity(repository, &lifecycle, params)?;
+            let changed = result.get("changed").and_then(Value::as_bool) == Some(true);
+            AgentEndpointOutput {
+                presentation_session: changed
+                    .then_some((lifecycle.project_id, lifecycle.session_id)),
                 result,
             }
         }

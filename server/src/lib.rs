@@ -97,6 +97,7 @@ pub mod session_auto_sleep;
 pub mod session_chat;
 pub(crate) mod session_chat_account_sign_in;
 pub mod session_chat_agent_fleet;
+pub(crate) mod session_chat_agent_gone_activity;
 pub(crate) mod session_chat_agent_restart;
 pub mod session_chat_agent_tasks;
 pub(crate) mod session_chat_agent_tasks_transcript;

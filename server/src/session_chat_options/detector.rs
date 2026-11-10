@@ -73,6 +73,9 @@ pub(crate) struct SessionChatOptionDetector {
     event_hub: GxserverEventHub,
     paths: GxserverPaths,
     server_id: String,
+    /// For the reconcile of an agent seen gone (session_chat_agent_gone_activity.rs), which writes
+    /// through the agent endpoint and its follow-ups.
+    app_state: AppState,
 }
 
 impl SessionChatOptionDetector {
@@ -86,6 +89,7 @@ impl SessionChatOptionDetector {
             event_hub: state.event_hub.clone(),
             paths: state.paths.clone(),
             server_id: state.metadata.server_id.clone(),
+            app_state: state.clone(),
         }
     }
 
@@ -474,6 +478,15 @@ impl SessionChatOptionDetector {
                     notice,
                 );
             }
+        }
+        // An agent gone with no notice: its stored working claim ends from here, the one place every
+        // fresh capture passes through, on every probe that still reads it gone.
+        if detected.agent_gone {
+            crate::session_chat_agent_gone_activity::dispatch_gone_agent_reconcile(
+                self.app_state.clone(),
+                project_id,
+                session_id,
+            );
         }
         // A trust prompt on a remembered folder is answered from here, the one
         // place every fresh capture passes through, so it is accepted whichever
