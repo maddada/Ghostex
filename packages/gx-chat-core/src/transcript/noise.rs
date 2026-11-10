@@ -794,6 +794,12 @@ pub fn classify_suppressed_turn(message: &ChatMessage) -> Option<SuppressedTurn>
             });
         }
     }
+    if let Some(blocked) = crate::transcript::hook_blocked::parse_hook_blocked_prompt(message) {
+        return Some(SuppressedTurn::Status {
+            label: crate::transcript::hook_blocked::hook_blocked_label(&blocked),
+            tone: Some("error"),
+        });
+    }
     // A `/btw` pair folded into one row (side_question.rs): a harness row, never a turn of its own.
     if crate::transcript::side_question::is_side_question_message(message) {
         return Some(SuppressedTurn::Collapsed {
@@ -1001,6 +1007,9 @@ pub fn suppressed_turn_presentation(message: &ChatMessage) -> Value {
     if kind == "collapsed" && label == INTERRUPTED_LABEL {
         return json!({ "kind": "inline", "label": INTERRUPTED_MARKER_TEXT, "text": "" });
     }
+    if let Some(blocked) = crate::transcript::hook_blocked::parse_hook_blocked_prompt(message) {
+        return hook_blocked_note(&label, &blocked.reason);
+    }
 
     // A background task's end never gets here: it is projected as the tool call it reports
     // (`background_rows.rs`).
@@ -1075,6 +1084,21 @@ pub fn suppressed_turn_presentation(message: &ChatMessage) -> Value {
         }
     }
     Value::Object(out)
+}
+
+/// The card under a prompt a hook refused (hook_blocked.rs): one red line with "Not sent" as its
+/// pill, which opens to the hook's whole reason when that is longer than the line can show.
+fn hook_blocked_note(label: &str, reason: &str) -> Value {
+    let expandable = reason.contains('\n') || reason.chars().count() > 120;
+    json!({
+        "kind": "status",
+        "subject": "hook",
+        "label": label,
+        "text": if expandable { reason } else { "" },
+        "tone": "error",
+        "statuses": [{ "label": label, "tone": "error", "detail": "Not sent" }],
+        "expandable": expandable,
+    })
 }
 
 /// CDXC:SessionChat 2026-11-02 DECISION:

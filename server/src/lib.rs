@@ -201,6 +201,7 @@ pub(crate) mod session_chat_hermes_fleet;
 pub(crate) mod session_chat_hermes_interrupt;
 pub mod session_chat_hermes_status;
 pub(crate) mod session_chat_history;
+pub(crate) mod session_chat_hook_blocked;
 pub mod session_chat_interactive;
 pub mod session_chat_local_command;
 pub mod session_chat_mention_paths;

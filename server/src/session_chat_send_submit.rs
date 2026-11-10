@@ -54,6 +54,19 @@ pub(crate) async fn confirm_submitted(
     let Some(screen) = message_still_held(agent, zmx_name, &needles, cancelled).await else {
         return Ok(());
     };
+    // Claude's prompt hook refused it: another Return would only run the hook again.
+    if crate::session_chat_hook_blocked::claude_screen_shows_hook_block(agent, &screen, text) {
+        crate::session_chat_hook_blocked::finish_hook_blocked_send(
+            project_id,
+            session_id,
+            zmx_name,
+            source,
+            text,
+            &screen_tail(&screen),
+        )
+        .await;
+        return Ok(());
+    }
     crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
         "sessionChatSendPressedEnterAgain",
         project_id,

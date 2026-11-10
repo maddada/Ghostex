@@ -80,6 +80,10 @@ pub fn surface_skill_invocation_user_turns(messages: &[ChatMessage]) -> Vec<Chat
 /// [`surface_skill_invocation_user_turns`] on a list the caller owns, rewritten in place rather
 /// than copied twice.
 pub fn surface_skill_invocation_user_turns_in(mut messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
+    // A prompt a hook refused is the user's bubble too, with its card under it (hook_blocked.rs).
+    if crate::transcript::hook_blocked::has_hook_blocked_prompt(&messages) {
+        messages = crate::transcript::hook_blocked::split_hook_blocked_prompts(messages);
+    }
     for message in &mut messages {
         let plain_text = message
             .blocks
