@@ -112,6 +112,7 @@ pub(crate) fn publish(store: &PresentationStore, tabs: &[MachineTabInput]) {
                 agent_name: session.agent_name.clone().unwrap_or_default(),
                 // The same test as the sidebar's crown (`is_coordinator` in gx-core's rows).
                 coordinator: session.coordinator_role.as_deref() == Some("coordinator"),
+                main_coordinator: session.is_main_coordinator,
                 // The composer's `+` picker shows each session's state, newest first.
                 activity: session.activity.as_str().to_string(),
                 lifecycle_state: session.lifecycle_state.as_str().to_string(),

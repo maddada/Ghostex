@@ -3,6 +3,7 @@ mod command;
 pub(super) mod delivery;
 pub(super) mod identity;
 mod lifecycle;
+mod main_coordinator;
 pub(super) mod outbound;
 mod visibility;
 

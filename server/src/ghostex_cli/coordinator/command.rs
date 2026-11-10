@@ -39,6 +39,7 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         "guide" => playbook::guide(&parsed),
         "create" => create(&parsed),
         "promote" => promote(&parsed),
+        "make-main" => make_main(&parsed),
         "options" => options(&parsed),
         "list" => list(&parsed),
         "status" => status(&parsed),
@@ -135,7 +136,28 @@ pub(super) fn read_view(session: &Value, flags: &Flags) -> CliResult<Value> {
 }
 
 fn create(parsed: &ParsedArgs) -> CliResult<()> {
-    let base = server_flags(&parsed.flags);
+    let result = create_coordinator(parsed)?;
+    if parsed.flags.truthy("json") {
+        print_json(&result);
+    } else {
+        let reference = agents::text(&result, "globalRef");
+        println!(
+            "Created coordinator \"{}\" ({reference}).",
+            agents::text(&result, "title")
+        );
+        println!("Talk to it in Ghostex, or send it work with: ghostex agents send {reference} \"<request>\"");
+    }
+    Ok(())
+}
+
+/// Creates a coordinator (`create`, and `agents send --main-coordinator --if-none create` when the
+/// project has none) and answers what `create --json` prints. `--computer <name>` creates it on
+/// that connected computer.
+pub(crate) fn create_coordinator(parsed: &ParsedArgs) -> CliResult<Value> {
+    let mut base = server_flags(&parsed.flags);
+    if let Some(computer) = flag_text(&parsed.flags, "computer") {
+        base.insert_text("computer", &computer);
+    }
     let caller = agents::caller().ok();
     // `--path <folder>`: gxserver adds the folder as a project and creates the coordinator there
     // (gbots/project.rs `add_create_project_path`).
@@ -230,6 +252,7 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
         "ok": true,
         "status": "created",
         "globalRef": reference,
+        "title": title,
         "session": agents::summary(&session),
     });
     // gxserver queued the first message (the skill line, then the task) before it answered.
@@ -244,13 +267,7 @@ fn create(parsed: &ParsedArgs) -> CliResult<()> {
             crate::coordinators::orchestrator_skill_line(family.unwrap_or_default())
         );
     }
-    if parsed.flags.truthy("json") {
-        print_json(&result);
-    } else {
-        println!("Created coordinator \"{title}\" ({reference}).");
-        println!("Talk to it in Ghostex, or send it work with: ghostex agents send {reference} \"<request>\"");
-    }
-    Ok(())
+    Ok(result)
 }
 
 /// The flags `promote` resolves its session with: `--server`, and `--computer <name>` so a short
@@ -320,6 +337,40 @@ fn promote(parsed: &ParsedArgs) -> CliResult<()> {
         );
     }
     println!("Sessions it started earlier are not its threads yet; adopt each with: ghostex coordinator link <session-ref> --coordinator {reference}");
+    Ok(())
+}
+
+/// `make-main <session-ref> [--computer <name>]`: makes that coordinator its project's main
+/// coordinator on its computer, taking the label from the one that had it (right-click > Make main
+/// coordinator on the desktop, and the phone's long-press item, which runs this verb). See
+/// server/src/coordinators/main_coordinator.rs.
+fn make_main(parsed: &ParsedArgs) -> CliResult<()> {
+    let base = promote_flags(parsed)?;
+    let reference = parsed.rest.first().ok_or_else(|| {
+        CliError::Other(
+            "Usage: ghostex coordinator make-main <session-ref> [--computer <name>].".into(),
+        )
+    })?;
+    let (session, flags) = resolve_session(reference, &base)?;
+    let result = call_gxserver_rpc(
+        "/api/setMainCoordinator",
+        &json!({ "projectId": session["projectId"], "sessionId": session["sessionId"] }),
+        &flags,
+    )
+    .map_err(|error| {
+        CliError::Other(format!(
+            "{error} (A computer whose Ghostex is older than main coordinators needs an update first.)"
+        ))
+    })?;
+    if parsed.flags.truthy("json") {
+        print_json(&result);
+    } else {
+        println!(
+            "\"{}\" ({}) is now the main coordinator of its project on its computer.",
+            agents::text(&session, "title"),
+            agents::text(&result, "globalRef")
+        );
+    }
     Ok(())
 }
 
@@ -490,8 +541,14 @@ fn list(parsed: &ParsedArgs) -> CliResult<()> {
             })
             .filter(|text| !text.is_empty())
             .unwrap_or_else(|| "no threads".to_string());
+        // Its project's main coordinator on this computer: the one agents contact by default.
+        let main = if row["isMainCoordinator"] == json!(true) {
+            "\tmain"
+        } else {
+            ""
+        };
         println!(
-            "{}\t{}\t{}",
+            "{}\t{}\t{}{main}",
             agents::text(&row, "globalRef"),
             agents::text(&row, "title"),
             counts

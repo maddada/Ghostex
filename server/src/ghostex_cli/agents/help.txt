@@ -11,6 +11,9 @@ USAGE
                      [--request-id <id>]
   ghostex agents send <session-ref> --body-file <path> [--interrupt | --queue]
                      [--request-id <id>]
+  ghostex agents send --main-coordinator (--project-id <id> | --path <folder>)
+                     [--computer <name>] [--if-none create | session] [--title <name>]
+                     (<text> | --body-file <path>) [--interrupt | --queue]
   ghostex agents close <session-ref>
   ghostex agents switch-account <session-ref> --account <number|email>
                                [--force] [--json]
@@ -51,6 +54,27 @@ CHOOSE AND CREATE
   chats to directly; it is not linked and reports to nobody. Needs Ghostex
   10.24.0 or later. `ghostex coordinator unlink <thread-ref>` turns an
   existing thread into such a session.
+
+ANOTHER PROJECT: ITS MAIN COORDINATOR
+  To get something from another project (or a project on another computer),
+  contact its main coordinator: the default one to contact. Each project has
+  one per computer (`ghostex coordinator list` marks it "main"), and
+  --main-coordinator reaches it without its session ref:
+    ghostex agents send --main-coordinator --project-id <id> "<what you need>"
+    ghostex agents send --main-coordinator --path ~/dev/app --computer studio "<what you need>"
+  It answers you through your own ref, like any reply.
+  A project with no coordinator has no main one. Then say what you want, or
+  the send stops and asks:
+    --if-none create   you want the project's coordinator: Ghostex starts it
+                       (the agent and model `ghostex coordinator create` picks),
+                       and your message is its first request.
+    --if-none session  you only want this work done: Ghostex starts a regular
+                       session there with your message as its task (--title
+                       names it, else its first words); it reports to you (a
+                       coordinator gets it as one of its threads).
+  With a main coordinator there, --if-none changes nothing. A computer whose
+  Ghostex is older than main coordinators gets a plain error that lists its
+  coordinators; pick one and send to its ref.
 
 IDENTITY AND RECIPIENTS
   whoami resolves your calling session from its Ghostex environment, never

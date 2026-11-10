@@ -401,6 +401,8 @@ pub(crate) fn session_row(
             can_toggle_close_after_done: remote_capable,
         },
         is_coordinator: session.coordinator_role.as_deref() == Some("coordinator"),
+        is_main_coordinator: session.is_main_coordinator
+            && session.coordinator_role.as_deref() == Some("coordinator"),
         coordinator_parent: match (
             session.coordinator_project_id.as_deref(),
             session.coordinator_session_id.as_deref(),

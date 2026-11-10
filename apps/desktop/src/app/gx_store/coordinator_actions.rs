@@ -163,6 +163,25 @@ impl GhostexGpuiApp {
                 })
                 .detach();
             }
+            // Right-click > Make main coordinator: takes the label from the project's main one on
+            // that computer (server/src/coordinators/main_coordinator.rs); both rows redraw from
+            // the presentation deltas gxserver sends.
+            Some("makeMain") => {
+                cx.spawn(async move |this, cx| {
+                    let answer = gx_rpc(remote, "/api/setMainCoordinator", ids).await;
+                    let _ = this.update(cx, |this, cx| {
+                        if let Err(error) = answer {
+                            this.dispatch_gpui_app_modal_toast(
+                                "warning",
+                                "Not made main coordinator",
+                                &error.message,
+                                cx,
+                            );
+                        }
+                    });
+                })
+                .detach();
+            }
             _ => {}
         }
         true

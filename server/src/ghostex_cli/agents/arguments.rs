@@ -10,6 +10,16 @@ pub(super) enum Delivery {
     Queue,
 }
 
+/// `--if-none`: what `send --main-coordinator` does when the project has no main coordinator.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum IfNone {
+    /// Start the project's main coordinator and send it the message.
+    Create,
+    /// Start a regular session there with the message as its task; it reports to the caller.
+    Session,
+}
+
+#[derive(Clone)]
 pub(super) struct Arguments {
     pub command: String,
     pub positional: Vec<String>,
@@ -33,6 +43,10 @@ pub(super) struct Arguments {
     pub force: bool,
     pub json: bool,
     pub help: bool,
+    /// `send --main-coordinator`: the recipient is the main coordinator of `--project-id` or
+    /// `--path` (on `--computer`), not a session ref (main_coordinator.rs).
+    pub main_coordinator: bool,
+    pub if_none: Option<IfNone>,
     pub flags: Flags,
 }
 
@@ -54,6 +68,8 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         force: false,
         json: false,
         help: args.is_empty(),
+        main_coordinator: false,
+        if_none: None,
         flags: Flags::default(),
     };
     let mut args = args.iter();
@@ -68,6 +84,19 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
             "--all" => parsed.all = true,
             "--allow-hidden" => parsed.allow_hidden = true,
             "--standalone" => parsed.standalone = true,
+            "--main-coordinator" => parsed.main_coordinator = true,
+            "--if-none" => {
+                let value = args.next().map(String::as_str).unwrap_or_default();
+                parsed.if_none = Some(match value {
+                    "create" => IfNone::Create,
+                    "session" => IfNone::Session,
+                    _ => {
+                        return Err(CliError::Other(
+                            "--if-none takes create (start the project's main coordinator) or session (start a regular session there that reports to you).".into(),
+                        ))
+                    }
+                });
+            }
             "--force" => parsed.force = true,
             "--interrupt" | "--queue" => {
                 if parsed.delivery != Delivery::Normal {
@@ -138,7 +167,24 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
             "--request-id must be 1 to 128 characters.".into(),
         ));
     }
+    if (parsed.main_coordinator || parsed.if_none.is_some()) && parsed.command != "send" {
+        return Err(CliError::Other(
+            "--main-coordinator and --if-none are only available for send.".into(),
+        ));
+    }
+    if parsed.if_none.is_some() && !parsed.main_coordinator {
+        return Err(CliError::Other(
+            "--if-none goes with --main-coordinator.".into(),
+        ));
+    }
+    let main_send = parsed.command == "send" && parsed.main_coordinator;
+    if main_send && (parsed.task.is_some() || parsed.allow_hidden || parsed.standalone) {
+        return Err(CliError::Other(
+            "send --main-coordinator takes the message as text or --body-file, plus --project-id or --path, --computer, --title and --if-none.".into(),
+        ));
+    }
     if parsed.command != "create"
+        && !main_send
         && (parsed.task.is_some()
             || parsed.title.is_some()
             || parsed.project_id.is_some()
@@ -181,6 +227,13 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
         "send" => {
             if parsed.all {
                 return Err(CliError::Other("--all is only available for list.".into()));
+            }
+            if parsed.main_coordinator {
+                let count = if parsed.body_file.is_some() { 0 } else { 1 };
+                if parsed.positional.len() != count {
+                    return Err(CliError::Other("Usage: ghostex agents send --main-coordinator --project-id <id>|--path <folder> [--computer <name>] [--if-none create|session] <text> (or --body-file <path>). Quote inline text as one argument.".into()));
+                }
+                return Ok(parsed);
             }
             let count = if parsed.body_file.is_some() { 1 } else { 2 };
             if parsed.positional.len() != count {

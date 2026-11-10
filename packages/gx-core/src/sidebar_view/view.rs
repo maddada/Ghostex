@@ -683,6 +683,10 @@ pub struct SessionRow {
     pub menu_facts: SessionMenuFacts,
     /// The session is a coordinator (it starts and supervises thread sessions).
     pub is_coordinator: bool,
+    /// The coordinator is its project's main one on its computer (gxserver's
+    /// `isMainCoordinator`): its row shows the quiet "Main" tag, and its menu offers no
+    /// "Make main coordinator".
+    pub is_main_coordinator: bool,
     /// The coordinator this session is a thread of: on the same machine, or (for a thread a
     /// coordinator started on another computer) the coordinator's machine.
     pub coordinator_parent: Option<SessionKey>,

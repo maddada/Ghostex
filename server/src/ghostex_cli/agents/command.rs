@@ -1,4 +1,4 @@
-use super::{arguments, delivery, identity, lifecycle};
+use super::{arguments, delivery, identity, lifecycle, main_coordinator};
 use crate::ghostex_cli::{output::print_json, rpc::CliResult, sessions};
 use serde_json::json;
 
@@ -72,6 +72,9 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                     );
                 }
             }
+        }
+        "send" if args.main_coordinator => {
+            print_json(&main_coordinator::send(&args)?);
         }
         "send" => {
             print_json(&delivery::send(&args)?);

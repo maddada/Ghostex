@@ -492,6 +492,18 @@ fn coordinator_rows(row: &SessionRow, stale: bool) -> Vec<MenuItem> {
     let id = row.sidebar_session_id.as_str();
     let mut rows = vec![MenuItem::separator()];
     if row.is_coordinator {
+        // CDXC:Coordinators 2026-11-10 SEE-ALSO: the user's decision in
+        // server/src/coordinators/main_coordinator.rs ("i should be able to give it to another
+        // coordinator on that machine by right clicking on it"). Hidden on the main one and on Chief
+        // of Staff, which never carries the label (gxserver refuses a GBot's chat too); the phone's long-press menu
+        // (use-sessions-screen-menus.tsx) offers the same.
+        if !row.is_main_coordinator && !row.is_chief {
+            rows.push(MenuItem::row(
+                "Make main coordinator",
+                "coordinator-captain-hat",
+                MenuCommand::coordinator_session(id, "makeMain"),
+            ));
+        }
         rows.push(MenuItem::row(
             "Goal & Instructions…",
             "checklist",

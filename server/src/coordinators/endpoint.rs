@@ -37,6 +37,7 @@ pub const COORDINATOR_ENDPOINTS: &[&str] = &[
     "/api/checkAgentSessionWrite",
     "/api/coordinatorBoard",
     "/api/coordinatorWork",
+    "/api/setMainCoordinator",
 ];
 
 fn text(params: &Map<String, Value>, key: &str) -> Option<String> {
@@ -120,6 +121,7 @@ pub fn handle_coordinator_endpoint(
         "/api/listCoordinators" => {
             let project_id = text(params, "projectId");
             let threads = list_threads(db)?;
+            let mains = super::main_coordinator::main_coordinators(db, repository);
             let mut rows = Vec::new();
             for coordinator in list_coordinators(db)? {
                 if project_id
@@ -156,11 +158,28 @@ pub fn handle_coordinator_endpoint(
                     "goal": coordinator.goal,
                     "lifecycleState": effective_lifecycle_state(&session),
                     "threadCounts": counts,
+                    // Its project's main coordinator on this computer (main_coordinator.rs). An
+                    // older gxserver leaves the field out, which the CLI reads as "needs an update".
+                    "isMainCoordinator": mains.get(&coordinator.project_id) == Some(&coordinator.session_id),
                 }));
             }
             Ok(CoordinatorEndpointOutput {
                 result: json!({ "coordinators": rows }),
                 changed_sessions: Vec::new(),
+            })
+        }
+        // Right-click > Make main coordinator (desktop, web build, phone).
+        "/api/setMainCoordinator" => {
+            let key = required_ids(params, "projectId", "sessionId")?;
+            let changed = super::main_coordinator::set_main_coordinator(db, repository, &key)?;
+            Ok(CoordinatorEndpointOutput {
+                result: json!({
+                    "ok": true,
+                    "projectId": key.0,
+                    "sessionId": key.1,
+                    "globalRef": create_global_session_ref(repository.server_id.as_str(), &key.0, &key.1),
+                }),
+                changed_sessions: changed,
             })
         }
         "/api/updateCoordinator" => {

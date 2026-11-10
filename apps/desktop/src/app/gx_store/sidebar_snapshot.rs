@@ -917,6 +917,10 @@ fn build_session(
     if row.is_coordinator {
         details.insert("isCoordinator".to_string(), Value::Bool(true));
     }
+    // Its project's main coordinator: the row's "Main" tag (native_sidebar/threads.rs).
+    if row.is_main_coordinator {
+        details.insert("isMainCoordinator".to_string(), Value::Bool(true));
+    }
     if session.nesting.depth > 0 {
         details.insert(
             "threadDepth".to_string(),

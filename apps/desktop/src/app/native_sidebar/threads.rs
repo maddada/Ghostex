@@ -181,6 +181,33 @@ pub(crate) fn coordinator_icon(appearance: &SidebarAppearance, chief: bool) -> A
     .into_any_element()
 }
 
+/// The quiet "Main" tag after a coordinator's title when it is its project's main coordinator on
+/// its computer (gxserver's `isMainCoordinator`), in the muted outlined style of a GBot chat's
+/// "Chief" tag (gbots_rows.rs `opened_by_chief_tag`), so the sidebar's small row tags look alike.
+///
+/// CDXC:Coordinators 2026-11-10 WHY: the user asked for a label on the main coordinator ("first one created in a project per machine gets this label"); the brief kept it quiet (no coloured pill) and one style on every surface. The Project and Unified sidebars draw it here; the phone's SessionRow.tsx draws the same tag.
+pub(crate) fn main_coordinator_tag(
+    session: &NativeSidebarSession,
+    appearance: &SidebarAppearance,
+) -> Option<AnyElement> {
+    if session.details.get("isMainCoordinator") != Some(&Value::Bool(true)) {
+        return None;
+    }
+    let scale = appearance.scale;
+    Some(
+        div()
+            .flex_shrink_0()
+            .px(px(4.0 * scale))
+            .rounded(px(4.0 * scale))
+            .border_1()
+            .border_color(appearance.muted.opacity(0.35))
+            .text_size(px(10.0 * scale))
+            .text_color(appearance.muted)
+            .child("Main")
+            .into_any_element(),
+    )
+}
+
 /// The size of the row's time text in `sessions.rs`; the badge's icon and count use it so they sit on the time's baseline.
 pub(super) const BADGE_TEXT_SIZE: f32 = 13.55;
 

@@ -21,6 +21,13 @@ pub(crate) fn close_threads_with_coordinator(
     if !is_coordinator {
         return 0;
     }
+    // A closed main coordinator hands its project's label to the oldest coordinator left there
+    // (coordinators/main_coordinator.rs), whose row shows it now.
+    if let Some(successor) = crate::coordinators::successor_after_close(db, repository, coordinator)
+    {
+        let _ =
+            schedule_presentation_session_delta(state, db, repository, &successor.0, &successor.1);
+    }
     let Ok(threads) = crate::coordinators::threads_open_under(db, repository, coordinator) else {
         return 0;
     };

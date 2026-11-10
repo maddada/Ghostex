@@ -17,6 +17,9 @@ pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     "/api/listSessions",
     "/api/readPresentationSnapshot",
     "/api/readSidebarHud",
+    // `ghostex agents send --main-coordinator --computer <name>` finds that computer's main
+    // coordinator of a project here (coordinators/main_coordinator.rs); ids, titles and goals.
+    "/api/listCoordinators",
     "/api/readSessionChat",
     "/api/readSessionChatQueue",
     "/api/readSessionText",

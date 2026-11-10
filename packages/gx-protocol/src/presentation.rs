@@ -1144,6 +1144,10 @@ pub struct PresentationSession {
     /// (gx-core `SessionRow::is_chief`).
     #[serde(default, skip_serializing_if = "is_false")]
     pub is_chief: bool,
+    /// Its project's main coordinator on this computer (server/src/coordinators/main_coordinator.rs):
+    /// the one agents contact by default. Absent from an older gxserver.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_main_coordinator: bool,
     /// A chat of a GBot (server/src/gbots/presentation.rs): its bot and who opened it; absent
     /// for every other session and while GBots are off.
     #[serde(default, skip_serializing_if = "Option::is_none")]

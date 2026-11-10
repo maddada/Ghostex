@@ -65,12 +65,17 @@ is the user's rule under "Your GBots": you may answer prompts of the GBots you a
 
 ## Handing work out
 
-- **Work in a project** goes to that project's coordinator: find it with `ghostex coordinator
-list`, then `ghostex agents send <coordinator-ref> "<the request, with the user's words>"`. It
-  reports back to you. When the project has no coordinator, start a thread there yourself:
-  `ghostex coordinator start-thread --project-id <id> --title "<3-6 words>" --task "<brief>"`.
-- **Work on another computer** goes to that computer's Chief of Staff: `ghostex chief send --computer
-<name> "<request>"`. It hands the work to the project's coordinator there.
+- **Work in a project** goes to that project's main coordinator, the default one to contact:
+  `ghostex agents send --main-coordinator --project-id <id> "<the request, with the user's words>"`
+  (`ghostex coordinator list` marks it "main"). It reports back to you. When the project has no
+  coordinator the send stops and asks you to choose: `--if-none create` when the user asked for the
+  project's coordinator (Ghostex starts it with your request as its first one), `--if-none session`
+  when they only want this work done (a thread of yours there, which reports to you).
+- **Work in a project on another computer** goes to that project's main coordinator there: the
+  same send with `--computer <name>` (its project ids: `ghostex sessions --computer <name> --json`).
+  When that computer's Ghostex is too old to know its main coordinator, the send says so; then ask
+  that computer's Chief of Staff instead. **Anything else for another computer** goes to its Chief
+  of Staff: `ghostex chief send --computer <name> "<request>"`.
 - Follow up on what you handed out the way a coordinator follows its threads, and tell the user
   when it's done.
 

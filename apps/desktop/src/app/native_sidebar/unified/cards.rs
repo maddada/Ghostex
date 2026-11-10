@@ -530,6 +530,9 @@ impl GhostexGpuiApp {
                     .children(crate::app::native_sidebar::threads::coordinator_badge(
                         session, appearance,
                     ))
+                    .children(crate::app::native_sidebar::threads::main_coordinator_tag(
+                        session, appearance,
+                    ))
                     .children(right.take()),
             )
             .child(

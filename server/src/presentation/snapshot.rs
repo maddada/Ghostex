@@ -172,6 +172,7 @@ pub fn build_presentation_session_delta(
     crate::coordinators::insert_coordinator_session_projection(
         &mut presentation_session,
         db,
+        repository,
         &session,
     );
     crate::chief::insert_chief_session_projection(&mut presentation_session, db);

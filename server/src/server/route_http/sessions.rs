@@ -521,6 +521,7 @@ pub(super) async fn route_sessions_http(
         | "/api/coordinatorThreadTitleReminder"
         | "/api/coordinatorBoard"
         | "/api/coordinatorWork"
+        | "/api/setMainCoordinator"
         | "/api/checkAgentSessionWrite" => {
             let path = endpoint.path.clone();
             handle_domain_http(

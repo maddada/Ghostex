@@ -19,6 +19,7 @@ fn insert_fields(
     session: &mut Value,
     is_coordinator: bool,
     is_chief: bool,
+    is_main: bool,
     thread: Option<(&ThreadRecord, Option<&Value>)>,
     generated_at: &str,
 ) {
@@ -27,6 +28,11 @@ fn insert_fields(
     };
     if is_coordinator {
         object.insert("coordinatorRole".to_string(), json!("coordinator"));
+    }
+    // Its project's main coordinator on this computer (main_coordinator.rs); additive, so older
+    // clients ignore it.
+    if is_coordinator && is_main {
+        object.insert("isMainCoordinator".to_string(), json!(true));
     }
     // CDXC:Chief 2026-11-08 DECISION: User (Q1734): Chief is "its own row but under spaces bar", so its session is flagged here for every client to lift it out of its project's list.
     if is_chief {
@@ -92,6 +98,7 @@ pub fn insert_coordinator_presentation_payload(
         .collect::<BTreeMap<_, _>>();
     let generated_at = now_iso();
     let chief = crate::chief::read_record(db).map(|record| record.key());
+    let mains = super::main_coordinator::main_coordinators(db, repository);
     let Some(sessions) = snapshot.get_mut("sessions").and_then(Value::as_array_mut) else {
         return;
     };
@@ -103,10 +110,12 @@ pub fn insert_coordinator_presentation_payload(
             continue;
         }
         let raw = thread.and_then(|_| repository.get_session(&key.0, &key.1).ok().flatten());
+        let is_main = super::main_coordinator::is_main_in(&mains, session);
         insert_fields(
             session,
             is_coordinator,
             chief.as_ref() == Some(&key),
+            is_main,
             thread.map(|thread| (thread, raw.as_ref())),
             &generated_at,
         );
@@ -120,6 +129,7 @@ pub fn insert_coordinator_presentation_payload(
 pub fn insert_coordinator_session_projection(
     presentation_session: &mut Value,
     db: &Connection,
+    repository: &DomainRepository<'_>,
     raw_session: &Value,
 ) {
     let (project_id, session_id) = session_key(presentation_session);
@@ -133,10 +143,14 @@ pub fn insert_coordinator_session_projection(
     }
     let is_chief = crate::chief::read_record(db)
         .is_some_and(|record| record.key() == (project_id.clone(), session_id.clone()));
+    let is_main = is_coordinator
+        && super::main_coordinator::main_coordinator_of(db, repository, &project_id)
+            .is_some_and(|main| main.1 == session_id);
     insert_fields(
         presentation_session,
         is_coordinator,
         is_chief,
+        is_main,
         thread.as_ref().map(|thread| (thread, Some(raw_session))),
         &now_iso(),
     );

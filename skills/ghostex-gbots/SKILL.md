@@ -238,7 +238,9 @@ ghostex agents create <agent-id> --path ~/Developer/site
 ```
 
 - For a project that already exists, pass `--project-id <id>` instead
-  (`ghostex state` lists the projects).
+  (`ghostex state` lists the projects). Work for a project that already has a
+  coordinator goes to its main coordinator instead: `ghostex agents send
+  --main-coordinator --project-id <id> "<request>"` (Ghostex newer than 11.2.2).
 - A thread or session on another computer: add `--computer <name>`; the folder
   is on that computer.
 - Tell the user where it is: the project's name, and that the coordinator or

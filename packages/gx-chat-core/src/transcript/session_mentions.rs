@@ -110,6 +110,9 @@ pub struct SessionChoice {
     pub agent_icon: Option<String>,
     pub agent_name: String,
     pub coordinator: bool,
+    /// Its project's main coordinator on its computer: the row's detail starts with "Main".
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub main_coordinator: bool,
     pub working: bool,
     /// `Working`, `Needs you`, `Idle` or `Sleeping`.
     pub state: String,
@@ -239,6 +242,7 @@ fn session_choice(session: &KnownSession, elsewhere: bool) -> SessionChoice {
             .map(str::to_string),
         agent_name,
         coordinator: session.coordinator,
+        main_coordinator: session.coordinator && session.main_coordinator,
         working,
         state: state.to_string(),
         active_at: session.active_at.clone(),
@@ -277,10 +281,12 @@ pub fn filter_session_choices(choices: &[SessionChoice], query: &str) -> Vec<Ses
         .collect()
 }
 
-/// What a `+` row says under its title: the computer and project of a session on another
-/// computer, then its agent and state.
+/// What a `+` row says under its title: "Main" for a project's main coordinator (the sidebar
+/// row's tag, CDXC:Coordinators 2026-11-10 in server/src/coordinators/main_coordinator.rs), the
+/// computer and project of a session on another computer, then its agent and state.
 pub fn choice_detail(choice: &SessionChoice) -> String {
     [
+        if choice.main_coordinator { "Main" } else { "" },
         choice.computer.as_str(),
         choice.project_name.as_str(),
         choice.agent_name.as_str(),

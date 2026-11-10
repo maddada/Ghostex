@@ -7,6 +7,7 @@ USAGE
                               [--model <m>] [--effort <e>] [--goal <text>]
                               [--task <first message>] [--json]
   ghostex coordinator promote [<session-ref>] [--goal <text>] [--computer <name>] [--json]
+  ghostex coordinator make-main <session-ref> [--computer <name>] [--json]
   ghostex coordinator options [--json]
   ghostex coordinator list [--project-id <id>] [--json]
   ghostex coordinator status [--coordinator <ref>] [--all] [--json]
@@ -121,6 +122,17 @@ PROMOTE
   --computer <name> looks <session-ref> up on another computer this one is
   connected to (`ghostex computers` lists them); that computer promotes it and
   installs the skill there. A ref that already names its computer needs no flag.
+
+MAIN COORDINATOR
+  Each project has one main coordinator on each computer: the one to contact by
+  default when an agent (or Chief of Staff) wants something from that project.
+  The first coordinator created in a project gets it; make-main gives it to
+  another coordinator there (right-click > Make main coordinator does the same).
+  Closing or deleting the main one passes it to the oldest coordinator left in
+  that project. list marks it with "main" (`isMainCoordinator` with --json).
+  To reach it without its session ref:
+    ghostex agents send --main-coordinator --project-id <id> [--computer <name>] "<text>"
+  See ghostex agents --help for what happens when a project has none.
 
 STATUS
   status prints the goal, the standing instructions, the memory notes, and every

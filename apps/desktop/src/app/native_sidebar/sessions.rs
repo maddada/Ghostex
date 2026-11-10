@@ -273,6 +273,7 @@ impl GhostexGpuiApp {
                 .when(!buttons_shown, |row| row.children(self.render_native_session_links_badge(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::coordinator_badge(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::gbots_rows::opened_by_chief_tag(session, appearance)))
+                .when(!buttons_shown, |row| row.children(super::threads::main_coordinator_tag(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::worktree_badge(session, appearance)))
                 .when(!buttons_shown, |row| row.children(super::threads::computer_badge(session, appearance)))
                 .when(!buttons_shown, |row| row.children(self.render_voice_call_badge(&session.session_id, appearance)))

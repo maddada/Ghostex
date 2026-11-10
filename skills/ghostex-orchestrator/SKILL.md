@@ -91,6 +91,15 @@ ghostex coordinator start-thread --title "<its task, 3 to 6 words>" --task "<bri
 - When the work lives in another folder or repository, still start the thread in your own project
   (no `--project-id`) and put that folder's absolute path in the brief, so the thread shows under
   you in the sidebar.
+- When you need something from another project (its code, a fix there, an answer only it has), ask
+  that project's main coordinator, the default one to contact, instead of starting a thread in its
+  folder: `ghostex agents send --main-coordinator --project-id <id> "<what you need, in the user's
+  words>"` (add `--computer <name>` for a project on another computer; `ghostex coordinator list`
+  marks the main one). It answers you like any reply. When the project has no coordinator the send
+  stops and asks you to choose: `--if-none create` when the user wants that project's coordinator,
+  `--if-none session` when they only want this work done (a thread of yours there that reports to
+  you). This needs a Ghostex newer than 11.2.2; when `agents send` does not know
+  `--main-coordinator`, find the coordinator with `ghostex coordinator list` and send to its ref.
 - When the user names another computer ("run this on Windows"), or the work needs that
   computer's own system, files, apps or hardware, start the thread there with
   `--computer <name>` (`ghostex computers` lists the connected ones). The thread opens in that
