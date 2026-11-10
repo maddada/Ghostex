@@ -29,7 +29,9 @@ pub(crate) const THREAD_INDENT: f32 = 16.0;
 /// The coordinator marker and its thread count.
 const COORDINATOR_ICON: &str = "titlebar/users-group.svg";
 const WAITING_COLOR: u32 = 0x95d7f6;
-const COORDINATOR_ROW_ICON: &str = "titlebar/coordinator-crown.svg";
+const COORDINATOR_ROW_ICON: &str = "titlebar/coordinator-captain-hat.svg";
+/// Chief of Staff's row keeps the crown it had before coordinators took the captain's hat.
+const CHIEF_ROW_ICON: &str = "titlebar/coordinator-crown.svg";
 const COORDINATOR_COLOR_DARK: u32 = 0xffffff;
 const COORDINATOR_COLOR_LIGHT: u32 = 0x000000;
 
@@ -157,10 +159,17 @@ pub(crate) fn is_coordinator(session: &NativeSidebarSession) -> bool {
 /// The icon a coordinator row draws in place of its agent's logo.
 ///
 /// CDXC:Coordinators 2026-10-01 DECISION:
-/// User: "please give coordinator agents a different logo in the sidebar of the app (not the agent's app logo)", a cool SVG instead of the Claude icon. A crown, bold enough to read at the row's 13px, drawn white on dark themes and black on light ones the way the Codex logo adapts (user: "make the crown white, not purple"), with the row's usual focus and hover dimming; its threads keep their agent logos, and the crew icon with the thread count stays beside it.
-pub(crate) fn coordinator_icon(appearance: &SidebarAppearance) -> AnyElement {
+/// User: "please give coordinator agents a different logo in the sidebar of the app (not the agent's app logo)", a cool SVG instead of the Claude icon, bold enough to read at the row's 13px, drawn white on dark themes and black on light ones the way the Codex logo adapts (user: "make the crown white, not purple"), with the row's usual focus and hover dimming; its threads keep their agent logos, and the crew icon with the thread count stays beside it.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User: "Can we please show a captain hat icon for coordinators instead of crown? but make it same color as we have now". The mark is our own peaked cap (crown, band, peak, badge dot; `coordinator-captain-hat.svg`) in the crown's colours and dimming; this supersedes the crown for coordinators. The user asked it "for coordinators", so Chief of Staff (`chief`) keeps the crown. The chat's pills, cards and work chips and the phone draw the same cap.
+pub(crate) fn coordinator_icon(appearance: &SidebarAppearance, chief: bool) -> AnyElement {
     titlebar_svg_icon(
-        COORDINATOR_ROW_ICON,
+        if chief {
+            CHIEF_ROW_ICON
+        } else {
+            COORDINATOR_ROW_ICON
+        },
         13.0 * appearance.scale,
         rgb(if appearance.light {
             COORDINATOR_COLOR_LIGHT

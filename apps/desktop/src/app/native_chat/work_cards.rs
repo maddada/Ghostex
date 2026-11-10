@@ -36,7 +36,7 @@ fn chip_icon(kind: &str) -> &'static str {
     match kind {
         "you" => "titlebar/user.svg",
         "thread" => "titlebar/robot.svg",
-        "coordinator" => "titlebar/coordinator-crown.svg",
+        "coordinator" => "titlebar/coordinator-captain-hat.svg",
         "steps" => "titlebar/checklist.svg",
         "item" => "titlebar/stack.svg",
         _ => "titlebar/clock.svg",

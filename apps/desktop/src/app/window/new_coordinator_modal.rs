@@ -983,7 +983,7 @@ impl Render for GpuiMakeCoordinatorModalWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.palette;
         let description = format!(
-            "\"{}\" keeps its conversation and keeps running: nothing restarts or interrupts it. It gets the crown now, and its coordinator playbook arrives once its current turn is over.",
+            "\"{}\" keeps its conversation and keeps running: nothing restarts or interrupts it. It gets the captain's hat now, and its coordinator playbook arrives once its current turn is over.",
             self.session_title
         );
         let body = v_flex()

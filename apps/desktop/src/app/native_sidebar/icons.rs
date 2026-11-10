@@ -144,7 +144,10 @@ fn render_session_icon(
             .items_center()
             .justify_center()
             .opacity(opacity)
-            .child(super::threads::coordinator_icon(appearance))
+            .child(super::threads::coordinator_icon(
+                appearance,
+                session.is_chief,
+            ))
             .into_any_element();
     }
     let image = session

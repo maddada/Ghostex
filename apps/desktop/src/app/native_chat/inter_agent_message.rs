@@ -592,7 +592,7 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// The agent's own logo (a coordinator's crown, `CDXC:Coordinators 2026-10-15` in the core's
+    /// The agent's own logo (a coordinator's captain's hat, `CDXC:Coordinators 2026-10-15` in the core's
     /// agent_message_card.rs) with a small arrow badge (prose grey coming in, sky going out), or
     /// the sparkle of a subagent, inside the fold's tile and wearing its badge
     /// (`SINGLE_LINE_CARD`, cards.rs) so the left icons look alike.
@@ -621,9 +621,9 @@ impl NativeChatView {
         };
         let agent = text(card, "agentIcon");
         let logo = match workspace_tab_agent_icon_path(&agent) {
-            // The sidebar's coordinator crown and colours (`coordinator_icon` in native_sidebar/threads.rs).
+            // The sidebar's coordinator captain's hat and colours (`coordinator_icon` in native_sidebar/threads.rs).
             _ if card["coordinator"] == true => icon(
-                "titlebar/coordinator-crown.svg",
+                "titlebar/coordinator-captain-hat.svg",
                 mark,
                 if p.light {
                     rgb(0x000000).into()

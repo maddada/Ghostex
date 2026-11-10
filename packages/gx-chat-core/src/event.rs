@@ -114,7 +114,7 @@ pub struct KnownSession {
     pub agent_id: String,
     /// The agent's display name (`Claude`, `Codex`).
     pub agent_name: String,
-    /// The session is a coordinator (an orchestrator): its cards draw the crown, as its sidebar
+    /// The session is a coordinator (an orchestrator): its cards draw the captain's hat, as its sidebar
     /// row does.
     pub coordinator: bool,
     /// `working`, `idle` or `attention`, for the composer's `+` picker. Not a name: a change to it

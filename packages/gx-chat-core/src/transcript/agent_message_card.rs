@@ -129,11 +129,11 @@ fn card(
     })
 }
 
-/// Marks a card whose other session is a coordinator, which the renderers draw with the crown in
+/// Marks a card whose other session is a coordinator, which the renderers draw with the captain's hat in
 /// place of its agent's logo (the arrow badge stays: it says which way the message went).
 ///
 /// CDXC:Coordinators 2026-10-15 DECISION:
-/// User, on a thread's `Message from "Main Coordinator"` card that showed the generic robot: "show crown icon for orchestrator messages not this". A card whose other session is a coordinator (the same `coordinatorRole` test as the sidebar's crown, read from the host's session list) draws the sidebar's crown (`titlebar/coordinator-crown.svg`, white on dark, black on light) instead of the agent logo, on the desktop, the web build and the phone; messages from any other agent keep their logo. Messages to a coordinator get the crown too, so the card always shows the other session the same way.
+/// User, on a thread's `Message from "Main Coordinator"` card that showed the generic robot: "show crown icon for orchestrator messages not this". A card whose other session is a coordinator (the same `coordinatorRole` test as the sidebar's crown, read from the host's session list) draws the sidebar's coordinator mark (white on dark, black on light) instead of the agent logo, on the desktop, the web build and the phone; messages from any other agent keep their logo. Messages to a coordinator get it too, so the card always shows the other session the same way. Since 2026-11-10 that mark is the captain's hat (`titlebar/coordinator-captain-hat.svg`, CDXC:Coordinators 2026-11-10 in the desktop's native_sidebar/threads.rs), not the crown.
 fn crowned(mut card: Value, coordinator: bool) -> Value {
     card["coordinator"] = coordinator.into();
     card
@@ -588,7 +588,7 @@ pub fn dress_sent(sent: &mut Value) {
         })
         .collect();
     let sentence = format!("Message to {count} sessions");
-    // The row's own mark is the crown only when every recipient is a coordinator.
+    // The row's own mark is the captain's hat only when every recipient is a coordinator.
     let coordinator = recipients
         .iter()
         .all(|recipient| recipient["coordinator"] == true);
