@@ -95,6 +95,10 @@ pub fn handle_with_ids(
         }
         // A row of the In progress list shows its line of work in the Work panel, the chat staying
         // where it is (`open_questions::show`).
+        // A page row in the dock asks how many of the page's questions are answered.
+        ActionKind::LoadPageQuestionCounts => {
+            crate::extras::work_cards::load_page_counts(state, text(action, "pageId"))
+        }
         ActionKind::JumpToWorkCard => {
             crate::extras::coordinator_board::focus_row(state, text(action, "key"))
         }

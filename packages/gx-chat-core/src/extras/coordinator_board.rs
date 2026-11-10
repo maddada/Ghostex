@@ -166,6 +166,11 @@ pub struct BoardRow {
     /// shows; "" when an answer was picked or none was given.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub replied: String,
+    /// How much a Ghostex page still asks, drawn after its title in the quieter colour
+    /// ("(14 questions)", "(10/16 answered)", "(not seen yet)"; work_cards.rs `page_count`); ""
+    /// for anything else.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub count: String,
     /// The card is open: it shows its whole line of work and its buttons (one card at a time).
     #[serde(default)]
     pub expanded: bool,
@@ -583,6 +588,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         lead: String::new(),
         body: text(row, "body").to_string(),
         title_runs: row.get("titleRuns").cloned().unwrap_or(Value::Null),
+        count: String::new(),
         replied: given
             .filter(|given| {
                 !row["answers"]
@@ -883,6 +889,14 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         body: String::new(),
                         title_runs: Value::Null,
                         replied: String::new(),
+                        count: if matches!(
+                            asker.kind,
+                            crate::transcript::open_questions::AskerKind::Page
+                        ) {
+                            crate::extras::work_cards::page_count(state, &asker)
+                        } else {
+                            String::new()
+                        },
                         // A question leaves by being answered, or put off For later in Resources.
                         remove: Value::Null,
                         restore: Value::Null,

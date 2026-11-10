@@ -78,6 +78,10 @@ fn settle_with_ids(
                 next_request_id(),
             ) {
                 effects.extend(more);
+            } else if let Some(more) =
+                crate::extras::work_cards::settle_page_counts(state, *request_id, answer.clone())
+            {
+                effects.extend(more);
             } else if let Some(more) = crate::extras::coordinator_board::settle_answer(
                 state,
                 *request_id,

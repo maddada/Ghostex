@@ -42,6 +42,28 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
     (icon, color.map_or(p.muted, |color| gpui::rgb(color).into()))
 }
 
+/// A page row's ⋯ menu (`dock_row`): Show in chat, Dismiss and Snooze with its lengths, as the
+/// app's dropdown rows (`{label, command}`, a submenu's under `children`).
+fn page_row_menu(row: &Value) -> Vec<Value> {
+    let mut rows = Vec::new();
+    if row["showInChat"].is_object() {
+        rows.push(json!({ "label": "Show in chat", "command": row["showInChat"] }));
+    }
+    if row["dismiss"].is_object() {
+        rows.push(json!({ "label": "Dismiss", "command": row["dismiss"] }));
+    }
+    let snooze: Vec<Value> = row["snooze"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|choice| json!({ "label": text(choice, "label"), "command": choice["command"] }))
+        .collect();
+    if !snooze.is_empty() {
+        rows.push(json!({ "label": "Snooze", "children": snooze }));
+    }
+    rows
+}
+
 /// A dock row's mark: a Ghostex page that needs him is a plain page in the need-you pink (`page`
 /// on the row, from gx-chat-core); everything else its status's mark (`status_look`). Every row
 /// that is a page takes its mark here.
@@ -291,6 +313,9 @@ fn plain_pictures(line: &str) -> String {
     out.push_str(rest);
     out
 }
+
+/// How often a drawn page row asks its gxserver for its counts (`refresh_page_counts`).
+const PAGE_COUNTS_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// The dock's rows' fold, as the chat's disclosure motion knows it.
 const DOCK_MOTION_KEY: &str = "work-dock:rows";
@@ -832,7 +857,15 @@ impl NativeChatView {
         let s = p.scale;
         let key = text(row, "key");
         let open_key = format!("dock-row:{key}");
-        let open = self.expanded.contains(&open_key);
+        // A Ghostex page's row never opens to a second line: a click opens the page, and its other
+        // actions are the ⋯ menu that takes the age's place under the pointer (`page_row_menu`).
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User: "for pages that need me, lets show 3 dots on hover (appears in place of the time
+        // basically) where i can click to see show in chat/dismiss/snooze. don't make it expand
+        // on click since it's useless when it expands".
+        let page_row = row["page"] == true && row["open"].is_object();
+        let open = self.expanded.contains(&open_key) && !page_row;
         let (icon, color) = row_mark(row, p);
         let body = p.strengthened(p.prose);
         let busy = row["busy"] == true;
@@ -945,7 +978,30 @@ impl NativeChatView {
             row_width - DOCK_LEAD - age_width - if beside { all_width + DOCK_GAP } else { 0.0 };
         let detail = text(row, "body");
         let title_runs = &row["titleRuns"];
-        let question = if !open {
+        let count = text(row, "count");
+        let question = if page_row && !count.is_empty() {
+            // The page's name, then how much it still asks; the name gives way first.
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .gap(px(6.0 * s))
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_color(body)
+                        .child(title.to_string()),
+                )
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .text_color(p.card_muted)
+                        .child(count.to_string()),
+                )
+                .into_any_element()
+        } else if !open {
             div()
                 .flex_1()
                 .min_w_0()
@@ -1057,6 +1113,29 @@ impl NativeChatView {
             }
         } else {
             under_answers = buttons;
+        }
+        if page_row {
+            let hover = gpui::SharedString::from(format!("dock-page-row:{key}"));
+            let page = row["open"].clone();
+            let menu = page_row_menu(row);
+            let right_menu = menu.clone();
+            head = head
+                .group(hover.clone())
+                .child(self.page_row_age(&key, &age, &hover, menu, p, cx))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.invoke(page.clone(), cx);
+                }))
+                .on_mouse_down(
+                    gpui::MouseButton::Right,
+                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                        cx.stop_propagation();
+                        this.show_dock_row_menu(right_menu.clone(), event.position, window, cx);
+                    }),
+                );
+            if let Some(page_id) = row["pageId"].as_str() {
+                self.refresh_page_counts(page_id, cx);
+            }
+            return div().w_full().child(head).into_any_element();
         }
         head = head
             .child(
@@ -1532,6 +1611,115 @@ impl NativeChatView {
         column
             .child(self.show_more_pill(&format!("more:{id}"), more_key, whole, line_height, p, cx))
             .into_any_element()
+    }
+
+    /// A page row's right end: its age, and over it while the row is hovered the ⋯ that opens its
+    /// menu (`page_row_menu`), as a board card's age and ⋯ (coordinator_board.rs `age_slot`).
+    fn page_row_age(
+        &self,
+        key: &str,
+        age: &str,
+        hover: &gpui::SharedString,
+        menu: Vec<Value>,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        div()
+            .relative()
+            .flex_shrink_0()
+            .min_w(px(26.0 * s))
+            .h(px(PROSE_LINE_HEIGHT * s))
+            .flex()
+            .items_center()
+            .justify_end()
+            .child(
+                div()
+                    .text_color(p.muted)
+                    .group_hover(hover.clone(), |style| style.opacity(0.0))
+                    .child(age.to_string()),
+            )
+            .child(
+                div()
+                    .id(gpui::SharedString::from(format!("dock-page-menu:{key}")))
+                    .role(gpui::Role::Button)
+                    .aria_label("More actions")
+                    .absolute()
+                    .right(px(-2.0 * s))
+                    .top(px((PROSE_LINE_HEIGHT - 22.0) / 2.0 * s))
+                    .w(px(26.0 * s))
+                    .h(px(22.0 * s))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(6.0 * s))
+                    .opacity(0.0)
+                    .group_hover(hover.clone(), |style| style.opacity(1.0))
+                    .chat_cursor_pointer()
+                    .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                    .tooltip(|window, cx| {
+                        gpui_component::tooltip::Tooltip::new("More actions").build(window, cx)
+                    })
+                    .child(
+                        svg()
+                            .path("titlebar/dots.svg")
+                            .size(px(14.0 * s))
+                            .text_color(p.card_muted),
+                    )
+                    .on_click(
+                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                            cx.stop_propagation();
+                            this.show_dock_row_menu(menu.clone(), event.position(), window, cx);
+                        }),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    /// Opens a dock row's menu at `at` with the app's dropdown, inside the window it was pressed
+    /// in (the chat's, or the floating Work card's).
+    fn show_dock_row_menu(
+        &mut self,
+        rows: Vec<Value>,
+        at: gpui::Point<gpui::Pixels>,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
+        if rows.is_empty() {
+            return;
+        }
+        let in_main = self
+            .open_main_window(cx)
+            .is_none_or(|main| main == window.window_handle());
+        if in_main {
+            self.show_chat_menu_at(rows, at, 180.0, window, cx);
+        } else {
+            self.show_chat_menu_in_window_at(rows, at, 180.0, window, cx);
+        }
+    }
+
+    /// Asks the page's gxserver how much of it is answered, at most every few seconds while its
+    /// row is drawn, so a pick made in the page shows in the row's count.
+    pub(super) fn refresh_page_counts(&self, page_id: &str, cx: &mut Context<Self>) {
+        let now = web_time::Instant::now();
+        let due = self
+            .board
+            .page_counts_asked
+            .borrow()
+            .get(page_id)
+            .is_none_or(|asked| now.duration_since(*asked) >= PAGE_COUNTS_EVERY);
+        if !due {
+            return;
+        }
+        self.board
+            .page_counts_asked
+            .borrow_mut()
+            .insert(page_id.to_string(), now);
+        let action = json!({ "type": "loadPageQuestionCounts", "pageId": page_id });
+        let chat = cx.weak_entity();
+        cx.defer(move |cx| {
+            let _ = chat.update(cx, |this, cx| this.invoke(action, cx));
+        });
     }
 
     /// The control under a cut description or question: "Show more" with a down chevron, "Show

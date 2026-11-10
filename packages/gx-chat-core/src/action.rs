@@ -86,6 +86,7 @@ action_kinds! {
     CoordinatorBoardChange => "coordinatorBoardChange",
     CoordinatorBoardAnswer => "coordinatorBoardAnswer",
     JumpToWorkCard => "jumpToWorkCard",
+    LoadPageQuestionCounts => "loadPageQuestionCounts",
     DismissWorkDockCard => "dismissWorkDockCard",
     SnoozeWorkAsk => "snoozeWorkAsk",
     ShowInChat => "showInChat",

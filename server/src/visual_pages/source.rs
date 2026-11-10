@@ -51,7 +51,10 @@ fn page_id_param(body: &Value) -> Result<String, DomainStateError> {
 /// `/api/readVisualPageSource` `{pageId}`: `{pageId, refreshable, changed, questionsLeft}`.
 /// `refreshable` says the page knows its file and the file is there; `changed` that the file
 /// changed since the page was published or last refreshed; `questionsLeft` that a question on it
-/// has no answer yet (`page_questions_left`; added 2026-11-11, so an older gxserver leaves it out).
+/// has no answer yet (`page_questions_left`; added 2026-11-11, so an older gxserver leaves it out);
+/// `questionsAnswered` and `questionsTotal` how many of its questions the reader's draft answers
+/// and how many it asks (`page_question_counts`, null for a page with no questions; added
+/// 2026-11-11 for the dock's page rows).
 pub(crate) fn handle_read_http(
     state: &AppState,
     endpoint_path: String,
@@ -71,6 +74,7 @@ pub(crate) fn handle_read_http(
         }
         _ => false,
     };
+    let counts = super::questions::page_question_counts(&state.paths.root_dir, &id);
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,
@@ -81,6 +85,8 @@ pub(crate) fn handle_read_http(
                 "refreshable": source.is_some(),
                 "changed": changed,
                 "questionsLeft": super::questions::page_questions_left(&state.paths.root_dir, &id),
+                "questionsAnswered": counts.map(|(answered, _)| answered),
+                "questionsTotal": counts.map(|(_, total)| total),
             }),
         ),
     )

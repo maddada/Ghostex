@@ -124,6 +124,11 @@ pub struct PanelsState {
     /// Cards whose answer gxserver recorded but whose message did not go: another try sends the
     /// message without recording it again.
     pub board_answer_unsent: std::collections::BTreeSet<String>,
+    /// Each page's questions answered in the reader's draft and asked, `(answered, total)`, by page
+    /// id, as its gxserver last said (`extras::work_cards::load_page_counts`).
+    pub page_question_counts: std::collections::BTreeMap<String, (u64, u64)>,
+    /// The page count reads in flight, by request id.
+    pub page_count_requests: std::collections::BTreeMap<u64, String>,
     /// The row a board pill in the chat asked the board to show (`board:B4`), and how many times
     /// one was clicked, so the renderers open the board and scroll to it once per click.
     pub board_focus: Option<(String, u64)>,
@@ -169,6 +174,8 @@ impl Default for PanelsState {
             board_answer_requests: Default::default(),
             board_answer_sends: Default::default(),
             board_answer_unsent: Default::default(),
+            page_question_counts: Default::default(),
+            page_count_requests: Default::default(),
             board_focus: None,
             intro_hidden: false,
             intro_hide_request: None,

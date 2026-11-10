@@ -879,8 +879,13 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
                 row["detail"] = json!([]);
             } else {
                 row["kind"] = json!("form");
-                // A Ghostex page (not a form): its mark is a page (desktop `row_mark`).
+                // A Ghostex page (not a form): its mark is a page (desktop `row_mark`), a click
+                // opens it, and its name carries how much it still asks (`page_count`).
                 row["page"] = json!(!form);
+                if !form {
+                    row["pageId"] = json!(asker.id);
+                    row["count"] = json!(page_count(state, &asker));
+                }
                 row["buttons"] = json!([]);
                 // A page that asks nothing waits to be marked seen (`Asker::seen_only`).
                 let detail = if asker.seen_only {
@@ -894,6 +899,90 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
             (at, row)
         })
         .collect()
+}
+
+/// `{type: "loadPageQuestionCounts", pageId}`: asks the page's gxserver how many of its questions
+/// the reader's draft answers (`readVisualPageSource`), unless a read is already out.
+pub fn load_page_counts(state: &mut ChatState, page_id: &str) -> Vec<crate::effect::Effect> {
+    let page_id = page_id.to_ascii_lowercase();
+    let panels = &state.extras.panels;
+    if page_id.is_empty()
+        || panels
+            .page_count_requests
+            .values()
+            .any(|asked| *asked == page_id)
+    {
+        return Vec::new();
+    }
+    let request_id = state.core.allocate_request_id();
+    state
+        .extras
+        .panels
+        .page_count_requests
+        .insert(request_id, page_id.clone());
+    vec![crate::effect::Effect::SendRpc {
+        request_id,
+        method: crate::wire::ChatRpcMethod::ReadVisualPageSource,
+        params: Box::new(json!({ "pageId": page_id })),
+    }]
+}
+
+/// Takes the answer to [`load_page_counts`]: the counts, kept by page; nothing for a refused read
+/// (an older gxserver), whose rows keep their count from the page's own markup.
+pub fn settle_page_counts(
+    state: &mut ChatState,
+    request_id: u64,
+    answer: Result<&Value, String>,
+) -> Option<Vec<crate::effect::Effect>> {
+    let page_id = state
+        .extras
+        .panels
+        .page_count_requests
+        .remove(&request_id)?;
+    state.core.claim_refusal();
+    if let Ok(result) = answer {
+        if let (Some(answered), Some(total)) = (
+            result["questionsAnswered"].as_u64(),
+            result["questionsTotal"].as_u64(),
+        ) {
+            state
+                .extras
+                .panels
+                .page_question_counts
+                .insert(page_id, (answered, total));
+        }
+    }
+    Some(Vec::new())
+}
+
+/// How much a page still asks, after its name in the quieter colour: "(14 questions)" while none
+/// is answered, "(10/16 answered)" once some are (a pick or words in the page's saved draft
+/// counts, sent or not), "(not seen yet)" for a page that asks nothing and waits to be marked
+/// seen. Before its gxserver has said, the questions its block lists, none answered.
+///
+/// CDXC:Coordinators 2026-11-11 DECISION:
+/// User, of a page row in the dock: "also show (10/16 answered) or (14 questions) next to the
+/// page name to know how many i need to answer".
+pub(crate) fn page_count(
+    state: &ChatState,
+    asker: &crate::transcript::open_questions::Asker,
+) -> String {
+    if asker.seen_only {
+        return "(not seen yet)".to_string();
+    }
+    let (answered, total) = state
+        .extras
+        .panels
+        .page_question_counts
+        .get(&asker.id.to_ascii_lowercase())
+        .copied()
+        .unwrap_or((0, asker.tags.len() as u64));
+    match (answered, total) {
+        (_, 0) => String::new(),
+        (0, 1) => "(1 question)".to_string(),
+        (0, total) => format!("({total} questions)"),
+        (answered, total) => format!("({answered}/{total} answered)"),
+    }
 }
 
 /// The one-click question (a reply's answer links) a form id names, when the form is one.

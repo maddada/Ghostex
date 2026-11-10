@@ -357,6 +357,10 @@ pub(crate) struct CoordinatorBoardView {
     /// The dock's rows' width at its last paint (unscaled), 0 before the first: what decides
     /// whether a row's answers fit beside its question (work_cards.rs `dock_row`).
     pub(super) dock_width: std::rc::Rc<std::cell::Cell<f32>>,
+    /// When each page row last asked its gxserver for its counts (work_cards.rs
+    /// `refresh_page_counts`), by page id.
+    pub(super) page_counts_asked:
+        std::cell::RefCell<std::collections::HashMap<String, web_time::Instant>>,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only
@@ -1422,6 +1426,27 @@ impl NativeChatView {
                                         p,
                                         cx,
                                     ))
+                                } else if !text(row, "count").is_empty() {
+                                    // Its count follows the page's draft while the card is drawn.
+                                    if let Some(page_id) = key.strip_prefix("question:") {
+                                        self.refresh_page_counts(page_id, cx);
+                                    }
+                                    // A page's name, then how much it still asks (work_cards.rs
+                                    // `page_count`); the name gives way first.
+                                    element.child(
+                                        div()
+                                            .min_w_0()
+                                            .flex()
+                                            .gap(px(6.0 * s))
+                                            .child(div().min_w_0().truncate().child(title.clone()))
+                                            .child(
+                                                div()
+                                                    .flex_shrink_0()
+                                                    .whitespace_nowrap()
+                                                    .text_color(p.card_muted)
+                                                    .child(text(row, "count")),
+                                            ),
+                                    )
                                 } else {
                                     element.child(title.clone())
                                 }
