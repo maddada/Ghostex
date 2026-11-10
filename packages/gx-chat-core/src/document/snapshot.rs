@@ -425,47 +425,11 @@ impl From<BTreeMap<String, Value>> for SharedForms {
 }
 
 /// A document part the state already holds behind an `Arc`, handed to every document as the same
-/// allocation rather than copied, compared or dropped part by part. Serialized as the value.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Shared<T>(pub std::sync::Arc<T>);
-
-impl<T: PartialEq> PartialEq for Shared<T> {
-    fn eq(&self, other: &Self) -> bool {
-        std::sync::Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
-    }
-}
-
-impl<T> std::ops::Deref for Shared<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
+/// allocation rather than copied, compared or dropped part by part. Serialized as the value. The
+/// wire type's own (`ghostex_gx_protocol::shared::Shared`), so a frame's side data and the
+/// document share one allocation.
+pub use ghostex_gx_protocol::shared::Shared;
 
 /// A document value kept by the core across documents (`document::AssembleCache`): the same value
 /// is shared rather than copied, compared or dropped while its inputs hold. Serialized as the value.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct SharedValue(pub std::sync::Arc<Value>);
-
-impl PartialEq for SharedValue {
-    fn eq(&self, other: &Self) -> bool {
-        std::sync::Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
-    }
-}
-
-impl std::ops::Deref for SharedValue {
-    type Target = Value;
-
-    fn deref(&self) -> &Value {
-        &self.0
-    }
-}
-
-impl From<Value> for SharedValue {
-    fn from(value: Value) -> Self {
-        Self(std::sync::Arc::new(value))
-    }
-}
+pub type SharedValue = Shared<Value>;

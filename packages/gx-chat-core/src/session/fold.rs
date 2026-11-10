@@ -12,6 +12,7 @@
 //! - `accountSwitch`, `pendingModelSelection` and `asyncQuestionsSince` are three-state: absent,
 //!   `null` and a value all mean different things.
 
+use ghostex_gx_protocol::shared::Shared;
 use ghostex_gx_protocol::{
     ChatAppendedFrame, ChatSnapshotFrame, ChatStateFrame, ChatStatus, ReadSessionChatResult, Tri,
 };
@@ -216,10 +217,10 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .clone()
         .or_else(|| previous_side.and_then(|state| state.unavailable_modes.clone()));
 
-    folded.result.state.resource_index = side
-        .resource_index
-        .clone()
-        .or_else(|| previous_side.and_then(|state| state.resource_index.clone()));
+    folded.result.state.resource_index = carried(
+        side.resource_index.as_ref(),
+        previous_side.and_then(|state| state.resource_index.as_ref()),
+    );
 
     folded.result.state.async_questions_since = match &side.async_questions_since {
         Tri::Absent => previous_side
@@ -277,10 +278,10 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .clone()
         .or_else(|| previous_side.and_then(|state| state.returned_prompt.clone()));
 
-    folded.result.state.coordinator_threads = side
-        .coordinator_threads
-        .clone()
-        .or_else(|| previous_side.and_then(|state| state.coordinator_threads.clone()));
+    folded.result.state.coordinator_threads = carried(
+        side.coordinator_threads.as_ref(),
+        previous_side.and_then(|state| state.coordinator_threads.as_ref()),
+    );
 
     folded.result.state.side_chats = side
         .side_chats
@@ -326,15 +327,35 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .clone()
         .or_else(|| previous_side.and_then(|state| state.queue.clone()));
 
+    let previous_draft = previous_side.and_then(|state| state.draft.as_ref());
     folded.result.state.draft = match &side.draft {
-        Some(draft) => Some(merge_draft_state(
-            previous_side.and_then(|state| state.draft.as_ref()),
-            draft,
-        )),
-        None => previous_side.and_then(|state| state.draft.clone()),
+        // An equal merge keeps the draft already held (`Shared`), so the session's copy and this
+        // one stay the same allocation.
+        Some(draft) => {
+            let merged = merge_draft_state(previous_draft.map(|draft| &**draft), draft);
+            Some(match previous_draft {
+                Some(previous) if **previous == merged => previous.clone(),
+                _ => merged.into(),
+            })
+        }
+        None => previous_draft.cloned(),
     };
 
     folded
+}
+
+/// A side value the frame carries, else the one the fold held: `incoming ?? previous`, keeping
+/// the previous allocation when the frame repeats an equal value, so the fold, the session state
+/// and the document go on sharing one copy (`ghostex_gx_protocol::shared::Shared`).
+pub(crate) fn carried<T: PartialEq>(
+    incoming: Option<&Shared<T>>,
+    previous: Option<&Shared<T>>,
+) -> Option<Shared<T>> {
+    match (incoming, previous) {
+        (Some(incoming), Some(previous)) if previous == incoming => Some(previous.clone()),
+        (Some(incoming), _) => Some(incoming.clone()),
+        (None, previous) => previous.cloned(),
+    }
 }
 
 /// `foldSessionChatAppend`: new rows, and nothing else that is not on the frame.

@@ -191,6 +191,29 @@ impl From<Vec<Value>> for ResourceIndex {
     }
 }
 
+/// The frame's own records, shared rather than copied (`ghostex_gx_protocol::shared::Shared`).
+impl From<ghostex_gx_protocol::shared::Shared<Vec<Value>>> for ResourceIndex {
+    fn from(entries: ghostex_gx_protocol::shared::Shared<Vec<Value>>) -> Self {
+        Self {
+            entries: entries.0,
+            view: std::sync::OnceLock::new(),
+        }
+    }
+}
+
+impl ResourceIndex {
+    /// Whether this index holds `entries`' own allocation.
+    pub fn shares(&self, entries: &ghostex_gx_protocol::shared::Shared<Vec<Value>>) -> bool {
+        std::sync::Arc::ptr_eq(&self.entries, &entries.0)
+    }
+}
+
+impl PartialEq<ghostex_gx_protocol::shared::Shared<Vec<Value>>> for ResourceIndex {
+    fn eq(&self, other: &ghostex_gx_protocol::shared::Shared<Vec<Value>>) -> bool {
+        std::sync::Arc::ptr_eq(&self.entries, &other.0) || *self.entries == **other
+    }
+}
+
 impl FromIterator<Value> for ResourceIndex {
     fn from_iter<I: IntoIterator<Item = Value>>(entries: I) -> Self {
         Vec::from_iter(entries).into()

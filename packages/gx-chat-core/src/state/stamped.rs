@@ -48,6 +48,14 @@ impl<T: PartialEq> Stamped<T> {
         true
     }
 
+    /// Takes `value` in place of an equal value, keeping the stamp (the value did not change), so
+    /// two holders of equal values can come to share one allocation; does nothing otherwise.
+    pub fn share_equal(&mut self, value: T) {
+        if self.value == value {
+            self.value = value;
+        }
+    }
+
     /// Replaces the value only when `value` differs, so an unchanged write keeps the stamp.
     pub fn set_if_changed(&mut self, value: T) {
         if self.value != value {

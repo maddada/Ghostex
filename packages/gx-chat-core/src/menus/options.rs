@@ -126,7 +126,7 @@ impl NativeChatOptions {
 
 /// True in an orchestrator's chat, whose effort pickers offer only the orchestrator levels.
 pub(crate) fn is_orchestrator(state: &ChatState) -> bool {
-    crate::extras::coordinator_threads::is_coordinator(state.session.coordinator_threads.as_ref())
+    crate::extras::coordinator_threads::is_coordinator(state.session.coordinator_threads.as_deref())
 }
 
 /// True in an orchestrator's chat while Show all effort levels (`orchestratorAllEfforts`) is off,

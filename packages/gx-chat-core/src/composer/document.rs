@@ -175,7 +175,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         // orchestrator never takes Close After Done.
         .filter(|action| {
             let coordinator = crate::extras::coordinator_threads::is_coordinator(
-                state.session.coordinator_threads.as_ref(),
+                state.session.coordinator_threads.as_deref(),
             );
             match action.id.as_str() {
                 "closeAfterDone" => !coordinator,

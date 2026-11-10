@@ -41,7 +41,7 @@ pub fn document_with_board(
 
     let (fleet_strip, tasks_panel, _) = panels::project(state, context);
     let threads_panel = coordinator_threads::project(
-        state.session.coordinator_threads.as_ref(),
+        state.session.coordinator_threads.as_deref(),
         extras.panels.threads_step,
         extras.panels.threads_all.as_ref().map(|(_, rows)| rows),
     );
@@ -170,7 +170,7 @@ pub fn document_with_board(
         NewSessionWelcome {
             // CDXC:Coordinators 2026-09-30 WHY: a new coordinator's first screen says what it is for; the generic "What should we build with Claude?" hides that this agent hands the work to threads.
             title: if coordinator_threads::is_coordinator(
-                state.session.coordinator_threads.as_ref(),
+                state.session.coordinator_threads.as_deref(),
             ) {
                 crate::extras::welcome::wrap_new_session_welcome_title(
                     "What should this coordinator work on?",

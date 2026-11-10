@@ -194,7 +194,7 @@ fn settle_with_ids(
     // The open "N more" list follows the threads: a new revision on a frame reads it again.
     effects.extend(coordinator_threads::read_all_threads(
         &mut state.extras.panels,
-        state.session.coordinator_threads.as_ref(),
+        state.session.coordinator_threads.as_deref(),
         &mut next_request_id,
     ));
     // `project()` runs at the two moments the page, the agent path or the working flag can move

@@ -63,7 +63,7 @@ pub fn handle_with_ids(
             crate::extras::coordinator_threads::set_step(panels, step.min(u32::MAX as u64) as u32);
             crate::extras::coordinator_threads::read_all_threads(
                 panels,
-                state.session.coordinator_threads.as_ref(),
+                state.session.coordinator_threads.as_deref(),
                 next_request_id,
             )
             .into_iter()

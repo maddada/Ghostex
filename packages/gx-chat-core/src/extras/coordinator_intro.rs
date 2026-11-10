@@ -114,7 +114,7 @@ pub const TIPS: &[Tip] = &[
 /// Whether this chat offers the tips: a coordinator (gxserver sends it `coordinatorThreads`) whose
 /// gxserver has not been told "Don't show again", and that this client has not just hidden.
 pub fn offered(state: &ChatState) -> bool {
-    let Some(threads) = state.session.coordinator_threads.as_ref() else {
+    let Some(threads) = state.session.coordinator_threads.as_deref() else {
         return false;
     };
     threads.get("introHidden") != Some(&Value::Bool(true)) && !state.extras.panels.intro_hidden
@@ -245,7 +245,7 @@ mod tests {
 
     fn coordinator(threads: Value) -> ChatState {
         let mut state = ChatState::default();
-        *state.session.coordinator_threads = Some(threads);
+        *state.session.coordinator_threads = Some(threads.into());
         state
     }
 

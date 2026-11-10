@@ -386,7 +386,7 @@ pub fn project(state: &ChatState) -> Value {
     let Some(cards) = state
         .session
         .coordinator_threads
-        .as_ref()
+        .as_deref()
         .and_then(|threads| threads.get("approvals"))
         .and_then(Value::as_array)
     else {
@@ -504,7 +504,7 @@ pub fn answer(state: &mut ChatState, action: &UserAction, request_id: u64) -> Op
     let card = state
         .session
         .coordinator_threads
-        .as_ref()
+        .as_deref()
         .and_then(|threads| threads.get("approvals"))
         .and_then(Value::as_array)?
         .iter()
@@ -564,7 +564,7 @@ pub fn receive(state: &mut ChatState) {
     let open: Vec<String> = state
         .session
         .coordinator_threads
-        .as_ref()
+        .as_deref()
         .and_then(|threads| threads.get("approvals"))
         .and_then(Value::as_array)
         .map_or(&[][..], Vec::as_slice)
@@ -625,7 +625,7 @@ mod tests {
         let mut state = ChatState::default();
         state.identity.project_id = "P1".to_string();
         state.identity.session_id = "G-coordinator".to_string();
-        *state.session.coordinator_threads = Some(json!({ "approvals": approvals }));
+        *state.session.coordinator_threads = Some(json!({ "approvals": approvals }).into());
         state
     }
 

@@ -315,6 +315,7 @@ pub fn boot_read(
         let mut cached = cached;
         crate::session::merge::share_with_list(&mut cached.rows, &state.messages);
         state.messages.snapshot = Some(cached);
+        crate::session::apply::share_side_with_fold(state);
         state.messages.authoritative_revision += 1;
         // The host handed this fold over; writing it straight back would only restamp it.
         state.messages.persisted_revision = state.messages.authoritative_revision;
@@ -425,6 +426,7 @@ fn frame_arrived(state: &mut ChatState, frame: &ChatFrame, context: &ChatContext
             let mut folded = folded;
             crate::session::merge::share_with_list(&mut folded.rows, &state.messages);
             state.messages.snapshot = Some(folded);
+            crate::session::apply::share_side_with_fold(state);
             state.messages.authoritative_revision += 1;
             if moved || before != FrameIdentity::capture(state) {
                 state.core.request_render();
@@ -494,21 +496,20 @@ fn frame_arrived(state: &mut ChatState, frame: &ChatFrame, context: &ChatContext
                 Verdict::Apply => {
                     // The retained fold still absorbs the frame (that is what the host persists
                     // and what a reopen seeds from); the VIEW takes the frame's own fields.
-                    // A state frame carries no rows and folds none, so the fold's rows are moved
-                    // across rather than copied with everything else on every streamed sample.
-                    let mut previous = state.messages.snapshot.take();
-                    let rows = previous
-                        .as_mut()
-                        .map(|previous| std::mem::take(&mut previous.rows));
-                    let mut folded = fold_state(previous.as_ref(), StateCarrier::State(frame));
-                    if let Some(rows) = rows {
-                        folded.rows = rows;
-                    }
+                    // Folded in place: a state frame replaces only what it carries
+                    // (`fold_state_frame`), so the fold's rows and side values move across.
+                    let folded = match state.messages.snapshot.take() {
+                        Some(previous) => {
+                            crate::session::fold_state_frame::fold_state_frame(previous, frame)
+                        }
+                        None => fold_state(None, StateCarrier::State(frame)),
+                    };
                     state.messages.snapshot = Some(folded);
                     let before = FrameIdentity::capture(state);
                     let moved =
                         side_state_moves(state, frame.lifecycle.as_ref(), false, &frame.state);
                     crate::session::apply::apply_state_frame(state, frame, context);
+                    crate::session::apply::share_side_with_fold(state);
                     if moved || before != FrameIdentity::capture(state) {
                         state.core.request_render();
                     }

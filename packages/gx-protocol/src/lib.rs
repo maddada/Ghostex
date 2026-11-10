@@ -39,6 +39,7 @@ pub mod presentation;
 pub mod rpc;
 pub mod session_chat_agents;
 pub mod session_ref;
+pub mod shared;
 pub mod side_state;
 pub mod starting;
 pub mod tri;

@@ -86,7 +86,7 @@ pub struct SessionState {
     pub returned_prompt: Option<Value>,
     /// A coordinator's threads (`{ threads }`); present only for a coordinator.
     /// Unchanged on omission.
-    pub coordinator_threads: crate::state::Stamped<Option<Value>>,
+    pub coordinator_threads: crate::state::Stamped<Option<crate::document::SharedValue>>,
     /// This session's side chats (`[{ projectId, sessionId, title, ... }]`); unchanged on omission.
     pub side_chats: Option<Value>,
     /// For a side chat, its main session (`{ sessionId, title }`); unchanged on omission.

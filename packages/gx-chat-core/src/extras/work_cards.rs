@@ -284,7 +284,7 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
     let Some(items) = state
         .session
         .coordinator_threads
-        .as_ref()
+        .as_deref()
         .and_then(|threads| threads.get("work"))
         .and_then(|work| work.get("items"))
         .and_then(Value::as_array)
@@ -750,9 +750,10 @@ pub fn ages_change_at(cards: &Value, now_ms: i64) -> Option<i64> {
 /// that already has words) does not walk the transcript again.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WorkInputs {
-    /// The stamp of the coordinator threads `work` was read from.
+    /// The stamp of the coordinator threads `work` was read from, and those threads themselves
+    /// (shared, `document::SharedValue`), which hold the `work` the cards were built from.
     threads: u64,
-    work: Option<Value>,
+    held_threads: Option<crate::document::SharedValue>,
     messages: usize,
     last_id: String,
     last_has_words: bool,
@@ -775,7 +776,7 @@ fn work_of(state: &ChatState) -> Option<&Value> {
     state
         .session
         .coordinator_threads
-        .as_ref()
+        .as_deref()
         .and_then(|threads| threads.get("work"))
 }
 
@@ -784,7 +785,7 @@ impl WorkInputs {
         let last = state.messages.composed.last();
         Self {
             threads: state.session.coordinator_threads.stamp(),
-            work: work_of(state).cloned(),
+            held_threads: (*state.session.coordinator_threads).clone(),
             messages: state.messages.composed.len(),
             last_id: last.map(|message| message.id.clone()).unwrap_or_default(),
             last_has_words: last_has_words(state),
@@ -809,10 +810,16 @@ impl WorkInputs {
         }
         let threads = state.session.coordinator_threads.stamp();
         if self.threads != threads {
-            if self.work.as_ref() != work_of(state) {
+            let held_work = self
+                .held_threads
+                .as_deref()
+                .and_then(|threads| threads.get("work"));
+            if held_work != work_of(state) {
                 return false;
             }
             self.threads = threads;
+            // The threads held now, so the ones they replaced are not kept alive here.
+            self.held_threads = (*state.session.coordinator_threads).clone();
         }
         let panels = state.extras.panels.stamp();
         if self.panels != panels {
@@ -844,7 +851,7 @@ pub fn project_kept(
     if state
         .session
         .coordinator_threads
-        .as_ref()
+        .as_deref()
         .and_then(|threads| threads.get("work"))
         .is_none()
     {
@@ -878,7 +885,7 @@ pub fn card_tags(state: &ChatState) -> std::collections::BTreeSet<String> {
     state
         .session
         .coordinator_threads
-        .as_ref()
+        .as_deref()
         .and_then(|threads| threads.get("work"))
         .and_then(|work| work.get("items"))
         .and_then(Value::as_array)

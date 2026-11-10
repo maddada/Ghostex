@@ -87,7 +87,7 @@ pub fn side_state_moves(
         || side
             .coordinator_threads
             .as_ref()
-            .is_some_and(|threads| session.coordinator_threads.as_ref() != Some(threads))
+            .is_some_and(|threads| session.coordinator_threads.as_deref() != Some(threads))
         || side
             .side_chats
             .as_ref()
@@ -118,7 +118,7 @@ pub fn side_state_moves(
         || side
             .resource_index
             .as_ref()
-            .is_some_and(|index| &*session.resource_index != index)
+            .is_some_and(|index| *session.resource_index != *index)
         || nullable(&side.account_switch, &session.account_switch)
         || nullable(&side.api_retry, &session.api_retry)
         || nullable(

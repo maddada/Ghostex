@@ -310,7 +310,7 @@ pub struct ChatSideState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue: Option<Vec<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub draft: Option<Value>,
+    pub draft: Option<crate::shared::Shared<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_commands: Option<Vec<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -318,7 +318,7 @@ pub struct ChatSideState {
     /// A coordinator's threads (`{ threads: [...], doneCount }`), carried only for a coordinator
     /// session; the Threads panel above its composer. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub coordinator_threads: Option<Value>,
+    pub coordinator_threads: Option<crate::shared::Shared<Value>>,
     /// This session's side chats (`[{ projectId, sessionId, title, working, lifecycleState,
     /// needsApproval?, needsAnswer?, unread? }]`, server/src/side_chats/panel.rs), carried once it
     /// has had one; the Side chats pill above its composer. Absent means unchanged.
@@ -390,7 +390,7 @@ pub struct ChatSideState {
     /// the loaded rows. A coordinator's also lists the pages its threads posted. Absent means
     /// unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resource_index: Option<Vec<Value>>,
+    pub resource_index: Option<crate::shared::Shared<Vec<Value>>>,
 }
 
 /// `sessionChatSnapshot` and `sessionChatReplaced`: an authoritative tail window.

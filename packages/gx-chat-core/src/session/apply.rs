@@ -81,14 +81,18 @@ pub fn apply_state_frame(
     if let Some(ids) = frame.state.removed_question_ids.clone() {
         *state.session.removed_question_ids = ids;
     }
-    // An index equal to the one held keeps its lookups (`ResourceIndex`).
+    // An index equal to the one held keeps its lookups (`ResourceIndex`). The fold already took
+    // the frame's index, or kept its own equal one (`fold::carried`), so the session takes that
+    // same allocation and compares by address.
     if let Some(index) = frame
         .state
         .resource_index
         .as_ref()
+        .map(|index| folded_side(state, |side| side.resource_index.as_ref()).unwrap_or(index))
         .filter(|index| *state.session.resource_index != **index)
+        .cloned()
     {
-        *state.session.resource_index = index.clone().into();
+        *state.session.resource_index = index.into();
     }
     apply_selected_options(state, frame.state.selected_options.as_ref());
     state.session.terminal_notice = frame.state.terminal_notice.clone();
@@ -108,7 +112,10 @@ pub fn apply_state_frame(
     if let Some(prompt) = frame.state.returned_prompt.clone() {
         apply_returned_prompt(state, &prompt);
     }
-    if let Some(threads) = frame.state.coordinator_threads.clone() {
+    if let Some(threads) = frame.state.coordinator_threads.as_ref() {
+        let threads = folded_side(state, |side| side.coordinator_threads.as_ref())
+            .unwrap_or(threads)
+            .clone();
         state
             .session
             .coordinator_threads
@@ -146,7 +153,7 @@ pub fn apply_state_frame(
         &frame.state.api_retry,
         &frame.state.pending_model_selection,
         frame.state.queue.as_ref(),
-        frame.state.draft.as_ref(),
+        frame.state.draft.as_deref(),
     );
 }
 
@@ -264,13 +271,72 @@ pub fn apply_queue_carriage(
     }
     if let Some(draft) = draft {
         // Every state frame of an older gxserver repeats the draft: an equal merge keeps the value
-        // the document already shares (`document::SharedValue`).
+        // the document already shares (`document::SharedValue`), and a merge equal to the fold's
+        // takes the fold's, so the two hold one copy.
         let merged = merge_draft_state(state.session.synced_draft.as_deref(), draft);
         if state.session.synced_draft.as_deref() != Some(&merged) {
-            state.session.synced_draft = Some(merged.into());
+            let folded = folded_side(state, |side| side.draft.as_ref())
+                .filter(|folded| ***folded == merged)
+                .cloned();
+            state.session.synced_draft = Some(folded.unwrap_or_else(|| merged.into()));
         }
         state.session.synced_draft_revision += 1;
     }
+}
+
+/// Makes the session state's coordinator threads, resource index and synced draft the fold's own
+/// allocations where their values are equal (`ghostex_gx_protocol::shared::Shared`): a seed read,
+/// a snapshot frame and the fold each parse their own copy, equal or not, and a coordinator chat's
+/// copies are megabytes each.
+pub fn share_side_with_fold(state: &mut ChatState) {
+    let Some(side) = state
+        .messages
+        .snapshot
+        .as_ref()
+        .map(|folded| &folded.result.state)
+    else {
+        return;
+    };
+    let threads = side.coordinator_threads.clone();
+    let index = side.resource_index.clone();
+    let draft = side.draft.clone();
+    if let Some(threads) = threads {
+        if !state
+            .session
+            .coordinator_threads
+            .as_ref()
+            .is_some_and(|held| held.same(&threads))
+        {
+            state.session.coordinator_threads.share_equal(Some(threads));
+        }
+    }
+    if let Some(index) = index {
+        if !state.session.resource_index.shares(&index) {
+            state.session.resource_index.share_equal(index.into());
+        }
+    }
+    if let Some(draft) = draft {
+        if state
+            .session
+            .synced_draft
+            .as_ref()
+            .is_some_and(|held| !held.same(&draft) && *held == draft)
+        {
+            state.session.synced_draft = Some(draft);
+        }
+    }
+}
+
+/// A side value of the retained fold, which a state frame folds before it is applied here.
+fn folded_side<'a, T>(
+    state: &'a ChatState,
+    field: impl Fn(&'a ghostex_gx_protocol::ChatSideState) -> Option<&'a T>,
+) -> Option<&'a T> {
+    state
+        .messages
+        .snapshot
+        .as_ref()
+        .and_then(|folded| field(&folded.result.state))
 }
 
 /// CDXC:Drafts 2026-08-28:
@@ -536,7 +602,7 @@ pub fn apply_authoritative(
         &result.state.api_retry,
         &result.state.pending_model_selection,
         result.state.queue.as_ref(),
-        result.state.draft.as_ref(),
+        result.state.draft.as_deref(),
     );
     state.session.error = if matches!(result.status, ChatStatus::Error) {
         Some(

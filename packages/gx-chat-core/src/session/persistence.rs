@@ -204,6 +204,7 @@ pub fn adopt(state: &mut ChatState, value: Option<&str>, context: &ChatContext) 
     let mut snapshot = stored.snapshot;
     crate::session::merge::share_with_list(&mut snapshot.rows, &state.messages);
     state.messages.snapshot = Some(snapshot);
+    crate::session::apply::share_side_with_fold(state);
     state.messages.authoritative_revision += 1;
     // Hydration is not a fold of its own: `emitSnapshot()` does NOT call `schedulePersistence()`,
     // so the record the core has just read must not be rewritten with a fresh stamp.

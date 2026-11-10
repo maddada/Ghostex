@@ -865,7 +865,7 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
 
 /// The board, or `None` on a chat that is not a coordinator or whose gxserver sends no board.
 pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<CoordinatorBoard> {
-    let threads = state.session.coordinator_threads.as_ref()?;
+    let threads = state.session.coordinator_threads.as_deref()?;
     // The work items, when gxserver sends them, laid out as the board was (work_panel.rs).
     let work_mode = threads.get("work").is_some_and(Value::is_object);
     let built;
@@ -1078,7 +1078,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
 /// User: "ghostex app gets slower with time until it becomes super slow". The board was projected and written out to JSON on every event of a coordinator chat, a large part of each event's document. It reads the clock only for its rows' ages, which move in whole minutes (`age_label`), so a kept board stands until the first of its rows' next minute, or until anything else it reads changes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BoardInputs {
-    threads: Stamped<Option<Value>>,
+    threads: Stamped<Option<crate::document::SharedValue>>,
     panels: Stamped<crate::state::PanelsState>,
     askers: Stamped<Vec<crate::transcript::open_questions::Asker>>,
     questions: crate::questions::forms::QuestionsInputs,
@@ -1127,7 +1127,7 @@ fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
     let board_rows = state
         .session
         .coordinator_threads
-        .as_ref()
+        .as_deref()
         .and_then(|threads| threads.get("board"))
         .and_then(|board| board.get("groups"))
         .and_then(Value::as_array)
@@ -1139,7 +1139,7 @@ fn ages_change_at(state: &ChatState, now_ms: i64) -> Option<i64> {
     let work = state
         .session
         .coordinator_threads
-        .as_ref()
+        .as_deref()
         .and_then(|threads| threads.get("work"))
         .and_then(|work| work.get("items"))
         .and_then(Value::as_array)
@@ -1292,7 +1292,7 @@ pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effe
     let key = state
         .session
         .coordinator_threads
-        .as_ref()
+        .as_deref()
         .and_then(|threads| threads.get("board"))
         .and_then(|board| board.get("groups"))
         .and_then(Value::as_array)
@@ -1418,7 +1418,7 @@ pub fn show_item(state: &mut ChatState, item: u64) -> Vec<crate::effect::Effect>
     let group = state
         .session
         .coordinator_threads
-        .as_ref()
+        .as_deref()
         .and_then(|threads| threads.get("board"))
         .and_then(|board| board.get("groups"))
         .and_then(Value::as_array)
@@ -1582,7 +1582,7 @@ mod tests {
     fn state_with(board: Value) -> ChatState {
         let mut state = ChatState::default();
         *state.session.coordinator_threads =
-            Some(json!({"threads": [], "total": 0, "board": board}));
+            Some(json!({"threads": [], "total": 0, "board": board}).into());
         state
     }
 
@@ -1997,7 +1997,7 @@ mod tests {
     fn no_board_no_pill() {
         let mut state = ChatState::default();
         assert!(coordinator_board(&state, &context()).is_none());
-        *state.session.coordinator_threads = Some(json!({"threads": [], "total": 0}));
+        *state.session.coordinator_threads = Some(json!({"threads": [], "total": 0}).into());
         assert!(coordinator_board(&state, &context()).is_none());
         assert!(pill(&Value::Null).is_none());
     }
