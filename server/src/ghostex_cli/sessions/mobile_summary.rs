@@ -858,6 +858,13 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         "coordinatorThreadState",
         &[s("coordinatorThreadState")],
     );
+    // CDXC:Sidebar 2026-11-09 SEE-ALSO: the same second-whitelist trap: the coordinator's threads
+    // on other computers, which the phone's Unified list nests under it (cli_session.rs).
+    insert_js(
+        &mut map,
+        "coordinatorRemoteThreads",
+        &[s("coordinatorRemoteThreads")],
+    );
     /*
      * CDXC:DelayedSend 2026-09-03:
      * Same SECOND-whitelist trap once more: `to_cli_session` forwarded the
@@ -913,6 +920,10 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     );
     insert_js(&mut map, "awaitingApproval", &[s("awaitingApproval")]);
     insert_js(&mut map, "awaitingAnswer", &[s("awaitingAnswer")]);
+    // The red not-moving dot (server/src/coordinators/stall.rs), which the phone's Unified list
+    // counts as needing you, as gx-core does (CDXC:Sidebar 2026-11-09 in unified_sidebar/tree.rs);
+    // absent while it moves, which is also what an older gxserver sends.
+    insert_js(&mut map, "stuckSince", &[s("stuckSince")]);
     // The Unified list's working start and failed model change (CDXC:Sidebar 2026-10-30 in cli_session.rs).
     insert_js(&mut map, "workingStartedAt", &[s("workingStartedAt")]);
     insert_js(
