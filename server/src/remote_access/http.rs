@@ -683,10 +683,10 @@ pub(crate) fn easy_connect_pairing_entry(code: EasyConnectCode, qr_address: Stri
     json!({ "payload": payload, "text": text, "code": code })
 }
 
-/// Only the desktop app's own owner session (GitHub #495 Phase 2: minted after it proved the
-/// owner key, held in its memory) may get a pairing code.
+/// Only you get a pairing code (the desktop app with its owner session or the token file, a paired
+/// phone); an agent's session token can't mint one (CDXC:Security 2026-11-10 in security/policy.rs).
 pub(crate) fn may_show_pairing_code(caller: &Principal) -> bool {
-    matches!(caller, Principal::Owner { .. })
+    caller.is_owner_device()
 }
 
 fn read_device_id(body: &Value) -> Result<String, RemoteAccessHttpError> {

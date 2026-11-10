@@ -109,6 +109,17 @@ fn catalog() -> CliResult<&'static SettingsCatalog> {
     CATALOG
         .get_or_init(|| {
             serde_json::from_str::<SettingsCatalog>(settings_catalog_json())
+                .map(|mut catalog| {
+                    // Option B: every setting the API writes, the CLI writes too, whatever the
+                    // bundled Help still says (CDXC:Security 2026-11-10 in settings-catalog help).
+                    for entry in &mut catalog.settings {
+                        entry.agent_writable = ghostex_settings_catalog::help::api_may_write(
+                            &entry.key,
+                            entry.agent_writable,
+                        );
+                    }
+                    catalog
+                })
                 .map_err(|error| format!("Bundled settings catalog is invalid: {error}"))
         })
         .as_ref()

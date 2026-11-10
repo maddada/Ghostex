@@ -131,6 +131,8 @@ pub enum ApprovalError {
     StillPending,
     Denied,
     BadPayload(String),
+    /// The caller is the one that asked: a request never approves itself.
+    OwnRequest,
 }
 
 impl std::fmt::Display for ApprovalError {
@@ -150,6 +152,9 @@ impl std::fmt::Display for ApprovalError {
             Self::StillPending => f.write_str("This request is still waiting for your approval."),
             Self::Denied => f.write_str("This request was denied."),
             Self::BadPayload(message) => f.write_str(message),
+            Self::OwnRequest => {
+                f.write_str("A request can't be approved by the one that asked for it.")
+            }
         }
     }
 }
@@ -278,6 +283,35 @@ impl ApprovalStore {
         stored.request.status = ApprovalStatus::Approved;
         stored.request.decided_at_ms = Some(now_ms);
         stored.request.decided_by = Some(key.key_id.clone());
+        stored.request.expires_at_ms = now_ms + APPROVED_TTL_MS;
+        Ok(stored.request.clone())
+    }
+
+    /// Approves request `id` on a click of `by` (one of your devices, checked by the route): no
+    /// signature (CDXC:Security 2026-11-10 in security/policy.rs). A request never approves itself.
+    pub fn approve_plain(
+        &self,
+        id: &str,
+        by: &Principal,
+        now_ms: u64,
+    ) -> Result<ApprovalRequest, ApprovalError> {
+        let mut requests = self.lock();
+        sweep(&mut requests, now_ms);
+        let stored = requests.get_mut(id).ok_or(ApprovalError::NotFound)?;
+        match &stored.request.status {
+            ApprovalStatus::Pending => {}
+            ApprovalStatus::Expired => return Err(ApprovalError::Expired),
+            other => return Err(ApprovalError::NotPending(other.clone())),
+        }
+        if stored.requester == *by {
+            return Err(ApprovalError::OwnRequest);
+        }
+        stored.request.status = ApprovalStatus::Approved;
+        stored.request.decided_at_ms = Some(now_ms);
+        stored.request.decided_by = Some(match by {
+            Principal::Owner { device_id } | Principal::Device { device_id } => device_id.clone(),
+            other => other.kind().to_string(),
+        });
         stored.request.expires_at_ms = now_ms + APPROVED_TTL_MS;
         Ok(stored.request.clone())
     }

@@ -137,7 +137,11 @@ const AGENT_DENIED_TABS: &[&str] = &["accounts", "remote"];
 CDXC:Security 2026-11-08 DECISION:
 User (#495 follow-up, Q1866 "settings only"): the keys that loosen security, which an agent could still write through `ghostex settings set` or `updateSettingsPatch`, are the owner's alone: agents are refused and pointed to the Settings page, and the owner changes them in Settings with no prompt. Checked against the whole agent-writable list on 8 Nov: full access for every agent, Workspaces (the team backend and Slack requests), keeping Cloud Box keys on phones, trusting every project folder, Connectors (agents reach the owner's connected accounts), the commands Ghostex itself runs (title generation, worktree setup, the custom editor), paste protection, and the Bot automations feed (whole agent reports). Settings that ask the owner already (GBots, Sync) keep asking.
 */
-/// Keys only the owner changes, in Settings: each loosens security.
+/*
+CDXC:Security 2026-11-10 DECISION:
+User (Q2140 = B): agents may change every setting again; gxserver's API and `ghostex settings set` write these (`api_may_write`). The committed Help (generated from this catalog, published from main to installed copies whose gxserver still refuses them) keeps marking them "not agent-writable" until the release that ships option B empties this list and regenerates the Help. This supersedes the Q1866 decision above.
+*/
+/// Keys only the owner changed, in Settings, before option B; Help still marks them until release.
 const USER_ONLY_KEYS: &[&str] = &[
     "agentAcceptAllEnabled",
     "workspacesHidden",
@@ -631,7 +635,14 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:Security 2026-11-09 DECISION:
 /// Security logs (Extensions > Experimental) is held the same way; its help, and the help that names Settings > Security, wait in the held help patch.
-pub const HELD_FROM_HELP_FILES: &[&str] = &[];
+pub const HELD_FROM_HELP_FILES: &[&str] = &["approvalsRequirePresence"];
+
+/// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
+/// `agentWritable`, or one of the keys Help still marks until option B's release
+/// (CDXC:Security 2026-11-10 at `USER_ONLY_KEYS`).
+pub fn api_may_write(key: &str, agent_writable: bool) -> bool {
+    agent_writable || USER_ONLY_KEYS.contains(&key)
+}
 
 /// Rows whose new wording is held out of the committed Help files until a release ships it: the
 /// key, then the title, subtitle and Advanced placement the Help files keep meanwhile. The release

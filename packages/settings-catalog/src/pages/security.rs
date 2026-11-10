@@ -6,8 +6,22 @@ pub(crate) fn page() -> Page {
     Page {
         id: "security",
         title: "Security",
-        sections: vec![log()],
+        sections: vec![approvals(), log()],
     }
+}
+
+/*
+CDXC:Security 2026-11-10 DECISION:
+User (Q2140 = B): "add a toggle to require touch id/pin etc for access but disabled by default, add it to security". Approving what still asks (a new phone or computer, a guest's message, an agent turning Easy Connect on) is a plain Approve; with this on, the approving device first asks for Touch ID or the Mac password, Windows Hello or the Windows password, the Linux password, or the phone's Face ID or fingerprint. gxserver keeps it per computer, so every device approving for that computer follows it (`/api/securityStatus` `requirePresence`).
+*/
+fn approvals() -> Section {
+    section(
+        "approvals",
+        "Approvals",
+        vec![
+            row("approvalsRequirePresence", "Require Touch ID or your password to approve", "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: your computer asks for Touch ID, Windows Hello or your password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer."),
+        ],
+    )
 }
 
 fn log() -> Section {

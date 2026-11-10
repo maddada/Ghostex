@@ -24,7 +24,9 @@ fn agent_writable_keys() -> &'static HashSet<String> {
         ghostex_settings_catalog::help::catalog()
             .settings
             .into_iter()
-            .filter(|entry| entry.agent_writable)
+            .filter(|entry| {
+                ghostex_settings_catalog::help::api_may_write(&entry.key, entry.agent_writable)
+            })
             .map(|entry| entry.key)
             .chain(api_writable_json_keys().into_iter().map(str::to_string))
             .collect()

@@ -122,39 +122,34 @@ impl Principal {
         }
     }
 
-    /// The owner's own devices: the desktop app and paired phones.
+    /// You: the desktop app (its owner session, or the token file it reads), the GPUI web build and
+    /// the `ghostex` CLI in your own terminal (the token file), and your paired phones. These approve
+    /// what still asks and answer secret requests (CDXC:Security 2026-11-10 in security/policy.rs).
     pub fn is_owner_device(&self) -> bool {
-        matches!(self, Self::Owner { .. } | Self::Device { .. })
+        matches!(
+            self,
+            Self::Owner { .. } | Self::Device { .. } | Self::LocalAgent
+        )
     }
 
     /*
-    CDXC:Security 2026-11-08 DECISION:
-    User (#495 follow-up): the token file (the CLI in the user's own terminal) keeps thread management (decision 3A), everything else of it is an agent's. Answering, typing into and interrupting other sessions ask nobody (CDXC:Security 2026-11-08 in security/policy.rs).
+    CDXC:Security 2026-11-10 DECISION:
+    User (Q2140 = B): "thinking of removing all these dumb blocks because they're adding friction and a lot of bugs … i dont know why we want to ban agents from doing everything with ghostex". You (the owner session, the token file, a paired phone) may do everything. An agent's session token may do everything too except the two things that keep the door: approving what lets someone new in (`DecideApprovals`) and answering or reading secrets (`OwnerSecrets`). Coordinators still manage only their own threads, which is how threads are organised, not a security rule. This supersedes the 8 Nov table that kept setup, owner settings and approvals from the token file and from agents.
     */
     pub fn has(&self, capability: Capability) -> bool {
         use Capability::*;
         match self {
-            Self::Owner { .. } | Self::Device { .. } => true,
+            Self::Owner { .. } | Self::Device { .. } | Self::LocalAgent => true,
             Self::Session { role, .. } => match capability {
-                OwnSession | ProjectSessions | AgentWritableSettings | RequestSensitiveAction => {
-                    true
-                }
                 ManageOwnThreads => matches!(role, SessionRole::Coordinator | SessionRole::Head),
-                ManageAnyThreads | OwnerSettings | DecideApprovals | OwnerSecrets | OwnerSetup => {
-                    false
-                }
-            },
-            // The design's "CLI in your own terminal" column: thread management stays, the rest
-            // is an agent's.
-            Self::LocalAgent => matches!(
-                capability,
+                ManageAnyThreads | DecideApprovals | OwnerSecrets => false,
                 OwnSession
-                    | ProjectSessions
-                    | ManageOwnThreads
-                    | ManageAnyThreads
-                    | AgentWritableSettings
-                    | RequestSensitiveAction
-            ),
+                | ProjectSessions
+                | AgentWritableSettings
+                | RequestSensitiveAction
+                | OwnerSettings
+                | OwnerSetup => true,
+            },
             // Agents on a connected computer reach only `PEER_ALLOWED_ENDPOINTS`
             // (connected_computers/scope.rs), and may ask for what those need.
             Self::Peer { .. } => capability == RequestSensitiveAction,

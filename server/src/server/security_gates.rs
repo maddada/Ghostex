@@ -236,7 +236,7 @@ fn api_chat_refused(
     };
     let project_id = text(params, "projectId").unwrap_or_default();
     match caller {
-        Principal::Owner { .. } | Principal::Device { .. } => false,
+        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent => false,
         Principal::Session {
             project_id: own_project,
             session_id: own_session,
@@ -731,17 +731,7 @@ fn easy_connect_action(state: &AppState, params: &Map<String, Value>) -> Option<
                 .iter()
                 .filter(|key| !known.contains(key.trim()))
                 .count();
-            // An empty allow-list lets any device in, so emptying one widens it.
-            let opened = allowed_client_keys.is_empty() && !known.is_empty();
-            if opened {
-                return Some(
-                    ActionRequest::new(
-                        SensitiveAction::EasyConnectAllowList,
-                        "Let any device connect through Easy Connect",
-                    )
-                    .params(exact()),
-                );
-            }
+            // An empty allow-list lets nobody in (8b3687891), so only a device added asks.
             (added > 0).then(|| {
                 ActionRequest::new(
                     SensitiveAction::EasyConnectAllowList,

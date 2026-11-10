@@ -92,6 +92,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("fasterRendering", J::Bool(false)),
     ("chatToolCallLines", J::Bool(false)),
     ("securityLogsEnabled", J::Bool(false)),
+    ("approvalsRequirePresence", J::Bool(false)),
     ("codeViewTabHidden", J::Bool(false)),
     ("browserViewTabHidden", J::Bool(false)),
     ("kanbanViewTabHidden", J::Bool(false)),

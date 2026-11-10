@@ -236,8 +236,12 @@ pub struct ReadApprovalParams {
 #[serde(rename_all = "camelCase")]
 pub struct ApproveApprovalParams {
     pub id: String,
+    /// Sent by apps from before plain approvals (and to a gxserver that doesn't say
+    /// `plainApprovals`); a gxserver that says it accepts the approval without them.
+    #[serde(default)]
     pub key_id: String,
     /// The signature over [`approval_signing_payload`], base64 standard with padding.
+    #[serde(default)]
     pub signature: String,
 }
 

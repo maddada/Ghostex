@@ -28,7 +28,7 @@ pub(crate) fn refusal(
     if !THREAD_LINK_ENDPOINTS.contains(&endpoint) {
         return None;
     }
-    if matches!(caller, Principal::Owner { .. } | Principal::Device { .. }) {
+    if caller.is_owner_device() {
         return None;
     }
     let ids = session_ids(body);

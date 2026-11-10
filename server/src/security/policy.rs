@@ -8,16 +8,13 @@ use super::{ActionRequest, Principal, SecurityState};
 
 /*
 CDXC:Security 2026-11-10 DECISION:
-User, on the page listing every fingerprint approval ("i'm asking about 'permissions' where you need to confirm using finger print … things are starting to break due to those"), group by group:
-- Q2098 connected computers, drop for computers you add yourself ("Drop it for computers we add please."): letting a computer's agents in never asks your own app (its owner session, its SSH login's token file) or your phone; anything else (an agent's own token, another computer's agents) still asks.
-- Q2099 another computer or phone becoming an approver, ask once and remember: unchanged here (one card, the keys are kept for good); the desktop asks at connect instead of waiting for you to act there (owner_security `cached_token`).
-- Q2100 pairing (settled by Q2109 and Q2110, the user's option C: "what are we protecting against even? i want to reduce the friction connecting"): a phone that signs in over SSH works at once with everything the token file allows (`Principal::LocalAgent`: reading, replying, Stop, typing, starting sessions), and only its owner powers (approving signed requests, answering secret requests, installing extensions and the rest of `Capability::DecideApprovals`, `OwnerSecrets`, `OwnerSetup`, `OwnerSettings`) wait for the one-time "Approve this phone?" with the three words, which still asks once per phone and is reused while it waits. Pairing asks nothing new of the token file, so an agent posing as a phone gains nothing; gxserver says `sshPhoneWorksUnpaired` (cli.rs) so the phone shows the request as one quiet line. This supersedes the 2026-11-10 "not done" answer.
-- Q2101 Easy Connect, ask only for turning it on: turning it on asks once and is remembered (a computer that already had Easy Connect set up counts as approved); ports, relay and allow-list changes don't ask.
-- Q2102 settings, ask only for settings that let someone in (`ghostex_settings_catalog::security_relaxing`).
-- Q2103 Collab, ask once per share: your own Share popover shows a share's link again and switches its mode without asking; a new share and each guest message in Approve mode still ask; agents still ask for all of it.
-- Q2104 agents' bigger moves, drop: full access at start, Autopilot answering approvals and its limits, Cloud Box logins and project files, and connecting a team backend never ask; each is written to the security log as allowed.
-- Q2105 GBots, drop for your own clicks: turning GBots on, adding a GBot, its API key and where it runs don't ask from your computer or phone; the terminal and agents still ask (most are refused by `/api/gbots` anyway).
-Steering another session (answering its prompt, typing into it, stopping it) never asks anyone (11.1.2, below). Only a person approves what still asks; agents can't approve; a session token can't enroll an owner.
+User (Q2140 = B, after the T3 Code comparison page): "thinking of removing all these dumb blocks because they're adding friction and a lot of bugs. app was way simpler before. i dont know why we want to ban agents from doing everything with ghostex but after testing it this seems like it's the wrong direction", and on the answer: "add a toggle to require touch id/pin etc for access but disabled by default, add it to security". So the door stays and nothing else asks:
+- Only what lets someone new in asks, with one plain Approve / Deny card (no Touch ID, no signature, `/api/approveApprovalRequest` with just `{ id }`): pairing a phone or a computer (the three words stay), and each Collab guest message in Approve mode, whoever asks; and, when an agent's session token asks, turning Easy Connect on (once, remembered), adding a device to its allow-list, a new Collab share or its link again, and Send mode for a share. Your own click in Ghostex (the owner session, the token file, a paired phone) is the approval for your own action, so it never shows a card. Answering a secret request stays yours alone (`Capability::OwnerSecrets`).
+- Only you approve: the owner session, the token file (the desktop app, the web build, the CLI in your terminal) and paired phones (`Capability::DecideApprovals`); an agent's session token can't, and a request never approves itself.
+- Everything else just works for you, your devices and your agents: connecting computers, settings, GBots, Autopilot, Cloud Boxes, teams, full access, extensions, and steering other sessions.
+- "Require Touch ID, Windows Hello or your password to approve" (`approvalsRequirePresence`, Settings > Security, off by default) is a check the approving device makes itself before it sends the same plain approval; gxserver only keeps the switch for every device that approves for this computer (`/api/securityStatus`).
+- Older apps keep working: a signed approval counts as a plain one, approver and owner keys enroll without asking, and gxserver says `plainApprovals` so newer apps stop signing.
+This supersedes the per-action answers of earlier the same day (Q2098 to Q2110) and the 8 Nov rules.
 */
 /*
 CDXC:Chief 2026-11-08 DECISION:
@@ -28,34 +25,17 @@ CDXC:Security 2026-11-08 DECISION:
     User, after 11.1.2: "please let agents manage other sessions like before. no need to limit this." Answering another session's permission prompt, typing into it and interrupting it ask nobody again, as before 11.1.x: agents here, the token file, and agents on a connected computer within what its grant allows. Chief's are still written to the security log as `allowed` (`security_gates::record_allowed`).
 */
 impl SecurityState {
-    /// Whether `caller` may do `action` without asking the owner (see the decision above).
+    /// Whether `caller` may do `action` without a card (see the decision above).
     pub fn skips_approval(&self, caller: &Principal, action: &ActionRequest) -> bool {
         use SensitiveAction::*;
-        let own_device = caller.is_owner_device();
+        let you = caller.is_owner_device();
         match &action.action {
-            AnswerOtherSessionPrompt | TypeIntoOtherSession | InterruptOtherSession => true,
-            // Q2098: your own app (its owner session here, or the token file its SSH login reads
-            // on the other computer) and your phone.
-            ComputerGrant | ComputerRegister | ComputerChangeAccess => {
-                own_device || matches!(caller, Principal::LocalAgent)
-            }
-            // Q2101.
-            EasyConnectAllowList | EasyConnectPorts | EasyConnectRelay => true,
-            EasyConnectEnable => self.is_remembered(EASY_CONNECT_ENABLE),
-            // Q2104.
-            ForceFullAccess
-            | AutopilotAnswerApprovals
-            | AutopilotLiftLimits
-            | CloudBoxShareLogins
-            | TeamSyncConnect => true,
-            // Q2105.
-            GbotsEnable | GbotsAddBot | GbotsApiKey | GbotsSetComputer => own_device,
-            // Q2103: the share was approved when it was made; its link again and its mode are
-            // your own call. The component writes this summary for a share that already exists
-            // (collab/src/owner.rs), never the caller.
-            CollabEnableSendMode | CollabChangeShare => own_device,
-            CollabShareChat => own_device && action.summary.starts_with(SHOW_SHARE_AGAIN),
-            _ => false,
+            // Someone new asks to come in: always a card.
+            PairingApproveDevice | CollabApproveGuestMessage => false,
+            // Lets someone new in when an agent does it; your own click is the approval.
+            EasyConnectEnable => you || self.is_remembered(EASY_CONNECT_ENABLE),
+            EasyConnectAllowList | CollabShareChat | CollabEnableSendMode => you,
+            _ => true,
         }
     }
 
@@ -82,9 +62,6 @@ impl SecurityState {
 
 /// The remembered approval for turning Easy Connect on.
 pub const EASY_CONNECT_ENABLE: &str = "easyConnectEnable";
-
-/// How the Collab component's card starts for a share that already exists.
-const SHOW_SHARE_AGAIN: &str = "Show the link and code for ";
 
 fn remember_key(request: &ApprovalRequest) -> Option<&'static str> {
     (request.action == SensitiveAction::EasyConnectEnable).then_some(EASY_CONNECT_ENABLE)
