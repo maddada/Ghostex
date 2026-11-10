@@ -348,6 +348,15 @@ pub fn link_tone(link: &Value) -> &'static str {
     }
 }
 
+/// The key a row's answer is locked under: its own, or a work item's Done's (`answerKey`, shared
+/// with its dock row).
+fn answer_key(row: &Value) -> &str {
+    match text(row, "answerKey") {
+        "" => text(row, "key"),
+        key => key,
+    }
+}
+
 /// A row gxserver sent, worded.
 fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
     let open = |url: &str| json!({"type": "openMarkdownLink", "href": url});
@@ -516,7 +525,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
                         // A work item's ask names its tag (work_panel.rs, as its chat card does).
                         "" => json!({
                             "type": "coordinatorBoardAnswer",
-                            "key": text(row, "key"),
+                            "key": answer_key(row),
                             "item": text(row, "ref"),
                             "label": label,
                             "text": format!("{}: {label}", text(row, "ref")),
@@ -911,7 +920,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
                     now_ms,
                     panels
                         .board_answers
-                        .get(text(row, "key"))
+                        .get(answer_key(row))
                         .map(String::as_str),
                 );
                 if text(row, "kind") == "item" {

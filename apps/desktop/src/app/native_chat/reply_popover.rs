@@ -87,9 +87,11 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A work item with no open question has no tag: its words go to the item ("W7: words").
+        let item = command["question"]["item"].as_str().unwrap_or_default();
         let question = command["question"]["tag"]
             .as_str()
-            .filter(|tag| !tag.is_empty())
+            .filter(|tag| !tag.is_empty() || !item.is_empty())
             .map(|tag| QuestionReply {
                 form: command["question"]["form"].as_str().map(str::to_owned),
                 tag: tag.to_owned(),
@@ -289,6 +291,12 @@ impl NativeChatView {
             // coordinator as "W7 Q12: words" (the user's "WE MUST HAVE REPLY BUTTON FOR NEEDS YOU
             // STUFF").
             if let Some((item, key)) = &question.work {
+                // "W7 Q12: words", or "W7: words" for an item that asks no question.
+                let to = if question.tag.is_empty() {
+                    item.clone()
+                } else {
+                    format!("{item} {}", question.tag)
+                };
                 match action {
                     ReplyAction::Send => self.invoke(
                         serde_json::json!({
@@ -298,13 +306,11 @@ impl NativeChatView {
                             "item": item,
                             "ask": question.tag,
                             "label": reply,
-                            "text": format!("{item} {}: {reply}", question.tag),
+                            "text": format!("{to}: {reply}"),
                         }),
                         cx,
                     ),
-                    ReplyAction::AddToPrompt => {
-                        self.append_prompt(&format!("{item} {}: {reply}", question.tag), cx)
-                    }
+                    ReplyAction::AddToPrompt => self.append_prompt(&format!("{to}: {reply}"), cx),
                 }
                 return;
             }
@@ -376,6 +382,11 @@ impl ReplyPopover {
         cx: &mut Context<Self>,
     ) -> Self {
         let placeholder = match &question {
+            Some(QuestionReply {
+                tag,
+                work: Some((item, _)),
+                ..
+            }) if tag.is_empty() => format!("Your reply on {item}…"),
             Some(question) => format!("Your answer to {}…", question.tag),
             None => "Reply…".to_string(),
         };

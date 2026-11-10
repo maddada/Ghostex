@@ -20,7 +20,7 @@
 use std::collections::BTreeMap;
 
 use ghostex_gx_protocol::ChatRole;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::state::{ChatContext, ChatState};
 
@@ -267,6 +267,42 @@ fn ask_buttons(item: &Value, ask: &Value, key: &str, picked: Option<&str>) -> Ve
         .collect()
 }
 
+/// The key that locks a Needs you item's Done (its one answer when it asks no open question), or
+/// `None` when it asks one or does not need the user. It names the item's last change, so once the
+/// coordinator changes the item its Done is offered afresh.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User, of a Needs you item with no question whose card had only Show in chat and Mention: "why
+/// don't i see a button to say All good on this task???? please fix for always". Every Needs you
+/// item with no open question has Done, in the answers' look, on its Work panel card, Columns card
+/// and dock row; a click tells the coordinator "W7: Done", and Reply stays for anything else.
+pub(crate) fn done_answer_key(item: &Value) -> Option<String> {
+    let asks_open = item["asks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|ask| ask["open"] == true);
+    (text(item, "kind") == "item" && text(item, "status") == "needs" && !asks_open)
+        .then(|| format!("work-done:{}:{}", text(item, "ref"), text(item, "at")))
+}
+
+/// A Needs you item's Done button (`done_answer_key`), as an ask's answer buttons are built.
+fn done_button(item: &Value, key: &str, picked: bool) -> Value {
+    let reference = text(item, "ref");
+    json!({
+        "label": "Done",
+        "recommended": false,
+        "picked": picked,
+        "command": {
+            "type": "coordinatorBoardAnswer",
+            "key": key,
+            "item": reference,
+            "label": "Done",
+            "text": format!("{reference}: Done"),
+        },
+    })
+}
+
 /// Whether an open ask is snoozed now: gxserver's `snoozedUntil`, or a snooze sent from here.
 fn snoozed(ask: &Value, key: &str, state: &ChatState, now_ms: i64) -> bool {
     at_ms(text(ask, "snoozedUntil")).is_some_and(|until| until > now_ms)
@@ -450,6 +486,39 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
             needs.push((now_ms - at > DAY_MS, at, row));
         }
     }
+    // Every Needs you line of work with no open question, with its Done and Reply.
+    for item in &items {
+        let Some(key) = done_answer_key(item) else {
+            continue;
+        };
+        let picked =
+            item["saidDone"] == true || answers.get(&key).is_some_and(|label| label == "Done");
+        let at = at_ms(text(item, "at")).unwrap_or(now_ms);
+        let card = dock_item_card(item, now_ms, None);
+        let changed_at = item["history"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|event| at_ms(text(event, "at")))
+            .max()
+            .unwrap_or(at);
+        let mut row = json!({
+            "key": key,
+            "kind": "item",
+            "status": "needs",
+            "title": card["title"],
+            "age": card["age"],
+            "detail": [card["line"]],
+            "buttons": [done_button(item, &key, picked)],
+            "busy": picked && item["saidDone"] != true,
+            "reply": { "item": text(item, "ref"), "key": key, "tag": "" },
+            "mention": mention_of(item),
+            "chips": card["chips"],
+            "needs": true,
+        });
+        row["showInChat"] = show_in_chat(&turns, changed_at, &key);
+        needs.push((now_ms - at > DAY_MS, at, row));
+    }
     // Then every blocked line of work no holding ask already stands for (a stuck thread, or the
     // coordinator's word), and what the newest turn finished: a finished row leaves after the next
     // turn, or with its x.
@@ -601,6 +670,13 @@ pub fn panel_actions(state: &ChatState, context: &ChatContext, row: &Value) -> V
         .max()
         .unwrap_or(0);
     let show = show_in_chat(&turns, changed_at, text(row, "key"));
+    // A Needs you item with no open question: Reply too, for anything besides its Done.
+    if let Some(key) = done_answer_key(item) {
+        return json!({
+            "reply": { "item": reference, "key": key, "tag": "" },
+            "showInChat": show,
+        });
+    }
     if show.is_null() {
         Value::Null
     } else {
