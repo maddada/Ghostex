@@ -84,8 +84,8 @@ use gpui::{
 use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement, Tooltip};
 
 use crate::ghostty_vt::{
-    VtCellWide, VtDirty, VtKey, VtKeyAction, VtKeyInput, VtMods, VtMouseAction, VtMouseButton,
-    VtMouseInput, VtScrollViewport, VtScrollbar, ffi,
+    VtCellWide, VtDirty, VtImage, VtImageLayer, VtKey, VtKeyAction, VtKeyInput, VtMods,
+    VtMouseAction, VtMouseButton, VtMouseInput, VtScrollViewport, VtScrollbar, ffi,
 };
 use crate::support_logs::{self, GpuiDiagnosticScenario, GpuiSupportLog};
 use crate::terminal_model::{
@@ -523,6 +523,16 @@ pub struct TerminalLayout {
     cursor: Option<CursorLayout>,
     marked_text: Option<MarkedTextLayout>,
     scrollbar: Option<ScrollbarLayout>,
+    /// Kitty graphics pictures in draw order (layer, then z).
+    images: Vec<ImageLayout>,
+}
+
+/// One Kitty graphics picture to draw, relative to the element's origin. `dest` is the part shown (the placement's cells); `image_bounds` is where the whole texture would land at that scale, so `paint_image` crops it to the placement's source rectangle.
+struct ImageLayout {
+    layer: VtImageLayer,
+    dest: Bounds<Pixels>,
+    image_bounds: Bounds<Pixels>,
+    image: Arc<RenderImage>,
 }
 
 impl TerminalLayout {
@@ -538,6 +548,7 @@ impl TerminalLayout {
             cursor: None,
             marked_text: None,
             scrollbar: None,
+            images: Vec::new(),
         }
     }
 }
@@ -589,6 +600,10 @@ pub struct TerminalView {
     configured_font_size: Pixels,
     frame: Option<TerminalSnapshot>,
     row_cache: Vec<Option<Arc<RowLayout>>>,
+    /// Atlas textures of the Kitty graphics pictures on screen: image id to (pixels generation, texture).
+    image_textures: HashMap<u32, (u64, Arc<RenderImage>)>,
+    /// Frees `image_textures` from the window's atlas when this view goes away.
+    image_textures_release: Option<gpui::Subscription>,
     cached_metrics: Option<CellMetrics>,
     exit: Option<TerminalExit>,
     pub cursor_shape: TerminalCursorShape,
@@ -769,6 +784,8 @@ impl TerminalView {
             configured_font_size,
             frame: None,
             row_cache: Vec::new(),
+            image_textures: HashMap::new(),
+            image_textures_release: None,
             cached_metrics: None,
             exit: None,
             cursor_shape: TerminalCursorShape::Block,
@@ -3051,6 +3068,15 @@ impl TerminalView {
             }
         }
 
+        let images = layout_images(&mut self.image_textures, frame, metrics, window);
+        if self.image_textures_release.is_none() && !self.image_textures.is_empty() {
+            self.image_textures_release = Some(cx.on_release_in(window, |view, window, _| {
+                for (_, (_, texture)) in view.image_textures.drain() {
+                    let _ = window.drop_image(texture);
+                }
+            }));
+        }
+
         if self.focused {
             let cursor_signature = (frame.cursor, bounds, metrics);
             if self.last_reported_ime_cursor != Some(cursor_signature) {
@@ -3113,8 +3139,86 @@ impl TerminalView {
                 bounds,
                 self.settings.light_theme,
             ),
+            images,
         }
     }
+}
+
+/// Lay out this frame's Kitty graphics pictures, uploading a texture for each picture that is new or changed and freeing the textures of pictures that left the screen.
+fn layout_images(
+    textures: &mut HashMap<u32, (u64, Arc<RenderImage>)>,
+    frame: &TerminalSnapshot,
+    metrics: CellMetrics,
+    window: &mut Window,
+) -> Vec<ImageLayout> {
+    let images: &[VtImage] = &frame.images;
+    // Placement pixels are the terminal's, in the cell size it last got with `resize`.
+    let x_per_px = metrics.cell_width.as_f32() / frame.cell_size_px.0.max(1) as f32;
+    let y_per_px = metrics.line_height.as_f32() / frame.cell_size_px.1.max(1) as f32;
+    let mut layouts = Vec::with_capacity(images.len());
+    for image in images {
+        let pixels = &image.pixels;
+        let texture = match textures.get(&pixels.image_id) {
+            Some((generation, texture)) if *generation == pixels.generation => texture.clone(),
+            _ => {
+                let Some(buffer) =
+                    image::RgbaImage::from_raw(pixels.width, pixels.height, pixels.bgra.clone())
+                else {
+                    continue;
+                };
+                let texture = Arc::new(RenderImage::new(vec![Frame::new(buffer)]));
+                if let Some((_, previous)) =
+                    textures.insert(pixels.image_id, (pixels.generation, texture.clone()))
+                {
+                    let _ = window.drop_image(previous);
+                }
+                texture
+            }
+        };
+        let dest = Bounds::new(
+            point(
+                px(image.viewport_col as f32 * metrics.cell_width.as_f32()
+                    + image.cell_offset_x as f32 * x_per_px),
+                px(image.viewport_row as f32 * metrics.line_height.as_f32()
+                    + image.cell_offset_y as f32 * y_per_px),
+            ),
+            size(
+                px(image.pixel_width as f32 * x_per_px),
+                px(image.pixel_height as f32 * y_per_px),
+            ),
+        );
+        // Source rectangle in texture pixels (a picture larger than a texture was scaled down).
+        let texture_x = pixels.width as f32 / pixels.image_width.max(1) as f32;
+        let texture_y = pixels.height as f32 / pixels.image_height.max(1) as f32;
+        let x_per_texel = dest.size.width.as_f32() / (image.source_width as f32 * texture_x);
+        let y_per_texel = dest.size.height.as_f32() / (image.source_height as f32 * texture_y);
+        let image_bounds = Bounds::new(
+            point(
+                dest.origin.x - px(image.source_x as f32 * texture_x * x_per_texel),
+                dest.origin.y - px(image.source_y as f32 * texture_y * y_per_texel),
+            ),
+            size(
+                px(pixels.width as f32 * x_per_texel),
+                px(pixels.height as f32 * y_per_texel),
+            ),
+        );
+        layouts.push(ImageLayout {
+            layer: image.layer,
+            dest,
+            image_bounds,
+            image: texture,
+        });
+    }
+    textures.retain(|image_id, (_, texture)| {
+        let shown = images
+            .iter()
+            .any(|image| image.pixels.image_id == *image_id);
+        if !shown {
+            let _ = window.drop_image(texture.clone());
+        }
+        shown
+    });
+    layouts
 }
 
 impl EventEmitter<TerminalViewEvent> for TerminalView {}
@@ -4003,7 +4107,21 @@ impl TerminalElement {
             },
         ));
         self.paint_background_image(bounds, layout.background, window, cx);
+        let paint_images = |layer: VtImageLayer, window: &mut Window| {
+            for image in layout.images.iter().filter(|image| image.layer == layer) {
+                let shift = |rect: Bounds<Pixels>| Bounds::new(rect.origin + origin, rect.size);
+                let _ = window.paint_image(
+                    shift(image.dest),
+                    shift(image.image_bounds),
+                    Corners::default(),
+                    image.image.clone(),
+                    0,
+                    false,
+                );
+            }
+        };
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            paint_images(VtImageLayer::BelowBackground, window);
             for (row, layout_row) in layout.rows.iter().enumerate() {
                 for span in &layout_row.bg_spans {
                     window.paint_quad(fill(
@@ -4020,6 +4138,8 @@ impl TerminalElement {
             for (row, span) in &layout.search_spans {
                 window.paint_quad(fill(span_bounds(*row, span.col, span.len), span.color));
             }
+
+            paint_images(VtImageLayer::BelowText, window);
 
             for (row, layout_row) in layout.rows.iter().enumerate() {
                 let y = origin.y + line_height * (row as f32);
@@ -4052,6 +4172,8 @@ impl TerminalElement {
                     window.paint_quad(fill(overline, span.color));
                 }
             }
+
+            paint_images(VtImageLayer::AboveText, window);
 
             if let Some((row, span)) = &layout.link_underline {
                 // Hover underline for the link under the pointer, painted

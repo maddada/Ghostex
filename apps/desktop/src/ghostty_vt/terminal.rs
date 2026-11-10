@@ -100,6 +100,16 @@ impl VtTerminal {
             unsafe { ffi::ghostty_terminal_free(raw) };
             return Err(err);
         }
+        // CDXC:Terminal 2026-11-10 WHY: libghostty-vt turns Kitty graphics on by default (10 MB), so a terminal that draws no pictures still told programs it could (#536: tools sent pictures and got a blank gap). Every terminal starts with the protocol off and answering nothing; a host that draws pictures turns it on with `set_kitty_image_storage_limit`.
+        let off = 0_u64;
+        // UNSUPPORTED only when the archive was built without Kitty graphics, which is off already.
+        let _ = unsafe {
+            ffi::ghostty_terminal_set(
+                raw,
+                ffi::GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT,
+                std::ptr::from_ref(&off).cast(),
+            )
+        };
         Ok(Self {
             raw,
             host_callbacks: std::ptr::null_mut(),
