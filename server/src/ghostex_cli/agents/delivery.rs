@@ -119,9 +119,10 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         ))
     })?;
     let duplicate = result["duplicate"] == json!(true);
-    // CDXC:Coordinators 2026-09-30 WHY: a coordinator's follow-up to a thread it already marked done reopens that thread, or its reply would go unsupervised and never be reported back.
+    // A coordinator's follow-up to a thread it already marked done reopens that thread, or its reply would go unsupervised and never be reported back; gxserver owns the rule (CDXC:Coordinators in server/src/coordinators/reopen.rs).
     // A repeated request id was linked by its first attempt; linking again would restart the delivery watch from now and miss the row the first attempt produced.
     // CDXC:Coordinators 2026-11-10 WHY: the reopen was silent, so a coordinator could not tell its message had put a done thread back under it, and a reply the thread finished while done was never reported (GitHub #541). The send says so in one line and prints that held reply.
+    // gxserver's send route reopens the thread itself and says so in the send's answer (server/src/coordinators/reopen.rs); this link call still watches the message, reopens for `--queue`, and answers for an older gxserver, guarded on the server by `sentAtMs`.
     let reopen = (!duplicate)
         .then(|| call_gxserver_rpc(
             "/api/linkCoordinatorThread",
@@ -134,12 +135,17 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
             &flags,
         ).ok())
         .flatten();
-    let reopened = reopen
-        .as_ref()
-        .is_some_and(|reopen| reopen["reopened"] == json!(true));
-    let held_report = reopen
-        .as_ref()
-        .and_then(|reopen| reopen["heldReport"].as_str())
+    let reopened = result["reopenedThread"] == json!(true)
+        || reopen
+            .as_ref()
+            .is_some_and(|reopen| reopen["reopened"] == json!(true));
+    let held_report = result["heldReport"]
+        .as_str()
+        .or_else(|| {
+            reopen
+                .as_ref()
+                .and_then(|reopen| reopen["heldReport"].as_str())
+        })
         .map(str::to_string);
     if reopened {
         // stderr, so the JSON on stdout keeps parsing.

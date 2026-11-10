@@ -3630,7 +3630,8 @@ version of the Projects features in Cursor and Claude Code.
   (it never closes a thread that is still working or waiting on you). A closed
   thread is not lost: when a follow-up comes, the coordinator reopens it or
   messages it, and the same conversation resumes under the coordinator with
-  everything it knew. Ask the coordinator to keep a thread open if you want to
+  everything it knew. A message you send it in its chat reopens it the same
+  way (typing in its terminal does not). Ask the coordinator to keep a thread open if you want to
   look at it. You can do it yourself too: right-click a thread and choose
   **Mark Thread Done** (greyed out while it is working or waiting on you) to
   mark it done and close its session, or **Reopen Thread** on a done thread to

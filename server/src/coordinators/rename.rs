@@ -198,6 +198,7 @@ mod tests {
             coordinator_session_id: "C1".into(),
             task: "task".into(),
             resolved_at: None,
+            last_resolved_at: None,
             observed_working: false,
             reported_at: None,
             reported_prompt_key: None,

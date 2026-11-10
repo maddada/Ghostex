@@ -62,6 +62,7 @@ mod tests {
             coordinator_session_id: "C1".into(),
             task: "task".into(),
             resolved_at: resolved.then(|| "2026-10-24T18:00:00.000Z".into()),
+            last_resolved_at: None,
             observed_working: true,
             reported_at: None,
             reported_prompt_key: None,

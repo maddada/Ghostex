@@ -113,6 +113,7 @@ mod tests {
             include_str!("../storage/migrations/0041_coordinators.sql"),
             include_str!("../storage/migrations/0042_coordinator_pending_messages.sql"),
             include_str!("../storage/migrations/0050_coordinator_close_threads.sql"),
+            include_str!("../storage/migrations/0075_coordinator_thread_close_stamp.sql"),
         ] {
             db.execute_batch(migration).unwrap();
         }

@@ -22,6 +22,42 @@ const TICK: Duration = Duration::from_secs(2);
 const FINISH_STABILITY_MS: i64 = 4_000;
 /// Waits after a failed delivery, doubled per failure up to the last value.
 const RETRY_DELAYS_MS: [i64; 4] = [10_000, 20_000, 40_000, 60_000];
+/// How long reports to one coordinator keep failing, the computer online, before Ghostex gives up.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// Approved plan (coordinator report delivery): a coordinator whose reports keep failing is retried for 10 minutes of plain elapsed time, then Ghostex stops trying, with no timer and no backstop, and posts one red "Not sent" row in Notifications: "Coordinator stopped getting reports", "Ghostex tried for 10 minutes and stopped. Check what it is waiting on, then send it a message to try again." It never gives up while the computer is offline (it keeps retrying at the last step instead). A new message accepted for that coordinator (`request_report_retry`) or a gxserver restart makes it try again, and the row turns read only when a delivery round to it then ends with no failure. What waits is each thread's current report, as before: there is no outbox.
+/// WHY: the retries used to go on every 60 seconds forever, and the user never heard that a coordinator was not getting its threads' reports.
+const GIVE_UP_AFTER_MS: i64 = 10 * 60_000;
+const REPORTS_NOTICE_TITLE: &str = "Coordinator stopped getting reports";
+const REPORTS_NOTICE_BODY: &str =
+    "Ghostex tried for 10 minutes and stopped. Check what it is waiting on, then send it a message to try again.";
+
+/// One coordinator's run of failed deliveries.
+struct FailureStreak {
+    failures: usize,
+    /// Earliest next try (ms).
+    retry_at: i64,
+    /// When this run began, or last made progress (a round that sent at least one report).
+    failing_since: i64,
+    /// Ghostex gave up: no attempt until `request_report_retry` or a restart.
+    gave_up: bool,
+}
+
+/// The coordinators Ghostex gave up on, shared with the send route so a new message to one asks
+/// for its reports again.
+fn given_up() -> &'static Mutex<HashSet<SessionKey>> {
+    static GIVEN_UP: std::sync::OnceLock<Mutex<HashSet<SessionKey>>> = std::sync::OnceLock::new();
+    GIVEN_UP.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+/// A new message was accepted for this session (the `/api/sendSessionChatMessage` route, never
+/// gxserver's own sends or a replay): when it is a coordinator Ghostex gave up on, its reports
+/// are tried again on the next tick.
+pub(crate) fn request_report_retry(key: &SessionKey) {
+    if let Ok(mut given_up) = given_up().lock() {
+        given_up.remove(key);
+    }
+}
 /// A message handed to a thread is reported undelivered only once it is this old...
 pub(super) const UNDELIVERED_MIN_AGE_MS: i64 = 60_000;
 /// ...and the thread has sat idle without it this long: a busy thread takes a message typed during
@@ -40,8 +76,8 @@ struct SupervisorMemory {
     stopped_since: HashMap<SessionKey, i64>,
     /// Coordinators with a delivery running right now.
     in_flight: HashSet<SessionKey>,
-    /// Coordinator → (consecutive failures, earliest retry in ms).
-    retry: HashMap<SessionKey, (usize, i64)>,
+    /// Each coordinator's run of failed deliveries.
+    retry: HashMap<SessionKey, FailureStreak>,
     transcript_gates: HashMap<SessionKey, SessionChatTranscriptGate>,
     /// Each thread's transcript file, resolved once for the pending-message check.
     transcript_paths: HashMap<SessionKey, std::path::PathBuf>,
@@ -846,12 +882,20 @@ fn supervise(
         if crate::session_self_heal::daemon_lost(&coordinator.0, &coordinator.1) {
             continue;
         }
-        if memory
-            .retry
-            .get(&coordinator)
-            .is_some_and(|(_, retry_at)| now < *retry_at)
-        {
-            continue;
+        if let Some(streak) = memory.retry.get(&coordinator) {
+            if streak.gave_up {
+                let still_given_up = given_up()
+                    .lock()
+                    .map(|given_up| given_up.contains(&coordinator))
+                    .unwrap_or(true);
+                if still_given_up {
+                    continue;
+                }
+                // Asked to try again: a fresh run.
+                memory.retry.remove(&coordinator);
+            } else if now < streak.retry_at {
+                continue;
+            }
         }
         memory.in_flight.insert(coordinator.clone());
         let back_line = memory.back_lines.get(&coordinator).cloned();
@@ -1025,6 +1069,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             .await
             .unwrap_or(false);
     let mut failed = false;
+    let mut delivered_any = false;
     let reports = if coordinator_open {
         delivery.reports
     } else {
@@ -1051,6 +1096,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             .unwrap_or_else(|_| Uuid::new_v4().to_string());
         match send_to_coordinator(&state, &coordinator, &line, &send_request_id).await {
             Ok(()) => {
+                delivered_any = true;
                 if let Ok(mut memory) = memory.lock() {
                     memory.report_send_ids.remove(&ledger_key);
                     memory.back_lines.remove(&coordinator);
@@ -1261,6 +1307,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             .unwrap_or_else(|_| Uuid::new_v4().to_string());
         match send_to_coordinator(&state, &coordinator, &message, &send_request_id).await {
             Ok(()) => {
+                delivered_any = true;
                 if let Ok(mut memory) = memory.lock() {
                     memory.report_send_ids.remove(&report_key);
                     if let ReportKind::Stalled { due } = &report.kind {
@@ -1354,24 +1401,140 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             }
         }
     }
+    let mut gave_up = None;
     if let Ok(mut memory) = memory.lock() {
         memory.in_flight.remove(&coordinator);
         if failed {
-            let failures = memory
+            let now = now_ms();
+            let streak = memory
                 .retry
-                .get(&coordinator)
-                .map(|(count, _)| *count)
-                .unwrap_or(0);
-            let delay = RETRY_DELAYS_MS[failures.min(RETRY_DELAYS_MS.len() - 1)];
-            memory
-                .retry
-                .insert(coordinator, (failures + 1, now_ms() + delay));
+                .entry(coordinator.clone())
+                .or_insert(FailureStreak {
+                    failures: 0,
+                    retry_at: now,
+                    failing_since: now,
+                    gave_up: false,
+                });
+            if delivered_any {
+                streak.failing_since = now;
+            }
+            let delay = RETRY_DELAYS_MS[streak.failures.min(RETRY_DELAYS_MS.len() - 1)];
+            streak.failures += 1;
+            streak.retry_at = now + delay;
+            if now - streak.failing_since >= GIVE_UP_AFTER_MS
+                && crate::network_status::offline_since().is_none()
+            {
+                streak.gave_up = true;
+                if let Ok(mut given_up) = given_up().lock() {
+                    given_up.insert(coordinator.clone());
+                }
+                gave_up = Some((streak.failures, now - streak.failing_since));
+            }
         } else {
             memory.retry.remove(&coordinator);
             memory
                 .report_send_ids
                 .retain(|(owner, _), _| owner != &coordinator);
         }
+    }
+    let notice_state = state.clone();
+    let notice_key = coordinator.clone();
+    match gave_up {
+        Some((failures, failing_ms)) => {
+            let _ = tokio::task::spawn_blocking(move || {
+                post_reports_notice(&notice_state, &notice_key, failures, failing_ms)
+            })
+            .await;
+        }
+        // A round that reached an open coordinator with no failure ends what the row reports.
+        None if !failed && coordinator_open => {
+            let _ = tokio::task::spawn_blocking(move || {
+                clear_reports_notice(&notice_state, &notice_key)
+            })
+            .await;
+        }
+        None => {}
+    }
+}
+
+/// Ghostex gave up on a coordinator's reports: one row in Notifications and one warning line.
+fn post_reports_notice(
+    state: &AppState,
+    coordinator: &SessionKey,
+    failures: usize,
+    failing_ms: i64,
+) {
+    let _ = state.logger.log(GxserverLogInput {
+        level: LogLevel::Warn,
+        event: "coordinatorReportsGaveUp".to_string(),
+        server_id: Some(state.metadata.server_id.clone()),
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: None,
+        details: Some(json!({
+            "coordinatorProjectId": coordinator.0,
+            "coordinatorSessionId": coordinator.1,
+            "failures": failures,
+            "failingMs": failing_ms,
+        })),
+    });
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Some(session) = repository
+        .get_session(&coordinator.0, &coordinator.1)
+        .ok()
+        .flatten()
+    else {
+        return;
+    };
+    let title = coordinators::session_title_of(&session);
+    let project = repository
+        .get_project(&coordinator.0)
+        .ok()
+        .flatten()
+        .and_then(|project| {
+            project
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+    let subtitle = [title.trim(), project.trim()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
+    use crate::notification_feed::store as feed;
+    let inserted = feed::insert_coordinator_reports_notice(
+        &db,
+        feed::NewNotificationFeedRow {
+            project_id: coordinator.0.clone(),
+            session_id: coordinator.1.clone(),
+            kind: feed::NOTIFICATION_FEED_KIND_SEND_FAILED,
+            title: REPORTS_NOTICE_TITLE.to_string(),
+            subtitle,
+            body: feed::bounded_notification_body(REPORTS_NOTICE_BODY),
+            agent_name: feed::notification_agent_icon(&session),
+            attention_event_id: None,
+        },
+    );
+    if inserted.is_ok() {
+        crate::notification_feed::broadcast_notification_feed_changed(state);
+    }
+}
+
+/// The coordinator's reports go out again: its "stopped getting reports" row, if any, goes read.
+fn clear_reports_notice(state: &AppState, coordinator: &SessionKey) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    if crate::notification_feed::store::mark_coordinator_reports_notice_read(&db, &coordinator.1)
+        .is_ok_and(|changed| changed > 0)
+    {
+        crate::notification_feed::broadcast_notification_feed_changed(state);
     }
 }
 

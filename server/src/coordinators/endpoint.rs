@@ -202,18 +202,43 @@ pub fn handle_coordinator_endpoint(
             // A message from a coordinator to its own done thread reopens it, so the reply is
             // supervised and reported again; any other recipient is left alone. A reply the thread
             // finished while it was done goes back to the sender in this answer: the message has
-            // just started a new turn, whose report would replace it.
+            // just started a new turn, whose report would replace it. gxserver's send route already
+            // reopens on the send itself (reopen.rs); this call is the `--queue` path's reopen and
+            // an older CLI's, guarded by the time the CLI took before its send (`sentAtMs`), and a
+            // confirmation (`messageDelivered`) only acknowledges the delivery.
             if params.get("reopenOnly").and_then(Value::as_bool) == Some(true) {
                 let thread = read_thread(db, &thread_key.0, &thread_key.1)?
                     .filter(|thread| thread.coordinator_key() == coordinator_key);
-                let (reopened, held_report) = match thread.as_ref() {
-                    Some(thread) if thread.is_resolved() => {
-                        let held = held_reply(repository, thread);
-                        set_thread_resolved(db, &thread_key.0, &thread_key.1, false)?;
-                        set_parked(repository, &thread_key, false)?;
-                        (true, held)
+                if params.get("messageDelivered").and_then(Value::as_bool) == Some(true) {
+                    if let Some(thread) = thread.as_ref() {
+                        acknowledge_delivered(db, thread)?;
                     }
-                    _ => (false, None),
+                    return Ok(CoordinatorEndpointOutput {
+                        result: json!({ "linked": false, "reopened": false, "heldReport": null, "watchingDelivery": false }),
+                        changed_sessions: Vec::new(),
+                    });
+                }
+                let send_ms = params
+                    .get("sentAtMs")
+                    .and_then(Value::as_i64)
+                    .filter(|sent| *sent <= Utc::now().timestamp_millis());
+                let plan = match (thread.as_ref(), send_ms) {
+                    (Some(_), Some(send_ms)) => {
+                        super::reopen::prepare_reopen(db, repository, &thread_key, send_ms, |_| {
+                            true
+                        })?
+                    }
+                    _ => None,
+                };
+                let (reopened, held_report) = match plan {
+                    Some(plan) => {
+                        if super::reopen::apply_reopen(db, repository, &plan, None)? {
+                            (true, plan.held_report)
+                        } else {
+                            (false, None)
+                        }
+                    }
+                    None => (false, None),
                 };
                 let watching = thread.is_some() && watch_pending_message(db, &thread_key, params)?;
                 return Ok(CoordinatorEndpointOutput {
@@ -376,6 +401,27 @@ fn watch_pending_message(
     Ok(true)
 }
 
+/// The sender read its message in the thread's transcript (`ghostex agents send`'s confirmation),
+/// so the watch stops; it never reopens a thread.
+///
+/// CDXC:Coordinators 2026-11-10 WHY:
+/// The confirmation used to drop the watch outright, and a reply too fast for a supervisor tick to see then lost its report: the watch's transcript match is what marks such a thread seen working. So an open thread whose message is still watched, and that has not been reported on since the message was sent, is marked seen working first, as the supervisor's own match does (`pending_delivery` in server/src/server/coordinator_runtime.rs). A report recorded after the send means that turn was reported already, and marking it again would report it twice.
+fn acknowledge_delivered(db: &Connection, thread: &ThreadRecord) -> Result<(), DomainStateError> {
+    let parse = |value: &str| chrono::DateTime::parse_from_rfc3339(value).ok();
+    let unreported_since_send = match (
+        thread.pending_message_at.as_deref().and_then(parse),
+        thread.reported_at.as_deref().and_then(parse),
+    ) {
+        (Some(sent), Some(reported)) => reported < sent,
+        (Some(_), None) => true,
+        (None, _) => false,
+    };
+    if !thread.is_resolved() && unreported_since_send && !thread.observed_working {
+        set_thread_observed_working(db, &thread.project_id, &thread.session_id)?;
+    }
+    drop_thread_pending_message(db, &thread.project_id, &thread.session_id)
+}
+
 /// A thread whose session the resolve is about to close must have nothing left running: closing
 /// stops its agent mid-turn or under an unanswered question.
 fn refuse_closing_unfinished(
@@ -400,7 +446,7 @@ fn refuse_closing_unfinished(
 
 /// CDXC:Coordinators 2026-10-01 DECISION:
 /// User: "If I close those threads in the sidebar, would we still be able to reopen them and send there later if needed? Can we start doing this to make the sidebar less cluttered? Instead of moving them to Parked." So `ghostex coordinator resolve` closes a finished thread's session (`closeSession`, which skips parking) and `reopen` or a coordinator's message resumes the same conversation. Only `resolve --keep-open` still parks a done thread, so the sidebar's Sessions list keeps only the work in flight, and reopening unparks it. Supersedes the 2026-09-30 rule that every done thread was parked.
-fn set_parked(
+pub(super) fn set_parked(
     repository: &DomainRepository<'_>,
     key: &SessionKey,
     parked: bool,
@@ -426,7 +472,10 @@ fn set_parked(
 
 /// CDXC:Coordinators 2026-11-10 WHY:
 /// The supervisor skips a resolved thread, and resolving clears `observedWorking`, so a turn the thread finished while it was done was never reported after a reopen: the supervisor saw an idle thread it had not seen work (GitHub #541). The reply newer than the thread's last report is that held report; a reopen hands it back (the supervisor reports it, or `agents send` prints it).
-fn held_reply(repository: &DomainRepository<'_>, thread: &ThreadRecord) -> Option<String> {
+pub(super) fn held_reply(
+    repository: &DomainRepository<'_>,
+    thread: &ThreadRecord,
+) -> Option<String> {
     let session = repository
         .get_session(&thread.project_id, &thread.session_id)
         .ok()??;

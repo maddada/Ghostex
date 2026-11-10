@@ -58,6 +58,9 @@ pub struct ThreadRecord {
     pub coordinator_session_id: String,
     pub task: String,
     pub resolved_at: Option<String>,
+    /// The latest Mark Done, stamped by every resolve, even of a thread already done
+    /// (`resolved_at` keeps the first one). `None` for a thread resolved before migration 0075.
+    pub last_resolved_at: Option<String>,
     pub observed_working: bool,
     pub reported_at: Option<String>,
     pub reported_prompt_key: Option<String>,
@@ -86,6 +89,13 @@ impl ThreadRecord {
 
     pub fn is_resolved(&self) -> bool {
         self.resolved_at.is_some()
+    }
+
+    /// When the thread was last marked done: the stamp a message must not predate to reopen it.
+    pub fn close_stamp(&self) -> Option<&str> {
+        self.last_resolved_at
+            .as_deref()
+            .or(self.resolved_at.as_deref())
     }
 }
 
@@ -141,6 +151,7 @@ fn thread_from_row(row: &Row<'_>) -> rusqlite::Result<ThreadRecord> {
         coordinator_session_id: row.get("coordinatorSessionId")?,
         task: row.get("task")?,
         resolved_at: row.get("resolvedAt")?,
+        last_resolved_at: row.get("lastResolvedAt")?,
         observed_working: row.get::<_, i64>("observedWorking")? == 1,
         reported_at: row.get("reportedAt")?,
         reported_prompt_key: row.get("reportedPromptKey")?,
@@ -155,7 +166,7 @@ fn thread_from_row(row: &Row<'_>) -> rusqlite::Result<ThreadRecord> {
 
 const COORDINATOR_COLUMNS: &str =
     "projectId, sessionId, goal, instructions, memoryJson, createdAt, updatedAt";
-const THREAD_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, pendingMessage, pendingMessageAt, closedWithCoordinatorAt, createdAt, updatedAt";
+const THREAD_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, resolvedAt, lastResolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, pendingMessage, pendingMessageAt, closedWithCoordinatorAt, createdAt, updatedAt";
 
 pub fn read_coordinator(
     db: &Connection,
@@ -355,6 +366,7 @@ pub fn set_thread_resolved(
             r#"
             UPDATE coordinator_threads
             SET resolvedAt = CASE WHEN ?3 THEN COALESCE(resolvedAt, ?4) ELSE NULL END,
+                lastResolvedAt = CASE WHEN ?3 THEN ?4 ELSE lastResolvedAt END,
                 observedWorking = CASE WHEN ?3 THEN 0 ELSE observedWorking END,
                 updatedAt = ?4
             WHERE projectId = ?1 AND sessionId = ?2

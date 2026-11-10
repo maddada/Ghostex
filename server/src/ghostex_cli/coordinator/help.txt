@@ -148,9 +148,9 @@ STATUS
 
 THREADS
   start-thread creates an agent session in the coordinator's project, links it,
-  and sends it the task. Ghostex appends the goal, the standing instructions,
-  the memory notes and the reporting rules to every task, so write only the task
-  itself. The agent defaults to the coordinator's own agent; an --agent turned off
+  and sends it the task. Ghostex appends the goal, the standing instructions
+  and the reporting rules to every task (your memory notes stay yours: add what
+  a thread needs to its task), so write only the task itself. The agent defaults to the coordinator's own agent; an --agent turned off
   in Settings > Agents is refused unless --allow-hidden is passed. --worktree gives the
   thread its own git worktree and branch (from --base-branch, or the default
   branch). --model and --effort apply to this thread only (Claude, Codex, Pi, OMP,
@@ -202,8 +202,9 @@ THREADS
   Mark Thread Done and Reopen Thread on a thread's sidebar menu do the same.
   --keep-open only marks it done and parks the session. A closed thread keeps
   its conversation: reopen resumes the same session and puts it back under its
-  coordinator, and the coordinator's `ghostex agents send <thread-ref> "<text>"`
-  to a closed thread resumes it the same way and reopens it.
+  coordinator, and a message sent to it in its chat, by you or by its coordinator
+  (`ghostex agents send <thread-ref> "<text>"`), resumes it the same way and
+  reopens it; typing in its terminal does not.
   sleep-inactive-threads puts the coordinator's idle threads to sleep, like
   Sleep Inactive Threads on its sidebar menu: threads that are working, waiting
   on a question or approval, or running a background shell stay awake, and so

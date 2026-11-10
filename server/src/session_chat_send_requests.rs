@@ -297,6 +297,23 @@ pub(crate) fn was_attempted(paths: &GxserverPaths, key: &SendRequestKey) -> bool
     })
 }
 
+/// When the attempt behind this id began (ms), for a replay that must be judged by the time of the
+/// original send (coordinators/reopen.rs).
+pub(crate) fn send_request_created_ms(paths: &GxserverPaths, key: &SendRequestKey) -> Option<i64> {
+    let db = open_gxserver_database(paths).ok()?;
+    db.query_row(
+        r#"
+        SELECT createdAtMs FROM session_chat_send_requests
+        WHERE projectId = ?1 AND sessionId = ?2 AND sendRequestId = ?3
+        "#,
+        params![key.project_id, key.session_id, key.send_request_id],
+        |row| row.get::<_, i64>(0),
+    )
+    .optional()
+    .ok()
+    .flatten()
+}
+
 /// Settles an interrupted attempt the transcript proved arrived.
 pub(crate) fn mark_sent(paths: &GxserverPaths, key: &SendRequestKey, result: &Value) {
     if let Ok(db) = open_gxserver_database(paths) {

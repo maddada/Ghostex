@@ -78,7 +78,7 @@ pub(crate) async fn handle_send_session_chat_message_http(
     .await
 }
 
-async fn send_session_chat_message_attempt(
+pub(super) async fn send_session_chat_message_attempt(
     state: &AppState,
     endpoint_path: String,
     request_id: String,
