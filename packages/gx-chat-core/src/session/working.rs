@@ -128,6 +128,8 @@ pub fn merge_status(
 ///
 /// Three independent starts: the `working` flag on reads and snapshots, the server's
 /// activity-transition state frames, and the host's own signal. From `controller.ts`.
+///
+/// CDXC:SessionChat 2026-11-09 WHY: gxserver's `agentGone` means no agent process runs in the session, so the server's working flag is stale (nothing ever reports the turn's end) and only a send the user just made counts. Without this the card kept naming the killed call and the composer kept Stop after Quiet had let its words go; subagents run inside the agent, so a roster still saying "working" is stale too.
 pub fn working_signal(state: &crate::state::ChatState) -> bool {
     let session = &state.session;
     let optimistic = state
@@ -135,6 +137,9 @@ pub fn working_signal(state: &crate::state::ChatState) -> bool {
         .sends
         .iter()
         .any(|entry| entry.queued_prompt_id.is_none());
+    if session.agent_gone {
+        return optimistic;
+    }
     let compacting = session
         .terminal_activity
         .as_ref()

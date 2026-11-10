@@ -736,7 +736,14 @@ fn the_words_quiet_held_back_show_once_gxserver_says_the_agent_is_gone() {
             || kinds(&gone).contains(&"grouped-work".to_string()),
         "the work is in view once the agent is gone: {gone:#?}"
     );
+    // The stale working flag no longer keeps the card on the dead call or Stop in the composer.
+    assert!(!ghostex_gx_chat_core::session::working::presents_working(
+        &state
+    ));
     // A later frame without it (the agent was started again) holds the running words again.
     ghostex_gx_chat_core::session::apply::apply_state_frame(&mut state, &frame(false), &context);
     assert!(!state.session.agent_gone);
+    assert!(ghostex_gx_chat_core::session::working::working_signal(
+        &state
+    ));
 }
