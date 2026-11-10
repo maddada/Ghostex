@@ -234,7 +234,51 @@ function Enter-SimplySignWindow {
     [GhostexWin32]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
     [GhostexWin32]::SetForegroundWindow($Window.MainWindowHandle) | Out-Null
     (New-Object -ComObject WScript.Shell).AppActivate($Window.Id) | Out-Null
+    try { [System.Windows.Automation.AutomationElement]::FromHandle($Window.MainWindowHandle).SetFocus() } catch { }
     Start-Sleep -Milliseconds 500
+    return $true
+}
+
+function Test-SimplySignFocused {
+    $FocusPid = [uint32]0
+    [GhostexWin32]::GetWindowThreadProcessId([GhostexWin32]::GetForegroundWindow(), [ref]$FocusPid) | Out-Null
+    return (Get-Process -Id $FocusPid -ErrorAction SilentlyContinue).ProcessName -like "*SimplySign*"
+}
+
+# Fallback when Windows keeps the focus elsewhere (the ARM64 runner's Windows
+# Search held it in test run 42735522576): fill the e-mail and one-time code
+# fields and press Login through UI Automation, which needs no focus. The
+# fields are the editable ones, top to bottom, as the keyboard path tabs them.
+function Set-LoginByAutomation([string]$Email, [string]$Code) {
+    $Window = Get-SimplySignWindow
+    if (-not $Window) { return $false }
+    $Automation = [System.Windows.Automation.AutomationElement]
+    $Root = $Automation::FromHandle($Window.MainWindowHandle)
+    $EditCondition = [System.Windows.Automation.PropertyCondition]::new($Automation::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+    $Fields = @()
+    foreach ($Edit in @($Root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $EditCondition))) {
+        $Value = $null
+        if ($Edit.Current.IsEnabled -and -not $Edit.Current.IsOffscreen -and
+            $Edit.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$Value) -and -not $Value.Current.IsReadOnly) {
+            $Fields += [pscustomobject]@{ Value = $Value; Y = $Edit.Current.BoundingRectangle.Y; X = $Edit.Current.BoundingRectangle.X }
+        }
+    }
+    $Fields = @($Fields | Sort-Object Y, X)
+    Write-Host "UI Automation found $($Fields.Count) editable field(s) in the SimplySign window"
+    if ($Fields.Count -lt 2) { return $false }
+    $ButtonCondition = [System.Windows.Automation.PropertyCondition]::new($Automation::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+    $Buttons = @($Root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $ButtonCondition) | Where-Object { $_.Current.IsEnabled -and -not $_.Current.IsOffscreen })
+    Write-Host "UI Automation buttons: $(($Buttons | ForEach-Object { $_.Current.Name }) -join ', ')"
+    $Login = $null
+    foreach ($Name in @("Login", "Log in", "Ok", "OK")) {
+        if (-not $Login) { $Login = $Buttons | Where-Object { $_.Current.Name -eq $Name } | Select-Object -First 1 }
+    }
+    $Invoke = $null
+    if (-not $Login -or -not $Login.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$Invoke)) { return $false }
+    $Fields[0].Value.SetValue($Email)
+    $Fields[1].Value.SetValue($Code)
+    $Invoke.Invoke()
+    Write-Host "Filled the login through UI Automation and pressed '$($Login.Current.Name)'"
     return $true
 }
 
@@ -347,23 +391,31 @@ function Invoke-Login {
         }
         $Counter = Wait-LoginWindow -Period $Settings.Period
         if (-not (Enter-SimplySignWindow)) { throw "The SimplySign Desktop login window disappeared" }
-        Write-WindowState "attempt $Attempt, before typing"
-        $FocusPid = [uint32]0
-        [GhostexWin32]::GetWindowThreadProcessId([GhostexWin32]::GetForegroundWindow(), [ref]$FocusPid) | Out-Null
-        if ((Get-Process -Id $FocusPid -ErrorAction SilentlyContinue).ProcessName -notlike "*SimplySign*") {
-            if ($Attempt -eq 1) { Save-Screenshot "attempt-1-focus-elsewhere" }
-            throw "SimplySign Desktop is not the focused window, so the login was not typed (see the window list above)"
+        if (-not (Test-SimplySignFocused)) {
+            # Windows Search or the Start menu can hold the focus on a fresh
+            # runner; Escape closes it (it goes to that window, not SimplySign).
+            [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+            Start-Sleep -Milliseconds 500
+            Enter-SimplySignWindow | Out-Null
         }
+        Write-WindowState "attempt $Attempt, before typing"
+        $Focused = Test-SimplySignFocused
         # Only before the first attempt: later the fields still hold what was typed.
         if ($Attempt -eq 1) { Save-Screenshot "attempt-1-before-typing" }
         $Code = Get-TotpCode -Key $Key -Algorithm $Settings.Algorithm -Digits $Settings.Digits -Counter $Counter
         Add-Mask $Code
-        [System.Windows.Forms.SendKeys]::SendWait("^a")
-        Send-Text $Email
-        [System.Windows.Forms.SendKeys]::SendWait("{TAB}")
-        [System.Windows.Forms.SendKeys]::SendWait("^a")
-        Send-Text $Code
-        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+        if ($Focused) {
+            [System.Windows.Forms.SendKeys]::SendWait("^a")
+            Send-Text $Email
+            [System.Windows.Forms.SendKeys]::SendWait("{TAB}")
+            [System.Windows.Forms.SendKeys]::SendWait("^a")
+            Send-Text $Code
+            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+        }
+        elseif (-not (Set-LoginByAutomation -Email $Email -Code $Code)) {
+            $Code = $null
+            throw "SimplySign Desktop is not the focused window and UI Automation could not fill its login, so nothing was typed (see the window list above)"
+        }
         $Code = $null
         Write-Host "Submitted the SimplySign login (attempt $Attempt); waiting for the certificate."
         $Deadline = [DateTime]::UtcNow.AddSeconds(90)
