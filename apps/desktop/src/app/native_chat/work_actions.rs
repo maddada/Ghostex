@@ -28,6 +28,16 @@ fn text(value: &Value, key: &str) -> String {
     value[key].as_str().unwrap_or_default().to_string()
 }
 
+/// The quiet word after a Reply that holds words not yet sent (`has_kept_reply`): the button's own
+/// muted ink, no colour of its own.
+fn draft_sign(p: &ChatAppearance) -> gpui::Div {
+    div()
+        .flex_shrink_0()
+        .font_weight(gpui::FontWeight::NORMAL)
+        .text_color(p.muted)
+        .child("Draft")
+}
+
 impl NativeChatView {
     /// An ask's answers, the dock's look everywhere: one filled button each, the recommended one
     /// ending in its star, the one picked here carrying a check. `busy`: an answer is being sent,
@@ -51,6 +61,7 @@ impl NativeChatView {
                 let command = answer["command"].clone();
                 // Reply (`reply_answer`): the reply box at the press, its words the answer.
                 let reply = answer["reply"].clone();
+                let draft = reply.is_object() && !picked && self.has_kept_reply(&reply);
                 let icon = if picked {
                     Some("titlebar/check.svg")
                 } else if reply.is_object() {
@@ -67,6 +78,11 @@ impl NativeChatView {
                     (busy || locked) && !picked,
                     p,
                 )
+                .when(draft, |button| {
+                    button
+                        .aria_label(format!("{label}, draft kept"))
+                        .child(draft_sign(p))
+                })
                 .when(answer["recommended"] == true, |button| {
                     button
                         .aria_label(format!("{label}, Recommended"))
@@ -144,6 +160,7 @@ impl NativeChatView {
     ) -> Option<AnyElement> {
         let open = row["open"].clone();
         let reply = row["reply"].clone();
+        let draft = !open.is_object() && reply.is_object() && self.has_kept_reply(&reply);
         // Each carries its icon, so it reads as an action and not as an answer.
         let (label, icon, id) = if open.is_object() {
             (
@@ -170,6 +187,11 @@ impl NativeChatView {
                 false,
                 p,
             )
+            .when(draft, |button| {
+                button
+                    .aria_label(format!("{label}, draft kept"))
+                    .child(draft_sign(p))
+            })
             .on_click(
                 cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                     cx.stop_propagation();
@@ -215,6 +237,7 @@ impl NativeChatView {
             let locked = answer["locked"] == true;
             let command = answer["command"].clone();
             let reply = answer["reply"].clone();
+            let draft = reply.is_object() && !picked && self.has_kept_reply(&reply);
             row = row.child(
                 div()
                     .id(gpui::SharedString::from(format!(
@@ -256,7 +279,11 @@ impl NativeChatView {
                                 .text_color(p.foreground),
                         )
                     })
-                    .child(div().min_w_0().truncate().child(label))
+                    .child(div().min_w_0().truncate().child(label.clone()))
+                    .when(draft, |this| {
+                        this.aria_label(format!("{label}, draft kept"))
+                            .child(draft_sign(p))
+                    })
                     .when(recommended, |this| {
                         this.child(
                             svg()
@@ -357,11 +384,16 @@ impl NativeChatView {
         if reply.is_object() {
             any = true;
             row = row.child(
+                // Holding words not yet sent, it keeps the soft "on" fill and says so.
                 self.work_icon_button(
                     format!("work-reply:{key}"),
                     "titlebar/arrow-back-up.svg",
-                    "Reply",
-                    false,
+                    if self.has_kept_reply(&reply) {
+                        "Reply (draft kept)"
+                    } else {
+                        "Reply"
+                    },
+                    self.has_kept_reply(&reply),
                     p,
                 )
                 .on_click(cx.listener(
