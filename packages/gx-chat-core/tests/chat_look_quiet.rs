@@ -569,3 +569,74 @@ fn the_status_bar_follows_the_folds_of_the_call_it_names() {
         "the words show once"
     );
 }
+
+/// Every answered question card a list draws: on rows, and on a grouped turn's tail (its own
+/// cards, its artifacts and its reply).
+fn every_answered_card(items: &[Value]) -> usize {
+    let count = |value: &Value| value.as_array().map_or(0, Vec::len);
+    items
+        .iter()
+        .map(|item| match item["kind"].as_str() {
+            Some("message") => count(&item["message"]["questions"]),
+            Some("grouped-work") => item["turns"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|turn| {
+                    count(&turn["questions"])
+                        + count(&turn["final"]["questions"])
+                        + turn["artifacts"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .map(|row| count(&row["questions"]))
+                            .sum::<usize>()
+                })
+                .sum(),
+            _ => 0,
+        })
+        .sum()
+}
+
+/// The turn's Completed reaches the chat a moment before the reply the agent wrote after the
+/// answer: for that moment the list ends at the answer. The question's sentence is no reply and
+/// its answered card shows once, under Quiet and Reduced, before and after the reply lands.
+#[test]
+fn a_completed_turn_before_its_reply_shows_the_answered_card_once() {
+    for agent_work in ["quiet", "reduced"] {
+        let mut rows = turn();
+        rows.push(words("s1", T0 + 4_500, "Which color do you want?"));
+        rows.push(ask("q1", T0 + 5_000));
+        let mut state = quiet_chat(rows.clone());
+        look(&mut state, agent_work);
+        state.session.prompt = Some(question_prompt());
+        items(&mut state, T0 + 5_300);
+        // Answered; the agent replies and stops, and its Completed lands before the reply row.
+        state.session.prompt = None;
+        rows.push(answered("a1", T0 + 9_000, "q1"));
+        set_rows(&mut state, rows.clone());
+        state.session.server_working = false;
+        state.session.lifecycle = Some(TurnLifecycle {
+            state: TurnLifecycleState::Completed,
+            turn_id: "u1".into(),
+            timestamp: Some(T0 + 9_600),
+        });
+        let gap = items(&mut state, T0 + 9_700);
+        assert_eq!(every_answered_card(&gap), 1, "{agent_work}: {gap:#?}");
+        assert!(
+            !drawn_words(&gap)
+                .iter()
+                .any(|text| text.contains("Which color")),
+            "{agent_work}: the question's sentence is no reply: {gap:#?}"
+        );
+        rows.push(words("reply", T0 + 9_500, "Red it is."));
+        set_rows(&mut state, rows);
+        let done = items(&mut state, T0 + 10_000);
+        assert_eq!(every_answered_card(&done), 1, "{agent_work}: {done:#?}");
+        assert_eq!(
+            drawn_words(&done),
+            ["Red it is."],
+            "{agent_work}: {done:#?}"
+        );
+    }
+}
