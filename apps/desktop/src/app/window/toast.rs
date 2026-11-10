@@ -203,6 +203,9 @@ pub(crate) enum GpuiAppToastAction {
         machine_id: Option<String>,
         /// That computer's name as the notice shows it; `None` for this computer.
         computer: Option<String>,
+        /// Approve asks for Touch ID, Windows Hello or the password first (that computer's
+        /// Settings > Security switch, or a gxserver from before plain approvals).
+        require_presence: bool,
     },
 }
 

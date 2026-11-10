@@ -167,10 +167,8 @@ pub(crate) fn rail_pages(store: &SettingsStore) -> Vec<RailPage> {
                     SettingsTabId::OsIntegration => store.os_integration_visible(),
                     SettingsTabId::Connectors => store.connectors_visible(),
                     SettingsTabId::Collab => store.collab_installed(),
-                    // The open page stays listed, so a link into a hidden Security shows where it is.
-                    SettingsTabId::Security => {
-                        store.security_logs_on() || active_tab == SettingsTabId::Security
-                    }
+                    // Always listed since it holds the approvals switch (CDXC:Security 2026-11-10 in
+                    // store.rs `security_logs_on`); only its log hides with Security logs.
                     _ => true,
                 }
         })

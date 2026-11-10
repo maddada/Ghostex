@@ -62,7 +62,10 @@ fn sentence(text: &str) -> String {
 /// How the modal draws `toast`.
 fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
     if let Some(GpuiAppToastAction::SecurityApproval {
-        request, computer, ..
+        request,
+        computer,
+        require_presence,
+        ..
     }) = &toast.action
     {
         let asker = match request.requested_by.kind.as_str() {
@@ -96,7 +99,8 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
             ],
             action_label: Some("Approve".to_string()),
             copy_text: None,
-            hint: Some(
+            // Only when it will (Settings > Security, or an older gxserver): a plain Approve is one click.
+            hint: require_presence.then(|| {
                 if cfg!(target_os = "windows") {
                     "Approve asks for Windows Hello first."
                 } else if cfg!(target_os = "macos") {
@@ -104,8 +108,8 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
                 } else {
                     "Approve asks for your password first."
                 }
-                .to_string(),
-            ),
+                .to_string()
+            }),
         };
     }
     NoticeModalItem {

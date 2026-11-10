@@ -195,21 +195,12 @@ impl GhostexGpuiApp {
         bridge: &AppModalHostBridgeEventHandler,
         cx: &mut gpui::Context<Self>,
     ) {
-        // A save that loosens security asks for the system prompt first (GitHub #495).
-        let command = match self.owner_security_hold_settings_save(kind, command, cx) {
-            Some(command) => command,
-            None => return,
-        };
         match command {
             command @ (SettingsModalCommand::SavePatch { .. }
             | SettingsModalCommand::SaveSettings { .. }) => {
                 self.save_gpui_settings_modal_command(command, cx);
             }
             SettingsModalCommand::PostMessage(message) => {
-                // A password typed with a machine whose save waits for the prompt waits with it.
-                if crate::app::owner_security::settings::wait_behind_held_save(&message) {
-                    return;
-                }
                 bridge(AppModalHostBridgeEvent::Message(
                     serde_json::json!({ "message": message, "type": "sidebarCommand" }).to_string(),
                 ));

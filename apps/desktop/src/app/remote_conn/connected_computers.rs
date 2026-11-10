@@ -691,6 +691,8 @@ fn gated_post(
         return Gated::Answered(None);
     };
     if let Some(request) = owner_security::waiting_request_in(status, &body) {
+        // Its card is this renewal's to show (`owner_security_show_waiting_request`).
+        owner_security::plain::note_own_request(&request.id);
         if let Some(machine) = state().get_mut(&job.machine_id) {
             machine.waiting.insert(side, request.id.clone());
         }

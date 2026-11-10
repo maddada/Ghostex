@@ -1,5 +1,6 @@
 //! Preview host for the notice modal: every toast that used to carry a button, in the words the
-//! app raises it with. States: `approval-remote` (default), `approval-local`, `account`,
+//! app raises it with. States: `approval-remote` (default, a plain Approve), `approval-local`,
+//! `approval-presence` (Settings > Security's switch on), `account`,
 //! `views-off`, `files-off`, `sync-undo`, `chief-undo`, `homebrew`, `remote-copy-path`,
 //! `display-scale`, `linux-update`, `terminal-error`, `git-error`, `gxserver-failed`, `queue`
 //! (three waiting: "1 of 3"), `copied` (Copy details just pressed). Every click is printed and the
@@ -34,11 +35,17 @@ fn approval(id: &str, message: &str, asker: &str, computer: &str, hint: &str) ->
             ("Asked by".to_string(), asker.to_string()),
             ("Computer".to_string(), computer.to_string()),
         ],
-        hint: Some(hint.to_string()),
+        // A plain Approve says nothing more; the hint shows only with Settings > Security's switch on.
+        hint: (!hint.is_empty()).then(|| hint.to_string()),
         ..item(
             id,
             NoticeModalTone::Approval,
-            "Approval needed",
+            // As the app titles them (owner_security/ui.rs `approval_title`).
+            if message.starts_with("Pair ") {
+                "Approve this phone?"
+            } else {
+                "Approval needed"
+            },
             message,
             Some("Approve"),
             None,
@@ -51,8 +58,16 @@ fn case(state: &str) -> NoticeModalItem {
     match state {
         "approval-local" => approval(
             "approval-local",
-            "Turn on GBots.",
+            "Turn on Easy Connect.",
             "Fix login bug",
+            "This computer",
+            "",
+        ),
+        // Settings > Security's "Require Touch ID or your password to approve" is on.
+        "approval-presence" => approval(
+            "approval-presence",
+            "Pair an iPhone that calls itself \"Mo's iPhone\". Approve only if the phone shows the same three words: harbor · koala · angle.",
+            "A new phone",
             "This computer",
             "Approve asks for Touch ID or your password first.",
         ),
@@ -154,10 +169,10 @@ fn case(state: &str) -> NoticeModalItem {
         ),
         _ => approval(
             "approval-remote",
-            "Let the agents on studio-mac and this computer reach each other. Approved computers stay connected for 30 days.",
-            "Ghostex",
+            "Pair an iPhone that calls itself \"Mo's iPhone\". Approve only if the phone shows the same three words: harbor · koala · angle.",
+            "A new phone",
             "studio-mac",
-            "Approve asks for Windows Hello first.",
+            "",
         ),
     }
 }

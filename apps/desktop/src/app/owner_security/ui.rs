@@ -227,6 +227,12 @@ impl GhostexGpuiApp {
             crate::app::helpers::gpui_remote_machine_name_from_settings(machine)
                 .unwrap_or_else(|| machine.to_string())
         });
+        let require_presence = match machine_id.as_deref() {
+            None => super::plain::asks_presence_first(&Transport::Local),
+            Some(machine) => self
+                .gpui_remote_gxserver_request_target(machine)
+                .is_none_or(|target| super::plain::asks_presence_first(&Transport::Remote(target))),
+        };
         self.upsert_gpui_app_toast(
             GpuiAppToast {
                 id,
@@ -239,6 +245,7 @@ impl GhostexGpuiApp {
                     deny: false,
                     machine_id,
                     computer,
+                    require_presence,
                 }),
                 loading: false,
                 persistent: true,

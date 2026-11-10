@@ -7,8 +7,8 @@
 //! SEE-ALSO: server/src/audit/ (the log and its check), packages/settings-catalog/src/pages/security.rs (its search rows), apps/desktop/src/app/gx_store/notifications/commands.rs (a security row in the bell opens this page).
 use super::super::fields::notice::{is_service_unreachable, service_unreachable_state};
 use super::super::fields::{
-    ButtonVariant, FieldStates, ListItemStatus, SettingsPage, card_inset, settings_button,
-    settings_list_item, settings_section, static_note,
+    ButtonVariant, FieldStates, ListItemStatus, RowSpec, SettingsPage, card_inset, settings_button,
+    settings_list_item, settings_section, static_note, toggle_field,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -71,7 +71,7 @@ pub(crate) fn outcome_words(outcome: &str) -> (&'static str, ListItemStatus) {
         "denied" => ("You said no", ListItemStatus::Neutral),
         "refused" => ("Refused", ListItemStatus::Warning),
         "failed" => ("Failed", ListItemStatus::Warning),
-        "allowed" => ("Allowed for Chief of Staff", ListItemStatus::Neutral),
+        "allowed" => ("Allowed", ListItemStatus::Neutral),
         _ => ("Recorded", ListItemStatus::Neutral),
     }
 }
@@ -131,6 +131,10 @@ impl SecurityTab {
     }
 
     fn reload(&mut self, cx: &mut Context<Self>) {
+        // The log shows only while Settings > Extensions > Experimental > Security logs is on.
+        if !self.store.read(cx).security_logs_on() {
+            return;
+        }
         if !self.store.read(cx).request().gxserver_rpc_available {
             self.error = Some("Ghostex's background service is not reachable.".to_string());
             cx.notify();
@@ -156,6 +160,44 @@ impl SecurityTab {
             },
             cx,
         );
+    }
+
+    /// "Require Touch ID or your password to approve" (`approvalsRequirePresence`, off by
+    /// default; CDXC:Security 2026-11-10 in packages/settings-catalog/src/pages/security.rs). The
+    /// approving device checks it before it sends the plain approval (`owner_security`).
+    fn approvals_section(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> Option<Div> {
+        let (label, description) = if cfg!(target_os = "macos") {
+            (
+                "Require Touch ID or your password to approve",
+                "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: Ghostex asks for Touch ID or your Mac password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
+            )
+        } else if cfg!(target_os = "windows") {
+            (
+                "Require Windows Hello or your password to approve",
+                "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: Ghostex asks for Windows Hello or your Windows password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
+            )
+        } else {
+            (
+                "Require your password to approve",
+                "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: Ghostex asks for your password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
+            )
+        };
+        let key = "approvalsRequirePresence";
+        let (modified, checked) = {
+            let values = self.store.read(cx).values();
+            (values.is_modified(key), values.bool(key))
+        };
+        let row = toggle_field(
+            self,
+            p,
+            key,
+            RowSpec::new(label)
+                .description(description)
+                .modified(modified),
+            checked,
+            cx,
+        );
+        settings_section(p, "Approvals", None, None, vec![row])
     }
 
     /// The chain check, then every entry, newest first.
@@ -256,6 +298,12 @@ impl Render for SecurityTab {
                 &matching,
                 move |tab, _window, cx| store.update(cx, |store, cx| store.set_active_tab(tab, cx)),
             )));
+            return settings_page(&self.store, SettingsTabId::Security, &p, blocks, cx);
+        }
+        if let Some(section) = self.approvals_section(&p, cx) {
+            blocks.push(PageBlock::section("approvals", section));
+        }
+        if !self.store.read(cx).security_logs_on() {
             return settings_page(&self.store, SettingsTabId::Security, &p, blocks, cx);
         }
         if self.error.as_deref().is_some_and(is_service_unreachable) {
