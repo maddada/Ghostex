@@ -104,6 +104,11 @@ on:
         required: false
         default: false
         type: boolean
+      certum_package_check_run:
+        description: TEST BRANCH ONLY - run certum-verify-package.ps1 on this run's release-windows-<arch> artifact, and on the unsigned 11.2.1 package
+        required: false
+        default: ''
+        type: string
 
 permissions:
   actions: read
@@ -167,8 +172,42 @@ jobs:
         shell: pwsh
         run: tooling/release-gpui/certum-simplysign-login.ps1 -Logout
 
+  certum_package_check:
+    if: ${{ inputs.certum_package_check_run != '' }}
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-windows-${{ inputs.arch }}
+          path: signed
+          run-id: ${{ inputs.certum_package_check_run }}
+          github-token: ${{ github.token }}
+      - name: The gate passes on the Certum-signed build
+        shell: pwsh
+        env:
+          GHOSTEX_CERTUM_CERT_SHA1: E81BEDC91DEA38C8BB2DA3651E161ADA280B6734
+        run: |
+          $Package = Get-ChildItem signed -File -Filter '*-full.nupkg' | Select-Object -First 1
+          $Installer = Get-ChildItem signed -File -Filter 'ghostex-*-windows-*.exe' | Select-Object -First 1
+          & tooling/release-gpui/certum-verify-package.ps1 -Package $Package.FullName -Installer $Installer.FullName
+      - name: The gate fails on the unsigned 11.2.1 build
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GHOSTEX_CERTUM_CERT_SHA1: E81BEDC91DEA38C8BB2DA3651E161ADA280B6734
+        run: |
+          gh release download v11.2.1 -R maddada/Ghostex -p 'Ghostex-11.2.1-win-${{ inputs.arch }}-stable-full.nupkg' -p 'ghostex-11.2.1-windows-${{ inputs.arch }}.exe' -D unsigned
+          $Failed = $false
+          try { & tooling/release-gpui/certum-verify-package.ps1 -Package "unsigned/Ghostex-11.2.1-win-${{ inputs.arch }}-stable-full.nupkg" -Installer "unsigned/ghostex-11.2.1-windows-${{ inputs.arch }}.exe" }
+          catch { $Failed = $true; Write-Host "Failed as expected: $($_.Exception.Message)" }
+          if (-not $Failed) { throw "the gate accepted an unsigned build" }
+
   build:
-    if: ${{ !inputs.certum_login_test }}
+    if: ${{ !inputs.certum_login_test && inputs.certum_package_check_run == '' }}
     runs-on: ${{ inputs.arch == 'arm64' && 'windows-11-vs2026-arm' || 'windows-2025' }}
     # CDXC:WindowsWedgedRunnerWatchdog 2026-09-01 (supersedes
     # CDXC:WindowsArm64BuildBudget 2026-08-19):
@@ -796,7 +835,7 @@ jobs:
   # artifact.
   runtime:
     name: native runtime (${{ inputs.arch }})
-    if: ${{ !inputs.certum_login_test }}
+    if: ${{ !inputs.certum_login_test && inputs.certum_package_check_run == '' }}
     runs-on: ${{ inputs.arch == 'arm64' && 'windows-11-vs2026-arm' || 'windows-2025' }}
     # Setup plus ~7 minutes of cargo; the budget leaves room for one watchdog
     # restart, the same arithmetic as jobs.build.
