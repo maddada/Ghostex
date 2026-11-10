@@ -912,7 +912,12 @@ sessions keep their own sections (`groupWorkingSessions`).
 `sidebarHideProjectsWithoutSessions`) leaves projects with no session in any state
 out of the Project sidebar. The open project always stays, and a Show all projects
 row at the end of the list brings the rest back in their places until you press it
-again. On the same Sort & Filter page, the tag rows sit under the heading "Show only
+again. A project whose sessions run in its worktrees (or in a merged copy of the
+repository) counts as having sessions. The phone has its own switch for the Project
+list, Hide Projects Without Sessions in the computer menu (hold the computer's tab)
+and in Settings > Sessions list: it starts as the computer has it, and once you
+change it on the phone the phone keeps its own value, and the computer is never
+changed. On the same Sort & Filter page, the tag rows sit under the heading "Show only
 sessions tagged"; when nothing matches, the list says "No sessions tagged X.
 Right-click a session > Tag As" with a Clear filter button.
 
