@@ -315,6 +315,7 @@ How to use this file:
 - **projectWebsiteViews** `projectWebsiteViews` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **appIconSourceId** `appIconSourceId` (text, default (empty)) [advanced, not agent-writable]: App-managed state saved with the settings; not a user preference.
 - **unifiedProjectOrder** `unifiedProjectOrder` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
+- **coordinatorBoardCollapsedColumns** `coordinatorBoardCollapsedColumns` (text, default done) [not agent-writable]: App-managed state saved with the settings; not a user preference.
 - **customSidebarTitlebarLightBackgroundColor** `customSidebarTitlebarLightBackgroundColor` (text, default #f4f4f5) [not agent-writable]: App-managed state saved with the settings; not a user preference.
 - **hotkeys** `hotkeys` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **customViewTemplates** `customViewTemplates` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
