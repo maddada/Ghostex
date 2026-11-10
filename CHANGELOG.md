@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The phone's first screen says what to do on each device:** three steps with icons (get Ghostex on the computer, click Connect a phone there, scan the code here) and one Scan the code button. Paste a code and Use Tailscale moved into "Other ways to connect" (the old "How does your phone reach your computer?" screen is gone), and Try a demo computer is a small link under the button. Add a computer on the phone shows the same steps. Comes with the next phone app.
 - **Arrow keys move the caret in a Ghostex page's note box again:** Left and the other arrows, Home/End, Page keys and Delete, with Option or Shift too, no longer type a blank into a page's text field, the Code view or another web view when a key was pressed before the web runtime finished loading (for example while it updated in the background after an app update).
 - **Claude and Grok Bot buttons moved to the header:** they sit directly left of the "Talk to the voice agent" button (each only while its extension is on), and are gone from the sidebar's bottom bar and from the sidebar row the header shows while Claude is on.
 - **The Grok extension is called Grok Bot:** its sidebar button tooltip, its Settings rows (Grok Bot start page, Grok Bot logins) and its Built-in switch now say Grok Bot.
