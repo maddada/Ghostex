@@ -330,18 +330,16 @@ pub(crate) struct CoordinatorBoardView {
     /// Where a count on the dock's status line was clicked: the next focus opens the panel as its
     /// floating card there, over the chat, even where it could dock (work_cards.rs).
     pub(super) float_at: Option<gpui::Bounds<gpui::Pixels>>,
-    /// A card's Snooze lengths open over the card (its key and the window point of the press), drawn
-    /// by the card's own window so the floating Work card stays open (work_actions.rs).
-    pub(super) snooze_popover: Option<(String, gpui::Point<gpui::Pixels>)>,
 }
 
-/// An open card menu: its card, the window point it opened at, whether it shows its Tags, and the
-/// window its board is in (the docked chat's, or the floating board's or the columns' own) with
-/// that window's size.
+/// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only
+/// the card's Snooze lengths (its Snooze button), and the window its board is in (the docked
+/// chat's, or the floating board's or the columns' own) with that window's size.
 pub(crate) struct BoardCardMenu {
     key: String,
     at: gpui::Point<gpui::Pixels>,
     tags: bool,
+    snooze: bool,
     parent: gpui::AnyWindowHandle,
     viewport: gpui::Size<gpui::Pixels>,
 }
@@ -349,6 +347,8 @@ pub(crate) struct BoardCardMenu {
 /// The card menu's width and inset (unscaled); its rows are the sidebar menu's.
 const BOARD_MENU_WIDTH: f32 = 220.0;
 const BOARD_MENU_PADDING: f32 = 6.0;
+/// The Snooze lengths' width (unscaled): their words are short.
+const BOARD_SNOOZE_MENU_WIDTH: f32 = 160.0;
 use crate::app::native_sidebar::{SIDEBAR_MENU_ROW_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIGHT};
 
 /// A card being dragged to another group, and the picture that follows the pointer.
@@ -1574,6 +1574,44 @@ impl NativeChatView {
             key: key.to_string(),
             at,
             tags: false,
+            snooze: false,
+            parent: window.window_handle(),
+            viewport: window.viewport_size(),
+        });
+        self.sync_board_card_menu_host(cx);
+        cx.notify();
+    }
+
+    /// Opens the card's menu as its Snooze lengths alone (the card's Snooze button) at `at`, or
+    /// closes it when that is what is open: the card menu's surface, so under window glass it is
+    /// the same frosted window, and its frame opens upward where it would pass the window's bottom.
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// The user runs the app with window transparency and dislikes dark opaque fills on glass; the
+    /// Work panel's Snooze lengths were a small menu of their own in the opaque sidebar menu
+    /// colours, cut by the floating Work card's bottom edge. They are now a page of the card's
+    /// right-click menu, which already takes the frosted window under glass and flips up.
+    pub(super) fn toggle_board_card_snooze(
+        &mut self,
+        key: &str,
+        at: gpui::Point<gpui::Pixels>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self
+            .board
+            .menu
+            .as_ref()
+            .is_some_and(|menu| menu.key == key && menu.snooze)
+        {
+            self.close_board_card_menu(cx);
+            return;
+        }
+        self.board.menu = Some(BoardCardMenu {
+            key: key.to_string(),
+            at,
+            tags: false,
+            snooze: true,
             parent: window.window_handle(),
             viewport: window.viewport_size(),
         });
@@ -1623,7 +1661,9 @@ impl NativeChatView {
     fn board_card_menu_frame(&self, menu: &BoardCardMenu) -> Option<gpui::Bounds<gpui::Pixels>> {
         let row = self.board_menu_row(&menu.key)?;
         let s = ChatAppearance::current(&self.snapshot).scale;
-        let rows = if menu.tags {
+        let rows = if menu.snooze {
+            row["actions"]["snooze"].as_array().map_or(0, Vec::len) as f32 * SIDEBAR_MENU_ROW_HEIGHT
+        } else if menu.tags {
             let options = self
                 .board_value()
                 .and_then(|board| board["tagOptions"].as_array().map(Vec::len))
@@ -1633,8 +1673,13 @@ impl NativeChatView {
         } else {
             row["menu"].as_array().map_or(0, Vec::len) as f32 * SIDEBAR_MENU_ROW_HEIGHT
         };
+        let width = if menu.snooze {
+            BOARD_SNOOZE_MENU_WIDTH
+        } else {
+            BOARD_MENU_WIDTH
+        };
         let size = gpui::size(
-            px(BOARD_MENU_WIDTH * s),
+            px(width * s),
             px((rows + 2.0 * BOARD_MENU_PADDING) * s + 2.0),
         );
         let margin = px(8.0);
@@ -1823,7 +1868,13 @@ impl NativeChatView {
             .aria_label("Card actions")
             .font_family(crate::ui_fonts::UI_FONT)
             .when(frosted, |panel| panel.size_full())
-            .when(!frosted, |panel| panel.w(px(BOARD_MENU_WIDTH * s)))
+            .when(!frosted, |panel| {
+                panel.w(px(if menu.snooze {
+                    BOARD_SNOOZE_MENU_WIDTH
+                } else {
+                    BOARD_MENU_WIDTH
+                } * s))
+            })
             .flex()
             .flex_col()
             .p(px(BOARD_MENU_PADDING * s))
@@ -1841,7 +1892,34 @@ impl NativeChatView {
             .occlude()
             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation());
-        if menu.tags {
+        if menu.snooze {
+            for (index, choice) in row["actions"]["snooze"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .enumerate()
+            {
+                let command = choice["command"].clone();
+                let view = view.clone();
+                panel = panel.child(
+                    item(
+                        format!("chat-board-card-snooze:{index}"),
+                        text(&choice, "label"),
+                        None,
+                        false,
+                    )
+                    .on_click(move |_, _, cx| {
+                        cx.stop_propagation();
+                        let command = command.clone();
+                        view.update(cx, |this, cx| {
+                            this.close_board_card_menu(cx);
+                            this.invoke(command, cx);
+                        });
+                    }),
+                );
+            }
+        } else if menu.tags {
             let back = view.clone();
             panel = panel.child(
                 item(
