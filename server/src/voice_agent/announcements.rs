@@ -35,6 +35,9 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
         let mut seen: HashMap<String, VoiceState> = HashMap::new();
         let mut turn_events: HashMap<String, Option<String>> = HashMap::new();
         let mut seeded = false;
+        // The saved call mode last seen: a change made anywhere (desktop Settings writes the file
+        // itself) switches the running calls, as `setVoiceAgentSettings` does at once.
+        let mut call_mode: Option<bool> = None;
         loop {
             if registry::count() == 0 {
                 RUNNING.store(false, Ordering::SeqCst);
@@ -55,6 +58,17 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                 }
                 tokio::time::sleep(POLL).await;
                 continue;
+            }
+            let paths = state.paths.clone();
+            if let Ok(push_to_talk) =
+                tokio::task::spawn_blocking(move || super::keys::push_to_talk_calls(&paths)).await
+            {
+                if call_mode.is_some_and(|seen| seen != push_to_talk) {
+                    for tx in registry::senders() {
+                        let _ = tx.send(Input::CallMode(push_to_talk));
+                    }
+                }
+                call_mode = Some(push_to_talk);
             }
             if let Ok(rows) = sessions::list_sessions_async(&state).await {
                 let mut lines: Vec<Announcement> = Vec::new();

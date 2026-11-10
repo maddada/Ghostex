@@ -104,6 +104,8 @@ pub(super) enum Input {
     TalkCancel,
     /// The client's Mute; gxserver drops the microphone's audio while it is on.
     Mute(bool),
+    /// `voiceAgentCallMode` was saved: `true` push-to-talk, `false` Regular (`set_call_mode`).
+    CallMode(bool),
     /// Hand the remembered last conversation to the agent (Continue).
     ContinueMemory,
     /// The user forgot the remembered conversation.
@@ -536,6 +538,8 @@ impl Conversation {
                     "voice": self.voice,
                     "voiceOptions": self.provider.voices(),
                     "callMode": if self.push_to_talk { "pushToTalk" } else { "regular" },
+                    // This gxserver switches a running call when the call mode is saved (`callMode` frames).
+                    "callModeLive": true,
                     "resumed": resumed,
                     "memory": if self.started_focused { Value::Null } else { memory::client_view(&self.state.paths) },
                     "memoryContinued": !self.started_focused && self.call_log.continued(),
@@ -652,6 +656,7 @@ impl Conversation {
                     self.drop_held_turn().await?;
                 }
             }
+            Input::CallMode(push_to_talk) => self.set_call_mode(push_to_talk).await?,
             Input::PlaybackRate(rate) => {
                 let rate = rate.clamp(*PLAYBACK_RATE_RANGE.start(), *PLAYBACK_RATE_RANGE.end());
                 let now = Instant::now();
@@ -1578,13 +1583,45 @@ impl Conversation {
         }));
     }
 
+    /// The saved call mode changed: the call switches now. The talk gate follows (a hold in progress
+    /// is dropped), the provider's turn detection is switched with the call's own configuration, and
+    /// the client hears `callMode` so its hold button and notice follow (`CDXC:VoiceMode 2026-11-10`
+    /// at `talk_start`).
+    async fn set_call_mode(&mut self, push_to_talk: bool) -> Result<(), Ended> {
+        if self.push_to_talk == push_to_talk {
+            return Ok(());
+        }
+        self.push_to_talk = push_to_talk;
+        let dropped = self.talk.set_push_to_talk(push_to_talk) == Cancel::Cleared;
+        self.session_update = self
+            .provider
+            .with_call_mode(&self.session_update, push_to_talk);
+        let update = self.session_update.clone();
+        self.provider_send(update).await?;
+        if push_to_talk || dropped {
+            // What the microphone sent so far was for the other mode's turn.
+            self.provider_send(json!({"type": "input_audio_buffer.clear"}))
+                .await?;
+            self.user_speaking = false;
+        }
+        self.last_talk = Instant::now();
+        self.to_client(json!({
+            "type": "callMode",
+            "callMode": if push_to_talk { "pushToTalk" } else { "regular" },
+        }));
+        if self.client_state == "userSpeaking" {
+            self.set_state("listening");
+        }
+        Ok(())
+    }
+
     /// Talk pressed. In a push-to-talk call, talking over the agent cuts its reply, as Stop does,
     /// then the microphone's audio collects in the provider's buffer until Talk is released. In a
     /// muted Regular call the hold only opens the microphone; the provider's turn detection does
     /// the rest (`talk.rs`).
     ///
-    /// CDXC:VoiceMode 2026-10-21 DECISION:
-    /// User: "I feel we're overcomplicating things. Let's just have two modes: push-to-talk and regular, and mention the pricing difference between the two in settings for the mobile app and for the desktop app. No need to switch when I'm muted, and only any of that. Let's just keep it simple: two modes in the settings, please." `voiceAgentCallMode` (`regular` default, `pushToTalk`) is read when a call starts and never switched mid-call; mute is a plain microphone mute in both modes. Supersedes the 2026-10-21 "Push-to-talk while muted" switch, which xAI kept billing for connected time. The 2026-10-24 hold to unmute in talk.rs leaves the mode alone.
+    /// CDXC:VoiceMode 2026-11-10 DECISION:
+    /// User: "I had push-to-talk selected, then switched to regular mode mid-conversation, and after that it kept forcing me to use hold-to-speak instead of regular. ... Please fix the mode switching so selecting regular from push-to-talk reliably switches the conversation to regular mode." Saving `voiceAgentCallMode` now switches every running call at once, both ways (`set_call_mode`), and the client is told with a `callMode` frame. Supersedes the 2026-10-21 rule that the mode is read when a call starts and never switched mid-call; the two modes themselves stay as the user set them then ("Let's just have two modes: push-to-talk and regular, and mention the pricing difference"), and mute is still a plain microphone mute in both.
     async fn talk_start(&mut self) -> Result<(), Ended> {
         match self.talk.press() {
             Press::Ignored => Ok(()),
