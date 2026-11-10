@@ -392,7 +392,7 @@ pub(crate) fn report_lands_mid_response(messages: &[ChatMessage], at: usize) -> 
 /// ([`report_lands_mid_response`]), or a background task's end that gxserver handed back holding
 /// the rows after it (`deferredWork`), which opens a turn here so those rows still load.
 ///
-/// CDXC:SessionChat 2026-11-09 WHY: gxserver's collapsed history cuts a turn at every user row, so a task notification after a subagent's report holds the rest of the response in its own `deferredWork`; read as one of the turn's calls, that section was never loaded and the line's steps stopped at the notification. Default still reads it the old way.
+/// CDXC:SessionChat 2026-11-09 WHY: gxserver's collapsed history cuts a turn at every user row, so a task notification after a subagent's report holds the rest of the response in its own `deferredWork`; read as one of the turn's calls, that section was never loaded and the line's steps stopped at the notification. Default keeps the notification as one of the turn's calls and reads its section with the turn's own instead (`turn_section`).
 fn work_lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
     report_lands_mid_response(messages, at)
         || messages.get(at).is_some_and(|row| {

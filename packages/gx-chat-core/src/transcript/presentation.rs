@@ -1454,8 +1454,10 @@ fn turn_items(
                             builder.message_or_placeholder(message, eager, Draw::InWorkFold)
                         })
                         .collect(),
-                    /* The turn's answered question cards, hoisted out of the fold. */
-                    questions: work
+                    /* The turn's answered question cards, hoisted out of the fold. Only the
+                    folded rows' cards: a row kept in view (a picture's) draws its own, and hoisting
+                    it too drew the card twice. */
+                    questions: collapsed_work
                         .iter()
                         .flat_map(|row| {
                             match builder

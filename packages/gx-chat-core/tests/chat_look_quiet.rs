@@ -578,6 +578,16 @@ fn every_answered_card(items: &[Value]) -> usize {
         .iter()
         .map(|item| match item["kind"].as_str() {
             Some("message") => count(&item["message"]["questions"]),
+            Some("completed-work") => {
+                count(&item["questions"])
+                    + count(&item["final"]["questions"])
+                    + item["artifacts"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(|row| count(&row["questions"]))
+                        .sum::<usize>()
+            }
             Some("grouped-work") => item["turns"]
                 .as_array()
                 .into_iter()
@@ -637,6 +647,48 @@ fn a_completed_turn_before_its_reply_shows_the_answered_card_once() {
             drawn_words(&done),
             ["Red it is."],
             "{agent_work}: {done:#?}"
+        );
+    }
+}
+
+/// A question asked in the same message as a picture: the picture keeps the row in view, so the
+/// row's own answered card is the only one, whether the row is the reply or the work.
+#[test]
+fn a_question_beside_a_picture_keeps_one_answered_card() {
+    for agent_work in ["quiet", "reduced", "default"] {
+        let mut rows = turn();
+        rows.push(row(
+            "pic",
+            "assistant",
+            T0 + 4_500,
+            json!([
+                { "type": "image-ref", "path": "/shots/after.png" },
+                { "type": "text", "text": "Here is the shot. Which color do you want?" },
+                { "type": "tool-call", "name": "AskUserQuestion", "callId": "q1",
+                  "input": { "questions": [{ "question": "Which color?", "header": "Color", "multiSelect": false,
+                    "options": [{ "label": "Red", "description": "r" }, { "label": "Blue", "description": "b" }] }] } },
+            ]),
+        ));
+        rows.push(answered("a1", T0 + 9_000, "q1"));
+        let mut state = quiet_chat(rows);
+        look(&mut state, agent_work);
+        state.session.server_working = false;
+        state.session.lifecycle = Some(TurnLifecycle {
+            state: TurnLifecycleState::Completed,
+            turn_id: "u1".into(),
+            timestamp: Some(T0 + 9_600),
+        });
+        let list = items(&mut state, T0 + 9_700);
+        assert_eq!(every_answered_card(&list), 1, "{agent_work}: {list:#?}");
+        // The reply lands: the picture's row is work kept in view, and still the card's only owner.
+        let mut rows = state.messages.list.clone();
+        rows.push(words("reply", T0 + 9_500, "Red it is."));
+        set_rows(&mut state, rows);
+        let list = items(&mut state, T0 + 10_000);
+        assert_eq!(
+            every_answered_card(&list),
+            1,
+            "{agent_work} replied: {list:#?}"
         );
     }
 }
