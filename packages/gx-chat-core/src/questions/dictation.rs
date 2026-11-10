@@ -26,6 +26,14 @@ pub struct Typed {
     pub spacing: bool,
 }
 
+/// Names this core, with its first event, for the `rev`s it gives its form boxes
+/// (`QuestionsState::core_id`).
+pub fn name_core(state: &mut ChatState, context: &ChatContext) {
+    if state.questions.core_id.is_empty() {
+        state.questions.core_id = context.random_id(0);
+    }
+}
+
 /// `insertDictation {text, spacing?, id?, draft, start, end, form?, slot?, shown?, shownStart?,
 /// shownEnd?}`: types Dictate's words into a draft and says where they went.
 ///
@@ -37,23 +45,23 @@ pub struct Typed {
 /// the recording for the renderer that keeps it until its words are in a draft; it comes back in
 /// the answer and means nothing here.
 ///
-/// Answered by the host action `dictationInserted {id, form, slot, rev, supersedes, content,
-/// caret, text, spacing}`. `content` is the target's text now and `caret` the offset after the
-/// words; every copy of the target that shows one of the texts in `supersedes` shows `content`
-/// instead, without reporting it as an edit. For a form box (`form` and `slot` set) the words are
-/// in its draft when the answer leaves, and `rev` is the box's newest dictation, which the copy
-/// then sends with its edits. For the chat box (`form` null) the renderer holds the draft: a chat
-/// box that no longer shows a text in `supersedes` asks again with its text as it is then (`text`
-/// and `spacing` are what it asked with), and the words are in once it showed `content`.
+/// Answered by the host action `dictationInserted {id, form, slot, core, rev, supersedes,
+/// content, caret, text, spacing}`. `content` is the target's text now and `caret` the offset
+/// after the words; every copy of the target that shows one of the texts in `supersedes` shows
+/// `content` instead, without reporting it as an edit. For a form box (`form` and `slot` set) the
+/// words are in its draft when the answer leaves, in the effects after the draft's save. For the
+/// chat box (`form` null) the renderer holds the draft: a chat box that no longer shows a text in
+/// `supersedes` asks again with its text as it is then (`text` and `spacing` are what it asked
+/// with), and the words are in once it showed `content`.
 ///
-/// A box's `rev` is the time of its newest dictation (never going back), not a count: a core that
-/// starts again has none of the earlier ones, and a copy of the box that outlived it must never
-/// pass for having shown a dictation of the new core. Every number the new core gives is later
-/// than any the old one gave.
+/// A box's `rev` counts the dictations this core typed into it, and `core` names the core that
+/// counted. A copy of the box sends both with its edits, as the answer or the form's document
+/// gave them with the text it shows (`edited`). A core that starts again counts from nothing
+/// under another name, so a `rev` the earlier one gave is never read as its own.
 ///
-/// CDXC:Dictate 2026-11-10 WHY: The renderers first chose the box themselves and wrote its whole text back with `formText`. That write could reach the core after Send answers or Skip all, which refuses it without a word, so a dictation finished in that moment reached neither the answers nor the chat box; and it was built from one drawn copy of the box, so it undid what the reader had typed in the other (the transcript's box and the Resources copy share one draft). Here the check and the write are one step in the order the core receives them: a box of an open form the chat still has gets the words in its draft as it is now, anything else puts them in the chat box. The words then stay: a copy's whole-text write that was made before the copy showed them is given them again (`keep`), every one of them however far behind the copy is, so no later write and no Send takes them out, and a renderer never has to write them back itself. Whether a recording's words are already in a draft is the renderer's to know (it keeps the recording), not this module's: a list of recordings kept here was lost with the core and could not tell a dismissed recording that is transcribed again from one typed twice.
+/// CDXC:Dictate 2026-11-10 WHY: The renderers first chose the box themselves and wrote its whole text back with `formText`. That write could reach the core after Send answers or Skip all, which refuses it without a word, so a dictation finished in that moment reached neither the answers nor the chat box; and it was built from one drawn copy of the box, so it undid what the reader had typed in the other (the transcript's box and the Resources copy share one draft). Here the check and the write are one step in the order the core receives them: a box of an open form the chat still has gets the words in its draft as it is now, anything else puts them in the chat box. The words then stay: a copy's whole-text write that was made before the copy showed them is given them again (`edited`), every one of them however far behind the copy is, so no later write and no Send takes them out, and a renderer never has to write them back itself. Whether a recording's words are already in a draft is the renderer's to know (it keeps the recording), not this module's: a list of recordings kept here was lost with the core and could not tell a dismissed recording that is transcribed again from one typed twice. A `rev` was the clock's time at first, so that a core that started again gave later numbers than the one before it. A clock goes back, and the new core has none of the dictations its restored drafts hold, so it could neither tell that a copy from before was behind nor give it the words. A write stamped by another core is refused instead and its copy shows the draft as this core has it: one rule for every writer that outlives its core, and nothing about dictations has to be stored.
 /// CDXC:Dictate 2026-11-10 SEE-ALSO: `aim_dictation` and `dictation_inserted` in apps/desktop/src/app/native_chat/dictation.rs; apps/mobile/app/src/chat/native/composer/dictationTarget.ts, src/chat/rust/host.ts (`dictationInserted`) and src/voice/dictation.ts (the recording).
-pub fn insert(state: &mut ChatState, context: &ChatContext, action: &UserAction) -> Vec<Effect> {
+pub fn insert(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let words = string(action, "text").trim();
     if words.is_empty() {
         return Vec::new();
@@ -76,13 +84,14 @@ pub fn insert(state: &mut ChatState, context: &ChatContext, action: &UserAction)
             };
             let placed = place(&before, words, start, end, spacing);
             let mut effects = write(state, form, slot, &placed.content);
-            let rev = typed(state, context, form, slot, words, spacing);
+            let rev = typed(state, form, slot, words, spacing);
             let mut supersedes = vec![before.as_str()];
             supersedes.extend(shown.filter(|shown| *shown != before));
             effects.push(answer(json!({
                 "id": id,
                 "form": form,
                 "slot": slot.to_json(),
+                "core": state.questions.core_id,
                 "rev": rev,
                 "supersedes": supersedes,
                 "content": placed.content,
@@ -113,29 +122,74 @@ pub fn insert(state: &mut ChatState, context: &ChatContext, action: &UserAction)
     }))]
 }
 
-/// A reader's whole-text write to a form box (`formText`, `formNotes`) with the dictations its
-/// copy of the box had not shown when it was made: `rev` behind the box's. Each missing
-/// dictation's words go into `text` at `caret` (the copy's caret after the edit; the end without
-/// one), by the same rule as when they were first typed, and the copies are told the box's text
-/// (`dictationInserted`, with no `id`). `None` when the write is up to date, or is not one for a
-/// box that takes text.
+/// A reader's whole-text write to a form box: `formText {form, question, text, rev?, core?,
+/// caret?}` or `formNotes {form, text, rev?, core?, caret?}`.
 ///
-/// Every dictation of a box is kept while the box takes text (`QuestionsState::dictations`), so a
-/// copy is never too far behind to be given its words: the list ends with the form, and holds
-/// only words its drafts were given.
-pub fn keep(
+/// `rev` and `core` are the copy's, for the text it showed before the edit (see `insert`), and
+/// `caret` is its caret after the edit. A copy behind the box's `rev` made its text without the
+/// dictations since: their words go into the text at `caret` (the end without one), by the same
+/// rule as when they were first typed, and the copies are told the box's text
+/// (`dictationInserted`, with no `id`). A copy another core stamped shows a draft this core never
+/// gave it: nothing of its text is written, and it is told the box's text as it is here. A write
+/// without `rev` is from a renderer that types no dictation into a form (a released phone) and
+/// goes in whole, as it always did.
+pub fn edited(
+    state: &mut ChatState,
+    form: &str,
+    slot: FormBox,
+    action: &UserAction,
+) -> Vec<Effect> {
+    let text = string(action, "text");
+    match reconciled(state, form, slot, text, action) {
+        None => write(state, form, slot, text),
+        Some((None, told)) => vec![told],
+        Some((Some(content), told)) => {
+            let mut effects = write(state, form, slot, &content);
+            effects.push(told);
+            effects
+        }
+    }
+}
+
+/// What a copy's write comes to when the copy does not show the box's draft as this core has it
+/// (`edited`): the text to write in its place (none for another core's copy) and what the copies
+/// are told. `None` for a write that goes in whole.
+///
+/// Every dictation of a box is kept while its form can still take text
+/// (`QuestionsState::dictations`), so a copy is never too far behind to be given its words.
+fn reconciled(
     state: &ChatState,
     form: &str,
     slot: FormBox,
     text: &str,
     action: &UserAction,
-) -> Option<(String, Effect)> {
+) -> Option<(Option<String>, Effect)> {
     let shown = action.param("rev").and_then(Value::as_u64)?;
     let was = forms::box_text(state, form, slot)?;
     let key = slot.key();
-    let rev = *state.questions.forms.get(form)?.dictated.get(&key)?;
-    let missing = state
-        .questions
+    let questions = &state.questions;
+    let rev = questions
+        .forms
+        .get(form)
+        .and_then(|entry| entry.dictated.get(&key))
+        .copied()
+        .unwrap_or(0);
+    let told = |supersedes: &[&str], content: &str, caret: usize| {
+        answer(json!({
+            "id": null,
+            "form": form,
+            "slot": slot.to_json(),
+            "core": questions.core_id,
+            "rev": rev,
+            "supersedes": supersedes,
+            "content": content,
+            "caret": caret,
+        }))
+    };
+    if action.param("core").and_then(Value::as_str) != Some(questions.core_id.as_str()) {
+        return Some((None, told(&[text], was, utf16_len(was))));
+    }
+    let missing = questions
         .dictations
         .get(form)?
         .get(&key)?
@@ -151,16 +205,8 @@ pub fn keep(
     if content == text {
         return None;
     }
-    let told = answer(json!({
-        "id": null,
-        "form": form,
-        "slot": slot.to_json(),
-        "rev": rev,
-        "supersedes": [was, text],
-        "content": content,
-        "caret": caret,
-    }));
-    Some((content, told))
+    let told = told(&[was, text], &content, caret);
+    Some((Some(content), told))
 }
 
 fn write(state: &mut ChatState, form: &str, slot: FormBox, text: &str) -> Vec<Effect> {
@@ -170,22 +216,14 @@ fn write(state: &mut ChatState, form: &str, slot: FormBox, text: &str) -> Vec<Ef
     }
 }
 
-/// Keeps a dictation typed into the box and answers the box's `rev` with it in: now, or one past
-/// the box's last when the clock has not moved on.
-fn typed(
-    state: &mut ChatState,
-    context: &ChatContext,
-    form: &str,
-    slot: FormBox,
-    words: &str,
-    spacing: bool,
-) -> u64 {
+/// Keeps a dictation typed into the box and answers the box's `rev` with it in.
+fn typed(state: &mut ChatState, form: &str, slot: FormBox, words: &str, spacing: bool) -> u64 {
     let Some(entry) = state.questions.forms.get_mut(form) else {
         return 0;
     };
     let key = slot.key();
     let rev = entry.dictated.entry(key.clone()).or_default();
-    *rev = (*rev + 1).max(context.now_ms as u64);
+    *rev += 1;
     let rev = *rev;
     state
         .questions

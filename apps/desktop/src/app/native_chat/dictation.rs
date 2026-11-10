@@ -852,6 +852,7 @@ impl NativeChatView {
         let adopts = dictated.supersedes.contains(&current);
         if adopts || current == dictated.content {
             entry.settled = true;
+            entry.core = dictated.core.clone();
             entry.rev = dictated.rev;
         }
         if adopts {
@@ -883,7 +884,8 @@ pub(crate) struct Dictated {
     /// The target's text now, and the UTF-16 offset after the words in it.
     content: String,
     caret: usize,
-    /// The newest dictation a form box's draft holds now.
+    /// A form box's draft now: the core that holds it and how many dictations it has.
+    core: String,
     rev: u64,
     /// The words were just heard; false when another copy's edit moved them.
     heard: bool,
@@ -899,6 +901,7 @@ impl Dictated {
                 .collect(),
             content: params["content"].as_str()?.to_owned(),
             caret: params["caret"].as_u64()? as usize,
+            core: params["core"].as_str().unwrap_or_default().to_owned(),
             rev: params["rev"].as_u64().unwrap_or(0),
             heard: params["text"].is_string(),
         })

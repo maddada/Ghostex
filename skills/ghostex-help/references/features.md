@@ -1655,14 +1655,14 @@ and it stops when you let go (Settings > Dictation > Hotkey mode also offers Tog
 and Hold). When macOS already uses Option+Ctrl+Space to switch input sources,
 Settings > Hotkeys says so under Dictate and offers Option+Ctrl+D with one
 click; like every hotkey it can be changed there. What you said goes into the chat box (or is typed into that
-session's terminal) and is never sent by itself. In versions newer than 11.2.2, on
+session's terminal) and is never sent by itself. In versions newer than 11.3.0, on
 the computer and the phone, a dictation you start while the caret is in a text box
 of a question form in the chat (a question's note, the note under "Other / none of
 these", a text answer, or "Anything else?") is typed into that box instead, at its
 caret. The box shows a small microphone while it waits for your words, touching
 another box while you talk does not move them, and if the form is sent or answered
 before they arrive they go into the chat box. Transcribe again and Transcribe
-previous always type into the chat box, and so does every dictation in 11.2.2 and
+previous always type into the chat box, and so does every dictation in 11.3.0 and
 earlier. Dictate records first and
 transcribes second: your voice is saved as a recording while you talk, and only
 after you stop is it turned into text by the engine you picked in Settings >

@@ -690,14 +690,23 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
         let in_transcript = answered.contains(id.as_str()) || index.answered_in_transcript(id);
         if !entry.cleared && in_transcript {
             entry.cleared = true;
-            // An answered form takes no more text, so no copy of its boxes is behind any more.
-            state.questions.dictations.remove(id);
             effects.push(Effect::WriteStorage {
                 key: form_drafts_key(&session_key, id),
                 value: None,
                 durable: false,
             });
         }
+    }
+    // A form that takes no more text has no copy left to be behind (`questions/dictation.rs`):
+    // one whose answers the transcript carries, and one gxserver lists as removed. Any other can
+    // take text again: a removal can still fail, answers that are sending or queued can come
+    // back, and Withdrawn is how the Resources modal reads a form, not the form's end.
+    if !state.questions.dictations.is_empty() {
+        let forms = &state.questions.forms;
+        let removed = &state.session.removed_question_ids;
+        state.questions.dictations.retain(|id, _| {
+            !removed.contains(id) && forms.get(id).is_none_or(|entry| !entry.cleared)
+        });
     }
     let open_forms: Vec<(String, usize)> = all_forms(state)
         .filter(|form| {
@@ -1024,8 +1033,9 @@ fn project_each(state: &ChatState) -> BTreeMap<String, Value> {
                 );
                 object.insert("takesNotes".to_string(), json!(takes_notes));
                 object.insert("notes".to_string(), json!(notes));
-                // How many dictations each box has taken, which a box's edits carry back as `rev`
-                // (`questions/dictation.rs`).
+                // What a box's edits carry back (`questions/dictation.rs`): this core's name, and
+                // how many dictations it typed into each box that took one (`rev`).
+                object.insert("core".to_string(), json!(state.questions.core_id));
                 if !entry.dictated.is_empty() {
                     object.insert(
                         "dictated".to_string(),

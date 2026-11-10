@@ -40,8 +40,10 @@ pub(super) struct FormInput {
     placeholder: String,
     /// It holds the reader's text: typed into, or filled from the saved draft once.
     pub(super) settled: bool,
-    /// The newest dictation the text it shows holds (the form's `dictated` in the document), sent
+    /// The draft the text it shows is: the core that holds it and how many dictations it has (the
+    /// form's `core` and `dictated` in the document, or a `dictationInserted` answer's), sent
     /// with each of the reader's edits.
+    pub(super) core: String,
     pub(super) rev: u64,
     /// The text the core just handed it (`show_dictated` in dictation.rs), until the input has
     /// reported it: that report is not the reader's edit.
@@ -261,12 +263,13 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // The newest dictation the box's draft holds, as of the document this text is from.
+        // The core that holds the box's draft and how many dictations the draft has, as of the
+        // document this text is from.
+        let form = &self.snapshot["questionForms"][form_id];
+        let core = form["core"].as_str().unwrap_or_default().to_string();
         let rev = key
             .rsplit_once(':')
-            .and_then(|(_, slot)| {
-                self.snapshot["questionForms"][form_id]["dictated"][slot].as_u64()
-            })
+            .and_then(|(_, slot)| form["dictated"][slot].as_u64())
             .unwrap_or(0);
         if let Some(entry) = self.inputs_mut(modal).get_mut(&key) {
             if entry.placeholder != hint {
@@ -279,6 +282,7 @@ impl NativeChatView {
             // box was made; it fills the box once, never over what the reader typed.
             if !entry.settled && !value.is_empty() {
                 entry.settled = true;
+                entry.core = core;
                 entry.rev = rev;
                 entry
                     .input
@@ -320,9 +324,10 @@ impl NativeChatView {
                     if entry.adopted.take().is_some_and(|adopted| adopted == value) {
                         return;
                     }
-                    // `rev` and `caret` let the core keep a dictation this copy has not shown yet
-                    // (`keep` in gx-chat-core's questions/dictation.rs).
+                    // `core`, `rev` and `caret` let the core keep a dictation this copy has not
+                    // shown yet (`edited` in gx-chat-core's questions/dictation.rs).
                     let mut action = change(value);
+                    action["core"] = json!(entry.core);
                     action["rev"] = json!(entry.rev);
                     action["caret"] = json!(caret);
                     this.invoke(action, cx)
@@ -350,6 +355,7 @@ impl NativeChatView {
                 _subscription: subscription,
                 placeholder: hint,
                 settled,
+                core,
                 rev,
                 adopted: None,
                 painted_height: Rc::new(Cell::new(0.0)),

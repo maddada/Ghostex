@@ -65,19 +65,12 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                         .and_then(Value::as_u64)
                         .unwrap_or(u64::MAX) as usize,
                 ),
-                ActionKind::FormText => {
-                    let text = action
-                        .param("text")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default();
-                    // A copy that has not shown the box's newest dictation keeps its words.
-                    let slot = crate::questions::forms::FormBox::Question(question);
-                    let kept = crate::questions::dictation::keep(state, &id, slot, text, action);
-                    let text = kept.as_ref().map_or(text, |(text, _)| text);
-                    let mut written = crate::questions::forms::write(state, &id, question, text);
-                    written.extend(kept.map(|(_, told)| told));
-                    written
-                }
+                ActionKind::FormText => crate::questions::dictation::edited(
+                    state,
+                    &id,
+                    crate::questions::forms::FormBox::Question(question),
+                    action,
+                ),
                 ActionKind::FormSkipAll => crate::questions::forms::skip_all(state, context, &id),
                 _ => crate::questions::forms::send(state, context, &id),
             });
@@ -189,18 +182,11 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .param("form")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            let text = action
-                .param("text")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
             let slot = crate::questions::forms::FormBox::Notes;
-            let kept = crate::questions::dictation::keep(state, id, slot, text, action);
-            let text = kept.as_ref().map_or(text, |(text, _)| text);
-            effects.extend(crate::questions::forms::write_notes(state, id, text));
-            effects.extend(kept.map(|(_, told)| told));
+            effects.extend(crate::questions::dictation::edited(state, id, slot, action));
         }
         ActionKind::InsertDictation => {
-            effects.extend(crate::questions::dictation::insert(state, context, action));
+            effects.extend(crate::questions::dictation::insert(state, action));
         }
         ActionKind::FormToggle => {
             let id = action

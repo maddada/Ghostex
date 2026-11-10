@@ -67,19 +67,24 @@ impl NativeChatView {
             .join("\n")
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn finish_form_attachments(
         &mut self,
         key: String,
         modal: bool,
-        input: Entity<TextareaState>,
         (original, start, end): (String, usize, usize),
         paths: Vec<Value>,
         mut error: Option<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !paths.is_empty() {
+        // The reference goes into a copy of the box that is drawn now: the one the paste started
+        // in, or the box's other copy (the transcript's, the Resources modal's) when that one is
+        // gone. Its text is the draft the write is made from, with the `core` and `rev` that say
+        // so; the text of a box no longer drawn is not, and with no copy drawn nothing is written.
+        let drawn = [modal, !modal]
+            .into_iter()
+            .find_map(|modal| Some((modal, self.inputs_mut(modal).get(&key)?.input.clone())));
+        if let Some((modal, input)) = drawn.filter(|_| !paths.is_empty()) {
             let current = input.read(cx).value().to_string();
             let others = self.form_others_text(&key, modal, cx);
             let result = self.runtime.as_ref().and_then(|runtime| {
@@ -104,14 +109,17 @@ impl NativeChatView {
                         input.replace_all(text.to_owned(), window, cx);
                         input.set_selected_range(caret..caret, cx);
                     });
-                    // Like the box's own edits (`sync_form_input_in`), the write says which
-                    // dictations its text holds: the box can have taken one since `text` was read.
-                    let rev = self.inputs_mut(modal).get(&key).map(|entry| entry.rev);
-                    if let Some(mut action) = change_action(&key, text) {
-                        if let Some(rev) = rev {
-                            action["rev"] = json!(rev);
-                            action["caret"] = json!(units);
-                        }
+                    // Like the box's own edits (`sync_form_input_in`), the write says which draft
+                    // its text was made from: the core can have typed a dictation into the box
+                    // that this copy has not drawn yet.
+                    let stamp = self
+                        .inputs_mut(modal)
+                        .get(&key)
+                        .map(|entry| (entry.core.clone(), entry.rev));
+                    if let Some(((core, rev), mut action)) = stamp.zip(change_action(&key, text)) {
+                        action["core"] = json!(core);
+                        action["rev"] = json!(rev);
+                        action["caret"] = json!(units);
                         self.invoke(action, cx);
                     }
                 }
