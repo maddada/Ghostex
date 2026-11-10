@@ -6,10 +6,11 @@ use serde_json::{json, Map, Value};
 
 use super::records::{
     drop_thread_pending_message, link_thread, list_coordinators, list_threads, list_threads_for,
-    now_iso, read_coordinator, read_thread, set_thread_pending_message, set_thread_resolved,
-    unlink_thread, write_coordinator, CoordinatorMemoryNote, CoordinatorRecord, SessionKey,
-    ThreadRecord, COORDINATOR_GOAL_MAX_CHARS, COORDINATOR_INSTRUCTIONS_MAX_CHARS,
-    COORDINATOR_MEMORY_MAX_NOTES, COORDINATOR_MEMORY_NOTE_MAX_CHARS,
+    now_iso, read_coordinator, read_thread, set_thread_observed_working,
+    set_thread_pending_message, set_thread_resolved, unlink_thread, write_coordinator,
+    CoordinatorMemoryNote, CoordinatorRecord, SessionKey, ThreadRecord, COORDINATOR_GOAL_MAX_CHARS,
+    COORDINATOR_INSTRUCTIONS_MAX_CHARS, COORDINATOR_MEMORY_MAX_NOTES,
+    COORDINATOR_MEMORY_NOTE_MAX_CHARS,
 };
 use super::state::{ThreadProgress, ThreadState};
 use crate::domain::{DomainRepository, DomainStateError};
@@ -199,21 +200,24 @@ pub fn handle_coordinator_endpoint(
             let only_if_coordinator =
                 params.get("onlyIfCoordinator").and_then(Value::as_bool) == Some(true);
             // A message from a coordinator to its own done thread reopens it, so the reply is
-            // supervised and reported again; any other recipient is left alone.
+            // supervised and reported again; any other recipient is left alone. A reply the thread
+            // finished while it was done goes back to the sender in this answer: the message has
+            // just started a new turn, whose report would replace it.
             if params.get("reopenOnly").and_then(Value::as_bool) == Some(true) {
                 let thread = read_thread(db, &thread_key.0, &thread_key.1)?
                     .filter(|thread| thread.coordinator_key() == coordinator_key);
-                let reopened = match thread.as_ref() {
+                let (reopened, held_report) = match thread.as_ref() {
                     Some(thread) if thread.is_resolved() => {
+                        let held = held_reply(repository, thread);
                         set_thread_resolved(db, &thread_key.0, &thread_key.1, false)?;
                         set_parked(repository, &thread_key, false)?;
-                        true
+                        (true, held)
                     }
-                    _ => false,
+                    _ => (false, None),
                 };
                 let watching = thread.is_some() && watch_pending_message(db, &thread_key, params)?;
                 return Ok(CoordinatorEndpointOutput {
-                    result: json!({ "linked": false, "reopened": reopened, "watchingDelivery": watching }),
+                    result: json!({ "linked": false, "reopened": reopened, "heldReport": held_report, "watchingDelivery": watching }),
                     changed_sessions: if reopened {
                         vec![thread_key]
                     } else {
@@ -301,7 +305,14 @@ pub fn handle_coordinator_endpoint(
             if close_session {
                 refuse_closing_unfinished(repository, &thread)?;
             }
+            let held = (!resolved && thread.is_resolved())
+                .then(|| held_reply(repository, &thread))
+                .flatten();
             let changed = set_thread_resolved(db, &thread_key.0, &thread_key.1, resolved)?;
+            // Seen working, so the supervisor reports the held reply once the thread is idle.
+            if held.is_some() {
+                set_thread_observed_working(db, &thread_key.0, &thread_key.1)?;
+            }
             if changed && !close_session {
                 set_parked(repository, &thread_key, resolved)?;
             }
@@ -411,6 +422,25 @@ fn set_parked(
     update.insert("isParked".to_string(), Value::Bool(parked));
     repository.update_session(&update)?;
     Ok(())
+}
+
+/// CDXC:Coordinators 2026-11-10 WHY:
+/// The supervisor skips a resolved thread, and resolving clears `observedWorking`, so a turn the thread finished while it was done was never reported after a reopen: the supervisor saw an idle thread it had not seen work (GitHub #541). The reply newer than the thread's last report is that held report; a reopen hands it back (the supervisor reports it, or `agents send` prints it).
+fn held_reply(repository: &DomainRepository<'_>, thread: &ThreadRecord) -> Option<String> {
+    let session = repository
+        .get_session(&thread.project_id, &thread.session_id)
+        .ok()??;
+    let (text, timestamp) = crate::notification_feed::body::last_assistant_message(&session)?;
+    let reported = thread
+        .reported_at
+        .as_deref()
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|time| time.timestamp_millis());
+    match (timestamp, reported) {
+        (Some(timestamp), Some(reported)) if timestamp <= reported => None,
+        (None, Some(_)) => None,
+        _ => Some(text),
+    }
 }
 
 /// The coordinator a request names: the coordinator itself, or the coordinator of a thread.

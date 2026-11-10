@@ -121,16 +121,33 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
     let duplicate = result["duplicate"] == json!(true);
     // CDXC:Coordinators 2026-09-30 WHY: a coordinator's follow-up to a thread it already marked done reopens that thread, or its reply would go unsupervised and never be reported back.
     // A repeated request id was linked by its first attempt; linking again would restart the delivery watch from now and miss the row the first attempt produced.
-    let _ = (!duplicate).then(|| call_gxserver_rpc(
-        "/api/linkCoordinatorThread",
-        &json!({
-            "coordinatorProjectId": sender["projectId"], "coordinatorSessionId": sender["sessionId"],
-            "projectId": recipient["projectId"], "sessionId": recipient["sessionId"],
-            "onlyIfCoordinator": true, "reopenOnly": true,
-            "pendingMessage": body, "sentAtMs": sent_at_ms,
-        }),
-        &flags,
-    ));
+    // CDXC:Coordinators 2026-11-10 WHY: the reopen was silent, so a coordinator could not tell its message had put a done thread back under it, and a reply the thread finished while done was never reported (GitHub #541). The send says so in one line and prints that held reply.
+    let reopen = (!duplicate)
+        .then(|| call_gxserver_rpc(
+            "/api/linkCoordinatorThread",
+            &json!({
+                "coordinatorProjectId": sender["projectId"], "coordinatorSessionId": sender["sessionId"],
+                "projectId": recipient["projectId"], "sessionId": recipient["sessionId"],
+                "onlyIfCoordinator": true, "reopenOnly": true,
+                "pendingMessage": body, "sentAtMs": sent_at_ms,
+            }),
+            &flags,
+        ).ok())
+        .flatten();
+    let reopened = reopen
+        .as_ref()
+        .is_some_and(|reopen| reopen["reopened"] == json!(true));
+    let held_report = reopen
+        .as_ref()
+        .and_then(|reopen| reopen["heldReport"].as_str())
+        .map(str::to_string);
+    if reopened {
+        // stderr, so the JSON on stdout keeps parsing.
+        eprintln!("reopened: this thread was resolved, its report will come back to you");
+        if let Some(held) = &held_report {
+            eprintln!("Its reply from while it was resolved, not reported before:\n{held}");
+        }
+    }
     let receipt = receipt(&result);
     let (status, note) = if args.delivery == Delivery::Queue {
         (
@@ -182,6 +199,8 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         "wakingRecipient": waking,
         "sendRequestId": send_request_id,
         "duplicate": duplicate,
+        "reopenedThread": reopened,
+        "heldReport": held_report,
         "sender": identity::summary(&sender),
         "recipient": identity::summary(&recipient),
         "receipt": receipt,
