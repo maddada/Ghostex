@@ -1,27 +1,30 @@
-//! The Projects page (packages/core-ui/settings-modal/tabs/projects.tsx (deleted 2026-10-01)): Files (the Docs folders
-//! list), Global Defaults, then the Project section for the project chosen in the searchable
-//! selector (worktree command, ticket key, Beads directory, Docs directory, each saved with its
-//! own button, plus its Work mode switch and Linear key: work_mode.rs) and that project's custom
-//! view settings (views.rs).
+//! The Projects page (packages/core-ui/settings-modal/tabs/projects.tsx (deleted 2026-10-01)), in
+//! two panels (regions.rs): the Global settings fold (New projects, Files with the Docs folders
+//! list, Global Defaults: global_settings.rs), then the project chosen in the Project dropdown
+//! (picker.rs) with its sections: Project settings (worktree command, ticket key, Beads directory,
+//! Docs directory, each saved with its own button), Issues Workflow (its Linear key:
+//! work_mode.rs), Cloud box (cloud_box.rs) and its custom view settings (views.rs).
 //!
 //! CDXC:Projects 2026-06-19-12:11 SEE-ALSO: the page edits selected-project metadata only and never offers project deletion.
 mod cloud_box;
 mod cloud_box_setup;
+mod global_settings;
 mod picker;
+mod regions;
 mod views;
 mod work_mode;
 
 use super::super::super::native_modal_kit::*;
 use super::super::fields::{
     ButtonVariant, FieldStates, ROW_GAP, ROW_MIN_HEIGHT, ROW_PADDING_X, ROW_PADDING_Y,
-    SearchableList, SettingsPage, icon, settings_button, settings_icon, settings_list_item,
-    settings_section, settings_text_input, settings_textarea, tooltip_text,
+    SearchableList, SettingsPage, icon, settings_button, settings_icon, settings_section,
+    settings_text_input, settings_textarea, tooltip_text,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
 use super::super::palette::SettingsPalette;
 use super::super::rail::{rail_pages, render_no_matches};
-use super::super::search::should_show_section;
+use super::super::search::{TabSearch, should_show_section};
 use super::super::store::{SettingsStore, post_store_message};
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _,
@@ -58,6 +61,8 @@ pub(crate) struct ProjectItem {
     pub(crate) beads_directory: String,
     pub(crate) docs_directory: String,
     pub(crate) worktree_parent_project_id: Option<String>,
+    /// The icon its sidebar row draws, as a data URL (picker.rs).
+    pub(crate) icon_data_url: Option<String>,
 }
 
 fn text(value: &Value, key: &str) -> String {
@@ -87,6 +92,11 @@ fn projects_from_hud(hud: Option<&Value>) -> Vec<ProjectItem> {
                         worktree_parent_project_id: project
                             .get("worktreeParentProjectId")
                             .and_then(Value::as_str)
+                            .map(str::to_string),
+                        icon_data_url: project
+                            .get("iconDataUrl")
+                            .and_then(Value::as_str)
+                            .filter(|url| !url.is_empty())
                             .map(str::to_string),
                     })
                 })
@@ -249,6 +259,8 @@ pub(crate) struct ProjectsTab {
     work: work_mode::ProjectWorkModeState,
     /// The selected project's Cloud box section (cloud_box.rs).
     cloud_box: cloud_box::ProjectCloudBoxState,
+    /// Whether the Global settings fold is open (regions.rs); it starts closed.
+    global_open: bool,
 }
 
 impl ProjectsTab {
@@ -280,6 +292,7 @@ impl ProjectsTab {
             preview_applied: false,
             work: work_mode::ProjectWorkModeState::default(),
             cloud_box: Default::default(),
+            global_open: false,
         }
     }
 
@@ -402,6 +415,12 @@ impl ProjectsTab {
                     store.scroll_to_section(SettingsTabId::Projects, "projectSettings", cx)
                 });
             }
+            "projects-fold-open" => {
+                self.global_open = true;
+                cx.notify();
+            }
+            "projects-dropdown" => self.picker.open(true, window, cx),
+            "projects-picked" => self.select_project("project-web", window, cx),
             "projects-inherited"
             | "projects-views"
             | "projects-work-mode"
@@ -653,198 +672,16 @@ impl Render for ProjectsTab {
             )));
         }
 
-        // SEE-ALSO: apps/desktop/src/app/remote_conn/clone_job_and_preview.rs hands this folder to the Add Project dialog as This machine's start folder.
-        if should_show_section(&search.section("newProjects"), None) {
-            let input = self.setting_input(
-                &p,
-                "defaultProjectsFolder",
-                &values.string("defaultProjectsFolder"),
-                "~/dev",
-                None,
-                None,
-                window,
-                cx,
-            );
-            let row = plain_row(
-                &p,
-                &SharedString::from("default-projects-folder"),
-                "Default projects folder",
-                Some(
-                    "Add Project's New project folder makes new projects here, and Local folder starts here. Left blank, Add Project suggests the folder that holds the selected project (else ~/dev) and saves the folder your first new project is made in.",
-                ),
-                None,
-                true,
-                input,
-                cx,
-            );
-            if let Some(section) = settings_section(&p, "New projects", None, None, vec![row]) {
-                blocks.push(PageBlock::section("newProjects", section));
-            }
-        }
-
-        // CDXC:Docs 2026-06-30-11:42 SEE-ALSO: the Docs folders list is a global Projects setting above the selector, comma-separated project-relative folders, in a card titled after the view it controls.
-        if should_show_section(&search.section("docs"), None) {
-            let input = self.setting_input(
-                &p,
-                "manageAdditionalDocsFolders",
-                &values.string("manageAdditionalDocsFolders"),
-                "plans, my documents, folders/folder name",
-                None,
-                None,
-                window,
-                cx,
-            );
-            let row = plain_row(
-                &p,
-                &SharedString::from("docs-folders"),
-                "Docs folders",
-                Some(
-                    "Comma-separated project-relative folders to scan recursively in the Files view. Spaces around folder names are ignored. Leave blank to scan docs/, artifacts/, ai/, and tmp/ at the project root and one folder down, plus root Markdown, HTML, and Excalidraw files. A Docs directory set below adds its whole tree on top of this.",
-                ),
-                None,
-                true,
-                input,
-                cx,
-            );
-            if let Some(section) = settings_section(
-                &p,
-                "Files",
-                Some("The Files view scans docs, artifacts, ai, and tmp by default, including those folders one level down. Add more project-relative folders here.".into()),
-                None,
-                vec![row],
-            ) {
-                blocks.push(PageBlock::section("docs", section));
-            }
-        }
-
-        // CDXC:Projects 2026-08-02 SEE-ALSO: Global Defaults configure every project at once; a project's own non-empty value always wins.
-        if should_show_section(&search.section("globalDefaults"), None) {
-            let command_state = FieldStates::textarea_state(
-                self,
-                &SharedString::from("globalWorktreeCommand"),
-                &global_command,
-                Some("bun install"),
-                (1, 20),
-                |tab: &mut ProjectsTab, text, _window, cx| {
-                    tab.save_setting("globalWorktreeCommand", text, cx)
-                },
-                window,
-                cx,
-            );
-            let rows = vec![
-                plain_row(
-                    &p,
-                    &SharedString::from("global-worktree-command"),
-                    "Worktree command",
-                    Some(
-                        "Runs in every new worktree folder unless the project sets its own command.",
-                    ),
-                    None,
-                    true,
-                    settings_textarea(&p, &command_state, 96.0, false, false, window, cx),
-                    cx,
-                ),
-                {
-                    let input = self.setting_input(
-                        &p,
-                        "globalBeadsDisplayKey",
-                        &global_key,
-                        "ZMX",
-                        Some(super::super::fields::CONTROL_LANE_WIDTH),
-                        Some(ticket_key),
-                        window,
-                        cx,
-                    );
-                    plain_row(
-                        &p,
-                        &SharedString::from("global-ticket-key"),
-                        "Ticket key",
-                        Some(
-                            "Ticket prefix for every project board unless the project sets its own key.",
-                        ),
-                        None,
-                        false,
-                        input,
-                        cx,
-                    )
-                },
-                {
-                    let input = self.setting_input(
-                        &p,
-                        "globalBeadsDirectory",
-                        &global_beads,
-                        "/Users/you/code/my-repo",
-                        None,
-                        None,
-                        window,
-                        cx,
-                    );
-                    plain_row(
-                        &p,
-                        &SharedString::from("global-beads-directory"),
-                        "Beads directory",
-                        Some(
-                            "Absolute path every Project board reads its Beads workspace (.beads) from unless the project sets its own directory. Leave blank to keep using each project root.",
-                        ),
-                        None,
-                        true,
-                        input,
-                        cx,
-                    )
-                },
-                {
-                    let input = self.setting_input(
-                        &p,
-                        "globalDocsDirectory",
-                        &global_docs,
-                        "/Users/you/Documents/vault",
-                        None,
-                        None,
-                        window,
-                        cx,
-                    );
-                    // CDXC:Docs 2026-08-09 SEE-ALSO: the Docs directory is added beside each project's own docs, never swapped in for them.
-                    plain_row(
-                        &p,
-                        &SharedString::from("global-docs-directory"),
-                        "Docs directory",
-                        Some(
-                            "Extra folder every project's Files view shows unless the project sets its own. It is added alongside that project's own README, CLAUDE.md, docs/ and Docs folders; it never replaces them. It appears as one top-level folder named after itself. Leave blank to add nothing.",
-                        ),
-                        None,
-                        true,
-                        input,
-                        cx,
-                    )
-                },
-            ];
-            if let Some(section) = settings_section(
-                &p,
-                "Global Defaults",
-                Some("Applied to every project that does not set its own value below.".into()),
-                None,
-                rows,
-            ) {
-                blocks.push(PageBlock::section("globalDefaults", section));
-            }
-        }
-
-        if should_show_section(&search.section("projectSettings"), None) {
-            match selected.clone() {
-                None => blocks.push(PageBlock::plain(no_projects(&p))),
-                Some(project) => {
-                    blocks.extend(self.project_blocks(
-                        &p,
-                        &projects,
-                        &project,
-                        [&global_command, &global_key, &global_beads, &global_docs],
-                        &values.value("customViews"),
-                        window,
-                        cx,
-                    ));
-                }
-            }
-        }
+        blocks.extend(self.page_regions(
+            &p,
+            &values,
+            &search,
+            &projects,
+            selected,
+            [&global_command, &global_key, &global_beads, &global_docs],
+            window,
+            cx,
+        ));
         if let Some(first) = blocks.first_mut() {
             first.margin_top += TAB_SCROLL_PADDING;
         }
@@ -859,31 +696,53 @@ impl Render for ProjectsTab {
 }
 
 impl ProjectsTab {
-    /// The Project section and the selected project's view sections.
+    /// The picked project's sections a search leaves on screen: Project settings, Issues
+    /// Workflow and Cloud box (each its own catalog section), then one per custom view.
     #[allow(clippy::too_many_arguments)]
-    fn project_blocks(
+    fn project_sections(
         &mut self,
         p: &SettingsPalette,
         projects: &[ProjectItem],
         project: &ProjectItem,
         globals: [&str; 4],
         custom_views: &Value,
+        search: &TabSearch,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Vec<PageBlock> {
+    ) -> Vec<AnyElement> {
+        let shows = |id: &str| should_show_section(&search.section(id), None);
+        let mut sections = Vec::new();
+        if shows("projectSettings") {
+            sections.extend(self.project_settings_section(p, globals, window, cx));
+        }
+        if shows("issuesWorkflow") {
+            let rows = self.work_mode_rows(p, projects, project, window, cx);
+            sections.extend(
+                settings_section(p, "Issues Workflow", None, None, rows)
+                    .map(IntoElement::into_any_element),
+            );
+        }
+        if shows("projectCloudBox") {
+            sections.extend(self.cloud_box_section(p, project, window, cx));
+        }
+        // The custom views have no catalog rows: a search shows them only when it names the page.
+        if !search.tab.is_searching || search.tab.group_title_matches {
+            sections.extend(self.view_sections(p, project, custom_views, window, cx));
+        }
+        sections
+    }
+
+    /// The Project settings section: the project's own fields, each with Clear and Save.
+    fn project_settings_section(
+        &mut self,
+        p: &SettingsPalette,
+        globals: [&str; 4],
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let [global_command, global_key, global_beads, global_docs] = globals;
         let drafts = self.drafts.clone();
         let mut rows: Vec<AnyElement> = Vec::new();
-        let picker = picker::project_picker(self, p, projects, project, window, cx);
-        rows.push(settings_list_item(
-            p,
-            None,
-            None,
-            "Project",
-            None,
-            Some(picker),
-        ));
-        rows.extend(self.work_mode_rows(p, projects, project, window, cx));
 
         // CDXC:Projects 2026-06-15-03:21 SEE-ALSO: the worktree command is the first editable project field; ticket key and Beads directory follow.
         let command_inherited =
@@ -1127,12 +986,19 @@ impl ProjectsTab {
             cx,
         ));
 
-        let mut blocks = Vec::new();
-        if let Some(section) = settings_section(p, "Project", None, None, rows) {
-            blocks.push(PageBlock::section("projectSettings", section));
-        }
-        blocks.extend(self.cloud_box_blocks(p, project, window, cx));
+        settings_section(p, "Project settings", None, None, rows).map(IntoElement::into_any_element)
+    }
 
+    /// One section per custom view, with this project's binding.
+    fn view_sections(
+        &mut self,
+        p: &SettingsPalette,
+        project: &ProjectItem,
+        custom_views: &Value,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let mut sections = Vec::new();
         // `ProjectViewSettings`, keyed by `${projectId}:${view.id}`: a new project starts fresh drafts.
         let views = source_views(custom_views);
         if self.view_drafts_project != project.project_id {
@@ -1169,12 +1035,16 @@ impl ProjectsTab {
                     .insert(view.id.clone(), initial_draft(view, &project.project_id));
             }
             let parent = parent_bindings(view);
-            if let Some(section) =
-                views::view_section(self, p, view, &project.project_id, parent, window, cx)
-            {
-                blocks.push(PageBlock::section(format!("view-{}", view.id), section));
-            }
+            sections.extend(views::view_section(
+                self,
+                p,
+                view,
+                &project.project_id,
+                parent,
+                window,
+                cx,
+            ));
         }
-        blocks
+        sections
     }
 }

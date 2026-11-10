@@ -20,4 +20,36 @@ impl GhostexGpuiApp {
         presentation.loaded_live(&local)?;
         serde_json::to_value(presentation.machine(&local)?.to_snapshot()?).ok()
     }
+
+    /// Gives each project Settings > Projects lists (`hud.projectSettingsProjects`) the icon its
+    /// sidebar row draws (`iconDataUrl`), from the live store as above, so the Project dropdown
+    /// shows it without a gxserver read. A project the store does not hold keeps its letter tile.
+    pub(crate) fn with_project_settings_icons(
+        &self,
+        mut message: serde_json::Value,
+    ) -> serde_json::Value {
+        let presentation = self.gx_store.core.presentation();
+        let Some(machine) = presentation.machine(&ghostex_gx_core::MachineId::Local) else {
+            return message;
+        };
+        let Some(projects) = message
+            .pointer_mut("/hud/projectSettingsProjects")
+            .and_then(serde_json::Value::as_array_mut)
+        else {
+            return message;
+        };
+        for project in projects {
+            let Some(icon) = project
+                .get("projectId")
+                .and_then(serde_json::Value::as_str)
+                .and_then(|project_id| {
+                    ghostex_gx_core::project_sidebar_icon_data_url(machine, project_id)
+                })
+            else {
+                continue;
+            };
+            project["iconDataUrl"] = serde_json::Value::String(icon);
+        }
+        message
+    }
 }

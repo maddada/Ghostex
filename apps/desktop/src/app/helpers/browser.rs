@@ -13,6 +13,11 @@ use gpui::{
 };
 
 use crate::app::helpers::*;
+// The data URL decoders live with the image cache that every native image path shares.
+pub(crate) use crate::data_url_image::{
+    browser_favicon_data_url_metadata, browser_favicon_decode_base64,
+    browser_favicon_image_format_for_mime, browser_favicon_percent_decode,
+};
 use crate::*;
 
 pub(crate) fn browser_toolbar_background() -> Hsla {
@@ -502,26 +507,6 @@ pub(crate) fn browser_favicon_image_from_data_url(value: &str) -> Option<Browser
     })
 }
 
-pub(crate) fn browser_favicon_data_url_metadata(metadata: &str) -> Option<(ImageFormat, bool)> {
-    let mut parts = metadata.split(';');
-    let mime_type = parts.next()?.trim();
-    let format = browser_favicon_image_format_for_mime(mime_type)?;
-    let is_base64 = parts.any(|part| part.trim().eq_ignore_ascii_case("base64"));
-    Some((format, is_base64))
-}
-
-pub(crate) fn browser_favicon_image_format_for_mime(mime_type: &str) -> Option<ImageFormat> {
-    match mime_type.trim().to_ascii_lowercase().as_str() {
-        "image/png" => Some(ImageFormat::Png),
-        "image/jpeg" | "image/jpg" => Some(ImageFormat::Jpeg),
-        "image/webp" => Some(ImageFormat::Webp),
-        "image/gif" => Some(ImageFormat::Gif),
-        "image/bmp" => Some(ImageFormat::Bmp),
-        "image/ico" | "image/x-icon" | "image/vnd.microsoft.icon" => Some(ImageFormat::Ico),
-        _ => None,
-    }
-}
-
 pub(crate) fn browser_safe_http_favicon_parts(
     value: &str,
 ) -> Option<(String, BrowserFaviconFetchSource)> {
@@ -582,126 +567,6 @@ pub(crate) fn browser_has_ascii_prefix(value: &str, prefix: &str) -> bool {
         .as_bytes()
         .get(..prefix.len())
         .is_some_and(|bytes| bytes.eq_ignore_ascii_case(prefix.as_bytes()))
-}
-
-pub(crate) fn browser_favicon_percent_decode(value: &str, max_bytes: usize) -> Option<Vec<u8>> {
-    let bytes = value.as_bytes();
-    let mut decoded = Vec::with_capacity(bytes.len().min(max_bytes));
-    let mut index = 0;
-    while index < bytes.len() {
-        if decoded.len() >= max_bytes {
-            return None;
-        }
-        let byte = bytes[index];
-        if byte == b'%' {
-            let high = *bytes.get(index + 1)?;
-            let low = *bytes.get(index + 2)?;
-            let high = browser_hex_value(high)?;
-            let low = browser_hex_value(low)?;
-            decoded.push((high << 4) | low);
-            index += 3;
-        } else {
-            decoded.push(byte);
-            index += 1;
-        }
-    }
-    Some(decoded)
-}
-
-pub(crate) fn browser_favicon_decode_base64(encoded: &[u8]) -> Option<Vec<u8>> {
-    let mut decoded = Vec::with_capacity((encoded.len() / 4).saturating_mul(3));
-    let mut quartet = [0_u8; 4];
-    let mut quartet_len = 0_usize;
-    let mut finished = false;
-
-    for byte in encoded.iter().copied() {
-        if byte.is_ascii_whitespace() {
-            continue;
-        }
-        if finished {
-            return None;
-        }
-
-        quartet[quartet_len] = if byte == b'=' {
-            64
-        } else {
-            browser_base64_value(byte)?
-        };
-        quartet_len += 1;
-
-        if quartet_len == quartet.len() {
-            finished = browser_favicon_decode_base64_quartet(&quartet, &mut decoded)?;
-            quartet_len = 0;
-        }
-    }
-
-    match quartet_len {
-        0 => Some(decoded),
-        1 => None,
-        2 => {
-            if quartet[0] == 64 || quartet[1] == 64 {
-                return None;
-            }
-            browser_favicon_push_decoded_byte(&mut decoded, (quartet[0] << 2) | (quartet[1] >> 4))?;
-            Some(decoded)
-        }
-        3 => {
-            if quartet[0] == 64 || quartet[1] == 64 || quartet[2] == 64 {
-                return None;
-            }
-            browser_favicon_push_decoded_byte(&mut decoded, (quartet[0] << 2) | (quartet[1] >> 4))?;
-            browser_favicon_push_decoded_byte(&mut decoded, (quartet[1] << 4) | (quartet[2] >> 2))?;
-            Some(decoded)
-        }
-        _ => None,
-    }
-}
-
-pub(crate) fn browser_favicon_decode_base64_quartet(
-    quartet: &[u8; 4],
-    decoded: &mut Vec<u8>,
-) -> Option<bool> {
-    if quartet[0] == 64 || quartet[1] == 64 || (quartet[2] == 64 && quartet[3] != 64) {
-        return None;
-    }
-
-    browser_favicon_push_decoded_byte(decoded, (quartet[0] << 2) | (quartet[1] >> 4))?;
-    if quartet[2] != 64 {
-        browser_favicon_push_decoded_byte(decoded, (quartet[1] << 4) | (quartet[2] >> 2))?;
-        if quartet[3] != 64 {
-            browser_favicon_push_decoded_byte(decoded, (quartet[2] << 6) | quartet[3])?;
-        }
-    }
-
-    Some(quartet[2] == 64 || quartet[3] == 64)
-}
-
-pub(crate) fn browser_favicon_push_decoded_byte(decoded: &mut Vec<u8>, byte: u8) -> Option<()> {
-    if decoded.len() >= BROWSER_FAVICON_IMAGE_MAX_BYTES {
-        return None;
-    }
-    decoded.push(byte);
-    Some(())
-}
-
-pub(crate) fn browser_base64_value(byte: u8) -> Option<u8> {
-    match byte {
-        b'A'..=b'Z' => Some(byte - b'A'),
-        b'a'..=b'z' => Some(byte - b'a' + 26),
-        b'0'..=b'9' => Some(byte - b'0' + 52),
-        b'+' | b'-' => Some(62),
-        b'/' | b'_' => Some(63),
-        _ => None,
-    }
-}
-
-pub(crate) fn browser_hex_value(byte: u8) -> Option<u8> {
-    match byte {
-        b'0'..=b'9' => Some(byte - b'0'),
-        b'a'..=b'f' => Some(byte - b'a' + 10),
-        b'A'..=b'F' => Some(byte - b'A' + 10),
-        _ => None,
-    }
 }
 
 pub(crate) fn browser_tab_icon_element(

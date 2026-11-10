@@ -548,7 +548,9 @@ pub(crate) const BROWSER_FAVICON_HTTP_REDIRECT_LIMIT: u32 = 3;
 
 pub(crate) const BROWSER_FAVICON_DATA_URL_MAX_CHARS: usize = 96 * 1024;
 
-pub(crate) const BROWSER_FAVICON_IMAGE_MAX_BYTES: usize = 64 * 1024;
+/// The web build (apps/gpui-web) shares this file but has no favicon fetcher to read it.
+#[allow(unused_imports)]
+pub(crate) use crate::data_url_image::BROWSER_FAVICON_IMAGE_MAX_BYTES;
 
 pub(crate) const BROWSER_FAVICON_IMAGE_MAX_DIMENSION: u32 = 512;
 

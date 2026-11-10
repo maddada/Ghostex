@@ -8,7 +8,6 @@ use super::super::super::fields::{
     ButtonVariant, FieldStates, checkbox_control, settings_button, settings_select,
     settings_text_input,
 };
-use super::super::super::page::PageBlock;
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::store_gxserver_rpc;
 use super::{ProjectItem, ProjectsTab, plain_row};
@@ -249,15 +248,15 @@ impl ProjectsTab {
     }
 
     /// The Cloud box section of the selected project.
-    pub(super) fn cloud_box_blocks(
+    pub(super) fn cloud_box_section(
         &mut self,
         p: &SettingsPalette,
         project: &ProjectItem,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Vec<PageBlock> {
+    ) -> Option<AnyElement> {
         if !self.store.read(cx).request().gxserver_rpc_available {
-            return Vec::new();
+            return None;
         }
         if self.cloud_box.project_id != project.project_id {
             self.load_cloud_box(&project.project_id, cx);
@@ -295,8 +294,7 @@ impl ProjectsTab {
             None,
             rows,
         )
-        .map(|section| vec![PageBlock::section("projectCloudBox", section)])
-        .unwrap_or_default()
+        .map(IntoElement::into_any_element)
     }
 
     fn cloud_box_defaults_row(

@@ -175,7 +175,7 @@ impl GhostexGpuiApp {
         );
         message["hud"]["commandSessionIndicators"] =
             gpui_sidebar_command_session_indicators_from_command_pane_sources(&commands, &sessions);
-        self.with_project_view_scope_options(message)
+        self.with_project_settings_icons(self.with_project_view_scope_options(message))
     }
 
     pub(crate) fn apply_gpui_gxserver_agent_settings_hydration_result(
