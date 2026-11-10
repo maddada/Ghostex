@@ -8,7 +8,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::app::helpers::*;
@@ -20,6 +20,8 @@ const CATALOG_READ_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long a computer that answered may stay quiet before it counts as serving no catalog: every
 /// gxserver that has one sends it right after `eventStreamReady`, and an older one sends nothing.
 const CATALOG_QUIET_AFTER_READY: Duration = Duration::from_millis(1500);
+/// How often the socket is checked for a next frame while counting that quiet spell.
+const CATALOG_PEEK_INTERVAL: Duration = Duration::from_millis(100);
 
 impl GhostexGpuiApp {
     /// The model catalog the connected computer `machine_id` serves: parsed, none served, or not
@@ -46,9 +48,14 @@ impl GhostexGpuiApp {
 }
 
 /// Opens the computer's event socket, waits for the catalog it sends as the socket connects, and
-/// closes it: `Some(Some(_))` the catalog, `Some(None)` it answered without one (including a
-/// stream that goes quiet after it is ready, as an older gxserver's does), `None` it was not
-/// reached in time.
+/// closes it: `Some(Some(_))` the catalog, `Some(None)` it answered without one (it closed the
+/// stream, sent something else, or sent nothing at all for `CATALOG_QUIET_AFTER_READY` after it
+/// was ready, as an older gxserver does), `None` it was not reached in time, or the time ran out
+/// in the middle of a frame, so a slow catalog is read again rather than taken as missing.
+///
+/// After readiness the socket is peeked with a short timeout between frames, so the quiet spell
+/// is real inactivity: it starts again after every frame, and once bytes are waiting the whole
+/// frame is read under the overall cap only.
 fn read_remote_model_catalog(
     target: &GpuiRemoteGxserverRequestTarget,
 ) -> Option<Option<serde_json::Value>> {
@@ -61,27 +68,44 @@ fn read_remote_model_catalog(
         });
     }
     let mut stream = gpui_remote_gxserver_open_presentation_websocket(target, &cancel).ok()?;
+    let frame_timeout = stream.read_timeout().ok().flatten();
     let mut liveness = GpuiRemoteGxserverPresentationLiveness::new();
     let mut ready = false;
+    let mut last_frame = Instant::now();
     while !cancel.load(Ordering::SeqCst) {
+        if ready {
+            // Between frames: wait for the next one's first byte, counting the quiet spell.
+            stream.set_read_timeout(Some(CATALOG_PEEK_INTERVAL)).ok()?;
+            let mut byte = [0u8; 1];
+            match stream.peek(&mut byte) {
+                Ok(0) => return Some(None),
+                Ok(_) => {}
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                    ) =>
+                {
+                    if last_frame.elapsed() >= CATALOG_QUIET_AFTER_READY {
+                        return Some(None);
+                    }
+                    continue;
+                }
+                Err(_) => return None,
+            }
+            stream.set_read_timeout(frame_timeout).ok()?;
+        }
         let frame = match gpui_websocket_read_frame(&mut stream, target, &mut liveness, &cancel) {
             Ok(Some(frame)) => frame,
-            // Cancelled: by the overall timeout, or by the quiet window after readiness.
-            Ok(None) => break,
-            Err(_) => return None,
+            // The overall time ran out before or during a frame: not an answer, read again later.
+            Ok(None) | Err(_) => return None,
         };
+        last_frame = Instant::now();
         match frame {
             GpuiWebSocketFrame::Text(text) => {
                 let event = serde_json::from_str::<serde_json::Value>(text.trim()).ok()?;
                 match event.get("type").and_then(serde_json::Value::as_str) {
-                    Some("eventStreamReady") if !ready => {
-                        ready = true;
-                        let cancel = cancel.clone();
-                        thread::spawn(move || {
-                            thread::sleep(CATALOG_QUIET_AFTER_READY);
-                            cancel.store(true, Ordering::SeqCst);
-                        });
-                    }
+                    Some("eventStreamReady") if !ready => ready = true,
                     Some("agentModelCatalogChanged") => return Some(event.get("catalog").cloned()),
                     // The catalog comes right after the ready event or not at all.
                     _ if ready => return Some(None),
@@ -95,7 +119,7 @@ fn read_remote_model_catalog(
             GpuiWebSocketFrame::Pong | GpuiWebSocketFrame::Other => {}
         }
     }
-    // A computer that said it was ready and then sent nothing serves no catalog; one that never
-    // got that far was not reached.
-    ready.then_some(None)
+    // The overall time ran out: not reached, or ready but still waiting for a frame to start
+    // within the quiet spell, which is read again rather than taken as missing.
+    None
 }
