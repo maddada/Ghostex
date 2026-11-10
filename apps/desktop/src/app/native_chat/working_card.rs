@@ -8,6 +8,7 @@
 use super::{
     appearance::ChatAppearance,
     cursor::ChatCursor as _,
+    indicator_overlay::{self, LiftedPlace},
     quiet_work,
     state::NativeChatView,
     transcript::text,
@@ -64,6 +65,9 @@ pub(super) struct WorkingCardCells {
     /// The slot and the line, offset from the status row's origin, with the clip the slot was
     /// painted in, as last measured.
     pub(super) tail_in_row: Rc<Cell<Option<super::status_tail::TailInRow>>>,
+    /// The capsule's lead and compaction track, where the pane draws them (indicator_overlay.rs).
+    capsule_lead: LiftedPlace,
+    capsule_track: LiftedPlace,
 }
 
 impl NativeChatView {
@@ -112,6 +116,8 @@ impl NativeChatView {
                 card.chat_cursor_pointer()
                     .on_click(cx.listener(|chat, _, _, cx| chat.jump_to_bottom(cx)))
             })
+            // Where the capsule's rounded edge is, for its lead drawn by the pane.
+            .child(self.working_card.capsule_lead.box_recorder())
             .child(header)
             .into_any_element();
         Some(card)
@@ -168,7 +174,7 @@ impl NativeChatView {
         let kind = card["labelKind"].as_str().unwrap_or_default();
         let activity = &card["activity"];
         let lead = match look {
-            WorkingLineLook::Capsule => working_line_lead(card, look, p, reduced_motion),
+            WorkingLineLook::Capsule => self.capsule_lead(card, p, reduced_motion, cx),
             // The row keeps the lead's place empty; the lead itself is drawn over it outside the
             // cached transcript (status_tail.rs).
             WorkingLineLook::Quiet => working_line_lead(card, look, p, true).map(|_| {
@@ -226,11 +232,35 @@ impl NativeChatView {
                 );
             }
             // In the transcript the progress track stays still: an animation there would draw
-            // the rows again on every frame (status_tail.rs).
+            // the rows again on every frame (status_tail.rs). In the capsule the pane draws its
+            // sweep when it can (indicator_overlay.rs).
+            let sweeps = look == WorkingLineLook::Capsule
+                && !reduced_motion
+                && activity["percent"].is_null()
+                && activity["indeterminate"] == true;
+            let lifted_track = (sweeps && self.indicators_lifted(chat))
+                .then_some(&self.working_card.capsule_track);
+            if let Some(place) = lifted_track {
+                let (place, primary, s) = (place.clone(), p.control_primary, p.scale);
+                self.indicator_overlay.set(
+                    indicator_overlay::WORKING_TRACK,
+                    Some(Rc::new(move || {
+                        place.draw(compaction_sweep(
+                            div()
+                                .w(px(48.0 * s))
+                                .h(px(4.0 * s))
+                                .rounded_full()
+                                .overflow_hidden(),
+                            primary,
+                        ))
+                    })),
+                );
+            }
             trailing.extend(activity_trailing(
                 activity,
                 p,
                 reduced_motion || look == WorkingLineLook::Quiet,
+                lifted_track,
             ));
         }
         let gap = match look {
@@ -478,6 +508,7 @@ fn activity_lead(activity: &Value, p: &ChatAppearance, reduced_motion: bool) -> 
                         )))
                     },
                 )
+                .keep_phase()
                 .into_any_element()
         }
     } else {
@@ -497,6 +528,7 @@ fn activity_lead(activity: &Value, p: &ChatAppearance, reduced_motion: bool) -> 
                     dot.opacity(1.0 - 0.65 * progress)
                 },
             )
+            .keep_phase()
             .into_any_element()
         }
     };
@@ -515,6 +547,7 @@ fn activity_trailing(
     activity: &Value,
     p: &ChatAppearance,
     reduced_motion: bool,
+    lifted: Option<&LiftedPlace>,
 ) -> Vec<AnyElement> {
     let s = p.scale;
     let numbers = |value: String| {
@@ -549,24 +582,11 @@ fn activity_trailing(
                 .justify_center()
                 .child(fill.w(relative(0.35)))
                 .into_any_element()
+        } else if let Some(place) = lifted {
+            // The pane draws the sweep over the empty track.
+            track.child(place.recorder()).into_any_element()
         } else {
-            track
-                .with_throttled_animation(
-                    "chat-compaction-progress",
-                    Duration::from_millis(1800),
-                    move |track, phase| {
-                        track.child(
-                            div()
-                                .absolute()
-                                .h_full()
-                                .rounded_full()
-                                .bg(primary)
-                                .w(relative(0.35))
-                                .left(relative(-0.35 + 1.351 * css_ease_in_out(phase))),
-                        )
-                    },
-                )
-                .into_any_element()
+            compaction_sweep(track, primary)
         });
     }
     if let Some(elapsed) = activity["elapsedLabel"].as_str() {
@@ -579,4 +599,63 @@ fn activity_trailing(
         parts.push(numbers(format!("{percent}%")));
     }
     parts
+}
+
+/// A compaction's indeterminate sweep across `track`.
+fn compaction_sweep(track: gpui::Div, primary: gpui::Hsla) -> AnyElement {
+    track
+        .relative()
+        .with_throttled_animation(
+            "chat-compaction-progress",
+            Duration::from_millis(1800),
+            move |track, phase| {
+                track.child(
+                    div()
+                        .absolute()
+                        .h_full()
+                        .rounded_full()
+                        .bg(primary)
+                        .w(relative(0.35))
+                        .left(relative(-0.35 + 1.351 * css_ease_in_out(phase))),
+                )
+            },
+        )
+        .keep_phase()
+        .into_any_element()
+}
+
+impl NativeChatView {
+    /// The capsule's lead, or, when the pane draws it (indicator_overlay.rs), an empty box of its
+    /// size that records where it is.
+    fn capsule_lead(
+        &self,
+        card: &Value,
+        p: &ChatAppearance,
+        reduced_motion: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let lead = working_line_lead(card, WorkingLineLook::Capsule, p, reduced_motion)?;
+        if reduced_motion || !self.indicators_lifted(cx.entity_id()) {
+            return Some(lead);
+        }
+        let place = self.working_card.capsule_lead.clone();
+        let (card, look) = (card.clone(), p.clone());
+        self.indicator_overlay.set(
+            indicator_overlay::WORKING_LEAD,
+            Some(Rc::new(move || {
+                place.draw(
+                    working_line_lead(&card, WorkingLineLook::Capsule, &look, false)
+                        .unwrap_or_else(|| div().into_any_element()),
+                )
+            })),
+        );
+        Some(
+            div()
+                .relative()
+                .size(px(VISUAL.spark_box * p.scale))
+                .flex_shrink_0()
+                .child(self.working_card.capsule_lead.recorder())
+                .into_any_element(),
+        )
+    }
 }

@@ -1,6 +1,6 @@
 use super::edit_shortcuts::ChatEditMenuActions as _;
 use super::keyboard::ComposerInputActions as _;
-use super::{appearance::ChatAppearance, state::NativeChatView};
+use super::{appearance::ChatAppearance, indicator_overlay, state::NativeChatView};
 use gpui::StatefulInteractiveElement as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -168,13 +168,28 @@ impl Render for NativeChatView {
         self.sync_status_tail(&p, window);
         let transcript = self.render_transcript_host(window, cx);
         let rows = self.list.item_count();
+        // The repeating indicators over the rows and in the composer's stack are drawn by the pane
+        // over the chat when it can, so their ticks leave the chat cached (indicator_overlay.rs).
+        let lifted = self.indicators_lifted(cx.entity_id());
+        let overlay = self.indicator_overlay.clone();
         let body = if covered {
+            overlay.set(indicator_overlay::STATUS_TAIL_LEAD, None);
+            overlay.set(indicator_overlay::ROW_MOTION, None);
             None
         } else {
             let content = transcript;
             let lone_scroll_bottom = self.render_lone_scroll_bottom(&p, cx);
-            let status_tail_lead = self.render_status_tail_lead(&p);
-            let row_motion = self.render_row_motion();
+            // The lone scroll-down pill is drawn over the rows, so the pane must not draw above it.
+            let lift_rows = lifted && lone_scroll_bottom.is_none();
+            let in_place = |key: &'static str, layer: Option<indicator_overlay::Layer>| {
+                overlay.set(key, layer.clone().filter(|_| lift_rows));
+                layer.filter(|_| !lift_rows).map(|layer| layer())
+            };
+            let status_tail_lead = in_place(
+                indicator_overlay::STATUS_TAIL_LEAD,
+                self.status_tail_lead_layer(&p),
+            );
+            let row_motion = in_place(indicator_overlay::ROW_MOTION, self.row_motion_layer());
             Some(
                 div()
                     .id("chat-transcript")
@@ -196,6 +211,11 @@ impl Render for NativeChatView {
                     .into_any_element(),
             )
         };
+        if covered {
+            // The composer is not drawn, so neither is its working card.
+            overlay.set(indicator_overlay::WORKING_LEAD, None);
+            overlay.set(indicator_overlay::WORKING_TRACK, None);
+        }
         let composer = if !covered {
             self.render_composer_host(cx)
         } else if maximized {

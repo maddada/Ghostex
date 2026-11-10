@@ -27,10 +27,18 @@ impl GhostexGpuiApp {
     /// CDXC:SessionChat 2026-09-21 WHY:
     /// The window root redraws for every sidebar scroll tick, store update and header change, and an uncached child view is rendered and laid out again on each of those draws: the visible transcript rows' markdown was measured again on frames where the chat had not changed, which is what made mouse wheel scrolling stall.
     /// A cached view is reused until it is notified or its bounds change, so anything the chat reads from outside itself has to notify it; shared settings and the system appearance do so through `notify_native_chat_views`.
+    /// With the chat's repeating indicators drawn over it here, so their ticks leave the chat
+    /// cached (native_chat/indicator_overlay.rs).
     fn cached_native_chat(
         view: gpui::Entity<crate::app::native_chat::state::NativeChatView>,
     ) -> impl IntoElement {
-        gpui::AnyView::from(view).cached(gpui::StyleRefinement::default().size_full())
+        let chat_view = view.entity_id();
+        crate::app::native_chat::indicator_overlay::hosted_chat(
+            chat_view,
+            gpui::AnyView::from(view)
+                .cached(gpui::StyleRefinement::default().size_full())
+                .into_any_element(),
+        )
     }
 
     pub(crate) fn notify_native_chat_views(&mut self, cx: &mut gpui::Context<Self>) {

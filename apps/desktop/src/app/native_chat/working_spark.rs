@@ -106,5 +106,8 @@ pub(super) fn spark(p: &ChatAppearance, reduced_motion: bool, glow: bool) -> Any
                     )
             },
         )
+        // The pane may draw it over the chat one frame and the chat the next
+        // (indicator_overlay.rs).
+        .keep_phase()
         .into_any_element()
 }

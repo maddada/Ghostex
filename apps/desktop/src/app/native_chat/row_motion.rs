@@ -9,6 +9,7 @@
 
 use super::{
     appearance::ChatAppearance,
+    indicator_overlay::Layer,
     state::NativeChatView,
     tool_card::{SHIMMER, SPIN, shimmer_text},
 };
@@ -167,6 +168,7 @@ impl MotionKind {
                 .with_throttled_animation(id, SHIMMER, move |title, phase| {
                     title.child(shimmer_text(&label, &font, phase, dim, bright))
                 })
+                .keep_phase()
                 .into_any_element(),
             MotionKind::Spin { color } => gpui::svg()
                 .path("titlebar/loader2.svg")
@@ -179,6 +181,7 @@ impl MotionKind {
                         progress,
                     )))
                 })
+                .keep_phase()
                 .into_any_element(),
         }
     }
@@ -215,6 +218,7 @@ impl NativeChatView {
                 .with_throttled_animation(id, SHIMMER, move |title, phase| {
                     title.child(shimmer_text(&label, &font, phase, dim, bright))
                 })
+                .keep_phase()
                 .into_any_element(),
         }
     }
@@ -238,24 +242,27 @@ impl NativeChatView {
                         progress,
                     )))
                 })
+                .keep_phase()
                 .into_any_element(),
         }
     }
 
-    /// The running calls' parts over the transcript's rows. Placed after the transcript, so a row
-    /// painted this frame has recorded where its parts go.
-    pub(super) fn render_row_motion(&self) -> Option<AnyElement> {
+    /// The running calls' parts over the transcript's rows, as a layer the pane draws over the
+    /// chat when it can (indicator_overlay.rs), else the chat after the transcript. Either way it
+    /// is drawn after the transcript, so a row painted this frame has recorded where its parts go.
+    pub(super) fn row_motion_layer(&self) -> Option<Layer> {
         if self.list.item_count() == 0 {
             return None;
         }
-        Some(
+        let (parts, list) = (self.row_motion.parts.clone(), self.list.clone());
+        Some(Rc::new(move || {
             RowMotionLayer {
-                parts: self.row_motion.parts.clone(),
-                list: self.list.clone(),
+                parts: parts.clone(),
+                list: list.clone(),
                 drawn: Vec::new(),
             }
-            .into_any_element(),
-        )
+            .into_any_element()
+        }))
     }
 }
 

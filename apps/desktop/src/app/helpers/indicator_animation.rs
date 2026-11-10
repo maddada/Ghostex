@@ -40,7 +40,12 @@ thread_local! {
     static ANIMATION_ONLY_RENDERS: RefCell<HashSet<EntityId>> = RefCell::new(HashSet::new());
     /// Windows with a shared-timer frame scheduled, when it is due, and the views it will notify.
     static TIMER_FRAMES_PENDING: RefCell<Vec<(WindowId, Instant, HashSet<EntityId>)>> = const { RefCell::new(Vec::new()) };
+    /// When each phase-keeping animation started, and when it last drew, by its element id.
+    static KEPT_PHASES: RefCell<HashMap<ElementId, (Instant, Instant)>> = RefCell::new(HashMap::new());
 }
+
+/// A phase-keeping animation not drawn for this long starts over when it is drawn again.
+const KEPT_PHASE_IDLE: Duration = Duration::from_secs(1);
 
 /// Lets the view being rendered keep what it draws cached on its indicator frames; call it from
 /// that view's render. Only a view whose frame stays cheap when nothing but an indicator changed should.
@@ -203,6 +208,7 @@ pub(crate) struct ThrottledAnimation<E> {
     id: ElementId,
     period: Duration,
     frame_interval: Duration,
+    keep_phase: bool,
     element: Option<E>,
     animator: Box<dyn Fn(E, f32) -> E + 'static>,
 }
@@ -223,6 +229,7 @@ pub(crate) trait ThrottledAnimationExt: Sized {
             id: id.into(),
             period,
             frame_interval: INDICATOR_FRAME_INTERVAL,
+            keep_phase: false,
             element: Some(self),
             animator: Box::new(animator),
         }
@@ -239,6 +246,31 @@ impl<E> ThrottledAnimation<E> {
         self.frame_interval = interval;
         self
     }
+
+    /// Carries on from where the animation with the same id was when it is drawn somewhere else in
+    /// the tree, rather than starting over: an indicator the pane draws over the chat moves into
+    /// the chat and back (native_chat/indicator_overlay.rs), and each move is a new element.
+    pub(crate) fn keep_phase(mut self) -> Self {
+        self.keep_phase = true;
+        self
+    }
+}
+
+/// When the phase-keeping animation `id` started: its earlier start while it drew within the last
+/// second, else now.
+fn kept_phase_start(id: &ElementId) -> Instant {
+    let now = Instant::now();
+    KEPT_PHASES.with_borrow_mut(|phases| {
+        phases.retain(|_, (_, seen)| now.saturating_duration_since(*seen) < KEPT_PHASE_IDLE);
+        phases.get(id).map_or(now, |(start, _)| *start)
+    })
+}
+
+/// The phase-keeping animation `id`, started at `start`, drew now.
+fn note_kept_phase(id: &ElementId, start: Instant) {
+    KEPT_PHASES.with_borrow_mut(|phases| {
+        phases.insert(id.clone(), (start, Instant::now()));
+    });
 }
 
 impl<E: IntoElement + 'static> IntoElement for ThrottledAnimation<E> {
@@ -271,9 +303,19 @@ impl<E: IntoElement + 'static> Element for ThrottledAnimation<E> {
         window.with_element_state(
             id.expect("a throttled animation carries an element id"),
             |state: Option<ThrottledAnimationState>, window| {
-                let state = state.unwrap_or_else(|| ThrottledAnimationState {
-                    start: Instant::now(),
-                });
+                let state = match state {
+                    Some(state) => state,
+                    None if self.keep_phase => ThrottledAnimationState {
+                        start: kept_phase_start(&self.id),
+                    },
+                    None => ThrottledAnimationState {
+                        start: Instant::now(),
+                    },
+                };
+                if self.keep_phase {
+                    // For the element that takes this one's place.
+                    note_kept_phase(&self.id, state.start);
+                }
                 let reduce_motion = cx.reduce_motion();
                 let progress = if reduce_motion {
                     0.0

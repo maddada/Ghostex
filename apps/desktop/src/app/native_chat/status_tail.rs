@@ -6,6 +6,7 @@
 
 use super::{
     appearance::ChatAppearance,
+    indicator_overlay::Layer,
     state::NativeChatView,
     working_card::{PaintedSlot, WorkingLineLook, working_line_lead},
 };
@@ -122,33 +123,35 @@ impl NativeChatView {
     ///
     /// CDXC:SessionChat 2026-11-07 WHY:
     /// The lead follows the row's place in the list (`ListState::bounds_for_item`) rather than only the bounds the row recorded when it painted: with Faster rendering on, a scroll moves the list's rows without painting them again, so recorded bounds alone went stale (or, cleared on each transcript draw, made the spark vanish while scrolling). The row's paint measures where the slot and the line sit inside it; every frame places them at the row's current origin.
-    pub(super) fn render_status_tail_lead(&self, p: &ChatAppearance) -> Option<AnyElement> {
+    ///
+    /// Returned as a layer: the pane draws it over the chat when it can (indicator_overlay.rs),
+    /// else the chat draws it after the transcript.
+    pub(super) fn status_tail_lead_layer(&self, p: &ChatAppearance) -> Option<Layer> {
         if !self.status_tail {
             return None;
         }
         let row = self.transcript_list_rows().checked_sub(1)?;
         let reduced_motion = crate::app::helpers::gpui_macos_reduce_motion_enabled();
-        let lead = working_line_lead(
-            &self.snapshot["workingCard"],
-            WorkingLineLook::Quiet,
-            p,
-            reduced_motion,
-        )?;
-        Some(
+        let card = self.snapshot["workingCard"].clone();
+        working_line_lead(&card, WorkingLineLook::Quiet, p, reduced_motion)?;
+        let cells = TailCells {
+            slot: self.working_card.tail_lead.clone(),
+            line: self.working_card.tail_line.clone(),
+            fresh: self.working_card.tail_fresh.clone(),
+            in_row: self.working_card.tail_in_row.clone(),
+        };
+        let (list, p) = (self.list.clone(), p.clone());
+        Some(Rc::new(move || {
             PaintedAtSlot {
-                cells: TailCells {
-                    slot: self.working_card.tail_lead.clone(),
-                    line: self.working_card.tail_line.clone(),
-                    fresh: self.working_card.tail_fresh.clone(),
-                    in_row: self.working_card.tail_in_row.clone(),
-                },
-                list: self.list.clone(),
+                cells: cells.clone(),
+                list: list.clone(),
                 row,
-                child: lead,
+                child: working_line_lead(&card, WorkingLineLook::Quiet, &p, reduced_motion)
+                    .unwrap_or_else(|| div().into_any_element()),
                 clip: None,
             }
-            .into_any_element(),
-        )
+            .into_any_element()
+        }))
     }
 }
 
@@ -177,6 +180,7 @@ pub(super) struct TailInRow {
 }
 
 /// The status row's painted cells (working_card.rs `WorkingCardCells`).
+#[derive(Clone)]
 struct TailCells {
     slot: PaintedSlot,
     line: Rc<Cell<Option<Bounds<Pixels>>>>,

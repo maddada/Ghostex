@@ -370,6 +370,11 @@ impl NativeChatView {
         // Status line in the chat on, the line is the transcript's last row instead
         // (status_tail.rs), and the box keeps the lead-in it has with no card above it; an empty
         // chat has no row to end with and keeps the card (gx-chat-core `inTranscript`).
+        // The card sets its lifted spark and track again when it draws (indicator_overlay.rs).
+        self.indicator_overlay
+            .set(super::indicator_overlay::WORKING_LEAD, None);
+        self.indicator_overlay
+            .set(super::indicator_overlay::WORKING_TRACK, None);
         let working_card = if maximized || self.snapshot["workingCard"]["inTranscript"] == true {
             None
         } else {

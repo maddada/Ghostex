@@ -343,9 +343,14 @@ impl Render for GhostexGpuiApp {
                     .get(session)
                     .map(|view| view.clone().into_any_element())
             } else {
-                self.native_chats
-                    .get(session)
-                    .map(|(_, view)| view.clone().into_any_element())
+                // The chat's repeating indicators are drawn over it here, as the desktop's pane
+                // does (native_chat/indicator_overlay.rs).
+                self.native_chats.get(session).map(|(_, view)| {
+                    crate::app::native_chat::indicator_overlay::hosted_chat(
+                        view.entity_id(),
+                        view.clone().into_any_element(),
+                    )
+                })
             }
         });
         // CDXC:Notifications 2026-11-01 DECISION: User (Q929): the finished-work border is a setting, "disabled by default for new users too", with its own colour; off, the edge stays transparent (the desktop's rule is `show_finished_work_border` in helpers/project/colors.rs). This supersedes the 2026-10-09 Workarea decision that always drew the 1px attention line; when on, the work area's top edge takes the chosen colour while the open session has attention, and the 1px edge is always there, transparent otherwise, so the line never moves the header.

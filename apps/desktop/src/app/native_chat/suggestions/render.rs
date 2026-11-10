@@ -317,6 +317,11 @@ impl Render for SuggestionPanel {
 }
 
 impl NativeChatView {
+    /// The suggestions popup is open, so the pane paints its shadow (`render_suggestion_shadow`).
+    pub(in crate::app::native_chat) fn suggestion_popup_open(&self) -> bool {
+        self.suggestions.bounds.is_some()
+    }
+
     /// CDXC:SessionChat 2026-09-19 WHY:
     /// React's list cast `shadow-xl` over the transcript and the top of the composer card. The popup's child window cannot paint it: the window would have to grow past the card, and that transparent margin would sit over the composer and the transcript and take their clicks, while the macOS window shadow outlines the card with a dark rim instead. The pane paints the shadow at the popup's frame as plain chrome with no hit area, and the popup's opaque card covers the part beneath it.
     pub(in crate::app::native_chat) fn render_suggestion_shadow(
