@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.2.99 - 2026-11-10
+
+- Test build for Certum Windows signing only (branch ghostex/3bf84f46-sign-rehearsal); never released.
+
 ## Unreleased
 
 - **Ghostex for Windows is signed** (#224): the installer and the app (Ghostex.exe, its runtime and helper, the editor, gxserver, wmx and the updater) now carry a code-signing certificate in the developer's name, so Windows SmartScreen and antivirus warnings about an unknown publisher should fade as the certificate gains reputation.
