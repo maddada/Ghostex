@@ -656,7 +656,8 @@ pub fn api_may_write(_key: &str, agent_writable: bool) -> bool {
 ///
 /// CDXC:RemotePairing 2026-11-11 DECISION:
 /// The coordinator, for the user ("rename it in the menu to Connect a Device"): Settings > Remote's
-/// Connect a phone button and the line that names it read Connect a Device; Help keeps the old words
+/// Connect a phone button and the line that names it read Connect a Device (and its neighbour Connect a
+/// computer reads Connect a Computer); Help keeps the old words
 /// until the release (release-11.3.1/help/connect-a-device.patch).
 pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[
     (

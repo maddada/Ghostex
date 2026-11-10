@@ -293,7 +293,7 @@ pub(super) fn reach_card(
             .child(settings_button_sized(
                 &t.p,
                 "remote-connect-computer",
-                "Connect a computer",
+                "Connect a Computer",
                 Some(ICON_DEVICE_DESKTOP),
                 ButtonVariant::Outline,
                 ButtonSize::Sm,
