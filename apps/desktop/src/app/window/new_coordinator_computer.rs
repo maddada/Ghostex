@@ -6,6 +6,7 @@
 //! User: "Can I choose where the coordinator runs?" and then "Let's just do it". For a project the sidebar merged from more than one copy, the dialog has a Computer field between Name and Agent listing every copy by its computer's name (and the end of its folder's path when one computer has two), defaulting to the copy the dialog was opened for (the one a session last started in, or the New thread picker's pick). A computer that is not connected is greyed "Not connected" and never swapped for another; the Agent, Model and Effort lists are the picked computer's own, and the playbook row is read from it. A project with one copy shows no field. The phone's form offers the same choice between the folders of one computer.
 //! SEE-ALSO: packages/gx-core/src/sidebar_view/view.rs (`SidebarView::project_copies`), apps/desktop/src/app/new_coordinator_modal_lifecycle.rs (the copies, the checks and the reads), apps/mobile/app/src/screens/sessions-screen/NewCoordinatorSheet.tsx (the phone's Folder row).
 use super::*;
+use gpui::StatefulInteractiveElement as _;
 
 /// The Computer field's height with its gaps: the dialog opens this much taller when it shows.
 pub(crate) const NEW_COORDINATOR_COMPUTER_FIELD_HEIGHT: f32 = 84.0;
@@ -43,9 +44,43 @@ pub(crate) enum CopyLineup {
     Missing,
 }
 
+/// What reading another computer's model catalog gave (`gpui_remote_model_catalog`).
+pub(crate) enum RemoteModelCatalog {
+    Served(ghostex_gx_chat_core::menus::catalog::AgentModelCatalog),
+    /// It answered and holds none (or one this build cannot read): kept for the dialog's life.
+    NoneServed,
+    /// Not reached in time: read again on the next pick or refresh.
+    Unreachable,
+}
+
 impl NewCoordinatorCopy {
     pub(crate) fn usable(&self) -> bool {
         self.connected && !self.gone
+    }
+}
+
+/// Why Create did not make the coordinator: one plain sentence, and the computer's own words
+/// (shown only behind Details) when there are any.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NewCoordinatorRefusal {
+    pub(crate) message: String,
+    pub(crate) details: Option<String>,
+}
+
+impl NewCoordinatorRefusal {
+    pub(crate) fn plain(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            details: None,
+        }
+    }
+
+    /// A refusal in the computer's own words: a plain sentence, the words behind Details.
+    pub(crate) fn from_computer(details: impl Into<String>) -> Self {
+        Self {
+            message: "Coordinator not created. Try again, or pick another computer.".to_string(),
+            details: Some(details.into()).filter(|details| !details.trim().is_empty()),
+        }
     }
 }
 
@@ -58,7 +93,7 @@ pub(crate) struct NewCoordinatorCreateReply {
 impl NewCoordinatorCreateReply {
     /// Hands the outcome to the dialog: created closes it, a refusal keeps it open with the
     /// reason. Returns whether the dialog was still there to take it.
-    pub(crate) fn finish(self, result: Result<(), String>, cx: &mut App) -> bool {
+    pub(crate) fn finish(self, result: Result<(), NewCoordinatorRefusal>, cx: &mut App) -> bool {
         let view = self.view;
         self.window
             .update(cx, |_root, window, cx| {
@@ -178,11 +213,19 @@ impl GpuiNewCoordinatorModalWindow {
     }
 
     /// Takes the picked copy's agents, keeping the agent, model and effort the user had where
-    /// that computer has them. `announce` says so under Agent when the agent had to change.
+    /// that computer has them. `announce` (a pick by the user) says so under Agent when the agent
+    /// had to change, and remembers the model and effort they had, so a computer whose models
+    /// arrive later still gets them when it has them.
     pub(super) fn apply_copy_agents(&mut self, announce: bool) {
         let previous = self.agent().cloned();
-        let previous_model = self.model().map(|model| model.value.clone());
-        let previous_effort = self.effort.clone();
+        if announce {
+            if self.intended_model.is_none() {
+                self.intended_model = self.model().map(|model| model.value.clone());
+            }
+            if self.intended_effort.is_none() {
+                self.intended_effort = self.effort.clone();
+            }
+        }
         let (agents, computer) = self
             .copy()
             .map(|copy| {
@@ -215,38 +258,49 @@ impl GpuiNewCoordinatorModalWindow {
         {
             self.agent_hint = Some(format!("{} isn't set up on {computer}.", previous.name));
         }
-        self.reset_model();
-        if let Some(value) = previous_model
-            && let Some(index) = self
-                .agent()
-                .and_then(|agent| agent.models.iter().position(|model| model.value == value))
-        {
-            self.model_index = index;
-            self.effort = previous_effort;
-            self.reset_effort();
-        }
+        self.restore_intended_model();
         self.agent_select.close();
         self.model_select.close();
         self.effort_select.close();
     }
 
+    /// The model and effort the user wants (their pick, else what was shown when they moved to
+    /// another copy) where the agent offers them, else its defaults. An effort the new model
+    /// offers is kept when only the model changed.
+    pub(super) fn restore_intended_model(&mut self) {
+        self.reset_model();
+        if let Some(value) = self.intended_model.clone()
+            && let Some(index) = self
+                .agent()
+                .and_then(|agent| agent.models.iter().position(|model| model.value == value))
+        {
+            self.model_index = index;
+        }
+        if self.intended_effort.is_some() {
+            self.effort = self.intended_effort.clone();
+            self.reset_effort();
+        }
+    }
+
     /// The host's fresh list of copies (opening the Computer menu, a refused Create): what is
-    /// connected now, and a copy gone since. The pick stays where it was, greyed if it went.
+    /// open and connected now and each computer's launchers as they are now, and a copy gone
+    /// since. The pick stays where it was, greyed if it went; the agent, model and effort stay
+    /// where the fresh lists still have them.
     pub(crate) fn set_copies(&mut self, fresh: Vec<NewCoordinatorCopy>, cx: &mut Context<Self>) {
         let chosen = self.copy().cloned();
         let mut next: Vec<NewCoordinatorCopy> = fresh
             .into_iter()
             .map(|mut copy| {
-                // A computer's agents and models read earlier stay.
-                if let Some(known) = self
-                    .copies
-                    .iter()
-                    .find(|known| known.group_id == copy.group_id)
+                // Agents not read this time (that computer's launchers unknown just now) stay as
+                // they were.
+                if copy.agents.is_none()
+                    && let Some(known) = self
+                        .copies
+                        .iter()
+                        .find(|known| known.group_id == copy.group_id)
                 {
-                    copy.agents = known.agents.clone().or(copy.agents);
-                    if known.lineup != CopyLineup::Loading {
-                        copy.lineup = known.lineup;
-                    }
+                    copy.agents = known.agents.clone();
+                    copy.lineup = known.lineup;
                 }
                 copy
             })
@@ -271,6 +325,7 @@ impl GpuiNewCoordinatorModalWindow {
                     .position(|copy| copy.group_id == group_id)
             })
             .unwrap_or(0);
+        self.apply_copy_agents(false);
         if self.copy_select.open {
             let rows = self.copy_rows();
             if self
@@ -336,18 +391,64 @@ impl GpuiNewCoordinatorModalWindow {
 
     pub(super) fn finish_create(
         &mut self,
-        result: Result<(), String>,
+        result: Result<(), NewCoordinatorRefusal>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.create_pending = false;
         match result {
             Ok(()) => window.remove_window(),
-            Err(reason) => {
-                self.create_error = Some(reason);
+            Err(refusal) => {
+                self.create_error = Some(refusal);
+                self.create_details_open = false;
                 cx.notify();
             }
         }
+    }
+
+    /// The Computer field draws the picked copy's problem, which then stands for a refusal about
+    /// it.
+    pub(super) fn copy_problem_drawn(&self) -> bool {
+        self.copies_shown && self.copy_problem().is_some()
+    }
+
+    /// Why the last Create was refused: its sentence, and the computer's own words behind
+    /// Details. Left out while the Computer field already says what is wrong with the pick.
+    pub(super) fn render_create_error(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let refusal = self
+            .create_error
+            .as_ref()
+            .filter(|_| !self.copy_problem_drawn())?;
+        let p = self.palette;
+        let mut column = v_flex()
+            .w_full()
+            .gap(px(4.0))
+            .child(modal_error(&p, &refusal.message));
+        if let Some(details) = &refusal.details {
+            let open = self.create_details_open;
+            column = column.child(
+                div()
+                    .id("new-coordinator-create-details")
+                    .text_size(px(12.0))
+                    .text_color(p.muted)
+                    .cursor_pointer()
+                    .child(if open { "Hide details" } else { "Details" })
+                    .on_click(cx.listener(|this, _: &gpui::ClickEvent, _window, cx| {
+                        this.create_details_open = !this.create_details_open;
+                        cx.notify();
+                    })),
+            );
+            if open {
+                column = column.child(
+                    div()
+                        .text_size(px(12.0))
+                        .line_height(px(17.0))
+                        .text_color(p.muted)
+                        .child(details.clone()),
+                );
+            }
+        }
+        Some(column.into_any_element())
     }
 
     pub(super) fn create_label(&self) -> &'static str {

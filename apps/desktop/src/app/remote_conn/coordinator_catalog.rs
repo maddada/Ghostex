@@ -12,34 +12,42 @@ use std::{
 };
 
 use crate::app::helpers::*;
+use crate::app::window::RemoteModelCatalog;
 use crate::*;
 
 /// How long the read waits for the catalog before treating the computer as having none.
 const CATALOG_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 impl GhostexGpuiApp {
-    /// The model catalog the connected computer `machine_id` serves, parsed; `None` when it is
-    /// not connected, sent none in time, or sent one this build cannot read.
+    /// The model catalog the connected computer `machine_id` serves: parsed, none served, or not
+    /// reached (not connected, or no answer in time).
     pub(crate) fn gpui_remote_model_catalog(
         &self,
         machine_id: &str,
         cx: &mut gpui::Context<Self>,
-    ) -> gpui::Task<Option<ghostex_gx_chat_core::menus::catalog::AgentModelCatalog>> {
+    ) -> gpui::Task<RemoteModelCatalog> {
         let Some(target) = self.gpui_remote_gxserver_request_target(machine_id) else {
-            return gpui::Task::ready(None);
+            return gpui::Task::ready(RemoteModelCatalog::Unreachable);
         };
         cx.background_executor().spawn(async move {
-            let catalog = read_remote_model_catalog(&target)?;
-            ghostex_gx_chat_core::menus::catalog::parse_agent_model_catalog(&catalog)
+            match read_remote_model_catalog(&target) {
+                Some(Some(catalog)) => {
+                    ghostex_gx_chat_core::menus::catalog::parse_agent_model_catalog(&catalog)
+                        .map_or(RemoteModelCatalog::NoneServed, RemoteModelCatalog::Served)
+                }
+                Some(None) => RemoteModelCatalog::NoneServed,
+                None => RemoteModelCatalog::Unreachable,
+            }
         })
     }
 }
 
 /// Opens the computer's event socket, waits for the catalog it sends as the socket connects, and
-/// closes it.
+/// closes it: `Some(Some(_))` the catalog, `Some(None)` it answered without one, `None` it was
+/// not reached in time.
 fn read_remote_model_catalog(
     target: &GpuiRemoteGxserverRequestTarget,
-) -> Option<serde_json::Value> {
+) -> Option<Option<serde_json::Value>> {
     let cancel = Arc::new(AtomicBool::new(false));
     {
         let cancel = cancel.clone();
@@ -57,16 +65,16 @@ fn read_remote_model_catalog(
                 let event = serde_json::from_str::<serde_json::Value>(text.trim()).ok()?;
                 match event.get("type").and_then(serde_json::Value::as_str) {
                     Some("eventStreamReady") => ready = true,
-                    Some("agentModelCatalogChanged") => return event.get("catalog").cloned(),
+                    Some("agentModelCatalogChanged") => return Some(event.get("catalog").cloned()),
                     // The catalog comes right after the ready event or not at all.
-                    _ if ready => return None,
+                    _ if ready => return Some(None),
                     _ => {}
                 }
             }
             GpuiWebSocketFrame::Ping(payload) => {
                 gpui_websocket_write_control_frame(&mut stream, 0xA, &payload).ok()?;
             }
-            GpuiWebSocketFrame::Close => return None,
+            GpuiWebSocketFrame::Close => return ready.then_some(None),
             GpuiWebSocketFrame::Pong | GpuiWebSocketFrame::Other => {}
         }
     }

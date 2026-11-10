@@ -13,8 +13,34 @@ use crate::app::window::*;
 use crate::*;
 
 type DialogSlot = Rc<RefCell<Option<gpui::WeakEntity<GpuiNewCoordinatorModalWindow>>>>;
-/// Each other computer's catalog, once read in this dialog (`None` inside: it sent none).
-type CatalogCache = Rc<RefCell<BTreeMap<String, Option<AgentModelCatalog>>>>;
+
+/// One copy the dialog has listed, remembered so the entry is still found when the copy it was
+/// opened for goes.
+#[derive(Clone)]
+struct KnownCopy {
+    group_id: String,
+    label: String,
+    computer: String,
+}
+
+/// What one open dialog keeps between its commands.
+#[derive(Default)]
+struct CopiesState {
+    /// The copy the dialog was opened for.
+    opened: String,
+    /// Every copy it has listed.
+    known: RefCell<Vec<KnownCopy>>,
+    /// Each other computer's catalog, once read in this dialog (`None` inside: it serves none).
+    /// A read that did not reach the computer is not kept, so the next pick reads again.
+    catalogs: RefCell<BTreeMap<String, Option<AgentModelCatalog>>>,
+}
+
+/// The machine a sidebar group id names: [`LOCAL_MACHINE_ID`] or the remote machine's id.
+fn machine_id_of(group_id: &str) -> String {
+    ProjectKey::parse_sidebar_group_id(group_id)
+        .and_then(|project| project.machine.remote_id().map(str::to_string))
+        .unwrap_or_else(|| LOCAL_MACHINE_ID.to_string())
+}
 
 fn dialog_of(slot: &DialogSlot) -> Option<gpui::Entity<GpuiNewCoordinatorModalWindow>> {
     slot.borrow().as_ref().and_then(|dialog| dialog.upgrade())
@@ -40,8 +66,11 @@ impl GhostexGpuiApp {
         let Some(opened_group) = text("groupId") else {
             return;
         };
-        let catalogs: CatalogCache = Default::default();
-        let copies = self.gx_store_new_coordinator_copies(&opened_group, &catalogs.borrow());
+        let state = Rc::new(CopiesState {
+            opened: opened_group.clone(),
+            ..CopiesState::default()
+        });
+        let copies = self.gx_store_new_coordinator_copies(&state);
         let selected_copy = copies
             .iter()
             .position(|copy| copy.group_id == opened_group)
@@ -68,8 +97,7 @@ impl GhostexGpuiApp {
         };
         let dialog: DialogSlot = Default::default();
         let host_dialog = dialog.clone();
-        let host_catalogs = catalogs.clone();
-        let host_opened = opened_group.clone();
+        let host_state = state.clone();
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
             match command {
                 NewCoordinatorModalCommand::Create {
@@ -81,15 +109,10 @@ impl GhostexGpuiApp {
                     reply,
                 } => {
                     if let Some(reason) =
-                        app.gx_store_new_coordinator_refusal(&host_opened, &group_id, &agent_id)
+                        app.gx_store_new_coordinator_refusal(&host_state, &group_id, &agent_id)
                     {
-                        app.refresh_new_coordinator_copies(
-                            &host_opened,
-                            &host_dialog,
-                            &host_catalogs,
-                            cx,
-                        );
-                        reply.finish(Err(reason), cx);
+                        app.refresh_new_coordinator_copies(&host_dialog, &host_state, cx);
+                        reply.finish(Err(NewCoordinatorRefusal::plain(reason)), cx);
                         return;
                     }
                     app.gx_store_create_coordinator(
@@ -107,10 +130,10 @@ impl GhostexGpuiApp {
                                     cx,
                                 ),
                                 // The dialog was closed while it waited: say it here instead.
-                                Some(reason) if !delivered => app.gx_store_create_toast(
+                                Some(refusal) if !delivered => app.gx_store_create_toast(
                                     "warning",
                                     "Coordinator not created",
-                                    Some(&reason),
+                                    Some(&refusal.message),
                                     cx,
                                 ),
                                 _ => {}
@@ -157,16 +180,11 @@ impl GhostexGpuiApp {
                     generation,
                 } => {
                     app.read_new_coordinator_playbook(&group_id, generation, &host_dialog, cx);
-                    app.read_new_coordinator_lineup(&group_id, &host_dialog, &host_catalogs, cx);
+                    app.read_new_coordinator_lineup(&group_id, &host_dialog, &host_state, cx);
                     return;
                 }
                 NewCoordinatorModalCommand::RefreshCopies => {
-                    app.refresh_new_coordinator_copies(
-                        &host_opened,
-                        &host_dialog,
-                        &host_catalogs,
-                        cx,
-                    );
+                    app.refresh_new_coordinator_copies(&host_dialog, &host_state, cx);
                     return;
                 }
                 NewCoordinatorModalCommand::Cancel => {}
@@ -188,52 +206,106 @@ impl GhostexGpuiApp {
         );
         if let Some(group_id) = first_pick {
             self.read_new_coordinator_playbook(&group_id, 0, &dialog, cx);
-            self.read_new_coordinator_lineup(&group_id, &dialog, &catalogs, cx);
+            self.read_new_coordinator_lineup(&group_id, &dialog, &state, cx);
         }
     }
 
-    /// The copies a New Coordinator dialog opened for `opened_group` offers: every copy of the
-    /// merged project it is one of, else that project alone. This computer's copies list its
-    /// agents with their lineups; another computer's list that computer's launchers, their
-    /// lineups once read (`catalogs`).
-    pub(crate) fn gx_store_new_coordinator_copies(
-        &self,
-        opened_group: &str,
-        catalogs: &BTreeMap<String, Option<AgentModelCatalog>>,
-    ) -> Vec<NewCoordinatorCopy> {
-        let listed: Vec<ghostex_gx_core::ProjectCopy> = self
-            .gx_store
-            .sidebar_list
-            .view()
-            .project_copies(opened_group)
-            .map(<[_]>::to_vec)
-            .unwrap_or_default();
-        if listed.is_empty() {
-            let machine_id = ProjectKey::parse_sidebar_group_id(opened_group)
-                .and_then(|project| project.machine.remote_id().map(str::to_string))
-                .unwrap_or_else(|| LOCAL_MACHINE_ID.to_string());
-            return vec![self.new_coordinator_copy(
-                opened_group,
-                String::new(),
-                String::new(),
-                &machine_id,
-                true,
-                catalogs,
-            )];
+    /// The copies an open New Coordinator dialog offers: every copy of the merged project it is
+    /// one of (found through any copy it has listed, so the entry survives the copy it was opened
+    /// for going), else the copies it listed that are still open, else that project alone. This
+    /// computer's copies list its agents with their lineups; another computer's list that
+    /// computer's launchers, their lineups once read (`CopiesState::catalogs`).
+    fn gx_store_new_coordinator_copies(&self, state: &CopiesState) -> Vec<NewCoordinatorCopy> {
+        let catalogs = state.catalogs.borrow();
+        let mut known = state.known.borrow_mut();
+        let listed = self.new_coordinator_listed_copies(state, &known);
+        let copies: Vec<NewCoordinatorCopy> = match listed {
+            Some(listed) => listed
+                .into_iter()
+                .map(|copy| {
+                    self.new_coordinator_copy(
+                        &copy.group_id,
+                        copy.label,
+                        copy.computer,
+                        &copy.machine_id,
+                        copy.connected,
+                        &catalogs,
+                    )
+                })
+                .collect(),
+            None => {
+                let open: Vec<NewCoordinatorCopy> = known
+                    .iter()
+                    .filter(|copy| self.new_coordinator_copy_is_open(&copy.group_id))
+                    .map(|copy| {
+                        self.new_coordinator_copy(
+                            &copy.group_id,
+                            copy.label.clone(),
+                            copy.computer.clone(),
+                            &machine_id_of(&copy.group_id),
+                            true,
+                            &catalogs,
+                        )
+                    })
+                    .collect();
+                if open.is_empty() {
+                    vec![self.new_coordinator_copy(
+                        &state.opened,
+                        self.new_coordinator_project_title(&state.opened),
+                        String::new(),
+                        &machine_id_of(&state.opened),
+                        true,
+                        &catalogs,
+                    )]
+                } else {
+                    open
+                }
+            }
+        };
+        for copy in &copies {
+            if !known.iter().any(|known| known.group_id == copy.group_id) {
+                known.push(KnownCopy {
+                    group_id: copy.group_id.clone(),
+                    label: copy.label.clone(),
+                    computer: copy.computer.clone(),
+                });
+            }
         }
-        listed
-            .into_iter()
-            .map(|copy| {
-                self.new_coordinator_copy(
-                    &copy.group_id,
-                    copy.label,
-                    copy.computer,
-                    &copy.machine_id,
-                    copy.connected,
-                    catalogs,
-                )
+        copies
+    }
+
+    /// The merged entry's copies as the Project list has them now, looked up through the copy
+    /// the dialog was opened for or any it has listed.
+    fn new_coordinator_listed_copies(
+        &self,
+        state: &CopiesState,
+        known: &[KnownCopy],
+    ) -> Option<Vec<ghostex_gx_core::ProjectCopy>> {
+        let view = self.gx_store.sidebar_list.view();
+        std::iter::once(state.opened.as_str())
+            .chain(known.iter().map(|copy| copy.group_id.as_str()))
+            .find_map(|group_id| view.project_copies(group_id))
+            .map(<[_]>::to_vec)
+    }
+
+    /// The project a group id names is still open on its computer (the store's own inventory).
+    fn new_coordinator_copy_is_open(&self, group_id: &str) -> bool {
+        ProjectKey::parse_sidebar_group_id(group_id).is_some_and(|project| {
+            self.gx_store
+                .core
+                .presentation()
+                .loaded(&project.machine)
+                .is_some_and(|loaded| loaded.project(&project.project_id).is_some())
+        })
+    }
+
+    fn new_coordinator_project_title(&self, group_id: &str) -> String {
+        ProjectKey::parse_sidebar_group_id(group_id)
+            .and_then(|project| {
+                let loaded = self.gx_store.core.presentation().loaded(&project.machine)?;
+                Some(loaded.project(&project.project_id)?.title.clone())
             })
-            .collect()
+            .unwrap_or_default()
     }
 
     fn new_coordinator_copy(
@@ -285,19 +357,25 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Sends the open dialog the copies as they are now.
+    /// Sends the open dialog the copies as they are now, and reads the models of the picked
+    /// copy's computer when they are not known yet (a read that timed out is tried again here).
     fn refresh_new_coordinator_copies(
         &self,
-        opened_group: &str,
         dialog: &DialogSlot,
-        catalogs: &CatalogCache,
+        state: &Rc<CopiesState>,
         cx: &mut gpui::Context<Self>,
     ) {
         let Some(view) = dialog_of(dialog) else {
             return;
         };
-        let copies = self.gx_store_new_coordinator_copies(opened_group, &catalogs.borrow());
-        view.update(cx, |dialog, cx| dialog.set_copies(copies, cx));
+        let copies = self.gx_store_new_coordinator_copies(state);
+        let picked = view.update(cx, |dialog, cx| {
+            dialog.set_copies(copies, cx);
+            dialog.chosen_group_id().map(str::to_string)
+        });
+        if let Some(group_id) = picked {
+            self.read_new_coordinator_lineup(&group_id, dialog, state, cx);
+        }
     }
 
     /// Why Create must not run in the copy `group_id` names, checked just before it: the project
@@ -306,7 +384,7 @@ impl GhostexGpuiApp {
     /// several, its computer connected, and the agent still set up there.
     fn gx_store_new_coordinator_refusal(
         &self,
-        opened_group: &str,
+        state: &CopiesState,
         group_id: &str,
         agent_id: &str,
     ) -> Option<String> {
@@ -314,21 +392,12 @@ impl GhostexGpuiApp {
         let Some(project) = ProjectKey::parse_sidebar_group_id(group_id) else {
             return Some(GONE.to_string());
         };
-        let open = self
-            .gx_store
-            .core
-            .presentation()
-            .loaded(&project.machine)
-            .is_some_and(|loaded| loaded.project(&project.project_id).is_some());
-        if !open {
+        if !self.new_coordinator_copy_is_open(group_id) {
             return Some(GONE.to_string());
         }
-        if group_id != opened_group
-            && let Some(copies) = self
-                .gx_store
-                .sidebar_list
-                .view()
-                .project_copies(opened_group)
+        let known = state.known.borrow();
+        if known.len() > 1
+            && let Some(copies) = self.new_coordinator_listed_copies(state, &known)
             && !copies.iter().any(|copy| copy.group_id == group_id)
         {
             return Some(GONE.to_string());
@@ -433,20 +502,22 @@ impl GhostexGpuiApp {
     }
 
     /// Reads the model catalog of the computer the copy `group_id` is on, when it is another one
-    /// whose catalog this dialog has not read yet, and gives the copy its agents' lineups.
+    /// whose catalog this dialog has not read yet, and gives the copy its agents' lineups. A
+    /// computer that was not reached gets none for now and is read again on the next pick or
+    /// refresh.
     fn read_new_coordinator_lineup(
         &self,
         group_id: &str,
         dialog: &DialogSlot,
-        catalogs: &CatalogCache,
+        state: &Rc<CopiesState>,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(machine_id) = ProjectKey::parse_sidebar_group_id(group_id)
-            .and_then(|project| project.machine.remote_id().map(str::to_string))
-        else {
+        let machine_id = machine_id_of(group_id);
+        if machine_id == LOCAL_MACHINE_ID {
             return;
-        };
-        if let Some(catalog) = catalogs.borrow().get(&machine_id) {
+        }
+        let cached = state.catalogs.borrow().get(&machine_id).cloned();
+        if let Some(catalog) = cached {
             let agents = self.gx_store_remote_coordinator_agents(&machine_id, catalog.as_ref());
             let lineup = if catalog.is_some() {
                 CopyLineup::Held
@@ -462,17 +533,26 @@ impl GhostexGpuiApp {
             return;
         }
         let read = self.gpui_remote_model_catalog(&machine_id, cx);
-        let (dialog, catalogs, group_id) = (dialog.clone(), catalogs.clone(), group_id.to_string());
+        let (dialog, state, group_id) = (dialog.clone(), state.clone(), group_id.to_string());
         cx.spawn(async move |this, cx| {
-            let catalog = read.await;
+            let read = read.await;
             let _ = this.update(cx, |app, cx| {
-                let lineup = if catalog.is_some() {
-                    CopyLineup::Held
-                } else {
-                    CopyLineup::Missing
+                let catalog = match read {
+                    RemoteModelCatalog::Served(catalog) => Some(Some(catalog)),
+                    RemoteModelCatalog::NoneServed => Some(None),
+                    RemoteModelCatalog::Unreachable => None,
                 };
-                let agents = app.gx_store_remote_coordinator_agents(&machine_id, catalog.as_ref());
-                catalogs.borrow_mut().insert(machine_id, catalog);
+                let lineup = match &catalog {
+                    Some(Some(_)) => CopyLineup::Held,
+                    _ => CopyLineup::Missing,
+                };
+                let agents = app.gx_store_remote_coordinator_agents(
+                    &machine_id,
+                    catalog.as_ref().and_then(Option::as_ref),
+                );
+                if let Some(catalog) = catalog {
+                    state.catalogs.borrow_mut().insert(machine_id, catalog);
+                }
                 if let Some(view) = dialog_of(&dialog) {
                     view.update(cx, |dialog, cx| {
                         dialog.set_copy_agents(&group_id, agents, lineup, cx)

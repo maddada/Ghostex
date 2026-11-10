@@ -14,12 +14,12 @@ impl GpuiRemoteGxserverConnection {
 }
 
 impl crate::GhostexGpuiApp {
-    /// Another computer's model catalog (the desktop reads it through that computer's tunnel, remote_conn/coordinator_catalog.rs). The page has no tunnels, so there is none to read.
+    /// Another computer's model catalog (the desktop reads it through that computer's tunnel, remote_conn/coordinator_catalog.rs). The page has no tunnels, so there is none to reach.
     pub(crate) fn gpui_remote_model_catalog(
         &self,
         _machine_id: &str,
         _cx: &mut gpui::Context<Self>,
-    ) -> gpui::Task<Option<ghostex_gx_chat_core::menus::catalog::AgentModelCatalog>> {
-        gpui::Task::ready(None)
+    ) -> gpui::Task<crate::app::window::RemoteModelCatalog> {
+        gpui::Task::ready(crate::app::window::RemoteModelCatalog::Unreachable)
     }
 }

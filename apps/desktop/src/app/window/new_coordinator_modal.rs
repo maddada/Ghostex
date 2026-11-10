@@ -144,7 +144,12 @@ pub(crate) struct GpuiNewCoordinatorModalWindow {
     /// Create was sent and its outcome is not back yet.
     create_pending: bool,
     /// Why the last Create was refused.
-    create_error: Option<String>,
+    create_error: Option<NewCoordinatorRefusal>,
+    /// The refusal's Details are open.
+    create_details_open: bool,
+    /// The model and effort the user wants across copies (`restore_intended_model`).
+    intended_model: Option<String>,
+    intended_effort: Option<String>,
     model_index: usize,
     effort: Option<String>,
     all_efforts: bool,
@@ -243,6 +248,9 @@ impl GpuiNewCoordinatorModalWindow {
             playbook_generation: 0,
             create_pending: false,
             create_error: None,
+            create_details_open: false,
+            intended_model: None,
+            intended_effort: None,
             model_index: 0,
             effort: None,
             all_efforts: config.all_efforts,
@@ -410,6 +418,8 @@ impl GpuiNewCoordinatorModalWindow {
     fn choose_agent(&mut self, index: usize, cx: &mut Context<Self>) {
         self.selected_agent = index;
         self.agent_hint = None;
+        self.intended_model = None;
+        self.intended_effort = None;
         self.agent_select.close();
         self.reset_model();
         cx.notify();
@@ -421,6 +431,7 @@ impl GpuiNewCoordinatorModalWindow {
             return;
         };
         self.model_index = index;
+        self.intended_model = self.model().map(|model| model.value.clone());
         self.model_select.close();
         self.focus_handle.focus(window, cx);
         self.reset_effort();
@@ -430,6 +441,7 @@ impl GpuiNewCoordinatorModalWindow {
     fn choose_effort(&mut self, index: usize, cx: &mut Context<Self>) {
         if let Some((value, _)) = self.efforts().get(index) {
             self.effort = Some(value.clone());
+            self.intended_effort = Some(value.clone());
         }
         self.effort_select.close();
         cx.notify();
@@ -665,12 +677,8 @@ impl GpuiNewCoordinatorModalWindow {
             if !message.is_empty() {
                 body = body.child(modal_error(&p, &message));
             }
-            if let Some(error) = self
-                .create_error
-                .as_ref()
-                .filter(|_| self.copy_problem().is_none())
-            {
-                body = body.child(modal_error(&p, error));
+            if let Some(error) = self.render_create_error(cx) {
+                body = body.child(error);
             }
             return body.into_any_element();
         };
@@ -698,13 +706,8 @@ impl GpuiNewCoordinatorModalWindow {
             body = body.child(row);
         }
         body = body.child(self.render_first_message(&agent.skill_line));
-        // A refusal about the picked copy is already said under the Computer field.
-        if let Some(error) = self
-            .create_error
-            .as_ref()
-            .filter(|_| self.copy_problem().is_none())
-        {
-            body = body.child(modal_error(&p, error));
+        if let Some(error) = self.render_create_error(cx) {
+            body = body.child(error);
         }
         body.into_any_element()
     }

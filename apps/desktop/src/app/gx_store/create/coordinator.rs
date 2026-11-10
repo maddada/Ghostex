@@ -19,7 +19,7 @@ use crate::GhostexGpuiApp;
 use crate::app::remote_conn::sidebar_rpc::{
     GpuiRemoteSidebarRpcMode, gpui_remote_sidebar_rpc_failure_reason,
 };
-use crate::app::window::{NewCoordinatorAgent, NewCoordinatorModel};
+use crate::app::window::{NewCoordinatorAgent, NewCoordinatorModel, NewCoordinatorRefusal};
 use ghostex_gx_chat_core::composer::skill_invocation::orchestrator_skill_line;
 use ghostex_gx_chat_core::protocol::{
     COORDINATOR_AGENT_FAMILIES, coordinator_default_model_label, coordinator_launch_takes_effort,
@@ -208,11 +208,18 @@ impl GhostexGpuiApp {
         name: &str,
         model: Option<&str>,
         effort: Option<&str>,
-        done: impl FnOnce(&mut Self, Result<(), String>, &mut gpui::Context<Self>) + 'static,
+        done: impl FnOnce(&mut Self, Result<(), NewCoordinatorRefusal>, &mut gpui::Context<Self>)
+        + 'static,
         cx: &mut gpui::Context<Self>,
     ) {
         let Some(project) = ProjectKey::parse_sidebar_group_id(group_id) else {
-            done(self, Err("That project is no longer open.".to_string()), cx);
+            done(
+                self,
+                Err(NewCoordinatorRefusal::plain(
+                    "That project is no longer open.",
+                )),
+                cx,
+            );
             return;
         };
         let hud = self.gx_store_launch_hud();
@@ -264,7 +271,7 @@ impl GhostexGpuiApp {
                                 cx,
                             );
                         }
-                        Err(reason) => done(this, Err(reason), cx),
+                        Err(reason) => done(this, Err(NewCoordinatorRefusal::plain(reason)), cx),
                     }
                 });
             })
@@ -281,7 +288,9 @@ impl GhostexGpuiApp {
         let Some(agent) = resolve_sidebar_agent(hud.as_deref(), agent_id) else {
             done(
                 self,
-                Err("That agent is no longer set up on this computer.".to_string()),
+                Err(NewCoordinatorRefusal::plain(
+                    "That agent is no longer set up on this computer.",
+                )),
                 cx,
             );
             return;
@@ -304,7 +313,9 @@ impl GhostexGpuiApp {
                 ),
                 Err(error) => {
                     let message = error.message.clone();
-                    let _ = this.update(cx, |this, cx| done(this, Err(message), cx));
+                    let _ = this.update(cx, |this, cx| {
+                        done(this, Err(NewCoordinatorRefusal::from_computer(message)), cx)
+                    });
                     return;
                 }
             };
@@ -312,7 +323,9 @@ impl GhostexGpuiApp {
                 let _ = this.update(cx, |this, cx| {
                     done(
                         this,
-                        Err("This computer could not create it.".to_string()),
+                        Err(NewCoordinatorRefusal::plain(
+                            "Coordinator not created. Try again.",
+                        )),
                         cx,
                     )
                 });
