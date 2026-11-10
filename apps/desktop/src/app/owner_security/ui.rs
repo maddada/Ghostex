@@ -40,10 +40,12 @@ fn approval_title(request: &ApprovalRequest) -> &'static str {
     if request.action != SensitiveAction::PairingApproveDevice {
         return "Approval needed";
     }
+    // The same question the Connect a phone window asks (CDXC:RemotePairing 2026-11-10 in
+    // window/connect_device_modal.rs).
     if request.summary.starts_with("Pair ") {
-        "Approve this phone?"
+        "Is this your phone?"
     } else {
-        "Approve this computer?"
+        "Is this your computer?"
     }
 }
 

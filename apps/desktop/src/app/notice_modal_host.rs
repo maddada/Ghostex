@@ -18,12 +18,15 @@ use crate::app::helpers::{
     chrome_uses_light_appearance, titlebar_active_text_color, titlebar_popup_menu_hover_color,
     titlebar_svg_icon,
 };
+use crate::app::window::native_modal_kit::approve_presence_hint;
 use crate::app::window::notice_modal::{
-    GpuiNoticeModalWindow, NoticeModalCommand, NoticeModalHost, NoticeModalItem, NoticeModalTone,
+    GpuiNoticeModalWindow, NoticeModalCommand, NoticeModalHost, NoticeModalItem,
+    NoticeModalPairing, NoticeModalTone,
 };
 use crate::app::window::toast::{
     GpuiAppToast, GpuiAppToastAction, GpuiAppToastLevel, gpui_app_toast_without_repeats,
 };
+use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
 
 /// The notices waiting for an answer and the modal that shows them.
 #[derive(Default)]
@@ -59,6 +62,49 @@ fn sentence(text: &str) -> String {
     }
 }
 
+/// The phone or computer a pairing request asks about, read from the summary and detail gxserver
+/// writes for it (server/src/remote_access/pair_device.rs: `… calls itself "<name>" …` and
+/// `… the same three words: a · b · c. …`); `None` for any other request, or one worded otherwise
+/// (it then shows as a plain approval).
+fn pairing_of(request: &ApprovalRequest) -> Option<NoticeModalPairing> {
+    if request.action != SensitiveAction::PairingApproveDevice {
+        return None;
+    }
+    let summary = request.summary.as_str();
+    let name = summary.split_once("calls itself \"")?.1.split_once('"')?.0;
+    let words: Vec<String> = request
+        .detail
+        .as_deref()?
+        .split_once("three words: ")?
+        .1
+        .split_once('.')?
+        .0
+        .split('·')
+        .map(|word| word.trim().to_string())
+        .filter(|word| !word.is_empty())
+        .collect();
+    if words.len() != 3 || name.trim().is_empty() {
+        return None;
+    }
+    let phone = summary.starts_with("Pair ");
+    let lower = summary.to_lowercase();
+    let kind_label = if !phone {
+        "computer"
+    } else if lower.contains("iphone") || lower.contains(" ios ") {
+        "iPhone"
+    } else if lower.contains("android") {
+        "Android"
+    } else {
+        "phone"
+    };
+    Some(NoticeModalPairing {
+        name: name.trim().to_string(),
+        kind_label: kind_label.to_string(),
+        phone,
+        words,
+    })
+}
+
 /// How the modal draws `toast`.
 fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
     if let Some(GpuiAppToastAction::SecurityApproval {
@@ -83,6 +129,26 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
             message.push(' ');
             message.push_str(&sentence(detail));
         }
+        // Only when it will (Settings > Security, or an older gxserver): a plain Approve is one click.
+        let hint = require_presence.then(|| approve_presence_hint().to_string());
+        // A pairing reads like the Connect a phone window: the device, its words, one sentence;
+        // the computer it asks on is named only when it isn't this one.
+        if let Some(pairing) = pairing_of(request) {
+            return NoticeModalItem {
+                id: toast.id.clone(),
+                tone: NoticeModalTone::Approval,
+                title: toast.title.clone(),
+                message: None,
+                source: computer
+                    .clone()
+                    .map(|computer| vec![("On".to_string(), computer)])
+                    .unwrap_or_default(),
+                action_label: Some("Approve".to_string()),
+                copy_text: None,
+                hint,
+                pairing: Some(pairing),
+            };
+        }
         return NoticeModalItem {
             id: toast.id.clone(),
             tone: NoticeModalTone::Approval,
@@ -99,17 +165,8 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
             ],
             action_label: Some("Approve".to_string()),
             copy_text: None,
-            // Only when it will (Settings > Security, or an older gxserver): a plain Approve is one click.
-            hint: require_presence.then(|| {
-                if cfg!(target_os = "windows") {
-                    "Approve asks for Windows Hello first."
-                } else if cfg!(target_os = "macos") {
-                    "Approve asks for Touch ID or your password first."
-                } else {
-                    "Approve asks for your password first."
-                }
-                .to_string()
-            }),
+            hint,
+            pairing: None,
         };
     }
     NoticeModalItem {
@@ -129,6 +186,7 @@ fn notice_item(toast: &GpuiAppToast) -> NoticeModalItem {
             .map(|action| action.label().to_string()),
         copy_text: toast.copy_text.clone(),
         hint: None,
+        pairing: None,
     }
 }
 

@@ -41,8 +41,8 @@ const ICON_CONNECTED: &str = "modals/settings/circle-check-filled.svg";
 
 /// The short website link that redirects to the latest Android APK.
 pub(crate) const GHOSTEX_ANDROID_INSTALL_URL: &str = "https://ghostex.dev/android";
-/// The iPhone app is on TestFlight; access is asked for on the Discord.
-pub(crate) const GHOSTEX_IPHONE_INSTALL_URL: &str = "https://discord.gg/df7b3G92CS";
+/// Ghostex for iPhone on the App Store.
+pub(crate) const GHOSTEX_IPHONE_INSTALL_URL: &str = "https://apps.apple.com/app/id6771707394";
 
 /// What the window connects: a phone (the QR) or another computer (the code to paste there).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -398,7 +398,7 @@ impl GpuiConnectDeviceWindow {
     fn title(&self) -> String {
         match (&self.stage, &self.waiting) {
             (Stage::Connected(device), _) => format!("{} is connected", device.name),
-            (Stage::Ready, Some(device)) => is_this_your(device),
+            (Stage::Ready, Some(device)) => pairing_question(device.phone).to_string(),
             _ => match self.kind {
                 ConnectDeviceKind::Phone => "Connect a phone".to_string(),
                 ConnectDeviceKind::Computer => "Connect a computer".to_string(),
@@ -806,11 +806,8 @@ impl GpuiConnectDeviceWindow {
                     .child(device.name.clone())
                     .child(self.muted(format!("· {}", device.kind_label))),
             )
-            .child(pairing_words(&p, &device.words))
-            .child(self.muted(format!(
-                "Your {} shows three words. Approve only if they are the same as these.",
-                if device.phone { "phone" } else { "computer" }
-            )))
+            .child(pairing_words(&p, &device.words, false))
+            .child(self.muted(pairing_words_sentence(device.phone)))
             .children(
                 self.decide_error
                     .clone()
@@ -820,11 +817,7 @@ impl GpuiConnectDeviceWindow {
                 modal_action_button(
                     &p,
                     "connect-device-deny",
-                    if device.phone {
-                        "Not my phone"
-                    } else {
-                        "Not my computer"
-                    },
+                    pairing_deny_label(device.phone),
                     None,
                     ModalButtonTone::Neutral,
                     deciding,
@@ -856,7 +849,7 @@ impl GpuiConnectDeviceWindow {
         v_flex()
             .w_full()
             .gap(px(16.0))
-            .child(pairing_words(&self.palette, &device.words))
+            .child(pairing_words(&self.palette, &device.words, false))
             .child(self.spinner_line(format!(
                 "Approved. Waiting for {} to finish connecting…",
                 device.name
@@ -932,54 +925,6 @@ impl GpuiConnectDeviceWindow {
             .child(self.footer(cx))
             .into_any_element()
     }
-}
-
-/// "Is this your phone?" / "Is this your computer?".
-fn is_this_your(device: &WaitingDevice) -> String {
-    format!(
-        "Is this your {}?",
-        if device.phone { "phone" } else { "computer" }
-    )
-}
-
-/// The line under Approve when it asks for Touch ID, Windows Hello or the password first.
-pub(crate) fn approve_presence_hint() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "Approve asks for Windows Hello first."
-    } else if cfg!(target_os = "macos") {
-        "Approve asks for Touch ID or your password first."
-    } else {
-        "Approve asks for your password first."
-    }
-}
-
-/// The three words, side by side in raised boxes, as the biggest thing on screen. The notice for
-/// the same request draws them with this too (app/window/notice_modal.rs).
-pub(crate) fn pairing_words(p: &ModalPalette, words: &[String]) -> AnyElement {
-    h_flex()
-        .w_full()
-        .gap(px(8.0))
-        .children(words.iter().map(|word| {
-            div()
-                .flex_1()
-                .flex_basis(px(0.0))
-                .min_w_0()
-                .h(px(64.0))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(MODAL_RADIUS_CONTROL))
-                .border_1()
-                .border_color(hsla(p.hairline))
-                .bg(hsla(p.raised))
-                .text_size(px(24.0))
-                .line_height(px(30.0))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(hsla(p.foreground))
-                .overflow_hidden()
-                .child(word.clone())
-        }))
-        .into_any_element()
 }
 
 impl Render for GpuiConnectDeviceWindow {

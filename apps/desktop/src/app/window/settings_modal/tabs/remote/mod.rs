@@ -661,6 +661,34 @@ impl RemoteTab {
         );
     }
 
+    /// Not my phone on a waiting phone or computer: denies its request, as the Connect a phone
+    /// window and the notice do, so the phone hears "The computer said no".
+    pub(super) fn deny_pending_device(&mut self, approval_id: String, cx: &mut Context<Self>) {
+        if approval_id.is_empty() || !self.rpc_available(cx) {
+            return;
+        }
+        self.removing_device = self
+            .pending_devices
+            .iter()
+            .find(|device| device.approval_id == approval_id)
+            .map(|device| device.id.clone());
+        cx.notify();
+        self.rpc(
+            "/api/denyApprovalRequest",
+            json!({ "id": approval_id }),
+            RPC_TIMEOUT,
+            cx,
+            |this, result, cx| {
+                this.removing_device = None;
+                if let Err(error) = result {
+                    this.request_error = Some(error);
+                }
+                this.refresh_pending_devices(cx);
+                cx.notify();
+            },
+        );
+    }
+
     /// The phones waiting for approval, while the Show QR sheet is open.
     pub(super) fn refresh_pending_devices(&mut self, cx: &mut Context<Self>) {
         self.rpc(
