@@ -412,6 +412,7 @@ fn offline(provider: Provider) -> Problem {
 ///
 /// CDXC:VoiceMode 2026-10-20 WHY: xAI documents no HTTP 402 (its rate limits are 429), yet answered 402 for a few minutes on 2026-10-20 and then served again; an account on The X Subscription draws API usage from the plan's weekly included pool and needs prepaid credit beyond it. So an xAI 402 is retried like a rate limit, keeps what xAI said as the detail, and never claims the account is out of credit.
 /// CDXC:VoiceMode 2026-10-30 WHY: OpenAI answers an account without credit with 429 and `insufficient_quota` (not 402), which waiting does not fix, so that one reads as payment required and is not retried.
+/// CDXC:VoiceMode 2026-11-11 WHY: xAI answers a wrong or revoked key on `/v1/stt` with HTTP 400 (`{"code":"Client specified an invalid argument","error":"Incorrect API key provided. ..."}`, measured 2026-11-11), not 401, so a user whose key stopped working was told the recording couldn't be read and to record it again. A 400 that names the API key reads as a refused key, as the key check in `keys.rs` already treats a 400.
 pub(super) fn status_problem(provider: Provider, status: u16, body: &str) -> Outcome {
     let label = provider.label();
     let detail = provider::error_body_text((!body.trim().is_empty()).then_some(body.as_bytes()))
@@ -421,7 +422,12 @@ pub(super) fn status_problem(provider: Provider, status: u16, body: &str) -> Out
     };
     let no_quota =
         provider == Provider::OpenAi && status == 429 && body.contains("insufficient_quota");
+    let key_refused = status == 400 && body.to_ascii_lowercase().contains("api key");
     match status {
+        _ if key_refused => Outcome::Final(said(
+            "badKey",
+            format!("{label} refused the API key. Check it in Settings > Voice, then transcribe again."),
+        )),
         401 | 403 => Outcome::Final(said(
             "badKey",
             format!("{label} refused the API key. Check it in Settings > Voice, then transcribe again."),
