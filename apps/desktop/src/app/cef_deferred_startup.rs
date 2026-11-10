@@ -39,9 +39,39 @@ impl GhostexGpuiApp {
             // (app/helpers/web_runtime_pending.rs); it is downloaded again now.
             if crate::app::helpers::web_runtime_pending::take_reinstall_after_launch() {
                 self.install_web_runtime(false, cx);
+            } else {
+                self.update_older_web_runtime_after_launch(cx);
             }
             Self::warm_up_web_runtime_after_launch(cx);
         }
+    }
+
+    /// CDXC:CefRuntime 2026-11-10 WHY:
+    /// GitHub #530: when an app update sealed a new CEF version, the web views showed the first-install prompt ("an optional install (one-time)") to a user who had installed the runtime. Having installed it is the user's yes, the same as the warm-up below treats an installed runtime: the new version downloads in the background right after launch, and the web views show its progress as "Updating web runtime". A computer that never installed it is left alone.
+    fn update_older_web_runtime_after_launch(&mut self, cx: &mut gpui::Context<Self>) {
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+        {
+            if web_runtime_state() != WebRuntimeState::NotInstalled {
+                return;
+            }
+            let older = cx
+                .background_executor()
+                .spawn(async { cef_component_window::older_cef_component_installed() });
+            cx.spawn(async move |this, cx| {
+                if !older.await {
+                    return;
+                }
+                let _ = this.update(cx, |this, cx| {
+                    if web_runtime_state() == WebRuntimeState::NotInstalled {
+                        set_web_runtime_install_is_update(true);
+                        this.install_web_runtime(false, cx);
+                    }
+                });
+            })
+            .detach();
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        let _ = cx;
     }
 
     /// CDXC:CefRuntime 2026-10-23 DECISION:

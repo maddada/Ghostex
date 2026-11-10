@@ -165,6 +165,100 @@ impl ComponentStore {
         versions
     }
 
+    /// An install of `name` for `platform` from a version other than the one this release seals:
+    /// what the user installed before an app update brought a new version. One whose archive is
+    /// the sealed one (same SHA-256) comes first, else the most recently installed.
+    pub fn previous_install_for_platform(
+        &self,
+        name: &str,
+        platform: &str,
+    ) -> Option<PreviousInstall> {
+        let component = self.manifest.components.get(name)?;
+        let current = component_version_dir_name(&component.name, &component.component_version);
+        let sealed_sha256 = component
+            .platforms
+            .get(platform)
+            .map(|asset| asset.sha256.as_str());
+        let mut found: Vec<(bool, std::time::SystemTime, PreviousInstall)> =
+            fs::read_dir(self.root.join(&component.name))
+                .ok()?
+                .flatten()
+                .filter(|entry| {
+                    entry.path().is_dir()
+                        && entry
+                            .file_name()
+                            .to_str()
+                            .is_some_and(|folder| !folder.starts_with('.') && folder != current)
+                })
+                .filter_map(|entry| {
+                    let path = entry.path().join(platform);
+                    let marker = read_install_marker(&path)?;
+                    (marker.name == component.name
+                        && marker.platform == platform
+                        && marker.version != component.component_version
+                        && require_identifier(&marker.version, "component version").is_ok())
+                    .then_some(())?;
+                    let installed_at = path
+                        .join(".ghostex-component.json")
+                        .metadata()
+                        .and_then(|metadata| metadata.modified())
+                        .unwrap_or(std::time::UNIX_EPOCH);
+                    Some((
+                        sealed_sha256 == Some(marker.sha256.as_str()),
+                        installed_at,
+                        PreviousInstall {
+                            version: marker.version,
+                            sha256: marker.sha256,
+                            path,
+                        },
+                    ))
+                })
+                .collect();
+        found.sort_by_key(|(same_archive, installed_at, _)| (*same_archive, *installed_at));
+        found.pop().map(|(_, _, previous)| previous)
+    }
+
+    /// CDXC:Release 2026-11-10 WHY:
+    /// A component's version re-keys whenever any of its platforms' inputs change, so an app update can seal a new version whose archive for this platform is byte for byte the one already installed (GitHub #530: 11.0.0 re-keyed code-server for a Windows-only script change and every Linux archive stayed identical). The installed folder is moved under the new version instead of downloading the same bytes again. Returns `None` when there is nothing to adopt or the move failed; the caller then downloads as usual.
+    fn adopt_previous_install(
+        &self,
+        component: &ComponentDefinition,
+        platform: &str,
+        asset: &ComponentPlatformAsset,
+        version_root: &Path,
+    ) -> Option<InstalledComponent> {
+        let previous = self
+            .previous_install_for_platform(&component.name, platform)
+            .filter(|previous| previous.sha256 == asset.sha256)?;
+        fs::create_dir_all(version_root).ok()?;
+        let unique = unique_suffix();
+        let staged = version_root.join(format!(".install-{}-{unique}", std::process::id()));
+        let backup = version_root.join(format!(".previous-{}-{unique}", std::process::id()));
+        let _cleanup = ScopedPathCleanup::new([staged.clone(), backup.clone()]);
+        fs::rename(&previous.path, &staged).ok()?;
+        if component.name == CODE_SERVER_COMPONENT_NAME && platform.starts_with("windows-") {
+            verify_installed_windows_code_server(&staged, &component.component_version, platform)
+                .ok()?;
+        }
+        write_install_marker(
+            &staged,
+            &component.name,
+            &component.component_version,
+            platform,
+            &asset.sha256,
+        )
+        .ok()?;
+        let mut replacement =
+            AtomicPathReplacement::prepare(&version_root.join(platform), &backup).ok()?;
+        replacement.install(&staged).ok()?;
+        let installed = self
+            .query_for_platform(&component.name, &component.component_version, platform)
+            .ok()
+            .filter(|installed| installed.installed)?;
+        replacement.commit().ok()?;
+        Some(installed)
+    }
+
     #[allow(dead_code)] // component-store query builder API kept complete
     pub fn query(&self, name: &str, version: &str) -> Result<InstalledComponent, String> {
         let platform = current_platform()?;
@@ -319,6 +413,20 @@ impl ComponentStore {
                 ComponentStoreProgressPhase::Ready,
             );
             return Ok(current);
+        }
+        if let Some(adopted) =
+            self.adopt_previous_install(component, platform, asset, &version_root)
+        {
+            prune_temporary_install_artifacts(&version_root);
+            prune_other_versions(&component_root, &version_dir_name)?;
+            emit(
+                progress,
+                component,
+                platform,
+                asset.size_bytes,
+                ComponentStoreProgressPhase::Ready,
+            );
+            return Ok(adopted);
         }
 
         fs::create_dir_all(&version_root).map_err(|error| {

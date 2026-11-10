@@ -174,7 +174,14 @@ impl GhostexGpuiApp {
                 };
                 return ProjectEditorPlaceholderSignature {
                     mode: TitlebarMode::Source,
-                    title: Some("Installing VS Code IDE component".to_string()),
+                    title: Some(
+                        if self.source_code_server_runtime.install_is_update {
+                            "Updating VS Code IDE component"
+                        } else {
+                            "Installing VS Code IDE component"
+                        }
+                        .to_string(),
+                    ),
                     message: message.to_string(),
                     actions: Vec::new(),
                 };

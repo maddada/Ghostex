@@ -99,6 +99,16 @@ impl ComponentStoreProgress {
     }
 }
 
+/// An install of a component's other version, found by `ComponentStore::previous_install_for_platform`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PreviousInstall {
+    pub version: String,
+    /// The SHA-256 of the archive it was unpacked from, as its install marker records it.
+    pub sha256: String,
+    /// `<store>/<name>/<version folder>/<platform>`.
+    pub path: PathBuf,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InstalledComponent {
     pub installed: bool,

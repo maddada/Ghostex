@@ -104,6 +104,9 @@ pub(crate) fn source_code_server_start_runtime_for_target(
 pub(crate) enum SourceCodeServerRuntimeAvailability {
     Available,
     InstallRequired,
+    /// The sealed version is not installed but an older one is: the user installed the editor
+    /// before an app update brought a new version, so it updates without asking again.
+    UpdateRequired,
     Failed(SourceCodeServerRuntimeFailure),
 }
 
@@ -245,6 +248,16 @@ pub(crate) fn source_code_server_runtime_availability(
     };
     match installed {
         Ok(installed) if installed.installed => SourceCodeServerRuntimeAvailability::Available,
+        Ok(installed)
+            if store
+                .previous_install_for_platform(
+                    SOURCE_CODE_SERVER_COMPONENT_NAME,
+                    &installed.platform,
+                )
+                .is_some() =>
+        {
+            SourceCodeServerRuntimeAvailability::UpdateRequired
+        }
         Ok(_) => SourceCodeServerRuntimeAvailability::InstallRequired,
         Err(_) => SourceCodeServerRuntimeAvailability::Failed(
             SourceCodeServerRuntimeFailure::InstallOther,

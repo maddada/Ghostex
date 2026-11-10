@@ -78,6 +78,33 @@ pub(crate) fn write_install_marker(
     .map_err(|error| format!("Could not write component install marker: {error}"))
 }
 
+/// What an install's `.ghostex-component.json` says it holds.
+pub(crate) struct InstallMarker {
+    pub(crate) name: String,
+    pub(crate) version: String,
+    pub(crate) platform: String,
+    pub(crate) sha256: String,
+}
+
+/// The install marker in `path`, when it is there and well formed.
+pub(crate) fn read_install_marker(path: &Path) -> Option<InstallMarker> {
+    let data = fs::read_to_string(path.join(".ghostex-component.json")).ok()?;
+    let marker = serde_json::from_str::<serde_json::Value>(&data).ok()?;
+    let field = |key: &str| {
+        marker
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+    };
+    let sha256 = field("sha256").filter(|sha256| valid_sha256(sha256))?;
+    Some(InstallMarker {
+        name: field("name")?,
+        version: field("version")?,
+        platform: field("platform")?,
+        sha256,
+    })
+}
+
 pub(crate) fn installed_marker_matches(
     path: &Path,
     name: &str,

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The VS Code view and the web runtime stay installed across updates:** when an update brings a new version of either, it updates by itself (the view shows "Updating" with its progress) instead of asking again as if it were a first install, and a new version whose download is identical to the one you have is kept without downloading it again (GitHub #530).
 - **A thread you message after marking it done reports back again:** a message (or `ghostex coordinator reopen`) to a finished thread puts it back under its coordinator and its reply always arrives, even when its session takes a while to start; a thread counts as closed only once its session has stayed closed for a minute, and `reopen` answers within seconds instead of timing out.
 - **A message to a sleeping or closed agent always says what happened:** `ghostex agents send` answers within seconds (sent, or waiting for the agent to start) instead of timing out while the agent wakes, and sending the same message again while the first copy still waits no longer delivers it twice.
 - **`.tsx` and `.jsx` files are coloured in Files:** imports, strings, comments, `const`, JSX tags and attributes now get colours like `.ts` files do (a `.tsx` file used to colour only types, capitalised names and a few keywords).

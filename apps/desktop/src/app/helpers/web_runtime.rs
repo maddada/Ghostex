@@ -30,6 +30,15 @@ pub(crate) enum WebRuntimeState {
 
 static WEB_RUNTIME_STATE: Mutex<WebRuntimeState> = Mutex::new(WebRuntimeState::NotInstalled);
 
+/// Whether the install that runs replaces an older runtime the user installed, so the web views
+/// say "Updating" rather than "Installing".
+static WEB_RUNTIME_INSTALL_IS_UPDATE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+pub(crate) fn set_web_runtime_install_is_update(update: bool) {
+    WEB_RUNTIME_INSTALL_IS_UPDATE.store(update, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub(crate) fn web_runtime_state() -> WebRuntimeState {
     WEB_RUNTIME_STATE
         .lock()
@@ -83,7 +92,14 @@ pub(crate) fn web_runtime_install_prompt(subject: &str) -> Option<WebRuntimeProm
             action: Some(WebRuntimePromptAction::Install),
         }),
         WebRuntimeState::Installing(phase) => Some(WebRuntimePrompt {
-            title: Some("Installing web runtime".to_string()),
+            title: Some(
+                if WEB_RUNTIME_INSTALL_IS_UPDATE.load(std::sync::atomic::Ordering::Relaxed) {
+                    "Updating web runtime"
+                } else {
+                    "Installing web runtime"
+                }
+                .to_string(),
+            ),
             message: web_runtime_install_phase_label(phase).to_string(),
             action: None,
         }),

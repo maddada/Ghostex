@@ -246,7 +246,7 @@ impl GhostexGpuiApp {
     /// Installs the version this release seals, the way the view that needs it would.
     pub(super) fn install_component_update(&mut self, plugin: &str, cx: &mut gpui::Context<Self>) {
         match plugin {
-            "code" => self.install_source_code_server_component(cx),
+            "code" => self.update_source_code_server_component(cx),
             "cef" => self.install_web_runtime(false, cx),
             _ => {}
         }

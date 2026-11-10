@@ -994,6 +994,9 @@ pub(crate) struct SourceCodeServerRuntimeOwner {
     /// Set with `SourceCodeServerRuntimeFailure::PortInUse`.
     pub(crate) port_in_use: Option<SourceCodeServerPortInUse>,
     pub(crate) install_progress: Option<component_store::ComponentStoreProgressPhase>,
+    /// The running install replaces an older version the user installed (an app update sealed a
+    /// new one), so the Code view says "Updating" rather than "Installing".
+    pub(crate) install_is_update: bool,
     pub(crate) started_at: Option<Instant>,
     pub(crate) generation: u64,
     pub(crate) state: SourceCodeServerRuntimeLaunchState,
@@ -1014,6 +1017,7 @@ impl SourceCodeServerRuntimeOwner {
             failure: None,
             port_in_use: None,
             install_progress: None,
+            install_is_update: false,
             started_at: None,
             generation: 0,
             state: SourceCodeServerRuntimeLaunchState::Idle,
@@ -1253,6 +1257,7 @@ impl SourceCodeServerRuntimeOwner {
         self.state = SourceCodeServerRuntimeLaunchState::Installing;
         self.failure = None;
         self.install_progress = Some(component_store::ComponentStoreProgressPhase::Checking);
+        self.install_is_update = false;
         self.started_at = Some(Instant::now());
         self.target = target;
         self.settings = settings;

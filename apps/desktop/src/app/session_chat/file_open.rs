@@ -638,6 +638,9 @@ impl GhostexGpuiApp {
             SourceCodeServerRuntimeAvailability::InstallRequired => {
                 Some("VS Code view is not installed on this machine.")
             }
+            SourceCodeServerRuntimeAvailability::UpdateRequired => {
+                Some("VS Code view needs an update on this machine.")
+            }
             SourceCodeServerRuntimeAvailability::Failed(_) => {
                 Some("VS Code view is unavailable on this machine.")
             }

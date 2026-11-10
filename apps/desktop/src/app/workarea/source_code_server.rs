@@ -195,6 +195,10 @@ impl GhostexGpuiApp {
                             this.source_code_server_runtime
                                 .set_install_required(target, settings);
                         }
+                        SourceCodeServerRuntimeAvailability::UpdateRequired => {
+                            this.update_source_code_server_component(cx);
+                            return;
+                        }
                         SourceCodeServerRuntimeAvailability::Failed(failure) => {
                             this.source_code_server_runtime
                                 .set_failed(target, settings, None, None, failure);
@@ -610,6 +614,15 @@ impl GhostexGpuiApp {
         })
         .detach();
         cx.notify();
+    }
+
+    /// CDXC:CodeEditor 2026-11-10 WHY:
+    /// GitHub #530: after an app update that sealed a new editor version, the Code view showed the first-install prompt ("a 150mb optional install (one-time)") to a user who had installed it, every time the component changed. Having installed it is the user's yes: the new version installs in the Code view without asking, which is also what Settings › Updates promises ("it also installs the next time it's needed").
+    pub(crate) fn update_source_code_server_component(&mut self, cx: &mut gpui::Context<Self>) {
+        self.install_source_code_server_component(cx);
+        if self.source_code_server_runtime.state == SourceCodeServerRuntimeLaunchState::Installing {
+            self.source_code_server_runtime.install_is_update = true;
+        }
     }
 
     #[allow(dead_code)]

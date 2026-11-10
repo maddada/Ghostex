@@ -652,6 +652,28 @@ fn installed_cef_component_dir() -> Option<PathBuf> {
     installed.installed.then_some(installed.path)
 }
 
+/// Whether this build's CEF is missing from the component store while an older version the user
+/// installed is there: an app update sealed a new CEF, so the runtime updates rather than waiting
+/// for the user to install it again (app/cef_deferred_startup.rs).
+pub(crate) fn older_cef_component_installed() -> bool {
+    let Some(store) = on_demand_component_store().ok().flatten() else {
+        return false;
+    };
+    let Some(component) = store.component(CEF_COMPONENT) else {
+        return false;
+    };
+    if component.component_version != expected_cef_component_version() {
+        return false;
+    }
+    let Ok(current) = store.query_current(CEF_COMPONENT) else {
+        return false;
+    };
+    !current.installed
+        && store
+            .previous_install_for_platform(CEF_COMPONENT, &current.platform)
+            .is_some()
+}
+
 pub(crate) fn verified_cef_runtime_readiness() -> Result<CefRuntimeReadiness, String> {
     #[cfg(target_os = "linux")]
     {
