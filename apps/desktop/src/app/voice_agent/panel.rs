@@ -1,7 +1,9 @@
 //! The voice panel: a small native child window, first under the work area header's top right,
 //! that shows the open conversation's state, live captions and tool lines, the voice (click it to
-//! pick another) and the speaking speed, with Mute, Stop talking and Hang up, and says why a
-//! conversation stopped.
+//! pick another) and the speaking speed, with Mute, Mute voice, Stop talking and Hang up, and says
+//! why a conversation stopped.
+//!
+//! CDXC:VoiceMode 2026-11-11 DECISION: User: "Please add an audio button to mute the speaking of the voice agent. It should sit next to the existing mute button. Also, make these two buttons show as just an icon with a tooltip for each, and use an icon that changes when the toggle state flips." The footer starts with two 28px icon-only toggles, the microphone (microphone / microphone-off, "Mute microphone" / "Unmute microphone") and the agent's voice (volume / volume-off, "Mute voice" / "Unmute voice"), then the hold button. Muted is a soft red tint with a red icon, never a dark fill on glass. The voice mute is the desktop's alone: the agent's audio still comes (captions, the reply's timing and the cut at an interruption follow gxserver's clock) and is not played; unmuting speaks from the next reply, nothing skipped is replayed. It lasts for the call, so a mute forgotten after one call never leaves the next one silent. The header's "Muted" stays the microphone's; the tinted toggle is the voice mute's only sign.
 //!
 //! CDXC:VoiceMode 2026-10-20 WHY: the conversation keeps going while the user moves between projects and chats, so the panel belongs to the main window, not to a chat or a view: it is an owned pop-up window attached as an AppKit child of the main window (the app toast window's pattern), which moves with the window, never takes focus, and overlaps nothing interactive of its own. A size change of the main window places it again.
 //! CDXC:VoiceMode 2026-10-20 DECISION: User: "the call screen should be movable and scrollable during voice mode." The panel's header is its drag handle: dragging it moves the panel's own window (`move_child_window`), kept inside the main window and remembered for the rest of the app's run, and the transcript scrolls with the wheel and trackpad. A window too small for the panel shrinks it, down to a floor.
@@ -63,7 +65,6 @@ const DRAG_THRESHOLD: f32 = 3.0;
 const REPOSITION_DELAY: std::time::Duration = std::time::Duration::from_millis(160);
 
 const ICON_MIC: &str = "titlebar/microphone.svg";
-const ICON_MIC_OFF: &str = "titlebar/microphone-off.svg";
 const ICON_HANG_UP: &str = "titlebar/phone-off.svg";
 const ICON_TOOL: &str = "titlebar/tool.svg";
 const ICON_CHECK: &str = "titlebar/check.svg";
@@ -159,6 +160,7 @@ struct PanelSnapshot {
     tool_label: Option<String>,
     rows: Vec<VoiceRow>,
     muted: bool,
+    voice_muted: bool,
     /// A push-to-talk call, and whether Talk is held.
     push_to_talk: bool,
     talking: bool,
@@ -636,6 +638,7 @@ impl GhostexGpuiApp {
             tool_label: agent.tool_label.clone(),
             rows: agent.rows.clone(),
             muted: agent.muted,
+            voice_muted: agent.voice_muted,
             push_to_talk: agent.push_to_talk,
             talking: agent.talking,
             hold_look: self.voice_agent_hold_look(),
@@ -730,6 +733,7 @@ fn move_voice_panel_window(
 #[derive(Clone)]
 enum PanelAction {
     Mute,
+    MuteVoice,
     StopTalking,
     HangUp,
     Close,
@@ -836,6 +840,7 @@ impl VoicePanelWindow {
                 PanelAction::ForgetMemory => app.forget_voice_agent_memory(cx),
                 PanelAction::ToggleMemoryDetails => app.toggle_voice_agent_memory_details(cx),
                 PanelAction::Mute => app.toggle_voice_agent_mute(cx),
+                PanelAction::MuteVoice => app.toggle_voice_agent_voice_mute(cx),
                 PanelAction::StopTalking => app.interrupt_voice_agent(cx),
                 PanelAction::HangUp => app.hang_up_voice_agent(cx),
                 PanelAction::Close => app.close_voice_agent_panel(cx),
@@ -1349,6 +1354,29 @@ impl VoicePanelWindow {
             .cursor(cursor)
             .child(listener)
             .into_any_element()
+    }
+
+    /// One of the two mute toggles (`panel_controls.rs`).
+    fn toggle_button(
+        &self,
+        id: &'static str,
+        (icon, tooltip): (&'static str, &'static str),
+        on: bool,
+        action: PanelAction,
+        colors: &PanelColors,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let panel = cx.entity().downgrade();
+        controls::toggle_button(
+            id,
+            icon,
+            SharedString::new_static(tooltip),
+            on,
+            colors.controls(),
+            move |_, cx| {
+                let _ = panel.update(cx, |this, cx| this.run(action.clone(), cx));
+            },
+        )
     }
 
     /// The icon-only hold button beside Mute (`panel_controls.rs`); pressing it while the agent
@@ -1925,17 +1953,20 @@ impl VoicePanelWindow {
         let mut right: Vec<AnyElement> = Vec::new();
         match snapshot.phase {
             VoicePhase::Starting | VoicePhase::Live => {
-                left.push(self.button(
+                left.push(self.toggle_button(
                     "voice-panel-mute",
-                    if snapshot.muted {
-                        ICON_MIC_OFF
-                    } else {
-                        ICON_MIC
-                    },
-                    Some(if snapshot.muted { "Unmute" } else { "Mute" }),
+                    controls::mic_toggle(snapshot.muted),
+                    snapshot.muted,
                     PanelAction::Mute,
                     colors,
-                    false,
+                    cx,
+                ));
+                left.push(self.toggle_button(
+                    "voice-panel-mute-voice",
+                    controls::voice_toggle(snapshot.voice_muted),
+                    snapshot.voice_muted,
+                    PanelAction::MuteVoice,
+                    colors,
                     cx,
                 ));
                 left.push(self.hold_button(snapshot, colors, cx));

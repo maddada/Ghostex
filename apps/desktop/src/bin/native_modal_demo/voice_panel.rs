@@ -12,7 +12,9 @@
 //! menu just switched to Regular: the strip's notice), `memory` (a muted call before anything was
 //! said, with the Last conversation card: the card, "Go ahead, I'm listening." and the text box,
 //! as the panel's `empty_body` lays them out), `memory-long` (the same with a long summary) and
-//! `memory-small` (the same at the panel's smallest size). Pressing the hold button holds it.
+//! `memory-small` (the same at the panel's smallest size), `voice-muted` (a Regular call with the
+//! agent's voice muted: the speaker toggle on) and `both-muted` (the microphone and the voice
+//! muted). Pressing the hold button holds it; clicking a mute toggle flips it.
 use super::rows;
 use super::voice_confirm_card as confirm_card;
 use super::voice_panel_controls::{self as controls, ControlColors, HoldLook, StripContent};
@@ -26,7 +28,6 @@ use gpui::{
 use gpui_component::{h_flex, v_flex};
 
 const ICON_MIC: &str = "titlebar/microphone.svg";
-const ICON_MIC_OFF: &str = "titlebar/microphone-off.svg";
 const ICON_HANG_UP: &str = "titlebar/phone-off.svg";
 const ICON_TOOL: &str = "titlebar/tool.svg";
 const ICON_CHECK: &str = "titlebar/check.svg";
@@ -56,6 +57,9 @@ struct VoicePanelDemo {
     scroll: ScrollHandle,
     /// The text box under the transcript, in the `typed` state.
     text_box: Option<gpui::Entity<gpui_component::input::TextareaState>>,
+    /// The mute toggles were clicked an odd number of times: the state's mute is flipped.
+    mic_flipped: bool,
+    voice_flipped: bool,
 }
 
 impl VoicePanelDemo {
@@ -108,17 +112,20 @@ impl Render for VoicePanelDemo {
         let colors = self.colors();
         let state = self.state.as_str();
         let held = self.held || state == "holding";
-        let muted = matches!(state, "muted" | "typed") || state.starts_with("memory");
-        let regular = matches!(state, "regular" | "mode-switched");
+        let muted = (matches!(state, "muted" | "typed" | "both-muted")
+            || state.starts_with("memory"))
+            != self.mic_flipped;
+        let voice_muted = matches!(state, "voice-muted" | "both-muted") != self.voice_flipped;
+        let regular = matches!(state, "regular" | "mode-switched" | "voice-muted");
         let (dot, label): (Hsla, &str) = if held {
             (rgba(0x38bdf8ff).into(), "Hearing you")
         } else {
             match state {
                 "speaking" => (rgba(0xa78bfaff).into(), "Speaking"),
-                "muted" | "typed" | "memory" | "memory-long" | "memory-small" => {
-                    (colors.muted, "Muted")
+                _ if muted => (colors.muted, "Muted"),
+                "regular" | "mode-switched" | "voice-muted" => {
+                    (rgba(0x4ade80ff).into(), "Listening")
                 }
-                "regular" | "mode-switched" => (rgba(0x4ade80ff).into(), "Listening"),
                 _ => (rgba(0x4ade80ff).into(), "Hold to talk"),
             }
         };
@@ -349,12 +356,40 @@ impl Render for VoicePanelDemo {
                     .items_center()
                     .border_t_1()
                     .border_color(colors.border)
-                    .child(button(
-                        if muted { ICON_MIC_OFF } else { ICON_MIC },
-                        if muted { "Unmute" } else { "Mute" },
-                        colors.ink.opacity(0.07),
-                        colors.text,
-                    ))
+                    .child({
+                        let (icon, tooltip) = controls::mic_toggle(muted);
+                        let demo = cx.entity().downgrade();
+                        controls::toggle_button(
+                            "voice-panel-mute",
+                            icon,
+                            tooltip.into(),
+                            muted,
+                            colors,
+                            move |_, cx| {
+                                let _ = demo.update(cx, |this, cx| {
+                                    this.mic_flipped = !this.mic_flipped;
+                                    cx.notify();
+                                });
+                            },
+                        )
+                    })
+                    .child({
+                        let (icon, tooltip) = controls::voice_toggle(voice_muted);
+                        let demo = cx.entity().downgrade();
+                        controls::toggle_button(
+                            "voice-panel-mute-voice",
+                            icon,
+                            tooltip.into(),
+                            voice_muted,
+                            colors,
+                            move |_, cx| {
+                                let _ = demo.update(cx, |this, cx| {
+                                    this.voice_flipped = !this.voice_flipped;
+                                    cx.notify();
+                                });
+                            },
+                        )
+                    })
                     .child(hold)
                     .child(div().flex_1())
                     .child(button(
@@ -452,6 +487,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                 voice_scroll,
                 scroll,
                 text_box,
+                mic_flipped: false,
+                voice_flipped: false,
             })
         },
         cx,
