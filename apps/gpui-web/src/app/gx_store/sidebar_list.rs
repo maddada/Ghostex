@@ -83,7 +83,7 @@ impl SidebarList {
         now_ms: u64,
     ) -> NativeSidebarSnapshot {
         self.last_inputs.ui = ui;
-        // `?settings=` is the page's only settings source (`lib.rs`); without it the rows keep the defaults.
+        // The computer's settings (`shared_settings_sync.rs`) with `?settings=` (`lib.rs`) on top; until the first read the rows keep the defaults.
         let saved = crate::shared_settings::shared_sidebar_settings_snapshot();
         if saved.revision() > 0 && saved.content_hash() != self.settings_hash {
             self.settings_hash = saved.content_hash();
