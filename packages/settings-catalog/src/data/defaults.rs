@@ -974,6 +974,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("workspaceBackgroundColor", J::Str("")),
     ("clickToWakeSleepingSessions", J::Bool(true)),
     ("dimSleepingSessions", J::Bool(false)),
+    ("dimInactiveProjects", J::Bool(false)),
     ("wakeSleepingSessionsOnSelect", J::Bool(true)),
     ("customViews", J::Arr(&[])),
     ("customViewTemplates", J::Arr(&[])),

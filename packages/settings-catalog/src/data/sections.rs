@@ -131,6 +131,7 @@ pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "keepAwakeDeactivateOnUserSwitch",
     "attentionNotificationActions",
     "dimSleepingSessions",
+    "dimInactiveProjects",
     "wakeSleepingSessionsOnSelect",
     "markedHandoversStyle",
     "markedHandoversEmoji",
@@ -509,6 +510,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "offerCleanupWhenPrMerges",
             "sidebarSessionTagListItems",
             "dimSleepingSessions",
+            "dimInactiveProjects",
             "wakeSleepingSessionsOnSelect",
         ],
     ),
@@ -618,7 +620,11 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
     ),
     (
         "advanced",
-        &["dimSleepingSessions", "wakeSleepingSessionsOnSelect"],
+        &[
+            "dimSleepingSessions",
+            "dimInactiveProjects",
+            "wakeSleepingSessionsOnSelect",
+        ],
     ),
     (
         "theming",
@@ -800,7 +806,11 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
     ),
     (
         "sleepingSessions",
-        &["dimSleepingSessions", "wakeSleepingSessionsOnSelect"],
+        &[
+            "dimSleepingSessions",
+            "dimInactiveProjects",
+            "wakeSleepingSessionsOnSelect",
+        ],
     ),
 ];
 

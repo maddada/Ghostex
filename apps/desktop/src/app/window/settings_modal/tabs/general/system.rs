@@ -560,6 +560,15 @@ pub(super) fn sleeping_sessions_section(
     rows.extend(page.toggle(
         g,
         "sleepingSessions",
+        "dimInactiveProjects",
+        "Dim inactive projects",
+        "Fade a project in the sidebar when all its sessions are asleep or closed, none is working and none waits on you, so projects you are not using stand apart. A project with no sessions counts as inactive.",
+        false,
+        cx,
+    ));
+    rows.extend(page.toggle(
+        g,
+        "sleepingSessions",
         "wakeSleepingSessionsOnSelect",
         "Wake sleeping sessions when selected",
         "Wake a sleeping session as soon as you select it. Turn off to open it with a Resume button instead, so switching sessions does not wake it by accident.",
