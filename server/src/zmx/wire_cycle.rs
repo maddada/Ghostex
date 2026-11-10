@@ -634,10 +634,14 @@ fn zmx_endpoint_error_message(error: ZmxEndpointError) -> String {
 ///
 /// CDXC:Resources 2026-10-24 WHY:
 /// The user's rule is "we shouldn't have orphaned ones" (`resource_session_owners`). A daemon whose row is gone (a create the previous gxserver died in the middle of, or a row removed while gxserver was down) was never ended: nothing restores it and nothing lists it but Resources, so it kept its agent, its endpoint record and, on Windows, its `windows-sessions` lock forever, and the reporter of GitHub #289 had to end them by hand. Only daemons with this server's name prefix are touched, a name counts as owned when it is a row's derived name, its stored `zmxName` or its provider state's `zmxName`, and the pass reads the live list once, so a row that exists is never ended.
+///
+/// CDXC:ServerDaemon 2026-11-10 WHY:
+/// The default socket folder is shared with `cargo xtask start --isolated` variants (GHOSTEX_HOME without ZMX_DIR), and server ids (360 of them) can collide, so a name with this server's prefix does not prove the daemon is this server's. On unix a daemon is ended only when the `GHOSTEX_GXSERVER_AUTH_TOKEN_FILE` it was started with is this server's token file, only that verified pid is signalled, and its socket is removed only from this server's current folder when that is the folder the daemon served. Anything unproven is kept and logged.
 pub(crate) fn end_unowned_zmx_session_daemons(
     repository: &DomainRepository<'_>,
     logger: &GxserverLogger,
     server_id: &str,
+    auth_token_file: &std::path::Path,
 ) {
     // A shared socket folder holds other profiles' daemons, which may carry this server's id (CDXC:ServerDaemon 2026-11-06 in screen_capture.rs).
     #[cfg(unix)]
@@ -654,54 +658,317 @@ pub(crate) fn end_unowned_zmx_session_daemons(
     if unowned.is_empty() {
         return;
     }
-    // Signalled like the wire cycle's daemons: an unowned daemon may be of an older generation too.
     #[cfg(unix)]
-    let outcomes: Vec<Result<String, String>> = terminate_zmx_session_daemon_processes(
-        &unowned.iter().map(String::as_str).collect::<Vec<_>>(),
-    )
-    .into_iter()
-    .map(|termination| termination.map(|()| "terminated".to_string()))
-    .collect();
+    end_verified_unowned_zmx_session_daemons(&unowned, logger, server_id, auth_token_file);
     #[cfg(windows)]
-    let outcomes: Vec<Result<String, String>> = {
+    {
+        let _ = auth_token_file;
         let Ok(zmx) = require_zmx() else {
             return;
         };
-        unowned
+        for zmx_name in unowned {
+            let kill = kill_zmx_session(&zmx_name, &zmx.executable_path);
+            let outcome = if kill.killed
+                && zmx_session_daemon_socket_present(&zmx_name) != Some(true)
+            {
+                Ok("killed".to_string())
+            } else {
+                terminate_zmx_session_daemon_process(&zmx_name).map(|()| "terminated".to_string())
+            };
+            log_unowned_zmx_session_daemon_outcome(logger, server_id, &zmx_name, &outcome);
+        }
+    }
+}
+
+fn log_unowned_zmx_session_daemon_outcome(
+    logger: &GxserverLogger,
+    server_id: &str,
+    zmx_name: &str,
+    outcome: &Result<String, String>,
+) {
+    let _ = logger.log(GxserverLogInput {
+        level: LogLevel::Warn,
+        event: match outcome {
+            Ok(_) => "unownedSessionDaemonEnded",
+            Err(_) => "unownedSessionDaemonEndFailed",
+        }
+        .to_string(),
+        server_id: Some(server_id.to_string()),
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: Some(match outcome {
+            Ok(_) => "A session terminal was still running for a session Ghostex no longer has, so it was ended.".to_string(),
+            Err(error) => format!("A session terminal is still running for a session Ghostex no longer has and could not be ended: {error}"),
+        }),
+        details: Some(json!({
+            "providerSessionId": zmx_name,
+            "termination": outcome.as_deref().unwrap_or("failed"),
+        })),
+    });
+}
+
+/// The environment variable a daemon names its gxserver's token file in (server/src/zmx/scripts.rs exports it).
+#[cfg(unix)]
+const ZMX_DAEMON_AUTH_TOKEN_FILE_ENV: &str = "GHOSTEX_GXSERVER_AUTH_TOKEN_FILE";
+
+/// A `zmx run <name>` process proven to be this server's, with the socket folder it resolved from its own environment.
+#[cfg(unix)]
+struct VerifiedZmxDaemon {
+    name: String,
+    pid: i64,
+    socket_dir: Option<std::path::PathBuf>,
+}
+
+#[cfg(unix)]
+enum ZmxDaemonOwnership {
+    Ours(Option<std::path::PathBuf>),
+    Kept {
+        reason: &'static str,
+        token_file: Option<String>,
+    },
+}
+
+/// The environment `pid` started with: `Err` when it cannot be read, so a missing variable and an unreadable environment stay apart.
+#[cfg(target_os = "macos")]
+fn zmx_daemon_environment(pid: i64) -> Result<std::collections::HashMap<String, String>, ()> {
+    super::process_table_macos::process_environment(pid).ok_or(())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn zmx_daemon_environment(pid: i64) -> Result<std::collections::HashMap<String, String>, ()> {
+    let environment = std::fs::read(format!("/proc/{pid}/environ")).map_err(|_| ())?;
+    Ok(environment
+        .split(|byte| *byte == 0)
+        .filter_map(|entry| {
+            let entry = String::from_utf8_lossy(entry);
+            let (name, value) = entry.split_once('=')?;
+            Some((name.to_string(), value.to_string()))
+        })
+        .collect())
+}
+
+/// The folder zmx bound its sockets in, resolved from the daemon's own environment the way `Cfg.socketDir` does (and `zmx_socket_directory` in screen_capture.rs).
+#[cfg(unix)]
+fn zmx_daemon_socket_directory(
+    environment: &std::collections::HashMap<String, String>,
+) -> Option<std::path::PathBuf> {
+    let folder = if let Some(zmx_dir) = environment.get("ZMX_DIR") {
+        std::path::PathBuf::from(zmx_dir)
+    } else if let Some(runtime) = environment.get("XDG_RUNTIME_DIR") {
+        std::path::PathBuf::from(runtime).join("zmx")
+    } else {
+        let temporary = environment
+            .get("TMPDIR")
+            .map(String::as_str)
+            .unwrap_or("/tmp")
+            .trim_end_matches('/');
+        let uid = unsafe { libc::getuid() };
+        std::path::PathBuf::from(format!("{temporary}/zmx-{uid}"))
+    };
+    fs::canonicalize(folder).ok()
+}
+
+/// Whether two token paths name the same file: resolved through links (the `legacy_dir/gxserver` compatibility link resolves to the current root), compared as written when either does not resolve.
+#[cfg(unix)]
+fn same_token_file(daemon: &std::path::Path, own: &std::path::Path) -> bool {
+    match (fs::canonicalize(daemon), fs::canonicalize(own)) {
+        (Ok(daemon), Ok(own)) => daemon == own,
+        _ => daemon == own,
+    }
+}
+
+#[cfg(unix)]
+fn zmx_daemon_ownership(pid: i64, own_token_file: &std::path::Path) -> ZmxDaemonOwnership {
+    let Ok(environment) = zmx_daemon_environment(pid) else {
+        return ZmxDaemonOwnership::Kept {
+            reason: "environmentUnreadable",
+            token_file: None,
+        };
+    };
+    let Some(token_file) = environment.get(ZMX_DAEMON_AUTH_TOKEN_FILE_ENV) else {
+        return ZmxDaemonOwnership::Kept {
+            reason: "noTokenVariable",
+            token_file: None,
+        };
+    };
+    if !same_token_file(std::path::Path::new(token_file), own_token_file) {
+        return ZmxDaemonOwnership::Kept {
+            reason: "otherServer",
+            token_file: Some(token_file.clone()),
+        };
+    }
+    ZmxDaemonOwnership::Ours(zmx_daemon_socket_directory(&environment))
+}
+
+/// Ends the unowned names' daemons this server can prove it started, by pid, and logs every daemon and socket it keeps.
+#[cfg(unix)]
+fn end_verified_unowned_zmx_session_daemons(
+    unowned: &[String],
+    logger: &GxserverLogger,
+    server_id: &str,
+    auth_token_file: &std::path::Path,
+) {
+    let processes = match read_process_snapshot() {
+        Ok(ps_output) => zmx_daemon_processes(&ps_output),
+        Err(error) => {
+            for zmx_name in unowned {
+                log_unowned_zmx_session_daemon_outcome(
+                    logger,
+                    server_id,
+                    zmx_name,
+                    &Err(error.clone()),
+                );
+            }
+            return;
+        }
+    };
+    let mut verified = Vec::new();
+    for zmx_name in unowned {
+        let pids: Vec<i64> = processes
             .iter()
-            .map(|zmx_name| {
-                let kill = kill_zmx_session(zmx_name, &zmx.executable_path);
-                if kill.killed && zmx_session_daemon_socket_present(zmx_name) != Some(true) {
-                    Ok("killed".to_string())
+            .filter(|(_, name)| name == zmx_name)
+            .map(|(pid, _)| *pid)
+            .collect();
+        if pids.is_empty() {
+            log_kept_zmx_socket(logger, server_id, zmx_name, "noDaemonProcess", None);
+            continue;
+        }
+        for pid in pids {
+            match zmx_daemon_ownership(pid, auth_token_file) {
+                ZmxDaemonOwnership::Ours(socket_dir) => verified.push(VerifiedZmxDaemon {
+                    name: zmx_name.clone(),
+                    pid,
+                    socket_dir,
+                }),
+                ZmxDaemonOwnership::Kept { reason, token_file } => {
+                    let _ = logger.log(GxserverLogInput {
+                        level: LogLevel::Warn,
+                        event: "unownedSessionDaemonKept".to_string(),
+                        server_id: Some(server_id.to_string()),
+                        request_id: None,
+                        client: None,
+                        duration_ms: None,
+                        error: Some("A session terminal named like this server's was kept running because nothing shows this server started it.".to_string()),
+                        details: Some(json!({
+                            "providerSessionId": zmx_name,
+                            "pid": pid,
+                            "reason": reason,
+                            "tokenFile": token_file,
+                        })),
+                    });
+                }
+            }
+        }
+    }
+    if verified.is_empty() {
+        return;
+    }
+    let own_socket_dir = fs::canonicalize(super::zmx_socket_directory()).ok();
+    for (daemon, outcome) in verified.iter().zip(terminate_verified_zmx_session_daemons(
+        &verified,
+        auth_token_file,
+    )) {
+        if outcome.is_ok() {
+            #[cfg(target_os = "macos")]
+            cleanup_macos_zmx_launchd_job(&daemon.name);
+            if daemon.socket_dir.is_some() && daemon.socket_dir == own_socket_dir {
+                remove_zmx_session_socket(&daemon.name);
+            } else {
+                log_kept_zmx_socket(
+                    logger,
+                    server_id,
+                    &daemon.name,
+                    "otherFolder",
+                    Some((daemon.socket_dir.as_deref(), own_socket_dir.as_deref())),
+                );
+            }
+        }
+        log_unowned_zmx_session_daemon_outcome(logger, server_id, &daemon.name, &outcome);
+    }
+}
+
+#[cfg(unix)]
+fn log_kept_zmx_socket(
+    logger: &GxserverLogger,
+    server_id: &str,
+    zmx_name: &str,
+    reason: &str,
+    folders: Option<(Option<&std::path::Path>, Option<&std::path::Path>)>,
+) {
+    let (daemon_folder, own_folder) = folders.unwrap_or((None, None));
+    let _ = logger.log(GxserverLogInput {
+        level: LogLevel::Warn,
+        event: "unownedSessionDaemonSocketKept".to_string(),
+        server_id: Some(server_id.to_string()),
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: Some("A session terminal's socket was left in place because nothing shows it belongs to this server's ended session terminal.".to_string()),
+        details: Some(json!({
+            "providerSessionId": zmx_name,
+            "reason": reason,
+            "daemonSocketFolder": daemon_folder.map(|path| path.display().to_string()),
+            "serverSocketFolder": own_folder.map(|path| path.display().to_string()),
+        })),
+    });
+}
+
+/// Signals only verified pids. Each is re-checked first: a pid that now runs something else, or a daemon whose token file changed, is left alone (pid reuse between the check and the kill); a pid that is gone counts as ended.
+#[cfg(unix)]
+fn terminate_verified_zmx_session_daemons(
+    daemons: &[VerifiedZmxDaemon],
+    auth_token_file: &std::path::Path,
+) -> Vec<Result<String, String>> {
+    let processes = match read_process_snapshot() {
+        Ok(ps_output) => zmx_daemon_processes(&ps_output),
+        Err(error) => return daemons.iter().map(|_| Err(error.clone())).collect(),
+    };
+    let alive = |pid: i64| unsafe { libc::kill(pid as libc::pid_t, 0) } == 0;
+    let mut outcomes: Vec<Option<Result<String, String>>> = Vec::with_capacity(daemons.len());
+    let mut signalled = Vec::new();
+    for daemon in daemons {
+        let still_ours = processes
+            .iter()
+            .any(|(pid, name)| *pid == daemon.pid && *name == daemon.name)
+            && matches!(
+                zmx_daemon_ownership(daemon.pid, auth_token_file),
+                ZmxDaemonOwnership::Ours(_)
+            );
+        if still_ours {
+            unsafe { libc::kill(daemon.pid as libc::pid_t, libc::SIGTERM) };
+            signalled.push(daemon.pid);
+            outcomes.push(None);
+        } else if alive(daemon.pid) {
+            outcomes.push(Some(Err(format!(
+                "process {} no longer is this server's zmx daemon, so it was left alone",
+                daemon.pid
+            ))));
+        } else {
+            outcomes.push(Some(Ok("exited".to_string())));
+        }
+    }
+    let mut running = wait_for_processes_exit(signalled, ZMX_DAEMON_TERMINATION_GRACE);
+    for process_id in &running {
+        unsafe { libc::kill(*process_id as libc::pid_t, libc::SIGKILL) };
+    }
+    running = wait_for_processes_exit(running, ZMX_DAEMON_TERMINATION_GRACE);
+    daemons
+        .iter()
+        .zip(outcomes)
+        .map(|(daemon, outcome)| {
+            outcome.unwrap_or_else(|| {
+                if running.contains(&daemon.pid) {
+                    Err(format!(
+                        "the zmx daemon process {} did not exit after SIGTERM and SIGKILL",
+                        daemon.pid
+                    ))
                 } else {
-                    terminate_zmx_session_daemon_process(zmx_name)
-                        .map(|()| "terminated".to_string())
+                    Ok("terminated".to_string())
                 }
             })
-            .collect()
-    };
-    for (zmx_name, outcome) in unowned.into_iter().zip(outcomes) {
-        let _ = logger.log(GxserverLogInput {
-            level: LogLevel::Warn,
-            event: match outcome {
-                Ok(_) => "unownedSessionDaemonEnded",
-                Err(_) => "unownedSessionDaemonEndFailed",
-            }
-            .to_string(),
-            server_id: Some(server_id.to_string()),
-            request_id: None,
-            client: None,
-            duration_ms: None,
-            error: Some(match &outcome {
-                Ok(_) => "A session terminal was still running for a session Ghostex no longer has, so it was ended.".to_string(),
-                Err(error) => format!("A session terminal is still running for a session Ghostex no longer has and could not be ended: {error}"),
-            }),
-            details: Some(json!({
-                "providerSessionId": zmx_name,
-                "termination": outcome.as_deref().unwrap_or("failed"),
-            })),
-        });
-    }
+        })
+        .collect()
 }
 
 /// Every zmx name a session row of this server can own.

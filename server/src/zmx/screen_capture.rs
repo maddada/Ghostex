@@ -65,7 +65,7 @@ const ZMX_SCREEN_CAPTURE_TAIL_BYTES: usize = 256 * 1024;
 /// this same environment into every daemon it launches, and the macOS launchd
 /// supervisor already watches the resulting path as its liveness signal.
 #[cfg(unix)]
-fn zmx_socket_directory() -> PathBuf {
+pub(crate) fn zmx_socket_directory() -> PathBuf {
     if let Some(zmx_dir) = std::env::var_os("ZMX_DIR") {
         return PathBuf::from(zmx_dir);
     }
@@ -82,6 +82,8 @@ fn zmx_socket_directory() -> PathBuf {
 
 /// CDXC:ServerDaemon 2026-11-06 DECISION:
 /// User: a test gxserver came up with the real server's id (S90), read the shared zmx socket folder and ended every real `S90-…` daemon as unowned, three times in one night; "gxserver must never end zmx daemons it did not start in its own folder". A separate profile (GHOSTEX_HOME) owns its socket folder only when ZMX_DIR points inside that home (`cargo xtask test-server` sets it); otherwise the folder is the default one every profile on this account shares, and nothing found there may be ended as this profile's.
+///
+/// True only for a separate profile whose socket folder is not inside its home. The default profile's folder is shared too (with `--isolated` variants), so this answers false for it and its cleanup proves ownership per daemon instead (CDXC:ServerDaemon 2026-11-10 on `end_unowned_zmx_session_daemons` in wire_cycle.rs).
 #[cfg(unix)]
 pub(crate) fn zmx_socket_directory_is_shared() -> bool {
     let Some(home) = std::env::var_os("GHOSTEX_HOME")

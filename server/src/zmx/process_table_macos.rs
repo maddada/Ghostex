@@ -202,6 +202,36 @@ pub(crate) fn process_environment_value(pid: i64, name: &str) -> Option<String> 
     procargs_environment_value(ProcArgs::new().read_raw(pid)?, name)
 }
 
+/// Every variable of the environment `pid` started with; `None` when it cannot be read.
+pub(crate) fn process_environment(pid: i64) -> Option<std::collections::HashMap<String, String>> {
+    let pid = i32::try_from(pid).ok().filter(|pid| *pid > 0)?;
+    procargs_environment(ProcArgs::new().read_raw(pid)?)
+}
+
+fn procargs_environment(bytes: &[u8]) -> Option<std::collections::HashMap<String, String>> {
+    let argc = i32::from_ne_bytes(bytes.get(..4)?.try_into().ok()?);
+    let mut offset = 4;
+    offset += bytes.get(offset..)?.iter().position(|byte| *byte == 0)? + 1;
+    while bytes.get(offset) == Some(&0) {
+        offset += 1;
+    }
+    let mut strings = bytes.get(offset..)?.split(|byte| *byte == 0);
+    for _ in 0..argc.max(0) {
+        strings.next()?;
+    }
+    // The environment ends at the first empty string; what follows is the kernel's apple strings.
+    Some(
+        strings
+            .take_while(|entry| !entry.is_empty())
+            .filter_map(|entry| {
+                let entry = String::from_utf8_lossy(entry);
+                let (name, value) = entry.split_once('=')?;
+                Some((name.to_string(), value.to_string()))
+            })
+            .collect(),
+    )
+}
+
 fn procargs_environment_value(bytes: &[u8], name: &str) -> Option<String> {
     let argc = i32::from_ne_bytes(bytes.get(..4)?.try_into().ok()?);
     let mut offset = 4;
