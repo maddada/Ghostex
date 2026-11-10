@@ -327,8 +327,10 @@ fn beads_hooks_warnings(state: &AppState, hooks: &Value) -> Vec<Value> {
     let result = hooks.get("stdout").and_then(Value::as_str).unwrap_or("");
     let kind = if result == "needsBdHooksInstall" {
         "beadsHooksNeeded"
-    } else if result.starts_with("kept:") {
+    } else if result == "kept: changed by hand" {
         "beadsHooksLeftAsIs"
+    } else if result.starts_with("kept:") {
+        "beadsHooksUnchecked"
     } else {
         return Vec::new();
     };

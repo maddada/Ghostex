@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
@@ -419,7 +419,7 @@ pub(crate) async fn ensure_beads_git_hooks(
 }
 
 /// CDXC:ProjectBoard 2026-11-10 WHY:
-/// Ghostex no longer writes Beads hooks: pointing the shared `core.hooksPath` at its own `ghostex-hooks` folder turned off the repository's own hooks in the main checkout and every worktree, and its hooks never ran the ones they replaced. Creating or opening a worktree now only repairs an old install, and when in doubt it keeps the path: it unsets `core.hooksPath` only when it points at Ghostex's folder, every file there is byte-identical to a template Ghostex once wrote, and bd says the repository uses no bd git hooks (no Beads workspace, no tracked JSONL file, or both `export.auto` and `import.auto` off). In every other case it keeps the path and its answer tells the user to unset it and run `bd hooks install`. It never fails the worktree action for this (`exitCode` is non-zero only when git itself fails), and it never writes or deletes a file.
+/// Ghostex no longer writes Beads hooks: pointing the shared `core.hooksPath` at its own `ghostex-hooks` folder turned off the repository's own hooks in the main checkout and every worktree, and its hooks never ran the ones they replaced. Creating or opening a worktree now only repairs an old install, and when in doubt it keeps the path: it unsets `core.hooksPath` only when it points at Ghostex's folder, every file there is byte-identical to a template Ghostex once wrote, and bd says the repository uses no bd git hooks (no Beads workspace, no tracked JSONL file, or both `export.auto` and `import.auto` off). In every other case it keeps the path: when it established that the repository tracks a JSONL file it tells the user to unset the path and run `bd hooks install`, and when bd or git could not answer (bd missing, a failed read or probe, a timeout) it names that reason instead, because a failed check proves nothing and unsetting the path before `bd hooks install` works would leave the repository without the import hooks it needs. It never fails the worktree action for this (`exitCode` is non-zero only when git itself fails), and it never writes or deletes a file.
 pub(crate) async fn ensure_beads_git_hooks_with_executable(
     context: &TypedOperationContext,
     bd_executable_path: Option<&str>,
@@ -466,18 +466,27 @@ pub(crate) async fn ensure_beads_git_hooks_with_executable(
             ),
         ));
     }
-    let uses_bd_hooks = match bd_executable_path {
-        Some(bd) => repository_may_use_bd_git_hooks(context, bd, &common_git_dir).await,
-        None => true,
-    };
-    if uses_bd_hooks {
-        return Ok(beads_hooks_result(
-            0,
-            "needsBdHooksInstall",
-            &format!(
-                "Ghostex kept its Beads git hooks because this repository keeps issues in a tracked JSONL file. To use your own hooks again, run `git config --unset core.hooksPath`, then `bd hooks install`, in {repo_root}."
-            ),
-        ));
+    match repository_bd_hooks_use(context, bd_executable_path, &common_git_dir).await {
+        BdHooksUse::NotUsed => {}
+        BdHooksUse::TrackedJsonl(file) => {
+            return Ok(beads_hooks_result(
+                0,
+                "needsBdHooksInstall",
+                &format!(
+                    "Ghostex kept its Beads git hooks because this repository keeps issues in a tracked JSONL file ({}). To use your own hooks again, run `git config --unset core.hooksPath`, then `bd hooks install`, in {repo_root}.",
+                    file.display()
+                ),
+            ));
+        }
+        BdHooksUse::Unknown { result, reason } => {
+            return Ok(beads_hooks_result(
+                0,
+                result,
+                &format!(
+                    "Ghostex kept its Beads git hooks setting because {reason}, so it could not tell whether this repository still needs them. Fix that first, then create or open a worktree again and Ghostex checks again ({repo_root})."
+                ),
+            ));
+        }
     }
     let unset = run_hooks_git(context, &["config", "--local", "--unset", "core.hooksPath"]).await?;
     if unset.exit_code != 0 {
@@ -493,32 +502,70 @@ pub(crate) async fn ensure_beads_git_hooks_with_executable(
     ))
 }
 
-/// True unless every bd read succeeds and either no JSONL file in the workspace is tracked by this repository or both auto flags are off.
-async fn repository_may_use_bd_git_hooks(
+/// Whether the repository still relies on bd's git hooks. Anything Ghostex could not establish is `Unknown`, which keeps the path.
+enum BdHooksUse {
+    /// No Beads workspace, both auto flags off, or no JSONL file tracked by this repository.
+    NotUsed,
+    /// This repository tracks this JSONL file and an auto flag is on.
+    TrackedJsonl(PathBuf),
+    /// `result` is the answer's `stdout` token; `reason` finishes "Ghostex kept its Beads git hooks setting because …".
+    Unknown {
+        result: &'static str,
+        reason: String,
+    },
+}
+
+async fn repository_bd_hooks_use(
     context: &TypedOperationContext,
-    bd: &str,
+    bd: Option<&str>,
     common_git_dir: &Path,
-) -> bool {
+) -> BdHooksUse {
+    let bd_failed = |reason: String| BdHooksUse::Unknown {
+        result: "kept: bd failed",
+        reason,
+    };
+    let Some(bd) = bd else {
+        return BdHooksUse::Unknown {
+            result: "kept: bd not found",
+            reason: "it could not find the bd command (install Beads or put bd on the PATH)"
+                .to_string(),
+        };
+    };
     let workspace = match resolve_beads_workspace(&context.cwd, bd, context).await {
         BeadsWorkspace::Workspace(path) => path,
-        BeadsWorkspace::None => return false,
-        BeadsWorkspace::Failed(_) => return true,
+        BeadsWorkspace::None => return BdHooksUse::NotUsed,
+        BeadsWorkspace::Failed(message) => {
+            return bd_failed(format!("`bd where` failed: {}", one_line(&message)))
+        }
     };
     let mut values = Vec::new();
     for key in ["export.auto", "import.auto", "export.path", "import.path"] {
         match read_beads_config_value(context, bd, key).await {
-            Some(value) => values.push(value),
-            None => return true,
+            Ok(value) => values.push(value),
+            Err(message) => {
+                return bd_failed(format!(
+                    "it could not read bd's config (`bd config get {key}`: {})",
+                    one_line(&message)
+                ))
+            }
         }
     }
-    let (Some(export_auto), Some(import_auto)) = (
-        beads_config_flag(&values[0], false),
-        beads_config_flag(&values[1], true),
-    ) else {
-        return true;
-    };
-    if !export_auto && !import_auto {
-        return false;
+    let mut flags = Vec::new();
+    for (key, value, default) in [
+        ("export.auto", &values[0], false),
+        ("import.auto", &values[1], true),
+    ] {
+        match beads_config_flag(value, default) {
+            Some(flag) => flags.push(flag),
+            None => {
+                return bd_failed(format!(
+                    "bd's `{key}` setting has a value it does not understand ({value})"
+                ))
+            }
+        }
+    }
+    if flags.iter().all(|flag| !flag) {
+        return BdHooksUse::NotUsed;
     }
     let workspace = Path::new(&workspace);
     let mut candidates = vec![workspace.join("issues.jsonl")];
@@ -527,102 +574,165 @@ async fn repository_may_use_bd_git_hooks(
             candidates.push(workspace.join(configured));
         }
     }
-    match fs::read_dir(workspace) {
-        Ok(entries) => {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path
-                    .extension()
-                    .is_some_and(|extension| extension == "jsonl")
-                {
-                    candidates.push(path);
-                }
-            }
+    let files_unreadable = |error: std::io::Error| BdHooksUse::Unknown {
+        result: "kept: files unreadable",
+        reason: format!(
+            "it could not list the Beads folder {}: {error}",
+            workspace.display()
+        ),
+    };
+    let entries = match fs::read_dir(workspace) {
+        Ok(entries) => entries,
+        Err(error) => return files_unreadable(error),
+    };
+    for entry in entries {
+        let path = match entry {
+            Ok(entry) => entry.path(),
+            Err(error) => return files_unreadable(error),
+        };
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "jsonl")
+        {
+            candidates.push(path);
         }
-        Err(_) => return true,
     }
     for candidate in candidates {
         match jsonl_tracked_by_repository(context, &candidate, common_git_dir).await {
-            Some(false) => {}
-            Some(true) | None => return true,
+            Ok(false) => {}
+            Ok(true) => return BdHooksUse::TrackedJsonl(candidate),
+            Err(message) => {
+                return BdHooksUse::Unknown {
+                    result: "kept: git check failed",
+                    reason: format!(
+                        "git could not tell whether {} is tracked: {}",
+                        candidate.display(),
+                        one_line(&message)
+                    ),
+                }
+            }
         }
     }
-    false
+    BdHooksUse::NotUsed
 }
 
-/// `Some(tracked)`, or `None` when git could not answer for a folder of this repository.
+/// `Ok(false)` only when git says the file is not tracked by this repository (its folder is outside any repository, in another one, or git lists no such file); every other failure is `Err`.
 async fn jsonl_tracked_by_repository(
     context: &TypedOperationContext,
     file: &Path,
     common_git_dir: &Path,
-) -> Option<bool> {
-    let (Some(folder), Some(name)) = (file.parent(), file.file_name()) else {
-        return Some(false);
-    };
-    if !folder.is_dir() {
-        return Some(false);
+) -> Result<bool, String> {
+    // A tracked file can be missing from the checkout, so ask from its nearest existing folder.
+    let mut folder = file.parent().ok_or("it has no parent folder")?;
+    loop {
+        match fs::metadata(folder) {
+            Ok(metadata) if metadata.is_dir() => break,
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("{}: {error}", folder.display())),
+        }
+        folder = folder.parent().ok_or("none of its folders exist")?;
     }
+    let relative = file
+        .strip_prefix(folder)
+        .map_err(|_| "its path could not be resolved".to_string())?
+        .to_string_lossy()
+        .to_string();
     let folder_text = folder.to_string_lossy().to_string();
-    let folder_common = run_process_command(
-        &ProcessCommand::new("git", vec!["rev-parse", "--git-common-dir"], &folder_text),
+    let folder_common = run_tracked_probe(
         context,
+        &folder_text,
+        vec!["rev-parse".to_string(), "--git-common-dir".to_string()],
     )
-    .await
-    .ok()?;
-    // A folder outside any repository (a redirected workspace) answers 128: it is not this repository's.
-    if folder_common.exit_code != 0
-        || !same_directory_path(
-            &resolve_path_against(&folder_text, folder_common.stdout.trim()),
-            common_git_dir,
-        )
-    {
-        return Some(false);
+    .await?;
+    if folder_common.exit_code != 0 {
+        // A redirected workspace outside any repository: git says so plainly.
+        if folder_common.stderr.contains("not a git repository") {
+            return Ok(false);
+        }
+        return Err(folder_common.stderr.or_else("git rev-parse failed"));
     }
-    let listed = run_process_command(
-        &ProcessCommand::new(
-            "git",
-            vec![
-                "ls-files".to_string(),
-                "--error-unmatch".to_string(),
-                "--".to_string(),
-                name.to_string_lossy().to_string(),
-            ],
-            &folder_text,
-        ),
+    if !same_directory_path(
+        &resolve_path_against(&folder_text, folder_common.stdout.trim()),
+        common_git_dir,
+    ) {
+        return Ok(false);
+    }
+    let listed = run_tracked_probe(
         context,
+        &folder_text,
+        vec![
+            "--literal-pathspecs".to_string(),
+            "ls-files".to_string(),
+            "--error-unmatch".to_string(),
+            "--".to_string(),
+            relative,
+        ],
     )
-    .await
-    .ok()?;
+    .await?;
     match listed.exit_code {
-        0 => Some(true),
-        1 => Some(false),
-        _ => None,
+        0 => Ok(true),
+        1 => Ok(false),
+        _ => Err(listed.stderr.or_else("git ls-files failed")),
     }
 }
 
-/// The `value` of `bd config get <key> --json`, or `None` when bd failed or printed something else.
+/// A git probe whose start failure or timeout is an error, never an answer.
+async fn run_tracked_probe(
+    context: &TypedOperationContext,
+    cwd: &str,
+    args: Vec<String>,
+) -> Result<CommandOutput, String> {
+    let output = run_process_command(&ProcessCommand::new("git", args, cwd), context)
+        .await
+        .map_err(|error| error.message)?;
+    match &output.error {
+        Some(error) => Err(error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("git did not answer")
+            .to_string()),
+        None => Ok(output),
+    }
+}
+
+/// The `value` of `bd config get <key> --json`, or why it could not be read.
 async fn read_beads_config_value(
     context: &TypedOperationContext,
     bd: &str,
     key: &str,
-) -> Option<String> {
+) -> Result<String, String> {
     let output = run_process_command(
         &ProcessCommand::new(bd, vec!["config", "get", key, "--json"], &context.cwd),
         context,
     )
     .await
-    .ok()?;
-    if output.exit_code != 0 {
-        return None;
+    .map_err(|error| error.message)?;
+    if let Some(error) = &output.error {
+        return Err(error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("bd did not answer")
+            .to_string());
     }
-    let parsed: Value = serde_json::from_str(output.stdout.trim()).ok()?;
+    if output.exit_code != 0 {
+        return Err(output.stderr.or_else("bd exited with an error"));
+    }
+    let parsed: Value = serde_json::from_str(output.stdout.trim())
+        .map_err(|_| "bd's answer was not JSON".to_string())?;
     if parsed.get("key").and_then(Value::as_str) != Some(key) {
-        return None;
+        return Err("bd answered for another key".to_string());
     }
     parsed
         .get("value")
         .and_then(Value::as_str)
         .map(|value| value.trim().to_string())
+        .ok_or_else(|| "bd's answer had no value".to_string())
+}
+
+/// The first line of a tool's message, for a one-line reason.
+fn one_line(message: &str) -> &str {
+    message.lines().next().unwrap_or("").trim()
 }
 
 /// An unset flag takes bd's default; a value bd's config parser might read differently counts as unknown.

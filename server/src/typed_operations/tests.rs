@@ -929,21 +929,6 @@ where
     );
 }
 
-fn run_git_output<I, S>(args: I, cwd: &Path) -> String
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<std::ffi::OsStr>,
-{
-    let output = run_git_raw(args, cwd);
-    assert!(
-        output.status.success(),
-        "git failed\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).to_string()
-}
-
 fn run_git_raw<I, S>(args: I, cwd: &Path) -> std::process::Output
 where
     I: IntoIterator<Item = S>,
