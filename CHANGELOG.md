@@ -1,8 +1,8 @@
 # Changelog
 
 ## Unreleased
-- **The Grok extension is called Grok Bot:** its sidebar button tooltip, its Settings rows (Grok Bot start page, Grok Bot logins) and its Built-in switch now say Grok Bot.
 
+- **The Grok extension is called Grok Bot:** its sidebar button tooltip, its Settings rows (Grok Bot start page, Grok Bot logins) and its Built-in switch now say Grok Bot.
 - **No more stray "23;24;28;32;42c" in an agent's terminal:** when a session was also open on a second computer (a Windows one in particular), switching to its terminal could type that text into the agent's prompt and shrink the terminal to the other computer's size, because the other computer's terminal answering a question from the agent was taken for typing. Fixed for sessions started after Ghostex is updated on the computer that runs them.
 - **OpenCode threads open on their conversation, also on another computer:** a thread a coordinator starts (here or with `--computer`) now shows the conversation in its terminal instead of OpenCode's empty start page, and a thread on another computer is no longer listed as Finished while it's still working, even when that computer still runs an older Ghostex. The terminal half needs Ghostex updated on the computer running OpenCode.
 - **Each project has a main coordinator on each computer:** the first coordinator you create in a project gets a quiet "Main" tag, and right-click (or long-press on the phone) > Make main coordinator gives it to another one there. It is the one agents and Chief of Staff contact when they want something from that project: `ghostex agents send --main-coordinator --project-id <id> "…"` (add `--computer <name>` for another computer). When the project has none, the agent chooses: `--if-none create` starts the project's coordinator, `--if-none session` starts a session that does the work and reports back. Closing the main one passes the tag to the oldest coordinator left.
