@@ -131,13 +131,19 @@ jobs:
           print(f"stripped APK signing block ({cd_offset - block_start} bytes)")
           PY
 
-          # v2/v3-only APKs have no v1 signature entries; zip exits 12 then.
-          if ! zip -d "$UNSIGNED" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 'META-INF/MANIFEST.MF'; then
-            status=$?
-            if [[ "$status" -ne 12 ]]; then
-              exit "$status"
-            fi
+          # v2/v3-only APKs have no v1 signature files. `zip -d` then exits 12
+          # ("Nothing to do!"). Do not use `if ! zip -d`: that test succeeds, `$?`
+          # is 0, and `exit "$?"` ends the step successfully before the APK exists.
+          # Delete only the signature names that are actually in the archive.
+          unzip -Z1 "$UNSIGNED" > "$RUNNER_TEMP/apk-entries.txt"
+          sig_entries=()
+          while IFS= read -r entry; do
+            [[ -n "$entry" ]] && sig_entries+=("$entry")
+          done < <(grep -E '^META-INF/([^/]+\.(SF|RSA|DSA|EC)|MANIFEST\.MF)$' "$RUNNER_TEMP/apk-entries.txt" || true)
+          if [[ ${#sig_entries[@]} -eq 0 ]]; then
             echo "No v1 signature entries to remove"
+          else
+            zip -d "$UNSIGNED" "${sig_entries[@]}"
           fi
 
           stage="$RUNNER_TEMP/ownership-stage"
@@ -168,7 +174,10 @@ jobs:
             --key-pass "file:$RUNNER_TEMP/key.pass" \
             --out "$SIGNED" \
             "$ALIGNED"
-          test -s "$SIGNED"
+          if [[ ! -s "$SIGNED" ]]; then
+            echo "::error::play-ownership.apk was not produced" >&2
+            exit 1
+          fi
 
           unzip -p "$SIGNED" assets/adi-registration.properties > "$RUNNER_TEMP/token.bin"
           printf '%s' "$ADI_REGISTRATION_TOKEN" > "$RUNNER_TEMP/expected.bin"
@@ -212,6 +221,10 @@ jobs:
                   handle.write(text.rstrip() + "\n")
                   handle.write("```\n")
           PY
+          if [[ ! -s "$SIGNED" ]]; then
+            echo "::error::play-ownership.apk was not produced" >&2
+            exit 1
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: play-ownership-apk
