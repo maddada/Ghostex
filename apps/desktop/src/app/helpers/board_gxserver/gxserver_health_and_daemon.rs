@@ -87,8 +87,9 @@ pub(crate) fn gpui_gxserver_server_health(timeout: Duration) -> Result<serde_jso
     if !(200..300).contains(&status_code) {
         return Err(format!("gxserver health failed with HTTP {status_code}."));
     }
-    serde_json::from_str::<serde_json::Value>(&body)
-        .map_err(|_| "gxserver health returned invalid JSON.".to_string())
+    serde_json::from_str::<serde_json::Value>(&body).map_err(|_| {
+        "Ghostex's background service sent a status this app couldn't read.".to_string()
+    })
 }
 
 /// Pid the local daemon reports on `/api/health/server`, read before asking it
@@ -397,7 +398,8 @@ pub(crate) fn gpui_probe_local_gxserver_health_with_diagnostics()
                     Err(_) => {
                         return (
                             GpuiLocalGxserverHealthState::Unreachable,
-                            "gxserver health returned invalid JSON.".into(),
+                            "Ghostex's background service sent a status this app couldn't read."
+                                .into(),
                         );
                     }
                 }

@@ -30,11 +30,9 @@ pub(crate) fn gpui_remote_gxserver_post_typed_operation(
         });
         return Ok((403, body.to_string()));
     }
-    // A remote gxserver still starting is waited out like the local one (typed_operations.rs).
-    let mut answer =
-        gpui_wait_out_gxserver_starting(std::time::Instant::now() + timeout, |remaining| {
-            gpui_remote_gxserver_post_typed_operation_once(target, path, params, remaining)
-        });
+    // A remote gxserver still starting is waited out like the local one (typed_operations.rs), and
+    // a read whose answer the link cut off is asked again on a fresh connection.
+    let mut answer = gpui_remote_post_riding_out_cuts(target, path, params, timeout);
     /*
     CDXC:RemoteMachines 2026-11-09 WHY:
     GitHub #520: a command from this computer to a connected one "doesn't arrive", and that
@@ -66,18 +64,106 @@ pub(crate) fn gpui_remote_gxserver_post_typed_operation(
     answer
 }
 
+/// Fresh connections a read gets after the link cut its answer off, before the cut is shown.
+const REMOTE_CUT_READ_RETRIES: u32 = 2;
+
+/*
+CDXC:RemoteMachines 2026-11-11 WHY:
+A user who "can barely talk to the remote computer" saw "invalid JSON errors all the time": every
+answer a dropping link cut off was read as a whole one, failed to parse, and showed "gxserver
+returned invalid JSON." Each attempt now says whether its answer arrived whole
+(`gxserver_http_answer`). A cut one, or a connection that closed or reset before any answer, is a
+dropped link: a request that is safe to repeat (`gxserver_request_is_safe_to_repeat`: a read, or a
+chat send named by its `sendRequestId`, which that computer's send ledger answers once) is asked
+again on a fresh connection up to twice, within its time limit, before anything is shown; any other
+request is never repeated blindly and says its answer did not arrive, so what was asked may or may
+not have happened there. A request that only timed out is not repeated here: the chat's own reads
+already ask again, and a slow link is not a dropped one (GitHub #361).
+*/
+fn gpui_remote_post_riding_out_cuts(
+    target: &GpuiRemoteGxserverRequestTarget,
+    path: &str,
+    params: &serde_json::Value,
+    timeout: Duration,
+) -> Result<(u16, String), String> {
+    let deadline = std::time::Instant::now() + timeout;
+    let repeatable = gxserver_request_is_safe_to_repeat(path, params);
+    let mut retries_left = if repeatable {
+        REMOTE_CUT_READ_RETRIES
+    } else {
+        0
+    };
+    loop {
+        let mut dropped = false;
+        let answer = gpui_wait_out_gxserver_starting(deadline, |remaining| {
+            gpui_remote_gxserver_post_attempt(target, path, params, remaining).map_err(|failure| {
+                dropped = matches!(failure, RemotePostFailure::Dropped);
+                failure.into_message(repeatable)
+            })
+        });
+        if !dropped || retries_left == 0 || std::time::Instant::now() >= deadline {
+            return answer;
+        }
+        retries_left -= 1;
+        std::thread::sleep(Duration::from_millis(300));
+    }
+}
+
+/// Why one attempt to a remote gxserver got no answer to use.
+enum RemotePostFailure {
+    /// The link dropped: the answer was cut off, or the connection closed or reset before it came.
+    /// That computer may have run the request.
+    Dropped,
+    Other(String),
+}
+
+impl RemotePostFailure {
+    fn into_message(self, repeatable: bool) -> String {
+        match self {
+            Self::Dropped => remote_cut_off_message(repeatable).to_string(),
+            Self::Other(message) => message,
+        }
+    }
+}
+
+impl From<String> for RemotePostFailure {
+    fn from(message: String) -> Self {
+        Self::Other(message)
+    }
+}
+
+/// What this app says when a remote computer's answer did not arrive whole.
+pub(crate) fn remote_cut_off_message(repeatable: bool) -> &'static str {
+    if repeatable {
+        "The answer from the remote computer was cut off: the connection to it dropped. Try again."
+    } else {
+        "The answer from the remote computer didn't arrive: the connection to it dropped, so what you asked may or may not have happened there. Check, then try again if it didn't."
+    }
+}
+
 fn gpui_remote_gxserver_post_typed_operation_once(
     target: &GpuiRemoteGxserverRequestTarget,
     path: &str,
     params: &serde_json::Value,
     timeout: Duration,
 ) -> Result<(u16, String), String> {
+    let repeatable = gxserver_request_is_safe_to_repeat(path, params);
+    gpui_remote_gxserver_post_attempt(target, path, params, timeout)
+        .map_err(|failure| failure.into_message(repeatable))
+}
+
+fn gpui_remote_gxserver_post_attempt(
+    target: &GpuiRemoteGxserverRequestTarget,
+    path: &str,
+    params: &serde_json::Value,
+    timeout: Duration,
+) -> Result<(u16, String), RemotePostFailure> {
     /*
     CDXC:RemoteMachines 2026-06-24-16:48:
     Remote gxserver RPCs use the live SSH tunnel target and in-memory token captured by Rust after Keychain storage. Keep this helper transport-only and response-unlogged: callers own endpoint allowlists and user-facing generic errors, while tokens, URLs, remote paths, params, stdout/stderr, and daemon bodies are never persisted or copied to renderer globals.
     */
     if !path.starts_with("/api/") {
-        return Err("Invalid remote gxserver API path.".to_string());
+        return Err("Invalid remote gxserver API path.".to_string().into());
     }
     let address = format!("127.0.0.1:{}", target.local_port);
     ghostex_paths::loopback_owner::check_host_port("127.0.0.1", target.local_port)
@@ -106,46 +192,56 @@ fn gpui_remote_gxserver_post_typed_operation_once(
     );
     let write_error = stream.write_all(request.as_bytes()).err();
 
-    let mut response = String::new();
-    let read_error = stream.read_to_string(&mut response).err();
-    if !response.contains("\r\n\r\n") {
+    let mut response = Vec::new();
+    let read_error = stream.read_to_end(&mut response).err();
+    // A read that stopped waiting is a slow link, not a dropped one (GitHub #361).
+    let timed_out = read_error.as_ref().is_some_and(|error| {
+        matches!(
+            error.kind(),
+            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+        )
+    });
+    if !response.windows(4).any(|window| window == b"\r\n\r\n") {
         if let Some(error) = write_error {
-            return Err(format!("Could not send remote gxserver request: {error}"));
+            return Err(format!("Could not send remote gxserver request: {error}").into());
         }
-        if let Some(error) = read_error {
-            return Err({
-                // Say which layer failed (GitHub #361): silence past the timeout is a slow link, not a
-                // broken tunnel, and the chat treats both as "not answering" and retries.
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                ) {
-                    "Remote gxserver did not answer in time over a slow connection.".to_string()
-                } else {
-                    "Could not read remote gxserver response.".to_string()
-                }
-            });
+        if timed_out {
+            // Say which layer failed (GitHub #361): silence past the timeout is a slow link, not a
+            // broken tunnel, and the chat treats both as "not answering" and retries.
+            return Err(
+                "Remote gxserver did not answer in time over a slow connection."
+                    .to_string()
+                    .into(),
+            );
         }
     }
     if !response.is_empty() {
         // Any answer through the tunnel proves it to the watchdog (tunnel_liveness.rs).
         gpui_remote_tunnel_note_answer(target.local_port);
     }
-    let (headers, body) = response
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| "Remote gxserver returned an invalid HTTP response.".to_string())?;
-    let status_code = headers
-        .lines()
-        .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .and_then(|status| status.parse::<u16>().ok())
-        .ok_or_else(|| "Remote gxserver returned an invalid HTTP status.".to_string())?;
+    let (status_code, body) = match gxserver_http_answer(&response) {
+        GxserverHttpAnswer::Whole(status, body) => (status, body),
+        GxserverHttpAnswer::CutOff if timed_out => {
+            return Err(
+                "Remote gxserver did not answer in time over a slow connection."
+                    .to_string()
+                    .into(),
+            );
+        }
+        // Nothing, part of the headers, or part of the body: the link dropped.
+        GxserverHttpAnswer::CutOff => return Err(RemotePostFailure::Dropped),
+        GxserverHttpAnswer::Unreadable => {
+            return Err("The remote computer's answer couldn't be read. Try again."
+                .to_string()
+                .into());
+        }
+    };
     if status_code == 401 {
         if let Some(token) = owner_token.as_deref() {
             crate::app::owner_security::forget_owner_token(token);
         }
     }
-    Ok((status_code, gxserver_http_response_body(headers, body)?))
+    Ok((status_code, body))
 }
 
 pub(crate) fn gpui_remote_gxserver_project_path_by_id(

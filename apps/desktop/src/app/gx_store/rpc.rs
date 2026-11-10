@@ -69,7 +69,7 @@ pub(crate) async fn gx_rpc_with_timeout(
                     Ok(envelope) => GxRpcError::from_envelope(&owned_path, Some(status), envelope),
                     Err(_) => Err(GxRpcError::transport(
                         &owned_path,
-                        "gxserver returned invalid JSON.",
+                        "Ghostex's answer couldn't be read. Try again.",
                     )),
                 },
                 Err(message) => Err(GxRpcError::unanswered(
