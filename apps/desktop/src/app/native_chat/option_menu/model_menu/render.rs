@@ -627,6 +627,9 @@ impl ChatOptionMenuPanel {
         let scroll = state.scroll.clone();
         let search = state.search.clone();
         let count = state.rows().len();
+        // The list's room: the card's list area less its padding and, on a tab with one, the
+        // Legacy models row under it.
+        let list_room = LIST_HEIGHT - 8.0 - if state.has_fold() { 28.0 } else { 0.0 };
         let list = if count == 0 {
             div()
                 .px(px(8.0 * scale))
@@ -664,7 +667,10 @@ impl ChatOptionMenuPanel {
                         .collect()
                 }),
             )
-            .size_full()
+            // Its height is its rows' (or the room it is given, when they do not fit).
+            .with_sizing_behavior(gpui::ListSizingBehavior::Infer)
+            .w_full()
+            .max_h(px(list_room * scale))
             .px(px(4.0 * scale))
             .track_scroll(&scroll)
             .into_any_element()
@@ -770,7 +776,9 @@ impl ChatOptionMenuPanel {
                     .opacity(if view["disabled"] == true { 0.5 } else { 1.0 })
                     .flex()
                     .flex_col()
-                    .child(div().flex_1().min_h_0().child(list))
+                    // The Legacy models row sits right under the last model on a short list and
+                    // stays at the bottom of the list's room on a long one, which scrolls above it.
+                    .child(div().min_h_0().child(list))
                     .when_some(view["legacy"].as_object().cloned(), |area, legacy| {
                         area.child(self.render_model_legacy_toggle(
                             &legacy,
