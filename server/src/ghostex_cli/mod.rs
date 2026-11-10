@@ -52,6 +52,7 @@ pub mod picker;
 mod port_web_metadata;
 pub mod ports;
 mod previous_sessions;
+mod projects;
 pub mod resources;
 pub mod rpc;
 mod run_in_terminal;
@@ -436,6 +437,7 @@ fn is_known_command(name: &str) -> bool {
         "web",
         "ports",
         "resources",
+        "projects",
         "computers",
         "chief",
         "autopilot",
@@ -512,6 +514,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         }
         "agents" => agents::run(args),
         "computers" => computers::run(args),
+        "projects" => projects::run(args),
         "chief" => chief::run(args),
         "autopilot" => autopilot::autopilot_command(args),
         "security" => security::run(args),
