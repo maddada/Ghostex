@@ -207,7 +207,8 @@ pub struct UnifiedRow {
     pub lane: MachineId,
     /// The machine's name, for a row of another machine; `None` for this computer.
     pub machine_label: Option<String>,
-    /// The group the row came from, which its menus and hover buttons are built against.
+    /// The project group of the session on `machine`, which its menus, hover buttons and icon are
+    /// built against (a borrowed thread's own computer's project, not its coordinator's).
     pub group: GroupView,
     pub session: SessionView,
     pub repo: RepoIdentity,
@@ -576,7 +577,7 @@ pub fn build_unified_sidebar_folded(
         .filter(|session| session.row.is_borrowed_thread() && !session.row.is_browser)
         .filter_map(|session| session.row.key.clone())
         .collect();
-    let mut borrowed_rows: Vec<(MachineId, GroupView, SessionView)> = Vec::new();
+    let mut borrowed_rows: Vec<(MachineId, SessionView)> = Vec::new();
     let mut own_copies: HashMap<SessionKey, usize> = HashMap::new();
     for machine in machines {
         options.machines.push(UnifiedFilterOption {
@@ -678,7 +679,7 @@ pub fn build_unified_sidebar_folded(
                     continue;
                 }
                 if session.row.is_borrowed_thread() {
-                    borrowed_rows.push((machine.machine.clone(), group.clone(), session.clone()));
+                    borrowed_rows.push((machine.machine.clone(), session.clone()));
                     continue;
                 }
                 if borrowed.contains(key) {
@@ -707,7 +708,7 @@ pub fn build_unified_sidebar_folded(
     }
     // Each borrowed thread takes its own computer's row's place, with that row's project, Space
     // and branch; one whose own row is out of the list (another Space, hidden) is not drawn.
-    for (lane, group, session) in borrowed_rows {
+    for (lane, session) in borrowed_rows {
         let Some(index) = session
             .row
             .key
@@ -721,7 +722,8 @@ pub fn build_unified_sidebar_folded(
         own.shelf = unified_shelf(&session, settings, is_unified_draft(&session.row), now_ms);
         own.status = unified_status(&session.row);
         own.came_back_ms = came_back_ms(&session.row);
-        own.group = group;
+        // The group stays its own computer's project (its icon, its worktree): only the drawn row
+        // comes from the coordinator's lane.
         own.session = session;
     }
     options.repos = repo_machines
