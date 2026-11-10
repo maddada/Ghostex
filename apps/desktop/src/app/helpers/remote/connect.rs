@@ -67,24 +67,12 @@ pub(crate) fn gpui_connect_remote_gxserver_platform(
             "machineId": config.remote_machine_id,
         }),
     );
-    let uses_easy_connect = config.uses_easy_connect();
-    let remote_machine_id = config.remote_machine_id.clone();
     let password_saved = config.has_saved_password || config.reuse_ssh_connection;
     let mut result =
         gpui_connect_remote_gxserver_platform_inner(config, install_approved, progress_tx);
     // A refused login with no password saved never had one to send: say so, not that it was wrong.
     if !password_saved && matches!(result.state, GpuiRemoteGxserverConnectState::AuthFailed) {
         result.message = GPUI_REMOTE_NO_SAVED_PASSWORD_MESSAGE.to_string();
-    }
-    /*
-    CDXC:RemotePairing 2026-09-03:
-    A failed Easy Connect attempt must not leave its loopback forwarder
-    registered: the config builder would keep resolving the machine to a
-    dialable `127.0.0.1:<port>` although nothing is connected. The successful
-    forwarder lives until the machine's gxserver connection is terminated.
-    */
-    if uses_easy_connect && !matches!(result.state, GpuiRemoteGxserverConnectState::Connected) {
-        gpui_stop_easy_connect_forward(remote_machine_id.as_str());
     }
     support_logs::append(
         support_logs::GpuiSupportLog::RemoteGxserverInstall,

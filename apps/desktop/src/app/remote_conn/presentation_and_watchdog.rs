@@ -333,8 +333,8 @@ impl GhostexGpuiApp {
             connection.terminate();
             self.unregister_connected_computer(remote_machine_id, connection.local_port);
         }
-        // The Easy Connect forwarder shares the machine's connection lifetime.
-        gpui_stop_easy_connect_forward(remote_machine_id);
+        // The machine's Easy Connect forwarder stays: its terminals and the other windows'
+        // connections ride on it (CDXC:RemotePairing 2026-11-10 in easy_connect_forward.rs).
     }
 
     pub(crate) fn stop_all_gpui_remote_gxserver_connections(&mut self) {

@@ -1,5 +1,5 @@
 // Records of the SSH tunnels this app spawns, so the next launch can stop the ones a crashed or
-// force-quit Ghostex left running.
+// force-quit Ghostex left running, and the launch's sweep of leftover Easy Connect helpers.
 
 use std::{fs, path::PathBuf};
 
@@ -85,6 +85,7 @@ pub(crate) fn gpui_remote_tunnel_record_fate(
 pub(crate) fn gpui_reap_orphaned_remote_tunnels() {
     #[cfg(unix)]
     {
+        gpui_reap_orphaned_easy_connect_helpers();
         let Ok(entries) = fs::read_dir(gpui_remote_tunnel_registry_dir()) else {
             return;
         };
@@ -132,6 +133,74 @@ pub(crate) fn gpui_reap_orphaned_remote_tunnels() {
             }
         }
     }
+}
+
+/// CDXC:RemotePairing 2026-11-10 WHY:
+/// An Easy Connect helper (`tailcat forward`) does not exit while its tunnel is up, so one whose Ghostex crashed or was force-quit ran on with its key, and the next launch's helper for the same machine, dialing with that key, stalled every few seconds (two clients with one key starve each other, GitHub #526). Helpers started since 2026-11-10 end with their owner (`ghostex_paths::tailcat_forward`); this ends the ones an earlier Ghostex left behind. Only a process that is certainly such a leftover goes: the helper Ghostex installs or ships, started in the one shape Ghostex starts it (`forward --bind=127.0.0.1 <address> 0:<port>`), with no parent left (adopted by pid 1). A helper under a running Ghostex, gxserver or `ghostex` command still has that parent and is never touched, nor is a tailcat the user runs themselves.
+#[cfg(unix)]
+fn gpui_reap_orphaned_easy_connect_helpers() {
+    let Ok(output) = std::process::Command::new("/bin/ps")
+        .args(["-axww", "-o", "pid=", "-o", "ppid=", "-o", "command="])
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+    else {
+        return;
+    };
+    let mut helpers = vec![ghostex_paths::tailcat::managed_tailcat_binary(
+        &ghostex_paths::GhostexPaths::resolve().data_dir,
+    )];
+    helpers.extend(
+        gpui_resolve_local_gxserver_binary()
+            .and_then(|gxserver| ghostex_paths::tailcat::bundled_tailcat_binary(&gxserver)),
+    );
+    let helpers: Vec<String> = helpers
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let helper_refs: Vec<&str> = helpers.iter().map(String::as_str).collect();
+        if let Some(pid) = gpui_orphaned_easy_connect_helper_pid(line, &helper_refs) {
+            unsafe {
+                libc::kill(pid, libc::SIGKILL);
+            }
+        }
+    }
+}
+
+/// The pid in a `ps -o pid= -o ppid= -o command=` line when it is a leftover Easy Connect helper:
+/// one of `helpers` run as `[--key=…] forward --bind=127.0.0.1 <address> 0:<port>` under pid 1.
+#[cfg(unix)]
+fn gpui_orphaned_easy_connect_helper_pid(line: &str, helpers: &[&str]) -> Option<i32> {
+    let mut fields = line.split_whitespace();
+    let pid = fields.next()?.parse::<i32>().ok()?;
+    if fields.next()? != "1" {
+        return None;
+    }
+    let command = line
+        .split_whitespace()
+        .skip(2)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let arguments = helpers
+        .iter()
+        .find_map(|helper| command.strip_prefix(helper)?.strip_prefix(' '))?;
+    let mut arguments = arguments.split_whitespace().peekable();
+    if arguments
+        .peek()
+        .is_some_and(|word| word.starts_with("--key="))
+    {
+        arguments.next();
+    }
+    let shape = [arguments.next()?, arguments.next()?];
+    let _address = arguments.next()?;
+    let mapping = arguments.next()?;
+    let ours = shape == ["forward", "--bind=127.0.0.1"]
+        && mapping
+            .strip_prefix("0:")
+            .is_some_and(|port| port.parse::<u16>().is_ok())
+        && arguments.next().is_none();
+    (ours && pid > 1).then_some(pid)
 }
 
 #[cfg(unix)]
