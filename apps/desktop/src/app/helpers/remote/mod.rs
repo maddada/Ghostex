@@ -32,6 +32,7 @@ pub(crate) mod source_code_server;
 pub(crate) mod ssh_connection_share;
 pub(crate) mod ssh_exec;
 pub(crate) mod ssh_process;
+pub(crate) mod token_keychain_save;
 pub(crate) mod tunnel_and_auth;
 pub(crate) mod tunnel_liveness;
 pub(crate) mod tunnel_registry;

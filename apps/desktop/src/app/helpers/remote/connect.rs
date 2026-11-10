@@ -59,7 +59,11 @@ pub(crate) fn gpui_connect_remote_gxserver_platform(
     // macOS RemoteGxserverInstallDebugLog parity: record the connect/install
     // lifecycle with bounded machine id + state enums only (no hosts, users,
     // ports, paths, tokens, or process output).
-    support_logs::append(
+    /*
+    CDXC:Diagnostics 2026-11-10 WHY:
+    The coordinator's brief: "log connect start and finish unconditionally". Both lines were written only with the debug switches on, and only a failure was always kept, so on 10 Nov a connect that never ended (it waited on a keychain prompt) left nothing: whether the app had tried at all had to be read from a sample of its threads. A start without a finish now shows a connect that is stuck, and the finish says how long it took. Two short lines per try.
+    */
+    support_logs::append_always(
         support_logs::GpuiSupportLog::RemoteGxserverInstall,
         "gpui.remoteGxserver.connectStarted",
         serde_json::json!({
@@ -67,6 +71,8 @@ pub(crate) fn gpui_connect_remote_gxserver_platform(
             "machineId": config.remote_machine_id,
         }),
     );
+    let started = std::time::Instant::now();
+    let remote_machine_id = config.remote_machine_id.clone();
     let password_saved = config.has_saved_password || config.reuse_ssh_connection;
     let mut result =
         gpui_connect_remote_gxserver_platform_inner(config, install_approved, progress_tx);
@@ -74,14 +80,18 @@ pub(crate) fn gpui_connect_remote_gxserver_platform(
     if !password_saved && matches!(result.state, GpuiRemoteGxserverConnectState::AuthFailed) {
         result.message = GPUI_REMOTE_NO_SAVED_PASSWORD_MESSAGE.to_string();
     }
-    support_logs::append(
+    support_logs::append_always(
         support_logs::GpuiSupportLog::RemoteGxserverInstall,
         if matches!(result.state, GpuiRemoteGxserverConnectState::Connected) {
             "gpui.remoteGxserver.connectFinished"
         } else {
             "gpui.remoteGxserver.connectFailed"
         },
-        serde_json::json!({ "state": result.state.support_log_state() }),
+        serde_json::json!({
+            "machineId": remote_machine_id,
+            "state": result.state.support_log_state(),
+            "tookMs": started.elapsed().as_millis() as u64,
+        }),
     );
     result
 }
@@ -349,21 +359,10 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
         );
     }
     let token = token.unwrap_or_default();
-    match gpui_save_remote_gxserver_token_to_keychain(&config.remote_machine_id, token.as_str()) {
-        GpuiRemoteTokenKeychainResult::Success => {}
-        GpuiRemoteTokenKeychainResult::Unsupported => {
-            return GpuiRemoteGxserverConnectResult::without_connection(
-                GpuiRemoteGxserverConnectState::Unsupported,
-                "Remote gxserver token storage is unavailable in this build.",
-            );
-        }
-        GpuiRemoteTokenKeychainResult::Failed => {
-            return GpuiRemoteGxserverConnectResult::without_connection(
-                GpuiRemoteGxserverConnectState::KeychainFailed,
-                "Could not store the remote gxserver token in secure system storage.",
-            );
-        }
-    }
+    // Saved off this thread: a keychain that waits on a system prompt must not hold the connect,
+    // which goes on with the token it has here (CDXC:RemoteMachines 2026-11-10 in
+    // token_keychain_save.rs).
+    gpui_save_remote_gxserver_token_soon(&config.remote_machine_id, token.as_str());
 
     match gpui_open_remote_gxserver_tunnel(&config, &execution_target, token.as_str()) {
         // CDXC:RemoteMachines 2026-10-31 WHY: gxserver answers health without zmx, so a machine read
