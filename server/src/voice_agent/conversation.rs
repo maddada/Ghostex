@@ -531,22 +531,12 @@ impl Conversation {
                     })));
                     let _ = previous.send(ClientFrame::Close);
                 }
-                let _ = out.send(ClientFrame::Json(json!({
-                    "type": "ready",
-                    "conversationId": self.id,
-                    "provider": self.provider.id(),
-                    "voice": self.voice,
-                    "voiceOptions": self.provider.voices(),
-                    "callMode": if self.push_to_talk { "pushToTalk" } else { "regular" },
-                    // This gxserver switches a running call when the call mode is saved (`callMode` frames).
-                    "callModeLive": true,
-                    "resumed": resumed,
-                    "memory": if self.started_focused { Value::Null } else { memory::client_view(&self.state.paths) },
-                    "memoryContinued": !self.started_focused && self.call_log.continued(),
-                    "focus": focus::client_view(self.focus.as_ref()),
-                    "idleHangupMs": IDLE_HANGUP.as_millis() as u64,
-                    "audio": {"encoding": "pcm16", "sampleRate": super::provider::SAMPLE_RATE, "channels": 1},
-                })));
+                let memory = if self.started_focused {
+                    Value::Null
+                } else {
+                    memory::client_view(&self.state.paths)
+                };
+                let _ = out.send(ClientFrame::Json(self.ready_frame(resumed, memory)));
                 if resumed {
                     for frame in &self.replay {
                         let _ = out.send(ClientFrame::Json(frame.clone()));
@@ -1609,10 +1599,39 @@ impl Conversation {
             "type": "callMode",
             "callMode": if push_to_talk { "pushToTalk" } else { "regular" },
         }));
+        // CDXC:VoiceMode 2026-11-10 WHY: The phone's native call (GhostexVoice.swift / .kt, app 11.2.1) and the desktop's capture gate the microphone with the mode they read from `ready`, so after a switch to Regular they kept sending nothing until Talk was held, the very bug the user reported. Every client already takes the mode from `ready`, so the attached client gets `ready` again with the new mode: their microphone gates follow without a new app. The memory card is left out (the user already answered it) unless the call continued the last one, which keeps "Remembering last conversation".
+        if let Some((_, out)) = &self.client {
+            let memory = if !self.started_focused && self.call_log.continued() {
+                memory::client_view(&self.state.paths)
+            } else {
+                Value::Null
+            };
+            let _ = out.send(ClientFrame::Json(self.ready_frame(true, memory)));
+        }
         if self.client_state == "userSpeaking" {
             self.set_state("listening");
         }
         Ok(())
+    }
+
+    /// The `ready` frame a client gets when it attaches, and again when the call switches mode.
+    fn ready_frame(&self, resumed: bool, memory: Value) -> Value {
+        json!({
+            "type": "ready",
+            "conversationId": self.id,
+            "provider": self.provider.id(),
+            "voice": self.voice,
+            "voiceOptions": self.provider.voices(),
+            "callMode": if self.push_to_talk { "pushToTalk" } else { "regular" },
+            // This gxserver switches a running call when the call mode is saved (`callMode` frames).
+            "callModeLive": true,
+            "resumed": resumed,
+            "memoryContinued": !self.started_focused && self.call_log.continued(),
+            "memory": memory,
+            "focus": focus::client_view(self.focus.as_ref()),
+            "idleHangupMs": IDLE_HANGUP.as_millis() as u64,
+            "audio": {"encoding": "pcm16", "sampleRate": super::provider::SAMPLE_RATE, "channels": 1},
+        })
     }
 
     /// Talk pressed. In a push-to-talk call, talking over the agent cuts its reply, as Stop does,
