@@ -1150,10 +1150,16 @@ impl NativeChatView {
                         .truncate()
                         .text_size(px(CHIP_SIZE * s))
                         .text_color(p.card_muted)
-                        .child(lead),
+                        .child(lead.clone()),
                 );
             }
-            chips = chips.child(self.board_answers(&key, &answers, p, cx));
+            // Beside a lead the answers keep their width; alone on a narrow card they give way.
+            let answers_pill = self.board_answers(&key, &answers, p, cx);
+            chips = if !lead.is_empty() && inner_width >= 260.0 {
+                chips.child(div().flex_shrink_0().child(answers_pill))
+            } else {
+                chips.child(answers_pill)
+            };
         } else if tags.is_empty() && !expanded {
             chips = chips.child(
                 div()

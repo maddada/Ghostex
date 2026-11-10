@@ -217,10 +217,26 @@ impl NativeChatView {
                         None
                     },
                     ToneButton::Secondary,
-                    recommended.then(|| "Recommended".to_string()),
+                    None,
                     busy && !picked,
                     p,
                 )
+                // The recommended answer carries the question forms' star after its label
+                // (ask_card.rs `recommended_mark`), "Recommended" as its tooltip and name.
+                .when(recommended, |button| {
+                    button
+                        .aria_label(format!("{label}, Recommended"))
+                        .tooltip(|window, cx| {
+                            gpui_component::tooltip::Tooltip::new("Recommended").build(window, cx)
+                        })
+                        .child(
+                            svg()
+                                .path("titlebar/star-filled.svg")
+                                .size(px(10.0 * s))
+                                .flex_shrink_0()
+                                .text_color(super::ask_card::ask_color(p).opacity(0.75)),
+                        )
+                })
                 .when(!busy, |button| {
                     button.on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
