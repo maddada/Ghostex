@@ -306,6 +306,12 @@ pub(crate) fn start_session_provider_with_observed_state(
             &cwd,
         );
         let startup_text = startup_text.unwrap_or_default();
+        // OpenCode's TUI opens its conversation only when it exists already (GitHub #538).
+        crate::session_chat_opencode::create_before_terminal_launch(
+            &probed_session,
+            Some(&project),
+            &startup_text,
+        );
         let startup_text =
             if crate::session_chat_composer::session_chat_composer_agent_id(&probed_session)
                 .as_deref()
