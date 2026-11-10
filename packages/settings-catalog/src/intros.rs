@@ -23,7 +23,7 @@ pub const PAGE_INTROS: &[(&str, &str)] = &[
     ("autopilot", "Keeps your sessions going while you're away, within limits you set, and logs what it did."),
     ("collab", "Share a chat through a link that opens in a browser, and what guests may do in it."),
     ("secrets", "Where Ghostex reads keys from (1Password), and how agents ask you for a secret privately."),
-    ("security", "How approving works on this computer, and the log of what was approved and who asked."),
+    ("security", "How you approve requests for this computer: with one click, or with Touch ID, Windows Hello, your password or your phone's Face ID first."),
     ("integrations", "What Ghostex adds to your agents and computer: the ghostex CLI, skills, Floating Capture and permissions."),
     ("remote", "Reach this computer from your phone or another computer, and add remote machines."),
     ("sync", "Carry Spaces, settings, skills and agents between your computers."),

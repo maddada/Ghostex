@@ -51,6 +51,18 @@ impl PageBlock {
 /// Space above the page title, below the search field.
 const HEADER_TOP: f32 = 20.0;
 
+/// The page's intro: the catalog's line, and on Security, while its log shows (Security logs on),
+/// a sentence about the log (CDXC:Security 2026-11-10 in store.rs `security_logs_on`).
+fn page_intro(store: &Entity<SettingsStore>, tab: SettingsTabId, cx: &App) -> Option<String> {
+    let intro = ghostex_settings_catalog::page_intro(tab.id())?.to_string();
+    if tab == SettingsTabId::Security && store.read(cx).security_logs_on() {
+        return Some(format!(
+            "{intro} Below, the log of what was asked and approved, and whether anyone changed it."
+        ));
+    }
+    Some(intro)
+}
+
 /// The page's title with its one-line intro under it (`ghostex_settings_catalog::page_intro`),
 /// above the first section, whose own extra top space it takes over.
 ///
@@ -59,6 +71,7 @@ const HEADER_TOP: f32 = 20.0;
 fn with_page_header(
     tab: SettingsTabId,
     p: &SettingsPalette,
+    intro: Option<String>,
     blocks: Vec<PageBlock>,
 ) -> Vec<PageBlock> {
     let header = v_flex()
@@ -73,18 +86,15 @@ fn with_page_header(
                 .text_color(hsla(p.foreground))
                 .child(tab.title()),
         )
-        .when_some(
-            ghostex_settings_catalog::page_intro(tab.id()),
-            |header, intro| {
-                header.child(
-                    div()
-                        .text_size(px(13.5))
-                        .line_height(px(19.0))
-                        .text_color(hsla(p.muted))
-                        .child(intro),
-                )
-            },
-        );
+        .when_some(intro, |header, intro| {
+            header.child(
+                div()
+                    .text_size(px(13.5))
+                    .line_height(px(19.0))
+                    .text_color(hsla(p.muted))
+                    .child(intro),
+            )
+        });
     let mut blocks = blocks;
     // Pages add 20px over their first section's own 12px; the header takes that place now.
     if let Some(first) = blocks.first_mut() {
@@ -144,7 +154,8 @@ pub(crate) fn settings_page(
     blocks: Vec<PageBlock>,
     cx: &mut App,
 ) -> AnyElement {
-    let blocks = with_page_header(tab, p, blocks);
+    let intro = page_intro(store, tab, cx);
+    let blocks = with_page_header(tab, p, intro, blocks);
     let (handle, tracker) = store.update(cx, |store, _| {
         (store.scroll_handle(tab), store.tracker(tab))
     });
