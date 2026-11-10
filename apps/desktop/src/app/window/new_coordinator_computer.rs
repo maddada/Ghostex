@@ -2,8 +2,8 @@
 //! runs in (another computer's, or a second clone here), with that computer's own agents and
 //! models, and the Create round trip that keeps the dialog open until the coordinator exists.
 //!
-//! CDXC:Coordinators 2026-11-09 DECISION:
-//! User: "Can I choose where the coordinator runs?" and then "Let's just do it". For a project the sidebar merged from more than one copy, the dialog has a Computer field between Name and Agent listing every copy by its computer's name (and the end of its folder's path when one computer has two), defaulting to the copy the dialog was opened for (the one a session last started in, or the New thread picker's pick). A computer that is not connected is greyed "Not connected" and never swapped for another; the Agent, Model and Effort lists are the picked computer's own, and the playbook row is read from it. A project with one copy shows no field. The phone's form offers the same choice between the folders of one computer.
+//! CDXC:Coordinators 2026-11-09 WHY:
+//! The contributor (sebastianarena, PR #542) chose this, from his own "Can I choose where the coordinator runs?": For a project the sidebar merged from more than one copy, the dialog has a Computer field between Name and Agent listing every copy by its computer's name (and the end of its folder's path when one computer has two), defaulting to the copy the dialog was opened for (the one a session last started in, or the New thread picker's pick). A computer that is not connected is greyed "Not connected" and never swapped for another; the Agent, Model and Effort lists are the picked computer's own, and the playbook row is read from it. A project with one copy shows no field. The phone's form offers the same choice between the folders of one computer.
 //! SEE-ALSO: packages/gx-core/src/sidebar_view/view.rs (`SidebarView::project_copies`), apps/desktop/src/app/new_coordinator_modal_lifecycle.rs (the copies, the checks and the reads), apps/mobile/app/src/screens/sessions-screen/NewCoordinatorSheet.tsx (the phone's Folder row).
 use super::*;
 use gpui::StatefulInteractiveElement as _;
