@@ -66,6 +66,13 @@ pub(crate) fn process_tree_rows(root_pids: &[i64]) -> Vec<ProcessRow> {
     rows
 }
 
+/// The process group and the terminal's foreground process group of `pid` (`ps -o pgid,tpgid`),
+/// `None` when the kernel does not answer or the process has no terminal.
+pub(crate) fn process_group_and_foreground(pid: i64) -> Option<(i64, i64)> {
+    let info = bsd_info(i32::try_from(pid).ok()?)?;
+    (info.e_tpgid != 0).then(|| (i64::from(info.pbi_pgid), i64::from(info.e_tpgid)))
+}
+
 fn all_pids() -> Vec<i32> {
     let mut pids = vec![0 as libc::pid_t; 4096];
     loop {

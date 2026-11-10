@@ -91,6 +91,11 @@ pub(crate) fn reconcile_gone_agent_activity(
     if identities.contains_key(&zmx_name) {
         return;
     }
+    // An agent the scan has no name for (run through a wrapper it does not know) still holds the
+    // terminal's foreground; only a shell in front is a prompt (zmx/foreground_job.rs).
+    if crate::zmx::zmx_session_runs_foreground_command(&zmx_name) == Some(true) {
+        return;
+    }
     let (Some(observed_activity), Some(observed_updated_at)) = (
         session
             .pointer("/runtimeSettings/agentActivity")

@@ -3,6 +3,7 @@ mod bash_startup;
 mod codex_wrapper;
 pub mod endpoint;
 pub mod env;
+mod foreground_job;
 #[cfg(not(windows))]
 mod fish_startup;
 mod grok_startup;
@@ -40,6 +41,7 @@ mod zsh_startup;
 
 pub use endpoint::*;
 pub(crate) use env::*;
+pub(crate) use foreground_job::zmx_session_runs_foreground_command;
 pub(crate) use launch::*;
 pub use probe_cache::*;
 pub(crate) use process_identity::*;

@@ -846,7 +846,7 @@ fn resolve_zmx_session_process_identities(
     identities
 }
 
-fn build_zmx_process_snapshot_command(zmx_executable_path: &str) -> String {
+pub(super) fn build_zmx_process_snapshot_command(zmx_executable_path: &str) -> String {
     #[cfg(windows)]
     return super::scripts_windows::process_snapshot_command(zmx_executable_path);
     // macOS reads the process rows in-process (process_table_macos.rs), so its script lists sessions only.
@@ -890,7 +890,7 @@ ps -axo pid=,ppid=,tty=,command=
 }
 
 #[cfg(not(target_os = "macos"))]
-fn parse_zmx_process_snapshot_sections(stdout: &str) -> (String, String) {
+pub(super) fn parse_zmx_process_snapshot_sections(stdout: &str) -> (String, String) {
     let zmx_marker = "__GHOSTEX_ZMX_LIST__";
     let ps_marker = "__GHOSTEX_PS__";
     let Some(zmx_index) = stdout.find(zmx_marker) else {
@@ -910,7 +910,10 @@ fn parse_zmx_process_snapshot_sections(stdout: &str) -> (String, String) {
     )
 }
 
-fn parse_zmx_root_pids(zmx_list_output: &str, session_names: &[String]) -> HashMap<String, i64> {
+pub(super) fn parse_zmx_root_pids(
+    zmx_list_output: &str,
+    session_names: &[String],
+) -> HashMap<String, i64> {
     let wanted = session_names.iter().cloned().collect::<HashSet<_>>();
     let mut root_pids = HashMap::new();
     for line in zmx_list_output.lines() {
