@@ -714,7 +714,7 @@ fn supervise(
                 memory
                     .stalls
                     .entry(key.clone())
-                    .or_insert_with(|| coordinators::StallWatch::new(now))
+                    .or_insert_with(|| coordinators::StallWatch::resumed(&session, now))
                     .observe(&session, now)
                     .map(|due| ReportKind::Stalled { due })
             }

@@ -97,6 +97,10 @@ pub struct StallWatch {
     /// The quiet stretch last reported, by when it began, and how many rounds of it were.
     reported: Option<(i64, u32)>,
     nudged_at: Option<i64>,
+    /// A watch whose clock was rebuilt from the transcript (`resumed`) says nothing is due before
+    /// this: until then it has not compared the screen twice, and a screen that still moves (a
+    /// build printing, a spinner) is output the transcript does not show.
+    quiet_until_checked: Option<i64>,
 }
 
 /// A report a watch says is due: the quiet stretch's start, which round of it this is (1 at the
@@ -120,7 +124,42 @@ impl StallWatch {
             checked_at: None,
             reported: None,
             nudged_at: None,
+            quiet_until_checked: None,
         }
+    }
+
+    /*
+    CDXC:Coordinators 2026-11-11 FIX:
+    GitHub #554 ("Stall and idle clocks reset when gxserver restarts"): a watch lives only in memory, so after a restart a thread that had shown no output for an hour started a fresh 8-minute wait from the restart. A watch made for a session already working now starts its quiet clock at the transcript's last write (never before the agent's last launch or the moment the session turned working), the same evidence the watch would have counted itself, and holds any report until it has looked at the screen twice, so a screen that kept moving through the restart still counts. The idle clock needs no fix: it starts at the thread's last report, which is stored (`idle_wait_report`).
+    */
+    /// BLOCKING (a file stat and a short transcript tail read). A watch for a session first seen
+    /// now, already working: its quiet clock starts at the transcript's last write when there is
+    /// one, so a gxserver restart does not restart a stretch of quiet.
+    pub fn resumed(session: &Value, now: i64) -> Self {
+        let mut watch = Self::new(now);
+        let (transcript_at, _) = transcript_activity(session, &mut watch.path);
+        let Some(written) = transcript_at.filter(|written| *written < now) else {
+            return watch;
+        };
+        // Never before the session turned working (its stored activity's last change): a turn
+        // that just began, its prompt not in the transcript yet, is no old stretch of quiet.
+        let working_since = session
+            .pointer("/runtimeSettings/agentActivity/lastChangedAt")
+            .and_then(Value::as_str)
+            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            .map(|at| at.timestamp_millis())
+            .unwrap_or(now);
+        let start = written
+            .max(agent_launched_at(session).unwrap_or(0))
+            .max(working_since)
+            .min(now);
+        if start < now {
+            watch.run = Some(agent_run_of(session));
+            watch.watched_since = start;
+            watch.transcript_seen = Some(written);
+            watch.quiet_until_checked = Some(now + 2 * test_scaled(STALL_CHECK_EVERY_MS));
+        }
+        watch
     }
 
     /// BLOCKING (a file stat, a short transcript tail read and, once quiet, one screen capture),
@@ -148,6 +187,9 @@ impl StallWatch {
         {
             self.checked_at = Some(now);
             self.look(session, now);
+        }
+        if self.quiet_until_checked.is_some_and(|until| now < until) {
+            return None;
         }
         let quiet_since = self.quiet_since();
         let round = self.round(now);
