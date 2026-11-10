@@ -1,9 +1,9 @@
 # Coordinator captain's hat: where the artwork comes from
 
-2026-11-10. The user supplied the picture and holds the licence for it: "im licensed to use that image pls use it directly".
+2026-11-10. The coordinator's mark is our own drawing after a picture the user supplied and holds the licence for ("im licensed to use that image pls use it directly"): a black line drawing of a peaked captain's cap seen from the side.
 
-- `coordinator-captain-hat.svg` is that picture (a 512 px black line drawing of a peaked captain's cap) vectorized with potrace 1.16 (`--turdsize 2 --alphamax 1.0 --opttolerance 0.2`), scaled to 23 units wide and centred in the 24 viewBox, filled with `currentColor`. The drawing is not changed.
-- `coordinator-captain-hat-small.svg` is the same picture with its lines thickened by 3 px (at 512 px, a disk erosion of the thresholded bitmap) before the same trace and fit, for sizes of 17 px and below, where the original's half-pixel lines go faint on a 1x screen. Nothing is redrawn.
+- `coordinator-captain-hat.svg` is that same cap drawn by hand seen straight from the front, so the icon is symmetrical (user: "keep the same hat exactly just make it shown from front I mean it will look better for the icon to be symmetrical"; he picked candidate A, "Balanced", in Q2172). It keeps his picture's line weight (0.95 at 24) and rounded pen ends: a saucer top a little wider than the band, the badge with its small inner mark, the band with its stripe, and a curved peak. Stroked in `currentColor`.
+- `coordinator-captain-hat-small.svg` is the same drawing with slightly thicker lines (1.25), for 17 px and below, where 0.95 goes faint on a 1x screen.
 - The phone draws the first one (`CoordinatorGlyph` in apps/mobile/app/src/components/sessions/icons.tsx).
 
-It replaced a hand-drawn cap the user rejected ("the icon u put for orchestrators doesn't look like the one i shared, this one looks simpler and uglier please fix").
+History: the side view traced from his picture (potrace) was the mark from 177cfd9f2 until this front view replaced it; it stays in git history only. Before that, a hand-drawn side view the user rejected ("this one looks simpler and uglier please fix").

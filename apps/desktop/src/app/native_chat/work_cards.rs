@@ -36,7 +36,7 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
 fn chip_icon(kind: &str) -> &'static str {
     match kind {
         "thread" => "titlebar/robot.svg",
-        // 12 px: the picture's thicker-lined copy for small sizes.
+        // 12 px: the hat's thicker-lined copy for small sizes.
         "coordinator" => "titlebar/coordinator-captain-hat-small.svg",
         "steps" => "titlebar/checklist.svg",
         "item" => "titlebar/stack.svg",
