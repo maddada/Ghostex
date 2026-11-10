@@ -1090,7 +1090,16 @@ impl SessionChatQueueRuntime {
     }
 
     /// The transcript read happens outside the `gates` lock, which deliveries also take.
+    /// CDXC:SessionChat 2026-11-11 WHY: an agent killed mid-turn leaves a transcript that reads Working for good (a tool result with no reply), so after #551 settled its activity idle the queue still held every row behind the dead turn. Once the detection funnel confirms the agent gone (session_chat_start_failure.rs), its transcript says nothing about what runs now: the row goes to the send path, which restarts the agent on its own conversation and holds the message for its input box (`restart_exited_agent_before_send` in send_heal.rs).
     fn transcript_lifecycle_is_working(&self, key: &str, session: &Value) -> bool {
+        if let (Some(project_id), Some(session_id)) = (
+            session_text(session, "projectId"),
+            session_text(session, "sessionId"),
+        ) {
+            if crate::session_chat_start_failure::agent_gone_confirmed(&project_id, &session_id) {
+                return false;
+            }
+        }
         let mut transcript = {
             let Ok(mut gates) = self.gates.lock() else {
                 return true;
