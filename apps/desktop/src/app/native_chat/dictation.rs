@@ -1,6 +1,7 @@
 //! The composer's Dictate control: the microphone records to a file first and the recording is
 //! transcribed after Stop (`voice_agent::Dictate`, gxserver's `/api/transcribeDictation`); the text
-//! is typed into the draft. While it records or transcribes, a small pill just above the
+//! is typed into the draft, or into the question form box that had the keyboard when the recording
+//! started (`aim_dictation`). While it records or transcribes, a small pill just above the
 //! microphone shows it with an ✕ that cancels (Escape cancels too); a failed transcription turns it
 //! into a small card that says what went wrong and what to do, with Add key or Check key and
 //! Transcribe again. Hovering the microphone when a recording has no text yet offers Transcribe
@@ -209,6 +210,9 @@ pub(crate) struct DictationControl {
     /// The pill at its last paint, and the spot it was last placed at (`Placement`).
     pill: Rc<Cell<Bounds<Pixels>>>,
     placed: Rc<Cell<(Pixels, Pixels)>>,
+    /// The question form box (its `form_inputs` key) the running dictation types into; `None` is
+    /// the chat box (`aim_dictation`).
+    target: Option<String>,
 }
 
 pub(crate) type Dictation = Option<DictationControl>;
@@ -244,8 +248,36 @@ impl NativeChatView {
             hover: None,
             pill: Default::default(),
             placed: Rc::new(Cell::new((px(0.0), px(0.0)))),
+            target: None,
         });
         dictate
+    }
+
+    /// Sets where the words of the run `dictate` is about to begin are typed: `target`, a question
+    /// form box, or the chat box. A new recording aims at the box that has the keyboard
+    /// (`focused_form_box`); a recording transcribed later (Transcribe again, Transcribe previous)
+    /// at the chat box. Nothing changes while one records or transcribes, so a box focused
+    /// meanwhile does not move it.
+    ///
+    /// CDXC:Dictate 2026-11-10 WHY: Dictate typed into the chat box even when the caret was in a question form's note, text answer or "Anything else?" box, so the words had to be cut from the draft and pasted into the box. The box that has the keyboard when the recording starts gets them, at its caret with the chat box's spacing; if its form was sent or answered meanwhile they go to the chat box, so a dictation is never lost. This widens "typed into the draft" of the SessionChat 2026-10-08 DECISION and follows the VoiceMode 2026-10-20 one on the caret showing where the words will land (both in this file's head).
+    /// CDXC:Dictate 2026-11-10 SEE-ALSO: the phone's rule is `apps/mobile/app/src/chat/native/composer/dictationTarget.ts`; the box shows it is the target in `question_form.rs` `note_box`.
+    fn aim_dictation(&mut self, dictate: &Entity<Dictate>, target: Option<String>, cx: &App) {
+        let dictate = dictate.read(cx);
+        if dictate.recording() || dictate.transcribing() {
+            return;
+        }
+        if let Some(control) = self.dictation.as_mut() {
+            control.target = target;
+        }
+    }
+
+    /// The form box the running dictation will type into, while it records or transcribes.
+    pub(super) fn dictation_target(&self, cx: &App) -> Option<&str> {
+        let control = self.dictation.as_ref()?;
+        let dictate = control.dictate.read(cx);
+        (dictate.recording() || dictate.transcribing())
+            .then_some(control.target.as_deref())
+            .flatten()
     }
 
     /// Whether the microphone is recording (the Stop glyph).
@@ -258,6 +290,7 @@ impl NativeChatView {
     /// Start recording, or stop and transcribe.
     pub(super) fn toggle_dictation(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let dictate = self.dictate(window, cx);
+        self.aim_dictation(&dictate, self.focused_form_box(window, cx), cx);
         dictate.update(cx, |dictate, cx| dictate.toggle(cx));
         cx.notify();
     }
@@ -277,6 +310,9 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         let dictate = self.dictate(window, cx);
+        if start {
+            self.aim_dictation(&dictate, self.focused_form_box(window, cx), cx);
+        }
         dictate.update(cx, |dictate, cx| {
             if start {
                 dictate.start(cx);
@@ -310,6 +346,7 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         let dictate = self.dictate(window, cx);
+        self.aim_dictation(&dictate, None, cx);
         dictate.update(cx, |dictate, cx| dictate.transcribe_previous(cx));
     }
 
@@ -641,6 +678,7 @@ impl NativeChatView {
                 .on_click(cx.listener(|this, _, _, cx| {
                     if let Some(control) = this.dictation.as_ref() {
                         let dictate = control.dictate.clone();
+                        this.aim_dictation(&dictate, None, cx);
                         dictate.update(cx, |dictate, cx| dictate.retry(cx));
                     }
                     cx.notify();
@@ -685,7 +723,9 @@ impl NativeChatView {
     }
 
     /// Type a finished dictation at the caret (over a selection), spaced from the characters on
-    /// either side of it (`spaced_at_caret`) while Insert with spacing is on.
+    /// either side of it (`spaced_at_caret`) while Insert with spacing is on. It goes into the
+    /// form box the dictation was aimed at (`aim_dictation`) while that box still takes text, the
+    /// chat box otherwise.
     ///
     /// CDXC:VoiceMode 2026-11-05 DECISION: User (Q1264) picked "Spacing at the caret": the space
     /// is decided by the characters next to the caret, not by the end of the draft, so text
@@ -693,11 +733,18 @@ impl NativeChatView {
     /// before a comma or after an opening bracket. `dictateInsertSpacing` off types it as heard.
     fn insert_dictation(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         let text = text.trim();
+        let target = self
+            .dictation
+            .as_mut()
+            .and_then(|control| control.target.take());
         if text.is_empty() {
             cx.notify();
             return;
         }
-        let Some(input) = self.input.clone() else {
+        let form_box = target
+            .and_then(|key| self.open_form_box(&key))
+            .map(|entry| entry.input.clone());
+        let Some(input) = form_box.or_else(|| self.input.clone()) else {
             cx.notify();
             return;
         };

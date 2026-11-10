@@ -191,7 +191,9 @@ impl NativeChatView {
     }
 
     /// A form's note or text box with what a paste adds: the paste hook, the pills' click, and a
-    /// line while an image is saved or when it could not be.
+    /// line while an image is saved or when it could not be. While a dictation that started in
+    /// the box records or transcribes, the box is marked as where its words will be typed
+    /// (`note_box`; the pill over the microphone keeps the clock and the ✕, dictation.rs).
     pub(super) fn form_box(
         &self,
         key: &str,
@@ -213,6 +215,8 @@ impl NativeChatView {
         } else {
             entry.paste_error.clone().map(|error| (error, true))
         };
+        // The modal draws its own copy of the box, which no dictation starts in.
+        let dictated_into = !modal && self.dictation_target(cx) == Some(key);
         div()
             .id(gpui::SharedString::from(format!("form-box:{key}")))
             .w_full()
@@ -227,6 +231,7 @@ impl NativeChatView {
                 &entry.input,
                 label,
                 paste,
+                dictated_into,
                 p,
             ))
             .when_some(status, |column, (status, error)| {

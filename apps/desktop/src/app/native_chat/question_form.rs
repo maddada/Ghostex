@@ -159,6 +159,25 @@ impl NativeChatView {
         }
     }
 
+    /// The transcript's form box that has the keyboard, by its key: where a dictation started now
+    /// types its words (`aim_dictation` in dictation.rs). The Resources modal's boxes are in a
+    /// window of their own, which has no microphone.
+    pub(super) fn focused_form_box(&self, window: &Window, cx: &gpui::App) -> Option<String> {
+        self.form_inputs
+            .iter()
+            .find(|(_, entry)| entry.input.read(cx).focus_handle(cx).is_focused(window))
+            .map(|(key, _)| key.clone())
+    }
+
+    /// The transcript's form box `key` names, while its form still takes answers: the boxes of a
+    /// form that was just sent or answered stay until the next draw drops them.
+    pub(super) fn open_form_box(&self, key: &str) -> Option<&FormInput> {
+        let (form, _) = key.rsplit_once(':')?;
+        (self.snapshot["questionForms"][form]["state"] == "open")
+            .then(|| self.form_inputs.get(key))
+            .flatten()
+    }
+
     /// Gives the Resources modal's form its text boxes (made with the modal's `window`), and drops
     /// the ones of a form that is not open.
     pub(super) fn sync_modal_form_inputs(
@@ -941,23 +960,65 @@ fn skip_all_chord() -> String {
     }
 }
 
+/// What the microphone in a box says while a dictation will type there; the phone
+/// (QuestionForm.tsx) says the same.
+const DICTATED_INTO: &str = "Your dictation goes here";
+
+/// The size of that microphone, unscaled, and the room kept between it and the box's text.
+const DICTATED_INTO_GLYPH: f32 = 13.0;
+const DICTATED_INTO_GAP: f32 = 6.0;
+
 /// A question's note box, and the form's notes box: one look. `paste` takes a pasted image
-/// (form_attachments.rs).
+/// (form_attachments.rs). `dictated_into` marks the box a running dictation will type into: the
+/// chat box's focus colour on its border and a small microphone at its right end, inside the
+/// box, so the form's height stays as it is.
+///
+/// CDXC:Dictate 2026-11-10 WHY: a line of words under the box was tried first; it made the form a line taller while a dictation ran, the transcript moved under the pointer, and the first press on the form's buttons was lost.
 pub(super) fn note_box(
     input: &Entity<TextareaState>,
     label: &'static str,
     paste: impl Fn(&gpui::ClipboardItem, &mut Window, &mut gpui::App) -> bool + 'static,
+    dictated_into: bool,
     p: &ChatAppearance,
 ) -> AnyElement {
     let s = p.scale;
     div()
+        .relative()
         .w_full()
         .px(px(10.0 * s))
         .py(px(6.0 * s))
+        .when(dictated_into, |this| {
+            this.pr(px((10.0 + DICTATED_INTO_GLYPH + DICTATED_INTO_GAP) * s))
+        })
         .rounded(px(9.0 * s))
         .border_1()
-        .border_color(p.input_border)
+        .border_color(if dictated_into {
+            p.ring
+        } else {
+            p.input_border
+        })
         .bg(if p.light { p.background } else { p.card_row })
+        .when(dictated_into, |this| {
+            this.child(
+                div()
+                    .id("dictated-into")
+                    .role(gpui::Role::Status)
+                    .aria_label(DICTATED_INTO)
+                    .absolute()
+                    // Centred on the first line (a 20px line in 6px of padding).
+                    .top(px((6.0 + (20.0 - DICTATED_INTO_GLYPH) / 2.0) * s))
+                    .right(px(10.0 * s))
+                    .tooltip(|window, cx| {
+                        gpui_component::tooltip::Tooltip::new(DICTATED_INTO).build(window, cx)
+                    })
+                    .child(
+                        gpui::svg()
+                            .path("titlebar/microphone.svg")
+                            .size(px(DICTATED_INTO_GLYPH * s))
+                            .text_color(p.muted),
+                    ),
+            )
+        })
         .child(
             Textarea::new(input)
                 .on_paste(paste)

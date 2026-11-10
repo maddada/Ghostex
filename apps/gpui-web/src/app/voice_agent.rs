@@ -36,12 +36,18 @@ pub(crate) enum DictateEvent {
 
 /// `?dictatePreview=recording|transcribing|failed` draws the Dictate button on the page, and
 /// pressing it shows that state, so the chat box's Dictate pill can be looked at in a browser. No
-/// microphone is opened; ✕ (or pressing the button again) goes back to idle. `failed:<code>`
+/// microphone is opened; ✕ (or pressing the button again) goes back to idle. Pressing the button
+/// again while it shows `recording` also types [`PREVIEW_WORDS`], as Stop does once the words are
+/// back, so where a dictation lands (the chat box, or the question form box it started in) can be
+/// looked at too. `failed:<code>`
 /// shows the failure card for one of gxserver's codes (`failed:noKey`, `failed:providerUnavailable`,
 /// ...), worded as gxserver words it (`server/src/voice_agent/transcribe.rs`).
 pub(crate) fn dictation_preview() -> bool {
     preview_phase().is_some()
 }
+
+/// What the preview's Stop types.
+const PREVIEW_WORDS: &str = "This is a sample dictation.";
 
 fn preview_phase() -> Option<DictatePhase> {
     let search = web_sys::window().and_then(|window| window.location().search().ok())?;
@@ -146,6 +152,10 @@ impl Dictate {
     pub(crate) fn toggle(&mut self, cx: &mut Context<Self>) {
         self.phase = match self.phase {
             DictatePhase::Idle => preview_phase().unwrap_or(DictatePhase::Idle),
+            DictatePhase::Recording => {
+                cx.emit(DictateEvent::Text(PREVIEW_WORDS.to_string()));
+                DictatePhase::Idle
+            }
             _ => DictatePhase::Idle,
         };
         cx.notify();
