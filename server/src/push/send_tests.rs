@@ -805,7 +805,8 @@ async fn push_send_provider_errors_are_bounded_and_redacted() {
     ] {
         assert!(log.contains(code), "{code} missing from {log}");
     }
-    assert!(!log.contains("SECRET-MESSAGE"));
+    // The service's own words are logged with the token cut out (CDXC:Notifications 2026-11-11 in push/expo.rs).
+    assert!(log.contains("[push token] SECRET-MESSAGE"), "{log}");
     assert_no_token_outside_store(
         h.temp.path(),
         &h.paths.auth_dir.join("push-registrations.json"),

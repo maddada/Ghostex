@@ -15,6 +15,36 @@ const RESPONSE_BYTES_MAX: u64 = 256 * 1024;
 const RETRY_AFTER_MAX_SECS: u64 = 3600;
 const CODE_CHARS_MAX: usize = 48;
 
+/// A refusal as the push service named it: its code (`InvalidCredentials`, `DeviceNotRegistered`, `MessageTooBig`, or
+/// gxserver's own `malformedResponse`, `timeout`, `http500` …) and the service's own words for it, if it gave any, on
+/// one line with every push token cut out (`crate::logging::cut_push_tokens`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Failure {
+    pub(crate) code: String,
+    pub(crate) message: Option<String>,
+}
+
+impl Failure {
+    pub(crate) fn code(code: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            message: None,
+        }
+    }
+
+    /// `code` with the `message` field of `answer` (a request error, a ticket or a receipt).
+    fn of(code: impl Into<String>, answer: &Value) -> Self {
+        Self {
+            code: code.into(),
+            message: answer
+                .get("message")
+                .and_then(Value::as_str)
+                .map(crate::logging::cut_push_tokens)
+                .filter(|message| !message.is_empty()),
+        }
+    }
+}
+
 /// What became of one message.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum SendOutcome {
@@ -25,30 +55,31 @@ pub(crate) enum SendOutcome {
     /// Worth another try: rate limited, a server error, or no answer.
     Retry {
         after: Option<Duration>,
-        code: String,
+        code: Failure,
     },
     /// Refused for good (bad request, missing access token, malformed answer).
-    Failed(String),
+    Failed(Failure),
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ReceiptState {
     Delivered,
     DeviceNotRegistered,
-    Failed(String),
+    Failed(Failure),
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ReceiptsOutcome {
     /// Receipts Expo has; ids it does not list are not ready yet.
     Read(HashMap<String, ReceiptState>),
-    Retry(String),
-    Failed(String),
+    Retry(Failure),
+    Failed(Failure),
 }
 
 /// CDXC:Notifications 2026-10-31 WHY:
 /// gxserver sends only to Expo's fixed push origin; no setting, environment variable or caller can point it elsewhere, and only the tests build a client for a local fake. Requests and answers follow Expo's page "Send notifications with the Expo Push Service" (docs.expo.dev/push-notifications/sending-notifications, read 2026-10-31): send at `/--/api/v2/push/send`, receipts at `/--/api/v2/push/getReceipts` with `ids`, `DeviceNotRegistered` on a ticket or receipt for a dead token, `TOO_MANY_REQUESTS` when rate limited, and `UNAUTHORIZED` when enhanced security asks for an access token gxserver does not have, which no retry can fix.
-/// Only a short error code leaves this module: Expo's error messages quote the push token, so they are never logged or returned. An answer that cannot be read counts as a failure and is not retried, since Expo may already have taken the message.
+/// A refusal leaves this module as its code and Expo's own words for it (`Failure`), with every push token cut out of those words: Expo's messages can quote the token. An answer that cannot be read counts as a failure and is not retried, since Expo may already have taken the message.
+/// CDXC:Notifications 2026-11-11 DECISION: User (push follow-ups, fault 3): log the push service's failure code and message as they are, while still never logging a token; a failed push showed only `[redacted:secret]` and could not be diagnosed. This supersedes "only a short error code leaves this module".
 pub(crate) struct ExpoClient {
     origin: String,
     agent: ureq::Agent,
@@ -77,7 +108,10 @@ impl ExpoClient {
     pub(crate) fn send(&self, message: &str) -> SendOutcome {
         match self.post(SEND_PATH, format!("[{message}]")) {
             Ok(answer) => send_outcome(answer),
-            Err(code) => SendOutcome::Retry { after: None, code },
+            Err(code) => SendOutcome::Retry {
+                after: None,
+                code: Failure::code(code),
+            },
         }
     }
 
@@ -85,7 +119,7 @@ impl ExpoClient {
     pub(crate) fn receipts(&self, ids: &[&str]) -> ReceiptsOutcome {
         match self.post(RECEIPTS_PATH, json!({ "ids": ids }).to_string()) {
             Ok(answer) => receipts_outcome(answer),
-            Err(code) => ReceiptsOutcome::Retry(code),
+            Err(code) => ReceiptsOutcome::Retry(Failure::code(code)),
         }
     }
 
@@ -123,16 +157,14 @@ struct Answer {
 }
 
 impl Answer {
-    /// The first request error code Expo named, if any.
-    fn error_code(&self) -> Option<String> {
-        self.body
-            .as_ref()?
-            .get("errors")?
-            .as_array()?
-            .first()?
+    /// The first request error Expo named, if any.
+    fn error_code(&self) -> Option<Failure> {
+        let error = self.body.as_ref()?.get("errors")?.as_array()?.first()?;
+        let code = error
             .get("code")
             .and_then(Value::as_str)
-            .map(bounded_code)
+            .map(bounded_code)?;
+        Some(Failure::of(code, error))
     }
 
     /// Rate limited, a server error, or refused for good; `None` for a 2xx answer.
@@ -141,24 +173,28 @@ impl Answer {
         match self.status {
             200..=299 if code.is_none() => None,
             429 => Some(Refusal::Retry(
-                code.unwrap_or_else(|| "TOO_MANY_REQUESTS".into()),
+                code.unwrap_or_else(|| Failure::code("TOO_MANY_REQUESTS")),
             )),
-            500..=599 => Some(Refusal::Retry(
-                code.unwrap_or_else(|| format!("http{}", self.status)),
-            )),
+            500..=599 => {
+                Some(Refusal::Retry(code.unwrap_or_else(|| {
+                    Failure::code(format!("http{}", self.status))
+                })))
+            }
             401 | 403 => Some(Refusal::Failed(
-                code.unwrap_or_else(|| "UNAUTHORIZED".into()),
+                code.unwrap_or_else(|| Failure::code("UNAUTHORIZED")),
             )),
-            _ => Some(Refusal::Failed(
-                code.unwrap_or_else(|| format!("http{}", self.status)),
-            )),
+            _ => {
+                Some(Refusal::Failed(code.unwrap_or_else(|| {
+                    Failure::code(format!("http{}", self.status))
+                })))
+            }
         }
     }
 }
 
 enum Refusal {
-    Retry(String),
-    Failed(String),
+    Retry(Failure),
+    Failed(Failure),
 }
 
 fn send_outcome(answer: Answer) -> SendOutcome {
@@ -178,23 +214,23 @@ fn send_outcome(answer: Answer) -> SendOutcome {
         .and_then(|body| body.get("data"))
         .and_then(Value::as_array);
     let Some([ticket]) = tickets.map(Vec::as_slice) else {
-        return SendOutcome::Failed("malformedResponse".into());
+        return SendOutcome::Failed(Failure::code("malformedResponse"));
     };
     match ticket.get("status").and_then(Value::as_str) {
         Some("ok") => match ticket.get("id").and_then(Value::as_str) {
             Some(id) if is_printable_id(id, RECEIPT_ID_MAX) => SendOutcome::Accepted(id.into()),
-            _ => SendOutcome::Failed("malformedResponse".into()),
+            _ => SendOutcome::Failed(Failure::code("malformedResponse")),
         },
         Some("error") => match detail_code(ticket).as_deref() {
             Some("DeviceNotRegistered") => SendOutcome::DeviceNotRegistered,
             Some("MessageRateExceeded") => SendOutcome::Retry {
                 after: answer.retry_after,
-                code: "MessageRateExceeded".into(),
+                code: Failure::of("MessageRateExceeded", ticket),
             },
-            Some(code) => SendOutcome::Failed(code.into()),
-            None => SendOutcome::Failed("unknown".into()),
+            Some(code) => SendOutcome::Failed(Failure::of(code, ticket)),
+            None => SendOutcome::Failed(Failure::code("unknown")),
         },
-        _ => SendOutcome::Failed("malformedResponse".into()),
+        _ => SendOutcome::Failed(Failure::code("malformedResponse")),
     }
 }
 
@@ -210,7 +246,7 @@ fn receipts_outcome(answer: Answer) -> ReceiptsOutcome {
         .and_then(|body| body.get("data"))
         .and_then(Value::as_object)
     else {
-        return ReceiptsOutcome::Failed("malformedResponse".into());
+        return ReceiptsOutcome::Failed(Failure::code("malformedResponse"));
     };
     let mut states = HashMap::new();
     for (id, receipt) in receipts {
@@ -218,10 +254,10 @@ fn receipts_outcome(answer: Answer) -> ReceiptsOutcome {
             Some("ok") => ReceiptState::Delivered,
             Some("error") => match detail_code(receipt).as_deref() {
                 Some("DeviceNotRegistered") => ReceiptState::DeviceNotRegistered,
-                Some(code) => ReceiptState::Failed(code.into()),
-                None => ReceiptState::Failed("unknown".into()),
+                Some(code) => ReceiptState::Failed(Failure::of(code, receipt)),
+                None => ReceiptState::Failed(Failure::code("unknown")),
             },
-            _ => ReceiptState::Failed("malformedResponse".into()),
+            _ => ReceiptState::Failed(Failure::code("malformedResponse")),
         };
         states.insert(id.clone(), state);
     }

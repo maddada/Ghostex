@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::{
     domain::DomainRepository,
@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-    expo::{ExpoClient, ReceiptState, ReceiptsOutcome, SendOutcome},
+    expo::{ExpoClient, Failure, ReceiptState, ReceiptsOutcome, SendOutcome},
     limiter::prune_budgets,
     message::{
         alert_message, silent_message, AgentStartEvent, AlertEvent, AlertKind, ALERT_TTL_MS,
@@ -103,6 +103,26 @@ impl Shared {
             duration_ms: None,
             error: None,
             details: Some(json!({ "code": code })),
+        });
+    }
+
+    /// A refusal from the push service: its code and its own words, as it gave them (never a token; the log's
+    /// sanitizer cuts any out again).
+    fn warn_failure(&self, event: &str, failure: &Failure) {
+        let mut details = serde_json::Map::new();
+        details.insert("pushErrorCode".into(), json!(failure.code));
+        if let Some(message) = &failure.message {
+            details.insert("pushErrorMessage".into(), json!(message));
+        }
+        let _ = self.logger.log(GxserverLogInput {
+            level: LogLevel::Warn,
+            event: event.to_string(),
+            server_id: None,
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(Value::Object(details)),
         });
     }
 }
@@ -623,19 +643,19 @@ fn after_send(
         }
         SendOutcome::Retry { after, code } => {
             let Some(delay) = RETRY_DELAYS_MS.get(sends - 1) else {
-                shared.warn("pushSendGaveUp", &code);
+                shared.warn_failure("pushSendGaveUp", &code);
                 return None;
             };
             let after_ms = after.map_or(0, |after| after.as_millis() as i64);
             let at = now + (*delay).max(after_ms);
             if at >= expires_at {
-                shared.warn("pushSendExpired", &code);
+                shared.warn_failure("pushSendExpired", &code);
                 return None;
             }
             Some(at)
         }
         SendOutcome::Failed(code) => {
-            shared.warn("pushSendFailed", &code);
+            shared.warn_failure("pushSendFailed", &code);
             None
         }
     }
@@ -698,7 +718,7 @@ fn settle_receipts(
                     false
                 }
                 Some(ReceiptState::Failed(code)) => {
-                    shared.warn("pushReceiptFailed", code);
+                    shared.warn_failure("pushReceiptFailed", code);
                     false
                 }
                 None => {
@@ -708,7 +728,7 @@ fn settle_receipts(
             }
         }),
         ReceiptsOutcome::Retry(code) => {
-            shared.warn("pushReceiptsUnavailable", &code);
+            shared.warn_failure("pushReceiptsUnavailable", &code);
             data.receipts.retain_mut(|receipt| {
                 if due_ids.contains(&receipt.id) {
                     receipt.due_at = now + RECEIPT_DELAY_MS;
@@ -717,7 +737,7 @@ fn settle_receipts(
             });
         }
         ReceiptsOutcome::Failed(code) => {
-            shared.warn("pushReceiptsFailed", &code);
+            shared.warn_failure("pushReceiptsFailed", &code);
             data.receipts
                 .retain(|receipt| !due_ids.contains(&receipt.id));
         }
