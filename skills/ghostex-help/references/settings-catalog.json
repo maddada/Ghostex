@@ -53,7 +53,7 @@
     {
       "key": "sessionChatTranscriptWidthPercent",
       "title": "Transcript width",
-      "subtitle": "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.",
+      "subtitle": "The widest the centered transcript gets. Auto matches the prompt composer; drag to set a percentage of the window instead. Side panels you open take the empty space beside it first, so the text only narrows once none is left. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -318,7 +318,7 @@
     {
       "key": "coordinatorBoardView",
       "title": "Coordinator board opens as",
-      "subtitle": "What the Board pill above a coordinator's chat box opens: its lines of work as a list beside the chat, or as columns over the chat, one per group. The switch at the top of either view changes this too.",
+      "subtitle": "What the Work pill above a coordinator's chat box opens: its lines of work as a list beside the chat, or as columns over the chat, one per group. The switch at the top of either view changes this too.",
       "tab": "chat",
       "tabTitle": "Chat",
       "section": "chat",
@@ -2022,7 +2022,7 @@
       "type": "boolean",
       "default": true,
       "advanced": true,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "terminalPastePreviewableImages",
@@ -9844,7 +9844,7 @@
       "sectionTitle": "Defaults",
       "type": "boolean",
       "default": true,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "agentAcceptAllEnabled",
@@ -9856,7 +9856,7 @@
       "sectionTitle": "Config",
       "type": "boolean",
       "default": false,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "defaultPromptAgentId",
@@ -9926,7 +9926,7 @@
       "sectionTitle": "Config",
       "type": "string",
       "default": "",
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "agentResumeHooks",
@@ -10076,14 +10076,14 @@
     {
       "key": "gbotsChiefAddsOnItsOwn",
       "title": "Chief of Staff may add GBots on its own",
-      "subtitle": "With GBots on, Chief of Staff adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one. Only you can change this, not an agent.",
+      "subtitle": "With GBots on, Chief of Staff adds a GBot when a job needs one and tells you in a card you can undo. Off, it asks you before adding each one.",
       "tab": "agents",
       "tabTitle": "Agents",
       "section": "homeFolder",
       "sectionTitle": "Home folder",
       "type": "boolean",
       "default": true,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "homeSecretFolders",
@@ -10457,7 +10457,7 @@
       "sectionTitle": "Stopping and deleting",
       "type": "boolean",
       "default": false,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "cloudBoxesBoxes",
@@ -11423,7 +11423,7 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "actionsHidden",
@@ -11483,7 +11483,7 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "readAloudHidden",
@@ -11555,7 +11555,7 @@
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "osIntegrationHidden",
@@ -11610,18 +11610,6 @@
       "key": "chatToolCallLines",
       "title": "Tool call lines",
       "subtitle": "Draw each run of an agent's tool calls as one quiet line that says what it is doing or did, with the calls as rows under it. Detailed view opens the lines, Simple keeps them shut. Off keeps the tool rows. Settings > Chat > Agent work set to Reduced or Quiet replaces these lines. Experimental, off by default.",
-      "tab": "extensions",
-      "tabTitle": "Extensions",
-      "section": "official",
-      "sectionTitle": "Experimental",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
-      "key": "securityLogsEnabled",
-      "title": "Security logs",
-      "subtitle": "Shows the Security page in Settings: the log of every sensitive action on this computer. The log is kept and its alerts arrive whether this is on or off. Experimental, off by default.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -12004,7 +11992,7 @@
       "sectionTitle": "Default editor",
       "type": "string",
       "default": "",
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "setDefaultEditor",
@@ -12117,7 +12105,7 @@
       "sectionTitle": "Global Defaults",
       "type": "string",
       "default": "",
-      "agentWritable": false
+      "agentWritable": true
     },
     {
       "key": "globalTicketKey",
@@ -12261,7 +12249,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "currentMachine",
-      "sectionTitle": "Current machine",
+      "sectionTitle": "This computer",
       "type": "ui",
       "agentWritable": false
     },
@@ -12272,18 +12260,18 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "currentMachine",
-      "sectionTitle": "Current machine",
+      "sectionTitle": "This computer",
       "type": "ui",
       "agentWritable": false
     },
     {
       "key": "sshAccess",
       "title": "SSH access",
-      "subtitle": "Lets your phone and other computers sign in to this one; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt.",
+      "subtitle": "Lets your phone and other computers sign in to this machine; Easy Connect and Tailscale need it. Ghostex can turn it on with one admin prompt.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "currentMachine",
-      "sectionTitle": "Current machine",
+      "sectionTitle": "This computer",
       "type": "ui",
       "agentWritable": false
     },
@@ -12302,62 +12290,40 @@
     {
       "key": "easyConnectEnabled",
       "title": "Easy Connect",
-      "subtitle": "Connect a phone or a remote machine. Install the Tailcat CLI helper with one click.",
+      "subtitle": "Reach this machine from anywhere; only the devices in the list get in. Connect a phone turns it on by itself.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "easyConnect",
-      "sectionTitle": "Easy Connect",
+      "sectionTitle": "Phones and computers that can reach this machine",
       "type": "ui",
       "agentWritable": false
     },
     {
       "key": "pairingCode",
-      "title": "Pairing code",
-      "subtitle": "Connect a Phone with a QR, or Connect a Remote machine with Copy Easy Connect code and its SSH username and password.",
+      "title": "Connect a phone",
+      "subtitle": "Opens the Connect a phone window with the code to scan; Connect a computer shows the code another computer pastes.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "easyConnect",
-      "sectionTitle": "Easy Connect",
+      "sectionTitle": "Phones and computers that can reach this machine",
       "type": "ui",
       "agentWritable": false
     },
     {
       "key": "pairedDevices",
       "title": "Paired devices",
-      "subtitle": "Phones and computers paired with this computer; remove one to unpair it and revoke its access.",
+      "subtitle": "Phones and computers that can reach this machine, and any waiting for Approve; remove one to cut it off.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "easyConnect",
-      "sectionTitle": "Easy Connect",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "pairedDevicesOnly",
-      "title": "Only paired devices can connect",
-      "subtitle": "Easy Connect lets in only paired phones and the keys listed under Advanced; a new phone can still pair while the QR is showing.",
-      "tab": "remote",
-      "tabTitle": "Remote",
-      "section": "easyConnect",
-      "sectionTitle": "Easy Connect",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "easyConnectRelay",
-      "title": "Relay",
-      "subtitle": "Where phones meet this computer: Ghostex's relay first with Tailscale's public relays as fallback, public relays only, or a relay you run.",
-      "tab": "remote",
-      "tabTitle": "Remote",
-      "section": "easyConnect",
-      "sectionTitle": "Easy Connect",
+      "sectionTitle": "Phones and computers that can reach this machine",
       "type": "ui",
       "agentWritable": false
     },
     {
       "key": "tailscaleEnabled",
       "title": "Tailscale on or off",
-      "subtitle": "Offer the Tailscale path; off keeps its card collapsed and hides it from Remote Setup.",
+      "subtitle": "Offer the Tailscale path; off leaves it out of the Connect a phone window.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "tailscale",
@@ -12401,12 +12367,12 @@
     },
     {
       "key": "addMachine",
-      "title": "Add a machine",
-      "subtitle": "Add a computer by SSH details or an Easy Connect code; saved machines appear as sidebar sections.",
+      "title": "Add a computer",
+      "subtitle": "Add a computer by SSH details or its code; saved computers appear as sidebar sections.",
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12417,7 +12383,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12428,7 +12394,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12439,7 +12405,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12450,7 +12416,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12461,7 +12427,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12472,7 +12438,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12483,7 +12449,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12494,7 +12460,7 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
       "type": "ui",
       "agentWritable": false
     },
@@ -12505,7 +12471,18 @@
       "tab": "remote",
       "tabTitle": "Remote",
       "section": "remoteMachines",
-      "sectionTitle": "Remote machines",
+      "sectionTitle": "Computers this machine connects to",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "easyConnectRelay",
+      "title": "Relay",
+      "subtitle": "Where phones meet this computer: Ghostex's relay first with Tailscale's public relays as fallback, public relays only, or a relay you run.",
+      "tab": "remote",
+      "tabTitle": "Remote",
+      "section": "remoteAdvanced",
+      "sectionTitle": "Advanced",
       "type": "ui",
       "agentWritable": false
     },
@@ -12739,6 +12716,29 @@
       "agentWritable": false
     },
     {
+      "key": "approvalsRequirePresence",
+      "title": "Require Touch ID or your password to approve",
+      "subtitle": "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: your computer asks for Touch ID, Windows Hello or your password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer.",
+      "tab": "security",
+      "tabTitle": "Security",
+      "section": "approvals",
+      "sectionTitle": "Approvals",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "stillAsks",
+      "title": "What still asks",
+      "subtitle": "What asks for an Approve on this computer: a phone or computer asking to pair, a Collab guest's message in Approve mode, and, when an agent asks, turning on Easy Connect, letting a device connect through it, sharing a chat or turning on Send mode. Everything else works without asking, and your own clicks never ask.",
+      "tab": "security",
+      "tabTitle": "Security",
+      "section": "stillAsks",
+      "sectionTitle": "What still asks",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "securityLogCheck",
       "title": "Security log check",
       "subtitle": "Whether the security log is intact. Each entry is chained to the one before it, so an entry that was changed or removed after it was written shows here.",
@@ -12759,6 +12759,18 @@
       "sectionTitle": "Security log",
       "type": "ui",
       "agentWritable": false
+    },
+    {
+      "key": "securityLogsEnabled",
+      "title": "Show the security log",
+      "subtitle": "Shows this computer's security log below: pairing phones and computers, Easy Connect changes, Collab shares, approvals and who asked for each. The log is kept and its alerts arrive whether this is on or off. Off by default.",
+      "tab": "security",
+      "tabTitle": "Security",
+      "section": "log",
+      "sectionTitle": "Security log",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
     },
     {
       "key": "workspaceName",

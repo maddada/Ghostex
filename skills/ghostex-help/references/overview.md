@@ -33,7 +33,7 @@ hotkeys Every shortcut and its default binding
 - **Sidebar** (left by default): projects, their sessions, tags and filters,
   remote machines, and the More Options menu under the button at
   the top right (Add Project, Sort & Filter, Sessions, Import Sessions, Search by
-  Prompt, Agents Hub, All Automations, Mobile & Remote, Join Discord, Send
+  Prompt, Agents Hub, All Automations, Connect a phone, Join Discord, Send
   Bug / Feedback, then
   New Window, Check for Updates, Restart Ghostex, Quit Ghostex, and Quit Ghostex
   & BG Service, which also stops the background service and every session). The

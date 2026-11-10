@@ -134,27 +134,9 @@ fn agent_denied_key(key: &str) -> bool {
 const AGENT_DENIED_TABS: &[&str] = &["accounts", "remote"];
 
 /*
-CDXC:Security 2026-11-08 DECISION:
-User (#495 follow-up, Q1866 "settings only"): the keys that loosen security, which an agent could still write through `ghostex settings set` or `updateSettingsPatch`, are the owner's alone: agents are refused and pointed to the Settings page, and the owner changes them in Settings with no prompt. Checked against the whole agent-writable list on 8 Nov: full access for every agent, Workspaces (the team backend and Slack requests), keeping Cloud Box keys on phones, trusting every project folder, Connectors (agents reach the owner's connected accounts), the commands Ghostex itself runs (title generation, worktree setup, the custom editor), paste protection, and the Bot automations feed (whole agent reports). Settings that ask the owner already (GBots, Sync) keep asking.
-*/
-/*
 CDXC:Security 2026-11-10 DECISION:
-User (Q2140 = B): agents may change every setting again; gxserver's API and `ghostex settings set` write these (`api_may_write`). The committed Help (generated from this catalog, published from main to installed copies whose gxserver still refuses them) keeps marking them "not agent-writable" until the release that ships option B empties this list and regenerates the Help. This supersedes the Q1866 decision above.
+User (Q2140 = B): agents may change every setting again; gxserver's API and `ghostex settings set` write every agent-writable key and the Help marks them so. This supersedes the 2026-11-08 decision (Q1866 "settings only") that made the keys loosening security the owner's alone.
 */
-/// Keys only the owner changed, in Settings, before option B; Help still marks them until release.
-const USER_ONLY_KEYS: &[&str] = &[
-    "agentAcceptAllEnabled",
-    "workspacesHidden",
-    "cloudBoxesPhoneStartEnabled",
-    "trustProjectFoldersAutomatically",
-    "connectorsHidden",
-    "customSessionTitleGenerationCommand",
-    "globalWorktreeCommand",
-    "customDefaultEditorCommand",
-    "terminalClipboardPasteProtection",
-    "botAutomationsHidden",
-    "gbotsChiefAddsOnItsOwn",
-];
 
 fn number_range(key: &str) -> Option<NumberRange> {
     let range = |min: f64, max: f64| NumberRange {
@@ -260,10 +242,8 @@ fn catalog_entry(row: &SettingRow, location: &Location) -> CatalogEntry {
         value_type,
         ValueType::Boolean | ValueType::Number | ValueType::String | ValueType::Enum
     );
-    let agent_writable = primitive
-        && !AGENT_DENIED_TABS.contains(&location.tab.0)
-        && !agent_denied_key(row.key)
-        && !USER_ONLY_KEYS.contains(&row.key);
+    let agent_writable =
+        primitive && !AGENT_DENIED_TABS.contains(&location.tab.0) && !agent_denied_key(row.key);
     CatalogEntry {
         key: row.key.to_string(),
         title: row.title.clone(),
@@ -635,13 +615,12 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:Security 2026-11-09 DECISION:
 /// Security logs (Extensions > Experimental) is held the same way; its help, and the help that names Settings > Security, wait in the held help patch.
-pub const HELD_FROM_HELP_FILES: &[&str] = &["approvalsRequirePresence", "stillAsks"];
+pub const HELD_FROM_HELP_FILES: &[&str] = &[];
 
 /// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
-/// `agentWritable`, or one of the keys Help still marks until option B's release
-/// (CDXC:Security 2026-11-10 at `USER_ONLY_KEYS`).
-pub fn api_may_write(key: &str, agent_writable: bool) -> bool {
-    agent_writable || USER_ONLY_KEYS.contains(&key)
+/// `agentWritable` (CDXC:Security 2026-11-10 above `number_range`).
+pub fn api_may_write(_key: &str, agent_writable: bool) -> bool {
+    agent_writable
 }
 
 /// Rows whose new wording is held out of the committed Help files until a release ships it: the
@@ -655,12 +634,7 @@ pub fn api_may_write(key: &str, agent_writable: bool) -> bool {
 ///
 /// CDXC:SessionChat 2026-11-10 DECISION:
 /// The coordinator, for the user (#535, merged as it came): Transcript width's new subtitle (a share of the window and only a maximum) waits in the held help patch with the rest of that change's Help.
-pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[(
-    "sessionChatTranscriptWidthPercent",
-    "Transcript width",
-    "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way unless Chat box matches transcript width is on.",
-    true,
-)];
+pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[];
 
 /// Rows that moved to another page, held at their old place in the committed Help files until a
 /// release ships the move: the key, the tab id and title, the section id and title, the title and
@@ -668,14 +642,7 @@ pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[(
 ///
 /// CDXC:Security 2026-11-10 DECISION:
 /// User (Q2173): the Security logs switch moves from Settings > Extensions > Experimental to Settings > Security; installed copies keep reading it where they have it until the release that ships the move empties this list and regenerates (security-b/release-steps.md).
-pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[(
-    "securityLogsEnabled",
-    ("extensions", "Extensions"),
-    ("official", "Experimental"),
-    "Security logs",
-    "Shows the Security page in Settings: the log of every sensitive action on this computer. The log is kept and its alerts arrive whether this is on or off. Experimental, off by default.",
-    "chatToolCallLines",
-)];
+pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[];
 
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`],
 /// with [`HELD_ROW_WORDING`]'s rows as they read before, and [`HELD_ROW_PLACEMENT`]'s rows back
