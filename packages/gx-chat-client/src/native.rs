@@ -20,7 +20,7 @@ use tungstenite::http::Uri;
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{ClientRequestBuilder, Error as SocketError, Message, Utf8Bytes, WebSocket};
 
-use crate::backlog::InboundBacklog;
+use crate::backlog::{InboundBacklog, Place};
 use crate::wire::{self, Endpoint, Followers, Inbound, StreamKey};
 
 /// Where the thread hands what it read. Called on the socket thread, under the backlog's lock: it
@@ -143,8 +143,8 @@ fn spawn(machine_id: String, sink: InboundSink, backlog: Arc<InboundBacklog>) ->
         machine_id,
         commands: receiver,
         sink,
+        ahead: ReadAhead::new(backlog.clone()),
         backlog,
-        ahead: ReadAhead::default(),
         followers: Followers::new(),
         endpoint: Endpoint::default(),
         attempts: 0,
@@ -170,8 +170,10 @@ enum End {
 }
 
 /// The frames read from the socket and not yet handed to the host, oldest first.
-#[derive(Default)]
 struct ReadAhead {
+    /// This thread's place in the backlog's line, held from the first refusal of `routed` until it
+    /// goes over, and given up when the read-ahead is dropped with the socket.
+    place: Place,
     /// Raw wire text, unparsed.
     frames: VecDeque<Utf8Bytes>,
     /// The wire bytes in `frames`.
@@ -183,6 +185,16 @@ struct ReadAhead {
 }
 
 impl ReadAhead {
+    fn new(backlog: Arc<InboundBacklog>) -> Self {
+        Self {
+            place: Place::new(backlog),
+            frames: VecDeque::new(),
+            bytes: 0,
+            routed: None,
+            short_reads: false,
+        }
+    }
+
     fn holding(&self) -> bool {
         self.routed.is_some() || !self.frames.is_empty()
     }
@@ -289,7 +301,7 @@ impl Link {
         if !matches!(end, End::Stop) {
             self.hand_over(true);
         }
-        self.ahead = ReadAhead::default();
+        self.ahead = ReadAhead::new(self.backlog.clone());
         end
     }
 
@@ -313,8 +325,11 @@ impl Link {
                 }
             };
             let sink = &self.sink;
+            // A refusal keeps this thread's place in line, so the frame goes over before anything
+            // another machine's thread offers after it (`backlog.rs`).
             let Err(inbound) = self
-                .backlog
+                .ahead
+                .place
                 .try_admit(bytes, inbound, |inbound| sink(inbound))
             else {
                 continue;
@@ -323,7 +338,7 @@ impl Link {
                 self.ahead.routed = Some((bytes, inbound));
                 return;
             }
-            self.backlog.admit(bytes, || sink(inbound));
+            self.ahead.place.admit(bytes, || sink(inbound));
         }
     }
 
