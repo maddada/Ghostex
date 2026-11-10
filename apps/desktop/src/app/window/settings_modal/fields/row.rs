@@ -800,13 +800,16 @@ pub(crate) fn static_note(
             .child(value.into())
             .into_any_element();
     }
+    // A boxed note on the page (an error, a service it can't reach) is a one-row card: the
+    // section card's radius, fill and hairline with the row inset ([`card_inset`]), so it reads
+    // like the cards around it (CDXC:Settings 2026-11-10 on [`settings_note_row`]).
     div()
-        .px(px(12.0))
-        .py(px(8.0))
-        .rounded(px(MODAL_RADIUS_CONTROL))
+        .px(px(ROW_PADDING_X))
+        .py(px(14.0))
+        .rounded(px(MODAL_RADIUS_SECTION))
         .border_1()
         .border_color(hsla(p.hairline))
-        .bg(hsla(css_fade(p.raised_hover, 0.3)))
+        .bg(hsla(p.raised))
         .text_size(px(14.0))
         .text_color(hsla(p.muted))
         .child(value.into())

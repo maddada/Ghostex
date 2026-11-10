@@ -9,9 +9,9 @@ mod model;
 
 use super::super::super::native_modal_kit::*;
 use super::super::fields::{
-    ButtonVariant, FieldStates, SearchableList, SettingsPage, card_inset, command_icon, icon,
-    move_index, reorder_handle, reorder_order, reorder_row, reorder_scroll_container,
-    settings_button, settings_icon, settings_icon_button, settings_section,
+    ButtonVariant, FieldStates, SearchableList, SettingsPage, command_icon, icon, move_index,
+    reorder_handle, reorder_order, reorder_row, reorder_scroll_container, settings_button,
+    settings_icon, settings_icon_button, settings_note_row, settings_section,
 };
 use super::super::model::SettingsTabId;
 use super::super::page::{PageBlock, settings_page};
@@ -271,31 +271,11 @@ fn ghost_hover(p: &SettingsPalette) -> gpui::Rgba {
     }
 }
 
-/// `Empty` inside a section card: a centered title and description.
+/// An empty list of actions: the Settings note row (CDXC:Settings 2026-11-10 on
+/// `settings_note_row` in fields/row.rs), its sentence and what to do about it on one line,
+/// instead of a centered title and description of its own.
 fn empty_state(p: &SettingsPalette, title: &str, description: &str) -> AnyElement {
-    card_inset(
-        v_flex()
-            .w_full()
-            .items_center()
-            .gap(px(8.0))
-            .child(
-                div()
-                    .text_size(px(16.0))
-                    .line_height(px(24.9))
-                    .text_color(hsla(p.foreground))
-                    .text_center()
-                    .child(title.to_string()),
-            )
-            .child(
-                div()
-                    .max_w(px(640.0))
-                    .text_size(px(13.0))
-                    .line_height(px(21.1))
-                    .text_color(hsla(p.muted))
-                    .text_center()
-                    .child(description.to_string()),
-            ),
-    )
+    settings_note_row(p, format!("{title}. {description}"))
 }
 
 impl ActionsTab {
@@ -575,7 +555,7 @@ impl Render for ActionsTab {
                 &ordered_global,
                 "Global Actions",
                 "Global actions apply to every project and are stored by the Ghostex daemon, so they follow you to every app that connects to it. They appear under Global in every project's Start menu.",
-                "No global actions configured",
+                "No global actions yet",
                 "Add a terminal or browser action that should be available in every project.",
                 cx,
             ) {
@@ -588,7 +568,7 @@ impl Render for ActionsTab {
                 &ordered,
                 "Project Actions",
                 "Actions are custom shortcuts for repeat work. Add terminal actions to run saved commands in quick command terminals, or browser actions to open saved URLs in browser panes. These actions are shared between a main project and its worktrees, and you can right-click the action button to show all configured actions for that project.",
-                "No actions configured",
+                "No actions yet",
                 "Add a terminal or browser action.",
                 cx,
             ) {
