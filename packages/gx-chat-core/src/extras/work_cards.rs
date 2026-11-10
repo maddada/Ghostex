@@ -879,6 +879,8 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
                 row["detail"] = json!([]);
             } else {
                 row["kind"] = json!("form");
+                // A Ghostex page (not a form): its mark is a page (desktop `row_mark`).
+                row["page"] = json!(!form);
                 row["buttons"] = json!([]);
                 // A page that asks nothing waits to be marked seen (`Asker::seen_only`).
                 let detail = if asker.seen_only {

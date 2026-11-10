@@ -41,6 +41,22 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
     (icon, color.map_or(p.muted, |color| gpui::rgb(color).into()))
 }
 
+/// A dock row's mark: a Ghostex page that needs him is a plain page in the need-you pink (`page`
+/// on the row, from gx-chat-core); everything else its status's mark (`status_look`). Every row
+/// that is a page takes its mark here.
+///
+/// CDXC:Coordinators 2026-11-11 DECISION:
+/// User: "please change the icon of the ones that need me but are html page to a page icon
+/// (without html written there in the icon) but colored pink". A question keeps its circle.
+pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::Hsla) {
+    let status = text(row, "status");
+    let (icon, color) = status_look(&status, p);
+    if row["page"] == true && status == "needs" {
+        return ("titlebar/file.svg", color);
+    }
+    (icon, color)
+}
+
 /// A chip's glyph by what it says.
 /// The dock's cards stop growing here (unscaled) and scroll inside it.
 const DOCK_MAX_HEIGHT: f32 = 360.0;
@@ -728,7 +744,7 @@ impl NativeChatView {
         let key = text(row, "key");
         let open_key = format!("dock-row:{key}");
         let open = self.expanded.contains(&open_key);
-        let (icon, color) = status_look(&text(row, "status"), p);
+        let (icon, color) = row_mark(row, p);
         let body = p.strengthened(p.prose);
         let busy = row["busy"] == true;
         let title = text(row, "title");
