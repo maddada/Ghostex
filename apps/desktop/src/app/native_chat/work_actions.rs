@@ -122,7 +122,7 @@ impl NativeChatView {
     }
 
     /// The actions an item repeats, as one row of icon buttons: Reply (`actions.reply`, the reply
-    /// bubble), Open, Show in chat, Dismiss, Snooze (which opens its three lengths beside it) and
+    /// bubble), Open, Show in chat, Dismiss, Snooze (a dropdown of its three lengths) and
     /// Mention (`mention`, the item's reference for the chat box). Only those it offers show;
     /// `None` when it offers none.
     pub(super) fn work_action_icons(
@@ -177,27 +177,44 @@ impl NativeChatView {
                 );
             }
         }
+        // Snooze opens the app's dropdown at the button with its lengths (1 hour, 6 hours, 24
+        // hours); picking one snoozes, and the row of buttons never changes.
+        //
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User, of the row turning into "Snooze for · 1 hour · 6 hours · 24 hours": "i don't like
+        // how snooze turns to \"Snooze for\" just please show a dropdown menu instead for the
+        // choices".
         let snooze: Vec<Value> = actions["snooze"].as_array().cloned().unwrap_or_default();
-        let snooze_key = format!("work-snooze-open:{key}");
-        let snooze_open = self.expanded.contains(&snooze_key);
         if !snooze.is_empty() {
             any = true;
-            let toggle = snooze_key.clone();
+            let rows: Vec<Value> = snooze
+                .iter()
+                .map(|choice| json!({ "label": text(choice, "label"), "command": choice["command"] }))
+                .collect();
             row = row.child(
                 self.work_icon_button(
                     format!("work-snooze:{key}"),
                     "titlebar/alarm.svg",
                     "Snooze",
-                    snooze_open,
+                    false,
                     p,
                 )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    if !this.expanded.remove(&toggle) {
-                        this.expanded.insert(toggle.clone());
-                    }
-                    cx.notify();
-                })),
+                .on_click(cx.listener(
+                    move |this, event: &gpui::ClickEvent, window, cx| {
+                        cx.stop_propagation();
+                        let at = event.position();
+                        // A card in one of the chat's own windows (the floating Work card) keeps
+                        // its menu inside that window.
+                        let in_main = this
+                            .open_main_window(cx)
+                            .is_none_or(|main| main == window.window_handle());
+                        if in_main {
+                            this.show_chat_menu_at(rows.clone(), at, 160.0, window, cx);
+                        } else {
+                            this.show_chat_menu_in_window_at(rows.clone(), at, 160.0, window, cx);
+                        }
+                    },
+                )),
             );
         }
         if !mention.is_empty() {
@@ -216,30 +233,6 @@ impl NativeChatView {
                     this.insert_board_reference(&mention, cx);
                 })),
             );
-        }
-        // Snooze open: its three lengths after the icons, as small answer-look buttons.
-        if snooze_open {
-            for (index, choice) in snooze.iter().enumerate() {
-                let command = choice["command"].clone();
-                let close = snooze_key.clone();
-                row = row.child(
-                    self.tone_button(
-                        gpui::SharedString::from(format!("work-snooze:{key}:{index}")),
-                        &text(choice, "label"),
-                        None,
-                        ToneButton::Secondary,
-                        None,
-                        false,
-                        p,
-                    )
-                    .ml(px(4.0 * s))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.expanded.remove(&close);
-                        this.invoke(command.clone(), cx);
-                    })),
-                );
-            }
         }
         any.then(|| row.into_any_element())
     }
