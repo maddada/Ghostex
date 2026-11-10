@@ -656,6 +656,16 @@ jobs:
           GHOSTEX_WINDOWS_BUILD_SILENCE_SECONDS: '900'
         run: |
           & (Join-Path $env:GITHUB_WORKSPACE 'tooling/release-gpui/windows-build-watchdog.ps1') -Phase package-finalize -Version '${{ inputs.version }}' -Arch '${{ inputs.arch }}'
+      # Window titles and a screenshot taken before anything was typed
+      # (certum-simplysign-login.ps1); never a code or the seed.
+      - name: Upload the SimplySign login diagnostics
+        if: ${{ failure() && steps.signing.outputs.signer == 'certum' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: certum-diagnostics-windows-${{ inputs.arch }}
+          path: ${{ runner.temp }}/certum-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Log out of SimplySign
         if: ${{ always() && steps.signing.outputs.signer == 'certum' }}
         shell: pwsh
