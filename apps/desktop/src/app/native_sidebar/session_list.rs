@@ -115,12 +115,25 @@ impl GhostexGpuiApp {
                         // The rows left unbuilt are still in the sidebar's focus order: Tab and
                         // Shift+Tab scroll to them (focus_order.rs).
                         for index in (0..sessions.len()).filter(|index| !built.contains(index)) {
+                            let session = &sessions[index];
+                            let first = super::focus_order::session_stop_key(&session.session_id);
+                            // A coordinator's fold button is the row's last stop (decorations.rs).
+                            let last = super::decorations::coordinator_fold_button(session)
+                                .map(|_| {
+                                    super::focus_order::coordinator_fold_stop_key(
+                                        &session.session_id,
+                                    )
+                                })
+                                .unwrap_or_else(|| first.clone());
                             app.native_sidebar.focus_stops.record_unbuilt_row(
-                                super::focus_order::session_stop_key(&sessions[index].session_id),
-                                Bounds::new(
-                                    bounds.origin + point(px(0.0), top_of(index)),
-                                    size(bounds.size.width, card_of(index)),
-                                ),
+                                super::focus_order::UnbuiltRow {
+                                    first,
+                                    last,
+                                    bounds: Bounds::new(
+                                        bounds.origin + point(px(0.0), top_of(index)),
+                                        size(bounds.size.width, card_of(index)),
+                                    ),
+                                },
                             );
                         }
                         built
