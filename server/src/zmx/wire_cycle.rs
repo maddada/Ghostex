@@ -1109,3 +1109,173 @@ mod unowned_daemon_tests {
         );
     }
 }
+
+/// The checks that decide whether a leftover `zmx run` process is this server's (GitHub PR
+/// #550): its command names the session, its token file is this server's own, and pid plus start
+/// time still name the process that was checked. Asked for by the user (Q2273: "add small tests
+/// for the token-file match and the process checks").
+#[cfg(all(test, unix))]
+mod verified_daemon_tests {
+    use super::*;
+    use std::process::{Child, Command, Stdio};
+
+    #[test]
+    fn a_zmx_run_command_names_its_session() {
+        assert_eq!(
+            zmx_run_session_name("/Applications/Ghostex.app/Contents/MacOS/zmx run S1b-P1-G1 --foreground"),
+            Some("S1b-P1-G1")
+        );
+        assert_eq!(zmx_run_session_name("zmx run S1b-P1-G1"), Some("S1b-P1-G1"));
+        assert_eq!(zmx_run_session_name("/usr/bin/zmx list"), None);
+        assert_eq!(zmx_run_session_name("/usr/bin/zmx run"), None);
+        assert_eq!(zmx_run_session_name("/usr/bin/zmxd run S1b-P1-G1"), None);
+        assert_eq!(zmx_run_session_name("/bin/sh -c zmx run S1b-P1-G1"), None);
+        assert_eq!(zmx_run_session_name(""), None);
+    }
+
+    #[test]
+    fn token_files_match_only_when_both_resolve_to_one_file() {
+        let folder = tempfile::tempdir().unwrap();
+        let own = folder.path().join("token");
+        let other = folder.path().join("other-token");
+        fs::write(&own, "a").unwrap();
+        fs::write(&other, "b").unwrap();
+        let link = folder.path().join("linked-token");
+        std::os::unix::fs::symlink(&own, &link).unwrap();
+        assert!(same_token_file(&own, &own));
+        assert!(same_token_file(&link, &own));
+        assert!(!same_token_file(&other, &own));
+        // A path that does not resolve proves nothing, even as the same text.
+        let missing = folder.path().join("missing");
+        assert!(!same_token_file(&missing, &missing));
+    }
+
+    /// A long-running process whose command line reads `<folder>/zmx run <name>`: a copy of
+    /// `yes`, which takes any arguments and runs until it is ended.
+    fn fake_daemon(folder: &std::path::Path, name: &str, token_file: Option<&std::path::Path>) -> Child {
+        let zmx = folder.join("zmx");
+        if !zmx.exists() {
+            fs::copy("/usr/bin/yes", &zmx).unwrap();
+            // macOS keeps a system binary's environment from other processes, also in a copy;
+            // signed again as a plain program it reads like the real zmx.
+            #[cfg(target_os = "macos")]
+            assert!(Command::new("/usr/bin/codesign")
+                .args(["--force", "--sign", "-"])
+                .arg(&zmx)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .unwrap()
+                .success());
+        }
+        let mut command = Command::new(&zmx);
+        command
+            .args(["run", name])
+            .env_remove(ZMX_DAEMON_AUTH_TOKEN_FILE_ENV)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        if let Some(token_file) = token_file {
+            command.env(ZMX_DAEMON_AUTH_TOKEN_FILE_ENV, token_file);
+        }
+        let child = command.spawn().unwrap();
+        // Until the kernel has the arguments and the environment of the new image.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while zmx_process_command(i64::from(child.id()))
+            .as_deref()
+            .and_then(zmx_run_session_name)
+            != Some(name)
+            && Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        child
+    }
+
+    fn end(mut child: Child) {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn a_daemon_is_ours_only_with_our_token_file_and_its_own_name() {
+        let folder = tempfile::tempdir().unwrap();
+        let own = folder.path().join("token");
+        let other = folder.path().join("other-token");
+        fs::write(&own, "a").unwrap();
+        fs::write(&other, "b").unwrap();
+
+        let ours = fake_daemon(folder.path(), "S1b-P1-G1", Some(&own));
+        let pid = i64::from(ours.id());
+        let started = match zmx_daemon_ownership(pid, "S1b-P1-G1", &own) {
+            ZmxDaemonOwnership::Ours { started } => started,
+            ZmxDaemonOwnership::Kept { reason, .. } => panic!("kept: {reason}"),
+        };
+        assert!(is_same_zmx_process(pid, started));
+        // Another session's name is not this process.
+        assert!(matches!(
+            zmx_daemon_ownership(pid, "S1b-P1-G2", &own),
+            ZmxDaemonOwnership::Kept { reason: "processChanged", .. }
+        ));
+        // Another server's token file.
+        assert!(matches!(
+            zmx_daemon_ownership(pid, "S1b-P1-G1", &other),
+            ZmxDaemonOwnership::Kept { reason: "otherServer", .. }
+        ));
+        end(ours);
+        // Gone: neither its start time nor its ownership can be read any more.
+        assert!(!is_same_zmx_process(pid, started));
+        assert!(matches!(
+            zmx_daemon_ownership(pid, "S1b-P1-G1", &own),
+            ZmxDaemonOwnership::Kept { reason: "processChanged", .. }
+        ));
+
+        let unmarked = fake_daemon(folder.path(), "S1b-P1-G3", None);
+        assert!(matches!(
+            zmx_daemon_ownership(i64::from(unmarked.id()), "S1b-P1-G3", &own),
+            ZmxDaemonOwnership::Kept { reason: "noTokenVariable", .. }
+        ));
+        end(unmarked);
+    }
+
+    #[test]
+    fn a_start_time_that_differs_is_another_process() {
+        let pid = i64::from(std::process::id());
+        let started = zmx_process_start(pid).expect("this process's start time");
+        assert!(is_same_zmx_process(pid, started));
+        assert!(!is_same_zmx_process(pid, (started.0 + 1, started.1)));
+    }
+
+    #[test]
+    fn only_a_verified_daemon_that_is_still_itself_is_signalled() {
+        let folder = tempfile::tempdir().unwrap();
+        let own = folder.path().join("token");
+        fs::write(&own, "a").unwrap();
+        let mut live = fake_daemon(folder.path(), "S1b-P1-G4", Some(&own));
+        let pid = i64::from(live.id());
+        let ZmxDaemonOwnership::Ours { started } = zmx_daemon_ownership(pid, "S1b-P1-G4", &own) else {
+            panic!("the fake daemon should be ours");
+        };
+        // A record of the same pid with another start time stands for a reused pid: not signalled.
+        let reused = VerifiedZmxDaemon {
+            name: "S1b-P1-G4".into(),
+            pid,
+            started: (started.0 + 1, started.1),
+        };
+        assert_eq!(
+            terminate_verified_zmx_session_daemons(std::slice::from_ref(&reused)),
+            vec![Ok("exited".to_string())]
+        );
+        assert!(live.try_wait().unwrap().is_none(), "a reused pid must not be signalled");
+        let verified = VerifiedZmxDaemon {
+            name: "S1b-P1-G4".into(),
+            pid,
+            started,
+        };
+        assert_eq!(
+            terminate_verified_zmx_session_daemons(std::slice::from_ref(&verified)),
+            vec![Ok("terminated".to_string())]
+        );
+        let _ = live.wait();
+    }
+}
