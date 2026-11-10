@@ -177,6 +177,11 @@ impl NativeChatView {
             WorkingLineLook::Capsule => self.capsule_lead(card, p, reduced_motion, cx),
             // The row keeps the lead's place empty; the lead itself is drawn over it outside the
             // cached transcript (status_tail.rs).
+            // While the rows draw their moving parts themselves (row_motion.rs `in_row`), so does
+            // the status row.
+            WorkingLineLook::Quiet if self.row_motion.in_row() => {
+                working_line_lead(card, look, p, reduced_motion)
+            }
             WorkingLineLook::Quiet => working_line_lead(card, look, p, true).map(|_| {
                 let slot = self.working_card.tail_lead.clone();
                 div()

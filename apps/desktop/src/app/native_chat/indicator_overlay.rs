@@ -42,6 +42,8 @@ pub(crate) struct IndicatorOverlay {
     /// A pane that draws the overlay holds the chat in the frame being drawn. Set when the pane
     /// renders (before the chat does), cleared once the overlay has drawn.
     hosted: Cell<bool>,
+    /// The window draws views again from last frame (Faster rendering): nothing is lifted.
+    retained: Cell<bool>,
     layers: RefCell<BTreeMap<&'static str, Layer>>,
 }
 
@@ -338,8 +340,27 @@ impl NativeChatView {
     pub(super) fn indicators_lifted(&self, chat: EntityId) -> bool {
         self.indicator_overlay.register(chat);
         self.indicator_overlay.hosted()
+            && !self.indicator_overlay.retained.get()
             && !self.suggestion_popup_open()
             && !self.snapshot["accountSwitchCard"].is_object()
             && !self.snapshot["subagent"].is_object()
+    }
+}
+
+impl NativeChatView {
+    /// Decides, before the rows are drawn, whether they draw their moving parts (a running call's
+    /// shimmer and spinner, the status row's spark) inside themselves this frame, as they did
+    /// before those were drawn over the rows; true when they do.
+    ///
+    /// CDXC:SessionChat 2026-11-10 WHY:
+    /// Two cases found in review of the overlays. Without window glass the "Press Escape again to interrupt" toast (scroll_bottom.rs) is drawn inside the cached transcript after the rows, and anything drawn after the transcript (the pane's overlay, or the chat's own layer) painted over it: a running call's label on the last row showed through the toast. While the toast shows the rows draw their motion themselves, under it; the toast is in the snapshot, so its coming and going draws the rows again.
+    /// With Faster rendering on, GPUI Fast draws a view that is dirty only because a view nested in it is again from last frame, rebuilding only the nested view (`.dependencies/zed/crates/gpui/src/fast/splice.rs`, `splice_layout`). A redraw of the transcript alone (a scroll, a hover) then copied the window root's and the chat's last prepaint, the overlay with it, so it stayed where it was while the rows moved, and the chat, not rendered by the root that frame, could draw its indicators in place as well. Under that setting nothing is lifted and every indicator animates inside its row or the composer, as before; each such tick rebuilds only the view it is in, which is what that setting is for.
+    pub(super) fn sync_motion_in_place(&mut self, window: &Window) -> bool {
+        let retained = window.view_retention();
+        self.indicator_overlay.retained.set(retained);
+        let glass = crate::app::helpers::window_glass_active_for(self.main_window);
+        let in_place = retained || (!glass && self.pill_toast().is_some());
+        self.row_motion.set_in_row(in_place);
+        in_place
     }
 }

@@ -72,6 +72,8 @@ pub(crate) struct RowMotion {
     parts: Rc<RefCell<HashMap<SharedString, Part>>>,
     /// The main list's row being drawn, while one is.
     drawing: Cell<Option<usize>>,
+    /// The rows draw their parts inside themselves this frame (`sync_motion_in_place`).
+    in_row: Cell<bool>,
 }
 
 impl RowMotion {
@@ -90,9 +92,22 @@ impl RowMotion {
         self.drawing.set(None);
     }
 
+    /// The rows draw their parts inside themselves (`in_row`), or leave them to a layer.
+    pub(super) fn set_in_row(&self, in_row: bool) {
+        self.in_row.set(in_row);
+    }
+
+    /// Whether the rows draw their parts inside themselves this frame.
+    pub(super) fn in_row(&self) -> bool {
+        self.in_row.get()
+    }
+
     /// Registers `id` in the row being drawn and returns the element that records where its place
     /// paints, or `None` outside the main list's rows.
     fn hold(&self, id: &SharedString, kind: MotionKind) -> Option<AnyElement> {
+        if self.in_row.get() {
+            return None;
+        }
         let row = self.drawing.get()?;
         let mut parts = self.parts.borrow_mut();
         match parts.get_mut(id) {

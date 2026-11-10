@@ -166,6 +166,8 @@ impl Render for NativeChatView {
         );
         // Status line in the chat: the working line joins or leaves the rows before they are drawn.
         self.sync_status_tail(&p, window);
+        // Where the rows' moving parts are drawn this frame, decided before the rows are.
+        let rows_in_place = self.sync_motion_in_place(window);
         let transcript = self.render_transcript_host(window, cx);
         let rows = self.list.item_count();
         // The repeating indicators over the rows and in the composer's stack are drawn by the pane
@@ -181,7 +183,9 @@ impl Render for NativeChatView {
             let lone_scroll_bottom = self.render_lone_scroll_bottom(&p, cx);
             // The lone scroll-down pill is drawn over the rows, so the pane must not draw above it.
             let lift_rows = lifted && lone_scroll_bottom.is_none();
+            // The rows draw their moving parts themselves (`sync_motion_in_place`): no layer.
             let in_place = |key: &'static str, layer: Option<indicator_overlay::Layer>| {
+                let layer = layer.filter(|_| !rows_in_place);
                 overlay.set(key, layer.clone().filter(|_| lift_rows));
                 layer.filter(|_| !lift_rows).map(|layer| layer())
             };
