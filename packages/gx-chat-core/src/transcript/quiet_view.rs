@@ -288,22 +288,43 @@ fn has(row: &Value, key: &str) -> bool {
     row[key].as_array().is_some_and(|list| !list.is_empty())
 }
 
-/// A message from another session: a thread's report, a subagent's, any agent's.
+/// A message from another session: a thread's report, a subagent's, any agent's (an agent message
+/// card, `systemCard` `agent-message`, included).
 fn is_report(row: &Value) -> bool {
-    row["role"] == "user"
-        && (row["interAgentMessage"].is_object() || row["agentMessage"].is_object())
+    (row["role"] == "user"
+        && (row["interAgentMessage"].is_object() || row["agentMessage"].is_object()))
+        || row["systemCard"]["kind"] == "agent-message"
+}
+
+/// Whether a row's words hold a form, one-click answers or a page: what asks something of the
+/// user, unlike a picture.
+fn asks_or_pages(row: &Value) -> bool {
+    use crate::transcript::inline_answers::ANSWERS_OPEN;
+    use crate::transcript::native_markdown::{NATIVE_QUESTIONS_OPEN, NATIVE_VISUAL_OPEN};
+    row["text"].as_str().is_some_and(|text| {
+        [NATIVE_QUESTIONS_OPEN, ANSWERS_OPEN, NATIVE_VISUAL_OPEN]
+            .iter()
+            .any(|mark| text.contains(mark))
+    })
 }
 
 /// Whether a row is something the user reads, which never folds: his own messages and answers, the
 /// agent's words, pages, forms and questions, pictures, a call waiting on his approval or a relayed
 /// approval under it, errors and notices, and a message that was not sent. A kind this does not
 /// know stays in view.
+///
+/// CDXC:SessionChat 2026-11-11 WHY: a message from another agent folds whatever else it holds, whether it starts a turn or lands in one: a thread's report that linked a picture (the chat draws a link to a local picture as one) was kept in view as if it were the user's, under the line that already counted it. It stays in view only for what waits on the user: a relayed approval under it, a call waiting on an approval, a question, a form or a page.
 fn reads(row: &Value, inputs: &Inputs) -> bool {
-    if waits_on_approval(row)
+    let waits = waits_on_approval(row)
         || row["id"]
             .as_str()
             .is_some_and(|id| inputs.approvals.contains(id))
         || has(row, "questions")
+        || asks_or_pages(row);
+    if is_report(row) {
+        return waits;
+    }
+    if waits
         || has(row, "images")
         || asks_in_words(row)
         || ["apiError", "systemCard", "suppressed", "sideQuestion"]
@@ -314,7 +335,7 @@ fn reads(row: &Value, inputs: &Inputs) -> bool {
         return true;
     }
     match row["role"].as_str() {
-        Some("user") => !is_report(row),
+        Some("user") => true,
         Some("assistant") => row["text"]
             .as_str()
             .is_some_and(|text| !text.trim().is_empty()),
