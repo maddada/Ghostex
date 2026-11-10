@@ -76,8 +76,8 @@ the door: `DecideApprovals` (list, approve and deny requests) and `OwnerSecrets`
 request, have gxserver read a secret provider reference, the phone's Cloud Box kit). Coordinators
 manage only their own threads (`ManageAnyThreads`, for any coordinator's threads, is yours and
 the token file's), which is how threads are organised, not a security rule. Peers hold only
-`RequestSensitiveAction` and keep `PEER_ALLOWED_ENDPOINTS`; guests, extensions and anonymous callers hold none and keep their
-own allow-lists.
+`RequestSensitiveAction` and keep `PEER_ALLOWED_ENDPOINTS`; guests, extensions and anonymous
+callers hold none and keep their own allow-lists.
 
 Refusals that stay because they keep the door: an agent's session token can't approve or deny,
 list requests, answer or read a secret, enroll an owner key, get a pairing code (it gets the

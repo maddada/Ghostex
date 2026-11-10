@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 pub enum SessionRole {
     /// An ordinary agent session.
     Agent,
-    /// A coordinator: may also manage its own threads.
+    /// A coordinator session. Which threads it manages is decided by the calling session's
+    /// identity (`coordinator_refusal` in `security_gates.rs`), not by this role.
     Coordinator,
     /// A thread started by a coordinator; same powers as an agent.
     Thread,
