@@ -25,11 +25,22 @@ impl GhostexGpuiApp {
                         Some(Value::Object(settings)) => break settings.clone(),
                         _ => break Map::new(),
                     },
-                    // An older gxserver has no settings read (`notFound`), and a client it does
-                    // not serve settings to is refused (`badRequest`): asking again changes
-                    // nothing, and the page keeps the settings it has.
+                    // An older gxserver has no settings read (`notFound`), a client it does not
+                    // serve settings to is refused (`badRequest`), and so are a token or a
+                    // protocol it does not take: asking again changes nothing, and the page keeps
+                    // the settings it has.
                     Err(error)
-                        if matches!(error.code.as_deref(), Some("notFound" | "badRequest")) =>
+                        if matches!(
+                            error.code.as_deref(),
+                            Some(
+                                "notFound"
+                                    | "badRequest"
+                                    | "unauthorized"
+                                    | "forbidden"
+                                    | "protocolMismatch"
+                                    | "methodNotAllowed"
+                            )
+                        ) =>
                     {
                         log::warn!("could not read the settings: {}", error.message);
                         return;
@@ -41,10 +52,11 @@ impl GhostexGpuiApp {
                             "could not read the settings, trying again: {}",
                             error.message
                         );
-                        attempt += 1;
+                        // 0.5s, 1s, 2s, 4s, 8s, then 15s.
                         let delay = SETTINGS_READ_RETRY_FIRST_MS
                             .saturating_mul(1 << attempt.min(5))
                             .min(SETTINGS_READ_RETRY_MAX_MS);
+                        attempt += 1;
                         cx.background_executor()
                             .timer(std::time::Duration::from_millis(delay))
                             .await;
