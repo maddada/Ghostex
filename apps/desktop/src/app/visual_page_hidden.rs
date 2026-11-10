@@ -17,8 +17,18 @@ pub(crate) struct HiddenVisualPage {
     pub(crate) key: u64,
     window: WindowHandle<Root>,
     view: Entity<GpuiVisualPageModalWindow>,
-    /// The pointer is over its tab, which shows the tab's x.
-    pub(crate) hovered: bool,
+    /// The pointer is over its tab, or over the tab's x, which overhangs the tab's corner. The
+    /// x shows while either is true, so the tab and its x are one hover area whichever of the two
+    /// hears about a move between them first.
+    over_tab: bool,
+    over_x: bool,
+}
+
+/// The part of a hidden page's tab the pointer is over (`set_hidden_visual_page_tab_hovered`).
+#[derive(Clone, Copy)]
+pub(crate) enum HiddenVisualPageTabPart {
+    Tab,
+    X,
 }
 
 /// What a hidden page's tab shows.
@@ -89,7 +99,8 @@ impl GhostexGpuiApp {
             key,
             window: modal.window,
             view,
-            hovered: false,
+            over_tab: false,
+            over_x: false,
         });
         self.sync_app_modal_over_chat(cx);
         self.restore_keyboard_focus_after_app_modal(cx);
@@ -176,7 +187,7 @@ impl GhostexGpuiApp {
                     key: page.key,
                     title: view.title().to_string(),
                     questions_left: view.questions_left(),
-                    hovered: page.hovered,
+                    hovered: page.over_tab || page.over_x,
                 })
             })
             .collect()
@@ -185,16 +196,23 @@ impl GhostexGpuiApp {
     pub(crate) fn set_hidden_visual_page_tab_hovered(
         &mut self,
         key: u64,
+        part: HiddenVisualPageTabPart,
         hovered: bool,
         cx: &mut gpui::Context<Self>,
     ) {
-        if let Some(page) = self
+        let Some(page) = self
             .hidden_visual_pages
             .iter_mut()
             .find(|page| page.key == key)
-            && page.hovered != hovered
-        {
-            page.hovered = hovered;
+        else {
+            return;
+        };
+        let flag = match part {
+            HiddenVisualPageTabPart::Tab => &mut page.over_tab,
+            HiddenVisualPageTabPart::X => &mut page.over_x,
+        };
+        if *flag != hovered {
+            *flag = hovered;
             cx.notify();
         }
     }

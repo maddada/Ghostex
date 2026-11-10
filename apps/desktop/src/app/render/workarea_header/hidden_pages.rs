@@ -11,7 +11,7 @@ use gpui::{
 use gpui_component::tooltip::Tooltip;
 
 use crate::app::helpers::*;
-use crate::app::visual_page_hidden::HiddenVisualPageTab;
+use crate::app::visual_page_hidden::{HiddenVisualPageTab, HiddenVisualPageTabPart};
 use crate::app::window::round_close_button::*;
 use crate::*;
 
@@ -71,6 +71,15 @@ impl GhostexGpuiApp {
                     }
                 })
                 .size(px(X_SIZE))
+                // Over any part of the x, also what overhangs the tab, the x stays.
+                .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                    this.set_hidden_visual_page_tab_hovered(
+                        key,
+                        HiddenVisualPageTabPart::X,
+                        *hovered,
+                        cx,
+                    );
+                }))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -117,7 +126,12 @@ impl GhostexGpuiApp {
             .text_color(titlebar_text_color())
             .cursor_pointer()
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
-                this.set_hidden_visual_page_tab_hovered(key, *hovered, cx);
+                this.set_hidden_visual_page_tab_hovered(
+                    key,
+                    HiddenVisualPageTabPart::Tab,
+                    *hovered,
+                    cx,
+                );
             }))
             .on_click(cx.listener(move |this, _, _, cx| this.show_hidden_visual_page(key, cx)))
             .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
