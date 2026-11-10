@@ -16,12 +16,16 @@ use crate::coordinators::{
 use crate::presentation::effective_lifecycle_state;
 use crate::session_chat_queue_runtime::SessionChatTranscriptGate;
 
+use super::coordinator_report_retry::{
+    announce_round, pause_for_outage, record_failed_round, waits_for_retry, FailureStreak,
+};
+
 const TICK: Duration = Duration::from_secs(2);
 /// A thread must stay out of work this long before its turn counts as finished: hooks and title
 /// observation can dip between tool calls.
 const FINISH_STABILITY_MS: i64 = 4_000;
 /// Waits after a failed delivery, doubled per failure up to the last value.
-const RETRY_DELAYS_MS: [i64; 4] = [10_000, 20_000, 40_000, 60_000];
+pub(super) const RETRY_DELAYS_MS: [i64; 4] = [10_000, 20_000, 40_000, 60_000];
 /// A message handed to a thread is reported undelivered only once it is this old...
 pub(super) const UNDELIVERED_MIN_AGE_MS: i64 = 60_000;
 /// ...and the thread has sat idle without it this long: a busy thread takes a message typed during
@@ -40,8 +44,8 @@ struct SupervisorMemory {
     stopped_since: HashMap<SessionKey, i64>,
     /// Coordinators with a delivery running right now.
     in_flight: HashSet<SessionKey>,
-    /// Coordinator → (consecutive failures, earliest retry in ms).
-    retry: HashMap<SessionKey, (usize, i64)>,
+    /// Each coordinator's run of failed deliveries.
+    retry: HashMap<SessionKey, FailureStreak>,
     transcript_gates: HashMap<SessionKey, SessionChatTranscriptGate>,
     /// Each thread's transcript file, resolved once for the pending-message check.
     transcript_paths: HashMap<SessionKey, std::path::PathBuf>,
@@ -255,7 +259,7 @@ pub(crate) fn start_coordinator_runtime(state: Arc<AppState>) {
     });
 }
 
-fn now_ms() -> i64 {
+pub(super) fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
@@ -478,6 +482,10 @@ fn supervise(
         .activity_read_at
         .retain(|key, _| open_keys.contains(key));
     memory.turns.retain(|key, _| open_keys.contains(key));
+    // Before the early return below: an outage with no open thread must not count either.
+    if crate::network_status::offline_since().is_some() {
+        pause_for_outage(&mut memory.retry, now_ms());
+    }
     let mut live: HashMap<SessionKey, coordinators::ThreadLive> = HashMap::new();
     if open.is_empty() {
         coordinators::replace_thread_live(live);
@@ -846,11 +854,7 @@ fn supervise(
         if crate::session_self_heal::daemon_lost(&coordinator.0, &coordinator.1) {
             continue;
         }
-        if memory
-            .retry
-            .get(&coordinator)
-            .is_some_and(|(_, retry_at)| now < *retry_at)
-        {
+        if waits_for_retry(&mut memory.retry, &coordinator, now) {
             continue;
         }
         memory.in_flight.insert(coordinator.clone());
@@ -1016,6 +1020,7 @@ fn empryo_thread_state(
 }
 
 async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, delivery: Delivery) {
+    let round_started = now_ms();
     let coordinator = delivery.coordinator.clone();
     // CDXC:Coordinators 2026-10-04 WHY: closing a thread and then its coordinator a second apart let a tick queue the thread's "closed" report while the coordinator was still open, and sending it woke the closed coordinator back up. The coordinator is checked again right before sending; a report for a closed one waits until it is resumed.
     let open_state = state.clone();
@@ -1025,6 +1030,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             .await
             .unwrap_or(false);
     let mut failed = false;
+    let mut delivered_any = false;
     let reports = if coordinator_open {
         delivery.reports
     } else {
@@ -1051,6 +1057,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             .unwrap_or_else(|_| Uuid::new_v4().to_string());
         match send_to_coordinator(&state, &coordinator, &line, &send_request_id).await {
             Ok(()) => {
+                delivered_any = true;
                 if let Ok(mut memory) = memory.lock() {
                     memory.report_send_ids.remove(&ledger_key);
                     memory.back_lines.remove(&coordinator);
@@ -1261,6 +1268,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             .unwrap_or_else(|_| Uuid::new_v4().to_string());
         match send_to_coordinator(&state, &coordinator, &message, &send_request_id).await {
             Ok(()) => {
+                delivered_any = true;
                 if let Ok(mut memory) = memory.lock() {
                     memory.report_send_ids.remove(&report_key);
                     if let ReportKind::Stalled { due } = &report.kind {
@@ -1354,25 +1362,25 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
             }
         }
     }
-    if let Ok(mut memory) = memory.lock() {
+    let gave_up = memory.lock().ok().and_then(|mut memory| {
         memory.in_flight.remove(&coordinator);
         if failed {
-            let failures = memory
-                .retry
-                .get(&coordinator)
-                .map(|(count, _)| *count)
-                .unwrap_or(0);
-            let delay = RETRY_DELAYS_MS[failures.min(RETRY_DELAYS_MS.len() - 1)];
-            memory
-                .retry
-                .insert(coordinator, (failures + 1, now_ms() + delay));
+            record_failed_round(
+                &mut memory.retry,
+                &coordinator,
+                delivered_any,
+                round_started,
+            )
         } else {
             memory.retry.remove(&coordinator);
             memory
                 .report_send_ids
                 .retain(|(owner, _), _| owner != &coordinator);
+            None
         }
-    }
+    });
+    // A round that reached an open coordinator with no failure ends what the row reports.
+    announce_round(&state, &coordinator, gave_up, !failed && coordinator_open).await;
 }
 
 /// The send ledger key of a quiet stretch's nudge, so a report retried after a failure does not

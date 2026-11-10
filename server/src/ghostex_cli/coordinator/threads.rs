@@ -277,6 +277,8 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
             "The create response has no session id. Run ghostex coordinator status before retrying.".into(),
         ));
     }
+    // The brief's send id: its delivery watch keeps it, and the confirmation below names it.
+    let brief_send_id = uuid::Uuid::new_v4().to_string();
     let linked = match &remote_server_id {
         Some(server_id) => call_gxserver_rpc(
             "/api/linkRemoteCoordinatorThread",
@@ -300,6 +302,7 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
                 "sessionId": session_id,
                 "task": task.trim(),
                 "pendingMessage": task.trim(),
+                "sendRequestId": brief_send_id,
             }),
             &flags,
         )?,
@@ -321,7 +324,7 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         "/api/queueSessionChatPrompt",
         &json!({
             "globalRef": reference, "projectId": project_id, "sessionId": session_id,
-            "text": message, "startupSend": true, "sendRequestId": uuid::Uuid::new_v4().to_string(),
+            "text": message, "startupSend": true, "sendRequestId": brief_send_id,
         }),
         &flags,
     )
@@ -339,7 +342,7 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         &flags,
     )?;
     if matches!(outcome, BriefOutcome::Started) && remote_server_id.is_none() {
-        agents::confirm_coordinator_delivery(coordinator, &thread, &flags);
+        agents::confirm_coordinator_delivery(coordinator, &thread, &brief_send_id, &flags);
     }
     let (status, note) = match &outcome {
         BriefOutcome::Started => ("started", "Its transcript shows the brief: it is working on it.".to_string()),
