@@ -76,6 +76,12 @@ pub(in crate::server) async fn route_http(
         return crate::visual_pages::read_draft(state.clone(), path).await;
     }
 
+    // `GET /visual/<id>/image?path=…` is a picture the page's boxes refer to (images.rs `read`).
+    if method == Method::GET && crate::visual_pages::is_image_route(&path) {
+        let query = parts.uri.query().map(str::to_string);
+        return crate::visual_pages::read_page_image(state.clone(), path, query).await;
+    }
+
     if method == Method::GET && path.starts_with(crate::visual_pages::VISUAL_PAGE_ROUTE_PREFIX) {
         let host = parts
             .headers
