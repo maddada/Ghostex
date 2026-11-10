@@ -22,6 +22,7 @@ pub(crate) mod project_browse_and_add;
 pub(crate) mod project_files_open;
 pub(crate) mod reconnect;
 pub(crate) mod reconnect_ladder;
+pub(crate) mod reconnect_schedule;
 pub(crate) mod settings_and_install_probe;
 pub(crate) mod settings_rpc;
 pub(crate) mod sidebar_request_and_recent_projects;

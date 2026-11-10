@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **A computer that was away reconnects within seconds of coming back:** when a remote computer stops answering (a restart, an update, a network that drops out), Ghostex now looks for it every 15 seconds for its first ten minutes away, where it used to slow down to about once a minute after the fourth try. A computer that returns is connected again within about 15 seconds instead of up to a minute or more. After ten minutes it is looked for once a minute, as before.
 - **A phone's own Easy Connect key no longer costs it a stall:** when an updated phone app registers its own key with a computer (right after pairing, or the first time it connects after the update), the computer now answers before it restarts Easy Connect. The phone reconnects in about a second, where it lost the answer, sat without a connection for six seconds or more and had to ask again.
 - **Waking your computer no longer drops a connection that only needed a moment:** after a wake, a computer whose connection did not answer the first check gets a second one two seconds later and is reconnected only if that fails too, so a link that outlived the sleep (most do over Tailscale and Easy Connect) carries on instead of reconnecting. A connection that is really gone is replaced within about half a minute of the wake.
 
