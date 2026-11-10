@@ -281,7 +281,12 @@ impl NativeChatView {
             text(card, "title")
         };
         let failed = text(card, "failedLabel");
-        let time = text(card, "time");
+        let time = self.live_time(
+            text(card, "time"),
+            &card["startedAt"],
+            ghostex_gx_chat_core::transcript::work_summary::tool_duration_label,
+            cx,
+        );
         let more = card["moreIcons"].as_u64().unwrap_or(0);
         let (card_surface, _, _, hover, _, _) = card_colors(p);
         // A line has no box: its circles are cut out of the chat's own background.
@@ -519,7 +524,12 @@ impl NativeChatView {
         let label = text(entry, "label");
         let reason = text(entry, "reason");
         let result = text(entry, "result");
-        let time = text(entry, "time");
+        let time = self.live_time(
+            text(entry, "time"),
+            &entry["startedAt"],
+            ghostex_gx_chat_core::transcript::work_summary::tool_time_label,
+            cx,
+        );
         let (_, _, _, hover, added_color, removed_color) = card_colors(p);
         let has_detail = match kind.as_str() {
             "file" => true,
@@ -731,5 +741,46 @@ impl NativeChatView {
                 .into_any_element();
         }
         row.into_any_element()
+    }
+}
+
+impl NativeChatView {
+    /// A call's or a card's time: the finished `time` the core wrote, or while it runs the time so
+    /// far since `started_at` (epoch ms, gx-chat-core `tool_card.rs`, where the user's decision
+    /// is), in the same words (`format`). Counting books one redraw for the next whole second of
+    /// the oldest visible clock; the chat's other visible rows draw again with it, but nothing is
+    /// re-projected. No start, no time.
+    pub(super) fn live_time(
+        &self,
+        time: String,
+        started_at: &Value,
+        format: fn(i64) -> String,
+        cx: &mut Context<Self>,
+    ) -> String {
+        let Some(start) = started_at.as_i64().filter(|_| time.is_empty()) else {
+            return time;
+        };
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map(|since| since.as_millis() as i64)
+            .unwrap_or(start);
+        let ran = (now - start).max(0);
+        if !self.tool_clock_tick.replace(true) {
+            let wait = Duration::from_millis((1_000 - ran % 1_000).max(50) as u64);
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(wait).await;
+                let _ = this.update(cx, |this, cx| {
+                    this.tool_clock_tick.set(false);
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
+        // Whole seconds ("1.0s", "12s"), and nothing in the first one, so it never counts
+        // milliseconds up.
+        if ran < 1_000 {
+            return String::new();
+        }
+        format(ran - ran % 1_000)
     }
 }
