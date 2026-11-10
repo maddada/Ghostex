@@ -170,6 +170,11 @@ pub struct DeferredWork {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub image_paths: Vec<String>,
+    /// How many tool calls the turn's rows hold, the held-back ones and those in view alike, so a
+    /// Quiet View line counts them before the turn is read (gx-chat-core
+    /// `transcript/quiet_view.rs`). Absent from a gxserver older than it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_count: Option<u64>,
 }
 
 /// One transcript row: the server's `SessionChatMessage` plus the client-only `deferredWork`.

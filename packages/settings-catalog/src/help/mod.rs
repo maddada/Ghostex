@@ -621,7 +621,20 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:AppModal 2026-11-10 DECISION:
 /// The coordinator, for the user: Help must not change on main before the next release, so Close buttons on the right (Settings > Interface > Advanced, macOS) is held the same way; its hand-written paragraph waits in the held help patch (release-11.3.1/help/close-buttons-left.patch).
-pub const HELD_FROM_HELP_FILES: &[&str] = &["closeButtonsOnRight", "dimInactiveProjects"];
+///
+/// CDXC:Hotkeys 2026-11-11 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so the Focus Sidebar hotkey (#558) is held the same way; a hotkey id here leaves the hotkey out of `hotkeys.md` and `settings-catalog.json`, and its Help waits in the held help patch (release-11.3.1/help/focus-sidebar-hotkey.patch).
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so the three Quiet View rows (Settings > Chat > Advanced) are held the same way; their Help waits in the held help patch (release-11.3.1/help/quiet-view.patch).
+pub const HELD_FROM_HELP_FILES: &[&str] = &[
+    "closeButtonsOnRight",
+    "dimInactiveProjects",
+    "focusSidebar",
+    "chatQuietViewCoordinators",
+    "chatQuietViewChats",
+    "chatQuietViewExpandLast",
+];
 
 /// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
 /// `agentWritable` (CDXC:Security 2026-11-10 above `number_range`).
@@ -640,7 +653,26 @@ pub fn api_may_write(_key: &str, agent_writable: bool) -> bool {
 ///
 /// CDXC:SessionChat 2026-11-10 DECISION:
 /// The coordinator, for the user (#535, merged as it came): Transcript width's new subtitle (a share of the window and only a maximum) waits in the held help patch with the rest of that change's Help.
-pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[];
+///
+/// CDXC:RemotePairing 2026-11-11 DECISION:
+/// The coordinator, for the user ("rename it in the menu to Connect a Device"): Settings > Remote's
+/// Connect a phone button and the line that names it read Connect a Device (and its neighbour Connect a
+/// computer reads Connect a Computer); Help keeps the old words
+/// until the release (release-11.3.1/help/connect-a-device.patch).
+pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[
+    (
+        "easyConnectEnabled",
+        "Easy Connect",
+        "Reach this machine from anywhere; only the devices in the list get in. Connect a phone turns it on by itself.",
+        false,
+    ),
+    (
+        "pairingCode",
+        "Connect a phone",
+        "Opens the Connect a phone window with the code to scan; Connect a computer shows the code another computer pastes.",
+        false,
+    ),
+];
 
 /// Hotkeys whose new description is held out of the committed Help files until a release ships
 /// it: the hotkey id, then the description the Help files keep meanwhile. The release that ships
@@ -769,6 +801,9 @@ pub fn published_catalog() -> Catalog {
     catalog
         .settings
         .retain(|entry| !HELD_FROM_HELP_FILES.contains(&entry.key.as_str()));
+    catalog
+        .hotkeys
+        .retain(|hotkey| !HELD_FROM_HELP_FILES.contains(&hotkey.id));
     for entry in &mut catalog.settings {
         if let Some((_, title, subtitle, advanced)) = HELD_ROW_WORDING
             .iter()

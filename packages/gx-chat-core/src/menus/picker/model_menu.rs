@@ -392,24 +392,26 @@ pub fn model_menu_rows(
     );
     let query = query.trim().to_lowercase();
     let words: Vec<&str> = query.split_whitespace().collect();
-    let mut ranked: Vec<(&ModelMenuEntry, bool, usize, usize)> = Vec::new();
+    // The last field marks a row drawn inside the Legacy models list.
+    let mut ranked: Vec<(&ModelMenuEntry, bool, usize, usize, bool)> = Vec::new();
     for (index, entry) in pool.iter().enumerate() {
         let favorite = is_favorite(entry);
         if query.is_empty() {
             // An agent's tab lists its legacy models after the current ones, and only once its
-            // Legacy models list is open; a starred one stays with the favorites at the top, and
-            // the session's own model stays in view.
-            if !favorites_tab
-                && entry.legacy
-                && !favorite
-                && selected_entry.is_none_or(|selected| selected != *entry)
-            {
+            // Legacy models list is open. A starred one also stays with the favorites at the top,
+            // and the session's own model also stays in view, and each is still listed in the
+            // Legacy models list (star lit), so the list always holds every legacy model and a
+            // star can be taken off in either place.
+            if !favorites_tab && entry.legacy {
                 if legacy_open {
-                    ranked.push((entry, favorite, index, 1));
+                    ranked.push((entry, favorite, index, 1, true));
+                }
+                if favorite || selected_entry.is_some_and(|selected| selected == *entry) {
+                    ranked.push((entry, favorite, index, 0, false));
                 }
                 continue;
             }
-            ranked.push((entry, favorite, index, 0));
+            ranked.push((entry, favorite, index, 0, false));
             continue;
         }
         // The label ranks first, then the model id ("gpt-6-luna"), then words split between them.
@@ -419,12 +421,16 @@ pub fn model_menu_rows(
         let Some(rank) = rank else {
             continue;
         };
-        ranked.push((entry, favorite, index, rank));
+        ranked.push((entry, favorite, index, rank, false));
     }
     // CDXC:SessionChat 2026-11-02 DECISION:
     // User: "we need the ability to add models to favorite to show them at the top of the list (shown in order alphabetical order at the top of the models list)". Starred rows come first, sorted by label case-insensitively (the favorites tab too), then the rest in their usual order (search rank, Auto, catalog order); a search keeps matching stars first. This supersedes Auto sorting above the stars (2026-09-22) and stars keeping catalog order.
     let pinned = |entry: &ModelMenuEntry| !favorites_tab && entry.value == AUTO_MODEL_VALUE;
     ranked.sort_by(|left, right| {
+        // The Legacy models list follows every other row, in catalog order.
+        if left.4 || right.4 {
+            return left.4.cmp(&right.4).then_with(|| left.2.cmp(&right.2));
+        }
         right
             .1
             .cmp(&left.1)
@@ -445,7 +451,7 @@ pub fn model_menu_rows(
     ranked
         .into_iter()
         .enumerate()
-        .map(|(index, (entry, favorite, _, _))| ModelMenuRow {
+        .map(|(index, (entry, favorite, _, _, folded))| ModelMenuRow {
             key: model_menu_favorite_key(entry.provider.as_str(), &entry.value),
             favorite,
             selected: selected_entry.is_some_and(|current| {
@@ -455,35 +461,30 @@ pub fn model_menu_rows(
             show_agent: favorites_tab,
             efforts: Vec::new(),
             effort: String::new(),
-            entry: (*entry).clone(),
+            entry: ModelMenuEntry {
+                // Only the rows inside the Legacy models list say so, so a client can find where
+                // that list starts (the phone puts its toggle before the first of them).
+                legacy: folded,
+                ..(*entry).clone()
+            },
         })
         .collect()
 }
 
 /// How many legacy models the open tab folds into its Legacy models list: none on the favorites
-/// tab or during a search, which list every match.
+/// tab or during a search, which list every match. A starred or in-use legacy model counts too:
+/// it is listed there as well as where it stands out.
 pub fn model_menu_legacy_count(
     entries: &ModelMenuEntries,
     tab: ModelMenuTabId,
     query: &str,
-    favorites: &[String],
-    current: &ModelMenuCurrent,
 ) -> usize {
     if tab == ModelMenuTabId::Favorites || !query.trim().is_empty() {
         return 0;
     }
-    let selected_entry = model_menu_entry_for(
-        entries,
-        current.provider.as_deref(),
-        current.model.as_deref(),
-    );
     entries_of(entries, tab.as_str())
         .iter()
-        .filter(|entry| {
-            entry.legacy
-                && selected_entry.is_none_or(|selected| selected != *entry)
-                && !is_favorite_entry(entry, favorites)
-        })
+        .filter(|entry| entry.legacy)
         .count()
 }
 

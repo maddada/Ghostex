@@ -173,6 +173,9 @@ pub(crate) struct VoiceAgent {
     pub(crate) tool_label: Option<String>,
     pub(crate) rows: Vec<VoiceRow>,
     pub(crate) muted: bool,
+    /// The agent's speech is not played (the panel's speaker toggle). Captions, the microphone and
+    /// typed turns carry on. For this call only: every call starts with the agent heard.
+    pub(crate) voice_muted: bool,
     pub(crate) problem: Option<VoiceProblem>,
     /// `xai` or `openai`, once `ready` named it.
     pub(crate) provider: Option<String>,
@@ -287,6 +290,13 @@ struct Playback {
     dropping: bool,
     /// Samples of the current reply handed to the speaker.
     relayed: u64,
+    /// The agent's voice is muted: its audio is not played.
+    silenced: bool,
+    /// Unmuted partway through a reply: the rest of it stays silent, speech resumes with the next.
+    skipping: bool,
+    /// Some of the current reply was not played, so how much was heard is not reported at an
+    /// interruption: gxserver's own playback clock, which paced the captions read instead, decides.
+    unheard: bool,
 }
 
 enum VoiceMessage {
@@ -375,6 +385,7 @@ impl GhostexGpuiApp {
         agent.hint = None;
         agent.hint_timer = None;
         agent.muted = false;
+        agent.voice_muted = false;
         agent.state = "connecting".to_string();
         agent.hang_up_timer = None;
         let endpoint = match endpoint {
@@ -478,6 +489,18 @@ impl GhostexGpuiApp {
                 link.socket
                     .send_json(&json!({ "type": "mute", "muted": muted }));
             }
+        }
+        self.sync_voice_agent_panel(cx);
+    }
+
+    /// Mutes or unmutes the agent's speech, on this computer only: gxserver still relays the audio
+    /// (the captions and the reply's timing come with it) and the speaker drops it. Muting silences
+    /// what is queued at once; unmuting speaks from the next reply, so nothing skipped is replayed.
+    pub(crate) fn toggle_voice_agent_voice_mute(&mut self, cx: &mut gpui::Context<Self>) {
+        let voice_muted = !self.voice_agent.voice_muted;
+        self.voice_agent.voice_muted = voice_muted;
+        if let Some(link) = &self.voice_agent.link {
+            set_voice_muted(&link.shared, voice_muted);
         }
         self.sync_voice_agent_panel(cx);
     }
@@ -1104,7 +1127,9 @@ fn socket_sink(shared: Arc<LinkShared>) -> VoiceSink {
                 if let Ok(mut playback) = shared.playback.lock()
                     && !playback.dropping
                 {
-                    if let Some(audio) = &playback.audio {
+                    if playback.silenced || playback.skipping {
+                        playback.unheard = true;
+                    } else if let Some(audio) = &playback.audio {
                         audio.enqueue(&pcm);
                     }
                     playback.relayed += (pcm.len() / 2) as u64;
@@ -1117,6 +1142,8 @@ fn socket_sink(shared: Arc<LinkShared>) -> VoiceSink {
                         if let Ok(mut playback) = shared.playback.lock() {
                             playback.dropping = false;
                             playback.relayed = 0;
+                            playback.skipping = false;
+                            playback.unheard = false;
                         }
                     }
                     Some("interrupted") => {
@@ -1128,8 +1155,10 @@ fn socket_sink(shared: Arc<LinkShared>) -> VoiceSink {
                                 .unwrap_or(0);
                             playback.dropping = true;
                             // 24 samples per millisecond at 24 kHz.
-                            event["playedMs"] =
-                                json!(playback.relayed.saturating_sub(dropped) / 24);
+                            if !playback.unheard {
+                                event["playedMs"] =
+                                    json!(playback.relayed.saturating_sub(dropped) / 24);
+                            }
                         }
                     }
                     _ => {}
@@ -1140,6 +1169,23 @@ fn socket_sink(shared: Arc<LinkShared>) -> VoiceSink {
         };
         let _ = shared.sender.unbounded_send(VoiceMessage::Socket(inbound));
     })
+}
+
+/// The speaker toggle on the playback the socket thread feeds.
+fn set_voice_muted(shared: &LinkShared, voice_muted: bool) {
+    if let Ok(mut playback) = shared.playback.lock() {
+        playback.silenced = voice_muted;
+        if voice_muted {
+            if let Some(audio) = &playback.audio
+                && audio.flush() > 0
+            {
+                playback.unheard = true;
+            }
+        } else {
+            // Whatever is left of the reply being relayed stays silent; `audioStart` ends this.
+            playback.skipping = true;
+        }
+    }
 }
 
 /// Silences the agent at once (Hang up, Stop talking).

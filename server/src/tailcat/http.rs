@@ -121,7 +121,23 @@ pub(crate) async fn handle_tailcat_http(
         None,
     );
     match outcome {
-        Ok((record, status)) => {
+        Ok((record, mut status)) => {
+            /*
+            CDXC:RemotePairing 2026-11-11 FIX:
+            GitHub #559: Easy Connect was turned on with no helper on the computer and nothing ever installed one, so it stayed on, stopped, with "Reinstall Ghostex" under it. Turning it on now starts the helper's install when it is missing; Easy Connect starts on the helper the moment it is in place, and the pages show the install's steps from the status below.
+            */
+            if matches!(update, TailcatStateUpdate::SetEnabled { enabled: true })
+                && !status.binary_found
+            {
+                super::install::start_installation(
+                    state.paths.clone(),
+                    state.tailcat_runtime.clone(),
+                );
+                let installation = super::install::installation_status();
+                status.installing = installation.running;
+                status.install_progress = installation.progress;
+                status.install_error = installation.error;
+            }
             log_tailcat_state_update_success(
                 &logger,
                 &update,

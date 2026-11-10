@@ -40,6 +40,29 @@ pub(crate) fn popup_open_frame<F>(
 where
     F: Styled + ParentElement + IntoElement + 'static,
 {
+    popup_open_frame_held(frame, content, false, at_once, reduce_motion)
+}
+
+/// `popup_open_frame` for a popup that stays invisible while `held`, until it has been fitted to
+/// its content, and only then fades in and rises (`hide_popup_window` on macOS).
+pub(crate) fn popup_open_frame_held<F>(
+    frame: F,
+    content: impl IntoElement,
+    held: bool,
+    at_once: bool,
+    reduce_motion: bool,
+) -> AnyElement
+where
+    F: Styled + ParentElement + IntoElement + 'static,
+{
+    if held {
+        let frame = frame.child(div().relative().size_full().min_h_0().child(content));
+        return if cfg!(target_os = "macos") {
+            frame.into_any_element()
+        } else {
+            frame.opacity(0.0).into_any_element()
+        };
+    }
     let Some(animation) = popup_open_animation(reduce_motion).filter(|_| !at_once) else {
         return frame.child(content).into_any_element();
     };
@@ -71,12 +94,12 @@ pub(crate) fn fade_in_popup_window(window: &Window, reduce_motion: bool) {
     unsafe extern "C" {
         fn GhostexGpuiFadeInPopupWindow(native_view: *mut std::ffi::c_void, seconds: f64);
     }
-    let Some(duration) = popup_open_duration(
+    // With motion off it still shows, at once: a held popup is invisible until this runs.
+    let duration = popup_open_duration(
         reduce_motion,
         crate::app::panel_motion::panel_motion_duration(),
-    ) else {
-        return;
-    };
+    )
+    .unwrap_or_default();
     let Ok(handle) = HasWindowHandle::window_handle(window) else {
         return;
     };
@@ -84,6 +107,25 @@ pub(crate) fn fade_in_popup_window(window: &Window, reduce_motion: bool) {
         unsafe { GhostexGpuiFadeInPopupWindow(handle.ns_view.as_ptr(), duration.as_secs_f64()) };
     }
 }
+
+/// Keeps a popup's window invisible from its `open_window` closure until `fade_in_popup_window`
+/// (macOS; elsewhere `popup_open_frame_held` draws the frame transparent).
+#[cfg(target_os = "macos")]
+pub(crate) fn hide_popup_window(window: &Window) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    unsafe extern "C" {
+        fn GhostexGpuiHidePopupWindow(native_view: *mut std::ffi::c_void);
+    }
+    let Ok(handle) = HasWindowHandle::window_handle(window) else {
+        return;
+    };
+    if let RawWindowHandle::AppKit(handle) = handle.as_raw() {
+        unsafe { GhostexGpuiHidePopupWindow(handle.ns_view.as_ptr()) };
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn hide_popup_window(_window: &Window) {}
 
 /// See `popup_open_frame`: elsewhere the frame's opacity is the fade.
 #[cfg(not(target_os = "macos"))]

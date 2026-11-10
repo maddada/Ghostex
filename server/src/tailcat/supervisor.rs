@@ -81,6 +81,10 @@ pub(super) struct TailcatLaneState {
     last_error: Option<String>,
     /// Why gxserver is stopping this lane's helper now, for the log (`take_stop_reason`).
     stop_reason: Option<&'static str>,
+    /// When this lane's helper was last started again for a silent relay (`relay_check.rs`). It
+    /// outlives each helper, so the once-in-ten-minutes limit holds across restarts for other
+    /// reasons.
+    relay_restart: super::relay_check::RelayRestartClock,
 }
 
 #[derive(Default)]
@@ -173,6 +177,47 @@ impl TailcatRuntime {
         version
     }
 
+    /// The helper file changed in place (an Update): its version is read again.
+    pub(crate) fn forget_binary_version(&self) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.binary_version = None;
+        }
+    }
+
+    /// Starts every running helper again from the saved state, on the helper file as it is now
+    /// (an Update replaced it under the same path, which `apply` alone sees as no change). The
+    /// keys, the allow-list, the ports and the devices let in on a knock stay as they are.
+    /// SEE-ALSO: server/src/tailcat/install.rs (`update`).
+    pub(crate) fn restart_helpers(&self, paths: &GxserverPaths, reason: &'static str) {
+        let Ok(db) = crate::storage::open_gxserver_database(paths) else {
+            return;
+        };
+        let Ok(state) = super::repository::read_tailcat_state_or_default(
+            &super::repository::TailcatRepository::new(&db),
+        ) else {
+            return;
+        };
+        if !state.enabled {
+            return;
+        }
+        {
+            let _one_at_a_time = self
+                .reconciling
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            for lane in [TailcatLane::Public, TailcatLane::Relay, TailcatLane::Door] {
+                let running = self
+                    .inner
+                    .lock()
+                    .is_ok_and(|mut inner| inner.lane(lane).spec.is_some());
+                if running {
+                    self.stop_lane(lane, reason);
+                }
+            }
+        }
+        self.apply(paths, &state);
+    }
+
     /*
     CDXC:RemotePairing 2026-09-01:
     One reconcile entry point for every trigger — enable/disable, a port or
@@ -201,13 +246,14 @@ impl TailcatRuntime {
         let Some(binary_path) = resolve_host_tailcat_binary(paths) else {
             self.stop_because("helperMissing");
             // CDXC:Notices 2026-11-06: Settings > Remote shows these to a person (Q1410); raw errors go to the log.
+            // CDXC:RemotePairing 2026-11-11 FIX: GitHub #559, the Mac app doesn't carry the helper, so "Reinstall Ghostex" could never bring it back; the pages offer Install for this state (server/src/tailcat/install.rs).
             eprintln!(
                 "[gxserver] tailcat binary not found (bundled, managed or GHOSTEX_TAILCAT_BIN)"
             );
             self.set_last_error(
                 TailcatLane::Public,
                 Some(
-                    "Part of Easy Connect is missing on this computer. Reinstall Ghostex to get it back."
+                    "The Easy Connect helper isn't installed on this computer yet. Install it from Settings > Remote or Connect a Device."
                         .to_string(),
                 ),
             );
@@ -622,6 +668,23 @@ impl TailcatRuntime {
         }
     }
 
+    /// The clock of `lane`'s relay check restarts, shared by every helper the lane has.
+    fn relay_restart_clock(&self, lane: TailcatLane) -> super::relay_check::RelayRestartClock {
+        self.inner
+            .lock()
+            .map(|mut inner| inner.lane(lane).relay_restart.clone())
+            .unwrap_or_default()
+    }
+
+    /// The address the helper of `lane` published, while `generation` is still the current one.
+    fn lane_token(&self, lane: TailcatLane, generation: u64) -> Option<String> {
+        let mut inner = self.inner.lock().ok()?;
+        let state = inner.lane(lane);
+        (state.generation == generation)
+            .then(|| state.token.clone())
+            .flatten()
+    }
+
     fn needs_token(&self, lane: TailcatLane, generation: u64) -> bool {
         self.inner.lock().ok().is_some_and(|mut inner| {
             let state = inner.lane(lane);
@@ -691,8 +754,21 @@ fn supervise(
         relay: super::relay_probe::key_relay_label(&spec.key_file),
         logger,
     };
+    // Looks whether the relay still delivers to this helper when a device it carried goes quiet,
+    // and asks for the helper to be started again when it does not (`relay_check.rs`). The door
+    // lives for a minute and is not checked.
+    let relay_check = (lane != TailcatLane::Door).then(|| {
+        let runtime = runtime.clone();
+        let last_restart = runtime.relay_restart_clock(lane);
+        super::relay_check::RelayCheck::new(
+            spec.key_file.with_file_name("relay-check.private.json"),
+            Box::new(move || runtime.lane_token(lane, generation)),
+            last_restart,
+            link_context.clone(),
+        )
+    });
     let mut backoff = INITIAL_BACKOFF;
-    loop {
+    'helper: loop {
         // The blob file is written by the child on startup; a stale one from
         // the previous run must never be reported as this run's token.
         let _ = fs::remove_file(&spec.addr_file);
@@ -719,8 +795,9 @@ fn supervise(
             let context = link_context.clone();
             let peers = peers.clone();
             let runtime = runtime.clone();
+            let relay_check = relay_check.clone();
             thread::spawn(move || {
-                super::link_log::follow_tailcat_log(stderr, context, peers, |key| {
+                super::link_log::follow_tailcat_log(stderr, context, peers, relay_check, |key| {
                     runtime.note_refused(lane, generation, key)
                 })
             });
@@ -742,6 +819,28 @@ fn supervise(
                 super::link_log::record_links_ended(&link_context, &peers, reason);
                 let _ = reply.send(());
                 return;
+            }
+            if relay_check
+                .as_ref()
+                .is_some_and(|check| check.take_restart_request())
+            {
+                // The relay no longer delivers to this helper and it has not noticed: a new one
+                // connects to the relay anew. Same key, so the same address.
+                terminate_process_group(&mut child);
+                super::link_log::record_helper_event(
+                    &link_context,
+                    "stopped",
+                    "relayConnectionSilent",
+                    Some(started_at.elapsed().as_millis() as u64),
+                );
+                super::link_log::record_links_ended(&link_context, &peers, "relayConnectionSilent");
+                // A stop that arrived meanwhile (a removed device, a changed allow-list) wins: the
+                // helper is not started again on the list it had.
+                if wait_for_stop(&stop_rx, Duration::ZERO) {
+                    return;
+                }
+                start_reason = "relayConnectionSilent";
+                continue 'helper;
             }
             if runtime.needs_token(lane, generation) {
                 if let Some(token) = read_address_blob(&spec.addr_file) {

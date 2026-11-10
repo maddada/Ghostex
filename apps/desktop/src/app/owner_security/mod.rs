@@ -279,8 +279,12 @@ fn rpc(
             let (status, body) =
                 gpui_remote_gxserver_post_typed_operation(target, endpoint, &params, CALL_TIMEOUT)
                     .map_err(|message| (None, message))?;
-            let envelope: Value = serde_json::from_str(&body)
-                .map_err(|_| (None, "gxserver returned invalid JSON.".to_string()))?;
+            let envelope: Value = serde_json::from_str(&body).map_err(|_| {
+                (
+                    None,
+                    "Ghostex's answer couldn't be read. Try again.".to_string(),
+                )
+            })?;
             if (200..300).contains(&status) {
                 return Ok(envelope.get("result").cloned().unwrap_or(Value::Null));
             }
@@ -585,8 +589,8 @@ fn enroll_owner_key(transport: &Transport, params: Value) -> Result<Value, Strin
         });
         return Err(WAITING.to_string());
     }
-    let envelope: Value =
-        serde_json::from_str(&body).map_err(|_| "gxserver returned invalid JSON.".to_string())?;
+    let envelope: Value = serde_json::from_str(&body)
+        .map_err(|_| "Ghostex's answer couldn't be read. Try again.".to_string())?;
     if (200..300).contains(&status) && envelope.get("ok").and_then(Value::as_bool) == Some(true) {
         return Ok(envelope.get("result").cloned().unwrap_or(Value::Null));
     }

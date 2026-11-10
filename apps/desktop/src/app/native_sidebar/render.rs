@@ -57,20 +57,21 @@ impl GhostexGpuiApp {
         // CDXC:Spaces 2026-11-05 DECISION:
         // User: "please implement spaces for the unified sidebar so when that extension is enabled it applies for unified sidebar also not just projecst sidebar". With Spaces on, the Unified header carries the Project sidebar's own Space row (selectors.rs, without the Bots slot), the list takes the same sideways swipe and empty-space drag with the same slide and fade (space_gesture.rs), and the outgoing Space's list stays frozen through the exit fade just as the Project list's does. The scope itself is gx-core's (`unified_space_scope`, `build_unified_sidebar_scoped`).
         let unified = self.native_sidebar.unified.clone();
+        // The rows keep the Project sidebar's even spacing (selectors.rs): the filter has its own row.
+        let gap = |height: f32| div().h(px(height * appearance.scale)).flex_shrink_0();
         let unified_header = unified.as_ref().map(|unified| {
             v_flex()
                 .w_full()
                 .flex_shrink_0()
                 .child(self.render_native_sidebar_new_session_row(&appearance, cx))
+                .child(gap(super::selectors::SIDEBAR_TOP_ROW_GAP))
                 .child(self.render_native_unified_header(unified, &appearance, window, cx))
                 .when(snapshot.spaces_enabled, |header| {
-                    header.child(div().h(px(4.0 * appearance.scale)).flex_shrink_0())
+                    header.child(gap(super::selectors::SIDEBAR_TOP_ROW_GAP))
                 })
                 .children(self.render_native_sidebar_space_row(&snapshot, &appearance, false, cx))
                 // CDXC:Chief 2026-11-08 DECISION: User (Q1922): Main Hub shows in the Unified sidebar too, under its header, drawn as in the Project sidebar (native_sidebar/chief.rs); its block lines up with the Unified group headers' box.
-                .when(!snapshot.spaces_enabled, |header| {
-                    header.child(div().h(px(6.0 * appearance.scale)).flex_shrink_0())
-                })
+                .child(gap(super::selectors::SIDEBAR_TOP_LIST_GAP))
                 .children(self.render_native_sidebar_chief(&snapshot, &appearance, true, cx))
                 .into_any_element()
         });

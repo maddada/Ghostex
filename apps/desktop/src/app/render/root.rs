@@ -239,6 +239,7 @@ impl Render for GhostexGpuiApp {
         self.sync_session_chat_pane_focus(window, cx);
         self.refresh_zmx_persistence_focused_terminal_if_changed(cx);
         let sidebar_chrome_visible = gpui_sidebar_chrome_visible(self.sidebar_collapsed);
+        let sidebar_keyboard_focus = self.sidebar_keyboard_focus_handle(cx);
         // The sidebar's peeking usage strip draws in a frosted window of its own, which outlives a
         // docked sidebar that is no longer drawn unless it is taken down here.
         if !sidebar_chrome_visible {
@@ -1406,6 +1407,9 @@ impl Render for GhostexGpuiApp {
                                 .id("ghostex-gpui-docked-sidebar")
                                 .w(px(self.sidebar_width))
                                 .h_full()
+                                // The Focus Sidebar hotkey's keyboard (gx_store/sidebar_keyboard.rs).
+                                .track_focus(&sidebar_keyboard_focus)
+                                .on_key_down(cx.listener(Self::sidebar_keyboard_key_down))
                                 .on_mouse_move(cx.listener(
                                     |this, event: &MouseMoveEvent, _window, _cx| {
                                         this.handle_floating_reveal_sidebar_edge_move(

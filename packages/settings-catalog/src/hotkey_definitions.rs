@@ -1615,4 +1615,16 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
         retired_default_keys: &[],
         action: J::Obj(&[("id", J::Str("focusLastTerminal")), ("kind", J::Str("terminalFocus"))]),
     },
+    // CDXC:Hotkeys 2026-11-11 DECISION:
+    // User (GitHub #558, "Add all three" on its comments): a Focus sidebar hotkey, because a terminal consumes Tab and a keyboard user in one cannot reach the sidebar. It shows the sidebar when hidden, moves the keyboard to its session list (arrows move, Enter opens), and Escape or the same key gives the keyboard back. Cmd+Shift+J (Ctrl+Shift+J on Windows and Linux) was the one Cmd+Shift letter free in both sections on all three platforms and not a view's own key (Ghostty's write-screen-file binding never runs: libghostty-vt applies no keybinds).
+    HotkeyDefinition {
+        id: "focusSidebar",
+        title: "Focus Sidebar",
+        description: "Move the keyboard to the sidebar's session list, showing the sidebar if it is hidden: arrow keys move through the sessions and Enter opens one. Escape or the same key gives the keyboard back.",
+        default_key: "cmd+shift+j",
+        windows_linux_default_key: None,
+        alternate_default_keys: &[],
+        retired_default_keys: &[],
+        action: J::Obj(&[("id", J::Str("focusSidebar")), ("kind", J::Str("terminalFocus"))]),
+    },
 ];

@@ -136,6 +136,17 @@ pub(crate) async fn relay(
             request_id,
         );
     }
+    // A message to a done thread of a coordinator here reopens it once the other computer took it
+    // (coordinators/remote_threads.rs `reopen_messaged_remote_thread`).
+    let reopen_target = (forwarded == "/api/sendSessionChatMessage" && is_chat_message(&bytes))
+        .then(|| super::thread_scope::session_ids(&bytes))
+        .flatten()
+        .map(|(project_id, session_id)| {
+            (
+                (server_id.to_string(), project_id, session_id),
+                crate::coordinators::now_iso(),
+            )
+        });
     let protocol = header_text(&headers, GXSERVER_PROTOCOL_HEADER);
     let content_type = header_text(&headers, header::CONTENT_TYPE.as_str());
     let url = format!("{}{forwarded}", computer.base_url);
@@ -166,6 +177,15 @@ pub(crate) async fn relay(
             request_id,
         ),
         Ok(Ok(Ok((status, content_type, body)))) => {
+            if let Some((key, sent_at)) = reopen_target.filter(|_| (200..300).contains(&status)) {
+                let (paths, caller) = (paths.clone(), caller.clone());
+                let _ = tokio::task::spawn_blocking(move || {
+                    let db = crate::storage::open_gxserver_database(&paths).ok()?;
+                    crate::coordinators::reopen_messaged_remote_thread(&db, &key, &caller, &sent_at)
+                        .ok()
+                })
+                .await;
+            }
             let mut response = Response::new(Body::from(body));
             *response.status_mut() =
                 StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -186,6 +206,16 @@ pub(crate) async fn relay(
             request_id,
         ),
     }
+}
+
+/// A chat message, not a raw key (`params.key`, send_http.rs), which never reopens a thread.
+fn is_chat_message(body: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(body)
+        .ok()
+        .is_some_and(|body| {
+            body.pointer("/params/key")
+                .is_none_or(serde_json::Value::is_null)
+        })
 }
 
 /// Why nothing reaches `computer` while its Agent access is off, naming whose switch it is.

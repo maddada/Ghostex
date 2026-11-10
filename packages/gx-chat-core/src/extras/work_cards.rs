@@ -303,6 +303,53 @@ fn done_button(item: &Value, key: &str, picked: bool) -> Value {
     })
 }
 
+/// The words a Reply sent for an ask from here: this client's pick when it is none of the ask's
+/// own answers, "" otherwise.
+fn replied_words(ask: &Value, picked: Option<&str>) -> String {
+    let Some(picked) = picked else {
+        return String::new();
+    };
+    let preset = ask["answers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|answer| text(answer, "label") == picked);
+    if preset || (picked == "Done" && ask["answers"].as_array().is_none_or(Vec::is_empty)) {
+        String::new()
+    } else {
+        picked.to_string()
+    }
+}
+
+/// The other lines of work that wait on an ask's answer (`item wait W8 --on Q12`), as
+/// `[{title, ref, command}]` where the command shows that item in the Work panel.
+fn waited_by(items: &[&Value], own: &Value, tag: &str) -> Value {
+    if tag.is_empty() {
+        return json!([]);
+    }
+    Value::Array(
+        items
+            .iter()
+            .filter(|other| text(other, "ref") != text(own, "ref"))
+            .filter(|other| !matches!(text(other, "status"), "finished" | "dropped"))
+            .filter(|other| {
+                other["waits"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|wait| text(wait, "on").eq_ignore_ascii_case(tag) && wait["open"] != false)
+            })
+            .map(|other| {
+                json!({
+                    "title": text(other, "title"),
+                    "ref": text(other, "ref"),
+                    "command": { "type": "jumpToWorkCard", "key": text(other, "key") },
+                })
+            })
+            .collect(),
+    )
+}
+
 /// Whether an open ask is snoozed now: gxserver's `snoozedUntil`, or a snooze sent from here.
 fn snoozed(ask: &Value, key: &str, state: &ChatState, now_ms: i64) -> bool {
     at_ms(text(ask, "snoozedUntil")).is_some_and(|until| until > now_ms)
@@ -472,12 +519,25 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
                 "kind": "ask",
                 "status": card["status"],
                 "title": card["title"],
+                // Its title's links (`#562`, a Markdown link) as runs the renderers draw, or null.
+                "titleRuns": crate::questions::form_links::word_runs(text(ask, "text")),
                 "body": card["body"],
                 "age": card["age"],
-                // The work it belongs to is its link (`chips`), not a second line.
-                "detail": [card["line"]],
+                // The line under it names only its own item (`chips`); whether it holds that item
+                // up is the row's mark. Other items that wait on its answer follow (`waitedBy`).
+                //
+                // CDXC:Coordinators 2026-11-10 DECISION:
+                // User, picking on the dock item line page (footer-page.html) after a line read
+                // "<item> · <item> waits on this": "C. Only the name", other items that wait "B.
+                // Name it when it is one, count when it is more", and "A. One line: the name is
+                // cut" when it does not fit.
+                "detail": [],
+                "waitedBy": waited_by(&items, item, text(ask, "tag")),
                 "buttons": card["buttons"],
                 "busy": card["busy"],
+                // The words sent from here as its Reply, which its Reply button shows until gxserver
+                // settles it (an answer picked from its buttons is marked on that button instead).
+                "replied": replied_words(ask, answers.get(&key).map(String::as_str)),
                 "reply": { "item": text(item, "ref"), "key": key, "tag": text(ask, "tag") },
                 "mention": mention_of(item),
                 "dismiss": card["cancel"],
@@ -819,13 +879,110 @@ fn question_rows(state: &ChatState, context: &ChatContext, now_ms: i64) -> Vec<(
                 row["detail"] = json!([]);
             } else {
                 row["kind"] = json!("form");
+                // A Ghostex page (not a form): its mark is a page (desktop `row_mark`), a click
+                // opens it, and its name carries how much it still asks (`page_count`).
+                row["page"] = json!(!form);
+                if !form {
+                    row["pageId"] = json!(asker.id);
+                    row["count"] = json!(page_count(state, &asker));
+                }
                 row["buttons"] = json!([]);
-                row["detail"] = json!([format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" })]);
+                // A page that asks nothing waits to be marked seen (`Asker::seen_only`).
+                let detail = if asker.seen_only {
+                    "Page, not seen yet".to_string()
+                } else {
+                    format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" })
+                };
+                row["detail"] = json!([detail]);
                 row["open"] = json!({ "type": "openResource", "id": asker.id });
             }
             (at, row)
         })
         .collect()
+}
+
+/// `{type: "loadPageQuestionCounts", pageId}`: asks the page's gxserver how many of its questions
+/// the reader's draft answers (`readVisualPageSource`), unless a read is already out.
+pub fn load_page_counts(state: &mut ChatState, page_id: &str) -> Vec<crate::effect::Effect> {
+    let page_id = page_id.to_ascii_lowercase();
+    let panels = &state.extras.panels;
+    if page_id.is_empty()
+        || panels
+            .page_count_requests
+            .values()
+            .any(|asked| *asked == page_id)
+    {
+        return Vec::new();
+    }
+    let request_id = state.core.allocate_request_id();
+    state
+        .extras
+        .panels
+        .page_count_requests
+        .insert(request_id, page_id.clone());
+    vec![crate::effect::Effect::SendRpc {
+        request_id,
+        method: crate::wire::ChatRpcMethod::ReadVisualPageSource,
+        params: Box::new(json!({ "pageId": page_id })),
+    }]
+}
+
+/// Takes the answer to [`load_page_counts`]: the counts, kept by page; nothing for a refused read
+/// (an older gxserver), whose rows keep their count from the page's own markup.
+pub fn settle_page_counts(
+    state: &mut ChatState,
+    request_id: u64,
+    answer: Result<&Value, String>,
+) -> Option<Vec<crate::effect::Effect>> {
+    let page_id = state
+        .extras
+        .panels
+        .page_count_requests
+        .remove(&request_id)?;
+    state.core.claim_refusal();
+    if let Ok(result) = answer {
+        if let (Some(answered), Some(total)) = (
+            result["questionsAnswered"].as_u64(),
+            result["questionsTotal"].as_u64(),
+        ) {
+            state
+                .extras
+                .panels
+                .page_question_counts
+                .insert(page_id, (answered, total));
+        }
+    }
+    Some(Vec::new())
+}
+
+/// How much a page still asks, after its name in the quieter colour: "(14 questions)" while none
+/// is answered, "(10/16 answered)" once some are (a pick or words in the page's saved draft
+/// counts, sent or not), "(not seen yet)" for a page that asks nothing and waits to be marked
+/// seen. Before its gxserver has said, the questions its block lists, none answered.
+///
+/// CDXC:Coordinators 2026-11-11 DECISION:
+/// User, of a page row in the dock: "also show (10/16 answered) or (14 questions) next to the
+/// page name to know how many i need to answer".
+pub(crate) fn page_count(
+    state: &ChatState,
+    asker: &crate::transcript::open_questions::Asker,
+) -> String {
+    if asker.seen_only {
+        return "(not seen yet)".to_string();
+    }
+    let (answered, total) = state
+        .extras
+        .panels
+        .page_question_counts
+        .get(&asker.id.to_ascii_lowercase())
+        .copied()
+        .unwrap_or((0, asker.tags.len() as u64));
+    match (answered, total) {
+        (_, 0) => String::new(),
+        (0, 1) => "(1 question)".to_string(),
+        (0, total) => format!("({total} questions)"),
+        (answered, total) => format!("({answered}/{total} answered)"),
+    }
 }
 
 /// The one-click question (a reply's answer links) a form id names, when the form is one.

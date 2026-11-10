@@ -2,7 +2,7 @@
 //! phone app so its port is tested against the same answers.
 //!
 //! CDXC:TranscriptExport 2026-10-31 WHY:
-//! User: the phone gets the same Handoff / Export and the same lead-in. The phone's sheet runs in TypeScript in front of a computer it reaches over SSH, and gx-core runs on neither the phone nor its WebAssembly chat core, so `apps/mobile/app/src/contract/handoff/handoff.ts` is a port of `session_handoff.rs` and `handoff_target.rs`. So that the two cannot drift, this test runs every case of `handoffFixture.json` through these functions and fails when the file's expected answers differ; `UPDATE_HANDOFF_FIXTURE=1 cargo test handoff_fixture` rewrites them. The phone's `handoff.test.ts` runs the same cases through its port. A checkout without the phone app skips the comparison.
+//! User: the phone gets the same Handoff / Export and the same lead-in. The phone's sheet runs in TypeScript in front of a computer it reaches over SSH, and gx-core runs on neither the phone nor its WebAssembly chat core, so `apps/mobile/app/src/contract/handoff/handoff.ts` is a port of `session_handoff.rs` and `handoff_target.rs`. So that the two cannot drift, this test runs every case of `handoffFixture.json` through these functions and fails when the file's expected answers differ; `UPDATE_HANDOFF_FIXTURE=1 cargo test handoff_fixture` rewrites them. The phone no longer runs these cases through its port: its tests were removed on 2026-11-11 (issue #557). A checkout without the phone app skips the comparison.
 
 use std::path::PathBuf;
 

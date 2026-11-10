@@ -559,6 +559,14 @@ fn table_actions(
         .into_any_element()
 }
 
+/// How a chat Markdown view's text looks (`text_view_look`): its colour, weight and sizes.
+pub(super) struct TextLook {
+    pub color: gpui::Hsla,
+    pub semibold: bool,
+    pub size: f32,
+    pub line_height: f32,
+}
+
 impl NativeChatView {
     /// The reader turned wrapping on or off for one fenced block.
     ///
@@ -617,6 +625,26 @@ impl NativeChatView {
         label_color: Option<gpui::Hsla>,
         cx: &gpui::Context<Self>,
     ) -> AnyElement {
+        let look = TextLook {
+            color: label_color.unwrap_or(p.prose),
+            semibold: label_color.is_some(),
+            size: PROSE_SIZE,
+            line_height: PROSE_LINE_HEIGHT,
+        };
+        self.text_view_look(id, content, references, p, look, cx)
+    }
+
+    /// `text_view` in its own colour and size (both unscaled sizes): a work item ask's
+    /// description in the dock and the Work panel, in the quieter colour at its card's size.
+    pub(super) fn text_view_look(
+        &self,
+        id: String,
+        content: String,
+        references: &Value,
+        p: &ChatAppearance,
+        look: TextLook,
+        cx: &gpui::Context<Self>,
+    ) -> AnyElement {
         let header_chat = cx.weak_entity();
         let header_appearance = p.clone();
         let mut style = super::markdown_style::text_style(p);
@@ -673,12 +701,10 @@ impl NativeChatView {
         })
         .selectable(true)
         .style(style)
-        .text_size(px(PROSE_SIZE * p.scale))
-        .line_height(px(PROSE_LINE_HEIGHT * p.scale))
-        .text_color(label_color.unwrap_or(p.prose))
-        .when(label_color.is_some(), |view| {
-            view.font_weight(FontWeight::SEMIBOLD)
-        })
+        .text_size(px(look.size * p.scale))
+        .line_height(px(look.line_height * p.scale))
+        .text_color(look.color)
+        .when(look.semibold, |view| view.font_weight(FontWeight::SEMIBOLD))
         .into_any_element()
     }
 

@@ -29,8 +29,9 @@ pub(super) async fn request(
         json!({"message":message,"endpoint":endpoint})
     })?;
     let (status, body) = response;
-    let mut envelope: Value = serde_json::from_str(&body)
-        .map_err(|_| json!({"message":"gxserver returned invalid JSON.","endpoint":endpoint}))?;
+    let mut envelope: Value = serde_json::from_str(&body).map_err(
+        |_| json!({"message":"Ghostex's answer couldn't be read. Try again.","endpoint":endpoint}),
+    )?;
     if envelope["ok"] == false {
         return Err(
             json!({"code":envelope["error"],"message":envelope["message"],"endpoint":endpoint}),

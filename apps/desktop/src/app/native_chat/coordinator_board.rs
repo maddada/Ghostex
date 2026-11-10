@@ -214,6 +214,22 @@ fn hex_color(hex: &str) -> Option<gpui::Hsla> {
         .map(|color| rgb(color).into())
 }
 
+/// A card's answers with Reply after them when it offers both (work_actions.rs `reply_answer`):
+/// locked once one is given, showing the words once a reply was sent from here (`replied`).
+fn with_reply(row: &Value, answers: &[Value]) -> Vec<Value> {
+    let mut all = answers.to_vec();
+    let reply = &row["actions"]["reply"];
+    if !answers.is_empty() && reply.is_object() {
+        let locked = answers.iter().any(|answer| answer["locked"] == true);
+        all.push(NativeChatView::reply_answer(
+            reply,
+            &text(row, "replied"),
+            locked,
+        ));
+    }
+    all
+}
+
 /// An open card's height (unscaled), estimated from its words: its title and latest line wrap at
 /// the list's width, then its chips and its buttons.
 fn expanded_card_height(row: &Value) -> f32 {
@@ -341,6 +357,10 @@ pub(crate) struct CoordinatorBoardView {
     /// The dock's rows' width at its last paint (unscaled), 0 before the first: what decides
     /// whether a row's answers fit beside its question (work_cards.rs `dock_row`).
     pub(super) dock_width: std::rc::Rc<std::cell::Cell<f32>>,
+    /// When each page row last asked its gxserver for its counts (work_cards.rs
+    /// `refresh_page_counts`), by page id.
+    pub(super) page_counts_asked:
+        std::cell::RefCell<std::collections::HashMap<String, web_time::Instant>>,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only
@@ -1157,11 +1177,6 @@ impl NativeChatView {
         let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
         let expanded = row["expanded"] == true;
         let title = text(row, "title");
-        let tooltip = [title.as_str(), text(row, "detail").as_str()]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n");
         let command = row["command"].clone();
         let toggle = row["toggle"].clone();
         let reference = text(row, "reference");
@@ -1256,7 +1271,7 @@ impl NativeChatView {
                 );
             }
             // Beside a lead the answers keep their width; alone on a narrow card they give way.
-            let answers_pill = self.board_answers(&key, &answers, p, cx);
+            let answers_pill = self.board_answers(&key, &with_reply(row, &answers), p, cx);
             chips = if !lead.is_empty() && inner_width >= 260.0 {
                 chips.child(div().flex_shrink_0().child(answers_pill))
             } else {
@@ -1273,12 +1288,6 @@ impl NativeChatView {
                         p.muted
                     } else {
                         p.card_muted
-                    })
-                    .when(!note.is_empty(), |this| {
-                        let note = note.clone();
-                        this.tooltip(move |window, cx| {
-                            gpui_component::tooltip::Tooltip::new(note.clone()).build(window, cx)
-                        })
                     })
                     .child(if note.is_empty() {
                         "No links yet".to_string()
@@ -1396,13 +1405,52 @@ impl NativeChatView {
                             .when(!expanded, |title| title.truncate())
                             .text_size(px(TITLE_SIZE * s))
                             .text_color(p.foreground)
-                            .when(!expanded, |title| {
-                                title.tooltip(move |window, cx| {
-                                    gpui_component::tooltip::Tooltip::new(tooltip.clone())
-                                        .build(window, cx)
-                                })
-                            })
-                            .child(title.clone()),
+                            // No tooltip repeats the card's title and line: a click opens the
+                            // card to its whole text.
+                            //
+                            // CDXC:Coordinators 2026-11-11 DECISION:
+                            // User, of the large tooltip over a Work panel card: "dont show this
+                            // tooltip since clicking expands it". The chips', buttons' and marks'
+                            // own small tooltips stay.
+                            // A work ask's title links its references (`#562`) as the dock does.
+                            .map(|element| {
+                                if row["titleRuns"].is_array() {
+                                    element.child(self.ask_title(
+                                        &key,
+                                        &title,
+                                        &row["titleRuns"],
+                                        !expanded,
+                                        p.foreground,
+                                        TITLE_SIZE,
+                                        TITLE_SIZE * 1.45,
+                                        p,
+                                        cx,
+                                    ))
+                                } else if !text(row, "count").is_empty() {
+                                    // Its count follows the page's draft while the card is drawn.
+                                    if let Some(page_id) = key.strip_prefix("question:") {
+                                        self.refresh_page_counts(page_id, cx);
+                                    }
+                                    // A page's name, then how much it still asks (work_cards.rs
+                                    // `page_count`); the name gives way first.
+                                    element.child(
+                                        div()
+                                            .min_w_0()
+                                            .flex()
+                                            .gap(px(6.0 * s))
+                                            .child(div().min_w_0().truncate().child(title.clone()))
+                                            .child(
+                                                div()
+                                                    .flex_shrink_0()
+                                                    .whitespace_nowrap()
+                                                    .text_color(p.card_muted)
+                                                    .child(text(row, "count")),
+                                            ),
+                                    )
+                                } else {
+                                    element.child(title.clone())
+                                }
+                            }),
                     )
                     .children(agent_button)
                     .children(self.board_restore_button(row, p, cx)),
@@ -1412,16 +1460,7 @@ impl NativeChatView {
             // lines, then "more" (the dock row's rule, work_cards.rs `ask_detail`).
             let body = text(row, "body");
             if !body.is_empty() {
-                card = card.child(self.ask_detail(
-                    &key,
-                    &body,
-                    inner_width,
-                    p.card_muted,
-                    13.0,
-                    19.0,
-                    p,
-                    cx,
-                ));
+                card = card.child(self.ask_markdown(&key, &body, p.card_muted, 13.0, 19.0, p, cx));
             }
             // Its latest line (a thread's report or what it is on, an item's note), whole.
             let line = Some(text(row, "detail"))
@@ -1558,7 +1597,13 @@ impl NativeChatView {
         // (work_actions.rs): its answers as the dock's filled buttons, then the actions every item
         // repeats as icon buttons (Reply, Open, Show in chat, Dismiss, Snooze, Mention).
         let answers: Vec<Value> = row["answers"].as_array().cloned().unwrap_or_default();
-        let icons = self.work_action_icons(&key, &row["actions"], &reference, true, p, cx);
+        let answers = with_reply(row, &answers);
+        // Reply is a button among the answers when it shows there, not an icon below them.
+        let mut actions = row["actions"].clone();
+        if answers.iter().any(|answer| answer["reply"].is_object()) {
+            actions["reply"] = Value::Null;
+        }
+        let icons = self.work_action_icons(&key, &actions, &reference, true, p, cx);
         let mut column = div().w_full().min_w_0().flex().flex_col().gap(px(6.0 * s));
         if !answers.is_empty() {
             column = column.child(

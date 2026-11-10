@@ -117,6 +117,11 @@ pub struct Asker {
     pub title: String,
     /// When the reply that holds it arrived (epoch ms), if the transcript says.
     pub at: Option<i64>,
+    /// A page that asks nothing but waits until the reader marks it seen (its block's
+    /// `"awaitsSeen": true`, CDXC:SessionChat 2026-11-11 DECISION in
+    /// server/src/visual_pages/publish.rs). It has no tags, counts as one thing waiting, and is
+    /// answered once the page's answers (`{"seen": true, …}`) come back.
+    pub seen_only: bool,
 }
 
 impl Asker {
@@ -217,6 +222,7 @@ pub fn asker_entries(messages: &[ChatMessage], prior: &[Found]) -> Vec<Found> {
                 skipped: Vec::new(),
                 superseded: Vec::new(),
                 inherited: false,
+                seen_only: false,
                 said: Vec::new(),
                 title: question.question.clone(),
                 at: message.timestamp,
@@ -269,6 +275,7 @@ pub fn asker_entries(messages: &[ChatMessage], prior: &[Found]) -> Vec<Found> {
                     skipped: Vec::new(),
                     superseded: Vec::new(),
                     inherited: false,
+                    seen_only: false,
                     said: Vec::new(),
                     title,
                     at: message.timestamp,
@@ -277,7 +284,12 @@ pub fn asker_entries(messages: &[ChatMessage], prior: &[Found]) -> Vec<Found> {
                 let Some(page) = ghostex_gx_visual::page_reference(&body) else {
                     continue;
                 };
-                let (Some(id), Some(tags)) = (page.page_id(), page.questions.clone()) else {
+                // A page that asks nothing waits only when its block says it waits to be seen.
+                let seen_only = page.questions.is_none() && page.awaits_seen;
+                let (Some(id), Some(tags)) = (
+                    page.page_id(),
+                    page.questions.clone().or_else(|| seen_only.then(Vec::new)),
+                ) else {
                     continue;
                 };
                 Asker {
@@ -292,6 +304,7 @@ pub fn asker_entries(messages: &[ChatMessage], prior: &[Found]) -> Vec<Found> {
                     skipped: Vec::new(),
                     superseded: Vec::new(),
                     inherited: false,
+                    seen_only,
                     said: Vec::new(),
                     title: page.title.trim().to_string(),
                     at: message.timestamp,

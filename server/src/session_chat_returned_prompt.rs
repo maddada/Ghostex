@@ -191,6 +191,31 @@ fn take_last_chat_send(
     false
 }
 
+/// A chat send Claude Code's prompt hook blocked (session_chat_hook_blocked.rs): its text goes back
+/// into the chat box like a prompt an Escape handed back, with no transcript row to hide, since the
+/// thread keeps showing what was blocked. `false` when the send is not this daemon's last chat send.
+pub(crate) fn return_session_chat_send_blocked_by_hook(
+    project_id: &str,
+    session_id: &str,
+    text: &str,
+) -> bool {
+    let sent = normalize_screen_text(text);
+    let Some(send) = last_sends().lock().ok().and_then(|sends| {
+        sends
+            .get(&store_key(project_id, session_id))
+            .filter(|send| !send.claimed && normalize_screen_text(&send.text) == sent)
+            .cloned()
+    }) else {
+        return false;
+    };
+    if !take_last_chat_send(project_id, session_id, Some(&send)) {
+        return false;
+    }
+    crate::session_chat_watchdog::cancel_session_chat_send_watchdog(project_id, session_id);
+    record_returned_prompt(project_id, session_id, &send, None);
+    true
+}
+
 /// Rewind deliberately restores an accepted prompt; it must not look like an interrupted unsent send to an older screen probe.
 pub(crate) fn cancel_returned_prompt_detection(project_id: &str, session_id: &str) {
     take_last_chat_send(project_id, session_id, None);

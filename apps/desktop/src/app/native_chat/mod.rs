@@ -77,6 +77,7 @@ mod question_exchange;
 mod question_form;
 mod questions_list;
 pub(crate) mod queue;
+mod quiet_view;
 mod quiet_work;
 mod read_pictures;
 mod reference_menu;

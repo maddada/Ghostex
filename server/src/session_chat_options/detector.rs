@@ -494,6 +494,13 @@ impl SessionChatOptionDetector {
                 session_id,
                 generation,
             );
+            // And its approval or question card, which nothing can answer any more.
+            crate::session_chat_agent_gone_prompt::dispatch_gone_agent_prompt_retire(
+                self.app_state.clone(),
+                project_id,
+                session_id,
+                generation,
+            );
         }
         // A trust prompt on a remembered folder is answered from here, the one
         // place every fresh capture passes through, so it is accepted whichever

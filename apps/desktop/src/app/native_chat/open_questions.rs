@@ -290,6 +290,8 @@ struct Wash {
     alpha: f32,
 }
 
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User: "let's change these to the same #F472B6 color that we use to represent questions everywhere pls". A Q-tag whose question still waits is drawn in the question pink: #f472b6 on a dark chat, #be185d on a light one (`QUESTION_COLOR` in native_sidebar/status.rs and `NEED_LIGHT` in marked_look.rs), in its text, "?" and outline. The values sit in question-tags.json because the phone reads that file's numbers too; keep them equal to those two constants. The answered and withdrawn pills keep their tones. It replaces the tan the open pill had since 2026-10-15.
 /// CDXC:SessionChat 2026-10-15 SEE-ALSO: The Q-tag pills' colours and shape come from packages/gx-chat-core/visual/question-tags.json, which the phone's Markdown.tsx and ChatPills.tsx read too; the state is gx-chat-core's `TagState` (transcript/open_questions.rs).
 static TAG_VISUAL: LazyLock<TagVisual> = LazyLock::new(|| {
     serde_json::from_str(include_str!(

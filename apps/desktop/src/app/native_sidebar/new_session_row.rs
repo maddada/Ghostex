@@ -1,9 +1,11 @@
 //! The New session row under the sidebar's top row, in the Project and the Unified sidebar alike
 //! (and so in the floating panel of a hidden sidebar, and with bots showing): one wide button in
-//! two halves, then Add project.
+//! two halves, the row's full width.
 //!
 //! CDXC:Sidebar 2026-11-10 DECISION:
-//! User (Q2340 C, Q2341 C, Q2342 D, Q2343 A, Q2344 "beside", Q2345 A): every sidebar layout has a wide New session button in a row of its own under the top row, with the pencil-on-a-square icon, its words and its shortcut on it. A click starts the agent you used last at once, in the project of the session you have open, as Cmd+Shift+O does (`start_new_agent_session`); the arrow at its end opens the New Thread picker, as Cmd+N does (`open_unified_new_session`). Add project sits beside it in both layouts and stays in the top-right menu too. The button replaces the Unified header's pencil, and Add project left that header for this row. It rests on a faint light fill so it reads as the sidebar's main action, never a dark one on glass.
+//! User (Q2340 C, Q2341 C, Q2342 D, Q2343 A, Q2344 "beside", Q2345 A): every sidebar layout has a wide New session button in a row of its own under the top row, with the pencil-on-a-square icon, its words and its shortcut on it. A click starts the agent you used last at once, in the project of the session you have open, as Cmd+Shift+O does (`start_new_agent_session`); the arrow at its end opens the New Thread picker, as Cmd+N does (`open_unified_new_session`). The button replaces the Unified header's pencil. It rests on a faint light fill so it reads as the sidebar's main action, never a dark one on glass.
+//! CDXC:Sidebar 2026-11-11 DECISION:
+//! User: "i dont like new project shown like button without bg there fam add it to the top row instead please to the right of search". Add project left this row for the top row, right of Search (native_sidebar/navigation.rs), so the row holds only the New session button and its arrow, the row's full width, 28 high like every row at the top. This supersedes Add project sitting beside the button.
 //! SEE-ALSO: native_sidebar/render.rs and selectors.rs (where the row goes), native_sidebar/unified/header.rs (the header it took the pencil and Add project from), apps/gpui-web/src/app/web_host/new_thread_picker.rs (the web build's `start_new_agent_session`).
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -12,18 +14,17 @@ use gpui::{
 };
 use gpui_component::h_flex;
 use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement};
-use serde_json::json;
 
 use super::appearance::SidebarAppearance;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 
-/// The row's side padding, its height and the gap before Add project, before the zoom.
-const ROW_PADDING: f32 = 8.0;
-const ROW_HEIGHT: f32 = 30.0;
-const ROW_GAP: f32 = 4.0;
+/// The row's side padding and its height, before the zoom: the top rows' shared edge and button
+/// height (navigation.rs).
+const ROW_PADDING: f32 = super::navigation::SIDEBAR_TOP_EDGE_INSET;
+const ROW_HEIGHT: f32 = super::navigation::SIDEBAR_TOP_ROW_BUTTON_HEIGHT;
 /// The button's corner radius, the arrow half's width and the inset of the label half.
-const BUTTON_RADIUS: f32 = 7.0;
+const BUTTON_RADIUS: f32 = super::navigation::SIDEBAR_TOP_ROW_BUTTON_RADIUS;
 const ARROW_WIDTH: f32 = 29.0;
 const LABEL_PADDING: f32 = 10.0;
 /// The label half's least width that still fits its icon, "New session" and the shortcut; below
@@ -35,7 +36,7 @@ const LABEL: &str = "New session";
 
 /// The width the label half gets in a sidebar `sidebar_width` wide, at `scale`.
 fn label_half_width(sidebar_width: f32, scale: f32) -> f32 {
-    sidebar_width / scale - ROW_PADDING * 2.0 - ROW_HEIGHT - ROW_GAP - ARROW_WIDTH
+    sidebar_width / scale - ROW_PADDING * 2.0 - ARROW_WIDTH
 }
 
 /// The shortcut the button shows: the configured New Agent Session key. The browser build has no
@@ -61,7 +62,7 @@ fn choose_tooltip() -> String {
 }
 
 impl GhostexGpuiApp {
-    /// The New session row: the two-half button, then Add project.
+    /// The New session row: the two-half button.
     pub(in crate::app::native_sidebar) fn render_native_sidebar_new_session_row(
         &self,
         appearance: &SidebarAppearance,
@@ -186,49 +187,10 @@ impl GhostexGpuiApp {
             appearance,
             cx,
         );
-        let add_project = div()
-            .id("native-sidebar-new-row-add-project")
-            .role(gpui::Role::Button)
-            .aria_label("Add project")
-            .size(px(ROW_HEIGHT * scale))
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(px(BUTTON_RADIUS * scale))
-            .hover(|button| button.bg(appearance.hover))
-            .child(titlebar_svg_icon(
-                "titlebar/folder-plus.svg",
-                15.0 * scale,
-                appearance.chrome_icon,
-            ))
-            .when(tooltips, |button| {
-                button.managed_discrete_tooltip_with_placement(
-                    ManagedTooltipPlacement::BelowRight,
-                    tooltip_delay,
-                    tooltip("Add project".to_string()),
-                )
-            })
-            .on_click(cx.listener(|app, _, _, cx| {
-                cx.stop_propagation();
-                app.dispatch_native_sidebar_ui(
-                    json!({"type": "sidebarAction", "action": "addProject"}),
-                    cx,
-                );
-            }));
-        let add_project = self.sidebar_focus_stop(
-            add_project,
-            "new-session:add-project",
-            super::focus_order::SidebarStopPlace::Fixed,
-            appearance,
-            cx,
-        );
         h_flex()
             .w_full()
             .flex_shrink_0()
-            .pt(px(1.0 * scale))
             .px(px(ROW_PADDING * scale))
-            .gap(px(ROW_GAP * scale))
             .child(
                 h_flex()
                     .flex_1()
@@ -244,7 +206,6 @@ impl GhostexGpuiApp {
                     .child(start)
                     .child(choose),
             )
-            .child(add_project)
             .into_any_element()
     }
 }

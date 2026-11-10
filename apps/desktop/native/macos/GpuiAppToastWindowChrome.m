@@ -63,7 +63,20 @@ void GhostexGpuiRemoveToastPopupWindowChrome(void *nativeView) {
      border, or window shadow behind the actual toast card. Keep only the
      card border/background in GPUI.
      */
+    /*
+     CDXC:VoiceMode 2026-11-11 WHY:
+     User: "i can't type in the text box" (the voice panel's, a pop-up with this chrome). Setting the
+     style mask rebuilds the window's frame and leaves the window itself as first responder instead
+     of GPUI's view, so a pop-up that takes the keyboard drew its caret but every typed key went to
+     the window and was dropped (Cmd+C still worked: key equivalents travel the view tree). Measured
+     on the panel's own window options: GPUIView before, GPUIPanel after. The responder the window
+     had is put back.
+     */
+    NSResponder *responder = window.firstResponder;
     window.styleMask = NSWindowStyleMaskNonactivatingPanel;
+    if (responder != nil && responder != window && window.firstResponder != responder) {
+      [window makeFirstResponder:responder];
+    }
     window.titleVisibility = NSWindowTitleHidden;
     window.titlebarAppearsTransparent = YES;
     window.opaque = NO;
@@ -212,6 +225,19 @@ void GhostexGpuiSetChildWindowContentFrame(void *childNativeView,
 
 // Fades a just-opened popup window in, its backdrop blur and shadow with it. Runs before the window's
 // first flush, so it never shows at full alpha first.
+// Keeps a just-opened popup window invisible until it has its final size and place.
+void GhostexGpuiHidePopupWindow(void *nativeView) {
+  @autoreleasepool {
+    if (nativeView == NULL) {
+      return;
+    }
+    NSWindow *window = ((__bridge NSView *)nativeView).window;
+    if (window != nil) {
+      window.alphaValue = 0.0;
+    }
+  }
+}
+
 void GhostexGpuiFadeInPopupWindow(void *nativeView, double seconds) {
   @autoreleasepool {
     if (nativeView == NULL) {

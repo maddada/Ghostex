@@ -629,7 +629,7 @@ pub fn playbook_status_notice(
     let reads = read_metadata(db, GUIDE_READS_METADATA_KEY)?;
     Ok(match recorded(&reads, key) {
         Some(read) if read == version => None,
-        Some(_) => Some("Your playbook changed since you last read it (work items and their cards replace the board and your replies' status sections): run `ghostex coordinator guide` now and follow it from here on.".to_string()),
+        Some(_) => Some("Your playbook changed since you last read it: run `ghostex coordinator guide` now and follow it from here on.".to_string()),
         None => Some("You have not read your playbook yet: run `ghostex coordinator guide` now and follow it from here on.".to_string()),
     })
 }

@@ -193,6 +193,45 @@ pub fn set_remote_thread_resolved(
     .map_err(sql_error)
 }
 
+/*
+CDXC:Coordinators 2026-11-11 FIX:
+GitHub #554 ("A done thread on another computer isn't reopened when it's messaged"): a message to a done thread on this computer reopens it (reopen.rs, PR #562), but one to a done thread on another computer, relayed from here, left it done, so the remote supervisor skipped it and its reply was never reported. The relay now reopens it after the other computer took the message, under #562's rules: only the thread's own coordinator or the user's own doors (owner session, paired phone, the token file) reopen, and a Mark Done given after the message was sent wins. A message typed on the thread's own computer still cannot reopen it: that computer has no record that the session is a thread, and this one cannot tell who sent it.
+SEE-ALSO: server/src/connected_computers/relay.rs, server/src/coordinators/reopen.rs (`caller_may_reopen`).
+*/
+/// Reopens the done remote thread `key` that `caller` just messaged, when `caller` may (its
+/// coordinator's session, or the user's own doors) and it was marked done no later than
+/// `sent_at` (ISO, the time the send began). One conditional update, so a Mark Done landing
+/// meanwhile wins. Returns whether it reopened the thread.
+pub fn reopen_messaged_remote_thread(
+    db: &Connection,
+    key: &RemoteThreadKey,
+    caller: &crate::security::Principal,
+    sent_at: &str,
+) -> Result<bool, DomainStateError> {
+    use crate::security::Principal;
+    let Some(thread) = read_remote_thread(db, key)? else {
+        return Ok(false);
+    };
+    let may = match caller {
+        Principal::Session {
+            project_id,
+            session_id,
+            ..
+        } => thread.coordinator_key() == (project_id.clone(), session_id.clone()),
+        Principal::Owner { .. } | Principal::Device { .. } | Principal::LocalAgent => true,
+        _ => false,
+    };
+    if !may || thread.resolved_at.is_none() {
+        return Ok(false);
+    }
+    db.execute(
+        "UPDATE coordinator_remote_threads SET resolvedAt = NULL, observedWorking = 0, updatedAt = ?5 WHERE serverId = ?1 AND projectId = ?2 AND sessionId = ?3 AND resolvedAt IS NOT NULL AND resolvedAt <= ?4",
+        params![key.0, key.1, key.2, sent_at, now_iso()],
+    )
+    .map(|changed| changed > 0)
+    .map_err(sql_error)
+}
+
 /// What the supervisor saw this pass. Returns whether the state clients show changed.
 pub fn record_remote_thread_progress(
     db: &Connection,

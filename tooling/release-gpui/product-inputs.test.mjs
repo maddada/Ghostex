@@ -344,8 +344,14 @@ describe('pinned toolchain values track the workflows', () => {
   test('the bundled tailcat pin matches the package script, the Settings install and the workflows', () => {
     const module = `github.com/tailscale/tailcat/cmd/tailcat@${TOOLCHAIN.tailcat}`;
     expect(readFileSync('server/package-remote-linux.mjs', 'utf8')).toContain(`const TAILCAT_MODULE = '${module}';`);
-    expect(readFileSync('server/src/tailcat/install.rs', 'utf8')).toContain(
-      `const TAILCAT_MODULE: &str = "${module}";`
+    // install.rs builds the module path from one version macro, which Settings > Updates also
+    // reads as the newest helper it offers (6f7f9162b), so the pin is checked in both pieces.
+    const install = readFileSync('server/src/tailcat/install.rs', 'utf8');
+    expect(/macro_rules! tailcat_version \{\s*\(\) => \{\s*"(v\d+\.\d+\.\d+)"/u.exec(install)?.[1]).toBe(
+      TOOLCHAIN.tailcat
+    );
+    expect(install).toMatch(
+      /const TAILCAT_MODULE: &str = concat!\(\s*"github\.com\/tailscale\/tailcat\/cmd\/tailcat@",\s*tailcat_version!\(\)\s*\);/u
     );
     const minimum = /pub const TAILCAT_MIN_VERSION: &str = "v(\d+)\.(\d+)\.(\d+)";/u.exec(
       readFileSync('packages/paths/src/tailcat.rs', 'utf8')

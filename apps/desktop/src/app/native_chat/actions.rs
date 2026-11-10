@@ -78,7 +78,7 @@ impl NativeChatView {
     fn view_modes_row(&self) -> Value {
         let summary_available = self.composer_control_available("summary");
         let level = self.snapshot["viewLevel"].as_str().unwrap_or("normal");
-        let modes: Vec<Value> = [
+        let mut modes: Vec<Value> = [
             ("summary", "Summary", "titlebar/list-check.svg"),
             ("normal", "Normal", "titlebar/leaf.svg"),
             ("detailed", "Detailed", "titlebar/list-details.svg"),
@@ -93,6 +93,21 @@ impl NativeChatView {
             row
         })
         .collect();
+        // Quiet View, for any chat, under the three levels (gx-chat-core
+        // `transcript/quiet_view.rs` has the user's words): the chat remembers its own choice.
+        let quiet = &self.snapshot["quietView"];
+        if quiet.is_object() {
+            let on = quiet["on"] == true;
+            let mut row = json!({
+                "label":"Quiet View","iconPath":"titlebar/eye-off.svg","checked":on,
+                "command":{"type":"setQuietView","on":!on},
+            });
+            if level == "summary" {
+                row["description"] = json!("Summary view folds more, so it wins while it is on");
+            }
+            modes.push(json!({"separator":true}));
+            modes.push(row);
+        }
         let detail = match level {
             "summary" => "Summary",
             "detailed" => "Detailed",

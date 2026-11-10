@@ -8,6 +8,9 @@ use serde_json::{Value, json};
 #[derive(Clone)]
 pub(crate) struct SpaceDragPreview {
     pub(crate) visible_ids: Vec<String>,
+    /// From one Space tile's start to the next's, before the zoom: the tiles stretch across their
+    /// row (CDXC:Spaces 2026-11-11 DECISION in selectors.rs), so it follows the sidebar's width.
+    pub(crate) pitch: f32,
     pub(crate) icon: String,
     pub(crate) color: Hsla,
     pub(crate) background: Hsla,
@@ -24,7 +27,7 @@ impl SpaceDragPreview {
             .flex()
             .items_center()
             .justify_center()
-            .rounded(px(6.0 * scale))
+            .rounded(px(super::navigation::SIDEBAR_TOP_ROW_BUTTON_RADIUS * scale))
             .border_1()
             .border_color(self.outline)
             .bg(self.background)
@@ -46,21 +49,20 @@ impl SpaceDragPreview {
         bounds: Bounds<Pixels>,
         scale: f32,
     ) -> Option<Value> {
+        let pitch = self.pitch;
         let left = if target_kind == "space-row" {
-            bounds.left() + px(3.0 * scale)
+            bounds.left() + px(super::navigation::SIDEBAR_TOP_EDGE_INSET * scale)
         } else {
             let index = self
                 .visible_ids
                 .iter()
                 .position(|id| id == target_id)
                 .or_else(|| (target_id == "other").then_some(self.visible_ids.len()))?;
-            bounds.left() - px(index as f32 * 32.0 * scale)
+            bounds.left() - px(index as f32 * pitch * scale)
         };
-        let candidate = self
-            .visible_ids
-            .iter()
-            .enumerate()
-            .find(|(index, _)| pointer.x < left + px((14.0 + *index as f32 * 32.0) * scale));
+        let candidate = self.visible_ids.iter().enumerate().find(|(index, _)| {
+            pointer.x < left + px(((pitch - 4.0) / 2.0 + *index as f32 * pitch) * scale)
+        });
         let (target_index, target_id, after) = match candidate {
             Some((index, id)) => (index, id, false),
             None => (

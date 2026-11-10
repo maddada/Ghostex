@@ -16,7 +16,6 @@
 //! The buttons are neutral fills, never the dark primary fill, because the card sits on the chat's
 //! glass (the user's standing rule: no black fills on glass).
 
-use super::appearance::ChatFilledButton as _;
 use super::chat_text_look::{PROSE_LINE_HEIGHT, PROSE_SIZE};
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -26,6 +25,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, div, px, svg,
 };
 use serde_json::{Value, json};
+use std::{cell::Cell, rc::Rc};
 
 /// A status's glyph and colour, the board's (coordinator_board.rs `group_look`), so a card reads as
 /// its row in the Work panel does.
@@ -40,6 +40,44 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
     }
     let (icon, color) = super::coordinator_board::group_look(group);
     (icon, color.map_or(p.muted, |color| gpui::rgb(color).into()))
+}
+
+/// A page row's ⋯ menu (`dock_row`): Show in chat, Dismiss and Snooze with its lengths, as the
+/// app's dropdown rows (`{label, command}`, a submenu's under `children`).
+fn page_row_menu(row: &Value) -> Vec<Value> {
+    let mut rows = Vec::new();
+    if row["showInChat"].is_object() {
+        rows.push(json!({ "label": "Show in chat", "command": row["showInChat"] }));
+    }
+    if row["dismiss"].is_object() {
+        rows.push(json!({ "label": "Dismiss", "command": row["dismiss"] }));
+    }
+    let snooze: Vec<Value> = row["snooze"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|choice| json!({ "label": text(choice, "label"), "command": choice["command"] }))
+        .collect();
+    if !snooze.is_empty() {
+        rows.push(json!({ "label": "Snooze", "children": snooze }));
+    }
+    rows
+}
+
+/// A dock row's mark: a Ghostex page that needs him is a plain page in the need-you pink (`page`
+/// on the row, from gx-chat-core); everything else its status's mark (`status_look`). Every row
+/// that is a page takes its mark here.
+///
+/// CDXC:Coordinators 2026-11-11 DECISION:
+/// User: "please change the icon of the ones that need me but are html page to a page icon
+/// (without html written there in the icon) but colored pink". A question keeps its circle.
+pub(super) fn row_mark(row: &Value, p: &ChatAppearance) -> (&'static str, gpui::Hsla) {
+    let status = text(row, "status");
+    let (icon, color) = status_look(&status, p);
+    if row["page"] == true && status == "needs" {
+        return ("titlebar/file.svg", color);
+    }
+    (icon, color)
 }
 
 /// A chip's glyph by what it says.
@@ -108,6 +146,179 @@ fn dock_row_action(row: &Value) -> Option<&'static str> {
         None
     }
 }
+
+/// One block of a description (`description_blocks`): its Markdown, and whether it follows the
+/// block before it as the next item of the same list (a list's own small gap, not a paragraph's).
+struct DescriptionBlock {
+    text: String,
+    tight: bool,
+}
+
+/// A description's blocks, each drawn as its own Markdown view so its height can be counted in
+/// whole lines: every paragraph, every list item (with its continuation and nested lines) and every
+/// fenced code block. A numbered item keeps its own number, so a list split this way still counts
+/// 1, 2, 3.
+fn description_blocks(words: &str) -> Vec<DescriptionBlock> {
+    let item = |line: &str| {
+        let line = line.trim_start();
+        line.starts_with("- ")
+            || line.starts_with("* ")
+            || line.starts_with("+ ")
+            || line.split_once(['.', ')']).is_some_and(|(number, rest)| {
+                !number.is_empty()
+                    && number.len() <= 9
+                    && number.chars().all(|c| c.is_ascii_digit())
+                    && rest.starts_with(' ')
+            })
+    };
+    let mut blocks: Vec<DescriptionBlock> = Vec::new();
+    // The block being read: its lines, whether it is a list item, and whether it is tight.
+    let mut current: Option<(String, bool, bool)> = None;
+    let mut fenced = false;
+    let mut after_blank = true;
+    fn finish(current: &mut Option<(String, bool, bool)>, blocks: &mut Vec<DescriptionBlock>) {
+        if let Some((text, _, tight)) = current.take() {
+            if !text.trim().is_empty() {
+                blocks.push(DescriptionBlock { text, tight });
+            }
+        }
+    }
+    // Whether the last block read was a list item, so the next item follows it tight.
+    let mut last_item = false;
+    for line in words.lines() {
+        let trimmed = line.trim_start();
+        if fenced {
+            if let Some((text, _, _)) = current.as_mut() {
+                text.push('\n');
+                text.push_str(line);
+            }
+            if trimmed.starts_with("```") {
+                fenced = false;
+                finish(&mut current, &mut blocks);
+                last_item = false;
+                after_blank = false;
+            }
+            continue;
+        }
+        if trimmed.starts_with("```") {
+            finish(&mut current, &mut blocks);
+            current = Some((line.to_string(), false, false));
+            fenced = true;
+            continue;
+        }
+        if trimmed.is_empty() {
+            if let Some((_, is_item, _)) = &current {
+                last_item = *is_item;
+            }
+            finish(&mut current, &mut blocks);
+            after_blank = true;
+            continue;
+        }
+        let indented = line.starts_with("  ") || line.starts_with('\t');
+        if item(line) && !indented {
+            if let Some((_, is_item, _)) = &current {
+                last_item = *is_item;
+            }
+            let tight = last_item && !after_blank;
+            finish(&mut current, &mut blocks);
+            current = Some((line.to_string(), true, tight));
+        } else if let Some((text, _, _)) = current.as_mut() {
+            text.push('\n');
+            text.push_str(line);
+        } else {
+            current = Some((line.to_string(), false, false));
+            last_item = false;
+        }
+        after_blank = false;
+    }
+    finish(&mut current, &mut blocks);
+    blocks
+}
+
+/// A description's Markdown kept compact for a row (`ask_markdown`): every line break kept as a
+/// break, a heading as a bold line at the text's size, a table row and a picture as their plain
+/// text. Lists, emphasis, code and links stay as written.
+fn compact_markdown(words: &str) -> String {
+    // Each line, and whether it is code (a fence or inside one), which keeps its plain break.
+    let mut out: Vec<(String, bool)> = Vec::new();
+    let mut fenced = false;
+    for line in words.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") {
+            fenced = !fenced;
+            out.push((line.to_string(), true));
+            continue;
+        }
+        if fenced {
+            out.push((line.to_string(), true));
+            continue;
+        }
+        let heading = trimmed.trim_start_matches('#');
+        let line = if trimmed.starts_with('#') && heading.starts_with(' ') {
+            format!("**{}**", heading.trim())
+        } else if trimmed.starts_with('|') {
+            // A table's row as its words; its rule line goes.
+            let cells: Vec<&str> = trimmed
+                .trim_matches('|')
+                .split('|')
+                .map(str::trim)
+                .filter(|cell| !cell.is_empty())
+                .collect();
+            if cells
+                .iter()
+                .all(|cell| cell.chars().all(|c| matches!(c, '-' | ':' | ' ')))
+            {
+                continue;
+            }
+            cells.join(" \u{b7} ")
+        } else {
+            plain_pictures(line)
+        };
+        out.push((line, false));
+    }
+    // A single line break is kept as a break, not joined into the line before it.
+    let mut text = String::new();
+    for (index, (line, code)) in out.iter().enumerate() {
+        text.push_str(line);
+        if let Some((next, _)) = out.get(index + 1) {
+            let plain_break = *code || line.trim().is_empty() || next.trim().is_empty();
+            text.push_str(if plain_break { "\n" } else { "  \n" });
+        }
+    }
+    text
+}
+
+/// `![alt](src)` as its alt words, so a description never draws a picture.
+fn plain_pictures(line: &str) -> String {
+    let mut out = String::new();
+    let mut rest = line;
+    while let Some(start) = rest.find("![") {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 2..];
+        match after.find("](").and_then(|close| {
+            after[close + 2..]
+                .find(')')
+                .map(|end| (close, close + 2 + end))
+        }) {
+            Some((close, end)) => {
+                out.push_str(&after[..close]);
+                rest = &after[end + 1..];
+            }
+            None => {
+                out.push_str("![");
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// How often a drawn page row asks its gxserver for its counts (`refresh_page_counts`).
+const PAGE_COUNTS_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// The dock's rows' fold, as the chat's disclosure motion knows it.
+const DOCK_MOTION_KEY: &str = "work-dock:rows";
 
 /// The fold key that shows every dock row in place instead of the first `limit`.
 const DOCK_ALL_ROWS: &str = "dock-rows:all";
@@ -278,7 +489,16 @@ impl NativeChatView {
         // row that was not there when it collapsed arrives.
         let collapsible = !rows.is_empty();
         let open = collapsible && dock["hidden"] != true;
-        let header = self.work_dock_header(&rows, collapsible, open, p, cx);
+        // Collapsing or opening, the rows ease their height and fade as the chat's other folds do
+        // (disclosure_motion.rs, its timing and the reduced motion setting), the chevron turning
+        // with them; the bar and the chat box under the dock follow its height.
+        //
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User, of the dock header's collapse: "please make this animate when expanded /
+        // collapsed".
+        let motion = self.disclosure_frame(DOCK_MOTION_KEY, open, cx);
+        let turned = motion.map_or(if open { 1.0 } else { 0.0 }, |frame| frame.log);
+        let header = self.work_dock_header(&rows, collapsible, open, turned, p, cx);
         let mut surface = div()
             .relative()
             .w_full()
@@ -290,7 +510,7 @@ impl NativeChatView {
             .text_size(px(PROSE_SIZE * s))
             .line_height(px(PROSE_LINE_HEIGHT * s))
             .child(header);
-        if open {
+        if open || motion.is_some() {
             let limit = dock["limit"].as_u64().unwrap_or(4) as usize;
             let hidden = rows.len().saturating_sub(limit);
             // "N more need you" opens the rest here, under the first rows, and "Show fewer" folds
@@ -339,7 +559,12 @@ impl NativeChatView {
                         })),
                 );
             }
-            surface = surface.child(list);
+            surface = surface.child(self.disclosure_body_motion(
+                DOCK_MOTION_KEY,
+                motion,
+                0.0,
+                list.into_any_element(),
+            ));
         }
         // Its top edge, which the work items list opens above (chat_pills.rs `toggle_pill_menu`),
         // so the list never covers the button that opened it.
@@ -347,16 +572,21 @@ impl NativeChatView {
         // Its rows' width, which decides what fits beside a question (`dock_row`); a change draws
         // the rows again at the new width.
         let width = self.board.dock_width.clone();
+        let chat = cx.weak_entity();
         Some(
             surface
                 .child(
                     gpui::canvas(
-                        move |bounds, window, _| {
+                        move |bounds, _, cx| {
                             top.set(Some(bounds.top()));
                             let inner = (bounds.size.width.as_f32() - 2.0) / s;
                             if (width.get() - inner).abs() > 0.5 {
                                 width.set(inner);
-                                window.refresh();
+                                // The chat's render is cached: tell it to lay the rows out again.
+                                let chat = chat.clone();
+                                cx.defer(move |cx| {
+                                    let _ = chat.update(cx, |_, cx| cx.notify());
+                                });
                             }
                         },
                         |_, _, _, _| {},
@@ -376,6 +606,7 @@ impl NativeChatView {
         rows: &[Value],
         collapsible: bool,
         open: bool,
+        turned: f32,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -402,9 +633,39 @@ impl NativeChatView {
             let blocked = rows.iter().filter(|row| row["kind"] == "blocked").count() as u64;
             vec![("needs", needs), ("blocked", blocked)]
         };
+        let counts: Vec<(&str, u64)> = counts.into_iter().filter(|(_, count)| *count > 0).collect();
+        let name_of = |group: &str| match group {
+            "needs" => "need you",
+            "blocked" => "blocked",
+            _ => "in progress",
+        };
+        // Each mark takes its name after its count when the header has room for all of them, and
+        // none does when it has not; the tooltips stay either way.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, of the header's marks: "make the icons on the left show name of each when there's
+        // space and not show name when no space". All switch together, never one named alone.
+        let room = match self.board.dock_width.get() {
+            width if width > 0.0 => width,
+            _ => DOCK_ROW_WIDTH_GUESS,
+        } - 12.0
+            - 5.0
+            - 8.0
+            - if board.is_object() { 26.0 + 6.0 } else { 0.0 }
+            - if collapsible { 24.0 + 6.0 } else { 0.0 };
+        let named_width: f32 = counts
+            .iter()
+            .map(|(group, count)| {
+                14.0 + 5.0
+                    + dock_text_width(&count.to_string(), 13.0, p, cx)
+                    + 4.0
+                    + dock_text_width(name_of(group), 13.0, p, cx)
+            })
+            .sum::<f32>()
+            + 12.0 * counts.len().saturating_sub(1) as f32;
+        let named = named_width <= room;
         let marks: Vec<AnyElement> = counts
             .into_iter()
-            .filter(|(_, count)| *count > 0)
             .map(|(group, count)| {
                 let (icon, color) = super::coordinator_board::group_look(group);
                 let color = color.map_or(p.muted, |color| gpui::rgb(color).into());
@@ -437,6 +698,9 @@ impl NativeChatView {
                             .font_features(gpui::FontFeatures(vec![("tnum".into(), 1)].into()))
                             .child(count.to_string()),
                     )
+                    .when(named, |mark| {
+                        mark.child(div().ml(px(-1.0 * s)).child(name_of(group)))
+                    })
                     .into_any_element()
             })
             .collect();
@@ -498,7 +762,17 @@ impl NativeChatView {
                         .justify_center()
                         .flex_shrink_0()
                         .rounded(px(6.0 * s))
-                        .child(super::ask_card::chevron(open, p)),
+                        // Down while open, up while collapsed, turning between them.
+                        .child(
+                            svg()
+                                .path("titlebar/chevron-down.svg")
+                                .size(px(14.0 * s))
+                                .flex_shrink_0()
+                                .text_color(p.muted)
+                                .with_transformation(gpui::Transformation::rotate(
+                                    gpui::percentage(0.5 * (1.0 - turned.clamp(0.0, 1.0))),
+                                )),
+                        ),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
                     let kind = if open { "hideWorkDock" } else { "showWorkDock" };
@@ -533,7 +807,14 @@ impl NativeChatView {
             .flex_shrink_0()
             .rounded(px(7.0 * s))
             .chat_cursor_pointer()
-            .chat_filled(fills, true)
+            // A plain button, as the chevron beside it: no fill at rest, the usual fills on hover
+            // and press, and pressed while the list it opens is shown.
+            //
+            // CDXC:Coordinators 2026-11-11 DECISION:
+            // User: "make the button on the right Work items not have bg behind it when not
+            // hovered so it's plain button".
+            .hover(move |style| style.bg(fills.hover))
+            .active(move |style| style.bg(fills.pressed))
             .when(shown, |button| button.bg(fills.pressed))
             .tooltip(|window, cx| {
                 gpui_component::tooltip::Tooltip::new("Work items").build(window, cx)
@@ -576,8 +857,16 @@ impl NativeChatView {
         let s = p.scale;
         let key = text(row, "key");
         let open_key = format!("dock-row:{key}");
-        let open = self.expanded.contains(&open_key);
-        let (icon, color) = status_look(&text(row, "status"), p);
+        // A Ghostex page's row never opens to a second line: a click opens the page, and its other
+        // actions are the ⋯ menu that takes the age's place under the pointer (`page_row_menu`).
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User: "for pages that need me, lets show 3 dots on hover (appears in place of the time
+        // basically) where i can click to see show in chat/dismiss/snooze. don't make it expand
+        // on click since it's useless when it expands".
+        let page_row = row["page"] == true && row["open"].is_object();
+        let open = self.expanded.contains(&open_key) && !page_row;
+        let (icon, color) = row_mark(row, p);
         let body = p.strengthened(p.prose);
         let busy = row["busy"] == true;
         let title = text(row, "title");
@@ -585,6 +874,9 @@ impl NativeChatView {
         // The answers, the look every place shares (work_actions.rs); a row with none shows what
         // it asks for in their place (Open or Reply).
         let answers: Vec<Value> = row["buttons"].as_array().cloned().unwrap_or_default();
+        // An ask with answers has Reply as its last answer (work_actions.rs `reply_answer`).
+        let reply_answer = (!answers.is_empty() && row["reply"].is_object())
+            .then(|| Self::reply_answer(&row["reply"], &text(row, "replied"), busy));
         let action = if answers.is_empty() && row["needs"] == true {
             dock_row_action(row)
         } else {
@@ -617,7 +909,12 @@ impl NativeChatView {
                 })
                 .collect(),
         };
-        let all_width = buttons_width(&widths);
+        // Reply always shows, so the answers give way to "+N" before it does: it is the one answer
+        // that takes anything, so a closed row keeps it one click away.
+        let reply_width = reply_answer.as_ref().map_or(0.0, |answer| {
+            dock_button_width(&text(answer, "label"), true, false, p, cx) + 6.0
+        });
+        let all_width = buttons_width(&widths) + reply_width;
         let fit = all_width <= beside_room;
         // Closed: the answers that fit, then "+N"; opened, all of them beside or under.
         let shown = if open || fit {
@@ -631,7 +928,7 @@ impl NativeChatView {
                 } else {
                     0.0
                 };
-                if buttons_width(&widths[..shown]) + chip <= beside_room {
+                if buttons_width(&widths[..shown]) + chip + reply_width <= beside_room {
                     break;
                 }
                 shown -= 1;
@@ -665,19 +962,76 @@ impl NativeChatView {
                 .into_any_element(),
             );
         }
+        if let Some(answer) = &reply_answer {
+            buttons.extend(self.work_answer_buttons(
+                &format!("{key}:reply"),
+                std::slice::from_ref(answer),
+                busy,
+                p,
+                cx,
+            ));
+        }
         let beside = !open || fit;
         // The question: one cut line closed. Opened, the title whole and its detail under it in
         // the quieter colour, four lines and then "more"; with no detail the title takes that rule.
         let title_width =
             row_width - DOCK_LEAD - age_width - if beside { all_width + DOCK_GAP } else { 0.0 };
         let detail = text(row, "body");
-        let question = if !open {
+        let title_runs = &row["titleRuns"];
+        let count = text(row, "count");
+        let question = if page_row && !count.is_empty() {
+            // The page's name, then how much it still asks; the name gives way first.
             div()
                 .flex_1()
                 .min_w_0()
-                .text_color(body)
-                .truncate()
-                .child(title.to_string())
+                .flex()
+                .gap(px(6.0 * s))
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_color(body)
+                        .child(title.to_string()),
+                )
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .text_color(p.card_muted)
+                        .child(count.to_string()),
+                )
+                .into_any_element()
+        } else if !open {
+            div()
+                .flex_1()
+                .min_w_0()
+                .child(self.ask_title(
+                    &key,
+                    &title,
+                    title_runs,
+                    true,
+                    body,
+                    PROSE_SIZE,
+                    PROSE_LINE_HEIGHT,
+                    p,
+                    cx,
+                ))
+                .into_any_element()
+        } else if detail.is_empty() && title_runs.is_array() {
+            div()
+                .flex_1()
+                .min_w_0()
+                .child(self.ask_title(
+                    &key,
+                    &title,
+                    title_runs,
+                    false,
+                    body,
+                    PROSE_SIZE,
+                    PROSE_LINE_HEIGHT,
+                    p,
+                    cx,
+                ))
                 .into_any_element()
         } else if detail.is_empty() {
             div()
@@ -701,16 +1055,20 @@ impl NativeChatView {
                 .flex()
                 .flex_col()
                 .gap(px(2.0 * s))
-                .child(
-                    div()
-                        .whitespace_normal()
-                        .text_color(body)
-                        .child(title.to_string()),
-                )
-                .child(self.ask_detail(
+                .child(self.ask_title(
+                    &key,
+                    &title,
+                    title_runs,
+                    false,
+                    body,
+                    PROSE_SIZE,
+                    PROSE_LINE_HEIGHT,
+                    p,
+                    cx,
+                ))
+                .child(self.ask_markdown(
                     &format!("detail:{key}"),
                     &detail,
-                    title_width,
                     p.card_muted,
                     PROSE_SIZE,
                     PROSE_LINE_HEIGHT,
@@ -756,6 +1114,29 @@ impl NativeChatView {
         } else {
             under_answers = buttons;
         }
+        if page_row {
+            let hover = gpui::SharedString::from(format!("dock-page-row:{key}"));
+            let page = row["open"].clone();
+            let menu = page_row_menu(row);
+            let right_menu = menu.clone();
+            head = head
+                .group(hover.clone())
+                .child(self.page_row_age(&key, &age, &hover, menu, p, cx))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.invoke(page.clone(), cx);
+                }))
+                .on_mouse_down(
+                    gpui::MouseButton::Right,
+                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                        cx.stop_propagation();
+                        this.show_dock_row_menu(right_menu.clone(), event.position, window, cx);
+                    }),
+                );
+            if let Some(page_id) = row["pageId"].as_str() {
+                self.refresh_page_counts(page_id, cx);
+            }
+            return div().w_full().child(head).into_any_element();
+        }
         head = head
             .child(
                 div()
@@ -792,13 +1173,22 @@ impl NativeChatView {
                     .children(under_answers),
             );
         }
-        let mut parts: Vec<AnyElement> = row["chips"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .enumerate()
-            .map(|(index, chip)| self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx))
-            .collect();
+        // A work item ask's line is one line naming its own item, then the other items that wait
+        // on its answer; names give way with an ellipsis, its own item's last (`item_line`).
+        let item_line = row["waitedBy"].is_array();
+        let mut parts: Vec<AnyElement> = if item_line {
+            self.item_line(&key, row, p, cx)
+        } else {
+            row["chips"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .enumerate()
+                .map(|(index, chip)| {
+                    self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx)
+                })
+                .collect()
+        };
         let said: Vec<String> = row["detail"]
             .as_array()
             .into_iter()
@@ -826,9 +1216,17 @@ impl NativeChatView {
                     .into_any_element(),
             );
         }
+        // Reply and Open are buttons on the row when they show there (an answer, or the one button
+        // of a row with no answers), never a second time among the icons.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, of an opened page row with the Open button and an Open icon under it: "2 open
+        // buttons? seriously fam?".
+        let reply_shown = reply_answer.is_some() || action == Some("Reply");
+        let open_shown = action == Some("Open");
         let actions = json!({
-            "reply": row["reply"],
-            "open": row["open"],
+            "reply": if reply_shown { Value::Null } else { row["reply"].clone() },
+            "open": if open_shown { Value::Null } else { row["open"].clone() },
             "showInChat": row["showInChat"],
             "dismiss": row["dismiss"],
             "snooze": row["snooze"],
@@ -848,7 +1246,8 @@ impl NativeChatView {
                             .min_w_0()
                             .min_h(px(28.0 * s))
                             .flex()
-                            .flex_wrap()
+                            .when(!item_line, |line| line.flex_wrap())
+                            .when(item_line, |line| line.overflow_hidden())
                             .items_center()
                             .gap_x(px(8.0 * s))
                             .gap_y(px(4.0 * s))
@@ -863,6 +1262,537 @@ impl NativeChatView {
             .bg(p.foreground.opacity(0.03))
             .child(head)
             .child(under)
+            .into_any_element()
+    }
+
+    /// An opened ask row's line: its own work item's name, then, when one other item waits on
+    /// its answer, "· <that item> waits on this", or "· N others wait" that opens the list of
+    /// them. It stays one line: a name too long is cut with an ellipsis and whole in its tooltip,
+    /// the other names giving way before the row's own item does, and the words and dots never
+    /// do. Its other parts (the steps to follow) come after.
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// User, of a line that read "<item> · <item> waits on this" with its dot left hanging: only
+    /// the item's name (the row's mark says whether it holds that item up); one other item that
+    /// waits is named, more are counted; and the line is cut, never wrapped.
+    fn item_line(
+        &self,
+        key: &str,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let s = p.scale;
+        let chips: Vec<Value> = row["chips"].as_array().cloned().unwrap_or_default();
+        let dot = || {
+            div()
+                .flex_shrink_0()
+                .text_color(p.muted)
+                .opacity(0.6)
+                .child("\u{b7}")
+                .into_any_element()
+        };
+        // A name with its stack icon, cut at the end when it must give way (`shrink`, against
+        // the others' weights, down to `floor`) and whole in its tooltip; `command` makes it a
+        // link. Another item's name gives way first but keeps a few words.
+        let name = |id: String, label: String, shrink: f32, floor: f32, command: Value| {
+            let tip = label.clone();
+            div()
+                .id(gpui::SharedString::from(id))
+                .flex_shrink(shrink)
+                .min_w(px(floor * s))
+                .flex()
+                .items_center()
+                .gap(px(6.0 * s))
+                .text_color(p.card_muted)
+                .child(
+                    svg()
+                        .path("titlebar/stack.svg")
+                        .size(px(14.0 * s))
+                        .flex_shrink_0()
+                        .text_color(p.muted),
+                )
+                .child(div().min_w_0().truncate().child(label))
+                .tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+                })
+                .when(command.is_object(), |part| {
+                    part.chat_cursor_pointer()
+                        .hover(|style| style.text_color(p.foreground))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.invoke(command.clone(), cx);
+                        }))
+                })
+                .into_any_element()
+        };
+        let mut parts = Vec::new();
+        for chip in chips.iter().filter(|chip| text(chip, "kind") == "item") {
+            parts.push(name(
+                format!("dock-item:{key}"),
+                text(chip, "label"),
+                1.0,
+                60.0,
+                chip["command"].clone(),
+            ));
+        }
+        let waited: Vec<Value> = row["waitedBy"].as_array().cloned().unwrap_or_default();
+        match waited.as_slice() {
+            [] => {}
+            [other] => {
+                if !parts.is_empty() {
+                    parts.push(dot());
+                }
+                parts.push(name(
+                    format!("dock-waits:{key}"),
+                    text(other, "title"),
+                    8.0,
+                    110.0,
+                    other["command"].clone(),
+                ));
+                parts.push(
+                    div()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .text_color(p.card_muted)
+                        .child("waits on this")
+                        .into_any_element(),
+                );
+            }
+            several => {
+                if !parts.is_empty() {
+                    parts.push(dot());
+                }
+                let rows: Vec<Value> = several
+                    .iter()
+                    .map(|other| {
+                        json!({ "label": text(other, "title"), "command": other["command"] })
+                    })
+                    .collect();
+                parts.push(
+                    div()
+                        .id(gpui::SharedString::from(format!("dock-waits:{key}")))
+                        .role(gpui::Role::Button)
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .text_color(p.card_muted)
+                        .underline()
+                        .chat_cursor_pointer()
+                        .hover(|style| style.text_color(p.foreground))
+                        .child(format!("{} others wait", several.len()))
+                        .on_click(
+                            cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                                cx.stop_propagation();
+                                let at = event.position();
+                                let in_main = this
+                                    .open_main_window(cx)
+                                    .is_none_or(|main| main == window.window_handle());
+                                if in_main {
+                                    this.show_chat_menu_at(rows.clone(), at, 240.0, window, cx);
+                                } else {
+                                    this.show_chat_menu_in_window_at(
+                                        rows.clone(),
+                                        at,
+                                        240.0,
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            }),
+                        )
+                        .into_any_element(),
+                );
+            }
+        }
+        // The steps to follow, and any other part, after the names.
+        for (index, chip) in chips
+            .iter()
+            .enumerate()
+            .filter(|(_, chip)| text(chip, "kind") != "item")
+        {
+            parts.push(
+                div()
+                    .flex_shrink_0()
+                    .child(self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx))
+                    .into_any_element(),
+            );
+        }
+        parts
+    }
+
+    /// A work item ask's title: one plain line cut at its end (`one_line`, a closed row or card),
+    /// or wrapping (opened), with its references (`#562`, a Markdown link) clickable the way a
+    /// question's are (`link_words`, from the core's `titleRuns`); a click on a link opens it
+    /// only, never the row.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn ask_title(
+        &self,
+        key: &str,
+        title: &str,
+        runs: &Value,
+        one_line: bool,
+        color: gpui::Hsla,
+        size: f32,
+        line_height: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        if !runs.is_array() {
+            return div()
+                .min_w_0()
+                .text_size(px(size * s))
+                .line_height(px(line_height * s))
+                .text_color(color)
+                .when(one_line, |title| title.truncate())
+                .when(!one_line, |title| title.whitespace_normal())
+                .child(title.to_string())
+                .into_any_element();
+        }
+        let words = self.link_words(
+            &format!("ask-title:{key}"),
+            super::link_words::LinkWords {
+                plain: title.to_string(),
+                runs,
+                size,
+                line_height,
+                weight: FontWeight::NORMAL,
+                color,
+            },
+            p,
+            cx,
+        );
+        if !one_line {
+            return words;
+        }
+        // One line: the words past the row's width wrap out of sight below it.
+        div()
+            .min_w_0()
+            .h(px(line_height * s))
+            .overflow_hidden()
+            .child(words)
+            .into_any_element()
+    }
+
+    /// A work item ask's description as the chat renders a message's text (`text_view_look`, the
+    /// same Markdown view: its line breaks and paragraphs, bold, italic, code, links, lists, and
+    /// `#562` linking to the project's GitHub), in the quieter colour at `size`; four rendered
+    /// lines and then "more", which shows the rest. Headings are bold lines at the text's size,
+    /// and a table or picture shows as its plain text (`compact_markdown`).
+    ///
+    /// It is drawn as its blocks (each paragraph, list item and code block its own Markdown view,
+    /// `description_blocks`), each measured, so the cut counts whole lines: the blocks that fit in
+    /// four lines show whole, the next one is cut after its last whole line that fits, and "more"
+    /// is the next line under it. The gaps between blocks do not count as lines.
+    ///
+    /// CDXC:Coordinators 2026-11-11 DECISION:
+    /// User, of an ask's description drawn as one flat run: "no new lines or markdown rendering
+    /// here which is wrong pls fix. also please make links like #562 clickable pls like we did in
+    /// regular chat (we have code for this already)".
+    ///
+    /// CDXC:Coordinators 2026-11-11 DECISION:
+    /// User, of the cut showing the top half of a line above "more": "please avoid the text
+    /// cutting above more?? make more part of the text for ex and cut at x lines then show more
+    /// on next line instead of doing what you're doing now". A height cap fell inside a line
+    /// whenever paragraph and list gaps came before it; the cut now falls between whole lines.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn ask_markdown(
+        &self,
+        id: &str,
+        words: &str,
+        color: gpui::Hsla,
+        size: f32,
+        line_height: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let more_key = format!("more:{id}");
+        let line = line_height * s;
+        let blocks = description_blocks(words);
+        // Each block's height at its last paint, as whole lines (`None` until measured).
+        let cells: Vec<Rc<Cell<f32>>> = blocks
+            .iter()
+            .enumerate()
+            .map(|(index, block)| {
+                self.disclosure_motion.borrow_mut().height(
+                    &format!("ask-markdown:{id}:{index}:{}", block.text.len()),
+                    "rendered",
+                )
+            })
+            .collect();
+        let lines: Vec<Option<usize>> = cells
+            .iter()
+            .map(|cell| {
+                let height = cell.get();
+                (height > 0.0).then(|| ((height / line).round() as usize).max(1))
+            })
+            .collect();
+        let total: Option<usize> = lines.iter().copied().sum();
+        let long = total.is_some_and(|total| total > DOCK_QUESTION_LINES);
+        let whole = long && self.expanded.contains(&more_key);
+        // How many lines each block shows: all, a whole number of its first ones, or none.
+        let mut budget = DOCK_QUESTION_LINES;
+        let shown: Vec<Option<usize>> = lines
+            .iter()
+            .map(|lines| {
+                let lines = lines.unwrap_or(usize::MAX);
+                if !long || whole {
+                    return Some(lines);
+                }
+                if budget == 0 {
+                    return None;
+                }
+                let take = lines.min(budget);
+                budget -= take;
+                Some(take)
+            })
+            .collect();
+        let chat = cx.weak_entity();
+        let mut column = div().w_full().min_w_0().flex().flex_col();
+        for (index, block) in blocks.iter().enumerate() {
+            let Some(take) = shown[index] else {
+                break;
+            };
+            let view = self.text_view_look(
+                format!("ask-markdown:{id}:{index}"),
+                compact_markdown(&block.text),
+                &Value::Null,
+                p,
+                super::rich_markdown::TextLook {
+                    color,
+                    semibold: false,
+                    size,
+                    line_height,
+                },
+                cx,
+            );
+            let measured = cells[index].clone();
+            let chat = chat.clone();
+            let rendered = div().relative().w_full().min_w_0().child(view).child(
+                gpui::canvas(
+                    move |bounds, _, cx| {
+                        let natural = bounds.size.height.as_f32();
+                        if (measured.get() - natural).abs() > 0.5 {
+                            measured.set(natural);
+                            // The chat's render is cached: tell it to draw again at this height.
+                            let chat = chat.clone();
+                            cx.defer(move |cx| {
+                                let _ = chat.update(cx, |_, cx| cx.notify());
+                            });
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full(),
+            );
+            // A block cut after `take` of its lines shows exactly those lines.
+            let cut = lines[index].is_some_and(|lines| take < lines);
+            let gap = match index {
+                0 => 0.0,
+                _ if block.tight => 4.0 * s,
+                _ => super::markdown_style::paragraph_gap(p),
+            };
+            column = column.child(
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .pt(px(gap))
+                    .when(cut, |part| {
+                        part.h(px(gap + take as f32 * line)).overflow_hidden()
+                    })
+                    .child(rendered),
+            );
+        }
+        if !long {
+            return column.into_any_element();
+        }
+        column
+            .child(self.show_more_pill(&format!("more:{id}"), more_key, whole, line_height, p, cx))
+            .into_any_element()
+    }
+
+    /// A page row's right end: its age, and over it while the row is hovered the ⋯ that opens its
+    /// menu (`page_row_menu`), as a board card's age and ⋯ (coordinator_board.rs `age_slot`).
+    fn page_row_age(
+        &self,
+        key: &str,
+        age: &str,
+        hover: &gpui::SharedString,
+        menu: Vec<Value>,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        div()
+            .relative()
+            .flex_shrink_0()
+            .min_w(px(26.0 * s))
+            .h(px(PROSE_LINE_HEIGHT * s))
+            .flex()
+            .items_center()
+            .justify_end()
+            .child(
+                div()
+                    .text_color(p.muted)
+                    .group_hover(hover.clone(), |style| style.opacity(0.0))
+                    .child(age.to_string()),
+            )
+            .child(
+                div()
+                    .id(gpui::SharedString::from(format!("dock-page-menu:{key}")))
+                    .role(gpui::Role::Button)
+                    .aria_label("More actions")
+                    .absolute()
+                    .right(px(-2.0 * s))
+                    .top(px((PROSE_LINE_HEIGHT - 22.0) / 2.0 * s))
+                    .w(px(26.0 * s))
+                    .h(px(22.0 * s))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(6.0 * s))
+                    .opacity(0.0)
+                    .group_hover(hover.clone(), |style| style.opacity(1.0))
+                    .chat_cursor_pointer()
+                    .hover(|style| style.bg(p.foreground.opacity(0.08)))
+                    .tooltip(|window, cx| {
+                        gpui_component::tooltip::Tooltip::new("More actions").build(window, cx)
+                    })
+                    .child(
+                        svg()
+                            .path("titlebar/dots.svg")
+                            .size(px(14.0 * s))
+                            .text_color(p.card_muted),
+                    )
+                    .on_click(
+                        cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                            cx.stop_propagation();
+                            this.show_dock_row_menu(menu.clone(), event.position(), window, cx);
+                        }),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    /// Opens a dock row's menu at `at` with the app's dropdown, inside the window it was pressed
+    /// in (the chat's, or the floating Work card's).
+    fn show_dock_row_menu(
+        &mut self,
+        rows: Vec<Value>,
+        at: gpui::Point<gpui::Pixels>,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
+        if rows.is_empty() {
+            return;
+        }
+        let in_main = self
+            .open_main_window(cx)
+            .is_none_or(|main| main == window.window_handle());
+        if in_main {
+            self.show_chat_menu_at(rows, at, 180.0, window, cx);
+        } else {
+            self.show_chat_menu_in_window_at(rows, at, 180.0, window, cx);
+        }
+    }
+
+    /// Asks the page's gxserver how much of it is answered, at most every few seconds while its
+    /// row is drawn, so a pick made in the page shows in the row's count.
+    pub(super) fn refresh_page_counts(&self, page_id: &str, cx: &mut Context<Self>) {
+        let now = web_time::Instant::now();
+        let due = self
+            .board
+            .page_counts_asked
+            .borrow()
+            .get(page_id)
+            .is_none_or(|asked| now.duration_since(*asked) >= PAGE_COUNTS_EVERY);
+        if !due {
+            return;
+        }
+        self.board
+            .page_counts_asked
+            .borrow_mut()
+            .insert(page_id.to_string(), now);
+        let action = json!({ "type": "loadPageQuestionCounts", "pageId": page_id });
+        let chat = cx.weak_entity();
+        cx.defer(move |cx| {
+            let _ = chat.update(cx, |this, cx| this.invoke(action, cx));
+        });
+    }
+
+    /// The control under a cut description or question: "Show more" with a down chevron, "Show
+    /// less" with an up one once open, as the chat's own expander says it (thinking.rs
+    /// `show_more_toggle`), but centred and drawn as a small pill in the quiet glass tones, so it
+    /// reads as a control and not as a word of the text. It sits one line under the last whole
+    /// line, in a line of its own (`line_height`).
+    ///
+    /// CDXC:Coordinators 2026-11-11 DECISION:
+    /// User, of the plain "more" under a description: "also please make more appear centered
+    /// and with better design to indicate that it's not part of the text? right now too bland i
+    /// think". The same pill in the dock row, the Work panel card and the Columns card.
+    pub(super) fn show_more_pill(
+        &self,
+        id: &str,
+        key: String,
+        open: bool,
+        line_height: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        div()
+            .w_full()
+            .min_h(px(line_height * s))
+            .pt(px(4.0 * s))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                div()
+                    .id(gpui::SharedString::from(id.to_string()))
+                    .role(gpui::Role::Button)
+                    .aria_expanded(open)
+                    .aria_label(if open { "Show less" } else { "Show more" })
+                    .h(px(20.0 * s))
+                    .px(px(9.0 * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(4.0 * s))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(p.foreground.opacity(0.08))
+                    .bg(p.foreground.opacity(0.05))
+                    .text_size(px(12.0 * s))
+                    .line_height(px(16.0 * s))
+                    .text_color(p.muted)
+                    .chat_cursor_pointer()
+                    .hover(|style| {
+                        style
+                            .bg(p.foreground.opacity(0.09))
+                            .text_color(p.foreground)
+                    })
+                    .child(
+                        svg()
+                            .path(if open {
+                                "titlebar/chevron-up.svg"
+                            } else {
+                                "titlebar/chevron-down.svg"
+                            })
+                            .size(px(12.0 * s))
+                            .flex_shrink_0()
+                            .text_color(p.muted),
+                    )
+                    .child(if open { "Show less" } else { "Show more" })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        if !this.expanded.remove(&key) {
+                            this.expanded.insert(key.clone());
+                        }
+                        cx.notify();
+                    })),
+            )
             .into_any_element()
     }
 
@@ -911,25 +1841,7 @@ impl NativeChatView {
             .flex()
             .flex_col()
             .child(text_block)
-            .child(
-                div()
-                    .id(gpui::SharedString::from(format!("more:{id}")))
-                    .role(gpui::Role::Button)
-                    .aria_expanded(whole)
-                    .text_size(px(size * s))
-                    .line_height(px(line_height * s))
-                    .text_color(p.muted)
-                    .chat_cursor_pointer()
-                    .hover(|style| style.text_color(p.foreground))
-                    .child(if whole { "less" } else { "more" })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        cx.stop_propagation();
-                        if !this.expanded.remove(&more_key) {
-                            this.expanded.insert(more_key.clone());
-                        }
-                        cx.notify();
-                    })),
-            )
+            .child(self.show_more_pill(&format!("more:{id}"), more_key, whole, line_height, p, cx))
             .into_any_element()
     }
 

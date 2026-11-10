@@ -1177,7 +1177,7 @@ pub(super) fn machine_dialog(
             &colors,
             "Easy Connect code",
             input(&code_input, window, cx),
-            Some("On the other computer, open Settings → Remote, click Connect a computer, then Copy the code."),
+            Some("On the other computer, open Settings → Remote, click Connect a Computer, then Copy the code."),
             message,
         ));
     }

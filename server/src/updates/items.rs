@@ -35,7 +35,7 @@ static EXTENSION_CATALOG: std::sync::Mutex<Option<(Instant, HashMap<String, Stri
     std::sync::Mutex::new(None);
 
 /// The next list reads every source again (after an update finished).
-pub(super) fn invalidate() {
+pub(crate) fn invalidate() {
     let mut list = LIST.lock().unwrap_or_else(|e| e.into_inner());
     GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     *list = None;
@@ -146,6 +146,10 @@ async fn collect(state: &AppState, fresh: bool) -> Vec<Value> {
         app_item(state),
     );
     let components = component_items();
+    let easy_connect_state = state.clone();
+    let easy_connect = tokio::task::spawn_blocking(move || easy_connect_item(&easy_connect_state))
+        .await
+        .ok();
     let mut items = Vec::new();
     items.push(app);
     items.extend(agents);
@@ -153,7 +157,115 @@ async fn collect(state: &AppState, fresh: bool) -> Vec<Value> {
     items.extend(tools);
     items.extend(extensions);
     items.extend(components);
+    items.extend(easy_connect);
     items
+}
+
+/// The id of the Easy Connect helper's row.
+pub(super) const EASY_CONNECT_ITEM: &str = "easyConnect";
+
+/// `v0.6.0` as numbers; `None` for an answer that isn't a version.
+fn tailcat_version_parts(version: &str) -> Option<(u64, u64, u64)> {
+    let core = version.trim().trim_start_matches('v');
+    let core = core.split(['-', '+', ' ']).next()?;
+    let mut parts = core.split('.').map(|part| part.parse::<u64>().ok());
+    Some((
+        parts.next()??,
+        parts.next().flatten().unwrap_or(0),
+        parts.next().flatten().unwrap_or(0),
+    ))
+}
+
+/*
+CDXC:Updates 2026-11-11 DECISION:
+User (GitHub #559): "i dont want to bundle tailcat tho since it'll increase size of app. also please add tailcat in updates system so we can click to update it when update comes". The Easy Connect helper is a card like the others: its installed version, the newest one (the version this gxserver installs, `TAILCAT_VERSION`, so a Ghostex release that raises it brings the update), and Update when Ghostex installed the helper Easy Connect hosts with and it is older. A helper Ghostex didn't install (Go, Homebrew, the copy a Linux package ships) is shown and left alone. Not installed puts it in the quiet Not installed part with Install. No "Update automatically": an update restarts the helper, which every connected phone notices for a moment, so it runs only on a click.
+SEE-ALSO: server/src/tailcat/install.rs (`start_update`, which keeps the address and the allow-list), server/src/updates/install.rs (`update_easy_connect`).
+*/
+fn easy_connect_item(state: &AppState) -> Value {
+    use crate::tailcat;
+    let installation = tailcat::install::installation_status();
+    let host = tailcat::resolve_host_tailcat_binary(&state.paths);
+    let name = "Easy Connect helper".to_string();
+    let detail = "Lets your phones reach this computer from anywhere".to_string();
+    let Some(host) = host else {
+        let mut item = json!({
+            "id": EASY_CONNECT_ITEM,
+            "kind": "component",
+            "group": "tools",
+            "name": name,
+            "icon": "easyConnect",
+            "detail": detail,
+            "installed": null,
+            "latest": tailcat::install::TAILCAT_VERSION,
+            "major": false,
+            "state": "notInstalled",
+            "canInstall": true,
+            "canUpdate": false,
+            "canAuto": false,
+            "auto": false,
+            "topBar": false,
+            "inUse": false,
+        });
+        if installation.running {
+            item["state"] = json!("updating");
+            item["progress"] = json!(installation.progress);
+        } else if let Some(error) = installation.error {
+            item["error"] = json!(error);
+        }
+        return item;
+    };
+    let managed = tailcat::binary::managed_tailcat_binary();
+    let managed_host = host == managed;
+    let bundled = std::env::current_exe()
+        .ok()
+        .and_then(|exe| ghostex_paths::tailcat::bundled_tailcat_binary(&exe))
+        .is_some_and(|bundled| bundled == host);
+    let installed = state.tailcat_runtime.binary_version(&host);
+    let latest = tailcat::install::TAILCAT_VERSION;
+    let older = match (
+        installed.as_deref().and_then(tailcat_version_parts),
+        tailcat_version_parts(latest),
+    ) {
+        (Some(installed), Some(latest)) => installed < latest,
+        _ => false,
+    };
+    let mut item = item(
+        EASY_CONNECT_ITEM.to_string(),
+        "component",
+        "tools",
+        name,
+        "easyConnect",
+        detail,
+        installed,
+        Some(latest.to_string()),
+    );
+    let can_update = managed_host && older;
+    let settled = if can_update { "available" } else { "upToDate" };
+    let updating = installation.running && installation.updating;
+    let state_word = if updating { "updating" } else { settled };
+    if updating {
+        item.insert("progress".into(), json!(installation.progress));
+    }
+    let note = if bundled {
+        Some("It comes with Ghostex here and updates with it.".to_string())
+    } else if !managed_host {
+        Some(format!(
+            "Easy Connect uses the helper at {}. Ghostex didn't install it, so it leaves it as it is.",
+            host.display()
+        ))
+    } else if can_update {
+        Some("Update restarts the helper once. Paired phones and computers stay paired and reconnect within seconds.".to_string())
+    } else {
+        None
+    };
+    item.insert("note".into(), json!(note));
+    item.insert("state".into(), json!(state_word));
+    item.insert("settledState".into(), json!(settled));
+    item.insert("canUpdate".into(), json!(can_update && !updating));
+    item.insert("canAuto".into(), json!(false));
+    item.insert("topBar".into(), json!(true));
+    item.insert("inUse".into(), json!(false));
+    Value::Object(item)
 }
 
 /// The on-demand extension components gxserver installs itself, while one is installed here:

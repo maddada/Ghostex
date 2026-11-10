@@ -120,7 +120,7 @@ impl GhostexGpuiApp {
         let subscription =
             cx.subscribe(
                 &view,
-                move |this, _view, event: &NativeChatEvent, cx| match event {
+                move |this, view, event: &NativeChatEvent, cx| match event {
                     NativeChatEvent::Broker(message) => {
                         if message["method"] == "presentation"
                             && let Some(key) =
@@ -144,23 +144,31 @@ impl GhostexGpuiApp {
                     NativeChatEvent::SessionDetailsRing => cx.notify(),
                     NativeChatEvent::Host(message) => {
                         let message = message.clone();
+                        // In the side chat's own window (CDXC:SessionChat 2026-11-11 on
+                        // `update_in_chat_window` in native_chat/binding.rs).
+                        let chat_window = view.read(cx).main_window;
                         cx.spawn(async move |this, cx| {
-                            let _ = this.update_in(cx, |this, window, cx| {
-                                // A view the tab has since replaced or dropped speaks for nothing.
-                                if this
-                                    .side_panel_chats
-                                    .get(&tab_id)
-                                    .is_none_or(|chat| chat.view.entity_id() != view_id)
-                                {
-                                    return;
-                                }
-                                this.receive_side_panel_chat_host_action(
-                                    shell_session_id,
-                                    &message,
-                                    window,
-                                    cx,
-                                );
-                            });
+                            Self::update_in_chat_window(
+                                &this,
+                                chat_window,
+                                cx,
+                                move |this, window, cx| {
+                                    // A view the tab has since replaced or dropped speaks for nothing.
+                                    if this
+                                        .side_panel_chats
+                                        .get(&tab_id)
+                                        .is_none_or(|chat| chat.view.entity_id() != view_id)
+                                    {
+                                        return;
+                                    }
+                                    this.receive_side_panel_chat_host_action(
+                                        shell_session_id,
+                                        &message,
+                                        window,
+                                        cx,
+                                    );
+                                },
+                            );
                         })
                         .detach();
                     }

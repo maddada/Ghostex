@@ -644,6 +644,8 @@ pub struct GhostexGpuiApp {
     pub(crate) sidebar_primary_agent_launcher_id: Option<String>,
     /// The open native GPUI app modal, if any; see app/native_app_modal_lifecycle.rs.
     pub(crate) native_app_modal: Option<NativeAppModal>,
+    /// Ghostex pages put aside, still running, oldest first; see app/visual_page_hidden.rs.
+    pub(crate) hidden_visual_pages: Vec<crate::app::visual_page_hidden::HiddenVisualPage>,
     /// The native Automate view, created the first time the view panel shows Automate; see app/native_automate/.
     pub(crate) native_automate: Option<Entity<crate::app::native_automate::NativeAutomateView>>,
     /// The Changes view (app/native_changes/), made the first time it is drawn.

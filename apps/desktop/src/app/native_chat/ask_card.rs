@@ -5,7 +5,7 @@
 //! answers come back as plain text under their question.
 //!
 //! CDXC:SessionChat 2026-10-11 DECISION:
-//! User picked "Clear ask, clear answer" for the agent's question card, then "please same style for the html modal also and the inline questions": all three places a question appears share this look. Amber marks a question waiting for the reader (its tile, progress bars and the picked option), green an answered one, muted one that got no answer. The amber is a light tint, not a strong one ("please make the yellow more subtle" on the page cards, then "yellow + dark all" for the chat): the tile fills 9% with a 14% ring and an 80% icon, a picked option takes a 32% border over a 4% wash with an 85% mark.
+//! User picked "Clear ask, clear answer" for the agent's question card, then "please same style for the html modal also and the inline questions": all three places a question appears share this look. Amber (the questions pink since 2026-11-11, see `ask_color`) marks a question waiting for the reader (its tile, progress bars and the picked option), green an answered one, muted one that got no answer. The tint is a light one, not a strong one ("please make the yellow more subtle" on the page cards, then "yellow + dark all" for the chat): the tile fills 9% with a 14% ring and an 80% icon, a picked option takes a 32% border over a 4% wash with an 85% mark.
 //!
 //! CDXC:SessionChat 2026-10-11 SEE-ALSO:
 //! The phone's copy is apps/mobile/app/src/chat/native/cards/askCard.tsx; the HTML question pages draw it in server/src/visual_pages/kit.rs. Change them together.
@@ -32,9 +32,17 @@ pub(super) enum AskTone {
     Quiet,
 }
 
-/// The colour a waiting question and the option the reader picked share.
+/// The colour a waiting question and the option the reader picked share: the questions pink.
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// User: "let's change these to the same #F472B6 color that we use to represent questions everywhere", then "All four" for the places that still drew a waiting question in amber. A question waiting for the reader (its tile's "?" badge, progress bars, the form's Waiting pill, the picked option, the star on a recommended answer, the jump highlight) takes the pink the sidebar's question dot uses (`QUESTION_COLOR`): #f472b6 on a dark chat, #be185d on a light one (the marked "Needs you" heading's pair, `NEED_DARK` and `NEED_LIGHT` in marked_look.rs), at the strengths the amber had. It supersedes the amber of 2026-10-11 and the user's #D2A024 badge (Q294 A, 2026-10-19). Answered stays green and a question that got no answer stays muted. The phone (cards/askCard.tsx) and the HTML pages (server/src/visual_pages/kit.rs) keep the same values.
 pub(super) fn ask_color(p: &ChatAppearance) -> Hsla {
-    rgb(if p.light { 0xb45309 } else { 0xfbbf24 }).into()
+    rgb(if p.light {
+        super::marked_look::NEED_LIGHT
+    } else {
+        super::marked_look::NEED_DARK
+    })
+    .into()
 }
 
 /// The question bubble the answered question cards' tile shows.
@@ -535,7 +543,7 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        // A pick waiting to be sent is a light amber tint; once sent it reads green at full strength.
+        // A pick waiting to be sent is a light pink tint; once sent it reads green at full strength.
         let (hue, edge, wash, ink) = if option.answered {
             (p.success(), 0.55, 0.08, 1.0)
         } else {

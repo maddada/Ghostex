@@ -84,6 +84,11 @@ list requests, answer or read a secret, enroll an owner key, get a pairing code 
 connection details with an empty code), or ask to pair over SSH (`/api/pairOverSsh` takes only the
 token file); a request is never approved by the caller that asked (`ApprovalStore::approve_plain`).
 A GBot API chat takes input only from you (`api_chat_refused`): its text comes from outside Ghostex.
+A thread's approval card relayed to its coordinator's chat is answered only by you
+(`relayed_card_refusal`): gxserver refuses a relayed answer (`relayedFrom`) from anyone but your
+own computer and phones, and while the card waits, an approval answer to that thread and any typing
+or Enter into its terminal from an agent's session token, another computer's agents, extensions or
+guests. Escape and Ctrl-C still pass (they cancel; coordinators stop stuck threads that way).
 
 ### Chief's head role
 
@@ -317,6 +322,11 @@ Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairi
   approved key goes on the allow-list of both helpers at once (they start again once with it), no
   saved address list names the door, and the door stops when the window closes; a removed key
   still restarts the helpers at once.
+- The relay check (`server/src/tailcat/relay_check.rs`) has a tailcat client key of its own beside
+  each helper's key (`relay-check.private.json`). It is on no allow-list and is never added to
+  one: gxserver says hello with it to this computer's own address, the helper logs the hello and
+  refuses the key, and that log line is all the check uses. While a pairing code is shown its
+  refused hello is not a knock.
 - `/api/pairDevice` (public) takes `deviceKey` (P-256, `ecdsaP256Sha256`) and optionally the
   phone's `approverKey`, consumes the code, and answers `{ status: "pending", pendingId, words }`.
   It creates a `pairingApproveDevice` approval request (target: the pending id; the detail names

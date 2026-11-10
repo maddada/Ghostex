@@ -47,6 +47,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ToggleSummary
         | ActionKind::SetVerbose
         | ActionKind::SetDetailLevel
+        | ActionKind::SetQuietView
         | ActionKind::LoadWork
         | ActionKind::RewindOpen
         | ActionKind::RewindCancel
@@ -189,6 +190,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::CoordinatorBoardChange
         | ActionKind::CoordinatorBoardAnswer
         | ActionKind::JumpToWorkCard
+        | ActionKind::LoadPageQuestionCounts
         | ActionKind::DismissWorkDockCard
         | ActionKind::SnoozeWorkAsk
         | ActionKind::ShowInChat
@@ -373,6 +375,7 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::CoordinatorBoardChange
             | ActionKind::CoordinatorBoardAnswer
         | ActionKind::JumpToWorkCard
+        | ActionKind::LoadPageQuestionCounts
         | ActionKind::DismissWorkDockCard
         | ActionKind::SnoozeWorkAsk
         | ActionKind::ShowInChat

@@ -406,7 +406,18 @@ pub(in crate::server) async fn route_http(
                     StatusCode::BAD_REQUEST,
                     rpc_error(
                         "badRequest",
-                        "Request body must be valid JSON.",
+                        "Ghostex couldn't read the request it was sent. Try again.",
+                        Some(request_id),
+                    ),
+                );
+            }
+            Err(ReadBodyError::Incomplete) => {
+                return routed_json(
+                    Some(endpoint.path),
+                    StatusCode::BAD_REQUEST,
+                    rpc_error(
+                        "incompleteRequest",
+                        "The request didn't arrive whole: the connection dropped while it was being sent. Try again.",
                         Some(request_id),
                     ),
                 );

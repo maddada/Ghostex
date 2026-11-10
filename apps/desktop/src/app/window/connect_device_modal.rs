@@ -38,6 +38,8 @@ const ICON_CHECK: &str = "modals/settings/check.svg";
 const ICON_PHONE: &str = "modals/settings/device-mobile.svg";
 const ICON_COMPUTER: &str = "modals/settings/device-desktop.svg";
 const ICON_CONNECTED: &str = "modals/settings/circle-check-filled.svg";
+const ICON_HELPER: &str = "modals/settings/plug-connected.svg";
+const ICON_ALERT: &str = "modals/settings/alert-triangle.svg";
 
 /// The short website link that redirects to the latest Android APK.
 pub(crate) const GHOSTEX_ANDROID_INSTALL_URL: &str = "https://ghostex.dev/android";
@@ -99,6 +101,9 @@ pub(crate) enum ConnectDeviceCommand {
     /// Install the helper if needed, turn SSH access and Easy Connect on; the host reports each
     /// step with `prepare_progress` and answers with `prepared`.
     Prepare,
+    /// Install the Easy Connect helper (the window's Install button); the host reports each step
+    /// with `helper_install_progress` and answers with `helper_installed` or `needs_helper`.
+    InstallHelper,
     /// Read the code and the waiting devices (opening the door for a new phone while this window
     /// shows); the host answers with `poll_answered`.
     Poll,
@@ -133,6 +138,11 @@ enum Stage {
     Preparing(Option<String>),
     /// Turning on failed; the message and Try again.
     Failed(String),
+    /// The Easy Connect helper isn't on this computer: what that means and Install (with why the
+    /// last install failed, when it did).
+    NeedsHelper(Option<String>),
+    /// The helper is installing; the line says which step.
+    InstallingHelper(Option<String>),
     /// The code (or "Getting a code ready…" until it arrives), and a waiting device when one asks.
     Ready,
     /// Approved: waiting for the device to finish pairing on its next ask.
@@ -216,6 +226,33 @@ impl GpuiConnectDeviceWindow {
             self.stage = Stage::Preparing(Some(note));
             cx.notify();
         }
+    }
+
+    /*
+    CDXC:RemotePairing 2026-11-11 DECISION:
+    GitHub #559: the window opened on "Getting a code ready" and stayed there on a Mac without the Easy Connect helper, with "Reinstall Ghostex" in Settings, which cannot bring the helper back (the Mac app doesn't carry it, by the user's choice: "i dont want to bundle tailcat tho since it'll increase size of app"). The square the code appears in now says the helper isn't installed yet, with one Install button, each step of the install while it runs, a plain error with Try again when it fails, and what works meanwhile; the code appears in the same window once the helper is in.
+    */
+    /// The Easy Connect helper is missing (`error`: why the last install failed).
+    pub(crate) fn needs_helper(&mut self, error: Option<String>, cx: &mut Context<Self>) {
+        self.stage = Stage::NeedsHelper(error);
+        cx.notify();
+    }
+
+    /// A step of the helper's install ("Downloading the build tools… 40%").
+    pub(crate) fn helper_install_progress(&mut self, note: Option<String>, cx: &mut Context<Self>) {
+        if matches!(
+            self.stage,
+            Stage::InstallingHelper(_) | Stage::NeedsHelper(_) | Stage::Preparing(_)
+        ) {
+            self.stage = Stage::InstallingHelper(note);
+            cx.notify();
+        }
+    }
+
+    /// The helper is in: the rest of turning on runs (`prepare_progress`, then `prepared`).
+    pub(crate) fn helper_installed(&mut self, cx: &mut Context<Self>) {
+        self.stage = Stage::Preparing(Some("Turning on Easy Connect…".to_string()));
+        cx.notify();
     }
 
     /// Easy Connect is on (or couldn't be turned on): start asking for the code.
@@ -308,6 +345,12 @@ impl GpuiConnectDeviceWindow {
         }
         self.poll_in_flight = true;
         (self.host)(ConnectDeviceCommand::Poll, cx);
+    }
+
+    fn install_helper(&mut self, cx: &mut Context<Self>) {
+        self.stage = Stage::InstallingHelper(None);
+        cx.notify();
+        (self.host)(ConnectDeviceCommand::InstallHelper, cx);
     }
 
     fn retry(&mut self, cx: &mut Context<Self>) {
@@ -511,12 +554,122 @@ impl GpuiConnectDeviceWindow {
             .into_any_element()
     }
 
+    /// What works while the helper isn't installed.
+    fn meanwhile_line(&self) -> Div {
+        div()
+            .text_size(px(12.0))
+            .line_height(px(17.0))
+            .text_color(hsla(self.palette.muted))
+            .child(if self.tailscale_enabled {
+                "Meanwhile, phones on Tailscale or on your own network can still connect."
+            } else {
+                "Meanwhile, phones on your own network can still connect."
+            })
+    }
+
+    /// The helper isn't installed: what it is, Install, and what works meanwhile; after a failed
+    /// install, why it failed and Try again.
+    fn helper_missing_content(&self, error: Option<String>, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        let failed = error.is_some();
+        let (icon, icon_color, heading) = if failed {
+            (ICON_ALERT, p.destructive, "The helper didn't install")
+        } else {
+            (
+                ICON_HELPER,
+                p.foreground,
+                "The Easy Connect helper isn't installed yet",
+            )
+        };
+        let explanation: SharedString = match error {
+            Some(error) => error.into(),
+            None => "Your phone reaches this computer through it. Ghostex builds it here once: it downloads about 65 MB of build tools and takes a few minutes.".into(),
+        };
+        v_flex()
+            .w_full()
+            .items_center()
+            .gap(px(12.0))
+            .px(px(32.0))
+            .text_center()
+            .child(modal_icon(icon, 26.0, icon_color))
+            .child(
+                div()
+                    .w_full()
+                    .text_size(px(15.0))
+                    .line_height(px(21.0))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(hsla(p.foreground))
+                    .child(heading),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .text_size(px(13.0))
+                    .line_height(px(19.0))
+                    .text_color(hsla(if failed { p.destructive } else { p.muted }))
+                    .child(explanation),
+            )
+            .child(div().pt(px(4.0)).w(px(180.0)).child(modal_action_button(
+                &p,
+                "connect-device-install-helper",
+                if failed { "Try again" } else { "Install the helper" },
+                None,
+                ModalButtonTone::Primary,
+                false,
+                |this: &mut Self, _window, cx| this.install_helper(cx),
+                cx,
+            )))
+            .child(div().w_full().pt(px(4.0)).child(self.meanwhile_line()))
+            .into_any_element()
+    }
+
+    /// The helper installing: its step, and that closing the window doesn't stop it.
+    fn helper_installing_content(&self, note: Option<String>) -> AnyElement {
+        let p = self.palette;
+        v_flex()
+            .w_full()
+            .items_center()
+            .gap(px(10.0))
+            .px(px(32.0))
+            .text_center()
+            .child(
+                h_flex()
+                    .gap(px(8.0))
+                    .items_center()
+                    .child(modal_spinner(p.foreground))
+                    .child(
+                        div()
+                            .text_size(px(15.0))
+                            .line_height(px(21.0))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(hsla(p.foreground))
+                            .child("Installing the Easy Connect helper"),
+                    ),
+            )
+            .child(
+                self.muted(note.unwrap_or_else(|| "Starting…".to_string()))
+                    .w_full(),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .pt(px(6.0))
+                    .text_size(px(12.0))
+                    .line_height(px(17.0))
+                    .text_color(hsla(p.muted))
+                    .child("It keeps going if you close this window. The code appears here when it's done."),
+            )
+            .into_any_element()
+    }
+
     /// The dashed square the code appears in (`height` tall): what is happening, or what went
     /// wrong.
     fn code_placeholder(&self, height: f32, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
         let content = match &self.stage {
             Stage::Failed(message) => self.failed_content(message.clone(), cx),
+            Stage::NeedsHelper(error) => self.helper_missing_content(error.clone(), cx),
+            Stage::InstallingHelper(note) => self.helper_installing_content(note.clone()),
             Stage::Preparing(Some(note)) => self.spinner_line(note.clone()),
             _ => self.spinner_line("Getting a code ready…"),
         };
@@ -580,7 +733,12 @@ impl GpuiConnectDeviceWindow {
         let p = self.palette;
         let ready = self.stage == Stage::Ready && self.code.is_some();
         if !ready {
-            return self.code_placeholder(140.0, cx);
+            // The helper's screens need more room than the code box.
+            let tall = matches!(
+                self.stage,
+                Stage::NeedsHelper(_) | Stage::InstallingHelper(_)
+            );
+            return self.code_placeholder(if tall { 300.0 } else { 140.0 }, cx);
         }
         let text = self
             .code

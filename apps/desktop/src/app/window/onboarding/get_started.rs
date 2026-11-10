@@ -1094,8 +1094,7 @@ impl GpuiOnboardingWindow {
             })
             .collect::<Vec<_>>();
         let readout = theme_preset_label(dark_scheme, &selected_preset);
-        let colourfulness_value =
-            colourfulness.map_or(COLOURFULNESS_LAST_POSITION / 2, |step| step) as f64;
+        let colourfulness_value = colourfulness.unwrap_or(COLOURFULNESS_LAST_POSITION / 2) as f64;
         let colourfulness_text = colourfulness.map_or("Custom".to_string(), |step| {
             colourfulness_name(colourfulness_points(step)).to_string()
         });

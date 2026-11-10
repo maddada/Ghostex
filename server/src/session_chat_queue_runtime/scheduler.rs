@@ -891,7 +891,11 @@ impl SessionChatQueueRuntime {
         let gateway_idle = hermes_gate == Some(crate::hermes_gateway::TypedMessageGate::Ready);
         let question_waits = crate::session_approval::session_awaits_answer(&session)
             && !question_card_left_standing(&session, &composer);
+        // CDXC:SessionChat 2026-11-11 WHY: an agent killed at its approval leaves the session in attention for good (no hook ends it; seen live on a throwaway server, the two queued rows still held a minute later). Nothing on screen can take the row's Return as an answer once the agent is confirmed gone, so the row goes to the send path, which restarts the agent first (`restart_exited_agent_before_send` in send_heal.rs).
+        let agent_gone =
+            crate::session_chat_start_failure::agent_gone_confirmed(project_id, session_id);
         if !gateway_idle
+            && !agent_gone
             && (question_waits
                 || !session_chat_queue_activity_is_deliverable(&session, generated_at))
         {
@@ -991,8 +995,11 @@ impl SessionChatQueueRuntime {
         User: "i came back to my pc all these were paused and waiting since yesterday.... and as soon as i switched to terminal on your session then things started flowing. this is crazy bad. please fix this." The coordinator (S90:P3lv0:G1pif) sat idle from 02:14 to 10:09 UTC with page answers, a message and thread reports queued. The head row was an ordinary queued row, and this gate read only the cached screen verdict, which (by everything logged) said Claude's input box was unreadable (Claude repaints only cells it thinks changed, so a frame damaged by a grid resize stays damaged on an idle Claude). Only a held startup send got a fresh look and the redraw (held_redraw.rs); no capture, redraw or write reached the session for eight hours, until the terminal view's resize repainted Claude.
         Asked "Should a queued message show in the chat why it is still waiting?" (Q752), the user answered "show reason" and added "and please self heal better...... this should never happen again". So a row this gate holds climbs a ladder, every step logged in session-chat-send-failures.jsonl (thresholds and reasons in wait_reason.rs): a cached verdict never holds a row on its own (the first tick it would, the screen is read fresh, then every 2 s easing to 15 s); at 20 s Claude gets a Ctrl+L (`sessionChatQueueRedrewClaude`, once a minute); at 45 s any agent gets a one-row resize and back, which is what the terminal view did (`sessionChatQueueResizedForRepaint`, every two minutes, repaint_nudge.rs); at a minute the row says why it waits and is logged (`sessionChatQueueHeldForInputBox`); at three minutes it goes to the send path anyway (`sessionChatQueueLastResort`), whose own fresh capture, repaint and dialog and question guards decide, and which marks it Not sent with the reason and Retry after two more minutes of finding no box. A startup send keeps waiting instead of Not sent (the 2026-10-11 DECISION in session_chat_send_wake.rs). Every reason a row waits for is shown on it after a minute, and a watchdog hands a row held five minutes by a gate that should have let it go, on a session idle by every signal, to the same last resort (`sessionChatQueueWatchdog`).
         */
+        // A gone agent's shell is no input box that will ever come back on its own: the send path
+        // restarts the agent and waits for its box (the 2026-11-11 WHY above).
         if !pending_box
             && !channel_ready
+            && !agent_gone
             && composer.blocks_message_for(composer_agent.as_deref())
             && !composer.should_dismiss()
         {
@@ -1090,7 +1097,16 @@ impl SessionChatQueueRuntime {
     }
 
     /// The transcript read happens outside the `gates` lock, which deliveries also take.
+    /// CDXC:SessionChat 2026-11-11 WHY: an agent killed mid-turn leaves a transcript that reads Working for good (a tool result with no reply), so after #551 settled its activity idle the queue still held every row behind the dead turn. Once the detection funnel confirms the agent gone (session_chat_start_failure.rs), its transcript says nothing about what runs now: the row goes to the send path, which restarts the agent on its own conversation and holds the message for its input box (`restart_exited_agent_before_send` in send_heal.rs).
     fn transcript_lifecycle_is_working(&self, key: &str, session: &Value) -> bool {
+        if let (Some(project_id), Some(session_id)) = (
+            session_text(session, "projectId"),
+            session_text(session, "sessionId"),
+        ) {
+            if crate::session_chat_start_failure::agent_gone_confirmed(&project_id, &session_id) {
+                return false;
+            }
+        }
         let mut transcript = {
             let Ok(mut gates) = self.gates.lock() else {
                 return true;

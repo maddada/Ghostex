@@ -84,7 +84,7 @@ pub(super) struct QuietEdit {
 }
 
 /// `segments` as one line of text, each coloured piece highlighted in its colour.
-fn styled_segments(segments: Vec<QuietSegment>) -> StyledText {
+pub(super) fn styled_segments(segments: Vec<QuietSegment>) -> StyledText {
     let mut line = String::new();
     let mut colours = Vec::new();
     for (piece, colour) in segments {
@@ -104,7 +104,7 @@ fn styled_segments(segments: Vec<QuietSegment>) -> StyledText {
 }
 
 /// An icon of a quiet line, lit with the line on hover.
-fn line_icon(path: &'static str, size: f32, p: &ChatAppearance) -> AnyElement {
+pub(super) fn line_icon(path: &'static str, size: f32, p: &ChatAppearance) -> AnyElement {
     svg()
         .path(path)
         .size(px(size * p.scale))
@@ -115,7 +115,7 @@ fn line_icon(path: &'static str, size: f32, p: &ChatAppearance) -> AnyElement {
 }
 
 /// The green check of a finished line or step.
-fn check(p: &ChatAppearance) -> AnyElement {
+pub(super) fn check(p: &ChatAppearance) -> AnyElement {
     svg()
         .path("titlebar/check.svg")
         .size(px(12.0 * p.scale))
@@ -150,7 +150,7 @@ pub(super) fn finished_mark<'a>(messages: impl IntoIterator<Item = &'a Value>) -
 }
 
 /// The turning loader of a line or step whose call still runs.
-fn loader(key: &str, p: &ChatAppearance, reduce_motion: bool) -> AnyElement {
+pub(super) fn loader(key: &str, p: &ChatAppearance, reduce_motion: bool) -> AnyElement {
     let glyph = svg()
         .path("titlebar/loader2.svg")
         .size(px(12.0 * p.scale))
@@ -246,7 +246,7 @@ impl NativeChatView {
     /// One quiet line: its icons, its text truncated to the column, and the chevron that shows on
     /// hover or while it is open. The line is as wide as what it says, so its hover covers only it.
     #[allow(clippy::too_many_arguments)]
-    fn quiet_line(
+    pub(super) fn quiet_line(
         &self,
         key: String,
         spoken: String,

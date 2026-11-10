@@ -298,7 +298,7 @@ pub fn model_menu_projection(
         "rows": rows,
         // The tab's Legacy models list: a toggle below the current models, whose rows follow
         // them in `rows` while it is open.
-        "legacy": match model_menu_legacy_count(&entries, tab, query, favorites, &current) {
+        "legacy": match model_menu_legacy_count(&entries, tab, query) {
             0 => Value::Null,
             count => json!({
                 "label": crate::menus::catalog::LEGACY_GROUP_LABEL,

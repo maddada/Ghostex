@@ -26,6 +26,9 @@ pub enum ChatRpcMethod {
     ReadSessionChatResource,
     /// A published page's picture for its chat card (`server/src/visual_pages/thumbnail.rs`).
     ReadVisualPageThumbnail,
+    /// A published page's state for the dock: how many of its questions the reader's draft
+    /// answers and how many it asks (`server/src/visual_pages/source.rs`).
+    ReadVisualPageSource,
     SendSessionChatMessage,
     InterruptSessionChat,
     AnswerSessionChatPrompt,
@@ -109,6 +112,7 @@ impl ChatRpcMethod {
             Self::ReadSessionChatImage => "readSessionChatImage",
             Self::ReadSessionChatResource => "readSessionChatResource",
             Self::ReadVisualPageThumbnail => "readVisualPageThumbnail",
+            Self::ReadVisualPageSource => "readVisualPageSource",
             Self::SendSessionChatMessage => "sendSessionChatMessage",
             Self::InterruptSessionChat => "interruptSessionChat",
             Self::AnswerSessionChatPrompt => "answerSessionChatPrompt",
@@ -166,6 +170,7 @@ impl ChatRpcMethod {
             "readSessionChatImage" => Self::ReadSessionChatImage,
             "readSessionChatResource" => Self::ReadSessionChatResource,
             "readVisualPageThumbnail" => Self::ReadVisualPageThumbnail,
+            "readVisualPageSource" => Self::ReadVisualPageSource,
             "sendSessionChatMessage" => Self::SendSessionChatMessage,
             "interruptSessionChat" => Self::InterruptSessionChat,
             "answerSessionChatPrompt" => Self::AnswerSessionChatPrompt,

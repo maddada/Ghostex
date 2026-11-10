@@ -59,14 +59,118 @@ fn reach_line(tab: &RemoteTab) -> &'static str {
         return "Checking Easy Connect…";
     };
     if status.installing || tab.install_pending {
-        "Installing Easy Connect…"
+        "Installing the Easy Connect helper…"
+    } else if !status.binary_found {
+        "The Easy Connect helper isn't installed yet."
     } else if status.enabled {
         "Easy Connect is on. Only the devices in this list get in."
-    } else if !status.binary_found {
-        "Easy Connect isn't set up yet. Connect a phone sets it up."
     } else {
         "Easy Connect is off. Phones on Tailscale or your own network can still connect."
     }
+}
+
+const ICON_HELPER: &str = "modals/settings/plug-connected.svg";
+
+/*
+CDXC:RemotePairing 2026-11-11 DECISION:
+GitHub #559: with the helper missing, this card said "Part of Easy Connect is missing on this computer. Reinstall Ghostex to get it back." and its switch was greyed out, and a reinstall can't bring the helper back (the Mac app doesn't carry it). The card now says the helper isn't installed yet, with Install, the install's step while it runs, a plain error with Try again when it fails, and what works meanwhile. Easy Connect starts by itself once the helper is in when it is turned on.
+*/
+/// The Easy Connect helper isn't installed: what it is and Install; while it installs, its step;
+/// after a failed install, why and Try again. `None` once the helper is in.
+fn helper_missing_block(
+    tab: &RemoteTab,
+    t: &RemoteTokens,
+    rpc: bool,
+    cx: &mut Context<RemoteTab>,
+) -> Option<AnyElement> {
+    let status = tab.easy_connect.as_ref()?;
+    if status.binary_found {
+        return None;
+    }
+    let installing = status.installing || tab.install_pending;
+    if installing {
+        let step = status
+            .install_progress
+            .clone()
+            .unwrap_or_else(|| "Starting…".to_string());
+        return Some(
+            v_flex()
+                .w_full()
+                .gap(px(4.0))
+                .child(
+                    h_flex()
+                        .w_full()
+                        .min_w_0()
+                        .items_center()
+                        .gap(px(8.0))
+                        .child(spinner("remote-helper-install-spinner", 14.0, t.muted, 900))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .text_size(px(13.0))
+                                .line_height(px(18.57))
+                                .text_color(hsla(t.foreground))
+                                .child(step),
+                        ),
+                )
+                .child(detail(
+                    t,
+                    "This takes a few minutes and keeps going if you close Settings.",
+                    true,
+                ))
+                .into_any_element(),
+        );
+    }
+    let failure = tab
+        .install_request_error
+        .clone()
+        .or_else(|| status.install_error.clone());
+    let failed = failure.is_some();
+    let message = if failed {
+        "The Easy Connect helper didn't install."
+    } else {
+        "The Easy Connect helper isn't installed yet. Phones reach this computer through it from anywhere; Ghostex builds it here once, in a few minutes."
+    };
+    Some(
+        v_flex()
+            .w_full()
+            .gap(px(6.0))
+            .child(
+                h_flex()
+                    .w_full()
+                    .min_w_0()
+                    .items_center()
+                    .gap(px(8.0))
+                    .child(settings_icon(
+                        if failed { ICON_ALERT } else { ICON_HELPER },
+                        14.0,
+                        if failed { t.failed } else { t.foreground },
+                    ))
+                    .child(div().flex_1().min_w_0().child(detail(t, message, true)))
+                    .child(compact_button(
+                        &t.p,
+                        "remote-helper-install",
+                        if failed { "Try again" } else { "Install" },
+                        None,
+                        Look::Filled,
+                        28.0,
+                        14.0,
+                        None,
+                        !rpc,
+                        None,
+                        |tab: &mut RemoteTab, _window, cx| tab.install_easy_connect_helper(cx),
+                        cx,
+                    )),
+            )
+            .children(failure.map(|message| error_line(t, message)))
+            .child(detail(
+                t,
+                "Meanwhile, phones on Tailscale or on your own network can still connect.",
+                true,
+            ))
+            .into_any_element(),
+    )
 }
 
 /// SSH access is off: a warning line with Turn on, since phones and computers sign in over SSH.
@@ -146,7 +250,8 @@ pub(super) fn reach_card(
         "remote-easy-connect-switch",
         "Easy Connect",
         is_on,
-        !rpc || status.is_none() || !binary_found,
+        // A switch left on without the helper can still be turned off.
+        !rpc || status.is_none() || (!binary_found && !is_on),
         None,
         |tab: &mut RemoteTab, checked, _window, cx| {
             tab.set_easy_connect_state(json!({ "enabled": checked, "kind": "setEnabled" }), cx);
@@ -154,13 +259,14 @@ pub(super) fn reach_card(
         cx,
     );
     let mut body = v_flex().w_full().min_w_0().gap(px(10.0));
+    body = body.children(helper_missing_block(tab, t, rpc, cx));
     body = body.children(ssh_off_line(tab, t, rpc, cx));
+    // Without the helper, the block above says what is wrong and what to do.
     let errors = [
-        tab.install_request_error.clone(),
         status
             .as_ref()
-            .and_then(|status| status.install_error.clone()),
-        status.as_ref().and_then(|status| status.last_error.clone()),
+            .filter(|status| status.binary_found)
+            .and_then(|status| status.last_error.clone()),
         tab.request_error.clone(),
     ];
     body = body.children(
@@ -175,7 +281,7 @@ pub(super) fn reach_card(
             .child(settings_button_sized(
                 &t.p,
                 "remote-connect-phone",
-                "Connect a phone",
+                "Connect a Device",
                 Some(ICON_QRCODE),
                 ButtonVariant::Default,
                 ButtonSize::Sm,
@@ -187,7 +293,7 @@ pub(super) fn reach_card(
             .child(settings_button_sized(
                 &t.p,
                 "remote-connect-computer",
-                "Connect a computer",
+                "Connect a Computer",
                 Some(ICON_DEVICE_DESKTOP),
                 ButtonVariant::Outline,
                 ButtonSize::Sm,

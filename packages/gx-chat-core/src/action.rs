@@ -86,6 +86,7 @@ action_kinds! {
     CoordinatorBoardChange => "coordinatorBoardChange",
     CoordinatorBoardAnswer => "coordinatorBoardAnswer",
     JumpToWorkCard => "jumpToWorkCard",
+    LoadPageQuestionCounts => "loadPageQuestionCounts",
     DismissWorkDockCard => "dismissWorkDockCard",
     SnoozeWorkAsk => "snoozeWorkAsk",
     ShowInChat => "showInChat",
@@ -288,6 +289,8 @@ action_kinds! {
     ToggleSummary => "toggleSummary",
     SetVerbose => "setVerbose",
     SetDetailLevel => "setDetailLevel",
+    // Quiet View (`transcript/quiet_view.rs`): `on` true or false, or null for the default.
+    SetQuietView => "setQuietView",
     Retry => "retry",
     // Retry on the card of a session whose computer is offline (`session/computer.rs`).
     ComputerRetry => "computerRetry",

@@ -1,7 +1,7 @@
 //! The voice panel's text box, under the transcript, and Space while the panel has the keyboard.
 //!
 //! CDXC:VoiceMode 2026-11-10 DECISION: User: "Add an input area at the bottom for the voice agent on the phone and on PC, so I can be muted and still type to the voice agent. It controls all of my sessions from the voice agent, and I can type instead of speaking every time. We need a text box at the bottom." A live call shows a text box under the transcript: Enter sends, Shift+Enter is a new line. What is sent goes into the call as the user's turn (the call socket's `text` frame, `server/src/voice_agent/socket.rs`): gxserver shows it as the user's line, cuts a reply being spoken and answers it like a spoken one, by voice and in the transcript, with all its tools. Typing never unmutes and never holds Talk. The phone does its part in `src/voice/`.
-//! CDXC:VoiceMode 2026-11-10 DECISION: User, via the coordinator: holding Space to talk keeps working while the voice panel has the keyboard, except while the text box itself is focused, where Space types a space. The panel takes the keyboard from a press on its transcript or its text box (`panel_copy.rs`), which leaves the main window inactive and its own Space hold idle, so the panel holds Talk on Space itself and tells the app when it would, for the header's keycap. A Space hold ends when the panel loses the keyboard, as the main window's does.
+//! CDXC:VoiceMode 2026-11-10 DECISION: User, via the coordinator: holding Space to talk keeps working while the voice panel has the keyboard, except while the text box itself is focused, where Space types a space. The panel takes the keyboard from a press on its transcript or its text box (`panel_copy.rs`), which leaves the main window inactive and its own Space hold idle, so the panel holds Talk on Space itself and tells the app when it would, for the header's keycap. A Space hold ends when the panel loses the keyboard, as the main window's does. Escape in the text box gives the keyboard back to the main window (user, 2026-11-11: "also i can't type in the text box"; the fix itself is the first responder kept in `GpuiAppToastWindowChrome.m`).
 
 use gpui::{
     AnyElement, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
@@ -72,6 +72,28 @@ impl VoicePanelWindow {
             self.text_box
                 .update(cx, |input, cx| input.set_value("", window, cx));
         }
+    }
+
+    /// Escape while the text box has the keyboard: the main window gets it back, the way closing a
+    /// modal hands it back (`activate_main_window_after_app_modal`); what was typed stays.
+    pub(super) fn text_box_escape(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if event.keystroke.key != "escape"
+            || event.keystroke.modifiers.modified()
+            || !self.text_box_focused(window, cx)
+        {
+            return;
+        }
+        cx.stop_propagation();
+        self.focus.focus(window, cx);
+        let app = self.app.clone();
+        cx.defer(move |cx| {
+            let _ = app.update(cx, |app, cx| app.activate_main_window_after_app_modal(cx));
+        });
     }
 
     /// A key down anywhere in the panel: the text box keeps every key it has, Space holds Talk

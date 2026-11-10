@@ -46,6 +46,67 @@ pub(crate) fn page_questions(
     Some((title, parse_questions(&html)))
 }
 
+/// Whether a question on the page still has no answer in the reader's draft: its kit writes every
+/// question's key into the draft (`collect()` in kit.rs), as `"skipped"` while a question has no
+/// pick and no text, so a key that is missing or skipped is a question left. False once the page
+/// was sent, and for a page with no questions unless it waits to be marked seen. The desktop's page window reads it for the dot on a
+/// hidden page's tab in the chat header (apps/desktop/src/app/visual_page_hidden.rs).
+pub(crate) fn page_questions_left(gxserver_state_dir: &Path, id: &str) -> bool {
+    if page_answered(gxserver_state_dir, id) {
+        return false;
+    }
+    // A page that asks nothing but waits to be marked seen (publish.rs) is left until it is.
+    if read_record(gxserver_state_dir, id).and_then(|record| record.get("awaitsSeen")?.as_bool())
+        == Some(true)
+    {
+        return true;
+    }
+    let Some((_, questions)) = page_questions(gxserver_state_dir, id) else {
+        return false;
+    };
+    let draft = read_record(gxserver_state_dir, id)
+        .and_then(|record| record.get("draft")?.get("kit").cloned())
+        .unwrap_or(serde_json::Value::Null);
+    questions
+        .iter()
+        .any(|question| match draft.get(&question.key) {
+            None => true,
+            Some(serde_json::Value::String(value)) => value == "skipped",
+            Some(_) => false,
+        })
+}
+
+/// How many of the page's questions the reader's draft answers, and how many it asks:
+/// `(answered, total)`, a question counting as answered once its key in the draft has a pick or
+/// text (anything but missing or `"skipped"`, as `page_questions_left` reads it). `None` for a page
+/// with no questions or one gxserver does not have. A draft answered on the page but not sent
+/// yet counts; once the page is sent every question counts as answered.
+///
+/// CDXC:Coordinators 2026-11-11 DECISION:
+/// User, of a page row in the dock: "also show (10/16 answered) or (14 questions) next to the
+/// page name to know how many i need to answer" (gx-chat-core work_cards.rs `page_count`).
+pub(crate) fn page_question_counts(gxserver_state_dir: &Path, id: &str) -> Option<(usize, usize)> {
+    let (_, questions) = page_questions(gxserver_state_dir, id)?;
+    if questions.is_empty() {
+        return None;
+    }
+    if page_answered(gxserver_state_dir, id) {
+        return Some((questions.len(), questions.len()));
+    }
+    let draft = read_record(gxserver_state_dir, id)
+        .and_then(|record| record.get("draft")?.get("kit").cloned())
+        .unwrap_or(serde_json::Value::Null);
+    let answered = questions
+        .iter()
+        .filter(|question| match draft.get(&question.key) {
+            None => false,
+            Some(serde_json::Value::String(value)) => value != "skipped",
+            Some(_) => true,
+        })
+        .count();
+    Some((answered, questions.len()))
+}
+
 /// Whether the page's answers were already sent (they may still wait in the session's queue).
 pub(crate) fn page_answered(gxserver_state_dir: &Path, id: &str) -> bool {
     read_record(gxserver_state_dir, id)

@@ -56,7 +56,7 @@ fn tick(state: &AppState, watches: &Mutex<HashMap<SessionKey, StallWatch>>) {
         working.insert(key.clone());
         let _ = watches
             .entry(key)
-            .or_insert_with(|| StallWatch::new(now))
+            .or_insert_with(|| StallWatch::resumed(session, now))
             .observe(session, now);
     }
     watches.retain(|key, _| working.contains(key));

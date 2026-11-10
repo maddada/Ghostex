@@ -283,6 +283,14 @@ impl NativeChatView {
                     .input
                     .update(cx, |state, cx| state.set_placeholder(hint, window, cx));
             }
+            /*
+            CDXC:Dictate 2026-11-11 FIX:
+            GitHub PR #553 follow-up (the user's Q2280): the box learnt the core's name only as it was first filled, so after the chat core started again a box the reader had typed in still carried the old core's name, and the first key typed in it was refused (a write stamped by another core, gx-chat-core questions/dictation.rs) and undone. A document from a new core now renames the box when the box shows exactly that core's draft: nothing in it can be behind. A box showing anything else keeps the old name, so the core's refusal still hands it the draft as the core has it.
+            */
+            if !core.is_empty() && entry.core != core && entry.input.read(cx).value() == value {
+                entry.core = core.clone();
+                entry.rev = rev;
+            }
             // The saved draft is read as the form appears, so its text can land after the
             // box was made; it fills the box once, never over what the reader typed.
             if !entry.settled && !value.is_empty() {
@@ -428,7 +436,7 @@ impl NativeChatView {
     /// The form `id` names, or its source as code when the document does not carry it (a form in
     /// a subagent's transcript).
     ///
-    /// CDXC:SessionChat 2026-10-11 DECISION: User: the form takes the "Clear ask, clear answer" card (ask_card.rs) like the agent's own question card: an amber tile while it waits, a green check once it is answered (that tile replaces the old Answered chip), the agent's title over a one-line detail, and a filled send button.
+    /// CDXC:SessionChat 2026-10-11 DECISION: User: the form takes the "Clear ask, clear answer" card (ask_card.rs) like the agent's own question card: a pink tile (amber until 2026-11-11) while it waits, a green check once it is answered (that tile replaces the old Answered chip), the agent's title over a one-line detail, and a filled send button.
     pub(super) fn question_form(
         &self,
         id: &str,
@@ -524,7 +532,7 @@ impl NativeChatView {
             format!("{} questions", questions.len())
         };
         // Put off For later (gx-chat-core questions/later.rs): it says so in grey instead of the
-        // amber Waiting, and stays answerable.
+        // pink Waiting, and stays answerable.
         let later = form["later"] == true;
         let held_for = text(form, "heldFor");
         let waiting_for = format!("Waiting for {held_for}");

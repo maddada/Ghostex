@@ -158,6 +158,7 @@ mod view_strip_order;
 mod view_tab_actions;
 pub(crate) mod view_tab_menus;
 pub(crate) mod visual_page_background_pictures;
+pub(crate) mod visual_page_hidden;
 pub(crate) mod visual_page_modal_lifecycle;
 pub(crate) mod visual_page_thumbnails;
 pub(crate) mod voice_agent;

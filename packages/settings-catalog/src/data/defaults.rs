@@ -666,6 +666,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatComposerMatchesTranscriptWidth", J::Bool(false)),
     // CDXC:SessionChat 2026-11-07 SEE-ALSO: Message spacing's user decision is in packages/gx-chat-core/src/transcript/chat_look.rs.
     ("chatMessageSpacing", J::Str("default")),
+    // CDXC:SessionChat 2026-11-11 SEE-ALSO: Quiet View's user decision (coordinators on, other chats and the expanded last turn off) is in packages/gx-chat-core/src/transcript/quiet_view.rs.
+    ("chatQuietViewCoordinators", J::Bool(true)),
+    ("chatQuietViewChats", J::Bool(false)),
+    ("chatQuietViewExpandLast", J::Bool(false)),
     // CDXC:Coordinators 2026-11-05 DECISION: the Board pill opens the side list until the user picks Columns (extras/coordinator_board.rs in gx-chat-core).
     ("coordinatorBoardView", J::Str("list")),
     // CDXC:Coordinators 2026-11-10 DECISION: the board's columns view collapses any column to its strip; Finished today starts collapsed (apps/desktop/src/app/native_chat/coordinator_board.rs `board_columns_body`).
@@ -674,9 +678,9 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("agentGhostexNote", J::Bool(true)),
     // CDXC:AgentGuide 2026-11-02 DECISION: User (#263): "if user asks for browser we ask which the user prefers (internal ghostex browser, or external browser)", and (Q1069) the answer is kept in this setting, which the note and `ghostex agent-guide` then state so agents stop asking. Ask until the user picks.
     ("agentPreviewBrowser", J::Str("ask")),
-    // CDXC:MarkedHandovers 2026-10-11 DECISION: User: "force the marked handovers for coordinators/orchestrator threads and their children by default and make it disabled by default for non-orchestrator/child threads". This switch covers every other session and stays off by default; threads mark regardless, orchestrators unless `orchestratorPlainReplies` is on.
+    // CDXC:MarkedHandovers 2026-10-11 DECISION: User: "force the marked handovers for coordinators/orchestrator threads and their children by default and make it disabled by default for non-orchestrator/child threads". This switch covers every other session and stays off by default; threads mark regardless. Since 2026-11-11 coordinators follow this switch too, unless `orchestratorPlainReplies` is on (CDXC:Coordinators 2026-11-11 DECISION in server/src/coordinators/role.rs).
     ("markedHandovers", J::Bool(false)),
-    // CDXC:MarkedHandovers 2026-10-17 DECISION: User: "please allow launching an orchestrator without the reply style so the orchestrator answers normally. but put "Not recommended" and make it an advanced setting". Off by default, so orchestrators keep marking their handovers; their threads mark their reports either way.
+    // CDXC:MarkedHandovers 2026-10-17 DECISION: User: "please allow launching an orchestrator without the reply style so the orchestrator answers normally. but put "Not recommended" and make it an advanced setting". Off by default; since 2026-11-11 it is the exception to `markedHandovers` for coordinators (with it on they answer in prose even while that switch is on), and their threads mark their reports either way.
     ("orchestratorPlainReplies", J::Bool(false)),
     // CDXC:Coordinators 2026-10-20 DECISION: User: "By default, we just show high and X high, but if he enables this, he can see all of the effort levels ... make the settings advanced." Off by default, so orchestrator effort pickers list only Low, Medium, High and XHigh since 2026-10-31 ("please allow setting low as the orchestrator effort level"; Medium joined on 2026-10-29 with "allow picking medium here but default to high"; `orchestrator_efforts` in packages/gx-chat-core/src/menus/orchestrator_effort.rs).
     ("orchestratorAllEfforts", J::Bool(false)),

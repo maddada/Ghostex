@@ -366,6 +366,7 @@ impl GhostexGpuiApp {
                 sidebar_primary_agent_launcher_id:
                     crate::app::gx_store::read_primary_agent_launcher_id(),
                 native_app_modal: None,
+                hidden_visual_pages: Vec::new(),
                 native_automate: None,
                 native_changes: None,
                 side_panel_chats: HashMap::new(),

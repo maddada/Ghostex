@@ -188,4 +188,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0072_paired_device_link_keys",
     "0073_paired_device_purpose_keys",
     "0074_coordinator_work_items",
+    "0075_coordinator_thread_watch_stamps",
 ];

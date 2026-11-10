@@ -78,6 +78,10 @@ fn settle_with_ids(
                 next_request_id(),
             ) {
                 effects.extend(more);
+            } else if let Some(more) =
+                crate::extras::work_cards::settle_page_counts(state, *request_id, answer.clone())
+            {
+                effects.extend(more);
             } else if let Some(more) = crate::extras::coordinator_board::settle_answer(
                 state,
                 *request_id,
@@ -222,6 +226,17 @@ fn settle_with_ids(
     state.extras.search.folds.quiet_style = state.transcript_view.chat_look.agent_work
         != crate::transcript::chat_look::AgentWork::Default;
     state.extras.search.folds.hidden = state.transcript_view.hidden_work();
+    // A closed Quiet View line's rows are out of sight (`transcript/quiet_view.rs`).
+    let mut items = items;
+    if state.extras.search.open {
+        for rows in
+            crate::transcript::quiet_view::closed_rows(state, context, &state.extras.search.folds)
+        {
+            for row in items.iter_mut().take(rows.end).skip(rows.start) {
+                *row = Value::Null;
+            }
+        }
+    }
     search::settle(&mut state.extras.search, &items);
     settle_activity_clock(state, context);
     arm_timers(state, context);

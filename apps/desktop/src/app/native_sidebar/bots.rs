@@ -18,12 +18,13 @@ use serde_json::json;
 
 use super::appearance::SidebarAppearance;
 use super::model::NativeSidebarGroup;
-use super::navigation::SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH;
+use super::navigation::{
+    SIDEBAR_TOP_ROW_BUTTON_HEIGHT, SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH, SIDEBAR_TOP_ROW_BUTTON_RADIUS,
+    SIDEBAR_TOP_ROW_BUTTON_WIDTH,
+};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 
-/// The top-row toggle's width, which the row's compaction math counts.
-pub(crate) const BOTS_TOGGLE_WIDTH: f32 = 30.0;
 /// The hairline and its gap before the Space-row slot, which the slot capacity counts.
 pub(crate) const BOTS_SPACE_SLOT_DIVIDER_WIDTH: f32 = 5.0;
 
@@ -74,7 +75,7 @@ impl GhostexGpuiApp {
                     cx,
                 )
                 .size(px(28.0 * scale))
-                .rounded(px(6.0 * scale))
+                .rounded(px(SIDEBAR_TOP_ROW_BUTTON_RADIUS * scale))
                 .border_1()
                 .border_color(appearance.foreground.opacity(0.08))
                 .cursor_pointer()
@@ -105,11 +106,11 @@ impl GhostexGpuiApp {
             cx,
         )
         .when(cfg!(target_os = "windows"), |button| button.occlude())
-        .h(px(28.0 * scale))
-        .w(px(BOTS_TOGGLE_WIDTH * scale))
+        .h(px(SIDEBAR_TOP_ROW_BUTTON_HEIGHT * scale))
+        .w(px(SIDEBAR_TOP_ROW_BUTTON_WIDTH * scale))
         .flex_shrink(1.0)
         .min_w(px(SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH * scale))
-        .rounded(px(5.0 * scale))
+        .rounded(px(SIDEBAR_TOP_ROW_BUTTON_RADIUS * scale))
         .cursor_default()
         .when(bots_mode, |button| button.bg(appearance.selected))
         .into_any_element()

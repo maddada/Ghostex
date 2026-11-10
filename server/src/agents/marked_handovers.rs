@@ -56,10 +56,21 @@ pub(crate) fn marked_handovers_enabled(paths: &GxserverPaths) -> bool {
     bool_setting(paths, SETTING_KEY)
 }
 
-/// Whether orchestrators answer without markers (no note in their role), read fresh like
-/// [`marked_handovers_enabled`].
+/// Whether Coordinators answer without markers is on, read fresh like
+/// [`marked_handovers_enabled`]. It only matters while Marked handovers is on (see
+/// [`coordinator_marks_replies`]).
 pub(crate) fn orchestrator_plain_replies(paths: &GxserverPaths) -> bool {
     bool_setting(paths, ORCHESTRATOR_PLAIN_SETTING_KEY)
+}
+
+/// Whether a coordinator writes its replies as marked sections: Marked handovers is on and
+/// Coordinators answer without markers is off. Since 2026-11-11 a coordinator follows the Marked
+/// handovers setting like every other session (CDXC:Coordinators 2026-11-11 DECISION in
+/// coordinators/role.rs `coordinator_guide_for`), which supersedes "orchestrators get it unless
+/// Orchestrators answer without markers is on" in the 2026-10-17 decision above; threads still
+/// mark their reports whatever the settings say.
+pub(crate) fn coordinator_marks_replies(paths: &GxserverPaths) -> bool {
+    marked_handovers_enabled(paths) && !orchestrator_plain_replies(paths)
 }
 
 fn bool_setting(paths: &GxserverPaths, key: &str) -> bool {
@@ -93,7 +104,7 @@ pub(crate) fn with_launch_notes(agent_id: &str, icon: Option<&str>, command: &st
         let role_file = crate::coordinators::coordinator_role_file(&paths);
         if command.contains(role_file.to_string_lossy().as_ref()) {
             // A Claude orchestrator reads its role file at every start and resume, so it is
-            // rewritten here to follow Orchestrators answer without markers; its note is the role's.
+            // rewritten here to follow the Marked handovers settings; its note is the role's.
             let _ = crate::coordinators::ensure_coordinator_role_file(&paths);
             return command.to_string();
         }
@@ -102,8 +113,8 @@ pub(crate) fn with_launch_notes(agent_id: &str, icon: Option<&str>, command: &st
         let pointer_arg = crate::coordinators::codex_developer_instructions_arg(
             crate::coordinators::GUIDE_POINTER_COORDINATOR_INSTRUCTIONS,
         );
-        // An older Codex coordinator keeps only its guide pointer: its work item cards take over
-        // the handover's sections (coordinators/role.rs `COORDINATOR_REPLY_FORMAT`).
+        // An older Codex coordinator keeps only its guide pointer: the guide it points to ends
+        // with the reply format (coordinators/role.rs `coordinator_guide_for`).
         if command.contains(&pointer_arg) {
             return command.to_string();
         }

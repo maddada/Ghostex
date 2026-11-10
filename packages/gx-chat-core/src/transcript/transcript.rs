@@ -211,7 +211,8 @@ fn project_normalized(
     grouped: bool,
 ) -> TranscriptProjection {
     let rendered = fold_chat_transcript(&normalized);
-    let mut final_ids = final_assistant_message_ids(&rendered, working);
+    let mid_response = crate::transcript::turns::mid_response_rows(&normalized);
+    let mut final_ids = final_assistant_message_ids(&rendered, working, &mid_response);
     let (items, demoted) = completed_work_render_items(
         &rendered,
         working,
@@ -221,7 +222,7 @@ fn project_normalized(
     );
     final_ids.retain(|id| !demoted.contains(id));
     let live_ids = if working {
-        rendered[crate::transcript::turns::active_response_start_index(&rendered)..]
+        rendered[crate::transcript::turns::active_response_start_index(&rendered, &mid_response)..]
             .iter()
             .map(|message| message.id.clone())
             .collect()

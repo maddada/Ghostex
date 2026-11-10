@@ -30,6 +30,14 @@ impl GhostexGpuiApp {
     /// is written from the sidebar snapshot), so the header and the sidebar still cannot disagree
     /// about what a session is called; they only stop disagreeing about which session is current.
     pub(crate) fn workarea_header_session_title(&self) -> Option<String> {
+        self.agents_workspace
+            .session(self.workarea_header_session_id()?)
+            .map(|session| session.title.clone())
+            .filter(|title| !title.trim().is_empty())
+    }
+
+    /// The session the breadcrumb names: the focused Agents pane's active tab.
+    pub(crate) fn workarea_header_session_id(&self) -> Option<TerminalSessionId> {
         let workspace = &self.agents_workspace;
         let pane_id = workspace
             .focus_mode_pane
@@ -37,11 +45,7 @@ impl GhostexGpuiApp {
             .chain(std::iter::once(workspace.focused_pane))
             .chain(workspace.rendered_leaf_order())
             .find(|pane_id| workspace.find_leaf(*pane_id).is_some())?;
-        let session_id = workspace.active_session_in_pane(pane_id)?;
-        workspace
-            .session(session_id)
-            .map(|session| session.title.clone())
-            .filter(|title| !title.trim().is_empty())
+        workspace.active_session_in_pane(pane_id)
     }
 
     /// CDXC:Titlebar 2026-09-10 WHY:
@@ -58,6 +62,11 @@ impl GhostexGpuiApp {
             .and_then(|snapshot| snapshot.project_icon_data_url.as_deref())
             .and_then(gpui_project_icon_image_from_data_url);
         let session_title = self.workarea_header_session_title();
+        // The pages this chat's cards opened that are put aside (app/visual_page_hidden.rs).
+        let hidden_page_tabs = self
+            .workarea_header_session_id()
+            .map(|session_id| self.hidden_visual_page_tabs(session_id, cx))
+            .unwrap_or_default();
         // Narrow drops the project half of the breadcrumb, but never leaves the header nameless:
         // with no focused session the project name is all there is to show.
         let show_project_name = !compact || session_title.is_none();
@@ -200,5 +209,10 @@ impl GhostexGpuiApp {
                         )
                     }),
             )
+            // Outside the title's row, which clips its text: the tabs' floating x overhangs a
+            // tab's corner and must not be cut off (render/workarea_header/hidden_pages.rs).
+            .when(!hidden_page_tabs.is_empty(), |this| {
+                this.child(self.render_hidden_visual_page_tabs(hidden_page_tabs, cx))
+            })
     }
 }

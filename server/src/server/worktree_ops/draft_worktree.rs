@@ -534,6 +534,16 @@ async fn read_tray(
         return Ok(unavailable(true));
     };
     let current_branch = source_branch(&context).await;
+    // The base branch list puts the default branch second, after the one picked
+    // (gx-chat-core `detail_part`). Optional, so older phones read the answer as before.
+    let source_path = context.source_path.clone();
+    let default_branch = tokio::task::spawn_blocking(move || {
+        crate::worktree_sessions::resolve_repository_default_branch(&source_path)
+    })
+    .await
+    .ok()
+    .flatten()
+    .map(|branch| branch.name);
     let worktrees: Vec<Value> = options
         .into_iter()
         .filter(|option| !option.is_current_project)
@@ -550,6 +560,7 @@ async fn read_tray(
         "movable": true,
         "projectName": project_name,
         "currentBranch": current_branch,
+        "defaultBranch": default_branch,
         "branches": branches,
         "worktrees": worktrees,
         "remembered": memory.to_value(),

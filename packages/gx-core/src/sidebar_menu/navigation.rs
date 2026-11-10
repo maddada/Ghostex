@@ -265,7 +265,9 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
         MenuCommand::command(message::open_automations_page()),
     ));
     more.push(MenuItem::separator());
-    more.push(intent("Connect a phone", "devices", "remoteSetup"));
+    // CDXC:RemotePairing 2026-11-11 DECISION: User: "rename it in the menu to Connect a Device". The
+    // window it opens keeps its own title until the window's mockup decides it.
+    more.push(intent("Connect a Device", "devices", "remoteSetup"));
     if input.settings.keep_awake_enabled && !input.settings.hide_keep_awake_titlebar_control {
         let active = input.host.keep_awake_minutes;
         let mut children: Vec<MenuItem> = KEEP_AWAKE_OPTIONS
