@@ -245,7 +245,10 @@ pub(crate) async fn handle_event_socket_scoped(
         }
     });
     let sender_task = tokio::spawn(async move {
+        // Unchanged heavy side fields stay out of state frames (chat_frame_dedupe.rs).
+        let mut chat_frames = super::chat_frame_dedupe::ChatFrameMemory::default();
         while let Some(event) = outbound_rx.recv().await {
+            let event = chat_frames.pass(event);
             if send_event_message(&mut socket_sender, event).await.is_err() {
                 break;
             }

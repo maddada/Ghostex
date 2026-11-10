@@ -128,6 +128,7 @@ mod autopilot_runtime;
 pub mod background_tasks;
 mod bot_sync;
 mod browser_tcp;
+mod chat_frame_dedupe;
 mod cef_devtools;
 mod close_after_done_runtime;
 pub mod commit_message_generation;
