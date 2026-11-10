@@ -348,23 +348,26 @@ fn ask_card(
 /// everything else is one status line under it that opens the Work panel. An open ask is drawn
 /// only there, never also under its reply; it leaves the dock once settled.
 pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
-    let Some(work) = state
+    let questions = question_dock_cards(state);
+    let work = state
         .session
         .coordinator_threads
         .as_ref()
-        .and_then(|threads| threads.get("work"))
-    else {
-        return Value::Null;
-    };
-    let items: Vec<&Value> = work["items"]
-        .as_array()
+        .and_then(|threads| threads.get("work"));
+    let items: Vec<&Value> = work
+        .and_then(|work| work["items"].as_array())
         .into_iter()
         .flatten()
         .filter(|item| item["kind"] == "item" && text(item, "status") != "dropped")
         .collect();
-    if items.is_empty() {
-        return Value::Null;
-    }
+    let Some(work) = work.filter(|_| !items.is_empty()) else {
+        // Any agent's chat: only its unanswered forms and pages, with no status line.
+        return if questions.is_empty() {
+            Value::Null
+        } else {
+            json!({ "cards": questions, "line": { "parts": [] } })
+        };
+    };
     let now_ms = context.now_millis();
     let answers = &state.extras.panels.board_answers;
     let mut cards: Vec<(i64, Value)> = Vec::new();
@@ -390,6 +393,8 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
     }
     cards.sort_by(|left, right| right.0.cmp(&left.0));
     let mut cards: Vec<Value> = cards.into_iter().map(|(_, card)| card).collect();
+    // The unanswered forms and pages wait with the asks.
+    cards.extend(questions);
     // Then every blocked line of work that no holding ask already stands for (a stuck thread, or
     // the coordinator's word), newest first.
     let mut blocked: Vec<(i64, Value)> = items
@@ -461,6 +466,40 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
         "cards": cards,
         "line": { "parts": parts },
     })
+}
+
+/// The forms and question pages in the chat's replies that still wait on the reader, newest first,
+/// as compact dock cards: `{key, kind: "questions", form: bool, title, line, command}`, Open going
+/// to the form or page (`goToResource`). They are the ? pill's own unanswered list
+/// (`questions::open_questions::unanswered`), so For later ones stay out and nothing is counted
+/// twice; one leaves the dock once every question on it is answered, skipped or withdrawn.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User, adding to placement C: "also please let's show those inline htmls from the agent replies
+/// there docked above while not answered". Any agent chat that asks, not only a coordinator's.
+fn question_dock_cards(state: &ChatState) -> Vec<Value> {
+    let mut askers: Vec<&crate::transcript::open_questions::Asker> =
+        crate::questions::open_questions::unanswered(state);
+    askers.sort_by_key(|asker| std::cmp::Reverse(asker.at.unwrap_or(0)));
+    askers
+        .into_iter()
+        .map(|asker| {
+            let form = matches!(
+                asker.kind,
+                crate::transcript::open_questions::AskerKind::Form
+            );
+            let open = asker.waiting(None);
+            let noun = if open == 1 { "question" } else { "questions" };
+            json!({
+                "key": format!("dock-questions:{}", asker.id),
+                "kind": "questions",
+                "form": form,
+                "title": if asker.title.is_empty() { "Questions" } else { asker.title.as_str() },
+                "line": format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" }),
+                "command": { "type": "goToResource", "id": asker.id },
+            })
+        })
+        .collect()
 }
 
 /// A line of work's card in the dock: blocked, or finished in the latest turn (`done_key`, with
@@ -795,7 +834,11 @@ fn moving_row(
         4,
         i64::MAX,
         json!({
-            "key": format!("work-moving:{anchor}"),
+            // One key for the chat, whichever reply it sits under: opened, it stays open across
+            // live updates, the end of a turn and a new reply; only the reader folds it (the
+            // user's "this gets collapsed after the turn ends and new text comes in, let's not do
+            // that").
+            "key": "work-moving",
             "kind": "moving",
             "anchorId": anchor,
             "turnId": turn.id,
@@ -812,13 +855,13 @@ fn moving_row(
 /// Who has a moving item, for the Moving list's groups: the user when it asks them something, the
 /// outside thing it waits on (GitHub, a review), the threads working on it, else the coordinator.
 /// Returns its group's rank, key and label, and `{kind, label, agentIcon}` for its icon and the
-/// table's Who column.
+/// line under its title.
 ///
 /// CDXC:Coordinators 2026-11-10 DECISION:
 /// User (Q2207 "B. Grouped by who has it", with "i like the table for wider screen but then
 /// switch to not table when narrower screen"): the opened Moving list groups its rows by who has
 /// them under quiet labels, With you first, then waiting on something outside, then threads
-/// working; a wide chat draws them as the compact table (Item, Where it stands, Who, Age), a
+/// working; a wide chat draws them as the compact table (Item, Where it stands, Age; who has it under the title), a
 /// narrow one and the phone as rows with the full text. The list keeps only Moving items (the
 /// user's "why 12 waiting here??"), so "waiting outside" is a moving item whose thread works
 /// while it also waits on something the coordinator named (`item wait --on`).

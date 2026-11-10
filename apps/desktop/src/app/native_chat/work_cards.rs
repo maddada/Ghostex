@@ -55,7 +55,6 @@ const DOCK_FOLD_KEY: &str = "work-dock-folded";
 /// text column is squeezed below a few words a line.
 const MOVING_TABLE_MIN_WIDTH: f32 = 640.0;
 const MOVING_ITEM_COLUMN: f32 = 200.0;
-const MOVING_WHO_COLUMN: f32 = 110.0;
 const MOVING_AGE_COLUMN: f32 = 36.0;
 
 /// A list row's title, with a session name's dotted underline when the row opens its card.
@@ -82,6 +81,23 @@ fn list_title(
                 p.scale,
             ))
         })
+        .into_any_element()
+}
+
+/// Who has a line of work, as a quiet line under its title: the icon and the name ("Claude ×2",
+/// GitHub, You, Coordinator).
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User, of the table's Who column: "The who part doesn't matter in this, just put it under Item's
+/// title". The table keeps Item, Where it stands and Age; the rows show the same line.
+fn who_line(who: &Value, p: &ChatAppearance) -> AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(6.0 * p.scale))
+        .text_color(p.muted)
+        .child(who_icon(who, p))
+        .child(div().min_w_0().truncate().child(text(who, "label")))
         .into_any_element()
 }
 
@@ -192,7 +208,12 @@ impl NativeChatView {
                     .gap(px(6.0 * s))
                     .children(cards.iter().map(|card| {
                         let key = text(card, "key");
-                        self.open_question_frame(Some(key.as_str()), self.work_card(card, p, cx), p)
+                        let drawn = if card["kind"] == "questions" {
+                            self.dock_questions_card(card, p, cx)
+                        } else {
+                            self.work_card(card, p, cx)
+                        };
+                        self.open_question_frame(Some(key.as_str()), drawn, p)
                     })),
             );
         }
@@ -303,6 +324,65 @@ impl NativeChatView {
                 this.toggle_coordinator_board(pill, window, cx);
             }));
         Some(dock_column.child(line).into_any_element())
+    }
+
+    /// An unanswered form or page in the dock: its title, how many questions it has open, and Open,
+    /// which goes to it (gx-chat-core work_cards.rs `question_dock_cards`).
+    fn dock_questions_card(
+        &self,
+        card: &Value,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let key = text(card, "key");
+        let body = p.strengthened(p.prose);
+        div()
+            .w_full()
+            .min_w_0()
+            .flex()
+            .items_center()
+            .gap(px(8.0 * s))
+            .px(px(12.0 * s))
+            .py(px(8.0 * s))
+            .rounded(px(10.0 * s))
+            .border_1()
+            .border_color(p.input_border)
+            .bg(p.card_panel)
+            .text_size(px(PROSE_SIZE * s))
+            .line_height(px(PROSE_LINE_HEIGHT * s))
+            .child(
+                svg()
+                    .path("titlebar/help-circle.svg")
+                    .size(px(14.0 * s))
+                    .flex_shrink_0()
+                    .text_color(gpui::rgb(
+                        crate::app::native_sidebar::status::QUESTION_COLOR,
+                    )),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .whitespace_normal()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(body)
+                            .child(text(card, "title")),
+                    )
+                    .child(div().text_color(p.card_muted).child(text(card, "line"))),
+            )
+            .child(self.chat_button(
+                format!("dock-open:{key}"),
+                "Open".to_string(),
+                card["command"].clone(),
+                p,
+                cx,
+            ))
+            .into_any_element()
     }
 
     /// A column of cards, or `None` when there are none.
@@ -774,12 +854,6 @@ impl NativeChatView {
                     .child(div().flex_1().min_w_0().child("Where it stands"))
                     .child(
                         div()
-                            .w(px(MOVING_WHO_COLUMN * s))
-                            .flex_shrink_0()
-                            .child("Who"),
-                    )
-                    .child(
-                        div()
                             .w(px(MOVING_AGE_COLUMN * s))
                             .flex_shrink_0()
                             .flex()
@@ -832,7 +906,13 @@ impl NativeChatView {
                             .w(px(MOVING_ITEM_COLUMN * s))
                             .flex_shrink_0()
                             .flex()
-                            .child(list_title(row, &key, index, clickable, body, p)),
+                            .flex_col()
+                            .child(
+                                div()
+                                    .flex()
+                                    .child(list_title(row, &key, index, clickable, body, p)),
+                            )
+                            .child(who_line(who, p)),
                     )
                     .child(
                         div()
@@ -841,18 +921,6 @@ impl NativeChatView {
                             .whitespace_normal()
                             .text_color(p.card_muted)
                             .child(line),
-                    )
-                    .child(
-                        div()
-                            .w(px(MOVING_WHO_COLUMN * s))
-                            .flex_shrink_0()
-                            .flex()
-                            .items_center()
-                            .gap(px(6.0 * s))
-                            .h(px(PROSE_LINE_HEIGHT * s))
-                            .text_color(p.card_muted)
-                            .child(who_icon(who, p))
-                            .child(div().min_w_0().truncate().child(text(who, "label"))),
                     )
                     .child(
                         div()
@@ -868,16 +936,6 @@ impl NativeChatView {
                     .gap(px(8.0 * s))
                     .child(
                         div()
-                            .w(px(20.0 * s))
-                            .h(px(PROSE_LINE_HEIGHT * s))
-                            .flex_shrink_0()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(who_icon(who, p)),
-                    )
-                    .child(
-                        div()
                             .flex_1()
                             .min_w_0()
                             .flex()
@@ -887,6 +945,7 @@ impl NativeChatView {
                                     .flex()
                                     .child(list_title(row, &key, index, clickable, body, p)),
                             )
+                            .child(who_line(who, p))
                             .when(!line.is_empty(), |cell| {
                                 cell.child(
                                     div()
