@@ -46,11 +46,13 @@ pub(super) const BOARD_COLUMNS_MENU: &str = "boardColumns";
 const VIEW_SETTING: &str = "coordinatorBoardView";
 const LIST_VIEW: &str = "list";
 const COLUMNS_VIEW: &str = "columns";
-/// The Done rail's width in the columns view, unscaled.
-const DONE_RAIL: f32 = 36.0;
+/// A collapsed column's strip in the columns view, unscaled.
+const STRIP_WIDTH: f32 = 36.0;
 /// The overlay's distance from the chat's edges, and a column's least width, unscaled.
 const OVERLAY_MARGIN: f32 = 16.0;
-const COLUMN_MIN_WIDTH: f32 = 200.0;
+const COLUMN_MIN_WIDTH: f32 = 240.0;
+/// The setting that lists the columns collapsed to their strip (group ids, comma-separated).
+const COLLAPSED_SETTING: &str = "coordinatorBoardCollapsedColumns";
 
 /// Where a header is drawn: the docked column, the floating card, or the columns overlay.
 #[derive(Clone, Copy, PartialEq)]
@@ -310,6 +312,16 @@ pub(crate) struct CoordinatorBoardView {
     menu_scroll: ScrollHandle,
     /// Each column's rows in the columns view, by group id.
     column_scrolls: std::cell::RefCell<std::collections::HashMap<String, ScrollHandle>>,
+    /// The columns view's row, which scrolls sideways when the open columns do not fit.
+    columns_scroll: ScrollHandle,
+    /// The columns collapsed here, ahead of the settings file (and on the web page, which cannot
+    /// save settings, for as long as the page is open).
+    collapsed_override: Option<Vec<String>>,
+    /// A drag on the row's background that scrolls it: where the pointer went down and the row's
+    /// offset then.
+    pan: Option<(gpui::Pixels, gpui::Pixels)>,
+    /// A card took this mouse press, so the row under it does not start a pan.
+    card_pressed: bool,
     /// The card a board pill in the chat asked to see (`focus` in the core's board), ringed for a
     /// moment once its list has scrolled to it.
     focus: Option<BoardFocus>,
@@ -730,8 +742,58 @@ impl NativeChatView {
         Some(self.board_columns_size().1)
     }
 
-    /// The columns overlay: the header with its switch, then one column per group, each scrolling
-    /// on its own. Empty groups are left out.
+    /// The columns collapsed to their strip: the setting, or the switch's last click here. Finished
+    /// today starts collapsed.
+    fn board_collapsed_columns(&self) -> Vec<String> {
+        if let Some(collapsed) = &self.board.collapsed_override {
+            return collapsed.clone();
+        }
+        let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+        match settings
+            .object()
+            .get(COLLAPSED_SETTING)
+            .and_then(Value::as_str)
+        {
+            Some(list) => list
+                .split(',')
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .collect(),
+            None => vec!["done".to_string()],
+        }
+    }
+
+    /// Collapses a column to its strip, or opens it again, and saves the choice.
+    fn toggle_board_column(&mut self, group: &str, cx: &mut Context<Self>) {
+        let mut collapsed = self.board_collapsed_columns();
+        if let Some(at) = collapsed.iter().position(|id| id == group) {
+            collapsed.remove(at);
+        } else {
+            collapsed.push(group.to_string());
+        }
+        self.host(
+            "setCoordinatorBoardCollapsed",
+            json!({ "columns": collapsed.join(",") }),
+            cx,
+        );
+        self.board.collapsed_override = Some(collapsed);
+        cx.notify();
+    }
+
+    /// The columns overlay: the header with its switch, then one column per group in the board's
+    /// order, each scrolling on its own, or collapsed to its strip. Empty groups are left out.
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// User, of the opened Finished today lane floating over the others: "please make done show as
+    /// a column not show floating. also please allow me to collapse not just done, i wanna be able
+    /// to collapse other ones too so they appear like narrower and other swimlanes have more
+    /// space. if too many open then allow horizontal scroll or grabbing on the bg and dragging to
+    /// scroll". Every column collapses to the narrow strip Done had (its glyph and count, a click
+    /// opens it) and opens in its place in the row; the open ones share the width, never under
+    /// `COLUMN_MIN_WIDTH`, and the row scrolls sideways (trackpad, Shift and the wheel, or a drag
+    /// on its background). Which are collapsed is the `coordinatorBoardCollapsedColumns` setting;
+    /// Finished today starts collapsed. Supersedes 2026-11-05's Done lane over the right side.
     pub(super) fn board_columns_body(
         &mut self,
         p: &ChatAppearance,
@@ -739,7 +801,25 @@ impl NativeChatView {
     ) -> Option<AnyElement> {
         let board = self.board_value()?.clone();
         let s = p.scale;
-        let mut columns = div()
+        let groups = board["groups"].as_array().cloned().unwrap_or_default();
+        let collapsed = self.board_collapsed_columns();
+        let is_collapsed = |group: &Value| collapsed.iter().any(|id| group["id"] == id.as_str());
+        let strips = groups.iter().filter(|group| is_collapsed(group)).count() as f32;
+        let open = groups.len() as f32 - strips;
+        // Each open column's width, so its cards fit their chips to it: the overlay, less the
+        // strips, shared out, never under `COLUMN_MIN_WIDTH` (the row then scrolls sideways).
+        let column = if open > 0.0 {
+            ((self.board_columns_size().0
+                - 24.0
+                - strips * (STRIP_WIDTH + 10.0)
+                - 10.0 * (open - 1.0))
+                / open)
+                .max(COLUMN_MIN_WIDTH)
+        } else {
+            COLUMN_MIN_WIDTH
+        };
+        let scroll = self.board.columns_scroll.clone();
+        let mut row = div()
             .id("chat-coordinator-board-columns-row")
             .flex_1()
             .min_w_0()
@@ -747,84 +827,72 @@ impl NativeChatView {
             .flex()
             .gap(px(10.0 * s))
             .pt(px(6.0 * s))
-            .overflow_x_scroll();
-        let groups = board["groups"].as_array().cloned().unwrap_or_default();
-        // Done is a slim rail at the right edge instead of a lane.
-        //
-        // CDXC:Coordinators 2026-11-05 DECISION:
-        // User (Q1248 "Slim rail"): Done with lots of cards on the right "is useless and shouldn't be
-        // emphasised", keeping the other lanes' width. Done is a narrow muted strip with its check and
-        // count, folded by default with the list's own fold of Done; a click opens its lane over the
-        // right side, never squeezing the others, and a click on the rail or the lane's header folds
-        // it again.
-        let done = groups.iter().find(|group| group["id"] == "done").cloned();
-        let lanes: Vec<&Value> = groups
-            .iter()
-            .filter(|group| group["id"] != "done")
-            .collect();
-        // Each column's width, so its cards fit their chips to it: the overlay, less the rail,
-        // shared out, never under `COLUMN_MIN_WIDTH` (the row then scrolls sideways).
-        let rail = if done.is_some() {
-            DONE_RAIL + 10.0
-        } else {
-            0.0
-        };
-        let shown = lanes.len().max(1) as f32;
-        let column = ((self.board_columns_size().0 - 24.0 - rail - 10.0 * (shown - 1.0)) / shown)
-            .max(COLUMN_MIN_WIDTH);
-        for group in &lanes {
-            columns = columns.child(self.board_column(group, column, p, cx));
+            .overflow_x_scroll()
+            // A wheel turns the row only with Shift (the columns scroll up and down under it).
+            .restrict_scroll_to_axis()
+            .track_scroll(&scroll);
+        for group in &groups {
+            row = row.child(if is_collapsed(group) {
+                self.board_column_strip(group, p, cx)
+            } else {
+                self.board_column(group, column, p, cx)
+            });
         }
-        let done_open = done.as_ref().is_some_and(|done| done["open"] == true);
-        let rail_element = done
-            .as_ref()
-            .map(|done| self.board_done_rail(done, done_open, p, cx));
-        let done_lane = done.as_ref().filter(|_| done_open).map(|done| {
-            div()
-                .absolute()
-                .top_0()
-                .bottom_0()
-                .right(px((DONE_RAIL + 10.0) * s))
-                .w(px(column * s))
-                .pl(px(10.0 * s))
-                .pt(px(6.0 * s))
-                .rounded(px(10.0 * s))
-                // The overlay's own menu tone, so the lane reads as part of the frosted board. Off
-                // window glass that is the board's surface itself; under glass the board's fill is
-                // thinned for the blur behind its window, and nothing blurs between the lane and
-                // the lanes under it in the same window, so the lane takes that tone nearly whole.
-                //
-                // CDXC:Coordinators 2026-11-05 WHY:
-                // User, of the opened Done lane drawn in the chat's own background: "why is done
-                // column black when expanded..". Under window glass that background is opaque black.
-                .bg(if crate::app::helpers::window_glass_active() {
-                    // Halfway between the board's frosted fill and the opaque tone.
-                    p.menu_opaque().opacity(
-                        (crate::app::helpers::frosted_panel_fill(p.menu_opaque()).a + 1.0) / 2.0,
-                    )
-                } else {
-                    p.menu_surface()
-                })
-                .border_l_1()
-                .border_color(p.foreground.opacity(0.1))
-                .shadow(vec![gpui::BoxShadow {
-                    color: gpui::black().opacity(0.28),
-                    offset: gpui::point(px(-6.0 * s), px(0.0)),
-                    blur_radius: px(18.0 * s),
-                    spread_radius: px(0.0),
-                    inset: false,
-                }])
-                .child(self.board_column(done, column, p, cx))
-        });
-        let columns = div()
-            .relative()
-            .flex_1()
-            .min_h_0()
-            .flex()
-            .gap(px(10.0 * s))
-            .child(columns)
-            .children(rail_element)
-            .children(done_lane);
+        let wheel_scroll = scroll.clone();
+        let down_scroll = scroll.clone();
+        let move_scroll = scroll;
+        let row = row
+            // Shift and a mouse wheel scroll sideways where the system leaves the wheel vertical.
+            .on_scroll(move |event: &gpui::ScrollEvent, window, cx| {
+                if !event.modifiers.shift {
+                    return;
+                }
+                let delta = event.delta.pixel_delta(window.line_height());
+                if delta.x != px(0.0) || delta.y == px(0.0) {
+                    return;
+                }
+                let offset = wheel_scroll.offset();
+                let max = wheel_scroll.max_offset().x;
+                let x = (offset.x + delta.y).clamp(-max, px(0.0));
+                wheel_scroll.set_offset(gpui::point(x, offset.y));
+                cx.stop_propagation();
+                window.refresh();
+            })
+            // A drag on the background between cards scrolls the row.
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |this, event: &gpui::MouseDownEvent, _, _| {
+                    let pressed_card = std::mem::take(&mut this.board.card_pressed);
+                    this.board.pan =
+                        (!pressed_card).then(|| (event.position.x, down_scroll.offset().x));
+                }),
+            )
+            .on_mouse_move(
+                cx.listener(move |this, event: &gpui::MouseMoveEvent, window, _| {
+                    let Some((from, start)) = this.board.pan else {
+                        return;
+                    };
+                    if event.pressed_button != Some(gpui::MouseButton::Left) {
+                        this.board.pan = None;
+                        return;
+                    }
+                    let offset = move_scroll.offset();
+                    let max = move_scroll.max_offset().x;
+                    let x = (start + event.position.x - from).clamp(-max, px(0.0));
+                    if x != offset.x {
+                        move_scroll.set_offset(gpui::point(x, offset.y));
+                        window.refresh();
+                    }
+                }),
+            )
+            .on_mouse_up(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, _| this.board.pan = None),
+            )
+            .on_mouse_up_out(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, _| this.board.pan = None),
+            );
         Some(
             div()
                 .id("chat-coordinator-board-columns")
@@ -835,36 +903,36 @@ impl NativeChatView {
                 .flex()
                 .flex_col()
                 .child(self.board_header(&board, BoardPlace::Columns, p, cx))
-                .child(columns)
+                .child(row)
                 .into_any_element(),
         )
     }
 
-    /// The Done rail: a narrow muted strip with Done's check and count; a click opens or folds the
-    /// Done lane.
-    fn board_done_rail(
+    /// A collapsed column: a narrow muted strip with its group's glyph and count; a click opens
+    /// it again.
+    fn board_column_strip(
         &self,
-        done: &Value,
-        open: bool,
+        group: &Value,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let count = done["count"].as_u64().unwrap_or(0);
+        let id = text(group, "id");
+        let (icon, color) = group_look(&id);
+        let icon_color: gpui::Hsla = color.map_or(p.muted, |color| rgb(color).into());
+        let count = group["count"].as_u64().unwrap_or(0);
+        let label = format!("Show {}", text(group, "title"));
+        let tooltip = label.clone();
         let drop_fill = p_drop(p);
-        let label = if open {
-            "Fold Done today"
-        } else {
-            "Show Done today"
-        };
+        let toggle = id.clone();
+        let drop_group = id.clone();
         div()
-            .id("chat-board-done-rail")
+            .id(gpui::SharedString::from(format!("chat-board-strip:{id}")))
             .role(gpui::Role::Button)
             .aria_label(format!("{label}, {count}"))
-            .aria_expanded(open)
+            .aria_expanded(false)
             .flex_shrink_0()
-            .w(px(DONE_RAIL * s))
-            .mt(px(6.0 * s))
+            .w(px(STRIP_WIDTH * s))
             .mb(px(8.0 * s))
             .flex()
             .flex_col()
@@ -874,18 +942,18 @@ impl NativeChatView {
             .rounded(px(10.0 * s))
             .border(px(s))
             .border_color(p.foreground.opacity(0.08))
-            .bg(p.foreground.opacity(if open { 0.07 } else { 0.03 }))
-            .opacity(if open { 1.0 } else { 0.75 })
+            .bg(p.foreground.opacity(0.03))
+            .opacity(0.75)
             .chat_cursor_pointer()
             .hover(|style| style.bg(p.foreground.opacity(0.08)).opacity(1.0))
             .tooltip(move |window, cx| {
-                gpui_component::tooltip::Tooltip::new(label).build(window, cx)
+                gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
             })
             .child(
                 svg()
-                    .path("titlebar/circle-check-filled.svg")
+                    .path(icon)
                     .size(px(14.0 * s))
-                    .text_color(gpui::Hsla::from(rgb(GOOD_COLOR)).opacity(0.8)),
+                    .text_color(icon_color.opacity(0.8)),
             )
             .child(
                 div()
@@ -893,15 +961,12 @@ impl NativeChatView {
                     .text_color(p.card_muted)
                     .child(count.to_string()),
             )
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.invoke(
-                    json!({"type": "toggleCoordinatorBoardGroup", "group": "done"}),
-                    cx,
-                );
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.toggle_board_column(&toggle, cx);
             }))
             .drag_over::<BoardCardDrag>(move |style, _, _, _| style.bg(drop_fill).opacity(1.0))
-            .on_drop(cx.listener(|this, drag: &BoardCardDrag, _, cx| {
-                this.drop_board_card(drag, "done", cx);
+            .on_drop(cx.listener(move |this, drag: &BoardCardDrag, _, cx| {
+                this.drop_board_card(drag, &drop_group, cx);
             }))
             .into_any_element()
     }
@@ -937,6 +1002,7 @@ impl NativeChatView {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
+            .restrict_scroll_to_axis()
             .track_scroll(&scroll)
             .flex()
             .flex_col()
@@ -947,7 +1013,14 @@ impl NativeChatView {
             .pb(px(8.0 * s));
         let inner = width - BADGE_ROOM - 2.0 * CARD_PAD - 2.0;
         for row in &rows {
-            cards = cards.child(self.board_card(row, inner, &scroll, &id, p, cx));
+            cards = cards.child(
+                div()
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|this, _, _, _| this.board.card_pressed = true),
+                    )
+                    .child(self.board_card(row, inner, &scroll, &id, p, cx)),
+            );
         }
         if rows.is_empty() {
             cards = cards.child(
@@ -968,11 +1041,12 @@ impl NativeChatView {
             );
         }
         let drop_group = id.clone();
+        let toggle = id.clone();
         let drop_fill = p_drop(p);
         div()
             .id(gpui::SharedString::from(format!("chat-board-column:{id}")))
-            .flex_1()
-            .min_w(px(COLUMN_MIN_WIDTH * s))
+            .flex_shrink_0()
+            .w(px(width * s))
             .min_h_0()
             .flex()
             .flex_col()
@@ -989,16 +1063,14 @@ impl NativeChatView {
                     )))
                     .flex_shrink_0()
                     .h(px(GROUP_HEIGHT * s))
-                    // The Done lane's header folds it back into its rail.
-                    .when(id == "done", |head| {
-                        head.chat_cursor_pointer()
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.invoke(
-                                    json!({"type": "toggleCoordinatorBoardGroup", "group": "done"}),
-                                    cx,
-                                );
-                            }))
+                    // The header collapses the column to its strip.
+                    .chat_cursor_pointer()
+                    .tooltip(|window, cx| {
+                        gpui_component::tooltip::Tooltip::new("Collapse").build(window, cx)
                     })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.toggle_board_column(&toggle, cx);
+                    }))
                     .flex()
                     .items_center()
                     .gap(px(6.0 * s))
@@ -1014,8 +1086,16 @@ impl NativeChatView {
                     .child(div().text_color(p.foreground).child(text(group, "title")))
                     .child(
                         div()
+                            .flex_1()
                             .text_color(p.card_muted)
                             .child(group["count"].as_u64().unwrap_or(0).to_string()),
+                    )
+                    .child(
+                        svg()
+                            .path("titlebar/chevron-left.svg")
+                            .size(px(12.0 * s))
+                            .flex_shrink_0()
+                            .text_color(p.muted),
                     ),
             )
             .child(cards)

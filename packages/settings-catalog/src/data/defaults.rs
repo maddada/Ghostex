@@ -668,6 +668,8 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatMessageSpacing", J::Str("default")),
     // CDXC:Coordinators 2026-11-05 DECISION: the Board pill opens the side list until the user picks Columns (extras/coordinator_board.rs in gx-chat-core).
     ("coordinatorBoardView", J::Str("list")),
+    // CDXC:Coordinators 2026-11-10 DECISION: the board's columns view collapses any column to its strip; Finished today starts collapsed (apps/desktop/src/app/native_chat/coordinator_board.rs `board_columns_body`).
+    ("coordinatorBoardCollapsedColumns", J::Str("done")),
     // CDXC:AgentGuide 2026-11-02 DECISION: User (Q1066): the short Ghostex note goes to every agent session Ghostex starts, "on by default (with a setting to turn it off)".
     ("agentGhostexNote", J::Bool(true)),
     // CDXC:AgentGuide 2026-11-02 DECISION: User (#263): "if user asks for browser we ask which the user prefers (internal ghostex browser, or external browser)", and (Q1069) the answer is kept in this setting, which the note and `ghostex agent-guide` then state so agents stop asking. Ask until the user picks.

@@ -197,6 +197,30 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        // The columns the coordinator board's columns view keeps collapsed to their strip
+        // (native_chat/coordinator_board.rs `toggle_board_column`), on every chat and computer.
+        if action == "setCoordinatorBoardCollapsed" {
+            if let Some(columns) = message.get("columns").and_then(serde_json::Value::as_str) {
+                let columns: Vec<&str> = columns
+                    .split(',')
+                    .filter(|id| {
+                        matches!(
+                            *id,
+                            "needs" | "blocked" | "moving" | "hold" | "later" | "done"
+                        )
+                    })
+                    .collect();
+                self.handle_gpui_app_modal_update_settings_patch_message(
+                    &serde_json::json!({
+                        "patch": { "coordinatorBoardCollapsedColumns": columns.join(",") },
+                        "source": "chat:coordinatorBoard",
+                        "type": "updateSettingsPatch",
+                    }),
+                    cx,
+                );
+            }
+            return;
+        }
         // The offline-computer card (remote_conn/chat_computers.rs): a message to the chat's
         // computer got no answer, or the card's Retry.
         if matches!(action, "checkComputer" | "reconnectComputer") {
