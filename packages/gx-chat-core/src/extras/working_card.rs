@@ -85,7 +85,16 @@ pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill])
     } else if working {
         (Some("Working".to_string()), "word")
     } else {
-        (worked.clone(), "worked")
+        // A coordinator's finished turn says what it changed after its time, as one line
+        // ("Worked for 15s · Pairing page started · 1 ask"; extras/work_cards.rs `turn_summary`).
+        let worked =
+            worked.clone().map(
+                |worked| match crate::extras::work_cards::turn_summary(state) {
+                    Some(summary) => format!("{worked} \u{b7} {summary}"),
+                    None => worked,
+                },
+            );
+        (worked, "worked")
     };
     // One line: the renderers cut it with an ellipsis and show the whole text on hover.
     let label = label

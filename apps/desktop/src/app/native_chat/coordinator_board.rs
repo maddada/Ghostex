@@ -1552,7 +1552,85 @@ impl NativeChatView {
                 .child(label)
         };
         let reference = text(row, "reference");
-        let mut line = div().flex().items_center().gap(px(6.0 * s)).min_w_0();
+        let mut line = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap(px(6.0 * s))
+            .min_w_0();
+        // The dock's actions (gx-chat-core work_cards.rs `panel_actions`): Reply, Open, Show in
+        // chat, Dismiss and Snooze, so an opened card offers the same here, in Columns and in the
+        // dock.
+        let actions = row["actions"].clone();
+        let reply = actions["reply"].clone();
+        if reply.is_object() {
+            line = line.child(
+                button("chat-board-card-reply", "Reply".to_string(), None).on_click(cx.listener(
+                    move |this, event: &gpui::ClickEvent, window, cx| {
+                        cx.stop_propagation();
+                        this.close_board_card_menu(cx);
+                        let at = event.position();
+                        let command = json!({
+                            "question": reply.clone(),
+                            "at": [f32::from(at.x), f32::from(at.y)],
+                        });
+                        this.open_reply_popover(&command, window, cx);
+                    },
+                )),
+            );
+        }
+        for (id, label, field) in [
+            ("chat-board-card-open", "Open", "open"),
+            ("chat-board-card-show", "Show in chat", "showInChat"),
+            ("chat-board-card-dismiss", "Dismiss", "dismiss"),
+        ] {
+            let command = actions[field].clone();
+            if command.is_object() {
+                line = line.child(button(id, label.to_string(), None).on_click(cx.listener(
+                    move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.close_board_card_menu(cx);
+                        this.invoke(command.clone(), cx);
+                    },
+                )));
+            }
+        }
+        let snooze: Vec<Value> = actions["snooze"].as_array().cloned().unwrap_or_default();
+        let snooze_key = format!("board-snooze-open:{key}");
+        let snooze_open = self.expanded.contains(&snooze_key);
+        if !snooze.is_empty() {
+            let toggle = snooze_key.clone();
+            line = line.child(
+                button(
+                    "chat-board-card-snooze",
+                    if snooze_open { "Snooze for" } else { "Snooze" }.to_string(),
+                    None,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    if !this.expanded.remove(&toggle) {
+                        this.expanded.insert(toggle.clone());
+                    }
+                    cx.notify();
+                })),
+            );
+            if snooze_open {
+                for (index, choice) in snooze.iter().enumerate() {
+                    let command = choice["command"].clone();
+                    line = line.child(
+                        button(
+                            &format!("chat-board-card-snooze-{index}"),
+                            text(choice, "label"),
+                            None,
+                        )
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.invoke(command.clone(), cx);
+                        })),
+                    );
+                }
+            }
+        }
         if !reference.is_empty() {
             line = line.child(
                 button(

@@ -35,7 +35,7 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
-fn at_ms(at: &str) -> Option<i64> {
+pub(crate) fn at_ms(at: &str) -> Option<i64> {
     crate::jstime::parse_iso_millis_utc(at).map(|at| at as i64)
 }
 
@@ -526,6 +526,98 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
     })
 }
 
+/// A Work panel row's actions for its opened card, the same as the dock's opened row: an ask's
+/// Reply, Show in chat, Dismiss and Snooze; any other line of work's Show in chat. `null` for none.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User: "WE MUST HAVE REPLY BUTTON FOR NEEDS YOU STUFF", for every needs-you item wherever it is
+/// drawn: the dock, the Work panel and Columns open to the same actions.
+pub fn panel_actions(state: &ChatState, context: &ChatContext, row: &Value) -> Value {
+    let Some(items) = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .and_then(|work| work.get("items"))
+        .and_then(Value::as_array)
+    else {
+        return Value::Null;
+    };
+    let reference = text(row, "ref");
+    let Some(item) = items.iter().find(|item| text(item, "ref") == reference) else {
+        return Value::Null;
+    };
+    let turns = turns(state);
+    let now_ms = context.now_millis();
+    if row["askRow"] == true {
+        let tag = text(row, "ask");
+        let Some(ask) = item["asks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|ask| text(ask, "tag") == tag && ask["open"] == true)
+        else {
+            return Value::Null;
+        };
+        let key = format!("work-ask:{reference}:{tag}");
+        let at = at_ms(text(ask, "askedAt")).unwrap_or(now_ms);
+        let picked = state
+            .extras
+            .panels
+            .board_answers
+            .get(&key)
+            .map(String::as_str);
+        let card = ask_card(item, ask, picked, at, now_ms, context);
+        let asked_in = item["history"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|event| {
+                text(event, "kind") == "ask" && text(event, "text").split(':').next() == Some(tag)
+            })
+            .filter_map(|event| at_ms(text(event, "at")))
+            .next_back()
+            .unwrap_or(at);
+        return json!({
+            "reply": { "item": reference, "key": key, "tag": tag },
+            "dismiss": card["cancel"],
+            "snooze": card["snooze"],
+            "showInChat": show_in_chat(&turns, asked_in, &key),
+        });
+    }
+    let changed_at = item["history"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|event| at_ms(text(event, "at")))
+        .max()
+        .unwrap_or(0);
+    let show = show_in_chat(&turns, changed_at, text(row, "key"));
+    if show.is_null() {
+        Value::Null
+    } else {
+        json!({ "showInChat": show })
+    }
+}
+
+/// A form's or page's actions for its opened Work panel card, the dock's row's.
+pub fn question_actions(state: &ChatState, context: &ChatContext, id: &str) -> Value {
+    let key = format!("dock-questions:{id}");
+    question_rows(state, context, context.now_millis())
+        .into_iter()
+        .map(|(_, row)| row)
+        .find(|row| row["key"] == key.as_str())
+        .map_or(Value::Null, |row| {
+            json!({
+                "reply": row["reply"],
+                "open": row["open"],
+                "dismiss": row["dismiss"],
+                "snooze": row["snooze"],
+                "showInChat": row["showInChat"],
+            })
+        })
+}
+
 /// A day, in ms: a needs-you row older than this sinks below the newer ones (`dock`).
 const DAY_MS: i64 = 86_400_000;
 
@@ -717,6 +809,80 @@ fn dock_item_card(item: &Value, now_ms: i64, done_key: Option<String>) -> Value 
     card
 }
 
+/// The turn whose line joins the "Worked for" line above the chat box: the newest, once it has
+/// finished and that line shows its time.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User (the target page): under a reply "one quiet line ... Worked for 40s · Started <item>",
+/// not the turn's line and "Worked for" stacked as two.
+fn merged_turn(state: &ChatState, turns: &[Turn]) -> Option<usize> {
+    let shows = state.transcript_view.worked_line.is_some()
+        && !state.transcript_view.chat_look.status_in_transcript;
+    shows.then(|| turns.len().checked_sub(1)).flatten()
+}
+
+/// The newest finished turn's line, for the end of its "Worked for" line
+/// (`extras::working_card`): "Pairing page started · 1 ask".
+pub fn turn_summary(state: &ChatState) -> Option<String> {
+    let turns = turns(state);
+    let newest = merged_turn(state, &turns)?;
+    let turn_id = turns.get(newest)?.id.clone();
+    let mut lines: BTreeMap<usize, TurnLine> = BTreeMap::new();
+    let items = state
+        .session
+        .coordinator_threads
+        .as_ref()?
+        .get("work")?
+        .get("items")?
+        .as_array()?;
+    for item in items.iter().filter(|item| item["kind"] == "item") {
+        let events: Vec<&Value> = item["history"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|event| TURN_KINDS.contains(&text(event, "kind")))
+            .filter(|event| {
+                at_ms(text(event, "at")).and_then(|at| turn_of(&turns, at)) == Some(newest)
+            })
+            .collect();
+        if events.is_empty() {
+            continue;
+        }
+        let summary = lines.entry(newest).or_default();
+        let kinds: Vec<&str> = events.iter().map(|event| text(event, "kind")).collect();
+        summary.asks += kinds.iter().filter(|kind| **kind == "ask").count();
+        if kinds.iter().all(|kind| *kind == "ask") {
+            continue;
+        }
+        let verb = if kinds.contains(&"done") {
+            "finished"
+        } else if kinds.contains(&"drop") {
+            "dropped"
+        } else if kinds.contains(&"add") {
+            "started"
+        } else if kinds.contains(&"wait") {
+            "waiting"
+        } else {
+            "updated"
+        };
+        summary
+            .parts
+            .push(format!("{} {verb}", text(item, "title")));
+    }
+    let _ = turn_id;
+    let summary = lines.remove(&newest)?;
+    let mut words: Vec<String> = summary.parts.iter().take(3).cloned().collect();
+    if summary.parts.len() > 3 {
+        words.push(format!("{} more", summary.parts.len() - 3));
+    }
+    match summary.asks {
+        0 => {}
+        1 => words.push("1 ask".to_string()),
+        asks => words.push(format!("{asks} asks")),
+    }
+    (!words.is_empty()).then(|| words.join(" \u{b7} "))
+}
+
 /// What one turn changed, for its quiet line (`project`).
 #[derive(Default)]
 struct TurnLine {
@@ -836,11 +1002,16 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
     // User (placement page, C): "The transcript keeps one quiet line per turn". The cards under a
     // reply and the In progress row there are gone: what needs the user docks above the chat box,
     // the In progress list opens from the status line, and the Work panel keeps the rest.
+    let merged = merged_turn(state, &turns);
     for (turn_index, summary) in lines {
         let turn = &turns[turn_index];
         let Some(anchor) = turn.anchor.as_deref() else {
             continue;
         };
+        // The newest finished turn's line rides on its "Worked for" line instead (`turn_summary`).
+        if Some(turn_index) == merged {
+            continue;
+        }
         let mut words: Vec<String> = summary.parts.iter().take(3).cloned().collect();
         if summary.parts.len() > 3 {
             words.push(format!("{} more", summary.parts.len() - 3));
@@ -912,6 +1083,10 @@ pub struct WorkInputs {
     last_id: String,
     last_has_words: bool,
     answers: BTreeMap<String, String>,
+    /// The newest turn's line rides on "Worked for" while that shows (`merged_turn`).
+    worked: bool,
+    /// Snoozes sent from here (`snoozed`).
+    snoozed: BTreeMap<String, i64>,
 }
 
 impl WorkInputs {
@@ -933,6 +1108,9 @@ impl WorkInputs {
                         .is_empty()
             }),
             answers: state.extras.panels.board_answers.clone(),
+            worked: state.transcript_view.worked_line.is_some()
+                && !state.transcript_view.chat_look.status_in_transcript,
+            snoozed: state.extras.panels.work_snoozed.clone(),
         }
     }
 }

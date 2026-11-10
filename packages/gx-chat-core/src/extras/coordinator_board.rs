@@ -184,6 +184,10 @@ pub struct BoardRow {
     /// The card's menu, in order: Open, Mention in chat, Tags, Mark done, Remove (or Restore).
     #[serde(default)]
     pub menu: Vec<BoardMenuItem>,
+    /// What the opened card offers besides Mention, the same as the dock's opened row
+    /// (`work_cards::panel_actions`): `{reply, open, showInChat, dismiss, snooze}`, `null` for none.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub actions: Value,
 }
 
 /// One answer on a card that asks the user something.
@@ -608,6 +612,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
             Value::Null
         },
         menu: Vec::new(),
+        actions: Value::Null,
     }
 }
 
@@ -847,7 +852,13 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         restore: Value::Null,
                         // A question's card opens its form, which is where it is answered.
                         expanded: false,
-                        toggle: Value::Null,
+                        // A click opens the card in place, as every card does (the user's "make it
+                        // be cohesive, so clicking doesn't sometimes expand and sometimes just
+                        // mentions"); Open and Reply are in it.
+                        toggle: json!({
+                            "type": "toggleCoordinatorBoardGroup",
+                            "group": format!("{CARD_KEY_PREFIX}question:{}", asker.id),
+                        }),
                         open: json!({"type": "jumpToQuestion", "id": asker.id}),
                         open_label: "Go to question".to_string(),
                         done: Value::Null,
@@ -855,6 +866,7 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         tag: String::new(),
                         set_tag: Value::Null,
                         menu: Vec::new(),
+                        actions: Value::Null,
                     },
                 )
             })
@@ -870,7 +882,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     let work_mode = threads.get("work").is_some_and(Value::is_object);
     let built;
     let board = if work_mode {
-        built = crate::extras::work_panel::work_board(&threads["work"]);
+        built = crate::extras::work_panel::work_board_at(&threads["work"], context.now_millis());
         &built
     } else {
         threads.get("board")?
@@ -906,6 +918,10 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
                     let chips = question_chips(state, row);
                     out.tags.splice(0..0, chips);
                 }
+                // The opened card's actions, the dock's (Reply, Show in chat, Dismiss, Snooze).
+                if work_mode {
+                    out.actions = crate::extras::work_cards::panel_actions(state, context, row);
+                }
                 // A work item's ask is answered or done, never dropped, moved or tagged by itself:
                 // those act on its item (work_panel.rs).
                 if row["askRow"] == true {
@@ -927,7 +943,14 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             .and_then(Value::as_u64)
             .map_or(rows.len(), |total| total as usize);
         if id == "needs" {
-            let questions = question_rows(state, now_ms);
+            let mut questions = question_rows(state, now_ms);
+            // Each with the dock's actions for its form or page (Reply, Open, Dismiss, Snooze).
+            for question in &mut questions {
+                if let Some(id) = question.key.strip_prefix("question:") {
+                    question.actions =
+                        crate::extras::work_cards::question_actions(state, context, id);
+                }
+            }
             asked = questions.len();
             total += questions.len();
             rows.splice(0..0, questions);

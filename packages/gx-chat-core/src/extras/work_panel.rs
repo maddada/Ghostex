@@ -174,7 +174,7 @@ fn item_row(item: &Value, group: &str, status: &str) -> Value {
 
 /// An open ask's row: what the user is asked, under the work it belongs to, with its answers (or
 /// Done for a task). Its key is its chat card's, so an answer given in either place locks both.
-fn ask_row(item: &Value, ask: &Value) -> Value {
+fn ask_row(item: &Value, ask: &Value, now_ms: i64) -> Value {
     let reference = text(item, "ref");
     let tag = text(ask, "tag");
     let holds = ask["holds"] == true;
@@ -188,7 +188,11 @@ fn ask_row(item: &Value, ask: &Value) -> Value {
     }
     let steps = text(ask, "steps");
     // Snoozed: under Later, quietly saying until when (work.rs `snooze`).
-    let snoozed = text(ask, "snoozedUntilLabel");
+    let snoozed = if snoozed_at(ask, now_ms) {
+        text(ask, "snoozedUntilLabel")
+    } else {
+        ""
+    };
     if !snoozed.is_empty() {
         detail = format!("{detail} \u{b7} Snoozed until {snoozed}");
     }
@@ -256,6 +260,21 @@ fn thread_row(item: &Value, group: &str) -> Value {
 /// The work as a board: `{groups: [{id, total, rows}], items, tagOptions}`, the shape gxserver
 /// sends the board in.
 pub fn work_board(work: &Value) -> Value {
+    work_board_at(work, 0)
+}
+
+/// Whether an ask is still snoozed at `now_ms` (0 when the caller has no clock: snoozed while
+/// gxserver says so). A snooze that has ended brings the ask back to Needs you at once, as the
+/// dock does.
+fn snoozed_at(ask: &Value, now_ms: i64) -> bool {
+    ask.get("snoozedUntil").is_some_and(|until| {
+        crate::extras::work_cards::at_ms(until.as_str().unwrap_or_default())
+            .is_some_and(|until| until > now_ms)
+    })
+}
+
+/// [`work_board`] read at `now_ms`, so snoozes that have ended are back where they belong.
+pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
     let mut groups: Map<String, Value> = WORK_GROUPS
         .iter()
         .map(|(id, _)| (id.to_string(), json!([])))
@@ -287,14 +306,14 @@ pub fn work_board(work: &Value) -> Value {
             .collect();
         for ask in &open_asks {
             push(
-                if ask.get("snoozedUntil").is_some() {
+                if snoozed_at(ask, now_ms) {
                     "later"
                 } else if ask["holds"] == true {
                     "blocked"
                 } else {
                     "needs"
                 },
-                ask_row(item, ask),
+                ask_row(item, ask, now_ms),
             );
         }
         // Finished before today: off the panel, though a task it left for the user stays.
