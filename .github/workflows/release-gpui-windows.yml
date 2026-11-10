@@ -99,6 +99,11 @@ on:
         required: false
         default: false
         type: boolean
+      certum_login_test:
+        description: TEST BRANCH ONLY - run just the SimplySign login and sign one throwaway file
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -114,7 +119,55 @@ env:
   GHOSTEX_REQUIRE_COMPONENT_SIGNATURES: '1'
 
 jobs:
+  # TEST BRANCH ONLY (ghostex/3bf84f46-sign-test, never merged): the SimplySign
+  # login and one signature in a few minutes instead of a full build.
+  certum_login_test:
+    if: ${{ inputs.certum_login_test }}
+    runs-on: ${{ inputs.arch == 'arm64' && 'windows-11-vs2026-arm' || 'windows-2025' }}
+    timeout-minutes: 25
+    env:
+      GHOSTEX_CERTUM_CERT_SHA1: ${{ vars.CERTUM_CERT_SHA1 || 'E81BEDC91DEA38C8BB2DA3651E161ADA280B6734' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Install SimplySign Desktop for Certum signing
+        shell: pwsh
+        run: tooling/release-gpui/certum-simplysign-login.ps1 -Install
+      - name: Log in to SimplySign for Certum signing
+        shell: pwsh
+        env:
+          CERTUM_SIMPLYSIGN_EMAIL: ${{ secrets.CERTUM_SIMPLYSIGN_EMAIL }}
+          CERTUM_SIMPLYSIGN_TOTP: ${{ secrets.CERTUM_SIMPLYSIGN_TOTP }}
+          GHOSTEX_CERTUM_LOGIN_SLOT: ${{ inputs.arch == 'arm64' && 'odd' || 'even' }}
+        run: tooling/release-gpui/certum-simplysign-login.ps1 -Login
+      - name: Sign and verify one throwaway file
+        shell: pwsh
+        run: |
+          # Hold the session a minute so a parallel x64/arm64 test overlaps.
+          Start-Sleep -Seconds 60
+          $File = Join-Path $env:RUNNER_TEMP 'certum-login-test.exe'
+          Copy-Item "$env:WINDIR\System32\where.exe" $File
+          & $env:GHOSTEX_SIGNTOOL remove /s $File
+          if ((Get-AuthenticodeSignature -LiteralPath $File).SignerCertificate) { throw "could not strip the copy's signature" }
+          & tooling/release-gpui/certum-sign.ps1 -Path $File
+          & $env:GHOSTEX_SIGNTOOL verify /pa /v $File
+          if ($LASTEXITCODE -ne 0) { throw "signtool verify failed" }
+      - name: Upload the SimplySign login diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: certum-diagnostics-login-test-${{ inputs.arch }}
+          path: ${{ runner.temp }}/certum-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Log out of SimplySign
+        if: ${{ always() }}
+        shell: pwsh
+        run: tooling/release-gpui/certum-simplysign-login.ps1 -Logout
+
   build:
+    if: ${{ !inputs.certum_login_test }}
     runs-on: ${{ inputs.arch == 'arm64' && 'windows-11-vs2026-arm' || 'windows-2025' }}
     # CDXC:WindowsWedgedRunnerWatchdog 2026-09-01 (supersedes
     # CDXC:WindowsArm64BuildBudget 2026-08-19):
@@ -742,6 +795,7 @@ jobs:
   # artifact.
   runtime:
     name: native runtime (${{ inputs.arch }})
+    if: ${{ !inputs.certum_login_test }}
     runs-on: ${{ inputs.arch == 'arm64' && 'windows-11-vs2026-arm' || 'windows-2025' }}
     # Setup plus ~7 minutes of cargo; the budget leaves room for one watchdog
     # restart, the same arithmetic as jobs.build.
