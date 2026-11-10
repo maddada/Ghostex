@@ -5,10 +5,11 @@
 //! A coordinator is created like any sidebar agent launch (the same launch settings, the same focus of the created session), with three differences: the `coordinator` object that makes gxserver add the role and the record; no draft, because a draft can switch its agent before the first prompt and the role would not follow; and a title the user chose, saved as the user's so gxserver keeps it when the agent names the conversation. It opens in chat, where the coordinator's reports read best.
 //! SEE-ALSO: apps/desktop/src/app/window/new_coordinator_modal.rs, apps/desktop/src/app/new_coordinator_modal_lifecycle.rs, server/src/server/route_http/sessions.rs (`/api/createAgentSession` with `coordinator`).
 
+use ghostex_gx_chat_core::menus::catalog::AgentModelCatalog;
 use ghostex_gx_core::{
     ProjectKey, SessionKey, created_session, default_agent_id_for_icon, local_agent_launch_params,
     new_coordinator_modal_payload, open_remote_session_terminal, remote_agent_launch_params,
-    remote_launch_agent_id, resolve_sidebar_agent, start_provider_params,
+    resolve_sidebar_agent, start_provider_params,
 };
 use serde_json::{Map, Value, json};
 
@@ -38,15 +39,19 @@ fn coordinator_family(agent: &Value) -> Option<&'static str> {
         .find(|supported| *supported == family)
 }
 
-/// The model lineup a coordinator on this family can pick from: the newest catalog this computer
-/// has (the chat's model pill reads the same one), each model with the efforts it accepts. Empty
-/// for an agent whose launch takes no model (`coordinator_launch_takes_model`): it starts on its
-/// configured one; no efforts for one whose launch takes no effort.
-fn coordinator_models(family: &str) -> Vec<NewCoordinatorModel> {
+/// The model lineup a coordinator on this family can pick from in `catalog` (this computer's
+/// newest, which the chat's model pill reads too, or the one another computer serves), each
+/// model with the efforts it accepts. Empty without a catalog, and for an agent whose launch
+/// takes no model (`coordinator_launch_takes_model`): it starts on its configured one; no efforts
+/// for one whose launch takes no effort.
+fn coordinator_models(
+    family: &str,
+    catalog: Option<&AgentModelCatalog>,
+) -> Vec<NewCoordinatorModel> {
     if !coordinator_launch_takes_model(family) {
         return Vec::new();
     }
-    let Some(catalog) = crate::app::gx_chat::current_model_catalog() else {
+    let Some(catalog) = catalog else {
         return Vec::new();
     };
     let Some(agent) = catalog.agents.get(family) else {
@@ -111,37 +116,58 @@ fn coordinator_params(
     params
 }
 
+/// The launchers of a sidebar HUD an orchestrator can run on, Claude first, in launcher order,
+/// with their lineups from `catalog`.
+pub(crate) fn coordinator_agents(
+    hud: Option<&Value>,
+    catalog: Option<&AgentModelCatalog>,
+) -> Vec<NewCoordinatorAgent> {
+    let rows = hud
+        .and_then(|hud| hud.get("agents"))
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let mut agents = rows
+        .iter()
+        .filter_map(|row| {
+            let family = coordinator_family(row)?;
+            Some((
+                family,
+                NewCoordinatorAgent {
+                    agent_id: row.get("agentId")?.as_str()?.to_string(),
+                    name: row
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or(family)
+                        .to_string(),
+                    family: family.to_string(),
+                    models: coordinator_models(family, catalog),
+                    skill_line: orchestrator_skill_line(Some(family)),
+                },
+            ))
+        })
+        .collect::<Vec<_>>();
+    agents.sort_by_key(|(family, _)| *family != "claude");
+    agents.into_iter().map(|(_, agent)| agent).collect()
+}
+
 impl GhostexGpuiApp {
-    /// The launchers an orchestrator can run on, Claude first, in launcher order.
+    /// This computer's launchers an orchestrator can run on, with this computer's lineups.
     pub(crate) fn gx_store_coordinator_agents(&self) -> Vec<NewCoordinatorAgent> {
-        let hud = self.gx_store_launch_hud();
-        let rows = hud
-            .as_deref()
-            .and_then(|hud| hud.get("agents"))
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let mut agents = rows
-            .iter()
-            .filter_map(|row| {
-                let family = coordinator_family(row)?;
-                Some((
-                    family,
-                    NewCoordinatorAgent {
-                        agent_id: row.get("agentId")?.as_str()?.to_string(),
-                        name: row
-                            .get("name")
-                            .and_then(Value::as_str)
-                            .unwrap_or(family)
-                            .to_string(),
-                        models: coordinator_models(family),
-                        skill_line: orchestrator_skill_line(Some(family)),
-                    },
-                ))
-            })
-            .collect::<Vec<_>>();
-        agents.sort_by_key(|(family, _)| *family != "claude");
-        agents.into_iter().map(|(_, agent)| agent).collect()
+        let catalog = crate::app::gx_chat::current_model_catalog();
+        coordinator_agents(self.gx_store_launch_hud().as_deref(), catalog.as_ref())
+    }
+
+    /// Another computer's launchers an orchestrator can run on, from the sidebar HUD read from it
+    /// (`HudHost::remote_sidebar_hud`), with `catalog`'s lineups (that computer's, once read).
+    /// `None` while that HUD has not been read.
+    pub(crate) fn gx_store_remote_coordinator_agents(
+        &self,
+        machine_id: &str,
+        catalog: Option<&AgentModelCatalog>,
+    ) -> Option<Vec<NewCoordinatorAgent>> {
+        let hud = self.gx_store.hud.remote_sidebar_hud(machine_id)?;
+        Some(coordinator_agents(Some(hud), catalog))
     }
 
     /// Opens the New Coordinator dialog for the project a group id names, read from the machine
@@ -172,6 +198,9 @@ impl GhostexGpuiApp {
 
     /// Creates the coordinator in the project a group id names (this computer or a remote one) and
     /// opens it in chat. gxserver queues its first message (the skill line) before it answers.
+    /// `done` hears whether it was created (before it opens) or why not; a remote computer's
+    /// `agent_id` is that computer's own launcher (the dialog lists its agents), sent as it is.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn gx_store_create_coordinator(
         &mut self,
         group_id: &str,
@@ -179,22 +208,18 @@ impl GhostexGpuiApp {
         name: &str,
         model: Option<&str>,
         effort: Option<&str>,
+        done: impl FnOnce(&mut Self, Result<(), String>, &mut gpui::Context<Self>) + 'static,
         cx: &mut gpui::Context<Self>,
     ) {
         let Some(project) = ProjectKey::parse_sidebar_group_id(group_id) else {
+            done(self, Err("That project is no longer open.".to_string()), cx);
             return;
         };
         let hud = self.gx_store_launch_hud();
         let (name, title_source) = coordinator_title(name);
         if let Some(machine_id) = project.machine.remote_id().map(str::to_string) {
             let params = coordinator_params(
-                remote_agent_launch_params(
-                    &remote_launch_agent_id(hud.as_deref(), agent_id),
-                    &project.project_id,
-                    Map::new(),
-                    None,
-                    name,
-                ),
+                remote_agent_launch_params(agent_id, &project.project_id, Map::new(), None, name),
                 title_source,
                 model,
                 effort,
@@ -222,6 +247,7 @@ impl GhostexGpuiApp {
                     };
                     match created {
                         Ok((created_project, session_id)) => {
+                            done(this, Ok(()), cx);
                             let created_project = created_project.unwrap_or(project_id.clone());
                             let session = SessionKey::remote(
                                 machine_id.as_str(),
@@ -238,12 +264,7 @@ impl GhostexGpuiApp {
                                 cx,
                             );
                         }
-                        Err(reason) => this.gx_store_create_toast(
-                            "warning",
-                            "Coordinator not created",
-                            Some(&reason),
-                            cx,
-                        ),
+                        Err(reason) => done(this, Err(reason), cx),
                     }
                 });
             })
@@ -251,14 +272,16 @@ impl GhostexGpuiApp {
             return;
         }
         let project_id = project.project_id.clone();
-        if !self.gx_store_ensure_local_project_path_available(&project_id, cx) {
+        if !self.gx_store_local_project_path_is_available(&project_id) {
+            // The dialog closes, and the missing folder's own dialog offers Locate.
+            done(self, Ok(()), cx);
+            self.gx_store_ensure_local_project_path_available(&project_id, cx);
             return;
         }
         let Some(agent) = resolve_sidebar_agent(hud.as_deref(), agent_id) else {
-            self.gx_store_create_toast(
-                "warning",
-                "Coordinator not created",
-                Some("That agent is no longer configured."),
+            done(
+                self,
+                Err("That agent is no longer set up on this computer.".to_string()),
                 cx,
             );
             return;
@@ -281,20 +304,21 @@ impl GhostexGpuiApp {
                 ),
                 Err(error) => {
                     let message = error.message.clone();
-                    let _ = this.update(cx, |this, cx| {
-                        this.gx_store_create_toast(
-                            "warning",
-                            "Coordinator not created",
-                            Some(&message),
-                            cx,
-                        );
-                    });
+                    let _ = this.update(cx, |this, cx| done(this, Err(message), cx));
                     return;
                 }
             };
             let Some((created_project, session_id)) = created else {
+                let _ = this.update(cx, |this, cx| {
+                    done(
+                        this,
+                        Err("This computer could not create it.".to_string()),
+                        cx,
+                    )
+                });
                 return;
             };
+            let _ = this.update(cx, |this, cx| done(this, Ok(()), cx));
             let created_project = created_project.unwrap_or(project_id.clone());
             // Started here rather than by the attach, so its first message has an agent to wait
             // for even when the chat is not opened yet.

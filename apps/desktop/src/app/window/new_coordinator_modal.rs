@@ -7,10 +7,14 @@
 //!
 //! The Playbook overrides row shows the user's overrides (what every coordinator reads after
 //! Ghostex's playbook) and its Edit button turns the dialog into their editor
-//! (new_coordinator_playbook.rs).
+//! (new_coordinator_playbook.rs). For a project on more than one computer (or cloned twice
+//! here) the Computer field picks where it runs (new_coordinator_computer.rs).
 use super::native_modal_kit::*;
+#[path = "new_coordinator_computer.rs"]
+mod computer;
 #[path = "new_coordinator_playbook.rs"]
 mod playbook;
+pub(crate) use computer::*;
 use ghostex_gx_chat_core::menus::orchestrator_effort::{
     default_orchestrator_effort, orchestrator_efforts,
 };
@@ -58,6 +62,9 @@ const CREATE: &str = "Create";
 pub(crate) struct NewCoordinatorAgent {
     pub(crate) agent_id: String,
     pub(crate) name: String,
+    /// Its agent family (`claude`, `codex`, …), which another computer's launcher of the same
+    /// kind shares.
+    pub(crate) family: String,
     /// Empty for an agent whose launch takes no model: it starts on its configured one.
     pub(crate) models: Vec<NewCoordinatorModel>,
     pub(crate) skill_line: String,
@@ -73,18 +80,31 @@ pub(crate) struct NewCoordinatorModel {
 }
 
 pub(crate) enum NewCoordinatorModalCommand {
+    /// Creates the coordinator in the copy `group_id` names. The dialog stays open and waits on
+    /// `reply`: created closes it, a refusal keeps it with the reason.
     Create {
+        group_id: String,
         agent_id: String,
         name: String,
         model: Option<String>,
         effort: Option<String>,
+        reply: NewCoordinatorCreateReply,
     },
-    /// Saves the playbook overrides, or moves off the old full copies. The dialog stays open and
-    /// waits on `reply`.
+    /// Saves the playbook overrides of the copy `group_id` names, or moves off the old full
+    /// copies. The dialog stays open and waits on `reply`.
     SavePlaybook {
+        group_id: String,
         change: PlaybookChange,
         reply: NewCoordinatorPlaybookReply,
     },
+    /// The Computer field picked another copy: read its playbook (for the pick `generation`), and
+    /// its computer's models when they are not known yet.
+    ChooseCopy {
+        group_id: String,
+        generation: u64,
+    },
+    /// The Computer menu opened: send the copies as they are now (`set_copies`).
+    RefreshCopies,
     Cancel,
 }
 
@@ -92,7 +112,10 @@ pub(crate) type NewCoordinatorModalHost = Rc<dyn Fn(NewCoordinatorModalCommand, 
 
 pub(crate) struct NewCoordinatorModalConfig {
     pub(crate) project_name: String,
-    pub(crate) agents: Vec<NewCoordinatorAgent>,
+    /// Where it can run, with each computer's agents: one copy for a project on one computer.
+    pub(crate) copies: Vec<NewCoordinatorCopy>,
+    /// The copy the dialog opens on.
+    pub(crate) selected_copy: usize,
     pub(crate) selected_agent: usize,
     /// `None` until the host has read it; the row is left out while it is unknown.
     pub(crate) playbook: Option<OrchestratorPlaybookInfo>,
@@ -106,8 +129,22 @@ pub(crate) struct GpuiNewCoordinatorModalWindow {
     host: NewCoordinatorModalHost,
     palette: ModalPalette,
     project_name: String,
+    /// The picked copy's agents (`apply_copy_agents`).
     agents: Vec<NewCoordinatorAgent>,
     selected_agent: usize,
+    copies: Vec<NewCoordinatorCopy>,
+    copy_index: usize,
+    copy_select: ModalSelect,
+    /// The Computer field shows: more than one copy, now or since the dialog opened.
+    copies_shown: bool,
+    /// "<agent> isn't set up on <computer>.", after a pick changed the agent.
+    agent_hint: Option<String>,
+    /// Bumped on every pick of a copy, so a playbook read or save for an earlier one is dropped.
+    playbook_generation: u64,
+    /// Create was sent and its outcome is not back yet.
+    create_pending: bool,
+    /// Why the last Create was refused.
+    create_error: Option<String>,
     model_index: usize,
     effort: Option<String>,
     all_efforts: bool,
@@ -183,15 +220,29 @@ impl GpuiNewCoordinatorModalWindow {
             ),
         ];
         name_input.update(cx, |input, cx| input.focus(window, cx));
-        let selected_agent = config
-            .selected_agent
-            .min(config.agents.len().saturating_sub(1));
+        let copy_index = config
+            .selected_copy
+            .min(config.copies.len().saturating_sub(1));
+        let agents = config
+            .copies
+            .get(copy_index)
+            .and_then(|copy| copy.agents.clone())
+            .unwrap_or_default();
+        let selected_agent = config.selected_agent.min(agents.len().saturating_sub(1));
         let mut this = Self {
             host,
             palette: config.palette,
             project_name: config.project_name,
-            agents: config.agents,
+            agents,
             selected_agent,
+            copies_shown: config.copies.len() > 1,
+            copies: config.copies,
+            copy_index,
+            copy_select: ModalSelect::new(),
+            agent_hint: None,
+            playbook_generation: 0,
+            create_pending: false,
+            create_error: None,
             model_index: 0,
             effort: None,
             all_efforts: config.all_efforts,
@@ -301,13 +352,14 @@ impl GpuiNewCoordinatorModalWindow {
     }
 
     fn close_menus(&mut self) {
+        self.copy_select.close();
         self.agent_select.close();
         self.model_select.close();
         self.effort_select.close();
     }
 
     fn toggle_agent_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.agents.len() < 2 {
+        if self.agents.len() < 2 || self.create_pending {
             return;
         }
         let open = self.agent_select.open;
@@ -357,6 +409,7 @@ impl GpuiNewCoordinatorModalWindow {
 
     fn choose_agent(&mut self, index: usize, cx: &mut Context<Self>) {
         self.selected_agent = index;
+        self.agent_hint = None;
         self.agent_select.close();
         self.reset_model();
         cx.notify();
@@ -383,11 +436,14 @@ impl GpuiNewCoordinatorModalWindow {
     }
 
     fn any_menu_open(&self) -> bool {
-        self.agent_select.open || self.model_select.open || self.effort_select.open
+        self.copy_select.open
+            || self.agent_select.open
+            || self.model_select.open
+            || self.effort_select.open
     }
 
     fn can_create(&self) -> bool {
-        !self.agents.is_empty()
+        !self.create_pending && !self.agents.is_empty() && self.copy_ready()
     }
 
     fn close_window_and_send(
@@ -405,17 +461,32 @@ impl GpuiNewCoordinatorModalWindow {
     }
 
     fn create(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.can_create() {
+            return;
+        }
         let Some(agent) = self.agents.get(self.selected_agent).cloned() else {
             return;
         };
+        let Some(group_id) = self.chosen_group_id().map(str::to_string) else {
+            return;
+        };
         let name = self.name.split_whitespace().collect::<Vec<_>>().join(" ");
+        self.close_menus();
+        self.create_pending = true;
+        self.create_error = None;
         let command = NewCoordinatorModalCommand::Create {
+            group_id,
             agent_id: agent.agent_id,
             name,
             model: self.model().map(|model| model.value.clone()),
             effort: self.effort.clone().filter(|_| !self.efforts().is_empty()),
+            reply: NewCoordinatorCreateReply {
+                view: cx.entity().downgrade(),
+                window: window.window_handle(),
+            },
         };
-        self.close_window_and_send(command, window, cx);
+        cx.notify();
+        (self.host)(command, cx);
     }
 
     fn on_enter_action(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
@@ -483,6 +554,10 @@ impl GpuiNewCoordinatorModalWindow {
                 self.close_playbook_editor(window, cx);
                 cx.stop_propagation();
             }
+            return;
+        }
+        if self.handle_copy_key(key, cx) {
+            cx.stop_propagation();
             return;
         }
         match self.agent_select.handle_key(key, self.agents.len()) {
@@ -569,13 +644,35 @@ impl GpuiNewCoordinatorModalWindow {
                 .child(modal_text_input(&p, &self.name_input, false, window, cx))
                 .child(modal_hint(&p, NAME_HINT)),
         );
+        if let Some(field) = self.render_computer_field(cx) {
+            body = body.child(field);
+        }
         let Some(agent) = self.agent() else {
-            return body
-                .child(modal_error(
-                    &p,
-                    "A coordinator runs on Claude, Codex, ZCode, Cursor, Grok, Copilot, Antigravity, Pi, OMP, OpenCode or DeepSeek Harness. Add one of them in Settings > Agents first.",
-                ))
-                .into_any_element();
+            let message = match self.copy() {
+                Some(copy) if self.copies_shown && copy.usable() && copy.agents.is_none() => {
+                    format!(
+                        "Couldn't read {}'s agents yet. Try again in a moment.",
+                        copy.computer
+                    )
+                }
+                Some(copy) if self.copies_shown && copy.usable() => format!(
+                    "A coordinator runs on Claude, Codex, ZCode, Cursor, Grok, Copilot, Antigravity, Pi, OMP, OpenCode or DeepSeek Harness. Add one of them in Settings > Agents on {} first.",
+                    copy.computer
+                ),
+                Some(_) if self.copies_shown => String::new(),
+                _ => "A coordinator runs on Claude, Codex, ZCode, Cursor, Grok, Copilot, Antigravity, Pi, OMP, OpenCode or DeepSeek Harness. Add one of them in Settings > Agents first.".to_string(),
+            };
+            if !message.is_empty() {
+                body = body.child(modal_error(&p, &message));
+            }
+            if let Some(error) = self
+                .create_error
+                .as_ref()
+                .filter(|_| self.copy_problem().is_none())
+            {
+                body = body.child(modal_error(&p, error));
+            }
+            return body.into_any_element();
         };
         let agent_trigger = modal_select_trigger(
             &p,
@@ -583,22 +680,33 @@ impl GpuiNewCoordinatorModalWindow {
             "new-coordinator-agent-select",
             Some(agent.name.clone()),
             "Choose an agent",
-            self.agents.len() < 2,
+            self.agents.len() < 2 || self.create_pending,
             |this, window, cx| this.toggle_agent_menu(window, cx),
             cx,
         );
-        body = body.child(
-            self.select_field(FIELD_AGENT, &self.agent_select, agent_trigger)
-                .w_full(),
-        );
+        let mut agent_field = self
+            .select_field(FIELD_AGENT, &self.agent_select, agent_trigger)
+            .w_full();
+        if let Some(hint) = &self.agent_hint {
+            agent_field = agent_field.child(modal_hint(&p, hint));
+        }
+        body = body.child(agent_field);
         if let Some(row) = self.render_model_row(cx) {
             body = body.child(row);
         }
         if let Some(row) = self.render_playbook_row(cx) {
             body = body.child(row);
         }
-        body.child(self.render_first_message(&agent.skill_line))
-            .into_any_element()
+        body = body.child(self.render_first_message(&agent.skill_line));
+        // A refusal about the picked copy is already said under the Computer field.
+        if let Some(error) = self
+            .create_error
+            .as_ref()
+            .filter(|_| self.copy_problem().is_none())
+        {
+            body = body.child(modal_error(&p, error));
+        }
+        body.into_any_element()
     }
 
     /// The skill line, drawn as a read-only box with a lock: it cannot be edited or removed.
@@ -644,17 +752,42 @@ impl GpuiNewCoordinatorModalWindow {
     /// and the row for an agent whose launch takes no model.
     fn render_model_row(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let agent = self.agent()?;
-        if agent.models.is_empty() {
-            return None;
-        }
         let p = self.palette;
+        if agent.models.is_empty() {
+            // Another computer's models, still being read: a placeholder rather than no field,
+            // so the row does not appear late as if the choice were new.
+            if !self.models_loading()
+                || !ghostex_gx_chat_core::protocol::coordinator_launch_takes_model(&agent.family)
+            {
+                return None;
+            }
+            let computer = self
+                .copy()
+                .map(|copy| copy.computer.clone())
+                .unwrap_or_default();
+            let loading = modal_select_trigger(
+                &p,
+                &self.model_select,
+                "new-coordinator-model-select",
+                Some(format!("Reading {computer}'s models…")),
+                "Choose a model",
+                true,
+                |_this: &mut Self, _window, _cx| {},
+                cx,
+            );
+            return Some(
+                self.select_field(FIELD_MODEL, &self.model_select, loading)
+                    .w_full()
+                    .into_any_element(),
+            );
+        }
         let model = modal_select_trigger(
             &p,
             &self.model_select,
             "new-coordinator-model-select",
             self.model().map(|model| model.label.clone()),
             "Choose a model",
-            false,
+            self.create_pending,
             |this, window, cx| this.toggle_model_menu(window, cx),
             cx,
         );
@@ -675,7 +808,7 @@ impl GpuiNewCoordinatorModalWindow {
                 "new-coordinator-effort-select",
                 label,
                 "Effort",
-                false,
+                self.create_pending,
                 |this, window, cx| this.toggle_effort_menu(window, cx),
                 cx,
             );
@@ -696,6 +829,7 @@ impl GpuiNewCoordinatorModalWindow {
     /// Issue #395: this drew only the open select's list and asked nothing of the closed ones, so a picked agent closed the Agent select but its frosted list stayed on screen (only the Effort list was ever told to hide). Never skip a closed select here.
     fn render_open_menu(&self, window: &Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let p = self.palette;
+        let copy_menu = self.render_copy_menu(window, cx);
         let agent_labels = self
             .agents
             .iter()
@@ -803,7 +937,7 @@ impl GpuiNewCoordinatorModalWindow {
             window,
             cx,
         );
-        agent_menu.or(model_menu).or(effort_menu)
+        copy_menu.or(agent_menu).or(model_menu).or(effort_menu)
     }
 
     fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -827,7 +961,7 @@ impl GpuiNewCoordinatorModalWindow {
         let create = modal_action_button(
             &p,
             "new-coordinator-create",
-            CREATE,
+            self.create_label(),
             None,
             ModalButtonTone::Primary,
             !self.can_create(),

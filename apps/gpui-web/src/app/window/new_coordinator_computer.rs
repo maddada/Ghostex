@@ -1,0 +1,1 @@
+../../../../desktop/src/app/window/new_coordinator_computer.rs

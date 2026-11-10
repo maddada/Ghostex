@@ -55,6 +55,13 @@ pub(crate) struct HudCounters {
     pub(crate) failed_reads: u64,
 }
 
+impl HudHost {
+    /// The sidebar HUD last read from another computer (its launchers among it), once read.
+    pub(crate) fn remote_sidebar_hud(&self, machine_id: &str) -> Option<&Value> {
+        self.sources.remote_sidebar_huds.get(machine_id)
+    }
+}
+
 impl GhostexGpuiApp {
     /// A HUD effect of the store (effects.rs hands them over).
     pub(in crate::app::gx_store) fn gx_store_perform_hud_effect(

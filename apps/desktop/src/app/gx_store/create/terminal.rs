@@ -284,19 +284,26 @@ impl GhostexGpuiApp {
         project_id: &str,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        if self.gx_store_local_project_path_is_available(project_id) {
+            return true;
+        }
+        self.gx_store_present_missing_project_folder(project_id, cx);
+        false
+    }
+
+    /// The local project's folder is there (or its state is not known yet), without the missing
+    /// folder's dialog.
+    pub(super) fn gx_store_local_project_path_is_available(&self, project_id: &str) -> bool {
         let state = self
             .gx_store
             .core
             .presentation()
             .project(&ProjectKey::local(project_id))
             .and_then(|project| project.path_state.clone());
-        match state {
-            None | Some(ghostex_gx_core::protocol::PathState::Available) => true,
-            Some(_) => {
-                self.gx_store_present_missing_project_folder(project_id, cx);
-                false
-            }
-        }
+        matches!(
+            state,
+            None | Some(ghostex_gx_core::protocol::PathState::Available)
+        )
     }
 
     /// `presentMissingProjectFolder(projectId)`: the dialog, or a toast when the project has no
