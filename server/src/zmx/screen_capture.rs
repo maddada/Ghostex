@@ -90,36 +90,7 @@ pub(crate) fn zmx_socket_directory_is_shared() -> bool {
     else {
         return ghostex_paths::uses_separate_profile();
     };
-    !std::env::var_os("ZMX_DIR").is_some_and(|dir| {
-        let dir = PathBuf::from(dir);
-        dir.starts_with(&home) || is_test_server_socket_folder(&home, &dir)
-    })
-}
-
-/// CDXC:ServerDaemon 2026-11-09 WHY: `cargo xtask test-server` puts a test server's socket folder in `/tmp/gxts-<uid>-<name>` because `<home>/zmx` was too long for a socket path on a computer whose home sits on another volume. That folder is still the test server's own, so it counts as owned when the home is `…/test-servers/<name>/home`, the name matches, and the folder is a real directory of this user that nobody else can open.
-#[cfg(unix)]
-fn is_test_server_socket_folder(home: &std::path::Path, dir: &std::path::Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    let name = home
-        .parent()
-        .filter(|_| home.file_name().is_some_and(|folder| folder == "home"))
-        .and_then(|server_folder| {
-            let root = server_folder.parent()?;
-            root.file_name()
-                .is_some_and(|folder| folder == "test-servers")
-                .then(|| server_folder.file_name())
-                .flatten()
-        })
-        .and_then(|name| name.to_str());
-    let uid = unsafe { libc::getuid() };
-    let Some(name) = name else {
-        return false;
-    };
-    if dir != std::path::Path::new(&format!("/tmp/gxts-{uid}-{name}")) {
-        return false;
-    }
-    std::fs::symlink_metadata(dir)
-        .is_ok_and(|meta| meta.is_dir() && meta.uid() == uid && meta.mode() & 0o077 == 0)
+    !std::env::var_os("ZMX_DIR").is_some_and(|dir| PathBuf::from(dir).starts_with(&home))
 }
 
 /// Every server id with a live session socket in this profile's folder or in the default folder
