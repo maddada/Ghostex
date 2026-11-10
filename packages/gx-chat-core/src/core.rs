@@ -65,6 +65,36 @@ pub struct ChatCore {
     parts_items_current: bool,
     /// The document parts kept with their inputs, reused by every assembly while those hold.
     assemble_cache: crate::document::AssembleCache,
+    /// A hidden chat's held-back rebuild ([`HiddenRebuild`]).
+    hidden_rebuild: HiddenRebuild,
+}
+
+/// How long a hidden chat may hold its document back after its last rebuild.
+const HIDDEN_REBUILD_MS: f64 = 1_000.0;
+
+/// What a hidden chat owes its document.
+///
+/// CDXC:SessionChat 2026-11-10 WHY: with nine agents working and one chat on screen, the chat host
+/// thread was 82% busy and `republish` was 83% of it, nearly all of that `assemble_with` (68%),
+/// while the chats off screen were the ones doing most of it: one event cost a hidden chat about
+/// 1 ms, 4.3 MB and 18,300 allocations (memharness soak, one chat shown and eight hidden) for a
+/// document no view drains; held back it costs about half the time and allocations. A hidden
+/// chat ([`crate::Event::Visibility`]) still dispatches every event and runs every state step of
+/// `republish` (pending echoes, composition, the projection, read aloud), so its state, the host's
+/// deliveries and everything it sends stay exactly as before; only the document assembly and the
+/// frame parts wait, at most [`HIDDEN_REBUILD_MS`] after the last rebuild, on a wake of their own,
+/// and run at once when the chat is shown again. The publish requests of the turns held back are
+/// kept here, so the rebuild ships whatever one of them would have shipped.
+#[derive(Clone, Debug, Default)]
+struct HiddenRebuild {
+    /// The host clock of the last full rebuild.
+    rebuilt_at_ms: Option<f64>,
+    /// When the held-back rebuild is due, while one is owed.
+    owed_at_ms: Option<f64>,
+    /// A held-back turn asked for a publish (`CoreState::request_publish`).
+    publish: bool,
+    /// A held-back turn asked for a render (`CoreState::request_render`).
+    render: bool,
 }
 
 /// The parts the host already has, which is what turns a whole list into a splice.
@@ -142,7 +172,12 @@ impl ChatCore {
         // Any call that hands the agent a message ends the new chat's worktree tray, whichever
         // family made it (a form answer, Send now), before this turn's document is built.
         crate::menus::draft_worktree::note_first_message(&mut self.state, false, &effects);
-        self.republish();
+        if self.holds_rebuild() {
+            self.refresh_state();
+            self.hold_rebuild();
+        } else {
+            self.republish();
+        }
         // Read aloud's speech rides after the publish that shows it (`read_aloud/playback.rs`).
         effects.append(&mut self.state.read_aloud.outbox);
         // One wake for the whole core, not one per timer: the table knows which key is earliest,
@@ -164,7 +199,55 @@ impl ChatCore {
 
     /// Milliseconds until the core's earliest armed deadline, or `None` when nothing is armed.
     pub fn next_wake_ms(&self) -> Option<u64> {
-        self.state.core.next_wake_ms(self.context.now_ms)
+        self.next_wake_ms_at(self.context.now_ms)
+    }
+
+    /// The earliest of the timers and a hidden chat's held-back rebuild, measured at `now_ms`.
+    fn next_wake_ms_at(&self, now_ms: f64) -> Option<u64> {
+        let timers = self.state.core.next_wake_ms(now_ms);
+        // Rounded up, so the wake never lands before the rebuild is due and re-arms for nothing.
+        let rebuild = self
+            .hidden_rebuild
+            .owed_at_ms
+            .map(|due| (due - now_ms).max(0.0).ceil() as u64);
+        match (timers, rebuild) {
+            (Some(timers), Some(rebuild)) => Some(timers.min(rebuild)),
+            (timers, rebuild) => timers.or(rebuild),
+        }
+    }
+
+    /// Whether this turn's rebuild waits: the chat is hidden, it has published before, and its
+    /// last rebuild was less than [`HIDDEN_REBUILD_MS`] ago. A show clears `hidden` in the
+    /// dispatch, so the turn that shows a chat always rebuilds.
+    fn holds_rebuild(&self) -> bool {
+        let core = &self.state.core;
+        core.hidden
+            && self.published_once
+            && core.controller_started
+            && core.boot_error.is_none()
+            && self
+                .hidden_rebuild
+                .rebuilt_at_ms
+                .is_some_and(|at| self.context.now_ms - at < HIDDEN_REBUILD_MS)
+    }
+
+    /// Takes this held-back turn's publish requests into the owed rebuild and arms its wake.
+    fn hold_rebuild(&mut self) {
+        let core = &mut self.state.core;
+        let requested = std::mem::take(&mut core.publish_requested);
+        let rendered = std::mem::take(&mut core.render_requested);
+        // A turn whose chain continued without asking publishes nothing, as in `republish`.
+        if !(std::mem::take(&mut core.chain_continued) && !requested) {
+            self.hidden_rebuild.publish |= requested;
+            self.hidden_rebuild.render |= rendered;
+        }
+        if self.hidden_rebuild.owed_at_ms.is_none() {
+            let since = self
+                .hidden_rebuild
+                .rebuilt_at_ms
+                .unwrap_or(self.context.now_ms);
+            self.hidden_rebuild.owed_at_ms = Some(since + HIDDEN_REBUILD_MS);
+        }
     }
 
     /// The state every family reads.
@@ -274,7 +357,7 @@ impl ChatCore {
                 Some(Box::new(self.document.clone()))
             },
             requests: Vec::new(),
-            next_wake_ms: self.state.core.next_wake_ms(now_ms),
+            next_wake_ms: self.next_wake_ms_at(now_ms),
         }
     }
 
@@ -315,6 +398,13 @@ impl ChatCore {
     /// Only a real change bumps, because the revision is what the host's change gate reads: a bump
     /// with identical content would ship the whole document once a second for nothing.
     pub fn republish(&mut self) {
+        self.refresh_state();
+        self.publish_if_moved();
+    }
+
+    /// The state steps of a publish, which later dispatches read and a hidden chat still runs on
+    /// every turn ([`HiddenRebuild`]).
+    fn refresh_state(&mut self) {
         crate::session::working::stamp_working_started(&mut self.state, self.context.now_ms);
         // The two `useEffect`s the TypeScript ran before the composition read their state: the
         // pending echoes pruned against the authoritative list, and the pending tool row dropped
@@ -329,12 +419,19 @@ impl ChatCore {
         crate::questions::resource_modal::after_refresh(&mut self.state, &self.context);
         // Auto-read reads the `finalIds` the refresh above just computed.
         crate::read_aloud::observe(&mut self.state, &self.context);
+    }
+
+    /// Assembles the document and the frame parts, and bumps the revision when the document moved.
+    fn publish_if_moved(&mut self) {
+        // Whatever a hidden chat held back is part of this rebuild.
+        let held = std::mem::take(&mut self.hidden_rebuild);
+        self.hidden_rebuild.rebuilt_at_ms = Some(self.context.now_ms);
         // The test is "did the STATE change", asked in the only terms the core has: assemble the
         // new state at the clock the published document was assembled at. Equal means nothing but
         // the clock moved, and the TypeScript would not have published either, so the host keeps
         // the snapshot it has (its `snapshot` variable is not refreshed without a publish).
-        let requested = std::mem::take(&mut self.state.core.publish_requested);
-        let rendered = std::mem::take(&mut self.state.core.render_requested);
+        let requested = std::mem::take(&mut self.state.core.publish_requested) || held.publish;
+        let rendered = std::mem::take(&mut self.state.core.render_requested) || held.render;
         let chain_continued = std::mem::take(&mut self.state.core.chain_continued);
         // `start`'s `.catch`: `transcriptItems = []; snapshot = {status: 'error', error};
         // revision++`. It runs with no controller at all, so it is decided before the gate below
