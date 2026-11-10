@@ -28,6 +28,9 @@ pub fn thread_to_orchestrator_refusal(
         .then_some(THREAD_TO_ORCHESTRATOR_REFUSAL)
 }
 
+/// The check's param naming the computer a peer's check came from; set only by gxserver.
+pub const SENDER_SERVER_ID_PARAM: &str = "senderServerId";
+
 /// `/api/checkAgentSessionWrite`: `{ "refusal": <text or null> }` for the session
 /// `senderProjectId`/`senderSessionId` about to send to or type into `projectId`/`sessionId`.
 pub fn read_agent_session_write_check(
@@ -42,10 +45,30 @@ pub fn read_agent_session_write_check(
             .unwrap_or_default()
             .to_string()
     };
+    let target = (text("projectId"), text("sessionId"));
+    let sender_server = text(SENDER_SERVER_ID_PARAM);
+    // CDXC:Coordinators 2026-11-11 FIX:
+    // GitHub #554 ("A thread on another computer can still message its coordinator"): the check comes from that computer's CLI as a peer, naming the sender's ids on its own computer, and was only looked up among this computer's threads, where a remote thread is not, so it was never refused. A check from a peer (gxserver stamps which computer, route_http/sessions.rs) now looks among the threads a coordinator here started on that computer.
+    if !sender_server.is_empty() {
+        let thread = super::read_remote_thread(
+            db,
+            &(
+                sender_server,
+                text("senderProjectId"),
+                text("senderSessionId"),
+            ),
+        )?;
+        let refusal = thread
+            .filter(|thread| {
+                thread.resolved_at.is_none() && thread.coordinator_key() == target
+            })
+            .map(|_| THREAD_TO_ORCHESTRATOR_REFUSAL);
+        return Ok(json!({ "refusal": refusal }));
+    }
     let sender_thread = read_thread(db, &text("senderProjectId"), &text("senderSessionId"))?;
     let refusal = thread_to_orchestrator_refusal(
         sender_thread.as_ref(),
-        (text("projectId").as_str(), text("sessionId").as_str()),
+        (target.0.as_str(), target.1.as_str()),
     );
     Ok(json!({ "refusal": refusal }))
 }
