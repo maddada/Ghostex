@@ -303,6 +303,35 @@ fn done_button(item: &Value, key: &str, picked: bool) -> Value {
     })
 }
 
+/// The other lines of work that wait on an ask's answer (`item wait W8 --on Q12`), as
+/// `[{title, ref, command}]` where the command shows that item in the Work panel.
+fn waited_by(items: &[&Value], own: &Value, tag: &str) -> Value {
+    if tag.is_empty() {
+        return json!([]);
+    }
+    Value::Array(
+        items
+            .iter()
+            .filter(|other| text(other, "ref") != text(own, "ref"))
+            .filter(|other| !matches!(text(other, "status"), "finished" | "dropped"))
+            .filter(|other| {
+                other["waits"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|wait| text(wait, "on").eq_ignore_ascii_case(tag) && wait["open"] != false)
+            })
+            .map(|other| {
+                json!({
+                    "title": text(other, "title"),
+                    "ref": text(other, "ref"),
+                    "command": { "type": "jumpToWorkCard", "key": text(other, "key") },
+                })
+            })
+            .collect(),
+    )
+}
+
 /// Whether an open ask is snoozed now: gxserver's `snoozedUntil`, or a snooze sent from here.
 fn snoozed(ask: &Value, key: &str, state: &ChatState, now_ms: i64) -> bool {
     at_ms(text(ask, "snoozedUntil")).is_some_and(|until| until > now_ms)
@@ -474,8 +503,16 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
                 "title": card["title"],
                 "body": card["body"],
                 "age": card["age"],
-                // The work it belongs to is its link (`chips`), not a second line.
-                "detail": [card["line"]],
+                // The line under it names only its own item (`chips`); whether it holds that item
+                // up is the row's mark. Other items that wait on its answer follow (`waitedBy`).
+                //
+                // CDXC:Coordinators 2026-11-10 DECISION:
+                // User, picking on the dock item line page (footer-page.html) after a line read
+                // "<item> · <item> waits on this": "C. Only the name", other items that wait "B.
+                // Name it when it is one, count when it is more", and "A. One line: the name is
+                // cut" when it does not fit.
+                "detail": [],
+                "waitedBy": waited_by(&items, item, text(ask, "tag")),
                 "buttons": card["buttons"],
                 "busy": card["busy"],
                 "reply": { "item": text(item, "ref"), "key": key, "tag": text(ask, "tag") },

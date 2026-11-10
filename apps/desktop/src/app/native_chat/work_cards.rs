@@ -792,13 +792,22 @@ impl NativeChatView {
                     .children(under_answers),
             );
         }
-        let mut parts: Vec<AnyElement> = row["chips"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .enumerate()
-            .map(|(index, chip)| self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx))
-            .collect();
+        // A work item ask's line is one line naming its own item, then the other items that wait
+        // on its answer; names give way with an ellipsis, its own item's last (`item_line`).
+        let item_line = row["waitedBy"].is_array();
+        let mut parts: Vec<AnyElement> = if item_line {
+            self.item_line(&key, row, p, cx)
+        } else {
+            row["chips"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .enumerate()
+                .map(|(index, chip)| {
+                    self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx)
+                })
+                .collect()
+        };
         let said: Vec<String> = row["detail"]
             .as_array()
             .into_iter()
@@ -848,7 +857,8 @@ impl NativeChatView {
                             .min_w_0()
                             .min_h(px(28.0 * s))
                             .flex()
-                            .flex_wrap()
+                            .when(!item_line, |line| line.flex_wrap())
+                            .when(item_line, |line| line.overflow_hidden())
                             .items_center()
                             .gap_x(px(8.0 * s))
                             .gap_y(px(4.0 * s))
@@ -864,6 +874,161 @@ impl NativeChatView {
             .child(head)
             .child(under)
             .into_any_element()
+    }
+
+    /// An opened ask row's line: its own work item's name, then, when one other item waits on
+    /// its answer, "· <that item> waits on this", or "· N others wait" that opens the list of
+    /// them. It stays one line: a name too long is cut with an ellipsis and whole in its tooltip,
+    /// the other names giving way before the row's own item does, and the words and dots never
+    /// do. Its other parts (the steps to follow) come after.
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// User, of a line that read "<item> · <item> waits on this" with its dot left hanging: only
+    /// the item's name (the row's mark says whether it holds that item up); one other item that
+    /// waits is named, more are counted; and the line is cut, never wrapped.
+    fn item_line(
+        &self,
+        key: &str,
+        row: &Value,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let s = p.scale;
+        let chips: Vec<Value> = row["chips"].as_array().cloned().unwrap_or_default();
+        let dot = || {
+            div()
+                .flex_shrink_0()
+                .text_color(p.muted)
+                .opacity(0.6)
+                .child("\u{b7}")
+                .into_any_element()
+        };
+        // A name with its stack icon, cut at the end when it must give way (`shrink`, against
+        // the others' weights, down to `floor`) and whole in its tooltip; `command` makes it a
+        // link. Another item's name gives way first but keeps a few words.
+        let name = |id: String, label: String, shrink: f32, floor: f32, command: Value| {
+            let tip = label.clone();
+            div()
+                .id(gpui::SharedString::from(id))
+                .flex_shrink(shrink)
+                .min_w(px(floor * s))
+                .flex()
+                .items_center()
+                .gap(px(6.0 * s))
+                .text_color(p.card_muted)
+                .child(
+                    svg()
+                        .path("titlebar/stack.svg")
+                        .size(px(14.0 * s))
+                        .flex_shrink_0()
+                        .text_color(p.muted),
+                )
+                .child(div().min_w_0().truncate().child(label))
+                .tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+                })
+                .when(command.is_object(), |part| {
+                    part.chat_cursor_pointer()
+                        .hover(|style| style.text_color(p.foreground))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.invoke(command.clone(), cx);
+                        }))
+                })
+                .into_any_element()
+        };
+        let mut parts = Vec::new();
+        for chip in chips.iter().filter(|chip| text(chip, "kind") == "item") {
+            parts.push(name(
+                format!("dock-item:{key}"),
+                text(chip, "label"),
+                1.0,
+                60.0,
+                chip["command"].clone(),
+            ));
+        }
+        let waited: Vec<Value> = row["waitedBy"].as_array().cloned().unwrap_or_default();
+        match waited.as_slice() {
+            [] => {}
+            [other] => {
+                if !parts.is_empty() {
+                    parts.push(dot());
+                }
+                parts.push(name(
+                    format!("dock-waits:{key}"),
+                    text(other, "title"),
+                    8.0,
+                    110.0,
+                    other["command"].clone(),
+                ));
+                parts.push(
+                    div()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .text_color(p.card_muted)
+                        .child("waits on this")
+                        .into_any_element(),
+                );
+            }
+            several => {
+                if !parts.is_empty() {
+                    parts.push(dot());
+                }
+                let rows: Vec<Value> = several
+                    .iter()
+                    .map(|other| {
+                        json!({ "label": text(other, "title"), "command": other["command"] })
+                    })
+                    .collect();
+                parts.push(
+                    div()
+                        .id(gpui::SharedString::from(format!("dock-waits:{key}")))
+                        .role(gpui::Role::Button)
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .text_color(p.card_muted)
+                        .underline()
+                        .chat_cursor_pointer()
+                        .hover(|style| style.text_color(p.foreground))
+                        .child(format!("{} others wait", several.len()))
+                        .on_click(
+                            cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
+                                cx.stop_propagation();
+                                let at = event.position();
+                                let in_main = this
+                                    .open_main_window(cx)
+                                    .is_none_or(|main| main == window.window_handle());
+                                if in_main {
+                                    this.show_chat_menu_at(rows.clone(), at, 240.0, window, cx);
+                                } else {
+                                    this.show_chat_menu_in_window_at(
+                                        rows.clone(),
+                                        at,
+                                        240.0,
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            }),
+                        )
+                        .into_any_element(),
+                );
+            }
+        }
+        // The steps to follow, and any other part, after the names.
+        for (index, chip) in chips
+            .iter()
+            .enumerate()
+            .filter(|(_, chip)| text(chip, "kind") != "item")
+        {
+            parts.push(
+                div()
+                    .flex_shrink_0()
+                    .child(self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx))
+                    .into_any_element(),
+            );
+        }
+        parts
     }
 
     /// Words that show four lines and then "more", which shows the rest ("less" folds them
