@@ -2656,7 +2656,7 @@ than six models (OpenCode, Pi and Cursor, for example) has a search field above
 the list: type part of a model's name or id ("sonnet", "gpt 6") to narrow it,
 with matching starred models still first. Older versions of a model (GPT 6 Sol
 once GPT 6.1 Sol is out, for example) sit under Legacy models at the bottom of
-the tab; click it to show them, or star one to keep it at the top. Codex,
+the tab; click it (or reach it with the arrow keys and press Enter or Right) to show them, or star one to keep it at the top. Codex,
 Cursor, Grok Build, Antigravity and OpenCode's lists come from the agent installed on that computer, so
 new models show up without a Ghostex update. The OpenCode tab is there in every
 thread and lists the models of the providers you set up in OpenCode; an OpenCode
