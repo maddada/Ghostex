@@ -17,6 +17,9 @@ use crate::*;
 /// macOS exactly as it does today.
 pub(crate) const FLOATING_REVEAL_EDGE_WIDTH: f32 = 10.0;
 
+/// The gap between the window's left border and a panel floated against it.
+pub(crate) const FLOATING_REVEAL_LEFT_GAP: f32 = 5.0;
+
 /// The visual line between the floating sidebar and the floating sessions column. It is painted
 /// chrome with no id and no listener, so it has no hitbox: the floating panel is not a place to
 /// resize the split.
@@ -172,9 +175,13 @@ impl GhostexGpuiApp {
     /// User: with the sidebar shown, the floating sessions pane always opens to the right of the
     /// sidebar, whether a hover on the sidebar's left edge or a session click asked for it. This
     /// supersedes the same-day arrangement that floated it over the sidebar for the hover.
+    ///
+    /// CDXC:Sidebar 2026-11-11 DECISION:
+    /// User: "shift the floating left sidebar a bit to the right (by 5px) so it's not directly on the edge. do this for chat and sidebar actually when shown as overlay on the left border itself". A panel floated at the window's left border (the sidebar, the sessions column, or both together) starts `FLOATING_REVEAL_LEFT_GAP` in from it, so a thin gap shows between the window's border and the panel; its width, top and bottom are unchanged. The work area frame's gutter (6pt) already is such a gap, so the larger of the two applies. The hover zone still reaches the window's very edge: the edge strip stays where it is, and the native keep zone while the panel is out (`keep` in GhostexGpuiNativeRevealUpdate) runs from the window's left edge, so the gap does not close the panel. A panel beside a docked sidebar is not at the border and does not change.
     pub(crate) fn floating_reveal_left_inset(&self) -> f32 {
         if self.sidebar_collapsed {
             self.floating_reveal_card_inset(self.floating_reveal_content())
+                .max(FLOATING_REVEAL_LEFT_GAP)
         } else {
             self.sidebar_width + SIDEBAR_DIVIDER_WIDTH
         }

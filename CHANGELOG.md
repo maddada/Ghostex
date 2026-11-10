@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The floating sidebar and chat panel sit 5px in from the window's left border (computer):** when the sidebar is hidden and you move the pointer to the left edge, the panel that slides over the window no longer touches the border; a thin gap shows between them. Its width, top and bottom are the same, and the pointer still opens it from the very edge of the window without the gap closing it. With the Frame the work area setting on, the frame's own gap is kept as it was.
 - **Terminal pictures stay after Ghostex reconnects to a session (computer):** a picture a program drew in a terminal (Kitty graphics, like `kitten icat` or an agent's chart) now comes back when Ghostex restarts or reattaches to the session, and stays when the pane is resized. Pictures that already scrolled into the history are still not brought back. Applies to sessions started after the update.
 - **The chat icon at the top of the sidebar is gone (computer):** it was a second button beside Hide sidebar that folded the Agents Panel, and it looked like a chat button. Expand side panel (Cmd+Ctrl+E, or the expand button at the end of the view tabs) does the same thing and is still there.
 - **On Windows, Easy Connect's helpers stop when Ghostex does:** when Ghostex or its background server crashed or was ended from Task Manager on a Windows PC, the helper programs behind Easy Connect kept running, and a leftover one could make the next connection stall every few seconds. They now end with the program that started them, as they already did on macOS and Linux.
