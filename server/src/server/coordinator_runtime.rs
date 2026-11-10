@@ -9,7 +9,7 @@
 use super::*;
 
 use crate::coordinators::{
-    self, agent_message, classify_thread_session, clear_thread_pending_message, list_threads,
+    self, agent_message, classify_thread_session, clear_thread_pending_message,
     record_thread_report, report_body, set_thread_observed_working, set_thread_resolved,
     MessageSender, SessionKey, ThreadProgress, ThreadRecord, ThreadReport, ThreadState,
 };
@@ -415,7 +415,10 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         return Vec::new();
     };
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let Ok(threads) = list_threads(&db) else {
+    // CDXC:Coordinators 2026-11-10 WHY: supervision watches only open threads, so only those are
+    // read (51 of 1,104 rows here, instead of 3.9 MB of text); the panels below read the resolved
+    // ones from memory (coordinators/thread_reads.rs).
+    let Ok(threads) = crate::coordinators::list_open_threads(&db) else {
         return Vec::new();
     };
     refresh_thread_screen_waits(state, &repository, &threads);

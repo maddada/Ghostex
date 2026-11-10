@@ -133,7 +133,7 @@ fn coordinator_from_row(row: &Row<'_>) -> rusqlite::Result<CoordinatorRecord> {
     })
 }
 
-fn thread_from_row(row: &Row<'_>) -> rusqlite::Result<ThreadRecord> {
+pub(super) fn thread_from_row(row: &Row<'_>) -> rusqlite::Result<ThreadRecord> {
     Ok(ThreadRecord {
         project_id: row.get("projectId")?,
         session_id: row.get("sessionId")?,
@@ -155,7 +155,7 @@ fn thread_from_row(row: &Row<'_>) -> rusqlite::Result<ThreadRecord> {
 
 const COORDINATOR_COLUMNS: &str =
     "projectId, sessionId, goal, instructions, memoryJson, createdAt, updatedAt";
-const THREAD_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, pendingMessage, pendingMessageAt, closedWithCoordinatorAt, createdAt, updatedAt";
+pub(super) const THREAD_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, pendingMessage, pendingMessageAt, closedWithCoordinatorAt, createdAt, updatedAt";
 
 pub fn read_coordinator(
     db: &Connection,
@@ -253,6 +253,21 @@ pub fn list_threads(db: &Connection) -> Result<Vec<ThreadRecord>, DomainStateErr
     let mut statement = db
         .prepare(&format!(
             "SELECT {THREAD_COLUMNS} FROM coordinator_threads ORDER BY createdAt"
+        ))
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], thread_from_row)
+        .map_err(sql_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    Ok(rows)
+}
+
+/// The threads that are not resolved, oldest first: the ones the supervisor watches.
+pub fn list_open_threads(db: &Connection) -> Result<Vec<ThreadRecord>, DomainStateError> {
+    let mut statement = db
+        .prepare_cached(&format!(
+            "SELECT {THREAD_COLUMNS} FROM coordinator_threads WHERE resolvedAt IS NULL ORDER BY createdAt"
         ))
         .map_err(sql_error)?;
     let rows = statement

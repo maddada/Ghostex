@@ -21,7 +21,7 @@ use serde_json::{json, Map, Value};
 use super::brief::report_headline;
 use super::endpoint::session_title_of;
 use super::live::{thread_live, ThreadLive};
-use super::records::{list_coordinators, list_threads, SessionKey, ThreadRecord};
+use super::records::{list_coordinators, SessionKey, ThreadRecord};
 use super::remote_threads::{list_remote_threads, RemoteThreadRecord};
 use super::state::{
     classify_thread_session, thread_needs_user_approval, waiting_prompt, ThreadProgress,
@@ -670,7 +670,12 @@ pub fn refresh_coordinator_panels(
     let Ok(coordinators) = list_coordinators(db) else {
         return Vec::new();
     };
-    let threads = list_threads(db).unwrap_or_default();
+    // The open threads read now, the resolved ones from memory unless one changed (thread_reads.rs).
+    let all_threads = super::read_all_threads(db).ok();
+    let threads = all_threads
+        .as_ref()
+        .map(super::AllThreads::ordered)
+        .unwrap_or_default();
     let remote_threads = list_remote_threads(db).unwrap_or_default();
     let mut board_items = super::work::list_all_work_items(db);
     let intro_hidden = super::intro::intro_hidden(db);
@@ -693,6 +698,7 @@ pub fn refresh_coordinator_panels(
         let mut panel_rows = Vec::new();
         for thread in threads
             .iter()
+            .copied()
             .filter(|thread| thread.coordinator_key() == key)
         {
             let thread_key = thread.key();

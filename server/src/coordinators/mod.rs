@@ -31,6 +31,7 @@ mod stale_report;
 mod stall;
 mod state;
 mod thread_messages;
+mod thread_reads;
 mod title;
 mod work;
 
@@ -63,5 +64,6 @@ pub use stale_report::*;
 pub use stall::*;
 pub use state::*;
 pub use thread_messages::*;
+pub(crate) use thread_reads::*;
 pub use title::*;
 pub use work::*;
