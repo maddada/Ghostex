@@ -124,10 +124,15 @@ pub(crate) fn agent_left_conversation(
 
 /// Whether this session's agent is confirmed gone: what a probe that could not read the screen
 /// (the capture failed or was cut) says, so a confirmed absence outlives it.
+/// Reading it counts as a probe, so a record whose captures keep failing is not forgotten as
+/// unwatched.
 pub(crate) fn agent_gone_confirmed(project_id: &str, session_id: &str) -> bool {
     agent_gone_watches()
-        .get(&format!("{project_id}:{session_id}"))
-        .is_some_and(|stored| stored.watch.confirmed_at.is_some())
+        .get_mut(&format!("{project_id}:{session_id}"))
+        .is_some_and(|stored| {
+            stored.touched = Instant::now();
+            stored.watch.confirmed_at.is_some()
+        })
 }
 
 /// Drops the session's record: its agent was started again or the session went away.
@@ -470,6 +475,20 @@ mod tests {
         );
         forget_untouched(&mut watches, later);
         assert!(!watches.contains_key("P:A") && watches.contains_key("P:B"));
+    }
+
+    /// Probes whose captures fail keep the record they read from being forgotten as unwatched.
+    #[test]
+    fn a_failed_capture_s_read_keeps_the_record_watched() {
+        confirm_agent_gone_for_test("P-touch", "S-touch");
+        agent_gone_watches()
+            .get_mut("P-touch:S-touch")
+            .unwrap()
+            .touched = Instant::now() - AGENT_GONE_UNTOUCHED - Duration::from_secs(1);
+        assert!(agent_gone_confirmed("P-touch", "S-touch"));
+        forget_untouched(&mut agent_gone_watches(), Instant::now());
+        assert!(agent_gone_confirmed("P-touch", "S-touch"), "still watched");
+        forget_agent_gone("P-touch", "S-touch");
     }
 
     /// The prompt goes before the settle time: nothing is held.
