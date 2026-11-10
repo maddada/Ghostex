@@ -8,22 +8,50 @@ use serde_json::{Map, Value, json};
 use crate::GhostexGpuiApp;
 
 const READ_SHARED_SETTINGS_PATH: &str = "/api/readSharedSettings";
+/// A failed read waits this long before its second try, twice as long before each later one, and
+/// never longer than the cap.
+const SETTINGS_READ_RETRY_FIRST_MS: u64 = 500;
+const SETTINGS_READ_RETRY_MAX_MS: u64 = 15_000;
 pub(super) const SHARED_SETTINGS_CHANGED_FRAME: &str = "\"type\":\"sharedSettingsChanged\"";
 
 impl GhostexGpuiApp {
     pub(super) fn gx_store_read_shared_settings(&mut self, cx: &mut gpui::Context<Self>) {
         let read = crate::shared_settings::begin_saved_read();
         cx.spawn(async move |app, cx| {
-            let settings = match super::gx_rpc(None, READ_SHARED_SETTINGS_PATH, json!({})).await {
-                Ok(result) => match result.get("settings") {
-                    Some(Value::Object(settings)) => settings.clone(),
-                    _ => Map::new(),
-                },
-                // An older gxserver has no settings read, or the file could not be read: the page keeps
-                // the settings it has.
-                Err(error) => {
-                    log::warn!("could not read the settings: {}", error.message);
-                    return;
+            let mut attempt: u32 = 0;
+            let settings = loop {
+                match super::gx_rpc(None, READ_SHARED_SETTINGS_PATH, json!({})).await {
+                    Ok(result) => match result.get("settings") {
+                        Some(Value::Object(settings)) => break settings.clone(),
+                        _ => break Map::new(),
+                    },
+                    // An older gxserver has no settings read (`notFound`), and a client it does
+                    // not serve settings to is refused (`badRequest`): asking again changes
+                    // nothing, and the page keeps the settings it has.
+                    Err(error)
+                        if matches!(error.code.as_deref(), Some("notFound" | "badRequest")) =>
+                    {
+                        log::warn!("could not read the settings: {}", error.message);
+                        return;
+                    }
+                    // A refused file read or a dropped request: tried again, since the change
+                    // frame that started this read is not sent twice. A later read takes over.
+                    Err(error) => {
+                        log::warn!(
+                            "could not read the settings, trying again: {}",
+                            error.message
+                        );
+                        attempt += 1;
+                        let delay = SETTINGS_READ_RETRY_FIRST_MS
+                            .saturating_mul(1 << attempt.min(5))
+                            .min(SETTINGS_READ_RETRY_MAX_MS);
+                        cx.background_executor()
+                            .timer(std::time::Duration::from_millis(delay))
+                            .await;
+                        if !crate::shared_settings::is_latest_saved_read(read) {
+                            return;
+                        }
+                    }
                 }
             };
             let _ = app.update(cx, |app, cx| {

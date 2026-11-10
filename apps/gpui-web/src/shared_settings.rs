@@ -68,12 +68,18 @@ fn publish(current: &mut PageSettings) {
     current.snapshot.object = Arc::new(object);
 }
 
-/// Installs a settings object this page composed (the current snapshot with a key changed): the
-/// keys that differ from gxserver's copy are kept as the page's own.
+/// Installs a settings object this page composed (the current snapshot with a key changed). Only
+/// the keys whose value differs from the current snapshot are the page's edits: an edit away from
+/// gxserver's copy is kept as the page's own, and an edit back to it drops the page's copy. The
+/// keys the caller passed through unchanged leave the page's other copies (`?settings=`) alone.
 pub fn install(object: Map<String, Value>) {
     CURRENT.with(|current| {
         let mut current = current.borrow_mut();
+        let shown = current.snapshot.object.clone();
         for (key, value) in object {
+            if shown.get(&key) == Some(&value) {
+                continue;
+            }
             if current.saved.get(&key) == Some(&value) {
                 // Back to the saved value: the saved one leads again, later changes included.
                 current.page.remove(&key);
@@ -94,6 +100,11 @@ pub fn begin_saved_read() -> u64 {
         current.latest_read += 1;
         current.latest_read
     })
+}
+
+/// Whether `read` is still the newest read started, so a failed one is worth trying again.
+pub fn is_latest_saved_read(read: u64) -> bool {
+    CURRENT.with(|current| current.borrow().latest_read == read)
 }
 
 /// Installs the settings gxserver read from this computer's settings file. `false` when they are
