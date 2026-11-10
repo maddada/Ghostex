@@ -2,11 +2,12 @@
 //!
 //! CDXC:SessionChat 2026-11-10 WHY:
 //! The socket threads handed every frame to the host over an unbounded channel, each one already
-//! parsed into a `serde_json::Value` (about 3.4 MB of wire text for a coordinator chat's state
-//! frame). While the one host thread was saturated the queue grew without limit, one suspect for
-//! the app's 2.8 GB memory peaks. A socket thread now waits here before it hands a frame over,
-//! until what is queued plus the frame fits the budget, so a burst waits in the kernel's socket
-//! buffer and gxserver slows down instead of the app holding it parsed. Nothing is dropped and
+//! parsed into a `serde_json::Value` (a coordinator chat's state frame is about 490 KB of wire text
+//! and 3.4 MB parsed). While the one host thread was saturated the queue grew without limit, one
+//! suspect for the app's 2.8 GB memory peaks. A frame is now handed over only when what is queued
+//! plus the frame fits the budget; until then the socket thread holds it, and what it reads after
+//! it, as raw text (`native.rs`, `READ_AHEAD_BYTES`), and only when that is full too does it wait
+//! here and leave the rest to the kernel's socket buffer and gxserver. Nothing is dropped and
 //! nothing is reordered: the frame still travels on the host's one channel, behind and ahead of the
 //! same commands as before, and the views' own commands never pass through this gate.
 //!
@@ -84,6 +85,29 @@ impl InboundBacklog {
         drop(state);
         // The next ticket holder may fit now.
         self.room.notify_all();
+    }
+
+    /// Hands `item` over with `deliver` if a frame of `bytes` fits now and nobody is waiting ahead
+    /// of it; otherwise gives `item` back untouched, without waiting.
+    pub(crate) fn try_admit<T>(
+        &self,
+        bytes: usize,
+        item: T,
+        deliver: impl FnOnce(T),
+    ) -> Result<(), T> {
+        let mut state = self.lock();
+        let fits = state.closed
+            || (state.serving == state.next_ticket
+                && (state.queued == 0 || state.queued.saturating_add(bytes) <= self.budget));
+        if !fits {
+            return Err(item);
+        }
+        if !state.closed {
+            state.queued += bytes;
+            state.sizes.push_back(bytes);
+        }
+        deliver(item);
+        Ok(())
     }
 
     /// The host has handled the oldest frame it was handed. Called on the host thread once per

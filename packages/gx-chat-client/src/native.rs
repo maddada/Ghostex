@@ -6,7 +6,7 @@
 //! whatever a dropped socket lost, because gxserver has no replay contract), and walks the
 //! [`RECONNECT_DELAYS_MS`](crate::RECONNECT_DELAYS_MS) ladder while the daemon is away.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::io::ErrorKind;
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
@@ -18,7 +18,7 @@ use ghostex_gx_protocol::{GXSERVER_PROTOCOL_VERSION, GXSERVER_PROTOCOL_VERSION_H
 use tungstenite::client::client_with_config;
 use tungstenite::http::Uri;
 use tungstenite::protocol::WebSocketConfig;
-use tungstenite::{ClientRequestBuilder, Error as SocketError, Message, WebSocket};
+use tungstenite::{ClientRequestBuilder, Error as SocketError, Message, Utf8Bytes, WebSocket};
 
 use crate::backlog::InboundBacklog;
 use crate::wire::{self, Endpoint, Followers, Inbound, StreamKey};
@@ -41,6 +41,23 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long one read may block, which bounds how late the thread notices a command. A subscribe is
 /// sent beside the chat's own seed read, so this is never what a chat waits for.
 const READ_TIMEOUT: Duration = Duration::from_millis(50);
+/// How much wire text the thread keeps reading ahead, unparsed, while the host's backlog is full.
+///
+/// CDXC:SessionChat 2026-11-10 WHY:
+/// gxserver keeps a 256-event queue per socket and disconnects a client that lets it fill
+/// (`server/src/events.rs` `client_channel`), which costs a reconnect and a snapshot of every
+/// followed chat. A thread that stopped reading whenever the host's backlog was full
+/// (`backlog.rs`) could fill it during a burst: a coordinator state frame is about 490 KB of wire
+/// text, so 256 of them behind the backlog and the 128 KB to 4 MB loopback socket buffers is only
+/// a second or two of host work at the measured 5.4 ms per event. The thread therefore keeps
+/// reading into this ordered queue of raw text, about a seventh of the frames' parsed size, and
+/// parses a frame only when the host has room for it. Only when this is full too does it stop
+/// reading, which is then a host behind by about 40 MB of frames, where gxserver's rule (drop the
+/// slow socket rather than hold or reorder its events) is the intended answer.
+const READ_AHEAD_BYTES: usize = 32 * 1024 * 1024;
+/// How long one read may block while frames are held for the host, so a held frame goes over soon
+/// after the host makes room even when the socket is quiet.
+const HELD_READ_TIMEOUT: Duration = Duration::from_millis(5);
 /// A snapshot of a long conversation is several megabytes; tungstenite's 16 MiB default would turn
 /// a larger one into a reconnect loop.
 const MAX_MESSAGE_BYTES: usize = 256 * 1024 * 1024;
@@ -127,6 +144,7 @@ fn spawn(machine_id: String, sink: InboundSink, backlog: Arc<InboundBacklog>) ->
         commands: receiver,
         sink,
         backlog,
+        ahead: ReadAhead::default(),
         followers: Followers::new(),
         endpoint: Endpoint::default(),
         attempts: 0,
@@ -151,11 +169,32 @@ enum End {
     Lost,
 }
 
+/// The frames read from the socket and not yet handed to the host, oldest first.
+#[derive(Default)]
+struct ReadAhead {
+    /// Raw wire text, unparsed.
+    frames: VecDeque<Utf8Bytes>,
+    /// The wire bytes in `frames`.
+    bytes: usize,
+    /// The oldest frame, already routed, that the backlog had no room for yet, and its wire size.
+    routed: Option<(usize, Inbound)>,
+    /// Whether the socket's read timeout is the short one (`HELD_READ_TIMEOUT`).
+    short_reads: bool,
+}
+
+impl ReadAhead {
+    fn holding(&self) -> bool {
+        self.routed.is_some() || !self.frames.is_empty()
+    }
+}
+
 struct Link {
     machine_id: String,
     commands: Receiver<Command>,
     sink: InboundSink,
     backlog: Arc<InboundBacklog>,
+    /// What was read and not yet handed to the host.
+    ahead: ReadAhead,
     followers: Followers,
     endpoint: Endpoint,
     /// Failed or dropped connections in a row, reset on every successful open.
@@ -244,6 +283,51 @@ impl Link {
     }
 
     fn serve(&mut self, socket: &mut WebSocket<TcpStream>) -> End {
+        let end = self.serve_reading(socket);
+        // What was read before the socket ended still reaches the host in order, as it did when
+        // every frame went straight over; a stopping host gets nothing more.
+        if !matches!(end, End::Stop) {
+            self.hand_over(true);
+        }
+        self.ahead = ReadAhead::default();
+        end
+    }
+
+    /// Hands what was read ahead to the host, oldest first, for as long as its backlog has room.
+    /// With no room it keeps the oldest frame and returns, unless the read-ahead is full or
+    /// `flush` asks for everything, in which case it waits for room. Frames no follower wants are
+    /// dropped here, against the followers as they are now.
+    fn hand_over(&mut self, flush: bool) {
+        loop {
+            let (bytes, inbound) = match self.ahead.routed.take() {
+                Some(routed) => routed,
+                None => {
+                    let Some(text) = self.ahead.frames.pop_front() else {
+                        return;
+                    };
+                    self.ahead.bytes -= text.len();
+                    match wire::route(&self.machine_id, text.as_str(), &self.followers) {
+                        Some(inbound) => (text.len(), inbound),
+                        None => continue,
+                    }
+                }
+            };
+            let sink = &self.sink;
+            let Err(inbound) = self
+                .backlog
+                .try_admit(bytes, inbound, |inbound| sink(inbound))
+            else {
+                continue;
+            };
+            if !flush && self.ahead.bytes < READ_AHEAD_BYTES {
+                self.ahead.routed = Some((bytes, inbound));
+                return;
+            }
+            self.backlog.admit(bytes, || sink(inbound));
+        }
+    }
+
+    fn serve_reading(&mut self, socket: &mut WebSocket<TcpStream>) -> End {
         for (key, limit) in &self.followers {
             if send(socket, wire::subscribe_message(key, *limit)).is_err() {
                 return End::Lost;
@@ -291,6 +375,23 @@ impl Link {
                     return End::Lost;
                 }
             }
+            // Every pass, including one after a read that timed out, offers the host what is held;
+            // this waits only when the read-ahead is full (`READ_AHEAD_BYTES`).
+            self.hand_over(false);
+            // While frames are held the reads come back quickly, so a held frame goes over soon
+            // after the host makes room even if the socket is quiet.
+            let holding = self.ahead.holding();
+            if holding != self.ahead.short_reads {
+                let timeout = if holding {
+                    HELD_READ_TIMEOUT
+                } else {
+                    READ_TIMEOUT
+                };
+                if socket.get_ref().set_read_timeout(Some(timeout)).is_err() {
+                    return End::Lost;
+                }
+                self.ahead.short_reads = holding;
+            }
             let text = match socket.read() {
                 Ok(Message::Text(text)) => text,
                 Ok(Message::Binary(bytes)) => match String::from_utf8(bytes.to_vec()) {
@@ -311,11 +412,9 @@ impl Link {
                 }
                 Err(_) => return End::Lost,
             };
-            if let Some(inbound) = wire::route(&self.machine_id, text.as_str(), &self.followers) {
-                // Waits while the host is behind (`backlog.rs`). The commands that arrive meanwhile
-                // stay queued for the next pass of the loop above, in order.
-                self.backlog.admit(text.len(), || (self.sink)(inbound));
-            }
+            // Handed over at the top of the next pass, after the commands that came with it.
+            self.ahead.bytes += text.len();
+            self.ahead.frames.push_back(text);
         }
     }
 }

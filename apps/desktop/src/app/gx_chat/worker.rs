@@ -38,11 +38,13 @@ static NEXT_SINK: AtomicU64 = AtomicU64::new(1);
 /// How much wire text the socket threads may have handed the host that it has not handled yet,
 /// beyond the one frame always let in (`packages/gx-chat-client/src/backlog.rs`).
 ///
-/// CDXC:SessionChat 2026-11-10 WHY: four of a coordinator chat's 3.4 MB state frames, or thousands
-/// of the few-kilobyte frames a streaming reply sends. The queue had no limit (one suspect for the
-/// app's 2.8 GB peaks); it now holds at most this much wire text, a few times that once parsed (an
-/// estimate, not measured), and a socket thread past it waits while the kernel buffers the rest.
-const INBOUND_BACKLOG_BYTES: usize = 16 * 1024 * 1024;
+/// CDXC:SessionChat 2026-11-10 WHY: the queue had no limit, one suspect for the app's 2.8 GB
+/// peaks. A frame waits here parsed, at about seven times its wire size (a coordinator state frame
+/// is about 490 KB on the wire and 3.4 MB as a `Value`, perf-1110 memory audit), so 8 MB of wire
+/// text is about 16 such frames and about 55 MB, or thousands of a streaming reply's few-kilobyte
+/// frames. Past it a socket thread keeps reading ahead unparsed (`READ_AHEAD_BYTES` in
+/// gx-chat-client's `native.rs`), so gxserver does not take the app for a stalled client.
+const INBOUND_BACKLOG_BYTES: usize = 8 * 1024 * 1024;
 
 /// Where a machine's gxserver is, for every chat on it. The app calls this whenever the local
 /// daemon's bootstrap or a remote machine's forward changes; the same value again does nothing.
