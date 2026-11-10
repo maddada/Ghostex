@@ -42,8 +42,8 @@ pub(crate) fn agent_write(selector_text: &str, flags: &Flags) -> CliResult<Optio
 }
 
 impl AgentWrite {
-    /// Fails with gxserver's answer when it refuses this write. A gxserver too old to know the
-    /// check lets it through, as before.
+    /// Fails with gxserver's answer when it refuses this write. When gxserver can't be asked, the
+    /// write goes out with a warning on stderr.
     pub fn check(&self) -> CliResult<()> {
         check_agent_session_write(&self.sender, &self.target, &self.flags)
     }
@@ -76,25 +76,37 @@ pub(crate) fn sign_message_payload(payload: &mut Value, sign: impl FnOnce(&str) 
     }
 }
 
+/// CDXC:Coordinators 2026-11-10 WHY: when gxserver can't be asked (it is restarting, or too old to know the check), the write still goes out, because a check that cannot run must not stop every agent's messages. It used to go out silently, so nobody could tell the check was skipped; it now says so on stderr.
 pub(crate) fn check_agent_session_write(
     sender: &Value,
     target: &Value,
     flags: &Flags,
 ) -> CliResult<()> {
-    let Ok(answer) = call_gxserver_rpc(
+    let answer = match call_gxserver_rpc(
         "/api/checkAgentSessionWrite",
         &json!({
             "senderProjectId": sender["projectId"], "senderSessionId": sender["sessionId"],
             "projectId": target["projectId"], "sessionId": target["sessionId"],
         }),
         flags,
-    ) else {
-        return Ok(());
+    ) {
+        Ok(answer) => answer,
+        Err(error) => {
+            eprintln!("{}", unchecked_write_warning(&error));
+            return Ok(());
+        }
     };
     match answer["refusal"].as_str() {
         Some(refusal) if !refusal.trim().is_empty() => Err(CliError::Other(refusal.to_string())),
         _ => Ok(()),
     }
+}
+
+fn unchecked_write_warning(error: &CliError) -> String {
+    format!(
+        "Warning: Ghostex could not check whether this message is allowed ({}), so it is sending it anyway.",
+        error.to_string().trim().trim_end_matches('.')
+    )
 }
 
 #[cfg(test)]

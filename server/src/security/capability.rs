@@ -69,9 +69,7 @@ pub enum Capability {
     OwnSession,
     /// Create sessions; send to and read other sessions of the project.
     ProjectSessions,
-    /// Start, rename, promote and close the threads it coordinates.
-    ManageOwnThreads,
-    /// Do that for any coordinator's threads.
+    /// Start, rename, promote and close any coordinator's threads.
     ManageAnyThreads,
     /// Change the settings the catalog marks `agentWritable`.
     AgentWritableSettings,
@@ -90,7 +88,6 @@ impl Capability {
     pub const KNOWN: &'static [Self] = &[
         Self::OwnSession,
         Self::ProjectSessions,
-        Self::ManageOwnThreads,
         Self::ManageAnyThreads,
         Self::AgentWritableSettings,
         Self::RequestSensitiveAction,
@@ -132,8 +129,7 @@ impl Principal {
         use Capability::*;
         match self {
             Self::Owner { .. } | Self::Device { .. } | Self::LocalAgent => true,
-            Self::Session { role, .. } => match capability {
-                ManageOwnThreads => matches!(role, SessionRole::Coordinator | SessionRole::Head),
+            Self::Session { .. } => match capability {
                 ManageAnyThreads | DecideApprovals | OwnerSecrets => false,
                 OwnSession | ProjectSessions | AgentWritableSettings | RequestSensitiveAction => {
                     true
@@ -157,22 +153,6 @@ impl Principal {
                 ..
             }
         )
-    }
-
-    /// Whether this caller may manage the thread whose coordinator is `coordinator_session_id`.
-    pub fn may_manage_thread_of(&self, coordinator_session_id: &str) -> bool {
-        if self.has(Capability::ManageAnyThreads) {
-            return true;
-        }
-        match self {
-            Self::Session {
-                session_id, role, ..
-            } => {
-                matches!(role, SessionRole::Coordinator | SessionRole::Head)
-                    && session_id == coordinator_session_id
-            }
-            _ => false,
-        }
     }
 }
 

@@ -74,9 +74,9 @@ box's own token file, peers and extensions open no socket. Test:
 "you") hold every capability. An agent's session token holds every one except the two that keep
 the door: `DecideApprovals` (list, approve and deny requests) and `OwnerSecrets` (answer a secret
 request, have gxserver read a secret provider reference, the phone's Cloud Box kit). Coordinators
-manage only their own threads (`ManageOwnThreads`; `ManageAnyThreads` is the token file's), which
-is how threads are organised, not a security rule. Peers hold only `RequestSensitiveAction` and
-keep `PEER_ALLOWED_ENDPOINTS`; guests, extensions and anonymous callers hold none and keep their
+manage only their own threads (`ManageAnyThreads`, for any coordinator's threads, is yours and
+the token file's), which is how threads are organised, not a security rule. Peers hold only
+`RequestSensitiveAction` and keep `PEER_ALLOWED_ENDPOINTS`; guests, extensions and anonymous callers hold none and keep their
 own allow-lists.
 
 Refusals that stay because they keep the door: an agent's session token can't approve or deny,
@@ -96,8 +96,9 @@ record (`metadata.chiefSession`, written only when gxserver itself creates that 
 Change Agent therefore take the role away on the next request. `/api/chief` `open`, `newChat` and
 `setAgent` accept only the owner's devices and the token file.
 
-`Principal::may_manage_thread_of(coordinator_session_id)` is the check for "coordinators manage
-their own threads"; the gate refuses a session that links threads to, edits or promotes a
+"Coordinators manage their own threads" is checked by who the session is, not by its token's role
+(a session promoted to coordinator keeps the role it started with): `coordinator_refusal` in
+`server/src/server/security_gates.rs` refuses a session that links threads to, edits or promotes a
 coordinator other than itself.
 
 ## How a route declares what it needs
