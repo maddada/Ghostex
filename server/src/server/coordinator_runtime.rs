@@ -1623,9 +1623,15 @@ fn pending_delivery(
             memory.undelivered_idle_since.remove(&key);
             let _ =
                 clear_thread_pending_message(db, &thread.project_id, &thread.session_id, sent_at);
-            // A turn too short for a tick to see it working still gets its report.
+            // A turn too short for a tick to see it working still gets its report, unless that
+            // turn was reported already.
             if !thread.observed_working {
-                let _ = set_thread_observed_working(db, &thread.project_id, &thread.session_id);
+                let _ = coordinators::mark_thread_working_for_message(
+                    db,
+                    &thread.project_id,
+                    &thread.session_id,
+                    sent_at,
+                );
             }
             return None;
         }

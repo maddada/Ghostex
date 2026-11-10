@@ -528,6 +528,32 @@ pub fn acknowledge_thread_pending_message(
     Ok(changed > 0)
 }
 
+/// The watched message sent at `sent_at` showed up in the thread's transcript: marks the thread
+/// seen working (so a turn too short for a tick to see is still reported), only while it is open
+/// and has not been reported on since that message was sent. One conditional update, so a report
+/// recorded meanwhile is never undone.
+///
+/// CDXC:Coordinators 2026-11-11 FIX:
+/// GitHub #554 (a comment of its author's): the supervisor's transcript check set `observedWorking` whenever it found the message, also after the turn it started had been reported, so the next tick reported that turn a second time (or said its final message could not be read). It now changes the mark under the same rule as the sender's confirmation (`acknowledge_thread_pending_message`).
+pub fn mark_thread_working_for_message(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    sent_at: &str,
+) -> Result<(), DomainStateError> {
+    db.execute(
+        r#"
+        UPDATE coordinator_threads
+        SET observedWorking = 1, updatedAt = ?4
+        WHERE projectId = ?1 AND sessionId = ?2 AND observedWorking = 0
+          AND resolvedAt IS NULL AND (reportedAt IS NULL OR reportedAt < ?3)
+        "#,
+        params![project_id, session_id, sent_at, now_iso()],
+    )
+    .map_err(sql_error)?;
+    Ok(())
+}
+
 /// Stops watching the message sent at `sent_at`; a newer one sent meanwhile stays watched.
 pub fn clear_thread_pending_message(
     db: &Connection,
