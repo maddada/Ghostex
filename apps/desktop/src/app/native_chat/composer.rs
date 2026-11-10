@@ -396,7 +396,22 @@ impl NativeChatView {
         // Status line in the chat on, the line is the transcript's last row instead
         // (status_tail.rs), and the box keeps the lead-in it has with no card above it; an empty
         // chat has no row to end with and keeps the card (gx-chat-core `inTranscript`).
-        let working_card = if maximized || self.snapshot["workingCard"]["inTranscript"] == true {
+        self.wake_when_worked_line_ends(cx);
+        // A coordinator's dock (work_cards.rs), built first: with a dock the status rides on its
+        // header bar (`work_dock_header`) and has no bar of its own.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, picking on the chat box bars page: "A. The status joins the dock's quiet line",
+        // always on that bar while the chat has a dock; a chat with no dock keeps its own bar.
+        let dock = if maximized {
+            None
+        } else {
+            self.render_work_dock(p, cx)
+        };
+        let working_card = if maximized
+            || dock.is_some()
+            || self.snapshot["workingCard"]["inTranscript"] == true
+        {
             None
         } else {
             self.render_working_card(p, cx)
@@ -477,6 +492,15 @@ impl NativeChatView {
         }
         if let Some(prompt) = self.render_prompt(p, window, cx) {
             if self.snapshot["prompt"]["kind"] == "question" {
+                // The question replaces the box and the dock, so the status keeps its own bar.
+                let working_card = match working_card {
+                    None if dock.is_some()
+                        && self.snapshot["workingCard"]["inTranscript"] != true =>
+                    {
+                        self.render_working_card(p, cx)
+                    }
+                    card => card,
+                };
                 return self
                     .composer_row()
                     .child(
@@ -504,11 +528,6 @@ impl NativeChatView {
         // User, of the "Worked for 34s · ... updated" bar above the dock: "please i beg you. move
         // this bar which shows how long we worked for etc to be below the work items cards
         // please". The gaps stay the stack's own.
-        let dock = if maximized {
-            None
-        } else {
-            self.render_work_dock(p, cx)
-        };
         let dock_shown = dock.is_some();
         footer = footer.children(dock).children(working_card.take());
         self.sync_files_links_menu(window, cx);

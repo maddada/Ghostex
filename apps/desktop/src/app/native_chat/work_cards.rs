@@ -583,7 +583,19 @@ impl NativeChatView {
             })
             .sum::<f32>()
             + 12.0 * counts.len().saturating_sub(1) as f32;
-        let named = named_width <= room;
+        // The agent's status rides at the bar's left (`dock_status_card`): the marks give up their
+        // names before it is cut, and it is cut at its end before anything overlaps.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, picking on the chat box bars page: "A. The status joins the dock's quiet line",
+        // the status first at the left and the count at the right ("B"), and of the drawing where
+        // it dropped under the rows: "it should always be on same row ok? not sometimes below in
+        // separate bar like u show here". So it is always on this bar while the chat has a dock.
+        let status_card = self.dock_status_card();
+        let status_width = status_card.as_ref().map_or(0.0, |card| {
+            24.0 + dock_text_width(card["label"].as_str().unwrap_or_default(), 13.0, p, cx) + 12.0
+        });
+        let named = named_width + status_width <= room;
         let marks: Vec<AnyElement> = counts
             .into_iter()
             .map(|(group, count)| {
@@ -650,20 +662,35 @@ impl NativeChatView {
                     head.h(px(34.0 * s)).rounded(px(11.0 * s))
                 }
             })
+            .when_some(status_card.as_ref(), |head, card| {
+                head.child(
+                    div()
+                        .flex_shrink(1.0)
+                        .min_w_0()
+                        .overflow_hidden()
+                        .child(self.working_line_in_bar(card, p, cx)),
+                )
+            })
+            .when(status_card.is_some(), |head| {
+                head.child(div().flex_1().min_w(px(8.0 * s)))
+            })
             .child(
                 div()
                     .min_w_0()
+                    .when(status_card.is_some(), |summary| summary.flex_shrink_0())
                     .flex()
                     .items_center()
                     .gap(px(12.0 * s))
                     .overflow_hidden()
                     .children(marks)
                     // Nothing counted and nothing to show: one quiet word, so the bar is not blank.
-                    .when(quiet && !collapsible, |summary| {
+                    .when(quiet && !collapsible && status_card.is_none(), |summary| {
                         summary.child(div().text_color(p.muted).child("Nothing in progress"))
                     }),
             )
-            .child(div().flex_1().min_w(px(8.0 * s)));
+            .when(status_card.is_none(), |head| {
+                head.child(div().flex_1().min_w(px(8.0 * s)))
+            });
         if board.is_object() {
             head = head.child(self.work_dock_list_button(p, cx));
         }
