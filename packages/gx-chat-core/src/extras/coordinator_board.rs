@@ -1281,6 +1281,42 @@ pub fn blocked_pill(board: &Value) -> Option<ChatPill> {
     })
 }
 
+/// The Work panel opens at the row `key` (an item's `work:12`, an ask's `work-ask:W3:Q12`): its
+/// group unfolds and shows every row, and the renderers open the panel and ring the row, the chat
+/// staying where it is (`open_questions::show`).
+pub fn focus_row(state: &mut ChatState, key: &str) -> Vec<crate::effect::Effect> {
+    let group = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+        .map(crate::extras::work_panel::work_board)
+        .and_then(|board| {
+            board["groups"].as_array()?.iter().find_map(|group| {
+                group["rows"]
+                    .as_array()?
+                    .iter()
+                    .any(|row| row["key"] == key)
+                    .then(|| text(group, "id").to_string())
+            })
+        });
+    let Some(group) = group else {
+        return vec![crate::effect::Effect::Toast {
+            level: "info".to_string(),
+            message: "That isn't on this chat's Work panel any more.".to_string(),
+        }];
+    };
+    let panels = &mut state.extras.panels;
+    if crate::extras::work_panel::folded_by_default(&group) != panels.board_toggled.contains(&group)
+    {
+        toggle(&mut panels.board_toggled, &group);
+    }
+    panels.board_expanded.insert(group);
+    let seq = panels.board_focus.as_ref().map_or(0, |(_, seq)| *seq) + 1;
+    panels.board_focus = Some((key.to_string(), seq));
+    Vec::new()
+}
+
 /// `showCoordinatorBoardGroup {group}`: the board opens at `group` (the Blocked pill), unfolded
 /// and showing every row, scrolled to its first card.
 pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effect> {

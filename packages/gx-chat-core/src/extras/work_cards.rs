@@ -496,10 +496,29 @@ fn question_dock_cards(state: &ChatState) -> Vec<Value> {
                 "form": form,
                 "title": if asker.title.is_empty() { "Questions" } else { asker.title.as_str() },
                 "line": format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" }),
-                "command": { "type": "goToResource", "id": asker.id },
+                "command": { "type": "openResource", "id": asker.id },
             })
         })
         .collect()
+}
+
+/// The Work panel row key of the open ask a question tag names (`work-ask:W3:Q12`), if a work item
+/// asks it.
+pub fn ask_key_of_tag(state: &ChatState, tag: &str) -> Option<String> {
+    let items = state
+        .session
+        .coordinator_threads
+        .as_ref()?
+        .get("work")?
+        .get("items")?
+        .as_array()?;
+    items.iter().find_map(|item| {
+        item["asks"]
+            .as_array()?
+            .iter()
+            .find(|ask| text(ask, "tag").eq_ignore_ascii_case(tag))
+            .map(|ask| format!("work-ask:{}:{}", text(item, "ref"), text(ask, "tag")))
+    })
 }
 
 /// A line of work's card in the dock: blocked, or finished in the latest turn (`done_key`, with
@@ -765,13 +784,10 @@ fn moving_row(
             "groupLabel": group_label,
             "who": who,
         });
-        if let Some(target) = target {
-            row["command"] = json!({
-                "type": "jumpToWorkCard",
-                "anchorId": target["anchorId"],
-                "key": target["key"],
-            });
-        }
+        // A row shows its line of work in the Work panel; the chat stays where it is
+        // (`open_questions::show`'s decision).
+        let _ = target;
+        row["command"] = json!({ "type": "jumpToWorkCard", "key": text(item, "key") });
         rows.push((rank, at, row));
     }
     if rows.is_empty() {

@@ -93,16 +93,10 @@ pub fn handle_with_ids(
         ActionKind::UseCoordinatorIntroExample => {
             crate::extras::coordinator_intro::use_example(&action.params)
         }
-        // A row of the Moving list goes to that item's newest card (work_cards.rs).
+        // A row of the In progress list shows its line of work in the Work panel, the chat staying
+        // where it is (`open_questions::show`).
         ActionKind::JumpToWorkCard => {
-            crate::questions::open_questions::jump_to_row(
-                state,
-                context,
-                text(action, "anchorId"),
-                text(action, "key"),
-                None,
-            );
-            Vec::new()
+            crate::extras::coordinator_board::focus_row(state, text(action, "key"))
         }
         // A finished-work card leaves the dock (work_cards.rs `dock`).
         ActionKind::DismissWorkDockCard => {
