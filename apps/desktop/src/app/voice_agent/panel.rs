@@ -45,6 +45,8 @@ mod copy;
 use super::rows;
 #[path = "panel_focus_strip.rs"]
 mod focus_strip;
+#[path = "panel_input.rs"]
+mod input;
 #[path = "panel_layout.rs"]
 pub(crate) mod layout;
 
@@ -212,6 +214,11 @@ pub(crate) struct VoicePanelWindow {
     settings_trigger: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     /// Focused by a press on the transcript, so Cmd+C reaches the panel (`panel_copy.rs`).
     focus: gpui::FocusHandle,
+    /// The text box under the transcript (`panel_input.rs`).
+    text_box: gpui::Entity<gpui_component::input::TextareaState>,
+    /// Whether the app was last told that Space would hold Talk in the panel.
+    space_free_noted: bool,
+    _subscriptions: Vec<gpui::Subscription>,
 }
 
 /// "1×", "1.2×", … "2×".
@@ -356,6 +363,7 @@ impl GhostexGpuiApp {
         if self.voice_agent.phase == VoicePhase::Idle {
             self.voice_agent.panel_reposition = None;
             self.voice_agent.panel_placed_for = None;
+            self.voice_agent.panel_space_free = false;
             if let Some(panel) = self.voice_agent.panel.take() {
                 let _ = panel.update(cx, |_, window, _| window.remove_window());
             }
@@ -404,6 +412,7 @@ impl GhostexGpuiApp {
                 apply_frosted_menu_blur(panel_window);
                 remove_gpui_app_toast_popup_window_chrome(panel_window, main_window_native_view);
                 cx.new(|cx| {
+                    let (text_box, subscriptions) = input::panel_text_box(panel_window, cx);
                     let scroll = ScrollHandle::new();
                     scroll.scroll_to_bottom();
                     VoicePanelWindow {
@@ -418,6 +427,9 @@ impl GhostexGpuiApp {
                         speed_trigger: Default::default(),
                         settings_trigger: Default::default(),
                         focus: cx.focus_handle(),
+                        text_box,
+                        space_free_noted: false,
+                        _subscriptions: subscriptions,
                     }
                 })
             })
@@ -1994,6 +2006,7 @@ impl Render for VoicePanelWindow {
         // (CDXC:Theming 2026-10-15 on `apply_frosted_menu_blur`).
         #[cfg(target_os = "macos")]
         apply_frosted_menu_blur(window);
+        self.note_space_free(window, cx);
         let snapshot = &self.snapshot;
         let colors = PanelColors::resolve();
         v_flex()
@@ -2001,9 +2014,12 @@ impl Render for VoicePanelWindow {
             .role(gpui::Role::Group)
             .aria_label(SharedString::new_static("Voice agent"))
             .track_focus(&self.focus)
-            .on_key_down(cx.listener(|_, event: &gpui::KeyDownEvent, window, cx| {
-                Self::copy_key(event, window, cx)
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                this.panel_key_down(event, window, cx)
             }))
+            .on_key_up(
+                cx.listener(|this, event: &gpui::KeyUpEvent, _, cx| this.panel_key_up(event, cx)),
+            )
             .size_full()
             .overflow_hidden()
             .rounded(px(RESOURCE_PANEL_RADIUS))
@@ -2015,6 +2031,9 @@ impl Render for VoicePanelWindow {
             .child(self.header(snapshot, &colors, cx))
             .children(self.focus_strip(snapshot, &colors, cx))
             .child(self.body(snapshot, &colors, cx))
+            .when(snapshot.phase == VoicePhase::Live, |this| {
+                this.child(self.text_box(&colors))
+            })
             .when(
                 matches!(snapshot.phase, VoicePhase::Starting | VoicePhase::Live),
                 |this| this.child(self.status_strip(snapshot, &colors, cx)),

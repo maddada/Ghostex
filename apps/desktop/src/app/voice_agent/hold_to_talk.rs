@@ -44,7 +44,7 @@ pub(crate) enum HoldMode {
     None,
 }
 
-fn plain_space(keystroke: &Keystroke) -> bool {
+pub(super) fn plain_space(keystroke: &Keystroke) -> bool {
     let modifiers = &keystroke.modifiers;
     keystroke.key == "space"
         && !modifiers.platform
@@ -115,7 +115,7 @@ impl GhostexGpuiApp {
         if held {
             return Some(true);
         }
-        (self.voice_agent.space_free
+        ((self.voice_agent.space_free || self.voice_agent.panel_space_free)
             && matches!(
                 self.voice_agent_hold_mode(),
                 HoldMode::Talk | HoldMode::Unmute
@@ -221,6 +221,41 @@ impl GhostexGpuiApp {
         if self.voice_agent.hold.is_some() {
             // The key-up has to reach this window, not a web page that held the keyboard.
             self.reclaim_gpui_root_for_chrome_input_focus();
+        }
+    }
+
+    /// Space in the voice panel while it has the keyboard and its text box does not
+    /// (`panel_input.rs`): down starts a Space hold (true when Space was the hold's), up ends it.
+    pub(super) fn voice_agent_panel_space(
+        &mut self,
+        down: bool,
+        repeat: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        if !down {
+            if self.voice_agent.hold == Some(HoldSource::Space) {
+                self.end_voice_agent_hold(cx);
+            }
+            return true;
+        }
+        if self.voice_agent.hold == Some(HoldSource::Space) {
+            return true;
+        }
+        if repeat || self.voice_agent.hold.is_some() {
+            return false;
+        }
+        self.start_voice_agent_hold(HoldSource::Space, cx)
+    }
+
+    /// The voice panel noted whether Space would hold Talk there, for its keycap.
+    pub(super) fn note_voice_agent_panel_space_free(
+        &mut self,
+        free: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if free != self.voice_agent.panel_space_free {
+            self.voice_agent.panel_space_free = free;
+            self.sync_voice_agent_panel(cx);
         }
     }
 

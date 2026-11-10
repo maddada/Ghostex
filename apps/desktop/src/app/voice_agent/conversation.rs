@@ -197,6 +197,9 @@ pub(crate) struct VoiceAgent {
     pub(crate) hold: Option<super::hold_to_talk::HoldSource>,
     /// Space would hold Talk now (the main window's keyboard is free), for the panel's keycap.
     pub(crate) space_free: bool,
+    /// Space would hold Talk in the voice panel: it has the keyboard and its text box does not
+    /// (`panel_input.rs`).
+    pub(crate) panel_space_free: bool,
     /// A short note in the strip above the panel's buttons, and the timer that clears it.
     pub(crate) hint: Option<String>,
     pub(super) hint_timer: Option<Task<()>>,
@@ -473,6 +476,23 @@ impl GhostexGpuiApp {
             }
         }
         self.sync_voice_agent_panel(cx);
+    }
+
+    /// A message typed in the panel's text box, sent into the live call as the user's turn: gxserver
+    /// shows it as the user's caption, cuts a reply being spoken and answers it like a spoken turn
+    /// (`server/src/voice_agent/socket.rs`, `text`). Mute is left as it is. False when no call is
+    /// live to take it.
+    pub(crate) fn send_voice_agent_text(&mut self, text: &str) -> bool {
+        let text = text.trim();
+        if text.is_empty() || self.voice_agent.phase != VoicePhase::Live {
+            return false;
+        }
+        let Some(link) = &self.voice_agent.link else {
+            return false;
+        };
+        link.socket
+            .send_json(&json!({ "type": "text", "text": text }));
+        true
     }
 
     /// "Stop talking": gxserver cancels the reply and answers `interrupted`.
