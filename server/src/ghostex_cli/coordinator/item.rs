@@ -526,9 +526,19 @@ fn print_list(work: &Value, all: bool) {
     let items = work["items"].as_array().cloned().unwrap_or_default();
     let mut empty = true;
     for (status, _) in HEADINGS {
+        // A task left for the user by a finished item is still theirs: it lists under Needs you,
+        // as the Work panel shows it.
+        let has_open_ask = |item: &&Value| {
+            item["asks"]
+                .as_array()
+                .is_some_and(|asks| asks.iter().any(|ask| ask["open"] == true))
+        };
         let listed: Vec<&Value> = items
             .iter()
-            .filter(|item| item["status"] == status)
+            .filter(|item| {
+                item["status"] == status
+                    || (status == "needs" && item["status"] == "finished" && has_open_ask(item))
+            })
             // Finished means today's, unless --all.
             .filter(|item| all || status != "finished" || item["today"] != false)
             .collect();
