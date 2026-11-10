@@ -84,6 +84,7 @@ mod relayed_approval;
 mod resource_modal;
 mod rewind;
 mod row_click;
+mod row_motion;
 mod rpc;
 mod run_command;
 mod run_location;

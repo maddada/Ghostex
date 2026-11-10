@@ -361,15 +361,18 @@ fn motion_clip_revealed(
     } else {
         clip.h(px(gap + floor + (natural - floor).max(0.0) * factor))
     };
-    clip.child(
+    // The fade reaches the running calls' motion drawn over the rows (row_motion.rs).
+    clip.child(super::row_motion::fixed_opacity_scope(
+        frame.rows_opacity,
         div()
             .pt(px(gap))
             .w_full()
             .min_w_0()
             .flex_shrink_0()
             .opacity(frame.rows_opacity)
-            .child(measured(height, content)),
-    )
+            .child(measured(height, content))
+            .into_any_element(),
+    ))
     .when_some(extent, |clip, extent| {
         clip.relative().child(extent_canvas(extent, false))
     })

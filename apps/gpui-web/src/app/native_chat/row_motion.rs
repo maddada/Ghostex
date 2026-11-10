@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_chat/row_motion.rs

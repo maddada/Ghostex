@@ -174,6 +174,7 @@ impl Render for NativeChatView {
             let content = transcript;
             let lone_scroll_bottom = self.render_lone_scroll_bottom(&p, cx);
             let status_tail_lead = self.render_status_tail_lead(&p);
+            let row_motion = self.render_row_motion();
             Some(
                 div()
                     .id("chat-transcript")
@@ -189,6 +190,8 @@ impl Render for NativeChatView {
                     .child(content)
                     // After the rows, so it draws where the status row painted this frame.
                     .children(status_tail_lead)
+                    // The running tool calls' shimmer and spinner, over their rows (row_motion.rs).
+                    .children(row_motion)
                     .children(lone_scroll_bottom)
                     .into_any_element(),
             )

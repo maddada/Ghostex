@@ -150,9 +150,9 @@ impl NativeChatView {
         }
         window.request_animation_frame();
         // Not ease-out-quint: that is ~95% opaque a third of the way in, which reads as a pop.
-        region
-            .opacity(gpui::ease_in_out(progress))
-            .into_any_element()
+        // The fade reaches the running calls' motion drawn over the rows (row_motion.rs).
+        let opacity = gpui::ease_in_out(progress);
+        super::row_motion::fixed_opacity_scope(opacity, region.opacity(opacity).into_any_element())
     }
 }
 

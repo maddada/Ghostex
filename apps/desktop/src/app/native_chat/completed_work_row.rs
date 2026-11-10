@@ -609,14 +609,17 @@ impl NativeChatView {
                 row = row.child(eased_part(
                     self.disclosure_motion.borrow_mut().height(id, "log"),
                     frame.log,
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(live_row_gap * s))
-                        .pb(px((live_row_gap - part_gap).max(0.0) * s))
-                        .opacity(frame.rows_opacity)
-                        .children(rows)
-                        .into_any_element(),
+                    super::row_motion::fixed_opacity_scope(
+                        frame.rows_opacity,
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(live_row_gap * s))
+                            .pb(px((live_row_gap - part_gap).max(0.0) * s))
+                            .opacity(frame.rows_opacity)
+                            .children(rows)
+                            .into_any_element(),
+                    ),
                 ));
             }
         } else {
@@ -625,14 +628,17 @@ impl NativeChatView {
                 row = row.child(eased_part(
                     self.disclosure_motion.borrow_mut().height(id, "log"),
                     frame.log,
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(part_gap * s))
-                        .pt(px(part_gap * s))
-                        .opacity(frame.rows_opacity)
-                        .children(log)
-                        .into_any_element(),
+                    super::row_motion::fixed_opacity_scope(
+                        frame.rows_opacity,
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(part_gap * s))
+                            .pt(px(part_gap * s))
+                            .opacity(frame.rows_opacity)
+                            .children(log)
+                            .into_any_element(),
+                    ),
                 ));
             }
         }

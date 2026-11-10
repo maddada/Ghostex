@@ -11,7 +11,7 @@
 use super::file_change_card::card_colors;
 use super::transcript::text;
 use super::{appearance::ChatAppearance, state::NativeChatView};
-use crate::app::helpers::ThrottledAnimationExt as _;
+use crate::app::helpers::indicator_animation::INDICATOR_MAX_FPS;
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -20,14 +20,14 @@ use gpui::{
     div, px, rgb,
 };
 use serde_json::Value;
-use std::time::Duration;
+use std::{cell::Cell, rc::Rc, time::Duration};
 
 /// How long a row takes to grow in, and the header's text to settle into its next value.
 const ENTER: Duration = Duration::from_millis(320);
 /// One sweep of the running row's shimmer.
 pub(super) const SHIMMER: Duration = Duration::from_millis(1400);
 /// One turn of the spinner.
-const SPIN: Duration = Duration::from_millis(800);
+pub(super) const SPIN: Duration = Duration::from_millis(800);
 /// The header's icon circles and how far each overlaps the one before it.
 const STACK_ICON: f32 = 22.0;
 const STACK_OVERLAP: f32 = 7.0;
@@ -328,7 +328,7 @@ impl NativeChatView {
                 let (hidden, shown) = (-STACK_ICON * s, -STACK_OVERLAP * s);
                 tile.with_animation(
                     SharedString::from(format!("{key}:icon:{index}")),
-                    Animation::new(ENTER).with_easing(gpui::ease_out_quint()),
+                    enter_animation(),
                     move |tile, delta| {
                         let tile = tile.opacity(delta);
                         if index == 0 {
@@ -347,20 +347,13 @@ impl NativeChatView {
         // settle into their next value ("Using 3 tools" into "Used 3 tools") while the card is
         // live, the old text giving way to the new one fading up.
         let title_element = if !live_label.is_empty() && animate {
-            let (dim, bright) = (p.muted.opacity(0.8), p.foreground);
-            let (shimmer_label, font) = (live_label.clone(), p.font.clone());
-            div()
-                .min_w_0()
-                .truncate()
-                .text_size(px(13.5 * s))
-                .with_throttled_animation(
-                    SharedString::from(format!("{key}:live")),
-                    SHIMMER,
-                    move |title, phase| {
-                        title.child(shimmer_text(&shimmer_label, &font, phase, dim, bright))
-                    },
-                )
-                .into_any_element()
+            // Drawn over the row, not in it (row_motion.rs).
+            self.running_shimmer(
+                SharedString::from(format!("{key}:live")),
+                div().min_w_0().truncate().text_size(px(13.5 * s)),
+                live_label.clone(),
+                p,
+            )
         } else {
             let plain = div()
                 .min_w_0()
@@ -372,7 +365,7 @@ impl NativeChatView {
                 plain
                     .with_animation(
                         SharedString::from(format!("{key}:title:{title}")),
-                        Animation::new(ENTER).with_easing(gpui::ease_out_quint()),
+                        enter_animation(),
                         |title, delta| title.opacity(0.2 + 0.8 * delta),
                     )
                     .into_any_element()
@@ -382,26 +375,19 @@ impl NativeChatView {
         };
         // A spinner beside the live line while a call runs, as its row has.
         let spinner: Option<AnyElement> = (!live_label.is_empty()).then(|| {
-            let glyph = gpui::svg()
+            if animate {
+                return self.running_spinner(
+                    SharedString::from(format!("{key}:spin")),
+                    13.0 * s,
+                    p.muted,
+                );
+            }
+            gpui::svg()
                 .path("titlebar/loader2.svg")
                 .size(px(13.0 * s))
                 .flex_shrink_0()
-                .text_color(p.muted);
-            if animate {
-                glyph
-                    .with_throttled_animation(
-                        SharedString::from(format!("{key}:spin")),
-                        SPIN,
-                        |glyph, progress| {
-                            glyph.with_transformation(gpui::Transformation::rotate(
-                                gpui::percentage(progress),
-                            ))
-                        },
-                    )
-                    .into_any_element()
-            } else {
-                glyph.into_any_element()
-            }
+                .text_color(p.muted)
+                .into_any_element()
         });
         let toggle_key = key.to_string();
         let aria = [
@@ -535,20 +521,13 @@ impl NativeChatView {
             _ => p.foreground,
         };
         let label_element: AnyElement = if running && animate {
-            let (dim, bright) = (p.muted.opacity(0.8), p.foreground);
-            let (shimmer_label, font) = (label.clone(), p.font.clone());
-            div()
-                .min_w_0()
-                .truncate()
-                .text_size(px(13.5 * s))
-                .with_throttled_animation(
-                    SharedString::from(format!("{key}:shimmer")),
-                    SHIMMER,
-                    move |row, phase| {
-                        row.child(shimmer_text(&shimmer_label, &font, phase, dim, bright))
-                    },
-                )
-                .into_any_element()
+            // Drawn over the row, not in it (row_motion.rs).
+            self.running_shimmer(
+                SharedString::from(format!("{key}:shimmer")),
+                div().min_w_0().truncate().text_size(px(13.5 * s)),
+                label.clone(),
+                p,
+            )
         } else {
             div()
                 .min_w_0()
@@ -590,27 +569,14 @@ impl NativeChatView {
             meta = meta.child(time);
         }
         let status_icon: AnyElement = match status.as_str() {
-            "running" => {
-                let spinner = gpui::svg()
-                    .path("titlebar/loader2.svg")
-                    .size(px(13.0 * s))
-                    .text_color(p.muted);
-                if animate {
-                    spinner
-                        .with_throttled_animation(
-                            SharedString::from(format!("{key}:spin")),
-                            SPIN,
-                            |glyph, progress| {
-                                glyph.with_transformation(gpui::Transformation::rotate(
-                                    gpui::percentage(progress),
-                                ))
-                            },
-                        )
-                        .into_any_element()
-                } else {
-                    spinner.into_any_element()
-                }
+            "running" if animate => {
+                self.running_spinner(SharedString::from(format!("{key}:spin")), 13.0 * s, p.muted)
             }
+            "running" => gpui::svg()
+                .path("titlebar/loader2.svg")
+                .size(px(13.0 * s))
+                .text_color(p.muted)
+                .into_any_element(),
             "waiting" => gpui::svg()
                 .path("titlebar/clock.svg")
                 .size(px(13.0 * s))
@@ -708,16 +674,34 @@ impl NativeChatView {
                 row = row.child(self.disclosure_body_motion(&key, motion, 0.0, body));
             }
         }
-        // A row grows in as its call starts, while the card is live.
+        // A row grows in as its call starts, while the card is live. Its fade reaches the
+        // shimmer and spinner drawn over it (row_motion.rs).
         if animate {
-            return row
-                .with_animation(
+            let faded = Rc::new(Cell::new(1.0));
+            let fading = faded.clone();
+            return super::row_motion::opacity_scope(
+                faded,
+                row.with_animation(
                     SharedString::from(format!("{card_key}:enter:{position}")),
-                    Animation::new(ENTER).with_easing(gpui::ease_out_quint()),
-                    |row, delta| row.opacity(delta).mt(px(-6.0 * (1.0 - delta))),
+                    enter_animation(),
+                    move |row, delta| {
+                        fading.set(delta);
+                        row.opacity(delta).mt(px(-6.0 * (1.0 - delta)))
+                    },
                 )
-                .into_any_element();
+                .into_any_element(),
+            );
         }
         row.into_any_element()
     }
+}
+
+/// A row growing in, a circle sliding out or the header's words settling.
+///
+/// CDXC:SessionChat 2026-11-10 WHY:
+/// These run inside the cached transcript, so each of their frames lays out and paints every visible row again; uncapped they asked for every display frame, 120 a second on ProMotion, for their 320ms. Thirty a second is the chat's indicator rate (`INDICATOR_MAX_FPS`).
+fn enter_animation() -> Animation {
+    Animation::new(ENTER)
+        .with_easing(gpui::ease_out_quint())
+        .with_max_fps(INDICATOR_MAX_FPS)
 }

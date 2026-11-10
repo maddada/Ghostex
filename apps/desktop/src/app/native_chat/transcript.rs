@@ -70,7 +70,11 @@ impl NativeChatView {
             return self.status_tail_row(index, cx);
         }
         let items = self.items.clone();
-        self.transcript_item_row(&items, index, true, window, cx)
+        // The running tool calls in the row draw their motion over it (row_motion.rs).
+        self.row_motion.start_row(index);
+        let row = self.transcript_item_row(&items, index, true, window, cx);
+        self.row_motion.end_row();
+        row
     }
 
     /// The column every transcript row sits in: the transcript's width (768px, or the Transcript

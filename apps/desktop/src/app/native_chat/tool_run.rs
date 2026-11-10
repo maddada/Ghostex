@@ -11,7 +11,6 @@ use super::quiet_work::{QuietLine, QuietMark, finished_mark};
 use super::{
     appearance::ChatAppearance, fonts::CHAT_MONO, state::NativeChatView, transcript::text,
 };
-use crate::app::helpers::ThrottledAnimationExt as _;
 use crate::app::native_chat::cursor::ChatCursor as _;
 use ghostex_gx_chat_core::transcript::chat_look::UserStyle;
 use ghostex_gx_chat_core::transcript::tool_rows::tool_fold_toggle_before;
@@ -725,24 +724,19 @@ impl NativeChatView {
         let shimmer =
             status == "running" && self.snapshot["working"] == true && !cx.reduce_motion();
         trigger = if shimmer {
-            let (dim, bright) = (p.muted.opacity(0.8), p.foreground);
-            let (label, font) = (name, p.font.clone());
+            // Drawn over the row, not in it (row_motion.rs).
             trigger.child(
-                div()
-                    .when(fills, |this| this.flex_1())
-                    .min_w_0()
-                    .truncate()
-                    .font_weight(name_weight)
-                    .when(described, |this| this.text_size(px(14.0 * s)))
-                    .with_throttled_animation(
-                        SharedString::from(format!("{key}:shimmer")),
-                        super::tool_card::SHIMMER,
-                        move |title, phase| {
-                            title.child(super::tool_card::shimmer_text(
-                                &label, &font, phase, dim, bright,
-                            ))
-                        },
-                    ),
+                self.running_shimmer(
+                    SharedString::from(format!("{key}:shimmer")),
+                    div()
+                        .when(fills, |this| this.flex_1())
+                        .min_w_0()
+                        .truncate()
+                        .font_weight(name_weight)
+                        .when(described, |this| this.text_size(px(14.0 * s))),
+                    name,
+                    p,
+                ),
             )
         } else if !preview.is_empty() && subagent.is_empty() {
             let name_marks = self.label_highlights(&name_key, &name);
