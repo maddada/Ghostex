@@ -3,7 +3,10 @@
 
 use std::{
     collections::HashMap,
-    sync::{LazyLock, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        LazyLock, Mutex,
+    },
     time::{Duration, Instant},
 };
 
@@ -90,6 +93,7 @@ pub(crate) fn agent_left_conversation(
 ) -> bool {
     let key = format!("{project_id}:{session_id}");
     let shell_prompt = agent_start_failure_notice(screen_text).is_some();
+    let started = Instant::now();
     let generation;
     {
         let mut watches = agent_gone_watches();
@@ -123,10 +127,49 @@ pub(crate) fn agent_left_conversation(
     };
     let mut watches = agent_gone_watches();
     // An agent started since these reads began is not the one they saw: they say nothing about it.
-    if agent_generation(&key) != generation {
+    // A probe older than the horizon may have outlived the record of that start, so it says nothing
+    // either.
+    if agent_generation(&key) != generation || started.elapsed() >= GENERATION_HORIZON {
         return false;
     }
     record_reading(&mut watches, key, reading, Instant::now())
+}
+
+/// The generation of the session's confirmed absence, for a write that ends its working claim to
+/// carry (`while_agent_gone`). `None` while nothing confirms the agent gone. A confirmed record
+/// belongs to the current generation: a start removes it, and a probe that began before the
+/// start cannot record one (`agent_left_conversation`).
+pub(crate) fn agent_gone_generation(project_id: &str, session_id: &str) -> Option<u64> {
+    let key = format!("{project_id}:{session_id}");
+    let watches = agent_gone_watches();
+    watches
+        .get(&key)
+        .filter(|stored| stored.watch.confirmed_at.is_some())
+        .map(|_| agent_generation(&key))
+}
+
+/// Runs `write` only while the absence confirmed at `generation` still stands, and holds the
+/// record's lock until `write` returns, so no agent start (`forget_agent_gone`, which every launch
+/// calls before it spawns) can pass between the check and the end of the write. `write` must not
+/// take this lock, and must already hold anything else it waits for (the SQLite write lock), so a
+/// start waiting here never waits on it in turn.
+pub(crate) fn while_agent_gone<R>(
+    project_id: &str,
+    session_id: &str,
+    generation: u64,
+    write: impl FnOnce() -> R,
+) -> Option<R> {
+    let key = format!("{project_id}:{session_id}");
+    let watches = agent_gone_watches();
+    let confirmed = watches
+        .get(&key)
+        .is_some_and(|stored| stored.watch.confirmed_at.is_some());
+    if !confirmed || agent_generation(&key) != generation {
+        return None;
+    }
+    let result = write();
+    drop(watches);
+    Some(result)
 }
 
 /// Whether this session's agent is confirmed gone: what a probe that could not read the screen
@@ -144,7 +187,7 @@ pub(crate) fn agent_gone_confirmed(project_id: &str, session_id: &str) -> bool {
 
 /// Drops the session's record: its agent was started again or the session went away. It also
 /// moves the session's agent generation, so a probe whose reads began before this cannot record
-/// what it saw of the agent that is gone.
+/// what it saw of the agent that is gone, and a queued write cannot end the new agent's state.
 pub(crate) fn forget_agent_gone(project_id: &str, session_id: &str) {
     let key = format!("{project_id}:{session_id}");
     let mut watches = agent_gone_watches();
@@ -152,19 +195,32 @@ pub(crate) fn forget_agent_gone(project_id: &str, session_id: &str) {
     let mut generations = AGENT_GENERATIONS
         .lock()
         .unwrap_or_else(|error| error.into_inner());
-    *generations.entry(key).or_insert(0) += 1;
+    let now = Instant::now();
+    generations.retain(|_, (_, at)| now.duration_since(*at) < GENERATION_HORIZON);
+    generations.insert(key, (NEXT_GENERATION.fetch_add(1, Ordering::Relaxed), now));
 }
 
-/// Per session, `project:session`: how many times its agent was started again or forgotten.
-/// Taken after the [`AGENT_GONE`] lock, never before it.
-static AGENT_GENERATIONS: LazyLock<Mutex<HashMap<String, u64>>> = LazyLock::new(Default::default);
+/// Hands out generations for every session, so a session's generation never repeats, even after
+/// its entry was dropped.
+static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
 
+/// Per session, `project:session`: the generation its last start (or forget) took, and when. An
+/// entry is kept for [`GENERATION_HORIZON`], and a probe that ran longer than that is ignored, so
+/// a dropped entry never makes an old probe look current. Taken after the [`AGENT_GONE`] lock,
+/// never before it.
+static AGENT_GENERATIONS: LazyLock<Mutex<HashMap<String, (u64, Instant)>>> =
+    LazyLock::new(Default::default);
+
+/// Longer than any screen probe runs (captures time out in seconds).
+const GENERATION_HORIZON: Duration = Duration::from_secs(10 * 60);
+
+/// The session's generation: 0 when it was never started again within the horizon.
 fn agent_generation(key: &str) -> u64 {
     AGENT_GENERATIONS
         .lock()
         .unwrap_or_else(|error| error.into_inner())
         .get(key)
-        .copied()
+        .map(|(generation, _)| *generation)
         .unwrap_or(0)
 }
 

@@ -481,11 +481,18 @@ impl SessionChatOptionDetector {
         }
         // An agent gone with no notice: its stored working claim ends from here, the one place every
         // fresh capture passes through, on every probe that still reads it gone.
-        if detected.agent_gone {
+        if let Some(generation) = detected
+            .agent_gone
+            .then(|| {
+                crate::session_chat_start_failure::agent_gone_generation(project_id, session_id)
+            })
+            .flatten()
+        {
             crate::session_chat_agent_gone_activity::dispatch_gone_agent_reconcile(
                 self.app_state.clone(),
                 project_id,
                 session_id,
+                generation,
             );
         }
         // A trust prompt on a remembered folder is answered from here, the one

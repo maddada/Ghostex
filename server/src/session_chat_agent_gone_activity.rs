@@ -14,9 +14,27 @@ use crate::storage::open_gxserver_database;
 /// Sessions with a reconcile running, `project:session`: probes that land meanwhile skip it.
 static IN_FLIGHT: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
 
+/// A session's place in [`IN_FLIGHT`], given back when the reconcile ends, panics included.
+struct InFlight(String);
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        IN_FLIGHT
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .remove(&self.0);
+    }
+}
+
 /// Runs [`reconcile_gone_agent_activity`] off the probe's thread, at most once at a time per
-/// session. Called by every detection that reads the agent gone.
-pub(crate) fn dispatch_gone_agent_reconcile(state: AppState, project_id: &str, session_id: &str) {
+/// session, for the absence confirmed at `generation`. Called by every detection that reads the
+/// agent gone.
+pub(crate) fn dispatch_gone_agent_reconcile(
+    state: AppState,
+    project_id: &str,
+    session_id: &str,
+    generation: u64,
+) {
     let key = format!("{project_id}:{session_id}");
     if !IN_FLIGHT
         .lock()
@@ -25,14 +43,12 @@ pub(crate) fn dispatch_gone_agent_reconcile(state: AppState, project_id: &str, s
     {
         return;
     }
+    let slot = InFlight(key);
     let project_id = project_id.to_string();
     let session_id = session_id.to_string();
     let run = move || {
-        reconcile_gone_agent_activity(&state, &project_id, &session_id);
-        IN_FLIGHT
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .remove(&key);
+        let _slot = slot;
+        reconcile_gone_agent_activity(&state, &project_id, &session_id, generation);
     };
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => {
@@ -43,9 +59,14 @@ pub(crate) fn dispatch_gone_agent_reconcile(state: AppState, project_id: &str, s
 }
 
 /// CDXC:SessionStatus 2026-11-10 WHY:
-/// No hook reports a killed agent, so its hook-backed "working" stayed for good: the sidebar, `ghostex sessions`, coordinators and phones whose chat core predates `agentGone` kept showing it working. A confirmed absence (session_chat_start_failure.rs `agent_left_conversation`) ends the claim the Stop hook would have ended, as idle, not attention: nothing finished, so no sound and no done notification, and a session already in attention keeps it. The write is guarded on the stored state this read observed (`/api/settleGoneAgentActivity`, agents/gone_activity.rs) and applied again on every probe while the agent stays gone and the session reads working, because writers that read outside a transaction can bring an older working state back; there is no "settled" flag that such a write could outlive.
+/// No hook reports a killed agent, so its hook-backed "working" stayed for good: the sidebar, `ghostex sessions`, coordinators and phones whose chat core predates `agentGone` kept showing it working. A confirmed absence (session_chat_start_failure.rs `agent_left_conversation`) ends the claim the Stop hook would have ended, as idle, not attention: nothing finished, so no sound and no done notification, and a session already in attention keeps it. The write is guarded on the stored state this read observed and on the agent generation the absence was confirmed at, checked under the lock every agent start takes before it launches (`/api/settleGoneAgentActivity`, agents/gone_activity.rs; `while_agent_gone`), and applied again on every probe while the agent stays gone and the session reads working, because writers that read outside a transaction can bring an older working state back; there is no "settled" flag that such a write could outlive.
 /// SEE-ALSO: server/src/session_chat_start_failure.rs, server/src/agents/gone_activity.rs, server/src/zmx/provider.rs (`forget_agent_gone` at the start boundary), server/src/server/session_self_heal_runtime.rs (probes a session nobody watches), packages/gx-chat-core/src/session/working.rs.
-pub(crate) fn reconcile_gone_agent_activity(state: &AppState, project_id: &str, session_id: &str) {
+pub(crate) fn reconcile_gone_agent_activity(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    generation: u64,
+) {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };
@@ -85,6 +106,7 @@ pub(crate) fn reconcile_gone_agent_activity(state: &AppState, project_id: &str, 
     let guard = GoneActivityGuard {
         observed_activity,
         observed_updated_at,
+        agent_generation: generation,
     };
     let _ = crate::server::dispatch_agent_http_blocking(
         state,

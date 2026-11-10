@@ -151,6 +151,18 @@ fn tick(state: &AppState) -> Vec<HealDue> {
 static GONE_PROBES_IN_FLIGHT: std::sync::LazyLock<Mutex<std::collections::HashSet<SessionKey>>> =
     std::sync::LazyLock::new(Default::default);
 
+/// A session's place in [`GONE_PROBES_IN_FLIGHT`], given back when the probe ends, panics included.
+struct GoneProbeInFlight(SessionKey);
+
+impl Drop for GoneProbeInFlight {
+    fn drop(&mut self) {
+        GONE_PROBES_IN_FLIGHT
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .remove(&self.0);
+    }
+}
+
 /// A session that reads working while this tick's process check found no agent in its live daemon
 /// gets a fresh look through the chat detection funnel, so the gone-agent reconcile there
 /// (session_chat_agent_gone_activity.rs) also reaches a session nobody has open. Working only:
@@ -187,15 +199,12 @@ fn probe_working_sessions_without_agent(
         {
             continue;
         }
+        let slot = GoneProbeInFlight(key.clone());
         let detector = crate::session_chat_options::SessionChatOptionDetector::new(state);
         let agent = crate::session_chat_composer::session_chat_composer_agent_id(session);
-        let key = key.clone();
         tokio::task::spawn_blocking(move || {
-            detector.detect_blocking(&key.0, &key.1, agent.as_deref(), true);
-            GONE_PROBES_IN_FLIGHT
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .remove(&key);
+            let slot = slot;
+            detector.detect_blocking(&slot.0 .0, &slot.0 .1, agent.as_deref(), true);
         });
     }
 }

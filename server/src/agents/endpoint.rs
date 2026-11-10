@@ -66,7 +66,6 @@ pub fn dispatch_agent_endpoint(
             | "/api/cancelFirstPromptAutoTitle"
             | "/api/ingestTerminalTitleEvent"
             | "/api/updateAgentActivity"
-            | SETTLE_GONE_AGENT_ACTIVITY_ENDPOINT
             | "/api/ingestAgentHookEvent"
     );
     let transaction = (updates_session_metadata && db.is_autocommit())
@@ -182,6 +181,7 @@ pub fn dispatch_agent_endpoint(
                 result,
             }
         }
+        // Owns its write transaction, taken before the gone record's lock (agents/gone_activity.rs).
         SETTLE_GONE_AGENT_ACTIVITY_ENDPOINT => {
             let lifecycle = read_lifecycle(params)?;
             let result = settle_gone_agent_activity(repository, &lifecycle, params)?;
