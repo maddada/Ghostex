@@ -255,6 +255,28 @@ pub struct RpcSuccessResponse {
     pub result: Value,
 }
 
+/// `RpcSuccessResponse` around any serializable result, written with the same fields in the
+/// same order, for a result that is not built as a `Value` (a cached list's text).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RpcSuccessOf<T: Serialize> {
+    pub ok: bool,
+    pub product: &'static str,
+    pub protocol_version: u64,
+    pub request_id: String,
+    pub result: T,
+}
+
+pub fn rpc_success_of<T: Serialize>(request_id: impl Into<String>, result: T) -> RpcSuccessOf<T> {
+    RpcSuccessOf {
+        ok: true,
+        product: GXSERVER_PRODUCT,
+        protocol_version: GXSERVER_PROTOCOL_VERSION,
+        request_id: request_id.into(),
+        result,
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RpcErrorResponse {

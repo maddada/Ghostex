@@ -8,7 +8,7 @@ use std::{convert::Infallible, net::SocketAddr, sync::Arc, time::Instant};
 use crate::{
     domain::{read_domain_rpc_params, DomainRepository, DomainStateError},
     logging::{log_level_from_status, DiagnosticLogScenario, GxserverLogInput},
-    protocol::rpc_success,
+    protocol::rpc_success_of,
     storage::open_gxserver_database,
 };
 
@@ -109,6 +109,26 @@ where
         &str,
     ) -> std::result::Result<Value, DomainStateError>,
 {
+    handle_domain_http_as(state, endpoint_path, request_id, body, handler)
+}
+
+/// `handle_domain_http` for a handler whose result is not a `Value` (listProjects' cached text).
+pub(super) fn handle_domain_http_as<R, F>(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+    handler: F,
+) -> RoutedResponse
+where
+    R: serde::Serialize,
+    F: FnOnce(
+        &DomainRepository<'_>,
+        &rusqlite::Connection,
+        &Map<String, Value>,
+        &str,
+    ) -> std::result::Result<R, DomainStateError>,
+{
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
@@ -137,7 +157,7 @@ where
         Ok(result) => routed_json(
             Some(endpoint_path),
             StatusCode::OK,
-            rpc_success(request_id, result),
+            rpc_success_of(request_id, result),
         ),
         Err(error) => domain_error_response(endpoint_path, request_id, error),
     }

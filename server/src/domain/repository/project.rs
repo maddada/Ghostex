@@ -379,6 +379,14 @@ impl<'a> DomainRepository<'a> {
         rows.into_iter().map(project_from_row).collect()
     }
 
+    /// `/api/listProjects`' result without copying the cached set (`ListProjectsResult`).
+    pub(crate) fn list_projects_result(&self) -> DomainResult<super::ListProjectsResult> {
+        if let Some(set) = super::project_cache::cached_projects(self.db, true) {
+            return Ok(super::ListProjectsResult::Cached(set));
+        }
+        self.list_projects().map(super::ListProjectsResult::Read)
+    }
+
     /// `list_projects` without each project's `previousSessionHistory`, for readers that never
     /// look at it (the key is absent from every returned project).
     ///
@@ -444,6 +452,9 @@ impl<'a> DomainRepository<'a> {
         session ownership while excluding them from every active or recent
         project list clients render.
         */
+        if let Some(set) = super::project_cache::cached_projects(self.db, true) {
+            return self.recent_projects_from_set(&set.projects);
+        }
         let mut statement = self
             .db
             .prepare(
@@ -469,6 +480,63 @@ impl<'a> DomainRepository<'a> {
                 let session_count = self.count_project_sessions(&project_id)?;
                 project_from_row(row)
                     .and_then(|project| recent_project_from_project(&project, session_count))
+            })
+            .collect()
+    }
+
+    /// `list_recent_projects` from the cached project set: the same rows, order and fields as its
+    /// query, with every session count from one grouped read.
+    ///
+    /// CDXC:Projects 2026-11-10 WHY: the query read every parked project whole (357 here, 0.86 MB
+    /// of JSON columns parsed) and counted each one's sessions separately, to keep five small
+    /// fields: 274 of 3,605 busy samples of gxserver while phones polled. The cache holds the same
+    /// rows parsed under `projectsRevision`. The filter and order repeat the query's SQL: `trim`
+    /// strips spaces only, and a missing `recentClosedAt` sorts last.
+    fn recent_projects_from_set(&self, projects: &[Value]) -> DomainResult<Vec<Value>> {
+        fn text<'a>(project: &'a Value, key: &str) -> Option<&'a str> {
+            project.get(key).and_then(Value::as_str)
+        }
+        let mut recent: Vec<&Value> = projects
+            .iter()
+            .filter(|project| {
+                project.get("isRecentProject") == Some(&Value::Bool(true))
+                    && text(project, "path").is_some_and(|path| !path.trim_matches(' ').is_empty())
+                    && text(project, "visibility") != Some("hidden")
+                    && text(project, "systemKind") != Some("remoteAttachCarrier")
+            })
+            .collect();
+        recent.sort_by(|left, right| {
+            text(right, "recentClosedAt")
+                .cmp(&text(left, "recentClosedAt"))
+                .then_with(|| text(right, "updatedAt").cmp(&text(left, "updatedAt")))
+                .then_with(|| text(left, "projectId").cmp(&text(right, "projectId")))
+        });
+        let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        {
+            let mut statement = self
+                .db
+                .prepare_cached("SELECT projectId, COUNT(*) FROM sessions GROUP BY projectId")
+                .map_err(sql_error)?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?.max(0) as usize,
+                    ))
+                })
+                .map_err(sql_error)?;
+            for row in rows {
+                let (project_id, count) = row.map_err(sql_error)?;
+                counts.insert(project_id, count);
+            }
+        }
+        recent
+            .into_iter()
+            .map(|project| {
+                let session_count = text(project, "projectId")
+                    .and_then(|project_id| counts.get(project_id).copied())
+                    .unwrap_or(0);
+                recent_project_from_project(project, session_count)
             })
             .collect()
     }

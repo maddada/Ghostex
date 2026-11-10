@@ -280,7 +280,7 @@ pub(super) async fn route_sessions_http(
                 } else {
                     sessions
                 };
-                Ok(json!({ "sessions": sessions }))
+                Ok(moved_result("sessions", Value::Array(sessions)))
             },
         ),
         "/api/updateSession" => handle_domain_http(
@@ -322,7 +322,7 @@ pub(super) async fn route_sessions_http(
                         &session_id,
                     )?;
                 }
-                Ok(json!({ "sessions": sessions }))
+                Ok(moved_result("sessions", Value::Array(sessions)))
             },
         ),
         /*

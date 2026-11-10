@@ -2,6 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use rusqlite::{Connection, OptionalExtension};
+use serde_json::value::RawValue;
 use serde_json::Value;
 
 use crate::domain::{project_from_row, project_row_from_sql, DomainResult};
@@ -12,6 +13,7 @@ const MAX_DATABASES: usize = 4;
 pub(crate) struct ProjectSet {
     pub(crate) projects: Vec<Value>,
     by_id: HashMap<String, usize>,
+    list_result: OnceLock<Option<Box<RawValue>>>,
 }
 
 impl ProjectSet {
@@ -19,6 +21,27 @@ impl ProjectSet {
         self.by_id
             .get(project_id)
             .map(|index| &self.projects[*index])
+    }
+
+    /// `/api/listProjects`' result, `{"projects":[...]}`, as text, written once per set.
+    ///
+    /// CDXC:StateSync 2026-11-10 WHY: every listProjects answer deep copied the whole set twice
+    /// (the clone out of this cache, then `json!` copying it into the result) before writing the
+    /// same text again: about 260 of 3,605 busy samples of gxserver while phones polled. The set
+    /// lives under one `projectsRevision`, so its text does too; the endpoint sends it as written.
+    pub(crate) fn list_result(&self) -> Option<&RawValue> {
+        self.list_result
+            .get_or_init(|| {
+                #[derive(serde::Serialize)]
+                struct ListResult<'a> {
+                    projects: &'a [Value],
+                }
+                serde_json::value::to_raw_value(&ListResult {
+                    projects: &self.projects,
+                })
+                .ok()
+            })
+            .as_deref()
     }
 }
 
@@ -101,7 +124,11 @@ pub(crate) fn cached_projects(db: &Connection, build: bool) -> Option<Arc<Projec
                 .map(|project_id| (project_id.to_string(), index))
         })
         .collect();
-    let set = Arc::new(ProjectSet { projects, by_id });
+    let set = Arc::new(ProjectSet {
+        projects,
+        by_id,
+        list_result: OnceLock::new(),
+    });
     if let Ok(mut cache) = cache().lock() {
         cache.retain(|entry| entry.database != database);
         if cache.len() >= MAX_DATABASES {
@@ -114,6 +141,32 @@ pub(crate) fn cached_projects(db: &Connection, build: bool) -> Option<Arc<Projec
         });
     }
     Some(set)
+}
+
+/// `/api/listProjects`' result: the cached set's text when the cache holds the set, else the
+/// projects just read. Both serialize to the same `{"projects":[...]}`.
+pub(crate) enum ListProjectsResult {
+    Cached(Arc<ProjectSet>),
+    Read(Vec<Value>),
+}
+
+impl serde::Serialize for ListProjectsResult {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(serde::Serialize)]
+        struct ListResult<'a> {
+            projects: &'a [Value],
+        }
+        match self {
+            Self::Cached(set) => match set.list_result() {
+                Some(text) => text.serialize(serializer),
+                None => ListResult {
+                    projects: &set.projects,
+                }
+                .serialize(serializer),
+            },
+            Self::Read(projects) => ListResult { projects }.serialize(serializer),
+        }
+    }
 }
 
 /// A cached project as the `*_without_session_history` readers return it.

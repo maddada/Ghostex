@@ -227,6 +227,14 @@ pub(crate) fn request_id(headers: &HeaderMap) -> String {
         .unwrap_or_else(|| Uuid::new_v4().to_string())
 }
 
+/// `{"<key>": value}` with `value` moved in. `json!` serializes its arguments, so
+/// `json!({ "projects": projects })` deep copied a whole list before the answer was written.
+pub(crate) fn moved_result(key: &str, value: Value) -> Value {
+    let mut result = serde_json::Map::with_capacity(1);
+    result.insert(key.to_string(), value);
+    Value::Object(result)
+}
+
 pub(crate) fn routed_json<T: serde::Serialize>(
     endpoint_path: Option<String>,
     status: StatusCode,
@@ -239,12 +247,14 @@ pub(crate) fn routed_json<T: serde::Serialize>(
 }
 
 pub(crate) fn json_response<T: serde::Serialize>(status: StatusCode, body: T) -> Response<Body> {
-    let text = serde_json::to_string(&body).unwrap_or_else(|_| {
+    let mut text = serde_json::to_string(&body).unwrap_or_else(|_| {
         format!(
             r#"{{"error":"internalError","message":"Failed to serialize gxserver response.","ok":false,"product":"{GXSERVER_PRODUCT}","protocolVersion":{GXSERVER_PROTOCOL_VERSION}}}"#
         )
     });
-    let mut response = Response::new(Body::from(format!("{text}\n")));
+    // Pushed, not `format!`ed: a list answer's text is megabytes, and formatting copied it once more.
+    text.push('\n');
+    let mut response = Response::new(Body::from(text));
     *response.status_mut() = status;
     response.headers_mut().insert(
         header::CONTENT_TYPE,

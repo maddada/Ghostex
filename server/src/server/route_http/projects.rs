@@ -90,16 +90,12 @@ pub(super) async fn route_projects_http(
                 Ok(json!({ "project": project }))
             },
         ),
-        "/api/listProjects" => handle_domain_http(
+        "/api/listProjects" => handle_domain_http_as(
             &state,
             endpoint.path,
             request_id,
             &body_json,
-            |repository, _, _, _| {
-                repository
-                    .list_projects()
-                    .map(|projects| json!({ "projects": projects }))
-            },
+            |repository, _, _, _| repository.list_projects_result(),
         ),
         "/api/listRecentProjects" => handle_domain_http(
             &state,
@@ -107,9 +103,9 @@ pub(super) async fn route_projects_http(
             request_id,
             &body_json,
             |repository, _, _, _| {
-                repository
-                    .list_recent_projects()
-                    .map(|recent_projects| json!({ "recentProjects": recent_projects }))
+                repository.list_recent_projects().map(|recent_projects| {
+                    moved_result("recentProjects", Value::Array(recent_projects))
+                })
             },
         ),
         "/api/closeProjectToRecent" => handle_domain_http(

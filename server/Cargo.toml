@@ -63,7 +63,7 @@ rusqlite = { version = "0.40", features = ["fallible_uint"] }
 # Codex compresses week-old rollouts to `.jsonl.zst` (crate::codex_rollout_archive); decode only, pure Rust.
 ruzstd = { version = "0.9", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value"] }
 sha1 = "0.11"
 sha2 = "0.11"
 subtle = "2"
