@@ -108,3 +108,6 @@ apps/web/
 
 # Build output of the `cargo xtask` crate (tooling/xtask).
 tooling/xtask/target/
+
+# A stray build folder at the repository root (a cargo run with the wrong target dir) must never block `cargo xtask rebuild`.
+/target/
