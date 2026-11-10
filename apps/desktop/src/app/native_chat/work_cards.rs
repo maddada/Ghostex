@@ -9,6 +9,7 @@
 
 use super::tone_card::ToneButton;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
+use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -34,12 +35,14 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
 /// A chip's glyph by what it says.
 fn chip_icon(kind: &str) -> &'static str {
     match kind {
-        "you" => "titlebar/user.svg",
         "thread" => "titlebar/robot.svg",
         // 12 px: the picture's thicker-lined copy for small sizes.
         "coordinator" => "titlebar/coordinator-captain-hat-small.svg",
         "steps" => "titlebar/checklist.svg",
         "item" => "titlebar/stack.svg",
+        "question" => "titlebar/help-circle.svg",
+        "link" => "titlebar/link.svg",
+        "file" => "titlebar/file-text.svg",
         _ => "titlebar/clock.svg",
     }
 }
@@ -84,7 +87,9 @@ impl NativeChatView {
                 .min_w_0()
                 .gap(px(6.0 * p.scale))
                 .children(cards.iter().map(|card| {
-                    let drawn = if card["folded"] == true {
+                    let drawn = if card["kind"] == "moving" {
+                        self.work_moving_row(card, p, cx)
+                    } else if card["folded"] == true {
                         self.work_fold_line(card, p)
                     } else {
                         self.work_card(card, p, cx)
@@ -169,32 +174,43 @@ impl NativeChatView {
                     .child(line),
             );
         }
+        // An icon and muted words, no outline or fill (Q2167); a thread, link or file opens.
         let chips: Vec<AnyElement> = card["chips"]
             .as_array()
             .into_iter()
             .flatten()
-            .map(|chip| {
+            .enumerate()
+            .map(|(index, chip)| {
+                let command = chip["command"].clone();
+                let label = text(chip, "label");
                 div()
+                    .id(gpui::SharedString::from(format!("work-chip:{key}:{index}")))
                     .flex()
-                    .flex_none()
+                    .flex_shrink(1.0)
+                    .min_w(px(40.0 * s))
+                    .max_w(px(280.0 * s))
                     .items_center()
                     .gap(px(5.0 * s))
                     .h(px(22.0 * s))
-                    .px(px(8.0 * s))
-                    .max_w(px(260.0 * s))
-                    .rounded(px(11.0 * s))
-                    .border_1()
-                    .border_color(p.input_border)
                     .text_size(px(12.5 * s))
                     .text_color(p.card_muted)
+                    .aria_label(label.clone())
                     .child(
                         svg()
                             .path(chip_icon(&text(chip, "kind")))
                             .size(px(12.0 * s))
                             .flex_shrink_0()
-                            .text_color(p.card_muted),
+                            .text_color(p.muted),
                     )
-                    .child(div().min_w_0().truncate().child(text(chip, "label")))
+                    .child(div().min_w_0().truncate().child(label))
+                    .when(command.is_object(), |chip| {
+                        chip.chat_cursor_pointer()
+                            .hover(|style| style.text_color(p.foreground))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.invoke(command.clone(), cx);
+                            }))
+                    })
                     .into_any_element()
             })
             .collect();
@@ -255,7 +271,8 @@ impl NativeChatView {
                     .flex()
                     .flex_wrap()
                     .items_center()
-                    .gap(px(6.0 * s))
+                    .gap_x(px(14.0 * s))
+                    .gap_y(px(4.0 * s))
                     .children(chips)
                     .when(!buttons.is_empty(), |row| {
                         row.child(
@@ -268,6 +285,174 @@ impl NativeChatView {
                         )
                     }),
             );
+        }
+        column.into_any_element()
+    }
+
+    /// Everything still running, as one quiet row ("Moving · 7" and their names) that opens to a
+    /// list; a row of the list goes to that item's newest card (gx-chat-core work_cards.rs
+    /// `moving_row`, which holds the user's Q2166).
+    fn work_moving_row(&self, card: &Value, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
+        let s = p.scale;
+        let key = text(card, "key");
+        let open = self.expanded.contains(&key);
+        let (icon, color) = status_look("moving", p);
+        let toggle_key = key.clone();
+        let waiting = text(card, "waiting");
+        let head = div()
+            .id(gpui::SharedString::from(format!("work-moving:{key}")))
+            .role(gpui::Role::Button)
+            .aria_label(format!(
+                "{}, {}",
+                text(card, "title"),
+                if open { "open" } else { "closed" }
+            ))
+            .w_full()
+            .min_w_0()
+            .flex()
+            .items_center()
+            .gap(px(8.0 * s))
+            .h(px(30.0 * s))
+            .px(px(12.0 * s))
+            .text_size(px(12.5 * s))
+            .chat_cursor_pointer()
+            .hover(|style| style.bg(p.foreground.opacity(0.04)))
+            .child(
+                svg()
+                    .path(if open {
+                        "titlebar/chevron-down.svg"
+                    } else {
+                        "titlebar/chevron-right.svg"
+                    })
+                    .size(px(12.0 * s))
+                    .flex_shrink_0()
+                    .text_color(p.muted),
+            )
+            .child(
+                svg()
+                    .path(icon)
+                    .size(px(12.0 * s))
+                    .flex_shrink_0()
+                    .text_color(color),
+            )
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(p.card_muted)
+                    .child(text(card, "title")),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .text_color(p.muted)
+                    .when(!open, |summary| summary.child(text(card, "summary"))),
+            )
+            .when(!waiting.is_empty(), |head| {
+                head.child(
+                    div()
+                        .flex_shrink_0()
+                        .text_color(p.muted)
+                        .child(waiting.clone()),
+                )
+            })
+            .on_click(cx.listener(move |this, _, _, cx| {
+                cx.stop_propagation();
+                if !this.expanded.remove(&toggle_key) {
+                    this.expanded.insert(toggle_key.clone());
+                }
+                cx.notify();
+            }));
+        let mut column = div()
+            .w_full()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .rounded(px(8.0 * s))
+            .border_1()
+            .border_color(p.input_border.opacity(0.7))
+            .overflow_hidden()
+            .child(head);
+        if open {
+            for (index, row) in card["rows"].as_array().into_iter().flatten().enumerate() {
+                let (row_icon, row_color) = status_look(&text(row, "status"), p);
+                let command = row["command"].clone();
+                let line = text(row, "line");
+                column = column.child(
+                    div()
+                        .id(gpui::SharedString::from(format!(
+                            "work-moving-row:{key}:{index}"
+                        )))
+                        .role(gpui::Role::Button)
+                        .aria_label(text(row, "title"))
+                        .w_full()
+                        .min_w_0()
+                        .flex()
+                        .items_start()
+                        .gap(px(8.0 * s))
+                        .px(px(12.0 * s))
+                        .py(px(6.0 * s))
+                        .border_t_1()
+                        .border_color(p.input_border.opacity(0.5))
+                        .text_size(px(12.5 * s))
+                        .child(
+                            div()
+                                .h(px(18.0 * s))
+                                .flex()
+                                .items_center()
+                                .pl(px(20.0 * s))
+                                .child(
+                                    svg()
+                                        .path(row_icon)
+                                        .size(px(11.0 * s))
+                                        .flex_shrink_0()
+                                        .text_color(row_color),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .child(
+                                    div()
+                                        .min_w_0()
+                                        .truncate()
+                                        .line_height(px(18.0 * s))
+                                        .text_color(p.foreground)
+                                        .child(text(row, "title")),
+                                )
+                                .when(!line.is_empty(), |cell| {
+                                    cell.child(
+                                        div()
+                                            .min_w_0()
+                                            .truncate()
+                                            .line_height(px(17.0 * s))
+                                            .text_color(p.muted)
+                                            .child(line.clone()),
+                                    )
+                                }),
+                        )
+                        .child(
+                            div()
+                                .flex_shrink_0()
+                                .line_height(px(18.0 * s))
+                                .text_color(p.muted)
+                                .child(text(row, "age")),
+                        )
+                        .when(command.is_object(), |row| {
+                            row.chat_cursor_pointer()
+                                .hover(|style| style.bg(p.foreground.opacity(0.04)))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    cx.stop_propagation();
+                                    this.invoke(command.clone(), cx);
+                                }))
+                        }),
+                );
+            }
         }
         column.into_any_element()
     }

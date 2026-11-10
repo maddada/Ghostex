@@ -59,7 +59,13 @@ fn item_chips(item: &Value, status: &str) -> Vec<Value> {
     let mut chips = Vec::new();
     let owner = owner_words(item);
     let waiting_says = status == "waiting" && !waits_line(item).is_empty();
-    if !owner.is_empty() && !waiting_says && !matches!(status, "needs" | "blocked") {
+    // Only a thread is worth naming: "You" and "Coordinator" are what the group already says
+    // (Q2167).
+    if !owner.is_empty()
+        && !waiting_says
+        && !matches!(status, "needs" | "blocked")
+        && text(&item["owner"], "kind") == "thread"
+    {
         chips.push(json!({ "kind": "owner", "label": owner, "tone": "" }));
     }
     let total = item["steps"]["total"].as_u64().unwrap_or(0);
@@ -253,7 +259,7 @@ pub fn work_board(work: &Value) -> Value {
     let mut mentions = Map::new();
     for item in work["items"].as_array().into_iter().flatten() {
         let status = text(item, "status");
-        if status == "dropped" || (status == "finished" && item["today"] == false) {
+        if status == "dropped" {
             continue;
         }
         let group = group_of(status);
@@ -279,6 +285,10 @@ pub fn work_board(work: &Value) -> Value {
                 },
                 ask_row(item, ask),
             );
+        }
+        // Finished before today: off the panel, though a task it left for the user stays.
+        if status == "finished" && item["today"] == false {
+            continue;
         }
         // An item that is with the user only for its asks shows as them, not twice.
         let only_asking = matches!(status, "needs" | "blocked")

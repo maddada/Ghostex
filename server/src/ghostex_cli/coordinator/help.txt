@@ -30,7 +30,8 @@ USAGE
                               [--release <name>] [--json]
   ghostex coordinator item now <W7> "<where it stands>" [--thread <thread-ref>]... [--json]
   ghostex coordinator item step <W7> "<step>" [--done] [--chore] [--json]
-  ghostex coordinator item ask <W7> "<what you ask>" [--answers "A,B" [--recommended B]]
+  ghostex coordinator item ask <W7> "<what you ask>" [--answers "A,B" | --answer "A" --answer "B"]
+                              [--recommended B]
                               [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex coordinator item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
   ghostex coordinator item wait <W7> --on <W8|Q12|"words">... [--until <when>] ["<line>"] [--json]
@@ -234,14 +235,17 @@ WORK ITEMS
   --chore keeps a rebuild or test run out of sight: chores are never shown.
   ask puts something before the user, with a question tag (the next after the
   chat's, or --tag Q12 for one already asked in the chat): one-click answers
-  with --answers, the steps to follow with --steps, and --holds when the work
+  with --answers (commas split them; write \, for a comma inside an answer,
+  or give each with --answer "Too small to read, simplify it"), the steps to
+  follow with --steps, and --holds when the work
   stops until they do it. An ask settles when the user answers it (its card,
   or "Q12: yes" in the chat for a tag asked there), with --done Q12 when the
   user did it, or --withdraw Q12. wait replaces what it waits on: W8 (another
   item), Q12 (an ask) or words for something outside, with --until for when
   it's expected. done finishes it with the one line worth keeping and
-  withdraws its open asks; drop takes it off (restore brings it back for 7
-  days). edit renames it, attaches or detaches threads, or sets its status
+  withdraws its open questions; a task for the user stays under Needs you
+  until they mark it done. drop takes it off with everything it asks
+  (restore brings it back for 7 days). edit renames it, attaches or detaches threads, or sets its status
   (needs-you, blocked, moving, waiting, later, next, held, parked, backlog,
   finished). list prints the items by status with their asks, waits and
   threads (Finished and dropped with --all); list W7 prints one with its

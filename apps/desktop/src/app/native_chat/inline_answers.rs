@@ -28,6 +28,11 @@ impl NativeChatView {
         let s = p.scale;
         let form_id = mark["form"].as_str().unwrap_or_default().to_string();
         let form = &self.snapshot["questionForms"][&form_id];
+        // Asked by a work item too: drawn once, as its ask card (gx-chat-core work_cards.rs
+        // `card_tags`).
+        if form["coveredByCard"] == true {
+            return gpui::div().into_any_element();
+        }
         let phase = form["state"].as_str().unwrap_or("open");
         let changing = form["changing"] == true;
         let withdrawn = form["tagWithdrawn"] == true || matches!(phase, "withdrawn" | "canceled");

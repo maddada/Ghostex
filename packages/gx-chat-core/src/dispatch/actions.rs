@@ -185,6 +185,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ShowCoordinatorBoardGroup
         | ActionKind::CoordinatorBoardChange
         | ActionKind::CoordinatorBoardAnswer
+        | ActionKind::JumpToWorkCard
         | ActionKind::InsertBoardReference
         | ActionKind::HideCoordinatorIntro
         | ActionKind::ToggleAutopilot
@@ -363,6 +364,7 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::ShowCoordinatorBoardGroup
             | ActionKind::CoordinatorBoardChange
             | ActionKind::CoordinatorBoardAnswer
+        | ActionKind::JumpToWorkCard
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
         | ActionKind::ToggleAutopilot
@@ -432,6 +434,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::ShowCoordinatorBoardGroup
             | ActionKind::CoordinatorBoardChange
             | ActionKind::CoordinatorBoardAnswer
+            | ActionKind::JumpToWorkCard
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
             | ActionKind::ToggleAutopilot

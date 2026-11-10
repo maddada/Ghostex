@@ -262,12 +262,15 @@ pub fn unanswered(state: &ChatState) -> Vec<&Asker> {
 /// ones included and removed ones left out, oldest first.
 pub fn waiting(state: &ChatState) -> Vec<&Asker> {
     let removed = crate::questions::later::removed_ids(state);
+    // A question a work item asks waits on its card, not here (`extras::work_cards::card_tags`).
+    let cards = crate::extras::work_cards::card_tags(state);
     let (settled_forms, settled_pages) = settled_by_index(state);
     state
         .transcript_view
         .askers
         .iter()
         .filter(|asker| !asker.answered && !asker.obsolete && !asker.inherited)
+        .filter(|asker| !crate::extras::work_cards::covered_by_cards(&asker.tags, &cards))
         .filter(|asker| match asker.kind {
             AskerKind::Form => !settled_forms.contains_key(asker.id.as_str()),
             AskerKind::Page => !settled_pages.contains_key(asker.id.as_str()),

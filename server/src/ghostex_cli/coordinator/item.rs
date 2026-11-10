@@ -214,7 +214,16 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
                             ))?),
                         );
                         params.insert("holds".into(), json!(holds));
-                        if let Some(answers) = flag_text(&parsed.flags, "answers") {
+                        // `--answer` repeated keeps each answer whole, commas and all.
+                        let each = repeated(args, "answer");
+                        if !each.is_empty() {
+                            let recommended =
+                                flag_text(&parsed.flags, "recommended").unwrap_or_default();
+                            params.insert(
+                                "answers".into(),
+                                json!(crate::coordinators::mark_answer_list(&each, &recommended)),
+                            );
+                        } else if let Some(answers) = flag_text(&parsed.flags, "answers") {
                             let recommended =
                                 flag_text(&parsed.flags, "recommended").unwrap_or_default();
                             params.insert(

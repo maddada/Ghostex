@@ -85,6 +85,7 @@ action_kinds! {
     ShowCoordinatorBoardGroup => "showCoordinatorBoardGroup",
     CoordinatorBoardChange => "coordinatorBoardChange",
     CoordinatorBoardAnswer => "coordinatorBoardAnswer",
+    JumpToWorkCard => "jumpToWorkCard",
     InsertBoardReference => "insertBoardReference",
     HideCoordinatorIntro => "hideCoordinatorIntro",
     ToggleAutopilot => "toggleAutopilot",

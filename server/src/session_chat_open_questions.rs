@@ -76,6 +76,8 @@ pub(crate) struct OpenAsker {
     waiting: usize,
     /// It was asked after the user's last message.
     latest_turn: bool,
+    /// The question tags it asks, uppercased.
+    tags: Vec<String>,
 }
 
 impl OpenAsker {
@@ -455,6 +457,11 @@ impl Ledger {
                     waiting: asker.waiting(form.as_ref()),
                     form,
                     latest_turn: turn_of.get(asker.message_id.as_str()) == Some(&self.turns),
+                    tags: asker
+                        .tags
+                        .iter()
+                        .map(|tag| tag.to_ascii_uppercase())
+                        .collect(),
                     id: asker.id,
                     kind: asker.kind,
                 }
@@ -560,6 +567,19 @@ fn read_open(
     let open = ledger.open(&queued, forked_at, |id| {
         crate::visual_pages::page_answered(&state.paths.root_dir, id)
     });
+    // A coordinator's question that a work item asks waits on the item's card, not here: it is
+    // counted once, as the ask (coordinators/work.rs `ask_tags`, gx-chat-core `card_tags`).
+    let card_tags =
+        crate::coordinators::ask_tags(db, &(project_id.to_string(), session_id.to_string()));
+    let open: Vec<OpenAsker> = if card_tags.is_empty() {
+        open
+    } else {
+        open.into_iter()
+            .filter(|asker| {
+                asker.tags.is_empty() || !asker.tags.iter().all(|tag| card_tags.contains(tag))
+            })
+            .collect()
+    };
     // The resource index: what the whole transcript holds, kept in its own table (survives a
     // restart, a compaction and a partly loaded chat).
     let read = ledger.index(&queued, forked_at, |id| {
@@ -1221,6 +1241,7 @@ mod tests {
             form: None,
             waiting,
             latest_turn: true,
+            tags: Vec::new(),
         }
     }
 

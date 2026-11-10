@@ -93,6 +93,17 @@ pub fn handle_with_ids(
         ActionKind::UseCoordinatorIntroExample => {
             crate::extras::coordinator_intro::use_example(&action.params)
         }
+        // A row of the Moving list goes to that item's newest card (work_cards.rs).
+        ActionKind::JumpToWorkCard => {
+            crate::questions::open_questions::jump_to_row(
+                state,
+                context,
+                text(action, "anchorId"),
+                text(action, "key"),
+                None,
+            );
+            Vec::new()
+        }
         ActionKind::CoordinatorBoardAnswer => {
             crate::extras::coordinator_board::answer(state, &action.params, next_request_id())
                 .into_iter()
