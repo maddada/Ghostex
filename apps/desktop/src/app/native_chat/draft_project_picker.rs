@@ -1,7 +1,8 @@
 //! The tray's project chip and machine chip and what they open: a search over every project on
 //! every machine, one row per repository, and the list of the machines that have the draft's
 //! project. The rows are gx-core's (`unified_sidebar/choices.rs`); picking moves the draft
-//! (`gx_store/unified_new_session.rs`). The phone draws the same choice in
+//! (`gx_store/unified_new_session.rs`). The same card lists the tray's long lists, the base
+//! branches and the existing worktrees, from gx-chat-core's menu rows (`DraftListKind`). The phone draws the same choice in
 //! `apps/mobile/app/src/chat/native/composer/ProjectPickerSheet.tsx` and `MachinePickerSheet.tsx`.
 //!
 //! CDXC:Worktrees 2026-11-03 DECISION:
@@ -21,17 +22,28 @@ use gpui::{
 };
 use gpui_component::Root;
 use gpui_component::input::{Input, InputEvent, InputState};
+use serde_json::Value;
 use std::time::Duration;
 // `web_time`, because the web build has no `std::time::Instant` (it panics in wasm).
 use web_time::Instant;
 
-/// The card's width before the chat's zoom.
-const CARD_WIDTH: f32 = 380.0;
-/// The search row, a list row, the list's padding and its tallest height, before the zoom.
+/// The card's narrowest and widest, before the chat's zoom: between them it is as wide as its
+/// longest row needs.
+const CARD_MIN_WIDTH: f32 = 260.0;
+const CARD_MAX_WIDTH: f32 = 380.0;
+/// The search row, a list row, the list's padding and its tallest height (ten rows, the rest
+/// scroll inside it), before the zoom.
 const SEARCH_HEIGHT: f32 = 34.0;
 const ROW_HEIGHT: f32 = 30.0;
 const LIST_PADDING: f32 = 4.0;
-const LIST_MAX_HEIGHT: f32 = 280.0;
+const MAX_ROWS: f32 = 10.0;
+const LIST_MAX_HEIGHT: f32 = ROW_HEIGHT * MAX_ROWS + LIST_PADDING * 2.0;
+/// A row's own padding, the gap before its detail and its tick, before the zoom.
+const ROW_PADDING: f32 = 8.0;
+const ROW_GAP: f32 = 8.0;
+const TICK: f32 = 13.0;
+const TEXT: f32 = 13.0;
+const DETAIL_TEXT: f32 = 11.5;
 const CARD_RADIUS: f32 = 10.0;
 /// The gap between the card and the chip it opens from.
 const CHIP_GAP: f32 = 6.0;
@@ -62,6 +74,8 @@ struct ProjectPickerCard {
     choices: Vec<UnifiedProjectChoice>,
     /// The machine chip's list: the draft's project, whose machines are the rows.
     machines_of: Option<UnifiedProjectChoice>,
+    /// The base branch or worktree list: the tray's own rows in place of the projects.
+    list: Option<(DraftListKind, Vec<Value>)>,
     input: Entity<InputState>,
     query: String,
     highlighted: usize,
@@ -76,16 +90,80 @@ struct ProjectPickerCard {
     _subscriptions: Vec<Subscription>,
 }
 
+/// The tray's long lists the card shows besides the projects and the machines.
+///
+/// CDXC:Worktrees 2026-11-10 DECISION:
+/// User: "wtf is this please fix!! make it have search also. should have logical limit on size and make placement of it better" about the base branch list, which opened as the chat menu's side panel: as tall as the window, about 550 wide, pinned to the window's left edge and with every branch and no search. It is now this card, like the project search the same breadcrumb opens: a search field focused on open (a match anywhere in the name), Up and Down, Enter and Escape, at most ten rows tall with the rest scrolling, as wide as its longest row within 260 to 380, and opening upward from the chip that opened it, kept inside the chat. The existing worktree list (Option+B in that mode too) and the project and computer lists share the size and placement.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum DraftListKind {
+    BaseBranch,
+    Worktree,
+}
+
+impl DraftListKind {
+    fn placeholder(self) -> &'static str {
+        match self {
+            Self::BaseBranch => "Search branches",
+            Self::Worktree => "Search worktrees",
+        }
+    }
+
+    fn nothing(self) -> &'static str {
+        match self {
+            Self::BaseBranch => "No branches match",
+            Self::Worktree => "No worktrees match",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::BaseBranch => "Pick the base branch",
+            Self::Worktree => "Pick a worktree",
+        }
+    }
+}
+
+/// What a pick does: move the draft to a project on a machine, or run a tray row's command.
+enum Pick {
+    Project(UnifiedProjectChoice, usize),
+    Command(Value),
+}
+
+/// The rows of `rows` whose label holds `query` anywhere, ignoring case.
+fn matching_rows(rows: &[Value], query: &str) -> Vec<Value> {
+    let query = query.trim().to_lowercase();
+    rows.iter()
+        .filter(|row| {
+            query.is_empty()
+                || row["label"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .contains(&query)
+        })
+        .cloned()
+        .collect()
+}
+
 impl ProjectPickerCard {
     fn rows(&self) -> Vec<UnifiedProjectChoice> {
         filter_project_choices(&self.choices, &self.query)
     }
 
-    /// The rows Up and Down walk: the projects, or the machine list's machines.
+    /// The list's rows that match the search.
+    fn list_rows(&self) -> Vec<Value> {
+        self.list
+            .as_ref()
+            .map(|(_, rows)| matching_rows(rows, &self.query))
+            .unwrap_or_default()
+    }
+
+    /// The rows Up and Down walk: the projects, the machine list's machines, or the list's rows.
     fn row_count(&self) -> usize {
-        match &self.machines_of {
-            Some(choice) => choice.machines.len(),
-            None => self.rows().len(),
+        match (&self.machines_of, &self.list) {
+            (Some(choice), _) => choice.machines.len(),
+            (None, Some(_)) => self.list_rows().len(),
+            (None, None) => self.rows().len(),
         }
     }
 }
@@ -97,16 +175,53 @@ fn card_height(rows: usize, search: bool, scale: f32) -> f32 {
     (if search { SEARCH_HEIGHT } else { 0.0 } + list + 2.0) * scale
 }
 
-/// Where the card opens: its left edge on the chip's and its bottom just above it, kept inside the
-/// chat.
+/// The card's width for rows whose words are `rows` (each a name and the note beside it), at
+/// `scale`: the widest row with its padding, within `CARD_MIN_WIDTH` and `CARD_MAX_WIDTH`.
+fn card_width<'a>(
+    rows: impl Iterator<Item = (&'a str, Option<&'a str>)>,
+    ticks: bool,
+    appearance: &ChatAppearance,
+    window: &Window,
+) -> f32 {
+    let s = appearance.scale;
+    let mut style = window.text_style();
+    style.font_family = appearance.font.clone().into();
+    let measure = |text: &str, size: f32| {
+        window
+            .text_system()
+            .shape_line(
+                text.to_owned().into(),
+                px(size * s),
+                &[style.to_run(text.len())],
+                None,
+            )
+            .width
+            .as_f32()
+    };
+    let widest = rows
+        .map(|(name, note)| {
+            measure(name, TEXT)
+                + note
+                    .filter(|note| !note.is_empty())
+                    .map_or(0.0, |note| ROW_GAP * s + measure(note, DETAIL_TEXT))
+        })
+        .fold(0.0, f32::max);
+    let chrome = (ROW_PADDING * 2.0 + LIST_PADDING * 2.0 + 2.0) * s
+        + if ticks { (ROW_GAP + TICK) * s } else { 0.0 };
+    (widest.ceil() + 1.0 + chrome).clamp(CARD_MIN_WIDTH * s, CARD_MAX_WIDTH * s)
+}
+
+/// Where the card opens: its left edge on the chip's and its bottom just above it (the bar sits
+/// low in the chat), kept inside the chat on every side.
 fn card_bounds(
     chip: Bounds<Pixels>,
     within: Bounds<Pixels>,
+    width: f32,
     height: f32,
     scale: f32,
 ) -> Bounds<Pixels> {
     let margin = px(8.0 * scale);
-    let width = px(CARD_WIDTH * scale).min(within.size.width - margin * 2.0);
+    let width = px(width).min(within.size.width - margin * 2.0);
     let height = px(height).min(chip.top() - within.top() - margin);
     let x = chip
         .left()
@@ -148,15 +263,9 @@ impl NativeChatView {
         Some((machine.label, local, choice.machines.len() > 1))
     }
 
-    /// A chip's click: opens the project search (`machines` false) or the machine list, or closes
-    /// the one open (also when the press that started this click already closed it by taking key
-    /// status, `CHIP_PRESS`).
-    pub(super) fn toggle_draft_place_picker(
-        &mut self,
-        machines: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    /// A press on a chip while a card is open closes it (also when the press that started this
+    /// click already closed it by taking key status, `CHIP_PRESS`); true when nothing should open.
+    fn draft_card_toggled_shut(&mut self, cx: &mut Context<Self>) -> bool {
         match self.draft_project_picker.take() {
             Some(DraftProjectPicker {
                 handle: Some(handle),
@@ -165,13 +274,26 @@ impl NativeChatView {
                 cx.defer(move |cx| {
                     let _ = handle.update(cx, |_, window, _| window.remove_window());
                 });
-                return;
+                true
             }
             Some(DraftProjectPicker {
                 closed_at: Some(at),
                 ..
-            }) if at.elapsed() < CHIP_PRESS => return,
-            _ => {}
+            }) if at.elapsed() < CHIP_PRESS => true,
+            _ => false,
+        }
+    }
+
+    /// A chip's click: opens the project search (`machines` false) or the machine list, or closes
+    /// the one open.
+    pub(super) fn toggle_draft_place_picker(
+        &mut self,
+        machines: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.draft_card_toggled_shut(cx) {
+            return;
         }
         let Some(app) = self.config.app.as_ref().and_then(|app| app.upgrade()) else {
             return;
@@ -200,17 +322,113 @@ impl NativeChatView {
                 })
                 .unwrap_or(0),
         };
+        let appearance = ChatAppearance::current(&self.snapshot);
+        let width = match &machines_of {
+            Some(choice) => card_width(
+                choice.machines.iter().map(|machine| {
+                    (
+                        machine.label.as_str(),
+                        (!machine.connected).then_some("Not connected"),
+                    )
+                }),
+                true,
+                &appearance,
+                window,
+            ),
+            None => card_width(
+                choices.iter().map(|choice| {
+                    (
+                        choice.label.as_str(),
+                        (!choice.has_sessions).then_some("No sessions"),
+                    )
+                }),
+                false,
+                &appearance,
+                window,
+            ),
+        };
         let rows = machines_of
             .as_ref()
             .map_or(choices.len(), |choice| choice.machines.len());
-        let appearance = ChatAppearance::current(&self.snapshot);
-        let scale = appearance.scale;
-        let content = super::child_window::content_bounds(window);
         let chip = if machines {
             self.draft_machine_chip_bounds.get()
         } else {
             self.draft_project_chip_bounds.get()
         };
+        let height = card_height(rows, !machines, appearance.scale);
+        self.open_draft_card(
+            chip,
+            width,
+            height,
+            (choices, machines_of, None),
+            highlighted,
+            appearance,
+            window,
+            cx,
+        );
+    }
+
+    /// The tray's base branch or worktree part: its rows in the card, with a search, or the card
+    /// closed when one is open.
+    pub(super) fn toggle_draft_list_picker(
+        &mut self,
+        kind: DraftListKind,
+        rows: Vec<Value>,
+        chip: Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.draft_card_toggled_shut(cx) || rows.is_empty() {
+            return;
+        }
+        let appearance = ChatAppearance::current(&self.snapshot);
+        let width = card_width(
+            rows.iter().map(|row| {
+                (
+                    row["label"].as_str().unwrap_or_default(),
+                    row["detail"].as_str(),
+                )
+            }),
+            true,
+            &appearance,
+            window,
+        );
+        let height = card_height(rows.len(), true, appearance.scale);
+        let highlighted = rows
+            .iter()
+            .position(|row| row["checked"] == true)
+            .unwrap_or(0);
+        self.open_draft_card(
+            chip,
+            width,
+            height,
+            (Vec::new(), None, Some((kind, rows))),
+            highlighted,
+            appearance,
+            window,
+            cx,
+        );
+    }
+
+    /// Opens the card in its own window above `chip` (content coordinates).
+    #[allow(clippy::too_many_arguments)]
+    fn open_draft_card(
+        &mut self,
+        chip: Bounds<Pixels>,
+        width: f32,
+        height: f32,
+        (choices, machines_of, list): (
+            Vec<UnifiedProjectChoice>,
+            Option<UnifiedProjectChoice>,
+            Option<(DraftListKind, Vec<Value>)>,
+        ),
+        highlighted: usize,
+        appearance: ChatAppearance,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let scale = appearance.scale;
+        let content = super::child_window::content_bounds(window);
         let view = self.bounds.get();
         let within = if view.size.width > px(0.0) && view.size.height > px(0.0) {
             Bounds::new(content.origin + view.origin, view.size)
@@ -220,7 +438,8 @@ impl NativeChatView {
         let bounds = card_bounds(
             Bounds::new(content.origin + chip.origin, chip.size),
             within,
-            card_height(rows, !machines, scale),
+            width,
+            height,
             scale,
         );
         let parent = super::child_window::window_native_view(window)
@@ -272,6 +491,7 @@ impl NativeChatView {
                                 chat,
                                 choices,
                                 machines_of,
+                                list,
                                 highlighted,
                                 appearance,
                                 window,
@@ -387,12 +607,16 @@ impl ProjectPickerCard {
         chat: WeakEntity<NativeChatView>,
         choices: Vec<UnifiedProjectChoice>,
         machines_of: Option<UnifiedProjectChoice>,
+        list: Option<(DraftListKind, Vec<Value>)>,
         highlighted: usize,
         appearance: ChatAppearance,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search projects"));
+        let placeholder = list
+            .as_ref()
+            .map_or("Search projects", |(kind, _)| kind.placeholder());
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
         let edits = cx.subscribe_in(
             &input,
             window,
@@ -448,6 +672,7 @@ impl ProjectPickerCard {
             chat,
             choices,
             machines_of,
+            list,
             input,
             query: String::new(),
             highlighted,
@@ -484,23 +709,35 @@ impl ProjectPickerCard {
         window.activate_window();
     }
 
-    /// Enter: the highlighted project, or the highlighted machine.
+    /// Enter: the highlighted project, machine or list row.
     fn pick_highlighted(&mut self, cx: &mut Context<Self>) {
         if let Some(choice) = self.machines_of.clone() {
             if choice.machines.get(self.highlighted).is_some() {
                 let chip = self.highlighted;
-                self.close(Some((choice, chip)), cx);
+                self.close(Some(Pick::Project(choice, chip)), cx);
+            }
+            return;
+        }
+        if self.list.is_some() {
+            if let Some(command) = self
+                .list_rows()
+                .get(self.highlighted)
+                .map(|row| row["command"].clone())
+                .filter(Value::is_object)
+            {
+                self.close(Some(Pick::Command(command)), cx);
             }
             return;
         }
         let rows = self.rows();
         if let Some(row) = rows.get(self.highlighted) {
-            self.close(Some((row.clone(), row.selected)), cx);
+            self.close(Some(Pick::Project(row.clone(), row.selected)), cx);
         }
     }
 
-    /// Closes the card, gives the chat its keyboard back and moves the draft for a pick.
-    fn close(&mut self, pick: Option<(UnifiedProjectChoice, usize)>, cx: &mut Context<Self>) {
+    /// Closes the card, gives the chat its keyboard back and moves the draft or runs the row's
+    /// command for a pick.
+    fn close(&mut self, pick: Option<Pick>, cx: &mut Context<Self>) {
         let picked_machine = self.machines_of.is_some();
         if self.closed {
             return;
@@ -531,8 +768,16 @@ impl ProjectPickerCard {
                 window.activate_window();
                 let _ = chat.update(cx, |chat, cx| {
                     chat.focus_composer_from_hotkey(window, cx);
-                    if let Some((row, chip)) = pick {
-                        chat.pick_draft_project(&row, chip, picked_machine, cx);
+                    match pick {
+                        Some(Pick::Project(row, chip)) => {
+                            chat.pick_draft_project(&row, chip, picked_machine, cx);
+                        }
+                        Some(Pick::Command(command)) => chat.handle_action(
+                            &super::actions::NativeChatAction { command },
+                            window,
+                            cx,
+                        ),
+                        None => {}
                     }
                     cx.notify();
                 });
@@ -639,7 +884,81 @@ impl ProjectPickerCard {
                     })
                     .on_click(cx.listener(move |card, _, _, cx| {
                         cx.stop_propagation();
-                        card.close(Some((pick.clone(), index)), cx);
+                        card.close(Some(Pick::Project(pick.clone(), index)), cx);
+                    }))
+                    .into_any_element()
+            })
+            .collect()
+    }
+}
+
+impl ProjectPickerCard {
+    /// The list's rows that match the search: each name, its note (Current, Default, a
+    /// worktree's branch) and a tick on the one picked.
+    fn render_list_rows(
+        &self,
+        p: &ChatAppearance,
+        wash: gpui::Hsla,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let s = p.scale;
+        self.list_rows()
+            .into_iter()
+            .enumerate()
+            .map(|(index, row)| {
+                let label = row["label"].as_str().unwrap_or_default().to_owned();
+                let detail = row["detail"]
+                    .as_str()
+                    .filter(|detail| !detail.is_empty())
+                    .map(str::to_owned);
+                let command = row["command"].clone();
+                div()
+                    .id(("chat-draft-list-row", index))
+                    .role(gpui::Role::Button)
+                    .aria_label(label.clone())
+                    .min_h(px(ROW_HEIGHT * s))
+                    .px(px(ROW_PADDING * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(ROW_GAP * s))
+                    .rounded(px(6.0 * s))
+                    .text_size(px(TEXT * s))
+                    .text_color(p.foreground)
+                    .chat_cursor_pointer()
+                    .when(index == self.highlighted, |row| row.bg(wash))
+                    .hover(move |style| style.bg(wash))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .whitespace_nowrap()
+                            .child(label),
+                    )
+                    .children(detail.map(|detail| {
+                        div()
+                            .flex_shrink_0()
+                            .text_size(px(DETAIL_TEXT * s))
+                            .text_color(p.muted)
+                            .child(detail)
+                    }))
+                    .child(div().size(px(TICK * s)).flex_shrink_0().when(
+                        row["checked"] == true,
+                        |slot| {
+                            slot.child(
+                                svg()
+                                    .path("titlebar/check.svg")
+                                    .size(px(TICK * s))
+                                    .text_color(p.muted),
+                            )
+                        },
+                    ))
+                    .on_click(cx.listener(move |card, _, _, cx| {
+                        cx.stop_propagation();
+                        if command.is_object() {
+                            card.close(Some(Pick::Command(command.clone())), cx);
+                        }
                     }))
                     .into_any_element()
             })
@@ -695,21 +1014,24 @@ impl Render for ProjectPickerCard {
                     .on_click(cx.listener(move |card, _, _, cx| {
                         cx.stop_propagation();
                         let chip = pick_row.selected;
-                        card.close(Some((pick_row.clone(), chip)), cx);
+                        card.close(Some(Pick::Project(pick_row.clone(), chip)), cx);
                     }))
                     .into_any_element()
             })
             .collect();
         let machines_of = self.machines_of.clone();
-        let rows_view = match &machines_of {
-            Some(choice) => self.render_machine_rows(choice, &p, wash, cx),
-            None => rows_view,
+        let kind = self.list.as_ref().map(|(kind, _)| *kind);
+        let rows_view = match (&machines_of, kind) {
+            (Some(choice), _) => self.render_machine_rows(choice, &p, wash, cx),
+            (None, Some(_)) => self.render_list_rows(&p, wash, cx),
+            (None, None) => rows_view,
         };
         let empty = rows_view.is_empty();
+        let nothing = kind.map_or("No projects match", DraftListKind::nothing);
         div()
             .id("chat-draft-project-picker")
             .role(gpui::Role::Dialog)
-            .aria_label("Pick a project")
+            .aria_label(kind.map_or("Pick a project", DraftListKind::label))
             .track_focus(&self.focus)
             .size_full()
             .flex()
@@ -772,7 +1094,7 @@ impl Render for ProjectPickerCard {
                                 .py(px(8.0 * s))
                                 .text_size(px(13.0 * s))
                                 .text_color(p.muted)
-                                .child("No projects match"),
+                                .child(nothing),
                         )
                     }),
             )

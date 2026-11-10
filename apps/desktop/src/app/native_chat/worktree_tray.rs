@@ -5,7 +5,8 @@
 //! two-row grid; this file measures the parts, draws them and opens their menus. The phone draws
 //! the same bar in `apps/mobile/app/src/chat/native/composer/WorktreeTray.tsx`.
 //!
-//! The project and computer parts open `draft_project_picker.rs`; the Cloud Box boot card is
+//! The project and computer parts, and the base branch and worktree lists, open the search card
+//! in `draft_project_picker.rs`; the Cloud Box boot card is
 //! `box_picker.rs`; the hotkeys that open each part are `tray_hotkeys.rs`.
 //!
 //! CDXC:Worktrees 2026-10-31 DECISION:
@@ -60,6 +61,11 @@ enum PartAction {
     None,
     /// The project search, or the computers that have the project (`draft_project_picker.rs`).
     Place { machines: bool },
+    /// The base branch or worktree list in the search card (`draft_project_picker.rs`).
+    List {
+        kind: super::draft_project_picker::DraftListKind,
+        rows: Vec<Value>,
+    },
     /// The chat menu with these rows, from the part.
     Menu {
         trigger: &'static str,
@@ -165,6 +171,11 @@ impl NativeChatView {
         if let Some(label) = detail["label"].as_str() {
             let cloud = detail["kind"] == "cloudBox";
             let has_menu = detail["menu"].is_array();
+            let list_kind = match detail["kind"].as_str() {
+                Some("baseBranch") => Some(super::draft_project_picker::DraftListKind::BaseBranch),
+                Some("worktree") => Some(super::draft_project_picker::DraftListKind::Worktree),
+                _ => None,
+            };
             choice.push(Part {
                 id: if cloud { CLOUD_TRIGGER } else { DETAIL_TRIGGER },
                 glyph: detail["glyph"].as_str().unwrap_or("git-branch").into(),
@@ -174,7 +185,12 @@ impl NativeChatView {
                 muted: !has_menu || detail["placeholder"] == true,
                 tooltip: detail["tooltip"].as_str().unwrap_or(label).to_owned(),
                 hotkey: has_menu.then_some("newChatPickBranch"),
-                action: if has_menu {
+                action: if let (true, Some(kind)) = (has_menu, list_kind) {
+                    PartAction::List {
+                        kind,
+                        rows: menu_rows(&detail["menu"]),
+                    }
+                } else if has_menu {
                     PartAction::Menu {
                         trigger: if cloud { CLOUD_TRIGGER } else { DETAIL_TRIGGER },
                         rows: menu_rows(&detail["menu"]),
@@ -202,6 +218,9 @@ impl NativeChatView {
         match action {
             PartAction::None => {}
             PartAction::Place { machines } => self.toggle_draft_place_picker(*machines, window, cx),
+            PartAction::List { kind, rows } => {
+                self.toggle_draft_list_picker(*kind, rows.clone(), bounds, window, cx)
+            }
             PartAction::Menu {
                 trigger,
                 rows,
@@ -210,6 +229,11 @@ impl NativeChatView {
                 if self.chat_menu_toggled_shut(trigger, cx) {
                     return;
                 }
+                // The where and Cloud Box menus open upward from their part with their left edges
+                // lined up, as a composer menu does, instead of the side panel's place that put
+                // them below the bar over the chat box (CDXC:Worktrees 2026-11-10 in
+                // draft_project_picker.rs).
+                self.menu_side = Some(super::option_menu::MenuSide::Left);
                 self.show_chat_menu(rows.clone(), bounds, *width, window, cx);
             }
         }
