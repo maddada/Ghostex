@@ -457,7 +457,10 @@ fn decode_data_url(url: &str) -> Result<gpui::Image, ChatImageFailure> {
         .and_then(|url| url.split_once(','))
         .ok_or_else(damaged)?;
     if !meta.contains(";base64") {
-        return Err(ChatImageFailure::new("unsupported"));
+        return Err(ChatImageFailure {
+            reason: "unsupported".to_string(),
+            error: format!("data:{meta}"),
+        });
     }
     decoded_image(meta.split(';').next().unwrap_or_default(), payload.trim())
 }
@@ -472,7 +475,11 @@ fn decode_data_url(url: &str) -> Result<gpui::Image, ChatImageFailure> {
  * file looks damaged instead of showing an empty stage.
  */
 fn decoded_image(media_type: &str, base64_data: &str) -> Result<gpui::Image, ChatImageFailure> {
-    let format = image_format(media_type).ok_or_else(|| ChatImageFailure::new("unsupported"))?;
+    // The type that arrived goes with the refusal, so the viewer can name it (unavailable.rs).
+    let format = image_format(media_type).ok_or_else(|| ChatImageFailure {
+        reason: "unsupported".to_string(),
+        error: media_type.trim().to_string(),
+    })?;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(base64_data)
         .map_err(|_| ChatImageFailure::new("damaged"))?;
