@@ -1168,6 +1168,7 @@ fn revealing_a_card_never_folds_drafts_and_leaves_an_open_list_alone() {
     let spot = |shelf| UnifiedRevealSpot {
         shelf,
         repo_key: "k".to_string(),
+        ancestors: Vec::new(),
     };
     // Drafts starts open, and sits above the groups.
     let mut saved = UnifiedSavedState::default();
@@ -1231,7 +1232,7 @@ fn revealing_a_card_the_filter_leaves_out_lifts_only_the_picks_it_misses() {
         },
     ];
     let built = build_unified_sidebar(&machines, settings(), &UnifiedFilter::default(), NOW);
-    let web = find_unified_row(&built, "r:web2:rw").expect("listed");
+    let web = find_unified_row(&built, "r:web2:rw").expect("listed").row;
 
     let mut filter = UnifiedFilter::default();
     filter.repos.insert("github.com/o/api".to_string());

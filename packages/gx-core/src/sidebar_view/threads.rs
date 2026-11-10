@@ -20,7 +20,7 @@ fn is_busy_thread(row: &SessionRow) -> bool {
 }
 
 /// A thread an expanded coordinator lists without its "N older threads" row.
-fn is_recent_thread(row: &SessionRow, now_ms: u64) -> bool {
+pub(crate) fn is_recent_thread(row: &SessionRow, now_ms: u64) -> bool {
     is_busy_thread(row)
         || row
             .timing

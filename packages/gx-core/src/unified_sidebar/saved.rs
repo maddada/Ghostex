@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use super::build::UnifiedFilter;
+use super::tree::UnifiedFolds;
 
 /// The client-storage key, in the same table as the Project sidebar's folds and hide list. The web
 /// build keeps it in the page's own storage under the same name.
@@ -32,6 +33,11 @@ pub struct UnifiedSavedState {
     pub last_machines: BTreeMap<String, String>,
     /// The repositories new sessions last started in, newest first: the project list's Recent.
     pub recent_repos: Vec<String>,
+    /// Coordinators whose threads are shown, by `unified_coordinator_key`; every coordinator
+    /// starts folded (CDXC:Sidebar 2026-11-09 in tree.rs).
+    pub unfolded_coordinators: BTreeSet<String>,
+    /// Coordinators whose older threads are listed.
+    pub older_shown_coordinators: BTreeSet<String>,
 }
 
 impl UnifiedSavedState {
@@ -64,6 +70,28 @@ impl UnifiedSavedState {
         self.recent_repos.retain(|repo| repo != repo_key);
         self.recent_repos.insert(0, repo_key.to_string());
         self.recent_repos.truncate(RECENT_REPOS_MAX);
+    }
+
+    /// The coordinators' folds as the builder reads them.
+    pub fn folds(&self) -> UnifiedFolds {
+        UnifiedFolds {
+            unfolded: self.unfolded_coordinators.clone(),
+            older_shown: self.older_shown_coordinators.clone(),
+        }
+    }
+
+    /// Flips a coordinator's fold.
+    pub fn toggle_coordinator(&mut self, key: &str) {
+        if !self.unfolded_coordinators.remove(key) {
+            self.unfolded_coordinators.insert(key.to_string());
+        }
+    }
+
+    /// Lists or tucks a coordinator's older threads.
+    pub fn toggle_older_threads(&mut self, key: &str) {
+        if !self.older_shown_coordinators.remove(key) {
+            self.older_shown_coordinators.insert(key.to_string());
+        }
     }
 
     pub fn set_filter(&mut self, filter: &UnifiedFilter) {

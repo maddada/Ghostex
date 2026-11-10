@@ -51,6 +51,7 @@ pub(crate) mod spaces;
 pub(crate) mod tags;
 pub(crate) mod text;
 mod threads;
+pub(crate) use threads::{is_recent_thread, recent_thread_deadline_ms};
 pub(crate) mod view;
 mod work;
 pub(crate) mod workspaces;
