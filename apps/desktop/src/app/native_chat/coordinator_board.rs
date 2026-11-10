@@ -1157,11 +1157,6 @@ impl NativeChatView {
         let focus = self.board.focus.as_ref().filter(|focus| focus.key == key);
         let expanded = row["expanded"] == true;
         let title = text(row, "title");
-        let tooltip = [title.as_str(), text(row, "detail").as_str()]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n");
         let command = row["command"].clone();
         let toggle = row["toggle"].clone();
         let reference = text(row, "reference");
@@ -1273,12 +1268,6 @@ impl NativeChatView {
                         p.muted
                     } else {
                         p.card_muted
-                    })
-                    .when(!note.is_empty(), |this| {
-                        let note = note.clone();
-                        this.tooltip(move |window, cx| {
-                            gpui_component::tooltip::Tooltip::new(note.clone()).build(window, cx)
-                        })
                     })
                     .child(if note.is_empty() {
                         "No links yet".to_string()
@@ -1396,12 +1385,13 @@ impl NativeChatView {
                             .when(!expanded, |title| title.truncate())
                             .text_size(px(TITLE_SIZE * s))
                             .text_color(p.foreground)
-                            .when(!expanded, |title| {
-                                title.tooltip(move |window, cx| {
-                                    gpui_component::tooltip::Tooltip::new(tooltip.clone())
-                                        .build(window, cx)
-                                })
-                            })
+                            // No tooltip repeats the card's title and line: a click opens the
+                            // card to its whole text.
+                            //
+                            // CDXC:Coordinators 2026-11-11 DECISION:
+                            // User, of the large tooltip over a Work panel card: "dont show this
+                            // tooltip since clicking expands it". The chips', buttons' and marks'
+                            // own small tooltips stay.
                             // A work ask's title links its references (`#562`) as the dock does.
                             .map(|element| {
                                 if row["titleRuns"].is_array() {
