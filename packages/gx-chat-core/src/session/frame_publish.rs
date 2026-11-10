@@ -79,6 +79,8 @@ pub fn side_state_moves(
         || (lifecycle_clears && session.lifecycle.is_some())
         || cleared(&side.prompt, &session.prompt)
         || cleared(&side.terminal_notice, &session.terminal_notice)
+        || side.agent_gone.is_some()
+        || session.agent_gone
         || cleared(&side.terminal_activity, &session.terminal_activity)
         || cleared(&side.agent_fleet, &session.agent_fleet)
         || cleared(&side.agent_tasks, &session.agent_tasks)

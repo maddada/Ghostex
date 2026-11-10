@@ -848,6 +848,10 @@ pub(crate) async fn handle_read_session_chat_http(
             }
             result.insert("terminalNotice".to_string(), notice.to_value());
         }
+        // Same capture, same cache: an agent gone with no notice saying so (frames.rs).
+        if detection.agent_gone {
+            result.insert("agentGone".to_string(), Value::Bool(true));
+        }
         /*
         CDXC:SessionChat 2026-08-23: commands Ghostex itself typed
         into this session. Inside the running gate with the screen-derived

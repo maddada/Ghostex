@@ -692,3 +692,51 @@ fn a_question_beside_a_picture_keeps_one_answered_card() {
         );
     }
 }
+
+/// An agent killed mid-call with no exit notice: gxserver's `agentGone` on a state frame shows
+/// the words Quiet held back, as the notice does, while the working signal still says it works.
+#[test]
+fn the_words_quiet_held_back_show_once_gxserver_says_the_agent_is_gone() {
+    let mut rows = turn();
+    rows.push(words("w2", T0 + 5_000, "Now writing the file."));
+    rows.push(call(
+        "c3",
+        T0 + 5_100,
+        "Bash",
+        json!({ "command": "sleep 100" }),
+    ));
+    let mut state = quiet_chat(rows);
+    let held = items(&mut state, T0 + 5_200);
+    assert!(
+        !drawn_words(&held)
+            .iter()
+            .any(|text| text.contains("Now writing")),
+        "the words between calls are held: {held:#?}"
+    );
+    let frame = |gone: bool| -> ghostex_gx_protocol::ChatStateFrame {
+        let mut frame = json!({
+            "type": "sessionChatState", "projectId": "P1", "sessionId": "S1", "epoch": 1,
+            "seq": 2, "protocolVersion": 1, "serverId": "S", "status": "working", "working": true,
+        });
+        if gone {
+            frame["agentGone"] = json!(true);
+        }
+        serde_json::from_value(frame).expect("a state frame")
+    };
+    let context = ChatContext {
+        now_ms: (T0 + 20_000) as f64,
+        ..Default::default()
+    };
+    ghostex_gx_chat_core::session::apply::apply_state_frame(&mut state, &frame(true), &context);
+    let gone = items(&mut state, T0 + 20_000);
+    assert!(
+        drawn_words(&gone)
+            .iter()
+            .any(|text| text.contains("Now writing"))
+            || kinds(&gone).contains(&"grouped-work".to_string()),
+        "the work is in view once the agent is gone: {gone:#?}"
+    );
+    // A later frame without it (the agent was started again) holds the running words again.
+    ghostex_gx_chat_core::session::apply::apply_state_frame(&mut state, &frame(false), &context);
+    assert!(!state.session.agent_gone);
+}

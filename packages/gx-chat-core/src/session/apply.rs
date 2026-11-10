@@ -92,6 +92,7 @@ pub fn apply_state_frame(
     }
     apply_selected_options(state, frame.state.selected_options.as_ref());
     state.session.terminal_notice = frame.state.terminal_notice.clone();
+    state.session.agent_gone = frame.state.agent_gone == Some(true);
     crate::session::terminal::apply_terminal_activity(
         state,
         frame.state.terminal_activity.as_ref(),
@@ -433,6 +434,7 @@ pub fn apply_authoritative(
     if restore_blocking {
         state.session.prompt = result.state.prompt.clone();
         state.session.terminal_notice = result.state.terminal_notice.clone();
+        state.session.agent_gone = result.state.agent_gone == Some(true);
     }
     if restore_presentation {
         apply_agent_identity(

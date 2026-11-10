@@ -225,11 +225,15 @@ pub fn waits_on_user(state: &crate::state::ChatState) -> bool {
                 .is_some_and(|notice| notice.passthrough || notice.holds_input()))
 }
 
-/// Whether gxserver reports that the agent left its terminal (`agentExited`, read off the screen):
-/// nothing runs any more, whatever the working signal or the rows say.
+/// Whether gxserver reports that the agent left its terminal: its `agentExited` notice, read off
+/// the screen, or `agentGone`, an agent gone with no notice saying so (killed, crashed): nothing
+/// runs any more, whatever the working signal or the rows say.
+///
+/// CDXC:SessionChat 2026-11-09 SEE-ALSO: server/src/session_chat_start_failure.rs (`agent_left_conversation` has the user's decision on the silent signal).
 pub fn agent_exited(state: &crate::state::ChatState) -> bool {
-    crate::questions::model::TerminalNotice::parse(state.session.terminal_notice.as_ref())
-        .is_some_and(|notice| notice.kind == "agentExited")
+    state.session.agent_gone
+        || crate::questions::model::TerminalNotice::parse(state.session.terminal_notice.as_ref())
+            .is_some_and(|notice| notice.kind == "agentExited")
 }
 
 /// Agent work Quiet: a turn waiting on the user is still running, whatever the working signal says.

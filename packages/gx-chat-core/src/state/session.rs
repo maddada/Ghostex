@@ -72,6 +72,8 @@ pub struct SessionState {
     pub selected_options_generation: u64,
     /// The blocking or failed terminal state. Cleared on omission.
     pub terminal_notice: Option<Value>,
+    /// gxserver's `agentGone`: the agent left its terminal with no notice saying so.
+    pub agent_gone: bool,
     /// Live on-screen progress such as compaction. Cleared on omission.
     pub terminal_activity: Option<Value>,
     /// Subagents on the agent's screen. Cleared on omission, never gated on `working`.
@@ -178,6 +180,7 @@ impl Default for SessionState {
             selected_options: None,
             selected_options_generation: 0,
             terminal_notice: None,
+            agent_gone: false,
             terminal_activity: None,
             agent_fleet: None,
             agent_tasks: None,

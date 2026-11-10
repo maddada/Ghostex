@@ -65,14 +65,49 @@ pub(crate) fn agent_start_failure(
     if transcript == Transcript::Unreadable {
         notice.detail = Some(LOST_CHAT_DETAIL.to_string());
     }
-    let zmx_name = crate::zmx::provider_zmx_session_name(&session).ok()?;
-    let running = crate::zmx::read_zmx_session_process_identities(
+    agent_process_gone(&session).then(|| with_missing_agent_command(notice))
+}
+
+/// Whether the session's agent came up, wrote its conversation and is gone now: the screen is back
+/// at a shell prompt and no agent process runs in the session, the same reading as a failed start
+/// ([`agent_start_failure`]) for a session that has a conversation. It is no card: the chat only
+/// stops waiting on an agent that is not there (`agentGone` on the chat's state).
+///
+/// CDXC:SessionChat 2026-11-09 DECISION:
+/// Sebastian picked a silent signal (Q43, option B) for an agent that dies without the "agent exited" notice (killed, crashed): gxserver tells the chat the agent is not running and Agent work Quiet shows the words it held back, as it does on that notice. No card, no notice and nothing new on screen, and it must not reach the account recovery that keys off the "agent exited" notice, so it is not one.
+/// SEE-ALSO: packages/gx-chat-core/src/session/working.rs (`agent_exited` reads `agentGone`), packages/gx-protocol/src/chat.rs (`ChatSideState::agent_gone`).
+pub(crate) fn agent_left_conversation(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    screen_text: &str,
+) -> bool {
+    if agent_start_failure_notice(screen_text).is_none() {
+        return false;
+    }
+    let Some(session) = repository
+        .get_session(project_id, session_id)
+        .ok()
+        .flatten()
+    else {
+        return false;
+    };
+    !crate::agentbox::is_agentbox_session(&session)
+        && conversation_on_disk(&session) == Transcript::Written
+        && agent_process_gone(&session)
+}
+
+/// No process runs in the session's terminal besides its shell, read from the snapshot the send
+/// heal trusts. An unreadable snapshot proves nothing.
+fn agent_process_gone(session: &Value) -> bool {
+    let Ok(zmx_name) = crate::zmx::provider_zmx_session_name(session) else {
+        return false;
+    };
+    crate::zmx::read_zmx_session_process_identities(
         std::slice::from_ref(&zmx_name),
         &crate::resume_lookup::home_dir(),
     )
-    // An unreadable snapshot proves nothing.
-    .map_or(true, |identities| identities.contains_key(&zmx_name));
-    (!running).then(|| with_missing_agent_command(notice))
+    .is_ok_and(|identities| !identities.contains_key(&zmx_name))
 }
 
 /// The name the card gives the session's agent (Q1122): "Claude Code couldn't start", not "The

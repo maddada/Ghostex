@@ -357,6 +357,9 @@ pub struct SessionChatTerminalDetection {
     stop showing a loading skeleton on its model/effort pills.
     */
     pub attempted: bool,
+    /// The agent wrote its conversation and is gone from the session now, with no notice saying so
+    /// (`session_chat_start_failure::agent_left_conversation`). Read from a whole capture only.
+    pub agent_gone: bool,
 }
 
 /// How a consumer wants its detection served.
