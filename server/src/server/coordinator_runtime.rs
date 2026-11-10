@@ -1067,6 +1067,9 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
         }
     }
     let reports = if failed { Vec::new() } else { reports };
+    // CDXC:Coordinators 2026-11-11 FIX:
+    // GitHub #554 ("One failed report blocks every later report"): the round stopped at the first report that failed to send, so a report that keeps failing on its own held back every other thread's report to that coordinator for good. A failure now skips only that report; the round tries the next one, and stops at a second failure in a row, which says the coordinator itself is not taking messages (no point paying for every report's send then). The failed one is tried again on the next round, as before.
+    let mut failed_in_a_row = 0usize;
     for report in reports {
         if let ReportKind::Waiting { key, .. } = &report.kind {
             let (check_state, thread, key) = (state.clone(), report.thread.clone(), key.clone());
@@ -1269,6 +1272,7 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
         match send_to_coordinator(&state, &coordinator, &message, &send_request_id).await {
             Ok(()) => {
                 delivered_any = true;
+                failed_in_a_row = 0;
                 if let Ok(mut memory) = memory.lock() {
                     memory.report_send_ids.remove(&report_key);
                     if let ReportKind::Stalled { due } = &report.kind {
@@ -1358,7 +1362,11 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                     },
                 );
                 failed = true;
-                break;
+                failed_in_a_row += 1;
+                if failed_in_a_row >= 2 {
+                    break;
+                }
+                continue;
             }
         }
     }
