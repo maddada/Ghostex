@@ -187,8 +187,12 @@ pub(crate) struct VoiceAgent {
     pub(crate) voice_picker_open: bool,
     /// How fast the agent's audio plays (`voiceAgentSpeed`).
     pub(crate) speed: f32,
-    /// `voiceAgentCallMode` is `pushToTalk`: the next call is push-to-talk (the gear menu's tick).
+    /// `voiceAgentCallMode` is `pushToTalk` (the gear menu's tick): the running call switches to it
+    /// when `call_mode_live`, else the next call starts in it.
     pub(crate) push_to_talk_setting: bool,
+    /// gxserver switches a running call when the call mode is saved (`ready.callModeLive`); an
+    /// older one keeps the mode the call started with.
+    pub(crate) call_mode_live: bool,
     /// This call is push-to-talk (`ready` said so): the microphone streams only while Talk is held.
     pub(crate) push_to_talk: bool,
     /// Talk is held (gxserver was sent `talkStart`).
@@ -678,6 +682,7 @@ impl GhostexGpuiApp {
                             .send_json(&json!({ "type": "mute", "muted": true }));
                     }
                 }
+                self.voice_agent.call_mode_live = event["callModeLive"].as_bool() == Some(true);
                 let push_to_talk = event["callMode"].as_str() == Some("pushToTalk");
                 self.voice_agent.push_to_talk = push_to_talk;
                 if let Some(link) = &self.voice_agent.link {
@@ -691,6 +696,10 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            "callMode" => self.voice_agent_call_mode_switched(
+                event["callMode"].as_str() == Some("pushToTalk"),
+                cx,
+            ),
             "caption" => {
                 let role = if event["role"].as_str() == Some("user") {
                     VoiceRole::User
@@ -907,7 +916,8 @@ impl GhostexGpuiApp {
         self.save_voice_agent_setting(SPEED_SETTING, json!(speed_setting_value(speed)), cx);
     }
 
-    /// The gear menu: saves `voiceAgentCallMode`; gxserver reads it when the next call starts.
+    /// The gear menu: saves `voiceAgentCallMode`. A gxserver with `callModeLive` switches the
+    /// running call at once and answers `callMode`; an older one reads it when the next call starts.
     pub(crate) fn set_voice_agent_call_mode(
         &mut self,
         push_to_talk: bool,
@@ -919,6 +929,32 @@ impl GhostexGpuiApp {
             "regular"
         };
         self.save_voice_agent_setting(CALL_MODE_SETTING, json!(value), cx);
+    }
+
+    /// gxserver switched the running call's mode (`{"type":"callMode"}`, sent when
+    /// `voiceAgentCallMode` is saved): the hold button and microphone gate follow, a hold in
+    /// progress is gone (gxserver dropped it), and the strip says what changed.
+    ///
+    /// CDXC:VoiceMode 2026-11-10 DECISION: User: "fix the mode switching so selecting regular from push-to-talk reliably switches the conversation to regular mode. Also consider showing the user a notice when the mode is about to switch, so it's clear what's happening." Picking a mode in the gear menu switches the running call (gxserver, `Conversation::set_call_mode`), and the panel's strip says "Microphone is open: regular mode" or "Hold to speak is on". Against a gxserver without `callModeLive` the menu still says the mode applies to the next call. Supersedes the call keeping the mode it started with.
+    fn voice_agent_call_mode_switched(&mut self, push_to_talk: bool, cx: &mut gpui::Context<Self>) {
+        let agent = &mut self.voice_agent;
+        agent.push_to_talk = push_to_talk;
+        agent.hold = None;
+        agent.talking = false;
+        if let Some(link) = &agent.link {
+            link.shared
+                .push_to_talk
+                .store(push_to_talk, Ordering::SeqCst);
+            link.shared.talking.store(false, Ordering::SeqCst);
+        }
+        self.flash_voice_agent_hint(
+            if push_to_talk {
+                super::hold_to_talk::HINT_PUSH_TO_TALK_ON
+            } else {
+                super::hold_to_talk::HINT_REGULAR_ON
+            },
+            cx,
+        );
     }
 
     /// Tells gxserver a hold started (`down`) or ended (`hold_to_talk.rs` decides when). In a
@@ -990,7 +1026,8 @@ impl GhostexGpuiApp {
         let speed = voice_agent_speed_setting(settings);
         let push_to_talk = push_to_talk_setting(settings);
         let agent = &mut self.voice_agent;
-        // The call mode applies to the next call; only the gear menu's tick follows it now.
+        // The gear menu's tick follows the setting; the running call follows gxserver's `callMode`
+        // frame (or, from an older gxserver, keeps its mode until the next call).
         let mode_changed = push_to_talk != agent.push_to_talk_setting;
         agent.push_to_talk_setting = push_to_talk;
         let Some(link) = agent.link.as_ref() else {

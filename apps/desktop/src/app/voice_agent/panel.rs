@@ -529,7 +529,12 @@ impl GhostexGpuiApp {
                 mode(push_to_talk),
             );
         }
-        menu = menu.menu_with_disabled("Applies to your next call", true, mode(push_to_talk));
+        let applies = if self.voice_agent.call_mode_live && self.voice_agent.active() {
+            "Switches this call now"
+        } else {
+            "Applies to your next call"
+        };
+        menu = menu.menu_with_disabled(applies, true, mode(push_to_talk));
         let app = cx.entity();
         cx.defer(move |cx| {
             let _ = main.update(cx, |_, window, cx| {

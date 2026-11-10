@@ -8,7 +8,8 @@
 //! (the panel resized larger, its size held by the panel's own limits), `voices` (the voice list
 //! opened on Ursa, far down Grok's list), `scrolled` (the reader scrolled up: the Scroll to bottom
 //! pill), `typed` (a muted call where the user typed a turn: the text box under the transcript,
-//! as `panel_input.rs` draws it, holding a draft). Pressing the hold button holds it.
+//! as `panel_input.rs` draws it, holding a draft), `mode-switched` (a push-to-talk call the gear
+//! menu just switched to Regular: the strip's notice). Pressing the hold button holds it.
 use super::rows;
 use super::voice_confirm_card as confirm_card;
 use super::voice_panel_controls::{self as controls, ControlColors, HoldLook, StripContent};
@@ -102,14 +103,14 @@ impl Render for VoicePanelDemo {
         let state = self.state.as_str();
         let held = self.held || state == "holding";
         let muted = matches!(state, "muted" | "typed");
-        let regular = state == "regular";
+        let regular = matches!(state, "regular" | "mode-switched");
         let (dot, label): (Hsla, &str) = if held {
             (rgba(0x38bdf8ff).into(), "Hearing you")
         } else {
             match state {
                 "speaking" => (rgba(0xa78bfaff).into(), "Speaking"),
                 "muted" | "typed" => (colors.muted, "Muted"),
-                "regular" => (rgba(0x4ade80ff).into(), "Listening"),
+                "regular" | "mode-switched" => (rgba(0x4ade80ff).into(), "Listening"),
                 _ => (rgba(0x4ade80ff).into(), "Hold to talk"),
             }
         };
@@ -136,6 +137,7 @@ impl Render for VoicePanelDemo {
             "speaking" => StripContent::StopTalking,
             "tap" => StripContent::Hint("Hold to talk, then let go to send".into()),
             "muted" => StripContent::Hint("Unmute to talk".into()),
+            "mode-switched" => StripContent::Hint("Microphone is open: regular mode".into()),
             _ => StripContent::Empty,
         };
         let mut lines: Vec<gpui::AnyElement> = vec![

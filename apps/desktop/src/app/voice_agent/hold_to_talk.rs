@@ -18,6 +18,9 @@ pub(super) const HINT_TOO_SHORT: &str = "Hold to talk, then let go to send";
 pub(super) const HINT_UNMUTE: &str = "Unmute to talk";
 pub(super) const HINT_ALREADY_HEARD: &str = "Mute first, then hold to talk";
 pub(super) const HINT_CANCELLED: &str = "Talk cancelled";
+/// The running call switched mode (`conversation.rs`, `callMode`).
+pub(super) const HINT_REGULAR_ON: &str = "Microphone is open: regular mode";
+pub(super) const HINT_PUSH_TO_TALK_ON: &str = "Hold to speak is on";
 pub(super) const HOLD_TO_TALK_HOTKEY: &str = "holdToTalk";
 
 /// What started the hold, which says which release ends it.
