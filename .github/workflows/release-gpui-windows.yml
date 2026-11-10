@@ -147,9 +147,10 @@ jobs:
           # Hold the session a minute so a parallel x64/arm64 test overlaps.
           Start-Sleep -Seconds 60
           $File = Join-Path $env:RUNNER_TEMP 'certum-login-test.exe'
-          Copy-Item "$env:WINDIR\System32\where.exe" $File
-          & $env:GHOSTEX_SIGNTOOL remove /s $File
-          if ((Get-AuthenticodeSignature -LiteralPath $File).SignerCertificate) { throw "could not strip the copy's signature" }
+          # A tiny unsigned console program (System32 files are catalog-signed).
+          powershell.exe -NoProfile -Command "Add-Type -TypeDefinition 'public static class P { public static void Main() {} }' -OutputAssembly '$File' -OutputType ConsoleApplication"
+          if (-not (Test-Path -LiteralPath $File)) { throw "could not build the throwaway program" }
+          if ((Get-AuthenticodeSignature -LiteralPath $File).SignerCertificate) { throw "the throwaway program is already signed" }
           & tooling/release-gpui/certum-sign.ps1 -Path $File
           & $env:GHOSTEX_SIGNTOOL verify /pa /v $File
           if ($LASTEXITCODE -ne 0) { throw "signtool verify failed" }
