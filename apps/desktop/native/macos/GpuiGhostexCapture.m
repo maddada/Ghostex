@@ -331,3 +331,15 @@ uint32_t GhostexGpuiCaptureRegisterHotkeys(const uint32_t *key_codes,
   }
   return registered;
 }
+
+/// Whether each display has its own Spaces (System Settings > Desktop & Dock > Displays have
+/// separate Spaces). There a child window cannot sit on a display other than its parent's: macOS
+/// puts it back in the parent's Space at the frame it was dropped at, mostly off that screen.
+bool GhostexGpuiScreensHaveSeparateSpaces(void) {
+  return NSScreen.screensHaveSeparateSpaces;
+}
+
+/// Whether the primary mouse button is held down anywhere, so a window drag is still going.
+bool GhostexGpuiPrimaryMouseButtonDown(void) {
+  return (NSEvent.pressedMouseButtons & 1) != 0;
+}

@@ -399,21 +399,46 @@ impl GpuiVisualPageModalWindow {
     }
 
     /// Keeps where the reader moved the window and the size they gave it for the next page window,
-    /// saved once the window has been still for a moment.
+    /// saved once the window has been still for a moment. A drag that ended where the window cannot
+    /// stay reachable (another display it cannot be shown on, off the top of the screen) puts it
+    /// back first (`frame::settle`, GitHub issue #560).
     fn keep_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let frame = window.bounds();
-        let Some(main) = crate::app::helpers::main_window_handle(cx)
-            .and_then(|main| main.update(cx, |_, window, _| window.bounds()).ok())
-        else {
+        let frame = frame::shared_frame(window);
+        let Some(main) = main_window_frame(cx) else {
             return;
         };
         if !frame::keep(main, frame) {
             return;
         }
-        self._frame_save = Some(cx.spawn(async move |_, cx| {
-            cx.background_executor()
-                .timer(Duration::from_millis(500))
-                .await;
+        self._frame_save = Some(cx.spawn_in(window, async move |this, cx| {
+            // Still while the button is held is a pause in the drag, not its end.
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(500))
+                    .await;
+                if !crate::app::ghostex_capture::platform::primary_mouse_button_down() {
+                    break;
+                }
+            }
+            let back = this
+                .update_in(cx, |_, window, cx| {
+                    let main = main_window_frame(cx)?;
+                    let to = frame::settle(
+                        main,
+                        frame::shared_frame(window),
+                        &frame::Screens::now(main, cx),
+                    )?;
+                    let native = crate::app::helpers::cef_parent_native_view(window).ok()?;
+                    Some((native as usize, to, window.scale_factor()))
+                })
+                .ok()
+                .flatten();
+            // Moved outside any update: AppKit reports the new frame to GPUI synchronously, and
+            // GPUI drops that report while the app is borrowed. The move is seen and kept as any
+            // other move is.
+            if let Some((native, to, scale)) = back {
+                crate::app::ghostex_capture::platform::set_window_frame(native, to, scale);
+            }
             frame::save();
         }));
     }
@@ -696,6 +721,13 @@ impl Render for GpuiVisualPageModalWindow {
             .child(band)
             .child(body)
     }
+}
+
+/// The main window's frame in the space all displays share (`frame::shared_frame`).
+fn main_window_frame(cx: &mut App) -> Option<gpui::Bounds<gpui::Pixels>> {
+    crate::app::helpers::main_window_handle(cx)?
+        .update(cx, |_, window, _| frame::shared_frame(window))
+        .ok()
 }
 
 impl Drop for GpuiVisualPageModalWindow {

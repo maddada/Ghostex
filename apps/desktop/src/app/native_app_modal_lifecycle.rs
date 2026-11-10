@@ -94,10 +94,20 @@ impl GhostexGpuiApp {
         // (CDXC:SessionChat 2026-11-04 DECISION in app/window/visual_page_modal/frame.rs).
         let movable = kind == GpuiAppModalKind::VisualPage;
         let window_bounds = if movable {
-            crate::app::window::visual_page_modal::frame::opening_frame(
-                self.main_window_bounds,
-                window_size,
-            )
+            use crate::app::window::visual_page_modal::frame;
+            // Placed in the space all displays share, against the displays there are now, and
+            // given back measured from the main window's display, as `display_id` below reads it.
+            let shift = self
+                .main_window_popup_owner()
+                .to_global(gpui::point(px(0.0), px(0.0)), cx);
+            let main =
+                crate::app::ghostex_capture::platform::window_frame(self.parent_ns_view as usize)
+                    .unwrap_or(gpui::Bounds::new(
+                        self.main_window_bounds.origin + shift,
+                        self.main_window_bounds.size,
+                    ));
+            let opening = frame::opening_frame(main, window_size, &frame::Screens::now(main, cx));
+            gpui::Bounds::new(opening.origin - shift, opening.size)
         } else {
             gpui::Bounds::centered_at(self.main_window_bounds.center(), window_size)
         };
