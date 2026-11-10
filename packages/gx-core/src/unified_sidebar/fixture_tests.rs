@@ -223,6 +223,7 @@ fn crew_answer(crew: &UnifiedCrew) -> Value {
         "listed": crew.listed,
         "older": crew.older,
         "olderShown": crew.older_shown,
+        "heldOpen": crew.held_open,
         "olderRow": crew.older_row,
         "badgeCount": crew.badge.count,
         "badgeTone": format!("{:?}", crew.badge.tone).to_lowercase(),
@@ -636,6 +637,8 @@ fn tree_machines() -> Value {
                 session("sub-lead", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_500_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"})),
                 session("deep", "p", json!({"title": "deepest thread", "activity": "attention", "createdMs": 10, "lastInteractionMs": 9_700_000, "coordinatorProjectId": "p", "coordinatorSessionId": "sub-lead", "coordinatorThreadState": "waiting"})),
                 session("old", "p", json!({"createdMs": 10, "lastInteractionMs": 1_000_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"})),
+                // A second older thread, which stays tucked when "old" is revealed.
+                session("stale", "p", json!({"createdMs": 10, "lastInteractionMs": 900_000, "coordinatorProjectId": "p", "coordinatorSessionId": "lead"})),
                 session("orphan", "p", json!({"createdMs": 10, "lastInteractionMs": 4_000, "coordinatorProjectId": "p", "coordinatorSessionId": "closed"})),
                 session("mine", "p", json!({"createdMs": 10, "lastInteractionMs": 3_000})),
             ],
