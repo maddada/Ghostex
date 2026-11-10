@@ -28,14 +28,18 @@ use crate::app::native_sidebar::threads::{
 /// A thread row's height, unscaled.
 const THREAD_ROW_HEIGHT: f32 = 26.0;
 
-/// What a click on the crew count does: "Hide threads" when the user unfolded it; "Keep threads
-/// open" while a search holds it open (the click saves it unfolded); otherwise what the unfold
+/// What a click on the crew count does: "Hide threads" when the user unfolded it, or "Stop keeping
+/// threads open" while a search or filter keeps its matches drawn anyway (the click only drops the
+/// saved preference); "Keep threads open" while a search holds it open (the click saves it
+/// unfolded); otherwise what the unfold
 /// shows: "Show 3 threads", "Show 2 threads (5 older)", or "Show threads (20 older)" when every
 /// thread waits behind the older-threads row.
 fn crew_label(card: &UnifiedCard) -> Option<String> {
     let crew = card.crew.as_ref()?;
     let plural = |count: u16| if count == 1 { "thread" } else { "threads" };
-    Some(if crew.unfolded {
+    Some(if crew.unfolded && crew.held_open {
+        "Stop keeping threads open".to_string()
+    } else if crew.unfolded {
         "Hide threads".to_string()
     } else if crew.open {
         "Keep threads open".to_string()

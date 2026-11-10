@@ -72,6 +72,11 @@ pub(crate) struct UnifiedSidebarHost {
     pending_reveal: Option<String>,
     /// The same for a session the web build opened by its key before any list held its row.
     pending_reveal_key: Option<SessionKey>,
+    /// The newest reveal's row and the coordinators above it when it was revealed. A computer that
+    /// answers later can nest the row under a coordinator it did not have then; when its
+    /// coordinators change, the reveal runs again, so the coordinators it now has unfold. A fold the
+    /// user makes afterwards leaves the coordinators the same and sticks.
+    reveal_watch: Option<RevealWatch>,
     /// The row the newest reveal brought on screen: listed with the coordinators above it while
     /// their other older threads stay tucked (gx-core `UnifiedFolds::reveal`). Not saved.
     reveal_target: Option<String>,
@@ -363,6 +368,15 @@ impl UnifiedSidebarHost {
                 &folds,
                 now_ms,
             );
+        }
+        if let Some(watch) = self.reveal_watch.as_mut() {
+            let ancestors = find_unified_row(&view, &watch.row_id).map(|found| found.ancestors);
+            if let Some(ancestors) = ancestors.filter(|ancestors| *ancestors != watch.ancestors) {
+                // Only coordinators to unfold call for a new reveal; a row that lost its
+                // coordinator is a card again and needs nothing.
+                watch.changed = !ancestors.is_empty();
+                watch.ancestors = ancestors;
+            }
         }
         self.all_repos.clone_from(&view.options.repos);
         let repo_menu_groups = repo_menu_groups(&view.options.repos, &groups);
@@ -709,6 +723,15 @@ fn drawn_reveal_spot(
     })
 }
 
+/// The newest reveal's row (`UnifiedSidebarHost::reveal_watch`).
+struct RevealWatch {
+    row_id: String,
+    /// Its coordinators, outermost first, as the newest build had them.
+    ancestors: Vec<String>,
+    /// A build found different coordinators above it: reveal it again.
+    changed: bool,
+}
+
 /// What a reveal opens for a row the drawn list does not show.
 struct HiddenReveal {
     spot: UnifiedRevealSpot,
@@ -720,6 +743,40 @@ struct HiddenReveal {
 }
 
 impl UnifiedSidebarHost {
+    /// The coordinators above `sidebar_session_id` in the list with nothing filtering, outermost
+    /// first; empty for a card or a row the list does not hold.
+    fn ancestry(
+        &self,
+        core: &Core,
+        list_inputs: &SidebarInputs,
+        sidebar_session_id: &str,
+        now_ms: u64,
+    ) -> Vec<String> {
+        let machines = unified_machines(core, list_inputs);
+        let inputs: Vec<UnifiedMachineInput<'_>> = machines
+            .iter()
+            .filter_map(|(machine, label)| {
+                Some(UnifiedMachineInput {
+                    machine: machine.clone(),
+                    label: label.clone(),
+                    view: self.lanes.get(machine)?.model.view(),
+                    spaces: unified_machine_spaces(core.presentation(), list_inputs, machine),
+                })
+            })
+            .collect();
+        let view = build_unified_sidebar_folded(
+            &inputs,
+            unified_settings(list_inputs),
+            &UnifiedFilter::default(),
+            unified_space_scope(core.presentation(), list_inputs).as_ref(),
+            &self.folds(),
+            now_ms,
+        );
+        find_unified_row(&view, sidebar_session_id)
+            .map(|found| found.ancestors)
+            .unwrap_or_default()
+    }
+
     /// Where a row the drawn list does not show would sit: a thread inside a folded coordinator,
     /// behind an older-threads row, or a card or thread the filter leaves out (lifted with
     /// `UnifiedFilter::admitting`). It builds the list again with the current filter and, when
@@ -828,6 +885,7 @@ impl GhostexGpuiApp {
             // The Project sidebar reveals its own rows.
             self.gx_store.unified_sidebar.pending_reveal = None;
             self.gx_store.unified_sidebar.pending_reveal_key = None;
+            self.gx_store.unified_sidebar.reveal_watch = None;
             if self.native_sidebar.unified.is_some() {
                 self.gx_store.unified_sidebar.lanes.clear();
                 self.native_sidebar.unified = None;
@@ -861,6 +919,19 @@ impl GhostexGpuiApp {
         self.gx_store_book_unified_deadline(deadline, cx);
         if let Some(pending) = self.gx_store.unified_sidebar.pending_reveal.take() {
             self.gx_store_unified_reveal(&pending, cx);
+        }
+        let rerun = self
+            .gx_store
+            .unified_sidebar
+            .reveal_watch
+            .as_mut()
+            .filter(|watch| watch.changed)
+            .map(|watch| {
+                watch.changed = false;
+                watch.row_id.clone()
+            });
+        if let Some(row_id) = rerun {
+            self.gx_store_unified_reveal(&row_id, cx);
         }
         let host = &mut self.gx_store.unified_sidebar;
         if let Some(row_id) = host
@@ -963,6 +1034,38 @@ impl GhostexGpuiApp {
             return;
         };
         self.gx_store.unified_sidebar.pending_reveal = None;
+        let now_ms = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_millis() as u64)
+            .unwrap_or_default();
+        // A new row to watch starts from the coordinators it has now; the same row keeps what the
+        // newest build saw.
+        let store = &self.gx_store;
+        if store
+            .unified_sidebar
+            .reveal_watch
+            .as_ref()
+            .is_none_or(|watch| watch.row_id != sidebar_session_id)
+        {
+            let ancestors = store.unified_sidebar.ancestry(
+                &store.core,
+                &store.sidebar_list.last_inputs,
+                sidebar_session_id,
+                now_ms,
+            );
+            self.gx_store.unified_sidebar.reveal_watch = Some(RevealWatch {
+                row_id: sidebar_session_id.to_string(),
+                ancestors,
+                changed: false,
+            });
+        }
+        // The older thread an earlier reveal listed goes back behind its row once another row is
+        // revealed.
+        let host = &mut self.gx_store.unified_sidebar;
+        let dropped_target = host
+            .reveal_target
+            .take_if(|target| target.as_str() != sidebar_session_id)
+            .is_some();
         let grouped = self
             .gx_store
             .sidebar_list
@@ -970,15 +1073,12 @@ impl GhostexGpuiApp {
             .settings
             .unified_group_by_project;
         // Rebuilt when a reveal unfolds a coordinator, lists its older threads or lifts the
-        // filter: the snapshot's threads come from the build.
-        let mut rebuild = false;
+        // filter, or an earlier reveal's older thread goes back: the snapshot's threads come from
+        // the build.
+        let mut rebuild = dropped_target;
         let spot = match drawn_reveal_spot(&snapshot, sidebar_session_id) {
             Some(spot) => spot,
             None => {
-                let now_ms = web_time::SystemTime::now()
-                    .duration_since(web_time::UNIX_EPOCH)
-                    .map(|elapsed| elapsed.as_millis() as u64)
-                    .unwrap_or_default();
                 let store = &self.gx_store;
                 let Some(hidden) = store.unified_sidebar.hidden_reveal(
                     &store.core,
@@ -990,6 +1090,9 @@ impl GhostexGpuiApp {
                     let host = &mut self.gx_store.unified_sidebar;
                     if host.session_key_for_row(sidebar_session_id).is_none() {
                         host.pending_reveal = Some(sidebar_session_id.to_string());
+                    }
+                    if rebuild {
+                        self.gx_store_unified_sidebar_changed(&ChangeSummary::default(), cx);
                     }
                     return;
                 };
