@@ -877,6 +877,32 @@ mod tests {
         );
         assert_eq!(scale["sidebarHideProjectsWithoutSessions"], json!(true));
         assert_eq!(picked["enableSessionParking"], json!(false));
+        // CDXC:Sidebar 2026-11-09: a coordinator names its thread on another computer by that
+        // computer's `globalRef`, which that computer's own summary must carry for the phone to nest it.
+        let coordinator = to_mobile_session_list(
+            &json!({"ok": true, "projects": [{"projectId": "P1", "name": "a", "path": "/a"}], "sessions": [{
+                "sessionId": "G1", "projectId": "P1", "globalRef": "S1:P1:G1",
+                "coordinatorRemoteThreads": [{"serverId": "S9", "projectId": "P2", "sessionId": "G2", "threadState": "working"}],
+            }]}),
+            &serde_json::Map::new(),
+        );
+        let thread = to_mobile_session_list(
+            &json!({"ok": true, "projects": [{"projectId": "P2", "name": "b", "path": "/b"}], "sessions": [{
+                "sessionId": "G2", "projectId": "P2", "globalRef": "S9:P2:G2",
+            }]}),
+            &serde_json::Map::new(),
+        );
+        let link = &coordinator["sessions"][0]["coordinatorRemoteThreads"][0];
+        assert_eq!(coordinator["sessions"][0]["globalRef"], json!("S1:P1:G1"));
+        assert_eq!(
+            thread["sessions"][0]["globalRef"],
+            json!(format!(
+                "{}:{}:{}",
+                link["serverId"].as_str().unwrap(),
+                link["projectId"].as_str().unwrap(),
+                link["sessionId"].as_str().unwrap()
+            ))
+        );
     }
 
     #[test]

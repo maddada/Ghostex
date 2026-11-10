@@ -859,7 +859,9 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         &[s("coordinatorThreadState")],
     );
     // CDXC:Sidebar 2026-11-09 SEE-ALSO: the same second-whitelist trap: the coordinator's threads
-    // on other computers, which the phone's Unified list nests under it (cli_session.rs).
+    // on other computers, which the phone's Unified list nests under it (cli_session.rs), each named
+    // by the `globalRef` its own computer gives it, so that computer's summary carries it too.
+    insert_js(&mut map, "globalRef", &[s("globalRef")]);
     insert_js(
         &mut map,
         "coordinatorRemoteThreads",
