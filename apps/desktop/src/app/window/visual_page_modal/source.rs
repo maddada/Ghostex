@@ -2,6 +2,8 @@
 //! seconds whether the HTML file the page was published from changed on disk, shows a refresh
 //! button at the top right when it did, and on a click has gxserver publish the file again under
 //! the same address and reloads the page, whose script returns to the scroll offset it was at.
+//! The same answer says whether a question on the page is still unanswered (`questionsLeft`), for
+//! the dot on the page's tab while it is hidden (app/visual_page_hidden.rs).
 //!
 //! CDXC:SessionChat 2026-10-22 DECISION:
 //! User: "when the page's file changes on disk while the window is open, show a refresh button at the top right; clicking it reloads the page (and keeps the scroll position where it can). Don't reload on its own." gxserver owns the file and the check (server/src/visual_pages/source.rs), so a remote machine's page is checked on that machine.
@@ -21,7 +23,8 @@ const RELOAD_AFTER_FLUSH: &str =
 
 impl GpuiVisualPageModalWindow {
     /// Starts asking; stops for a page published without its file's path (an older `ghostex show`)
-    /// or one gxserver no longer has.
+    /// or one gxserver no longer has, unless the answer also says whether questions are left
+    /// (a gxserver from 2026-11-11 on), which is asked for as long as the window lives.
     pub(super) fn watch_page_source(&mut self, cx: &mut Context<Self>) {
         let Some(page_id) = self.page_id.clone() else {
             return;
@@ -40,14 +43,18 @@ impl GpuiVisualPageModalWindow {
                     // gxserver restarting or the tunnel down: ask again on the next turn.
                     continue;
                 };
-                if status["refreshable"] != true {
+                let questions_left = status["questionsLeft"].as_bool();
+                if status["refreshable"] != true && questions_left.is_none() {
                     return;
                 }
-                let changed = status["changed"] == true;
+                let changed = status["refreshable"] == true && status["changed"] == true;
                 let updated = this.update(cx, |this, cx| {
                     if this.source_changed != changed && !this.refreshing {
                         this.source_changed = changed;
                         cx.notify();
+                    }
+                    if let Some(left) = questions_left {
+                        this.note_questions_left(left, cx);
                     }
                 });
                 if updated.is_err() {
@@ -55,6 +62,40 @@ impl GpuiVisualPageModalWindow {
                 }
             }
         }));
+    }
+
+    fn note_questions_left(&mut self, left: bool, cx: &mut Context<Self>) {
+        if self.questions_left != left {
+            self.questions_left = left;
+            (self.host)(VisualPageModalCommand::QuestionsLeft, cx);
+        }
+    }
+
+    /// Asks once, a moment after the page was told to save its draft (`set_hidden`), so the
+    /// answer counts the reader's last pick.
+    pub(super) fn check_questions_left_soon(&mut self, cx: &mut Context<Self>) {
+        let Some(page_id) = self.page_id.clone() else {
+            return;
+        };
+        let remote = self.remote.clone();
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(400))
+                .await;
+            let Ok(status) = gx_rpc(
+                remote,
+                "/api/readVisualPageSource",
+                json!({ "pageId": page_id }),
+            )
+            .await
+            else {
+                return;
+            };
+            if let Some(left) = status["questionsLeft"].as_bool() {
+                let _ = this.update(cx, |this, cx| this.note_questions_left(left, cx));
+            }
+        })
+        .detach();
     }
 
     /// The refresh button: publish the file again, then reload where the reader was.

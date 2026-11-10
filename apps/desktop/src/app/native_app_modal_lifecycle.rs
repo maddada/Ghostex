@@ -78,7 +78,11 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         self.remove_gpui_app_modal_window_without_focus_restore(cx);
-        self.remove_native_app_modal_window(cx);
+        // A Ghostex page is put aside rather than closed, so opening a second page (or any other
+        // modal) over it loses nothing (app/visual_page_hidden.rs).
+        if !self.hide_visual_page_modal(cx) {
+            self.remove_native_app_modal_window(cx);
+        }
         // Settings is back: the Back to Settings button of a claude.ai sign-in has done its job.
         if kind == GpuiAppModalKind::Settings {
             crate::app::claude_cloud_sign_in_return::hide_claude_sign_in_return_button(cx);

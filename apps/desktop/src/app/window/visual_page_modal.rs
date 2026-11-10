@@ -1,5 +1,5 @@
 //! The floating window a chat page card opens: an agent's published HTML page (`ghostex show`)
-//! over the chat, closed by two clicks away, Escape or its close button. The page's own script
+//! over the chat, hidden by a click away or its Hide button, closed by Escape or its close button. The page's own script
 //! (`page.rs`) opens its pictures in a viewer inside the page and remembers where the reader left
 //! it, and a refresh button appears when the page's file changed on disk (`source.rs`).
 //!
@@ -10,6 +10,8 @@
 //! User: an agent's HTML page marked to open floating opens "in a pop up above the chat basically that when i click away goes away". A card whose block carries `"open": "popup"` opens its page here instead of in the browser.
 //! CDXC:SessionChat 2026-10-22 DECISION:
 //! User: the page window is harder to lose: clicking outside it no longer closes it on the first click, "have to click twice". The first click away arms it for `CLICK_AWAY_ARMED_FOR` (2 seconds, while the header says "Click outside again to close") and a second click away within that time closes it; Escape and the close button still close it at once. This supersedes the single click away of the 2026-10-09 decision above.
+//! CDXC:SessionChat 2026-11-11 DECISION:
+//! User's picks on the hide-page mockup (page-links/hide-page.html): a page hides instead of closing (option C of "When the page hides") when a link in it opens in the app's browser, from the Hide button beside its close x, and on any click outside it, which replaces the two clicks that closed it above; the x, Escape and sending its answers still close it for good. A hidden page is kept running (option A of "Bringing it back"): its window is only ordered out, so its tab in the chat's header (app/visual_page_hidden.rs) brings it back at once in the same place and size, scrolled where it was, with every pick and note as it was. Hidden, it has no keyboard and takes no clicks.
 //! CDXC:SessionChat 2026-10-09 WHY:
 //! The page is loaded with `#gx-theme=light|dark`, which the bootstrap every published page starts with (server/src/visual_pages/theme.rs) reads before first paint, so the page wears the app's appearance rather than the system's. Links the page opens go to the reader's browser, so the window only ever shows the page itself.
 //! CDXC:SessionChat 2026-11-04 DECISION:
@@ -49,8 +51,7 @@ const CONTROL_INSET: f32 = 10.0;
 const ICON_CLOSE: &str = "titlebar/x.svg";
 const ICON_OPEN_IN_BROWSER: &str = "titlebar/external-link.svg";
 const ICON_REFRESH: &str = "titlebar/refresh.svg";
-/// How long a first click away keeps the window armed for the second one that closes it.
-const CLICK_AWAY_ARMED_FOR: Duration = Duration::from_secs(2);
+const ICON_HIDE: &str = "titlebar/window-minimize.svg";
 /// A focus loss this soon after a press in another window is that press, already counted.
 const SAME_CLICK: Duration = Duration::from_millis(400);
 /// Its own browser profile, so a page's storage never mixes with the Browser's or an
@@ -63,8 +64,14 @@ const FLUSH_DRAFT: &str = "window.ghostex&&ghostex.__flush&&ghostex.__flush();";
 const FLUSH_ON_QUIT_WAIT: Duration = Duration::from_millis(150);
 
 pub(crate) enum VisualPageModalCommand {
-    /// A click away, Escape or the close button.
+    /// Escape, the close button, or the page closing itself once its answers were sent.
     Close,
+    /// A click away or the Hide button: the window is put aside, still running
+    /// (app/visual_page_hidden.rs).
+    Hide,
+    /// Whether a question on the page is still unanswered changed (`source.rs`), for the dot on
+    /// its tab while it is hidden.
+    QuestionsLeft,
     /// Closes the window and opens the page in the reader's browser.
     OpenInBrowser { url: String },
     /// A link the page opened (a new window or `target=_blank`), for the app to route by the
@@ -78,6 +85,16 @@ pub(crate) type VisualPageModalHost = Rc<dyn Fn(VisualPageModalCommand, &mut App
 
 pub(crate) struct GpuiVisualPageModalWindow {
     host: VisualPageModalHost,
+    /// Which page window this is, for the app to tell a hidden one's commands from the shown one's.
+    key: u64,
+    /// The chat whose card opened the page, whose header shows its tab while it is hidden.
+    source_session: Option<TerminalSessionId>,
+    /// gxserver says a question on the page has no answer yet (`source.rs`).
+    questions_left: bool,
+    /// The window is put aside (`set_hidden`).
+    hidden: bool,
+    /// When the window was last shown; presses elsewhere from before do not count.
+    shown_at: Instant,
     palette: ModalPalette,
     url: String,
     /// The page's title, for screen readers: the page shows its own.
@@ -97,11 +114,8 @@ pub(crate) struct GpuiVisualPageModalWindow {
     /// The page's file changed on disk since it was published (`source.rs`).
     source_changed: bool,
     refreshing: bool,
-    /// When a first click away armed the window, while it is armed.
-    armed_at: Option<Instant>,
     /// The press in another window counted last, so the same press is never counted twice.
     counted_press: Option<Instant>,
-    _disarm: Option<Task<()>>,
     _source_watch: Option<Task<()>>,
     /// What the page was last handed of the app's glass and theme (`glass.rs`).
     glass: glass::PageGlass,
@@ -127,6 +141,8 @@ impl GpuiVisualPageModalWindow {
         open_message: serde_json::Value,
         palette: ModalPalette,
         host: VisualPageModalHost,
+        key: u64,
+        source_session: Option<TerminalSessionId>,
         remote: Option<GpuiRemoteGxserverRequestTarget>,
         web_runtime_ready: bool,
         window: &mut Window,
@@ -171,6 +187,11 @@ impl GpuiVisualPageModalWindow {
         ];
         let mut modal = Self {
             host,
+            key,
+            source_session,
+            questions_left: false,
+            hidden: false,
+            shown_at: Instant::now(),
             palette,
             url,
             title,
@@ -184,9 +205,7 @@ impl GpuiVisualPageModalWindow {
             remote,
             source_changed: false,
             refreshing: false,
-            armed_at: None,
             counted_press: None,
-            _disarm: None,
             _source_watch: None,
             glass: glass::PageGlass::new(palette.light),
             _glass_watch: None,
@@ -443,25 +462,43 @@ impl GpuiVisualPageModalWindow {
         }));
     }
 
-    /// One click away: the first arms the window, a second within `CLICK_AWAY_ARMED_FOR` closes it.
+    /// A click away hides the window (CDXC:SessionChat 2026-11-11 DECISION above).
     fn click_away(&mut self, cx: &mut Context<Self>) {
-        let now = Instant::now();
-        if self
-            .armed_at
-            .is_some_and(|armed| now.duration_since(armed) < CLICK_AWAY_ARMED_FOR)
-        {
-            (self.host)(VisualPageModalCommand::Close, cx);
-            return;
+        if !self.hidden {
+            (self.host)(VisualPageModalCommand::Hide, cx);
         }
-        self.armed_at = Some(now);
-        cx.notify();
-        self._disarm = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(CLICK_AWAY_ARMED_FOR).await;
-            let _ = this.update(cx, |this, cx| {
-                this.armed_at = None;
-                cx.notify();
-            });
-        }));
+    }
+
+    pub(crate) fn key(&self) -> u64 {
+        self.key
+    }
+
+    pub(crate) fn source_session(&self) -> Option<TerminalSessionId> {
+        self.source_session
+    }
+
+    pub(crate) fn url(&self) -> &str {
+        &self.url
+    }
+
+    pub(crate) fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub(crate) fn questions_left(&self) -> bool {
+        self.questions_left
+    }
+
+    /// The app put the window aside or brought it back. Hiding saves the page's draft at once and
+    /// asks gxserver again whether questions are left, so the tab's dot counts the last pick.
+    pub(crate) fn set_hidden(&mut self, hidden: bool, cx: &mut Context<Self>) {
+        self.hidden = hidden;
+        if hidden {
+            self.flush_draft(cx);
+            self.check_questions_left_soon(cx);
+        } else {
+            self.shown_at = Instant::now();
+        }
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -576,8 +613,7 @@ impl GpuiVisualPageModalWindow {
     }
 
     /// The band over the page's top edge: nothing but the page's own backdrop, the round glass
-    /// controls in its right corner, and on its left the loading spinner or, while a first click
-    /// away has armed the window, the note that a second one closes it. The rest of the band moves
+    /// controls in its corners, and on its left the loading spinner. The rest of the band moves
     /// the window.
     fn top_band(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let glass = ControlGlass::for_theme(self.glass.light);
@@ -588,33 +624,20 @@ impl GpuiVisualPageModalWindow {
             .pl(px(12.0))
             .when(!self.loaded && self.error.is_none(), |this| {
                 this.child(modal_spinner(glass.icon))
-            })
-            .when(self.armed_at.is_some(), |this| {
-                this.child(
-                    div()
-                        .flex_shrink_0()
-                        .h(px(CONTROL_SIZE))
-                        .px(px(10.0))
-                        .flex()
-                        .items_center()
-                        .rounded_full()
-                        .bg(glass.fill)
-                        .border_1()
-                        .border_color(glass.border)
-                        .text_size(px(11.5))
-                        .text_color(glass.text)
-                        .child("Click outside again to close"),
-                )
             });
         let close = control_button("visual-page-close", ICON_CLOSE, "Close", glass)
             .on_click(cx.listener(|this, _, _, cx| (this.host)(VisualPageModalCommand::Close, cx)));
+        // Hide sits beside the X (CDXC:SessionChat 2026-11-11 DECISION above): after it in the
+        // left corner, before it at the right.
+        let hide = control_button("visual-page-hide", ICON_HIDE, "Hide", glass)
+            .on_click(cx.listener(|this, _, _, cx| (this.host)(VisualPageModalCommand::Hide, cx)));
         // The X sits in the band's left corner on macOS, before the status, and ends the right
         // corner's controls elsewhere (CDXC:AppModal 2026-11-10 in window/round_close_button.rs).
         let (leading_close, trailing_close) = if super::round_close_button::close_buttons_on_left()
         {
-            (Some(close), None)
+            (Some(h_flex().gap(px(6.0)).child(close).child(hide)), None)
         } else {
-            (None, Some(close))
+            (None, Some(h_flex().gap(px(6.0)).child(hide).child(close)))
         };
         h_flex()
             .flex_shrink_0()
@@ -746,13 +769,12 @@ fn observe_presses_elsewhere(
     window: &mut Window,
     cx: &mut Context<GpuiVisualPageModalWindow>,
 ) -> Subscription {
-    let opened_at = Instant::now();
     let own_window = gpui::Window::window_handle(window).window_id();
     cx.observe_global_in::<super::popup_dismissal::MainWindowPointerPress>(
         window,
         move |this, _, cx| {
             let press = *cx.global::<super::popup_dismissal::MainWindowPointerPress>();
-            if press.at <= opened_at
+            if press.at <= this.shown_at
                 || press.window == own_window
                 || this.counted_press == Some(press.at)
             {

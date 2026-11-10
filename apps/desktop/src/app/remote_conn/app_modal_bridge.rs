@@ -340,7 +340,16 @@ fn gpui_app_modal_open_message_allowed_fields(
 ) -> Option<&'static [&'static str]> {
     match modal {
         GpuiAppModalKind::MermaidDiagram | GpuiAppModalKind::MarkdownTable => Some(&["source"]),
-        GpuiAppModalKind::VisualPage => Some(&["url", "title", "file"]),
+        // The machine a remote session's page is on (`open_session_chat_visual_page`) and the chat
+        // whose card opened it (app/visual_page_hidden.rs) come along too.
+        GpuiAppModalKind::VisualPage => Some(&[
+            "url",
+            "title",
+            "file",
+            "remoteMachineId",
+            "remoteProjectId",
+            "sourceSessionId",
+        ]),
         GpuiAppModalKind::RecentProjects => Some(&["machineId", "machineName"]),
         GpuiAppModalKind::SidebarSpaceEditor => Some(&[
             "memberCollectionId",

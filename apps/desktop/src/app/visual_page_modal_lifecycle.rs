@@ -3,6 +3,7 @@
 //! SEE-ALSO: apps/desktop/src/app/window/visual_page_modal.rs (the window entity), apps/desktop/src/app/native_docs/published_page.rs (the page in the Files view), apps/desktop/src/app/native_app_modal_lifecycle.rs (the shared window path), apps/desktop/src/app/cef_deferred_startup.rs (an open that waits for the web runtime).
 use crate::app::helpers::web_runtime::web_runtime_available;
 use crate::app::helpers::*;
+use crate::app::visual_page_hidden::same_page;
 use crate::app::window::*;
 use crate::web_bridge_types::AppModalHostBridgeEvent;
 use crate::*;
@@ -91,11 +92,16 @@ impl GhostexGpuiApp {
                 project_id: text("remoteProjectId").unwrap_or_default(),
             });
         match target {
-            ChatPageOpenTarget::Popup => self.receive_app_modal_host_bridge_event(
-                AppModalHostBridgeEvent::Message(message.to_string()),
-                window,
-                cx,
-            ),
+            ChatPageOpenTarget::Popup => {
+                // The chat whose header shows the page's tab while it is hidden.
+                let mut message = message.clone();
+                message["sourceSessionId"] = session_id.0.to_string().into();
+                self.receive_app_modal_host_bridge_event(
+                    AppModalHostBridgeEvent::Message(message.to_string()),
+                    window,
+                    cx,
+                )
+            }
             ChatPageOpenTarget::SystemBrowser => {
                 let light = self.gpui_native_modal_palette().light;
                 let opened = text("url")
@@ -184,7 +190,12 @@ impl GhostexGpuiApp {
     }
 
     /// CDXC:SessionChat 2026-11-10 DECISION: User: "links inside the inline html need to open it inside the app's browser if i pick that in settings for opening links please". A web link clicked in a Ghostex page (the floating window or the Files view) takes the chat link's path (`open_session_chat_link`), so "Open links in embedded browser" decides between the app's Browser and the system browser, as it does for a link in the transcript. The page's own anchors and other schemes never get here: the page bootstrap (server/src/visual_pages/theme.rs `PAGE_BOOTSTRAP`) only sends other http(s) documents out as new windows.
+    ///
+    /// CDXC:SessionChat 2026-11-11 DECISION: a link that opens in the app's browser puts the shown page aside (app/visual_page_hidden.rs), so the link's page is not under it; one that leaves for the system browser leaves the page as it is.
     fn open_visual_page_web_link(&mut self, url: String, cx: &mut gpui::Context<Self>) {
+        if shared_settings::shared_sidebar_settings_snapshot().web_links_open_in_app() {
+            self.hide_visual_page_modal(cx);
+        }
         let app = cx.weak_entity();
         // The link path needs the main window, which this command does not carry.
         cx.defer(move |cx| {
@@ -228,7 +239,24 @@ impl GhostexGpuiApp {
             );
             return;
         }
+        // The same page put aside comes back as it was instead of opening a second time.
+        if let Some(key) = self.hidden_visual_page_showing(&url, cx) {
+            visual_page_modal::open_timing::finish("shownAgain");
+            self.show_hidden_visual_page(key, cx);
+            return;
+        }
+        // The page shown now is opened again in a new window, as before, not put aside twice.
+        if self
+            .shown_visual_page_url(cx)
+            .is_some_and(|shown| same_page(&shown, &url))
+        {
+            self.remove_native_app_modal_window(cx);
+        }
         let title = text("title").unwrap_or_else(|| "Ghostex page".to_string());
+        let source_session = text("sourceSessionId")
+            .and_then(|id| id.parse::<u64>().ok())
+            .map(TerminalSessionId);
+        let key = next_visual_page_key();
         let remote_project =
             text("remoteMachineId").map(|remote_machine_id| GpuiRemoteProjectReference {
                 remote_machine_id,
@@ -239,7 +267,7 @@ impl GhostexGpuiApp {
         });
         let palette = self.gpui_native_modal_palette();
         let host = self.native_app_modal_host(cx, move |app, command, cx| {
-            app.handle_gpui_visual_page_modal_command(command, remote_project.clone(), cx);
+            app.handle_gpui_visual_page_modal_command(command, key, remote_project.clone(), cx);
         });
         let kind = GpuiAppModalKind::VisualPage;
         let (width, height) = self.chat_preview_modal_size(cx);
@@ -256,6 +284,8 @@ impl GhostexGpuiApp {
                         open_message,
                         palette,
                         host,
+                        key,
+                        source_session,
                         remote,
                         web_runtime_ready,
                         window,
@@ -292,16 +322,28 @@ impl GhostexGpuiApp {
 
     /// `remote_project` is the machine whose session published the open page, `None` for this
     /// computer's.
+    /// `key` is the page window that sent it (`GpuiVisualPageModalWindow::key`): a hidden page's
+    /// commands only repaint its tab.
     fn handle_gpui_visual_page_modal_command(
         &mut self,
         command: VisualPageModalCommand,
+        key: u64,
         remote_project: Option<GpuiRemoteProjectReference>,
         cx: &mut gpui::Context<Self>,
     ) {
-        if self.native_app_modal_kind() != Some(GpuiAppModalKind::VisualPage) {
+        if matches!(command, VisualPageModalCommand::QuestionsLeft) {
+            cx.notify();
+            return;
+        }
+        if self.shown_visual_page_key(cx) != Some(key) {
             return;
         }
         let url = match command {
+            VisualPageModalCommand::QuestionsLeft => return,
+            VisualPageModalCommand::Hide => {
+                self.hide_visual_page_modal(cx);
+                return;
+            }
             VisualPageModalCommand::Close => {
                 self.close_native_app_modal_from_bridge(cx);
                 return;
@@ -332,7 +374,8 @@ impl GhostexGpuiApp {
                         match gpui_remote_machine_url(&url, &target) {
                             GpuiRemoteMachineUrl::Gxserver(url) => url,
                             GpuiRemoteMachineUrl::MachineLoopback => {
-                                self.close_native_app_modal_from_bridge(cx);
+                                // It opens in the app's Browser, so the page steps aside.
+                                self.hide_visual_page_modal(cx);
                                 self.open_remote_machine_loopback_link(&url, remote_project, cx);
                                 return;
                             }
@@ -346,6 +389,12 @@ impl GhostexGpuiApp {
         };
         self.open_visual_page_web_link(url, cx);
     }
+}
+
+/// A new page window's key (`GpuiVisualPageModalWindow::key`).
+fn next_visual_page_key() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Where a chat page card opens its page: Settings > Chat > Open Ghostex pages in
