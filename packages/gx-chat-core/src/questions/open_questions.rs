@@ -43,6 +43,10 @@ pub struct OpenQuestions {
     /// How many forms and question pages are unanswered and not put off For later; the ? pill shows
     /// while this is above zero.
     pub count: u32,
+    /// What the ? pill counts and shows for: the unanswered questions the dock above the chat box
+    /// cannot show (older than the loaded rows), so a question is counted in one place only.
+    #[serde(default)]
+    pub pill_count: u32,
     /// The pill's text: "Previous question ↑".
     pub text: String,
     /// What a screen reader says for it.
@@ -740,8 +744,13 @@ pub fn project_with(
     let open = unanswered(state);
     // The loaded rows' unanswered questions, plus the ones older than what the chat has loaded,
     // plus the coordinator's open asks.
-    let count =
-        (open.len() + indexed_waiting(state, &indexed_entries(state)).len() + asks.len()) as u32;
+    let older = indexed_waiting(state, &indexed_entries(state)).len();
+    let count = (open.len() + older + asks.len()) as u32;
+    // The unanswered forms and pages in the loaded rows and the coordinator's open asks wait in the
+    // dock above the chat box (`extras::work_cards::dock`): the ? pill shows and counts only what
+    // the dock cannot show, the questions older than the loaded rows, so nothing is counted in two
+    // places (the user's "This is a mess man ... wtf is this?", 2026-11-10).
+    let pill_count = older as u32;
     let filter = state.questions.open_questions.filter.as_str();
     /*
     CDXC:SessionChat 2026-11-04 WHY:
@@ -826,6 +835,7 @@ pub fn project_with(
     }
     OpenQuestions {
         count,
+        pill_count,
         text: "Previous question \u{2191}".to_string(),
         accessibility_label: match count {
             0 => "No unanswered questions".to_string(),

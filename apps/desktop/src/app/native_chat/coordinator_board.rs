@@ -327,6 +327,9 @@ pub(crate) struct CoordinatorBoardView {
     focus: Option<BoardFocus>,
     /// The card whose menu is open (a right-click, or its ⋯), and where.
     menu: Option<BoardCardMenu>,
+    /// Where a count on the dock's status line was clicked: the next focus opens the panel as its
+    /// floating card there, over the chat, even where it could dock (work_cards.rs).
+    pub(super) float_at: Option<gpui::Bounds<gpui::Pixels>>,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, and the
@@ -2039,6 +2042,20 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A count on the dock's status line: the list floats over the chat at that group, the
+        // transcript staying as it is (the user's "when i click to see what's in progress let's
+        // show it floating, let's not expand it in the chat transcript").
+        if let Some(at) = self.board.float_at.take() {
+            if self.board.open {
+                self.board.open = false;
+            }
+            if !self.chat_menu_is_open(BOARD_TRIGGER) {
+                cx.defer_in(window, move |this, window, cx| {
+                    this.toggle_pill_menu(BOARD_MENU, at, window, cx);
+                });
+            }
+            return;
+        }
         if self.board_view() == COLUMNS_VIEW {
             if !self.chat_menu_is_open(BOARD_COLUMNS_TRIGGER) {
                 self.open_board_columns_after_dock(window, cx);

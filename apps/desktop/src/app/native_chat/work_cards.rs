@@ -44,11 +44,9 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
 
 /// A chip's glyph by what it says.
 /// The dock's cards stop growing here (unscaled) and scroll inside it.
-const DOCK_MAX_HEIGHT: f32 = 300.0;
+const DOCK_MAX_HEIGHT: f32 = 420.0;
 /// The dock's cards fold by themselves while the draft is longer than this.
 const DOCK_FOLDS_PAST_CHARS: usize = 280;
-/// The fold key (`expanded`) of the dock's cards, folded by the user.
-const DOCK_FOLD_KEY: &str = "work-dock-folded";
 
 /// The opened Moving list draws as a table once the transcript is at least this wide (unscaled):
 /// its Item, Who and Age columns plus a "Where it stands" column of at least 260 px, so neither
@@ -169,161 +167,54 @@ impl NativeChatView {
             .collect()
     }
 
-    /// The dock above a coordinator's chat box (gx-chat-core work_cards.rs `dock`, which holds the
-    /// user's pick C): every open ask as its full card, newest first, in a stack capped at
-    /// `DOCK_MAX_HEIGHT` with its own scroll, then the one status line that opens the Work panel.
-    /// The line's chevron folds the cards, and they fold by themselves while a long message is
-    /// typed, so the box never has to fight them for room.
+    /// The dock above a chat box (gx-chat-core work_cards.rs `dock`, which holds the user's
+    /// decisions): every open ask, unanswered form or page, blocked line of work and what the latest
+    /// turn finished, as cards in a stack capped at `DOCK_MAX_HEIGHT` with its own scroll; nothing
+    /// when there are none. The counts are the Work pill's. The cards step aside while a long
+    /// message is typed, and while the Work panel is docked beside the chat (it lists the same
+    /// things, so nothing reads as two lists of the same thing).
     pub(super) fn render_work_dock(
         &self,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let dock = &self.snapshot["workDock"];
-        let parts: Vec<Value> = dock["line"]["parts"]
+        let cards: Vec<Value> = self.snapshot["workDock"]["cards"]
             .as_array()
             .cloned()
             .unwrap_or_default();
-        let cards: Vec<Value> = dock["cards"].as_array().cloned().unwrap_or_default();
-        if parts.is_empty() && cards.is_empty() {
+        if cards.is_empty() {
             return None;
         }
-        let s = p.scale;
         let long_draft = self
             .input
             .as_ref()
             .is_some_and(|input| input.read(cx).value().len() > DOCK_FOLDS_PAST_CHARS);
-        let folded = self.expanded.contains(DOCK_FOLD_KEY) || long_draft;
-        let mut dock_column = div().w_full().min_w_0().flex().flex_col().gap(px(6.0 * s));
-        if !cards.is_empty() && !folded {
-            dock_column = dock_column.child(
-                div()
-                    .id("work-dock-cards")
-                    .w_full()
-                    .min_w_0()
-                    .max_h(px(DOCK_MAX_HEIGHT * s))
-                    .overflow_y_scroll()
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.0 * s))
-                    .children(cards.iter().map(|card| {
-                        let key = text(card, "key");
-                        let drawn = if card["kind"] == "questions" {
-                            self.dock_questions_card(card, p, cx)
-                        } else {
-                            self.work_card(card, p, cx)
-                        };
-                        self.open_question_frame(Some(key.as_str()), drawn, p)
-                    })),
-            );
+        let panel_open = self.board.open && self.board.docked;
+        if long_draft || panel_open {
+            return None;
         }
-        let pill = self
-            .pill_bounds
-            .cell(super::coordinator_board::BOARD_MENU)
-            .get();
-        let line = div()
-            .id("work-dock-line")
-            .role(gpui::Role::Button)
-            .aria_label("Open the Work panel")
-            .w_full()
-            .min_w_0()
-            .flex()
-            .items_center()
-            .gap(px(8.0 * s))
-            .h(px(32.0 * s))
-            .px(px(12.0 * s))
-            .rounded(px(10.0 * s))
-            .border_1()
-            .border_color(p.input_border)
-            .bg(p.card_panel)
-            .text_size(px(PROSE_SIZE * s))
-            .chat_cursor_pointer()
-            .hover(|style| style.bg(p.foreground.opacity(0.04)))
-            .when(!cards.is_empty(), |line| {
-                let label = if folded {
-                    "Show the cards"
-                } else {
-                    "Fold the cards"
-                };
-                line.child(
-                    div()
-                        .id("work-dock-fold")
-                        .role(gpui::Role::Button)
-                        .aria_label(label)
-                        .flex_shrink_0()
-                        .size(px(20.0 * s))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(px(5.0 * s))
-                        .hover(|style| style.bg(p.foreground.opacity(0.08)))
-                        .tooltip(move |window, cx| {
-                            gpui_component::tooltip::Tooltip::new(label).build(window, cx)
-                        })
-                        .child(
-                            svg()
-                                .path(if folded {
-                                    "titlebar/chevron-up.svg"
-                                } else {
-                                    "titlebar/chevron-down.svg"
-                                })
-                                .size(px(12.0 * s))
-                                .text_color(p.muted),
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            cx.stop_propagation();
-                            if !this.expanded.remove(DOCK_FOLD_KEY) {
-                                this.expanded.insert(DOCK_FOLD_KEY.to_string());
-                            }
-                            cx.notify();
-                        })),
-                )
-            })
-            .child(
-                svg()
-                    .path("titlebar/layout-board-split.svg")
-                    .size(px(14.0 * s))
-                    .flex_shrink_0()
-                    .text_color(p.muted),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_color(p.card_muted)
-                    .children(parts.iter().enumerate().flat_map(|(index, part)| {
-                        let tone = super::coordinator_board::tone_color(&text(part, "tone"))
-                            .map_or(p.card_muted, |color| gpui::rgb(color).into());
-                        [
-                            (index > 0).then(|| {
-                                div().flex_shrink_0().child(" \u{b7} ").into_any_element()
-                            }),
-                            Some(
-                                div()
-                                    .flex_shrink_0()
-                                    .text_color(tone)
-                                    .child(text(part, "text"))
-                                    .into_any_element(),
-                            ),
-                        ]
-                        .into_iter()
-                        .flatten()
-                    })),
-            )
-            .child(
-                svg()
-                    .path("titlebar/chevron-right.svg")
-                    .size(px(12.0 * s))
-                    .flex_shrink_0()
-                    .text_color(p.muted),
-            )
-            .on_click(cx.listener(move |this, _, window, cx| {
-                this.toggle_coordinator_board(pill, window, cx);
-            }));
-        Some(dock_column.child(line).into_any_element())
+        let s = p.scale;
+        Some(
+            div()
+                .id("work-dock-cards")
+                .w_full()
+                .min_w_0()
+                .max_h(px(DOCK_MAX_HEIGHT * s))
+                .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .gap(px(6.0 * s))
+                .children(cards.iter().map(|card| {
+                    let key = text(card, "key");
+                    let drawn = if card["kind"] == "questions" {
+                        self.dock_questions_card(card, p, cx)
+                    } else {
+                        self.work_card(card, p, cx)
+                    };
+                    self.open_question_frame(Some(key.as_str()), drawn, p)
+                }))
+                .into_any_element(),
+        )
     }
 
     /// An unanswered form or page in the dock: its title, how many questions it has open, and Open,
@@ -415,7 +306,7 @@ impl NativeChatView {
                     let drawn = if card["kind"] == "moving" {
                         self.work_moving_row(card, p, cx)
                     } else if card["folded"] == true {
-                        self.work_fold_line(card, p)
+                        self.work_fold_line(card, p, cx)
                     } else {
                         self.work_card(card, p, cx)
                     };
@@ -1087,7 +978,7 @@ impl NativeChatView {
 
     /// An item's earlier card, or a settled ask: one quiet line, its status's glyph, what that turn
     /// did, and when.
-    fn work_fold_line(&self, card: &Value, p: &ChatAppearance) -> AnyElement {
+    fn work_fold_line(&self, card: &Value, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
         let s = p.scale;
         let status = match text(card, "foldStatus").as_str() {
             "" => text(card, "status"),
@@ -1096,6 +987,7 @@ impl NativeChatView {
         let (icon, color) = status_look(&status, p);
         let words = text(card, "foldText");
         let outcome = text(card, "foldOutcome");
+        let command = card["command"].clone();
         let tooltip = if outcome.is_empty() {
             words.clone()
         } else {
@@ -1153,6 +1045,15 @@ impl NativeChatView {
                     .text_color(p.muted)
                     .child(text(card, "time")),
             )
+            // A turn's line opens the Work panel at the first line of work it names.
+            .when(command.is_object(), |line| {
+                line.chat_cursor_pointer()
+                    .hover(|style| style.bg(p.foreground.opacity(0.04)))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(command.clone(), cx);
+                    }))
+            })
             .into_any_element()
     }
 }

@@ -988,7 +988,8 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     // The Work panel's header: "3 for you · 1 blocked · 2 in progress".
     if work_mode {
         if needs > 0 {
-            meta.push(format!("{needs} for you"));
+            // The pill's words ("4 need you"), so the header and the pill read the same.
+            meta.push(format!("{needs} need you"));
         }
         if blocked > 0 {
             meta.push(format!("{blocked} blocked"));
@@ -1029,15 +1030,16 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     // User, of "Board •1 •1 •5" in pink, red and amber: "also red for blocked need to be it's own
     // pill :))". The Blocked count leaves the Board pill for a Blocked pill beside it
     // (`blocked_pill`), which opens the board at Blocked.
-    let pill_counts = [
-        ("needs", needs.saturating_sub(asked)),
-        ("blocked", blocked),
-        ("moving", moving),
-    ]
-    .into_iter()
-    .filter(|(_, count)| *count > 0)
-    .map(|(id, count)| (id.to_string(), count))
-    .collect();
+    // Superseded 2026-11-10: the ? pill no longer counts what the dock above the chat box shows
+    // (`questions::open_questions` `pill_count`), so the pill's Needs you is the group's whole
+    // count, the same number the panel's header and groups show (the user's "the counts
+    // disagree").
+    let _ = asked;
+    let pill_counts = [("needs", needs), ("blocked", blocked), ("moving", moving)]
+        .into_iter()
+        .filter(|(_, count)| *count > 0)
+        .map(|(id, count)| (id.to_string(), count))
+        .collect();
     let empty = out
         .iter()
         .filter(|group| !matches!(group.id.as_str(), "ideas" | "removed"))
@@ -1202,11 +1204,33 @@ pub fn pill(board: &Value) -> Option<ChatPill> {
         "" => "Board".to_string(),
         title => title.to_string(),
     };
+    // The counts in words while the strip has room ("Work · 4 need you · 7 in progress"); a tight
+    // strip drops the label and keeps the coloured counts (the renderers), the tooltip saying them.
+    let count_of = |id: &str| {
+        board["pillCounts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|pair| pair[0] == id)
+            .and_then(|pair| pair[1].as_u64())
+            .unwrap_or(0)
+    };
+    let mut words = vec![title.clone()];
+    let needs = count_of("needs");
+    if needs > 0 {
+        // "need you" for any number, as a list heading reads (the target page's wording).
+        words.push(format!("{needs} need you"));
+    }
+    let moving = count_of("moving");
+    if moving > 0 {
+        words.push(format!("{moving} in progress"));
+    }
+    let label = words.join(" \u{b7} ");
     Some(ChatPill {
         switch: None,
         menu: Vec::new(),
         id: BOARD_PILL.to_string(),
-        label: title.clone(),
+        label,
         count: String::new(),
         waiting: String::new(),
         running: false,
@@ -1320,11 +1344,15 @@ pub fn focus_row(state: &mut ChatState, key: &str) -> Vec<crate::effect::Effect>
 /// `showCoordinatorBoardGroup {group}`: the board opens at `group` (the Blocked pill), unfolded
 /// and showing every row, scrolled to its first card.
 pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effect> {
-    let key = state
-        .session
-        .coordinator_threads
+    // The Work panel's own groups when the chat has work items (`work_panel::work_board`), as the
+    // dock's status line counts them; else gxserver's board.
+    let threads = state.session.coordinator_threads.as_ref();
+    let built = threads
+        .and_then(|threads| threads.get("work"))
+        .map(crate::extras::work_panel::work_board);
+    let key = built
         .as_ref()
-        .and_then(|threads| threads.get("board"))
+        .or_else(|| threads.and_then(|threads| threads.get("board")))
         .and_then(|board| board.get("groups"))
         .and_then(Value::as_array)
         .into_iter()
@@ -1339,8 +1367,14 @@ pub fn show_group(state: &mut ChatState, group: &str) -> Vec<crate::effect::Effe
     let Some(key) = key else {
         return Vec::new();
     };
+    let work_mode = built.is_some();
     let panels = &mut state.extras.panels;
-    if folded_by_default(group) != panels.board_toggled.contains(group) {
+    let folded = if work_mode {
+        crate::extras::work_panel::folded_by_default(group)
+    } else {
+        folded_by_default(group)
+    };
+    if folded != panels.board_toggled.contains(group) {
         toggle(&mut panels.board_toggled, group);
     }
     panels.board_expanded.insert(group.to_string());
