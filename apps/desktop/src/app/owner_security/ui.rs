@@ -24,6 +24,16 @@ three words, so a phone's pairing request is titled that here instead of the gen
 "Approval needed" (a computer asking to connect through Easy Connect reads "Approve this
 computer?"). gxserver writes the summary: a phone's starts with "Pair", a computer's with "Let".
 */
+/// Why a card's Approve or Deny didn't go through.
+enum Decided {
+    /// A newer request replaced the card's ([`super::CardRequest::Moved`]).
+    Moved(ApprovalRequest),
+    /// The request no longer waits; the plain words why.
+    Gone(String),
+    /// gxserver or the prompt refused.
+    Failed(String),
+}
+
 /// The notice's title: what the person is asked to approve.
 fn approval_title(request: &ApprovalRequest) -> &'static str {
     use ghostex_gx_protocol::approval::SensitiveAction;
@@ -75,7 +85,8 @@ impl GhostexGpuiApp {
 
     /// A computer's stream went live (`machine_id: None` for this one): its requests still
     /// waiting show as cards, including any whose event this app missed (CDXC:Security
-    /// 2026-11-09 at `owner_security::pending_requests`).
+    /// 2026-11-09 at `owner_security::pending_requests`), and cards for requests no longer
+    /// waiting there go (CDXC:Security 2026-11-10 at `owner_security::card_request`).
     pub(crate) fn owner_security_show_pending_requests(
         &mut self,
         machine_id: Option<String>,
@@ -92,8 +103,33 @@ impl GhostexGpuiApp {
             .background_executor()
             .spawn(async move { super::pending_requests(&transport) });
         cx.spawn(async move |this, cx| {
-            let requests = listed.await;
+            let Some(requests) = listed.await else {
+                return;
+            };
             let _ = this.update(cx, |this, cx| {
+                // A card whose request no longer waits there (it lapsed or was answered while this
+                // app was away, or gxserver restarted without it) goes; the rest show again.
+                let prefix = card_id(machine_id.as_deref(), "");
+                let live: std::collections::HashSet<String> = requests
+                    .iter()
+                    .map(|request| card_id(machine_id.as_deref(), &request.id))
+                    .collect();
+                let stale: Vec<String> = this
+                    .app_notices
+                    .queue
+                    .iter()
+                    .chain(this.app_toasts.iter())
+                    .map(|toast| toast.id.clone())
+                    .filter(|id| {
+                        // `apr_` and 16 characters: never another computer's whose id starts alike.
+                        id.strip_prefix(&prefix)
+                            .is_some_and(|rest| rest.starts_with("apr_") && rest.len() == 20)
+                            && !live.contains(id)
+                    })
+                    .collect();
+                for id in stale {
+                    this.remove_gpui_app_toast(&id, cx);
+                }
                 for request in requests {
                     this.owner_security_on_approval_change(
                         machine_id.clone(),
@@ -291,16 +327,19 @@ impl GhostexGpuiApp {
                 | ghostex_gx_protocol::approval::SensitiveAction::ComputerRegister
         );
         let decided = cx.background_executor().spawn(async move {
-            if !super::request_still_waiting(&transport, &request.id) {
-                return Err(None);
+            match super::card_request(&transport, &request.id) {
+                super::CardRequest::Waiting => {}
+                super::CardRequest::Moved(newer) => return Err(Decided::Moved(newer)),
+                super::CardRequest::Gone(why) => return Err(Decided::Gone(why)),
             }
             if deny {
                 super::deny_request(&transport, &request.id)
             } else {
                 super::approve_request(&transport, &request)
             }
-            .map_err(Some)
+            .map_err(Decided::Failed)
         });
+        let machine_id = machine_id.map(str::to_string);
         cx.spawn(async move |this, cx| {
             let outcome = decided.await;
             let _ = this.update(cx, |this, cx| {
@@ -309,15 +348,21 @@ impl GhostexGpuiApp {
                 if outcome.is_ok() && lets_computer_in && !deny {
                     this.renew_connected_computers(true, cx);
                 }
-                if let Err(None) = outcome {
+                if let Err(Decided::Moved(newer)) = outcome {
+                    // The newer request's words may differ (a phone's new three words): its card
+                    // shows to be read and approved, never approved for the user.
                     this.remove_gpui_app_toast(&card, cx);
+                    this.owner_security_show_card(machine_id.clone(), newer, cx);
                     this.dispatch_gpui_workspace_action_toast(
                         "info",
-                        "Already answered",
-                        "That request was already answered or ran out of time.",
+                        "A newer request",
+                        "This request was replaced by a newer one for the same thing. Its card shows now: check it, then approve.",
                         cx,
                     );
-                } else if let Err(Some(error)) = outcome {
+                } else if let Err(Decided::Gone(why)) = outcome {
+                    this.remove_gpui_app_toast(&card, cx);
+                    this.dispatch_gpui_workspace_action_toast("info", "No longer waiting", &why, cx);
+                } else if let Err(Decided::Failed(error)) = outcome {
                     // Another owner there: name both computers and the card that lets this app in.
                     let error = match computer.as_deref() {
                         Some(computer) if error == super::OWNER_WAITING_ERROR => {

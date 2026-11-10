@@ -266,6 +266,28 @@ pub struct ApprovalRequest {
     /// The approver key that signed it (approved), or the device that denied it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decided_by: Option<String>,
+    /// The newer request that replaced this one (the same asker asking for the same thing again);
+    /// this one is then `expired`. A card holding this id moves to that one. Older gxservers
+    /// never send it, and older apps ignore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaced_by: Option<String>,
+}
+
+/// What a client hears for an id gxserver doesn't have (never had, or decided over 30 minutes ago).
+pub const GONE_MESSAGE: &str = "This request expired.";
+
+/// The words for a request that lapsed unanswered: plainly expired, and who can ask again
+/// (gxserver's answer to Approve, and the desktop's card).
+pub fn expired_message(request: &ApprovalRequest) -> String {
+    let again = match request.action {
+        SensitiveAction::PairingApproveDevice if request.summary.starts_with("Pair ") => {
+            "Ask again from the phone."
+        }
+        SensitiveAction::PairingApproveDevice => "Ask again from the other computer.",
+        SensitiveAction::CollabApproveGuestMessage => "The guest can send it again.",
+        _ => "The agent can ask again.",
+    };
+    format!("This request expired. {again}")
 }
 
 /// An approver key as Settings > Security lists it.

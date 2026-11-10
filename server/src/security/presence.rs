@@ -85,17 +85,14 @@ impl SecurityState {
                 Err(_) => {}
             }
         }
-        let (request, is_new) = self.approvals.create(
-            caller,
-            requester_for(caller, requester_label),
-            &action,
-            now_ms,
-        );
-        if is_new {
-            self.publish(SecurityEvent::ApprovalRequested {
-                request: request.clone(),
-            });
-        }
+        let request = self
+            .open_request(
+                caller,
+                requester_for(caller, requester_label),
+                &action,
+                now_ms,
+            )
+            .request;
         PresenceOutcome::Pending(request)
     }
 }
@@ -123,6 +120,7 @@ fn policy_approval(
         status: ApprovalStatus::Consumed,
         decided_at_ms: Some(now_ms),
         decided_by: Some("policy".to_string()),
+        replaced_by: None,
     }
 }
 

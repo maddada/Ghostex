@@ -177,7 +177,10 @@ let grant = match require_owner_presence(&state, &caller, action, &body_json, &p
 - The error body is the usual RPC error plus `approval` (an `ApprovalRequest`), and its message
   names the id. The caller repeats the same call with `params.approvalId` once it is approved; only
   the caller that asked (or you) can spend it, once, within 2 minutes. A pending request lapses
-  after 10 minutes; an identical pending request from the same caller is reused.
+  after 10 minutes; an identical pending request from the same caller is reused, and a newer one
+  for the same thing (the same action and target, or for pairing the same device key) replaces
+  the caller's older one, which becomes `expired` with `replacedBy` (a Collab guest's messages
+  never replace each other).
 - Clients: the `ghostex` CLI prints what it waits for on stderr, polls `/api/readApprovalRequest`
   and repeats the call (`--no-wait` returns at once). The desktop and the phone show the card.
 
@@ -186,16 +189,23 @@ let grant = match require_owner_presence(&state, &caller, action, &body_json, &p
 | Endpoint | Params | Who | Result |
 | --- | --- | --- | --- |
 | `/api/listApprovalRequests` | none | you | `{ requests }`, pending, oldest first |
-| `/api/readApprovalRequest` | `{ id }` | its requester, you | `{ request }` |
+| `/api/readApprovalRequest` | `{ id }` | its requester, you | `{ request, current? }`: `current` is the newest request that replaced this one; an unknown id is `notFound` "This request expired." |
 | `/api/approveApprovalRequest` | `{ id }` (older apps add `keyId` and `signature`, accepted and not checked) | you, never the requester | `{ request }` (status `approved`) |
 | `/api/denyApprovalRequest` | `{ id }` | you | `{ request }` (`denied`) |
 | `/api/securityStatus` | none | any but guests | `{ serverId, caller, plainApprovals: true, requirePresence, ownerKeys, approverKeys, pendingApprovals }` |
 | `/api/listApproverKeys`, `/api/enrollApproverKey`, `/api/removeApproverKey` | as before | you | kept for older apps: an approver key enrolls at once and is listed, but approving checks no signature |
 | `/api/enrollOwnerKey`, `/api/ownerChallenge`, `/api/openOwnerSession` | as before (`askOwner`, `approverKey` accepted) | the token file or an owner session (an agent's session token can't add an owner key) | kept for desktops from before plain approvals: a key enrolls at once, no "act as the owner" card (#532) |
 
-Statuses: `pending`, `approved`, `denied`, `expired`, `consumed`. Requests live in memory; a
-gxserver restart drops them and the asker asks again. `/api/events` carries
-`{ type: "approvalRequestsChanged", change: "requested"|"approved"|"denied"|"expired", request }`.
+Statuses: `pending`, `approved`, `denied`, `expired`, `consumed` (a replaced request is `expired`
+with `replacedBy`; no new status, so older apps read it). Approving or denying a lapsed one answers
+`expired` with plain words (`expired_message` in packages/gx-protocol/src/approval.rs: "This request
+expired. Ask again from the phone."), a replaced one `replaced`. Requests are saved in
+`gxserver/auth/approval-requests.json` (see Persistence), so after a restart they keep their id,
+words and expiry. `/api/events` carries
+`{ type: "approvalRequestsChanged", change: "requested"|"approved"|"denied"|"expired", request }`;
+a replaced request goes out as `expired` with `replacedBy`, so its card closes and the newer
+request's card shows. The desktop reads a card's request back before Approve and moves to
+`current`, shown to be read (its words may differ), never approved for the user.
 
 ## Older apps and older gxservers
 
@@ -226,6 +236,14 @@ is as readable to a same-user program as the token file), `ownerSessions` (hashe
 round-trips), `rememberedApprovals` (key → when: approvals asked once and kept for good, today
 `easyConnectEnable`; older gxservers ignore it), `approvedProjectReach` (`{ caller, target }`: an agent session and a project it may reach). An unreadable file is moved aside and gxserver starts with
 none; the desktop then enrolls again on first use.
+
+`gxserver/auth/approval-requests.json` (0600, written whole through a rename on every change):
+each request with its asker (`requester`, a `Principal`), `shared`, `replaceKey`, and `resume`:
+what the part of gxserver that asked keeps to finish it once approved after a restart (`pairing`:
+the waiting phone or computer, restored by `RemotePairingRuntime::restore_waiting`; `collab`: the
+call Collab repeats, restored by `collab_shim::http::approvals::start`). Decided requests are kept
+30 minutes, so a client hears how its request ended. An unreadable file is moved aside and the
+askers ask again. Older gxservers ignore the file.
 
 ## The security log (`crate::audit`)
 

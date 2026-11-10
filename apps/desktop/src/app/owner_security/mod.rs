@@ -149,6 +149,9 @@ pub(crate) fn request_state(transport: &Transport, id: &str) -> RequestState {
             Ok(request) => match request.status {
                 ApprovalStatus::Pending => RequestState::Pending(request),
                 ApprovalStatus::Approved => RequestState::Approved,
+                // Replaced by a newer request (gxserver 11.2.3+): not a no; asking again gets
+                // the newest one back.
+                ApprovalStatus::Expired if request.replaced_by.is_some() => RequestState::Gone,
                 ApprovalStatus::Denied | ApprovalStatus::Expired => RequestState::Declined,
                 _ => RequestState::Gone,
             },
@@ -419,10 +422,10 @@ pub(crate) fn asks_for_this_app(request: &ApprovalRequest) -> bool {
 CDXC:Security 2026-11-09 WHY:
 Discord report (11.2.0): "I click approve, and then get this little error popup that tells me its Not approved. It tells me to do it on the phone or other computers. Nothing comes up on those computers and I dont see a way to do it there?" The request a computer waits on showed as a card only from its `approvalRequestsChanged` event, sent once when the request is made: an app that was restarting, updating or reconnecting at that moment never showed it, and nothing listed it later, so the request waited a day with no way to answer it. Each computer's waiting requests are now read when its stream goes live and shown as cards, where this app may answer them (this computer, or one where it already acts as the owner).
 */
-/// The requests waiting for the owner on `transport`'s gxserver. Empty on a connected computer
-/// where this app doesn't act as the owner yet: listing needs that, and it is never asked for
-/// from here.
-pub(crate) fn pending_requests(transport: &Transport) -> Vec<ApprovalRequest> {
+/// The requests waiting for the owner on `transport`'s gxserver. `None` when they can't be
+/// listed: a connected computer where this app doesn't act as the owner yet (listing needs that,
+/// and it is never asked for from here), or gxserver didn't answer.
+pub(crate) fn pending_requests(transport: &Transport) -> Option<Vec<ApprovalRequest>> {
     use ghostex_gx_protocol::approval::ApprovalStatus;
     in_security_flow(|| {
         match transport {
@@ -436,7 +439,7 @@ pub(crate) fn pending_requests(transport: &Transport) -> Vec<ApprovalRequest> {
             // no card.
             Transport::Remote(_) => {
                 if quiet_owner_session(transport).is_none() {
-                    return Ok(Vec::new());
+                    return Err("this app doesn't act as the owner there yet".to_string());
                 }
             }
         }
@@ -455,10 +458,8 @@ pub(crate) fn pending_requests(transport: &Transport) -> Vec<ApprovalRequest> {
                 .collect(),
         )
     })
-    .unwrap_or_else(|error| {
-        log::info!("waiting approval requests not read: {error}");
-        Vec::new()
-    })
+    .map_err(|error| log::info!("waiting approval requests not read: {error}"))
+    .ok()
 }
 
 /// gxserver's routes for the user's own actions on a session (Stop, answering its prompt, typing
@@ -801,26 +802,61 @@ pub(crate) fn approve_request(
 CDXC:Security 2026-11-08 WHY:
 A card only leaves when its gxserver says the request was answered or lapsed, and a card whose word never arrived (the app was away from its event stream when it happened) stayed for good: Approve asked for Touch ID and then failed, and the agent's next try added another card beside it. Before the prompt, the card's request is read back; one no longer waiting just closes.
 */
-/// Whether request `id` still waits for the owner; `true` when gxserver can't say, so the
-/// decision goes ahead and reports its own error.
-pub(crate) fn request_still_waiting(transport: &Transport, id: &str) -> bool {
+/*
+CDXC:Security 2026-11-10 WHY:
+Gregg's report (gregg-approval-bug): after a gxserver restart, or once a newer request replaced the card's, Approve read the old id back as gone and said "That request was already answered or ran out of time", while the fresh request sat with no card. The user: a card never dead-ends on a request that is gone. gxserver now keeps waiting requests across restarts and points a replaced id at the newest one (`current`); the card moves there (its words may differ, so it is shown to be read, not approved for the user), and one that truly lapsed says so plainly ("This request expired. Ask again from the phone."), never "already answered".
+*/
+/// Where an approval card's request stands, read just before Approve or Deny.
+pub(crate) enum CardRequest {
+    /// Still waiting (or gxserver can't say: the decision goes ahead and reports its own error).
+    Waiting,
+    /// A newer request for the same thing replaced it: its card shows instead.
+    Moved(ApprovalRequest),
+    /// No longer waiting: the plain words why.
+    Gone(String),
+}
+
+/// Reads request `id` back before the card's Approve or Deny.
+pub(crate) fn card_request(transport: &Transport, id: &str) -> CardRequest {
+    use ghostex_gx_protocol::approval::{ApprovalStatus, GONE_MESSAGE, expired_message};
     let plain = plain::is_plain(transport);
     in_security_flow(|| {
         if !plain {
             require_owner_session(transport)?;
         }
-        match rpc(transport, "/api/readApprovalRequest", json!({ "id": id })) {
-            Ok(answer) => Ok::<bool, String>(
-                answer
-                    .pointer("/request/status")
-                    .and_then(Value::as_str)
-                    .is_none_or(|status| status == "pending"),
-            ),
-            Err((Some(code), _)) if code == "notFound" => Ok(false),
-            Err(_) => Ok(true),
-        }
+        let answer = match rpc(transport, "/api/readApprovalRequest", json!({ "id": id })) {
+            Ok(answer) => answer,
+            Err((Some(code), _)) if code == "notFound" => {
+                return Ok::<_, String>(CardRequest::Gone(GONE_MESSAGE.to_string()));
+            }
+            Err(_) => return Ok(CardRequest::Waiting),
+        };
+        let read = |key: &str| {
+            answer
+                .get(key)
+                .cloned()
+                .and_then(|value| serde_json::from_value::<ApprovalRequest>(value).ok())
+        };
+        let Some(request) = read("request") else {
+            return Ok(CardRequest::Waiting);
+        };
+        Ok(match request.status {
+            ApprovalStatus::Pending => CardRequest::Waiting,
+            ApprovalStatus::Expired => match read("current") {
+                Some(current) if current.status == ApprovalStatus::Pending => {
+                    CardRequest::Moved(current)
+                }
+                _ if request.replaced_by.is_some() => CardRequest::Gone(
+                    "A newer request for the same thing replaced this one, and it isn't waiting any more."
+                        .to_string(),
+                ),
+                _ => CardRequest::Gone(expired_message(&request)),
+            },
+            ApprovalStatus::Denied => CardRequest::Gone("This request was denied.".to_string()),
+            _ => CardRequest::Gone("This request was already approved.".to_string()),
+        })
     })
-    .unwrap_or(true)
+    .unwrap_or(CardRequest::Waiting)
 }
 
 /// [`approve_request`] for request `id` of this computer's gxserver (a phone or computer waiting
