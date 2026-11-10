@@ -1601,46 +1601,14 @@ impl VoicePanelWindow {
             }));
         let empty = snapshot.rows.is_empty() && snapshot.problem.is_none();
         let memory = self.memory_block(snapshot, colors, cx);
+        if empty {
+            return self.empty_body(snapshot, memory, colors);
+        }
         v_flex()
             .flex_1()
             .min_h_0()
             .when_some(memory, |this, memory| this.child(memory))
-            // Laid out like the bell dropdown's "No notifications yet" (`render_notifications_empty_state`).
-            .when(empty, |this| {
-                this.child(
-                    v_flex()
-                        .flex_1()
-                        .items_center()
-                        .justify_center()
-                        .gap(px(6.0))
-                        .px(px(24.0))
-                        .text_center()
-                        .child(titlebar_svg_icon(
-                            ICON_MIC,
-                            32.0,
-                            colors.ink.opacity(0.35),
-                        ))
-                        .child(
-                            div()
-                                .mt(px(4.0))
-                                .text_size(px(13.0))
-                                .font_weight(gpui::FontWeight::MEDIUM)
-                                .text_color(colors.ink.opacity(0.86))
-                                .child(match snapshot.phase {
-                                    VoicePhase::Live => "Go ahead, I'm listening.",
-                                    _ => "Starting the voice agent…",
-                                }),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(11.5))
-                                .line_height(px(16.0))
-                                .text_color(colors.ink.opacity(0.50))
-                                .child("Ask what your agents are doing, send one a prompt, answer a question, or start a new agent."),
-                        ),
-                )
-            })
-            .when(!empty, |this| {
+            .map(|this| {
                 let away = layout::shows_scroll_to_bottom(self.following, self.distance_to_end());
                 let panel = cx.entity().downgrade();
                 this.child(
@@ -1674,11 +1642,11 @@ impl VoicePanelWindow {
                         .bg(rgba(0xfbbf2418))
                         .border_1()
                         .border_color(rgba(0xfbbf2440))
-                        .child(
-                            div()
-                                .pt(px(1.0))
-                                .child(titlebar_svg_icon(ICON_ALERT, 14.0, rgba(0xfbbf24ff).into())),
-                        )
+                        .child(div().pt(px(1.0)).child(titlebar_svg_icon(
+                            ICON_ALERT,
+                            14.0,
+                            rgba(0xfbbf24ff).into(),
+                        )))
                         .child(
                             div()
                                 .flex_1()
@@ -1690,6 +1658,65 @@ impl VoicePanelWindow {
                         ),
                 )
             })
+            .into_any_element()
+    }
+
+    /// The body before anything was said: the Last conversation card (when there is one) and
+    /// "Go ahead, I'm listening." under it, centred in what is left above the text box.
+    ///
+    /// CDXC:VoiceMode 2026-11-11 WHY: User: "stuff is messed up man": with the Last conversation card up, the empty state did not fit, so the text box was drawn over its second hint line and the microphone was pressed against the card. With the card up the hint lines go (the card already says what to do next), and the whole area scrolls when even that does not fit (a long summary, the panel at its smallest), so it can never run under the text box.
+    fn empty_body(
+        &self,
+        snapshot: &PanelSnapshot,
+        memory: Option<AnyElement>,
+        colors: &PanelColors,
+    ) -> AnyElement {
+        let with_card = memory.is_some();
+        div()
+            .id("voice-panel-empty-body")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .child(
+                v_flex()
+                    .min_h_full()
+                    .when_some(memory, |this, memory| this.child(memory))
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .items_center()
+                            .justify_center()
+                            .gap(px(6.0))
+                            .px(px(24.0))
+                            .py(px(10.0))
+                            .text_center()
+                            .child(titlebar_svg_icon(
+                                ICON_MIC,
+                                if with_card { 24.0 } else { 32.0 },
+                                colors.ink.opacity(0.35),
+                            ))
+                            .child(
+                                div()
+                                    .mt(px(4.0))
+                                    .text_size(px(13.0))
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(colors.ink.opacity(0.86))
+                                    .child(match snapshot.phase {
+                                        VoicePhase::Live => "Go ahead, I'm listening.",
+                                        _ => "Starting the voice agent…",
+                                    }),
+                            )
+                            .when(!with_card, |this| {
+                                this.child(
+                                    div()
+                                        .text_size(px(11.5))
+                                        .line_height(px(16.0))
+                                        .text_color(colors.ink.opacity(0.50))
+                                        .child("Ask what your agents are doing, send one a prompt, answer a question, or start a new agent."),
+                                )
+                            }),
+                    ),
+            )
             .into_any_element()
     }
 

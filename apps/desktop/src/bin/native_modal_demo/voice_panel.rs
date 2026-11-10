@@ -9,7 +9,10 @@
 //! opened on Ursa, far down Grok's list), `scrolled` (the reader scrolled up: the Scroll to bottom
 //! pill), `typed` (a muted call where the user typed a turn: the text box under the transcript,
 //! as `panel_input.rs` draws it, holding a draft), `mode-switched` (a push-to-talk call the gear
-//! menu just switched to Regular: the strip's notice). Pressing the hold button holds it.
+//! menu just switched to Regular: the strip's notice), `memory` (a muted call before anything was
+//! said, with the Last conversation card: the card, "Go ahead, I'm listening." and the text box,
+//! as the panel's `empty_body` lays them out), `memory-long` (the same with a long summary) and
+//! `memory-small` (the same at the panel's smallest size). Pressing the hold button holds it.
 use super::rows;
 use super::voice_confirm_card as confirm_card;
 use super::voice_panel_controls::{self as controls, ControlColors, HoldLook, StripContent};
@@ -27,6 +30,9 @@ const ICON_MIC_OFF: &str = "titlebar/microphone-off.svg";
 const ICON_HANG_UP: &str = "titlebar/phone-off.svg";
 const ICON_TOOL: &str = "titlebar/tool.svg";
 const ICON_CHECK: &str = "titlebar/check.svg";
+const ICON_HISTORY: &str = "titlebar/history.svg";
+const ICON_PLAY: &str = "titlebar/player-play.svg";
+const ICON_FRESH: &str = "titlebar/refresh.svg";
 
 /// Grok's voices, in the order gxserver lists them (`XAI_VOICES` in `server/src/voice_agent/provider.rs`).
 const GROK_VOICES: &[&str] = &[
@@ -102,14 +108,16 @@ impl Render for VoicePanelDemo {
         let colors = self.colors();
         let state = self.state.as_str();
         let held = self.held || state == "holding";
-        let muted = matches!(state, "muted" | "typed");
+        let muted = matches!(state, "muted" | "typed") || state.starts_with("memory");
         let regular = matches!(state, "regular" | "mode-switched");
         let (dot, label): (Hsla, &str) = if held {
             (rgba(0x38bdf8ff).into(), "Hearing you")
         } else {
             match state {
                 "speaking" => (rgba(0xa78bfaff).into(), "Speaking"),
-                "muted" | "typed" => (colors.muted, "Muted"),
+                "muted" | "typed" | "memory" | "memory-long" | "memory-small" => {
+                    (colors.muted, "Muted")
+                }
                 "regular" | "mode-switched" => (rgba(0x4ade80ff).into(), "Listening"),
                 _ => (rgba(0x4ade80ff).into(), "Hold to talk"),
             }
@@ -285,6 +293,7 @@ impl Render for VoicePanelDemo {
             )
             .child(match state {
                 "voices" => self.voice_list(colors),
+                "memory" | "memory-long" | "memory-small" => memory_empty_body(state, colors),
                 _ => v_flex()
                     .relative()
                     .flex_1()
@@ -403,7 +412,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     };
     let light = super::env("GHOSTEX_NATIVE_MODAL_DEMO_THEME") == "light";
     // `resized`: a resize the panel holds to its limits, in a roomy main window.
-    let panel = if state == "resized" {
+    let panel = if state == "memory-small" {
+        layout::MIN_SIZE
+    } else if state == "resized" {
         layout::clamp_panel_size(size(px(560.0), px(600.0)), size(px(1400.0), px(900.0)))
     } else {
         layout::DEFAULT_SIZE
@@ -423,12 +434,14 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         panel.width.as_f32(),
         panel.height.as_f32(),
         move |window, cx| {
-            let text_box = (state == "typed").then(|| {
+            let text_box = (state == "typed" || state.starts_with("memory")).then(|| {
                 cx.new(|cx| {
                     let mut input = gpui_component::input::TextareaState::new(window, cx)
                         .auto_grow(1, 5)
                         .placeholder("Type to the voice agent…");
-                    input.set_value("And start the release notes", window, cx);
+                    if state == "typed" {
+                        input.set_value("And start the release notes", window, cx);
+                    }
                     input
                 })
             });
@@ -461,4 +474,98 @@ fn demo_card(state: &str) -> Option<rows::ConfirmCard> {
         _ => return None,
     };
     rows::confirm_card(&frame)
+}
+
+/// The panel's `empty_body` with the Last conversation card, drawn the same way (`panel.rs`).
+fn memory_empty_body(state: &str, colors: ControlColors) -> gpui::AnyElement {
+    let gist = if state == "memory-long" {
+        "User shared that a friend's company lost its codebase through a leaked token and then had an AWS ransom attack; we went through rotating every key, which sessions touch AWS, and what the release thread still needs before it can ship tonight."
+    } else {
+        "User shared friend's company lost codebase via token leak and had AWS ransom attack"
+    };
+    let card_button = |glyph: &'static str, label: &'static str| {
+        h_flex()
+            .h(px(28.0))
+            .px(px(9.0))
+            .gap(px(6.0))
+            .items_center()
+            .rounded(px(7.0))
+            .border_1()
+            .border_color(colors.border)
+            .bg(colors.raised)
+            .text_size(px(12.0))
+            .text_color(colors.text)
+            .child(icon(glyph, 13.0, colors.text))
+            .child(label)
+    };
+    div()
+        .id("voice-panel-demo-empty-body")
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .child(
+            v_flex()
+                .min_h_full()
+                .child(
+                    v_flex()
+                        .flex_shrink_0()
+                        .mx(px(12.0))
+                        .mt(px(10.0))
+                        .p(px(10.0))
+                        .gap(px(7.0))
+                        .rounded(px(10.0))
+                        .bg(colors.ink.opacity(0.05))
+                        .border_1()
+                        .border_color(colors.border)
+                        .child(
+                            h_flex()
+                                .gap(px(6.0))
+                                .items_center()
+                                .text_size(px(11.5))
+                                .text_color(colors.muted)
+                                .child(icon(ICON_HISTORY, 12.0, gpui::rgba(0xa78bfaff).into()))
+                                .child(
+                                    div()
+                                        .text_size(px(12.0))
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(colors.text)
+                                        .child("Last conversation"),
+                                )
+                                .child(div().flex_1().min_w_0().truncate().child("· 6 h ago")),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(12.0))
+                                .line_height(px(16.5))
+                                .text_color(colors.text.opacity(0.85))
+                                .child(gist),
+                        )
+                        .child(
+                            h_flex()
+                                .gap(px(6.0))
+                                .child(card_button(ICON_PLAY, "Continue"))
+                                .child(card_button(ICON_FRESH, "Start fresh")),
+                        ),
+                )
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .items_center()
+                        .justify_center()
+                        .gap(px(6.0))
+                        .px(px(24.0))
+                        .py(px(10.0))
+                        .text_center()
+                        .child(icon(ICON_MIC, 24.0, colors.ink.opacity(0.35)))
+                        .child(
+                            div()
+                                .mt(px(4.0))
+                                .text_size(px(13.0))
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(colors.ink.opacity(0.86))
+                                .child("Go ahead, I'm listening."),
+                        ),
+                ),
+        )
+        .into_any_element()
 }
