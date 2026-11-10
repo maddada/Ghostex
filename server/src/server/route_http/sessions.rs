@@ -95,6 +95,12 @@ pub(super) async fn route_sessions_http(
                 }
                 let project = repository.resolve_create_session_project(params)?;
                 crate::gbots::refuse_bot_project_create(&project, params)?;
+                // Chief of Staff, a GBot or Ghostex Help starts at most a few sessions per turn.
+                let turn_create = crate::agents::turn_create_cap::check_turn_create_cap(
+                    &state.paths,
+                    repository,
+                    &caller,
+                )?;
                 // A named account is checked against a current usage reading (launch.rs `requested_account`).
                 if params.contains_key("account") {
                     state.accounts.refresh(&state.paths.home_dir, false);
@@ -102,6 +108,7 @@ pub(super) async fn route_sessions_http(
                 let params = &coordinator_runtime::prepare_coordinator_create_params(params)?;
                 let create_params = create_agent_session_params_for_project(db, &project, params)?;
                 let created_session = repository.create_session(&create_params, false)?;
+                crate::agents::turn_create_cap::record_turn_create(turn_create);
                 let session =
                     apply_created_session_identity(repository, &created_session, &create_params)?;
                 let is_coordinator =

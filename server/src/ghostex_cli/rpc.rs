@@ -414,7 +414,7 @@ fn with_agent_caller(pathname: &str, body: &Value) -> Option<Value> {
 }
 
 /// The session this CLI runs in, from the variables Ghostex sets in every session.
-fn caller_session_from_env() -> Option<String> {
+pub(crate) fn caller_session_from_env() -> Option<String> {
     [
         "GHOSTEX_GLOBAL_SESSION_REF",
         "GHOSTEX_NATIVE_SESSION_ID",

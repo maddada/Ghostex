@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **One question to Chief of Staff, a GBot or Ask Ghostex no longer starts a swarm of Help chats:** a Ghostex Help chat that couldn't find an answer used to ask Ghostex Help again, which started another chat that did the same, so one question could fill the "Ghostex" project with a dozen chats and use up your plan. Help now answers from its guide or says the guide doesn't cover it, asking again waits for the answer already on its way, and Chief of Staff, a GBot or Ghostex Help can start at most 6 sessions for one request.
 - **OpenCode keeps showing that it's working for the whole turn:** the chat box shows Stop and the working word until OpenCode finishes, also when OpenCode's plugin stops reporting partway through a long turn (it used to show the Send arrow while OpenCode was still working, #529). On computer, web and phone, once Ghostex is updated on the computer running OpenCode.
 - **Cmd+D from a session in a sidebar folder keeps the split:** the new session joins that folder and opens beside it, instead of landing in the project's own list and leaving the folder; Cmd+Shift+D and the other quick creates there do the same, thanks to @roypadina.
 - **A project's buttons work on an entry that merges two copies:** Add Worktree, History, Create Agent and the launcher's agents open for the copy the entry acts on (another computer's, or a second clone), and the Unified sidebar's project menu works for a project the Project sidebar hides, thanks to @sebastianarena.

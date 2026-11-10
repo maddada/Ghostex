@@ -27,6 +27,7 @@ pub mod terminal_title;
 #[cfg(test)]
 mod tests;
 pub mod title_reconcile;
+pub(crate) mod turn_create_cap;
 pub mod zcode_titles;
 
 pub(crate) use accept_all::*;
