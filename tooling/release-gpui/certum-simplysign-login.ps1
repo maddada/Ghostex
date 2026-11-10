@@ -312,12 +312,22 @@ function Invoke-Login {
     }
     (New-Object -ComObject Shell.Application).MinimizeAll()
     Start-Sleep -Seconds 1
-    # The first start launches the tray service; the second shows the login window.
+    # The first start launches the tray service; the second shows the login
+    # window. SimplySign is an x64 program, so on ARM64 it runs emulated and
+    # starts more slowly: each start gets up to 20 seconds to show its window.
     for ($Launch = 1; $Launch -le 5 -and -not (Get-SimplySignWindow); $Launch++) {
         Start-Process -FilePath $SimplySignExe
-        Start-Sleep -Seconds 4
+        $Shown = [DateTime]::UtcNow.AddSeconds(20)
+        while ([DateTime]::UtcNow -lt $Shown -and -not (Get-SimplySignWindow)) { Start-Sleep -Seconds 2 }
     }
-    if (-not (Get-SimplySignWindow)) { throw "SimplySign Desktop did not open its login window" }
+    if (-not (Get-SimplySignWindow)) {
+        Write-WindowState "SimplySign window missing"
+        Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like "*SimplySign*" -or $_.ProcessName -like "*Certum*" } | ForEach-Object {
+            Write-Host "[SimplySign window missing] process: $($_.ProcessName) id=$($_.Id) window=$($_.MainWindowHandle) title='$($_.MainWindowTitle)' responding=$($_.Responding)"
+        }
+        Save-Screenshot "simplysign-window-missing"
+        throw "SimplySign Desktop did not open its login window"
+    }
     Write-SimplySignText "login window"
 
     $Certificate = $null
