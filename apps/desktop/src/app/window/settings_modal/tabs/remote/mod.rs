@@ -1080,6 +1080,7 @@ impl RemoteTab {
                 | "remote-ssh-off"
                 | "remote-ssh-popover"
                 | "remote-ec-off"
+                | "remote-ec-off-waiting"
                 | "remote-paired-confirm"
         ) {
             self.section = RemoteSection::EasyConnect;

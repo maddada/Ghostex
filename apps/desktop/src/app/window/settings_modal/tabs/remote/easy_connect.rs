@@ -224,8 +224,19 @@ fn easy_connect_body(
     if let Some(error) = status.as_ref().and_then(|status| status.last_error.clone()) {
         body = body.child(error_line(t, error));
     }
+    /*
+    CDXC:RemotePairing 2026-11-10 WHY:
+    Gregg's report (gregg-approval-bug): his phone signs in over SSH and Tailscale, Easy Connect was off, and on his Mac Settings > Remote had no Paired devices list at all, so a phone waiting with its three words had nowhere on the computer to be seen or approved. A phone that signs in over SSH or Tailscale pairs too, so the list (with a waiting phone's words and Approve) shows whenever a phone waits or is paired, Easy Connect on or off; only the Easy Connect parts (its allow-list row, Relay) need it on.
+    */
+    let has_devices = !tab.pending_devices.is_empty()
+        || tab
+            .paired_devices
+            .as_ref()
+            .is_some_and(|devices| !devices.is_empty());
+    if is_on || has_devices {
+        body = body.child(paired_devices::paired_devices_list(tab, t, rpc, is_on, cx));
+    }
     if is_on {
-        body = body.child(paired_devices::paired_devices_list(tab, t, rpc, cx));
         body = body.child(super::relay::relay_section(tab, t, rpc, window, cx));
     }
     body.into_any_element()

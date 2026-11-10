@@ -57,10 +57,13 @@ pub(super) fn remote_row(main: AnyElement, value: Option<AnyElement>) -> AnyElem
         .into_any_element()
 }
 
+/// The paired and waiting devices; `easy_connect_on` adds Easy Connect's "Only paired devices can
+/// connect" row.
 pub(super) fn paired_devices_list(
     tab: &mut RemoteTab,
     t: &RemoteTokens,
     rpc: bool,
+    easy_connect_on: bool,
     cx: &mut Context<RemoteTab>,
 ) -> AnyElement {
     // A confirmation for a device that went away is dropped.
@@ -223,14 +226,14 @@ pub(super) fn paired_devices_list(
         }
         rows.splice(0..0, pending);
     }
-    let paired_only = paired_only_row(tab, t, rpc, cx);
+    let paired_only = easy_connect_on.then(|| paired_only_row(tab, t, rpc, cx));
     v_flex()
         .w_full()
         .min_w_0()
         .gap(px(6.0))
         .child(section_label(t, "Paired devices"))
         .child(rows_frame(t, rows))
-        .child(rows_frame(t, vec![paired_only]))
+        .children(paired_only.map(|row| rows_frame(t, vec![row])))
         .into_any_element()
 }
 

@@ -8,7 +8,9 @@
 //! `remote-paired-confirm` (a paired device's Remove confirmation), `remote-ssh-off`
 //! (RemoteSshAccessOff, Easy Connect expanded), `remote-ssh-link` (SSH off on the Tailscale tab,
 //! its "turn it on in Current machine" link just followed), `remote-ssh-popover` (SSH off with the Windows
-//! instructions open), `remote-ec-off` (RemoteEasyConnectOff, expanded), `remote-tailscale`,
+//! instructions open), `remote-ec-off` (RemoteEasyConnectOff, expanded), `remote-ec-off-waiting` (Easy Connect
+//! off, nothing paired yet, a phone that signs in over SSH waiting with its three words),
+//! `remote-tailscale`,
 //! `remote-tailscale-manual` (Tailscale expanded, typed values shown), `remote-tailscale-qr`
 //! (Tailscale's code in the Show QR dialog), `remote-machines` (the Remote machines tab),
 //! `remote-add-machine`,
@@ -32,6 +34,8 @@ struct RemoteFixture {
     easy_connect: Value,
     access: Value,
     devices: Vec<Value>,
+    /// Phones waiting for approval (`/api/pairedDevices`'s `pending`).
+    pending: Vec<Value>,
 }
 
 thread_local! {
@@ -89,7 +93,8 @@ fn demo_relay() -> Value {
 }
 
 fn fixture_for(state: &str) -> RemoteFixture {
-    let easy_connect_enabled = state != "remote-ec-off";
+    let easy_connect_enabled = !matches!(state, "remote-ec-off" | "remote-ec-off-waiting");
+    let waiting = state == "remote-ec-off-waiting";
     let ssh_enabled = !matches!(
         state,
         "remote-ssh-off" | "remote-ssh-popover" | "remote-ssh-link"
@@ -121,24 +126,42 @@ fn fixture_for(state: &str) -> RemoteFixture {
             },
             "username": "madda",
         }),
-        devices: vec![
-            json!({
-                "id": "dev-1",
-                "lastSeenAt": iso_now_minus_hours(0),
-                "name": "Pixel 9 Pro",
-                "pairedAt": iso_now_minus_hours(0),
-                "platform": "android",
-                "sshKeyFingerprint": "SHA256:aaaa",
-            }),
-            json!({
-                "id": "dev-2",
-                "lastSeenAt": iso_now_minus_hours(26),
-                "name": "Studio",
-                "pairedAt": "2026-09-01T10:00:00.000Z",
-                "platform": "macos",
-                "sshKeyFingerprint": "SHA256:bbbb",
-            }),
-        ],
+        pending: if waiting {
+            vec![json!({
+                "id": "pd_story",
+                "name": "Gregg's iPhone",
+                "platform": "ios",
+                "words": ["teapot", "rabbit", "sparrow"],
+                "approvalId": "apr_story",
+                "requestedAtMs": 0,
+                "expiresAtMs": 0,
+                "overSsh": true,
+            })]
+        } else {
+            Vec::new()
+        },
+        devices: if waiting {
+            Vec::new()
+        } else {
+            vec![
+                json!({
+                    "id": "dev-1",
+                    "lastSeenAt": iso_now_minus_hours(0),
+                    "name": "Pixel 9 Pro",
+                    "pairedAt": iso_now_minus_hours(0),
+                    "platform": "android",
+                    "sshKeyFingerprint": "SHA256:aaaa",
+                }),
+                json!({
+                    "id": "dev-2",
+                    "lastSeenAt": iso_now_minus_hours(26),
+                    "name": "Studio",
+                    "pairedAt": "2026-09-01T10:00:00.000Z",
+                    "platform": "macos",
+                    "sshKeyFingerprint": "SHA256:bbbb",
+                }),
+            ]
+        },
     }
 }
 
@@ -167,7 +190,11 @@ pub(super) fn story_settings(state: &str, settings: &mut Map<String, Value>) {
     // Only the Remote story saves a machine; the SSH-off and Easy-Connect-off stories have none.
     if !matches!(
         state,
-        "remote-ssh-off" | "remote-ssh-popover" | "remote-ec-off" | "remote-empty"
+        "remote-ssh-off"
+            | "remote-ssh-popover"
+            | "remote-ec-off"
+            | "remote-ec-off-waiting"
+            | "remote-empty"
     ) {
         settings.insert(
             "remoteMachines".into(),
@@ -282,7 +309,9 @@ pub(super) fn rpc(path: &str, params: &Value) -> Result<Value, String> {
                 }
                 Ok(result)
             }
-            "/api/pairedDevices" => Ok(json!({ "devices": fixture.devices })),
+            "/api/pairedDevices" => {
+                Ok(json!({ "devices": fixture.devices, "pending": fixture.pending }))
+            }
             // Three pairings from before 11.0.1 still wait (tabs/remote/pair_again.rs), or a real
             // gxserver's answer saved to GHOSTEX_NATIVE_MODAL_DEMO_NOTICE.
             "/api/securityUpgradeNotice" => Ok(crate::security_upgrade_demo::saved_notice()
