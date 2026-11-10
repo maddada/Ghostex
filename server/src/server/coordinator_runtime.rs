@@ -1912,15 +1912,86 @@ pub(crate) fn queue_session_chat_prompt(
     Ok(())
 }
 
-/// `/api/promoteCoordinator`: makes an existing session a coordinator, then queues its playbook
-/// in the session's chat queue, which hands it over only once the agent is idle (never mid-turn).
-/// See the CDXC:Coordinators decision on `promote_session_to_coordinator`.
-pub(crate) fn promote_coordinator(
+/// `/api/promoteCoordinator`: makes an existing session a coordinator, then types its playbook
+/// into the session's chat the way Enter in the chat box does (`send_playbook_now`).
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User: "when we make session into a coordinator from the sidebar then please send the message right away don't queue it". The playbook used to go into the session's chat queue, which holds it like a Tab-queued message until the agent is idle. It now goes through the same send the chat's Send and `ghostex agents send` use: typed and submitted now, picked up by a busy agent at its next input boundary (no interrupt), and a sleeping or closed session is woken and holds it as its first message. The sidebar menu and `ghostex coordinator promote` both reach this one handler. The later "playbook changed" messages (coordinators/playbook.rs) are unchanged.
+/// See also the CDXC:Coordinators decision on `promote_session_to_coordinator`.
+pub(crate) async fn handle_promote_coordinator_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    // The database handle is not Send, so it is dropped before the send below awaits.
+    let promoted = {
+        let db = match open_gxserver_database(&state.paths) {
+            Ok(db) => db,
+            Err(error) => {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "internalError",
+                        message: format!("SQLite gxserver state error: {error}"),
+                    },
+                )
+            }
+        };
+        let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let _identity_source =
+            crate::session_identity_log::identity_write_source(format!("endpoint:{endpoint_path}"));
+        promote_coordinator(state, &db, &repository, &params)
+    };
+    let promoted = match promoted {
+        Ok(promoted) => promoted,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    // The coordinator record is committed, so a failure from here on is reported, not raised.
+    let playbook_error = match promoted.skill_error {
+        Some(error) => Some(error),
+        None => send_playbook_now(state, &promoted.key, &promoted.playbook_message)
+            .await
+            .err(),
+    };
+    let (project_id, session_id) = &promoted.key;
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(
+            request_id,
+            json!({
+                "ok": true,
+                "globalRef": crate::ids::create_global_session_ref(state.metadata.server_id.as_str(), project_id, session_id),
+                "title": promoted.title,
+                // The key keeps its old name for clients that read it: the message is sent, not queued.
+                "playbookQueued": playbook_error.is_none(),
+                "playbookError": playbook_error,
+            }),
+        ),
+    )
+}
+
+/// A promotion's stored record, before its playbook message is sent.
+struct PromotedCoordinator {
+    key: SessionKey,
+    title: String,
+    playbook_message: String,
+    /// Why the orchestrator skill could not be installed (then no message is sent).
+    skill_error: Option<String>,
+}
+
+fn promote_coordinator(
     state: &AppState,
     db: &rusqlite::Connection,
     repository: &DomainRepository<'_>,
     params: &Map<String, Value>,
-) -> std::result::Result<Value, DomainStateError> {
+) -> std::result::Result<PromotedCoordinator, DomainStateError> {
     let promotion = coordinators::promote_session_to_coordinator(
         db,
         state.metadata.server_id.as_str(),
@@ -1928,27 +1999,48 @@ pub(crate) fn promote_coordinator(
     )?;
     let (project_id, session_id) = &promotion.key;
     schedule_presentation_session_delta(state, db, repository, project_id, session_id)?;
-    // The coordinator record is committed, so a failure from here on is reported, not raised.
-    let playbook_error =
+    let skill_error =
         coordinators::ensure_orchestrator_skill_installed(&state.paths, &promotion.family)
-            .and_then(|_| {
-                queue_session_chat_prompt(
-                    state,
-                    project_id,
-                    session_id,
-                    &promotion.playbook_message,
-                    false,
-                )
-            })
             .err()
             .map(|error| error.message);
-    Ok(json!({
-        "ok": true,
-        "globalRef": crate::ids::create_global_session_ref(state.metadata.server_id.as_str(), project_id, session_id),
-        "title": promotion.title,
-        "playbookQueued": playbook_error.is_none(),
-        "playbookError": playbook_error,
-    }))
+    Ok(PromotedCoordinator {
+        key: promotion.key,
+        title: promotion.title,
+        playbook_message: promotion.playbook_message,
+        skill_error,
+    })
+}
+
+/// Sends a promoted session its playbook through the chat's own send: the default `ghostex agents
+/// send` delivery (typed now, a busy agent takes it at its next input boundary, a sleeping session
+/// is woken and holds it as its first message), not the chat queue.
+async fn send_playbook_now(
+    state: &AppState,
+    key: &SessionKey,
+    message: &str,
+) -> std::result::Result<(), String> {
+    let body = json!({
+        "params": {
+            "projectId": key.0,
+            "sessionId": key.1,
+            "text": message,
+            "sendRequestId": Uuid::new_v4().to_string(),
+        }
+    });
+    let routed = crate::session_chat_send::handle_send_session_chat_message_http(
+        state,
+        "/api/sendSessionChatMessage".to_string(),
+        Uuid::new_v4().to_string(),
+        &body,
+    )
+    .await;
+    if routed.response.status().is_success() {
+        return Ok(());
+    }
+    let bytes = to_bytes(routed.response.into_body(), 64 * 1024)
+        .await
+        .unwrap_or_default();
+    Err(String::from_utf8_lossy(&bytes).to_string())
 }
 
 pub(crate) fn handle_coordinator_http(

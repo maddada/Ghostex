@@ -329,7 +329,7 @@ fn promote(parsed: &ParsedArgs) -> CliResult<()> {
         agents::text(&result, "title")
     );
     if result["playbookQueued"].as_bool() == Some(true) {
-        println!("The coordinator skill is installed and the message to read it is queued; it reaches the session once it is idle.");
+        println!("The coordinator skill is installed and the message to read it was sent now; a busy agent takes it at its next input boundary.");
     } else {
         println!(
             "Its coordinator skill or message could not be set up ({}). Send it with: ghostex agents send {reference} \"Run ghostex coordinator guide and follow it from now on.\"",
