@@ -167,8 +167,55 @@ using System.Runtime.InteropServices;
 public static class GhostexWin32 {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 }
 "@
+    Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
+}
+
+# Diagnostics for a login that does not mount the certificate. Window titles,
+# the focused window and the SimplySign window's static text (labels, error
+# messages; edit fields are skipped, so a typed code is never read) go to the
+# log; a screenshot is taken only before anything is typed.
+$DiagnosticsDir = Join-Path ($env:RUNNER_TEMP ?? [IO.Path]::GetTempPath()) "certum-diagnostics"
+
+function Write-WindowState([string]$Label) {
+    $Foreground = [GhostexWin32]::GetForegroundWindow()
+    $ForegroundPid = [uint32]0
+    [GhostexWin32]::GetWindowThreadProcessId($Foreground, [ref]$ForegroundPid) | Out-Null
+    $ForegroundProcess = Get-Process -Id $ForegroundPid -ErrorAction SilentlyContinue
+    Write-Host "[$Label] focused window: $($ForegroundProcess.ProcessName) '$($ForegroundProcess.MainWindowTitle)'"
+    Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object {
+        Write-Host "[$Label] window: $($_.ProcessName) '$($_.MainWindowTitle)'"
+    }
+}
+
+function Write-SimplySignText([string]$Label) {
+    foreach ($Process in @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like "*SimplySign*" -and $_.MainWindowHandle -ne 0 })) {
+        try {
+            $Root = [System.Windows.Automation.AutomationElement]::FromHandle($Process.MainWindowHandle)
+            $Names = $Root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) |
+                Where-Object { $_.Current.ControlType -ne [System.Windows.Automation.ControlType]::Edit -and $_.Current.Name } |
+                ForEach-Object { $_.Current.Name } | Select-Object -Unique -First 25
+            Write-Host "[$Label] SimplySign window '$($Process.MainWindowTitle)' shows: $($Names -join ' | ')"
+        }
+        catch { Write-Host "[$Label] could not read the SimplySign window: $($_.Exception.Message)" }
+    }
+}
+
+function Save-Screenshot([string]$Name) {
+    try {
+        New-Item -ItemType Directory -Force -Path $DiagnosticsDir | Out-Null
+        $Bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+        $Bitmap = [System.Drawing.Bitmap]::new($Bounds.Width, $Bounds.Height)
+        $Graphics = [System.Drawing.Graphics]::FromImage($Bitmap)
+        $Graphics.CopyFromScreen($Bounds.Left, $Bounds.Top, 0, 0, $Bitmap.Size)
+        $Bitmap.Save((Join-Path $DiagnosticsDir "$Name.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+        $Graphics.Dispose(); $Bitmap.Dispose()
+    }
+    catch { Write-Host "Screenshot $Name failed: $($_.Exception.Message)" }
 }
 
 function Get-SimplySignWindow {
@@ -181,6 +228,10 @@ function Enter-SimplySignWindow {
     $Window = Get-SimplySignWindow
     if (-not $Window) { return $false }
     [GhostexWin32]::ShowWindow($Window.MainWindowHandle, 9) | Out-Null
+    # An Alt press lets this process take the foreground (Windows refuses
+    # SetForegroundWindow to a background process otherwise).
+    [GhostexWin32]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
+    [GhostexWin32]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
     [GhostexWin32]::SetForegroundWindow($Window.MainWindowHandle) | Out-Null
     (New-Object -ComObject WScript.Shell).AppActivate($Window.Id) | Out-Null
     Start-Sleep -Milliseconds 500
@@ -240,11 +291,18 @@ function Invoke-Login {
     Import-DesktopAutomation
 
     # The ARM64 runner image can start with a first-run privacy screen and a
-    # System Properties dialog in front of everything (certum-cloud-code-sign
-    # dismisses them the same way); Escape is harmless when nothing is there.
+    # System Properties dialog in front of everything. certum-cloud-code-sign
+    # dismisses the privacy screen with Tab x7 + Enter before SimplySign starts;
+    # done the same way here, then Escape for the Start menu.
+    Write-WindowState "before login"
     if ($env:RUNNER_ARCH -eq "ARM64") {
-        [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+        Save-Screenshot "arm64-desktop-at-start"
+        for ($Tab = 0; $Tab -lt 7; $Tab++) { [System.Windows.Forms.SendKeys]::SendWait("{TAB}"); Start-Sleep -Milliseconds 200 }
+        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+        Start-Sleep -Seconds 2
         Get-Process -Name SystemPropertiesAdvanced, SystemPropertiesPerformance -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+        Start-Sleep -Seconds 1
     }
     (New-Object -ComObject Shell.Application).MinimizeAll()
     Start-Sleep -Seconds 1
@@ -254,6 +312,7 @@ function Invoke-Login {
         Start-Sleep -Seconds 4
     }
     if (-not (Get-SimplySignWindow)) { throw "SimplySign Desktop did not open its login window" }
+    Write-SimplySignText "login window"
 
     $Certificate = $null
     for ($Attempt = 1; $Attempt -le 2 -and -not $Certificate; $Attempt++) {
@@ -272,6 +331,9 @@ function Invoke-Login {
         }
         $Counter = Wait-LoginWindow -Period $Settings.Period
         if (-not (Enter-SimplySignWindow)) { throw "The SimplySign Desktop login window disappeared" }
+        Write-WindowState "attempt $Attempt, before typing"
+        # Only before the first attempt: later the fields still hold what was typed.
+        if ($Attempt -eq 1) { Save-Screenshot "attempt-1-before-typing" }
         $Code = Get-TotpCode -Key $Key -Algorithm $Settings.Algorithm -Digits $Settings.Digits -Counter $Counter
         Add-Mask $Code
         [System.Windows.Forms.SendKeys]::SendWait("^a")
@@ -283,8 +345,19 @@ function Invoke-Login {
         $Code = $null
         Write-Host "Submitted the SimplySign login (attempt $Attempt); waiting for the certificate."
         $Deadline = [DateTime]::UtcNow.AddSeconds(90)
+        $Reported = $false
         while ([DateTime]::UtcNow -lt $Deadline -and -not ($Certificate = Find-Certificate $Thumbprint)) {
             Start-Sleep -Seconds 3
+            if (-not $Reported -and [DateTime]::UtcNow -gt $Deadline.AddSeconds(-75)) {
+                $Reported = $true
+                Write-Host "[attempt $Attempt, 15 s after submitting] SimplySign login window $(if (Get-SimplySignWindow) { 'is still open' } else { 'has closed (login accepted)' })"
+                Write-SimplySignText "attempt $Attempt, 15 s after submitting"
+            }
+        }
+        if (-not $Certificate) {
+            Write-WindowState "attempt $Attempt, no certificate"
+            Write-SimplySignText "attempt $Attempt, no certificate"
+            Get-PnpDevice -Class SmartCardReader, SmartCard -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "[attempt $Attempt] device: $($_.Class) '$($_.FriendlyName)' $($_.Status)" }
         }
     }
     [Array]::Clear($Key, 0, $Key.Length)
