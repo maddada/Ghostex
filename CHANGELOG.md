@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The iPhone's local network question makes sense:** when the app asks to find devices on your local network, it now says Ghostex uses it to reach your computer directly on the same network, instead of a developer message about development servers.
 - **Ghostex for Windows is signed** (#224): the installer and the app (Ghostex.exe, its runtime and helper, the editor, gxserver, wmx and the updater) now carry a code-signing certificate in the developer's name, so Windows SmartScreen and antivirus warnings about an unknown publisher should fade as the certificate gains reputation.
 - **A busy coordinator chat on the phone stays light:** while you watch it, its thread list now sends only what changed, a few KB instead of about 180 KB every few seconds, so it costs far less mobile data (with the next iPhone and Android app).
 - **Make Coordinator sends its first message right away:** turning a session into a coordinator (the sidebar's right-click menu or `ghostex coordinator promote`) now types the message that tells it the role at once, like pressing Enter in the chat, instead of leaving it in the queue until the agent is idle; a busy agent takes it at its next input boundary, and a sleeping or closed session is woken and gets it as its first message.
