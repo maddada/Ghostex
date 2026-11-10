@@ -79,8 +79,8 @@ pub(crate) fn agent_start_failure(
 /// not the agent coming back. The process read is the shared cached snapshot, since a dead agent
 /// whose Working never cleared is probed about every second.
 ///
-/// CDXC:SessionChat 2026-11-09 DECISION:
-/// Sebastian picked a silent signal (Q43, option B) for an agent that dies without the "agent exited" notice (killed, crashed): gxserver tells the chat the agent is not running and Agent work Quiet shows the words it held back, as it does on that notice. No card, no notice and nothing new on screen, and it must not reach the account recovery that keys off the "agent exited" notice, so it is not one.
+/// CDXC:SessionChat 2026-11-09 WHY:
+/// The contributor (sebastianarena, PR #540) chose a silent signal for an agent that dies without the "agent exited" notice (killed, crashed): gxserver tells the chat the agent is not running and Agent work Quiet shows the words it held back, as it does on that notice. No card, no notice and nothing new on screen, and it must not reach the account recovery that keys off the "agent exited" notice, so it is not one.
 /// SEE-ALSO: packages/gx-chat-core/src/session/working.rs (`agent_exited` reads `agentGone`), packages/gx-protocol/src/chat.rs (`ChatSideState::agent_gone`).
 pub(crate) fn agent_left_conversation(
     repository: &DomainRepository<'_>,
