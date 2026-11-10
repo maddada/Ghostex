@@ -399,6 +399,18 @@ fn in_flight() -> &'static Mutex<HashSet<(String, String)>> {
     IN_FLIGHT.get_or_init(Default::default)
 }
 
+/// Waits (up to five seconds) for the background index a read started on this session to finish.
+#[cfg(test)]
+pub(crate) fn wait_for_index_for_test(project_id: &str, session_id: &str) {
+    let key = (project_id.to_string(), session_id.to_string());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while in_flight().lock().is_ok_and(|flying| flying.contains(&key))
+        && std::time::Instant::now() < deadline
+    {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
 /// Builds the index of every thread of this coordinator that has none yet (a resolved or stopped
 /// thread is never swept), once, on background threads.
 pub(crate) fn backfill_threads(

@@ -63,8 +63,10 @@ fn the_read_fingerprint_moves_when_the_agent_is_gone() {
         );
     };
     seed(false);
-    // The first read settles what a read stores (the queue, the agents list).
+    // The first read settles what a read stores (the queue, the agents list) and starts the
+    // session's index on a background thread, whose landing moves the fingerprint once.
     let _ = fingerprint();
+    crate::session_chat_resources::wait_for_index_for_test(&project_id, &session_id);
     let running = fingerprint();
     assert_eq!(fingerprint(), running, "nothing changed, nothing moves");
     seed(true);
