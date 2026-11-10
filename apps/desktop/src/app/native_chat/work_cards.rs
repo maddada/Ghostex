@@ -109,6 +109,9 @@ fn dock_row_action(row: &Value) -> Option<&'static str> {
     }
 }
 
+/// The dock's rows' fold, as the chat's disclosure motion knows it.
+const DOCK_MOTION_KEY: &str = "work-dock:rows";
+
 /// The fold key that shows every dock row in place instead of the first `limit`.
 const DOCK_ALL_ROWS: &str = "dock-rows:all";
 /// The dock's cards fold by themselves while the draft is longer than this.
@@ -278,7 +281,16 @@ impl NativeChatView {
         // row that was not there when it collapsed arrives.
         let collapsible = !rows.is_empty();
         let open = collapsible && dock["hidden"] != true;
-        let header = self.work_dock_header(&rows, collapsible, open, p, cx);
+        // Collapsing or opening, the rows ease their height and fade as the chat's other folds do
+        // (disclosure_motion.rs, its timing and the reduced motion setting), the chevron turning
+        // with them; the bar and the chat box under the dock follow its height.
+        //
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User, of the dock header's collapse: "please make this animate when expanded /
+        // collapsed".
+        let motion = self.disclosure_frame(DOCK_MOTION_KEY, open, cx);
+        let turned = motion.map_or(if open { 1.0 } else { 0.0 }, |frame| frame.log);
+        let header = self.work_dock_header(&rows, collapsible, open, turned, p, cx);
         let mut surface = div()
             .relative()
             .w_full()
@@ -290,7 +302,7 @@ impl NativeChatView {
             .text_size(px(PROSE_SIZE * s))
             .line_height(px(PROSE_LINE_HEIGHT * s))
             .child(header);
-        if open {
+        if open || motion.is_some() {
             let limit = dock["limit"].as_u64().unwrap_or(4) as usize;
             let hidden = rows.len().saturating_sub(limit);
             // "N more need you" opens the rest here, under the first rows, and "Show fewer" folds
@@ -339,7 +351,12 @@ impl NativeChatView {
                         })),
                 );
             }
-            surface = surface.child(list);
+            surface = surface.child(self.disclosure_body_motion(
+                DOCK_MOTION_KEY,
+                motion,
+                0.0,
+                list.into_any_element(),
+            ));
         }
         // Its top edge, which the work items list opens above (chat_pills.rs `toggle_pill_menu`),
         // so the list never covers the button that opened it.
@@ -376,6 +393,7 @@ impl NativeChatView {
         rows: &[Value],
         collapsible: bool,
         open: bool,
+        turned: f32,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -498,7 +516,17 @@ impl NativeChatView {
                         .justify_center()
                         .flex_shrink_0()
                         .rounded(px(6.0 * s))
-                        .child(super::ask_card::chevron(open, p)),
+                        // Down while open, up while collapsed, turning between them.
+                        .child(
+                            svg()
+                                .path("titlebar/chevron-down.svg")
+                                .size(px(14.0 * s))
+                                .flex_shrink_0()
+                                .text_color(p.muted)
+                                .with_transformation(gpui::Transformation::rotate(
+                                    gpui::percentage(0.5 * (1.0 - turned.clamp(0.0, 1.0))),
+                                )),
+                        ),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
                     let kind = if open { "hideWorkDock" } else { "showWorkDock" };
