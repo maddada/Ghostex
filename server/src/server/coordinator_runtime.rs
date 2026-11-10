@@ -1020,6 +1020,7 @@ fn empryo_thread_state(
 }
 
 async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, delivery: Delivery) {
+    let round_started = now_ms();
     let coordinator = delivery.coordinator.clone();
     // CDXC:Coordinators 2026-10-04 WHY: closing a thread and then its coordinator a second apart let a tick queue the thread's "closed" report while the coordinator was still open, and sending it woke the closed coordinator back up. The coordinator is checked again right before sending; a report for a closed one waits until it is resumed.
     let open_state = state.clone();
@@ -1364,7 +1365,12 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
     let gave_up = memory.lock().ok().and_then(|mut memory| {
         memory.in_flight.remove(&coordinator);
         if failed {
-            record_failed_round(&mut memory.retry, &coordinator, delivered_any)
+            record_failed_round(
+                &mut memory.retry,
+                &coordinator,
+                delivered_any,
+                round_started,
+            )
         } else {
             memory.retry.remove(&coordinator);
             memory

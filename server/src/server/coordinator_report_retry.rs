@@ -11,7 +11,7 @@ use super::coordinator_runtime::{now_ms, RETRY_DELAYS_MS};
 /// How long reports to one coordinator keep failing, the computer online, before Ghostex gives up.
 ///
 /// CDXC:Coordinators 2026-11-10 DECISION:
-/// Sebastian (Q29): Ghostex gives up on a coordinator's reports after 10 minutes of failed deliveries while the computer is online, and never gives up while it is offline: time offline or away doesn't count. An outage resets the whole window (`pause_for_outage`), failure time from before it included, and time away the supervisor did not see (the computer asleep) never counts alone: a run must also have made `MIN_FAILED_ATTEMPTS_TO_GIVE_UP` failed attempts. Giving up means no timer and no backstop, and one red "Not sent" row in Notifications: "Coordinator stopped getting reports", "Ghostex tried for 10 minutes and stopped. Check what it is waiting on, then send it a message to try again." A new message accepted for that coordinator (`request_report_retry`) or a gxserver restart makes it try again, and the row turns read only when a delivery round to it then ends with no failure. What waits is each thread's current report, as before: there is no outbox.
+/// Sebastian (Q29): Ghostex gives up on a coordinator's reports after 10 minutes of failed deliveries while the computer is online, and never gives up while it is offline: time offline or away doesn't count. An outage resets the whole window (`pause_for_outage`), failure time from before it included, and time away the supervisor did not see (the computer asleep) never counts: a gap the retries did not run through restarts the run (`AWAY_GAP_MS`), and a run must also have made `MIN_FAILED_ATTEMPTS_TO_GIVE_UP` failed attempts. Giving up means no timer and no backstop, and one red "Not sent" row in Notifications: "Coordinator stopped getting reports", "Ghostex tried for 10 minutes and stopped. Check what it is waiting on, then send it a message to try again." A new message accepted for that coordinator (`request_report_retry`) or a gxserver restart makes it try again, and the row turns read only when a delivery round to it then ends with no failure. What waits is each thread's current report, as before: there is no outbox.
 /// WHY: the retries used to go on every 60 seconds forever, and the user never heard that a coordinator was not getting its threads' reports.
 const GIVE_UP_AFTER_MS: i64 = 10 * 60_000;
 /// The failed attempts, counted since the run's clock last restarted, that the retry schedule
@@ -19,8 +19,11 @@ const GIVE_UP_AFTER_MS: i64 = 10 * 60_000;
 /// this many as well (13 with today's steps).
 ///
 /// CDXC:Coordinators 2026-11-10 WHY:
-/// The clock alone can count time away: a computer that slept for hours, an outage the supervisor did not tick through, or a send left pending through a sleep all leave `failing_since` where it was, so one failure afterwards gave up at once on time that was never spent retrying. Each counted attempt waited its schedule step first (a sleep can stand in for at most one step), so a run that also reached this count really retried for about 10 minutes. This replaces an earlier rule that read a long gap between rounds as time away, which missed a sleep in the middle of a send.
+/// The clock alone can count time away: a computer that slept for hours, an outage the supervisor did not tick through, or a send left pending through a sleep all leave `failing_since` where it was, so one failure afterwards gave up at once on time that was never spent retrying. Two rules keep it out, and both are needed. A round that starts more than `AWAY_GAP_MS` after the run's last failure did not follow the schedule, so the gap is time away and the run starts over (clock and count): that covers a sleep, a missed outage or a late tick during a retry wait, which the count alone would let through (12 real failures, hours asleep, one failure on waking). This count covers a sleep in the middle of a send, which the gap cannot see because the round started on time: one failure after it cannot give up alone. What is left, a long sleep during the 13th send after 12 real failures, is a fair give-up: those 12 failures were about 10 minutes of real retrying.
 const MIN_FAILED_ATTEMPTS_TO_GIVE_UP: usize = attempts_within(GIVE_UP_AFTER_MS);
+/// A round that starts this long after the run's last failure did not follow the retry schedule
+/// (its longest step, twice over): the time between was spent away, not failing.
+const AWAY_GAP_MS: i64 = 2 * RETRY_DELAYS_MS[RETRY_DELAYS_MS.len() - 1];
 
 /// How many failed attempts the retry schedule makes from a run's first failure until `window`
 /// has passed, the first failure included.
@@ -52,6 +55,8 @@ pub(super) struct FailureStreak {
     failing_since: i64,
     /// Failed attempts since `failing_since` (the run's clock) last restarted.
     attempts: usize,
+    /// When its last failed round was recorded.
+    last_failed_at: i64,
     /// Ghostex gave up: no attempt until `request_report_retry` or a restart.
     gave_up: bool,
 }
@@ -109,13 +114,15 @@ pub(super) fn waits_for_retry(
     false
 }
 
-/// Counts a round that ended in a failure; `Some((failures, failing_ms))` when it makes Ghostex
-/// give up on the coordinator: 10 minutes of failing and `MIN_FAILED_ATTEMPTS_TO_GIVE_UP` attempts
-/// since the run's clock last restarted.
+/// Counts a round that began at `round_started` and ended in a failure; `Some((failures,
+/// failing_ms))` when it makes Ghostex give up on the coordinator: 10 minutes of failing and
+/// `MIN_FAILED_ATTEMPTS_TO_GIVE_UP` attempts since the run's clock last restarted. A round that
+/// started more than `AWAY_GAP_MS` after the last failure restarts the clock and the count.
 pub(super) fn record_failed_round(
     retry: &mut HashMap<SessionKey, FailureStreak>,
     coordinator: &SessionKey,
     delivered_any: bool,
+    round_started: i64,
 ) -> Option<(usize, i64)> {
     let mut gave_up = None;
     let now = now_ms();
@@ -124,13 +131,15 @@ pub(super) fn record_failed_round(
         retry_at: now,
         failing_since: now,
         attempts: 0,
+        last_failed_at: now,
         gave_up: false,
     });
-    if delivered_any {
+    if delivered_any || round_started - streak.last_failed_at > AWAY_GAP_MS {
         streak.failing_since = now;
         streak.attempts = 0;
     }
     streak.attempts += 1;
+    streak.last_failed_at = now;
     let delay = RETRY_DELAYS_MS[streak.failures.min(RETRY_DELAYS_MS.len() - 1)];
     streak.failures += 1;
     streak.retry_at = now + delay;
