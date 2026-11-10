@@ -50,6 +50,15 @@ pub(super) async fn route_chat_http(
             )
             .await
         }
+        "/api/voiceAgentText" => {
+            crate::voice_agent::handle_voice_agent_text_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/forgetVoiceAgentMemory" => {
             crate::voice_agent::handle_forget_voice_agent_memory_http(
                 &state,
