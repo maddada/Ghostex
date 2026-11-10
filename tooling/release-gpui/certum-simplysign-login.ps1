@@ -290,19 +290,25 @@ function Invoke-Login {
     Test-Totp
     Import-DesktopAutomation
 
-    # The ARM64 runner image can start with a first-run privacy screen and a
-    # System Properties dialog in front of everything. certum-cloud-code-sign
-    # dismisses the privacy screen with Tab x7 + Enter before SimplySign starts;
-    # done the same way here, then Escape for the Start menu.
+    # The ARM64 runner image (windows-11-vs2026-arm) starts with Windows'
+    # first-run "Choose privacy settings for your device" screen covering the
+    # desktop and holding the focus (process WWAHost): in test run 42722612240
+    # the login was typed into it, and Tab x7 + Enter (certum-cloud-code-sign's
+    # dismissal) did not clear it in 42730081540. Closing its process does; a
+    # System Properties dialog and the WSL console can be up as well.
     Write-WindowState "before login"
-    if ($env:RUNNER_ARCH -eq "ARM64") {
-        Save-Screenshot "arm64-desktop-at-start"
-        for ($Tab = 0; $Tab -lt 7; $Tab++) { [System.Windows.Forms.SendKeys]::SendWait("{TAB}"); Start-Sleep -Milliseconds 200 }
-        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-        Start-Sleep -Seconds 2
-        Get-Process -Name SystemPropertiesAdvanced, SystemPropertiesPerformance -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
-        Start-Sleep -Seconds 1
+    $FirstRun = @(Get-Process -Name WWAHost -ErrorAction SilentlyContinue)
+    if ($FirstRun.Count -gt 0) {
+        Save-Screenshot "desktop-at-start"
+        $FirstRun | Stop-Process -Force -ErrorAction SilentlyContinue
+        Write-Host "Closed the Windows first-run screen (WWAHost)."
+    }
+    Get-Process -Name SystemPropertiesAdvanced, SystemPropertiesPerformance -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Get-Process -Name wsl -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object { $_.CloseMainWindow() | Out-Null }
+    Start-Sleep -Seconds 2
+    if ($FirstRun.Count -gt 0) {
+        Save-Screenshot "desktop-after-closing-first-run"
+        Write-WindowState "after closing the first-run screen"
     }
     (New-Object -ComObject Shell.Application).MinimizeAll()
     Start-Sleep -Seconds 1
@@ -332,6 +338,12 @@ function Invoke-Login {
         $Counter = Wait-LoginWindow -Period $Settings.Period
         if (-not (Enter-SimplySignWindow)) { throw "The SimplySign Desktop login window disappeared" }
         Write-WindowState "attempt $Attempt, before typing"
+        $FocusPid = [uint32]0
+        [GhostexWin32]::GetWindowThreadProcessId([GhostexWin32]::GetForegroundWindow(), [ref]$FocusPid) | Out-Null
+        if ((Get-Process -Id $FocusPid -ErrorAction SilentlyContinue).ProcessName -notlike "*SimplySign*") {
+            if ($Attempt -eq 1) { Save-Screenshot "attempt-1-focus-elsewhere" }
+            throw "SimplySign Desktop is not the focused window, so the login was not typed (see the window list above)"
+        }
         # Only before the first attempt: later the fields still hold what was typed.
         if ($Attempt -eq 1) { Save-Screenshot "attempt-1-before-typing" }
         $Code = Get-TotpCode -Key $Key -Algorithm $Settings.Algorithm -Digits $Settings.Digits -Counter $Counter
