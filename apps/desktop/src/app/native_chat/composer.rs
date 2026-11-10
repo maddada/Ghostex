@@ -462,6 +462,11 @@ impl NativeChatView {
         if let Some(card) = self.render_catch_up(p, window, cx) {
             waiting.push(card.into_any_element());
         }
+        // A coordinator's dock: its open asks and the status line, right above the box
+        // (work_cards.rs).
+        if !maximized && let Some(dock) = self.render_work_dock(p, cx) {
+            waiting.push(dock);
+        }
         self.sync_files_links_menu(window, cx);
         self.sync_resource_modal_menu(window, cx);
         if maximized && let Some(suggestions) = self.inline_suggestions(window, cx) {

@@ -49,6 +49,8 @@ pub fn assemble_with(
         &open_asks,
     );
     document.work_cards = ghostex_gx_protocol::Tri::Value(work_cards);
+    document.work_dock =
+        ghostex_gx_protocol::Tri::Value(crate::extras::work_cards::dock(state, context));
     document.work_ask_tags = ghostex_gx_protocol::Tri::Value(serde_json::json!(
         crate::extras::work_cards::card_tags(state)
     ));

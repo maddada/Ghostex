@@ -276,6 +276,147 @@ fn ask_buttons(item: &Value, ask: &Value, key: &str, picked: Option<&str>) -> Ve
         .collect()
 }
 
+/// An ask's card: its question, what waits on it, the work it belongs to, and its buttons while
+/// open; folded once settled (its answer whole in `foldOutcome`).
+fn ask_card(
+    item: &Value,
+    ask: &Value,
+    picked: Option<&str>,
+    at: i64,
+    now_ms: i64,
+    context: &ChatContext,
+) -> Value {
+    let reference = text(item, "ref");
+    let tag = text(ask, "tag");
+    let key = format!("work-ask:{reference}:{tag}");
+    let open = ask["open"] == true && picked.is_none();
+    let answered: String = text(ask, "answered").chars().take(200).collect();
+    let line = if ask["holds"] == true {
+        format!("{} waits on this", text(item, "title"))
+    } else {
+        "Nothing waits on it".to_string()
+    };
+    let mut ask_chips = vec![json!({ "kind": "item", "label": text(item, "title") })];
+    if !text(ask, "steps").is_empty() {
+        ask_chips.push(steps_chip(text(ask, "steps")));
+    }
+    let ask_status = if ask["holds"] == true {
+        "blocked"
+    } else {
+        "needs"
+    };
+    let buttons = if open || (picked.is_some() && ask["open"] == true) {
+        ask_buttons(item, ask, &key, picked)
+    } else {
+        Vec::new()
+    };
+    json!({
+        "key": key,
+        "kind": "ask",
+        "folded": ask["open"] != true,
+        "ref": reference,
+        "title": text(ask, "text"),
+        "status": ask_status,
+        "statusLabel": status_label(ask_status),
+        "tag": tag,
+        "holds": ask["holds"] == true,
+        "line": line,
+        "chips": ask_chips,
+        "buttons": buttons,
+        "busy": picked.is_some() && ask["open"] == true,
+        // A settled ask's line: a check once answered or done.
+        "foldStatus": if ask["open"] == true { ask_status } else { "finished" },
+        "answered": answered,
+        "foldText": format!("{tag} \u{b7} {}", text(ask, "text")),
+        "foldOutcome": if answered.is_empty() { "Answered".to_string() } else { answered.clone() },
+        "age": crate::transcript::message_time::age_label(now_ms, at),
+        "time": clock(at, context),
+    })
+}
+
+/// The dock above a coordinator's chat box: `{cards, line}`. `cards` is every open ask, newest
+/// first, as its full card with its buttons; `line` is the one status line under them
+/// (`{parts: [{text, tone, group}]}`, "1 needs you · 5 in progress · 1 waiting"), counted from the
+/// Work panel's own groups (`work_panel::work_board`), so the line and the panel never disagree.
+/// `null` when the chat is not a coordinator's or it has no work.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User (placement page, "C. Asks docked, the rest one line", with "Asks, blocked, done card,
+/// should be shown there. also please let's show those inline htmls from the agent replies there
+/// docked above while not answered. also for any ask i should be able to click 'Snooze' and snooze
+/// it for 1h 6h 24h or cancel it"): what needs him docks above the chat box as its full card, and
+/// everything else is one status line under it that opens the Work panel. An open ask is drawn
+/// only there, never also under its reply; it leaves the dock once settled.
+pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
+    let Some(work) = state
+        .session
+        .coordinator_threads
+        .as_ref()
+        .and_then(|threads| threads.get("work"))
+    else {
+        return Value::Null;
+    };
+    let items: Vec<&Value> = work["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|item| item["kind"] == "item" && text(item, "status") != "dropped")
+        .collect();
+    if items.is_empty() {
+        return Value::Null;
+    }
+    let now_ms = context.now_millis();
+    let answers = &state.extras.panels.board_answers;
+    let mut cards: Vec<(i64, Value)> = Vec::new();
+    for item in &items {
+        for ask in item["asks"].as_array().into_iter().flatten() {
+            if ask["open"] != true {
+                continue;
+            }
+            let key = format!("work-ask:{}:{}", text(item, "ref"), text(ask, "tag"));
+            let at = at_ms(text(ask, "askedAt")).unwrap_or(now_ms);
+            cards.push((
+                at,
+                ask_card(
+                    item,
+                    ask,
+                    answers.get(&key).map(String::as_str),
+                    at,
+                    now_ms,
+                    context,
+                ),
+            ));
+        }
+    }
+    cards.sort_by(|left, right| right.0.cmp(&left.0));
+    let board = crate::extras::work_panel::work_board(work);
+    let total = |group: &str| {
+        board["groups"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|entry| entry["id"] == group)
+            .and_then(|entry| entry["total"].as_u64())
+            .unwrap_or(0)
+    };
+    let mut parts = Vec::new();
+    for (group, words, tone) in [
+        ("needs", "needs you", "question"),
+        ("blocked", "blocked", "bad"),
+        ("moving", "in progress", ""),
+        ("hold", "waiting", ""),
+    ] {
+        let count = total(group);
+        if count > 0 {
+            parts.push(json!({ "text": format!("{count} {words}"), "tone": tone, "group": group }));
+        }
+    }
+    json!({
+        "cards": cards.into_iter().map(|(_, card)| card).collect::<Vec<_>>(),
+        "line": { "parts": parts },
+    })
+}
+
 /// The cards, in transcript order: `[{ key, kind ("item" | "ask"), anchorId, turnId, folded,
 /// ref, title, status, statusLabel, line, chips: [{kind, label}], age, at, foldText, time, tag,
 /// holds, buttons: [{label, recommended, picked, command}], answered, busy }]`, and the open asks
@@ -354,70 +495,27 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
                     continue;
                 }
                 let key = format!("work-ask:{reference}:{tag}");
-                let picked = answers.get(&key).map(String::as_str);
-                let open = ask["open"] == true && picked.is_none();
-                let answered: String = text(ask, "answered").chars().take(200).collect();
                 let at = at_ms(text(event, "at")).unwrap_or(first_at);
-                let line = if ask["holds"] == true {
-                    format!("{} waits on this", text(item, "title"))
-                } else {
-                    "Nothing waits on it".to_string()
-                };
-                let mut ask_chips = vec![json!({ "kind": "item", "label": text(item, "title") })];
-                if !text(ask, "steps").is_empty() {
-                    ask_chips.push(steps_chip(text(ask, "steps")));
-                }
-                let ask_status = if ask["holds"] == true {
-                    "blocked"
-                } else {
-                    "needs"
-                };
-                let buttons = if open || (picked.is_some() && ask["open"] == true) {
-                    ask_buttons(item, ask, &key, picked)
-                } else {
-                    Vec::new()
-                };
-                let ask_fold = format!("{tag} \u{b7} {}", text(ask, "text"));
-                let ask_outcome = if answered.is_empty() {
-                    "Answered".to_string()
-                } else {
-                    answered.clone()
-                };
                 if ask["open"] == true {
                     open_asks.push(OpenAsk {
                         key: key.clone(),
                         anchor: anchor.to_string(),
                         at,
                     });
+                    // An open ask waits in the dock above the chat box (`dock`), not here.
+                    continue;
                 }
-                cards.push((
-                    turn.start_ms,
-                    if ask["open"] == true { 0 } else { 5 },
+                let mut card = ask_card(
+                    item,
+                    ask,
+                    answers.get(&key).map(String::as_str),
                     at,
-                    json!({
-                        "key": key,
-                        "kind": "ask",
-                        "anchorId": anchor,
-                        "turnId": turn.id,
-                        "folded": ask["open"] != true,
-                        "ref": reference,
-                        "title": text(ask, "text"),
-                        "status": ask_status,
-                        "statusLabel": status_label(ask_status),
-                        "tag": tag,
-                        "holds": ask["holds"] == true,
-                        "line": line,
-                        "chips": ask_chips,
-                        "buttons": buttons,
-                        "busy": picked.is_some() && ask["open"] == true,
-                        // A settled ask's line: a check once answered or done.
-                        "foldStatus": if ask["open"] == true { ask_status } else { "finished" },
-                        "answered": answered,
-                        "foldText": ask_fold,
-                        "foldOutcome": ask_outcome,
-                        "time": clock(at, context),
-                    }),
-                ));
+                    now_ms,
+                    context,
+                );
+                card["anchorId"] = json!(anchor);
+                card["turnId"] = json!(turn.id);
+                cards.push((turn.start_ms, 5, at, card));
             }
             // The item's own card, unless the turn only asked.
             if events.iter().all(|event| text(event, "kind") == "ask") {
