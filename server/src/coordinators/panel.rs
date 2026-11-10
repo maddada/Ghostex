@@ -157,7 +157,8 @@ pub fn insert_coordinator_threads(
 
 /// One thread's panel row, kept while nothing it was built from has changed.
 struct CachedRow {
-    thread: ThreadRecord,
+    /// Shared with the kept threads (thread_reads.rs), so its text is in memory once.
+    thread: std::sync::Arc<ThreadRecord>,
     /// A hash of the session row's stored columns, `None` when the row is gone.
     session: Option<u64>,
     row: Value,
@@ -674,7 +675,7 @@ pub fn refresh_coordinator_panels(
     let all_threads = super::read_all_threads(db).ok();
     let threads = all_threads
         .as_ref()
-        .map(super::AllThreads::ordered)
+        .map(super::AllThreads::ordered_shared)
         .unwrap_or_default();
     let remote_threads = list_remote_threads(db).unwrap_or_default();
     let mut board_items = super::work::list_all_work_items(db);
@@ -761,7 +762,7 @@ pub fn refresh_coordinator_panels(
                     next_rows.insert(
                         thread_key.clone(),
                         CachedRow {
-                            thread: thread.clone(),
+                            thread: std::sync::Arc::clone(thread),
                             session: fingerprint,
                             recent_until: recent_until(&row),
                             live: live.clone(),

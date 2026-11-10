@@ -10,9 +10,18 @@
 //! another coordinator, clearing `closedWithCoordinatorAt`) change a short column the query reads.
 //! The panels are still built after the tick's supervision, from a fresh read of the open threads,
 //! so a thread's change reaches the board on the tick it happened (coordinator_runtime.rs `tick`).
+//!
+//! CDXC:Coordinators 2026-11-10 WHY (review): the kept threads are per database file, so two
+//! databases in one process (parallel tests) never see each other's. Two text-only writes within
+//! one millisecond would leave the short columns equal, so a resolved thread's text is reused only
+//! once it was read at least [`SETTLE_MS`] after its own `updatedAt`: every thread write stamps the
+//! current time, so no later write can carry that `updatedAt` (a clock set back could still).
+//! Recently changed threads are simply read again on each tick until then. The threads are held as
+//! `Arc`s that the panel's row cache shares (panel.rs `CachedRow`), which kept a full copy of every
+//! thread before this cache existed, so their text is in memory once, as it was before.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     sync::{Arc, Mutex, OnceLock},
 };
 
@@ -28,19 +37,28 @@ use crate::domain::DomainStateError;
 const FINGERPRINT_COLUMNS: &str = "projectId, sessionId, coordinatorProjectId, coordinatorSessionId, resolvedAt, observedWorking, reportedAt, reportedPromptKey, pendingMessageAt, closedWithCoordinatorAt, createdAt, updatedAt, rowid";
 
 /// A thread and its `rowid`, for the merge order.
-type Placed = (i64, ThreadRecord);
+type Placed = (i64, Arc<ThreadRecord>);
 
-/// A resolved thread's key, its short columns as one text, and its `rowid`.
-type Fingerprint = (SessionKey, String, i64);
+/// A resolved thread's key, its short columns as one text, its `rowid` and its `updatedAt` in ms.
+type Fingerprint = (SessionKey, String, i64, Option<i64>);
+
+/// How long after its `updatedAt` a resolved thread's text is read before it is kept.
+const SETTLE_MS: i64 = 2_000;
+
+/// Databases whose resolved threads are kept at once (tests open a few in one process).
+const MAX_DATABASES: usize = 4;
 
 #[derive(Default)]
 struct ResolvedThreads {
+    database: String,
     fingerprints: Vec<Fingerprint>,
     threads: Arc<Vec<Placed>>,
+    /// Per thread, whether its text was read late enough to be reused (`SETTLE_MS`).
+    settled: Vec<bool>,
 }
 
-fn resolved_cache() -> &'static Mutex<ResolvedThreads> {
-    static CACHE: OnceLock<Mutex<ResolvedThreads>> = OnceLock::new();
+fn resolved_cache() -> &'static Mutex<VecDeque<ResolvedThreads>> {
+    static CACHE: OnceLock<Mutex<VecDeque<ResolvedThreads>>> = OnceLock::new();
     CACHE.get_or_init(Default::default)
 }
 
@@ -57,6 +75,14 @@ impl AllThreads {
 
     /// Open and resolved threads merged back into `createdAt` order.
     pub(crate) fn ordered(&self) -> Vec<&ThreadRecord> {
+        self.ordered_shared()
+            .into_iter()
+            .map(|thread| &**thread)
+            .collect()
+    }
+
+    /// `ordered`, as the shared records, for a cache that keeps them (panel.rs).
+    pub(crate) fn ordered_shared(&self) -> Vec<&Arc<ThreadRecord>> {
         let mut merged = Vec::with_capacity(self.open.len() + self.resolved.len());
         let (mut open, mut resolved) =
             (self.open.iter().peekable(), self.resolved.iter().peekable());
@@ -93,7 +119,7 @@ pub(crate) fn read_all_threads(db: &Connection) -> Result<AllThreads, DomainStat
             ))
             .map_err(sql_error)?;
         let rows = statement
-            .query_map([], |row| Ok((row.get(0)?, thread_from_row(row)?)))
+            .query_map([], |row| Ok((row.get(0)?, Arc::new(thread_from_row(row)?))))
             .map_err(sql_error)?;
         rows.collect::<Result<Vec<Placed>, _>>()
             .map_err(sql_error)?
@@ -129,39 +155,67 @@ fn read_resolved_threads(db: &Connection) -> Result<Arc<Vec<Placed>>, DomainStat
                     }
                     fingerprint.push('\u{1f}');
                 }
+                let updated_at = row
+                    .get::<_, Option<String>>(11)?
+                    .and_then(|text| chrono::DateTime::parse_from_rfc3339(&text).ok())
+                    .map(|time| time.timestamp_millis());
                 Ok((
                     (row.get(0)?, row.get(1)?),
                     fingerprint,
                     row.get::<_, i64>(12)?,
+                    updated_at,
                 ))
             })
             .map_err(sql_error)?;
         rows.collect::<Result<Vec<Fingerprint>, _>>()
             .map_err(sql_error)?
     };
-    let Ok(mut cache) = resolved_cache().lock() else {
+    // An in-memory database has no file to key it by, and is read whole each time.
+    let Some(database) = db
+        .path()
+        .filter(|path| !path.is_empty())
+        .map(str::to_string)
+    else {
         return Ok(Arc::new(read_threads_by_key(db, &fingerprints)?));
     };
-    if cache.fingerprints == fingerprints {
-        return Ok(cache.threads.clone());
+    let Ok(mut caches) = resolved_cache().lock() else {
+        return Ok(Arc::new(read_threads_by_key(db, &fingerprints)?));
+    };
+    let cache = match caches.iter().position(|entry| entry.database == database) {
+        Some(index) => caches.remove(index).unwrap_or_default(),
+        None => ResolvedThreads {
+            database: database.clone(),
+            ..Default::default()
+        },
+    };
+    if cache.fingerprints == fingerprints && cache.settled.iter().all(|settled| *settled) {
+        let threads = cache.threads.clone();
+        caches.push_back(cache);
+        return Ok(threads);
     }
+    let now = chrono::Utc::now().timestamp_millis();
     let known: HashMap<&SessionKey, (&String, &Placed)> = cache
         .fingerprints
         .iter()
         .zip(cache.threads.iter())
-        .map(|((key, fingerprint, _), placed)| (key, (fingerprint, placed)))
+        .zip(cache.settled.iter())
+        .filter(|(_, settled)| **settled)
+        .map(|(((key, fingerprint, _, _), placed), _)| (key, (fingerprint, placed)))
         .collect();
     let mut threads = Vec::with_capacity(fingerprints.len());
-    for (key, fingerprint, rowid) in &fingerprints {
+    let mut settled = Vec::with_capacity(fingerprints.len());
+    for (key, fingerprint, rowid, updated_at) in &fingerprints {
         match known.get(key) {
             Some((known_fingerprint, placed)) if *known_fingerprint == fingerprint => {
                 threads.push((*placed).clone());
+                settled.push(true);
             }
             _ => {
                 // A thread reopened or removed since the short read is simply left out until the
                 // next tick reads it again.
                 if let Some(thread) = read_thread(db, key)?.filter(ThreadRecord::is_resolved) {
-                    threads.push((*rowid, thread));
+                    threads.push((*rowid, Arc::new(thread)));
+                    settled.push(updated_at.is_some_and(|at| now - at >= SETTLE_MS));
                 }
             }
         }
@@ -169,10 +223,15 @@ fn read_resolved_threads(db: &Connection) -> Result<Arc<Vec<Placed>>, DomainStat
     let threads = Arc::new(threads);
     // Kept only when every row was read as fingerprinted, so a skipped row is read again next tick.
     if threads.len() == fingerprints.len() {
-        cache.fingerprints = fingerprints;
-        cache.threads = threads.clone();
-    } else {
-        *cache = ResolvedThreads::default();
+        if caches.len() >= MAX_DATABASES {
+            caches.pop_front();
+        }
+        caches.push_back(ResolvedThreads {
+            database,
+            fingerprints,
+            threads: threads.clone(),
+            settled,
+        });
     }
     Ok(threads)
 }
@@ -182,11 +241,11 @@ fn read_threads_by_key(
     fingerprints: &[Fingerprint],
 ) -> Result<Vec<Placed>, DomainStateError> {
     let mut threads = Vec::with_capacity(fingerprints.len());
-    for (key, _, rowid) in fingerprints {
+    for (key, _, rowid, _) in fingerprints {
         threads.extend(
             read_thread(db, key)?
                 .filter(ThreadRecord::is_resolved)
-                .map(|thread| (*rowid, thread)),
+                .map(|thread| (*rowid, Arc::new(thread))),
         );
     }
     Ok(threads)
