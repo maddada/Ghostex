@@ -52,6 +52,9 @@ impl QuietLines {
     }
 }
 
+/// The space between a shut line and the reply that ends it.
+const LINE_TO_REPLY: f32 = 8.0;
+
 /// Where a row stands among the lines.
 #[derive(Clone, Copy)]
 pub(super) struct QuietPlace {
@@ -67,7 +70,6 @@ fn rail(rows: Vec<AnyElement>, bottom: f32, p: &ChatAppearance) -> AnyElement {
     div()
         .flex()
         .flex_col()
-        .w_full()
         .min_w_0()
         .ml(px(6.0 * s))
         .pl(px(16.0 * s))
@@ -242,16 +244,19 @@ impl NativeChatView {
         self.is_expanded(&line.key, line.open)
     }
 
-    /// Whether row `index` sits on an opened line's rail down to the next row, so its column keeps
-    /// no gap of its own below it (transcript.rs).
-    pub(super) fn quiet_row_is_railed(&self, index: usize) -> bool {
+    /// The gap row `index` keeps below it when a line changes it (transcript.rs): none on an opened
+    /// line's rail, which runs on to the next row; a shut line's own small gap above the reply that
+    /// ends it.
+    pub(super) fn quiet_row_bottom(&self, index: usize, p: &ChatAppearance) -> Option<f32> {
         let lines = self.quiet_lines();
-        lines.rows.get(&index).is_some_and(|at| {
-            let line = &lines.lines[*at];
-            self.quiet_open(line)
-                && line.tail.as_ref().is_none_or(|tail| tail.row != index)
-                && index + 1 < line.end
-        })
+        let line = &lines.lines[*lines.rows.get(&index)?];
+        let tail_row = line.tail.as_ref().map(|tail| tail.row);
+        if self.quiet_open(line) {
+            (tail_row != Some(index) && index + 1 < line.end).then_some(0.0)
+        } else {
+            (index == line.start && tail_row.is_some_and(|row| row > index))
+                .then(|| LINE_TO_REPLY * p.scale)
+        }
     }
 
     /// Row `index` under Quiet View, or `None` when a shut line draws nothing for it.
@@ -323,7 +328,13 @@ impl NativeChatView {
                         ));
                     }
                     self.hide_file_changes = false;
-                    let gap = if parts.is_empty() { 0.0 } else { p.row_gap() };
+                    let gap = if parts.is_empty() {
+                        0.0
+                    } else if open {
+                        p.row_gap()
+                    } else {
+                        LINE_TO_REPLY
+                    };
                     let mut first = true;
                     for (part, above) in spaced_tail(drawn, false, None, p) {
                         let above = if std::mem::take(&mut first) {

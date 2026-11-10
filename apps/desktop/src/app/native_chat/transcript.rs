@@ -173,7 +173,7 @@ impl NativeChatView {
             },
             None => self.item_content(item, items.get(index + 1), main, &p, window, cx),
         };
-        let flush = main && self.quiet_row_is_railed(index);
+        let bottom = main.then(|| self.quiet_row_bottom(index, &p)).flatten();
         self.detail_rows.end_row();
         self.row_find = None;
         self.row_label_find = None;
@@ -195,11 +195,11 @@ impl NativeChatView {
                 };
                 this.pt(px(32.0 * s + header))
             })
-            // A row on an opened quiet line's rail keeps the rail through the gap below it.
-            .child(if flush {
-                self.transcript_row_column(&p).pb_0().child(content)
-            } else {
-                self.transcript_row_column(&p).child(content)
+            // A row on an opened quiet line's rail keeps the rail through the gap below it, and a
+            // shut line sits close to its reply (quiet_view.rs).
+            .child(match bottom {
+                Some(bottom) => self.transcript_row_column(&p).pb(px(bottom)).child(content),
+                None => self.transcript_row_column(&p).child(content),
             })
             .into_any_element()
     }
