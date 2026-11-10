@@ -68,7 +68,7 @@ fn read_remote_model_catalog(
         });
     }
     let mut stream = gpui_remote_gxserver_open_presentation_websocket(target, &cancel).ok()?;
-    let frame_timeout = stream.read_timeout().ok().flatten();
+    let frame_timeout = stream.read_timeout().ok()?;
     let mut liveness = GpuiRemoteGxserverPresentationLiveness::new();
     let mut ready = false;
     let mut last_frame = Instant::now();
