@@ -15,6 +15,7 @@
 //! CDXC:SessionChat 2026-10-14 SEE-ALSO:
 //! questions/open_questions.rs steps the pill and lands the jumps (the document's `openQuestions`); apps/desktop/src/app/native_chat/open_questions.rs and apps/mobile/app/src/chat/native/transcript/OpenQuestions.tsx draw the pill and the highlight; server/src/ghostex_cli/show.rs writes a page block's `"questions"`; skills/ghostex-visuals/SKILL.md teaches tags and `withdraw`. Change them together.
 
+use crate::state::ChatRow;
 use std::collections::HashSet;
 
 use ghostex_gx_protocol::{ChatMessage, ChatRole};
@@ -174,14 +175,20 @@ fn same_tag(a: &str, b: &str) -> bool {
 
 /// Every form and question page the agent's replies hold, oldest first, once each.
 /// `answered` lists the ids whose answers the transcript carries (`page_answers.rs`).
-pub fn askers(messages: &[ChatMessage], answered: &[String]) -> Vec<Asker> {
-    settle_askers(&asker_entries(messages, &[]), answered)
+pub fn askers(messages: &[ChatRow], answered: &[String]) -> Vec<Asker> {
+    settle_askers(
+        &asker_entries(crate::state::messages_of(messages), &[]),
+        answered,
+    )
 }
 
 /// What the replies in `messages` ask and withdraw, and what the reader's messages answer in words,
 /// in order: the reading half of [`askers`]. `prior` is what the messages before these already
 /// held, so a form or page they asked first is not counted again here.
-pub fn asker_entries(messages: &[ChatMessage], prior: &[Found]) -> Vec<Found> {
+pub fn asker_entries<'a>(
+    messages: impl IntoIterator<Item = &'a ChatMessage>,
+    prior: &[Found],
+) -> Vec<Found> {
     let mut found: Vec<Found> = Vec::new();
     for message in messages {
         if message.role == ChatRole::User {
@@ -544,7 +551,7 @@ pub fn mark_skipped(
 ///
 /// CDXC:SessionStatus 2026-10-23 DECISION:
 /// User, asked whether a fork should count the open questions it inherits from the conversation it was forked from: "No, only questions asked after the fork". The pink question dot, `answer requested (n)` and the Previous question pill count only questions the fork itself asked; the parent still counts its own. The fork point is the time gxserver created the forked session (`forkedAt`, from its `createdAt`): a Claude fork copies the parent's lines with their original times, all older than that, and every line the fork writes is newer.
-pub fn mark_inherited(askers: &mut [Asker], messages: &[ChatMessage], forked_at: Option<i64>) {
+pub fn mark_inherited(askers: &mut [Asker], messages: &[ChatRow], forked_at: Option<i64>) {
     let Some(forked_at) = forked_at else {
         return;
     };
@@ -975,7 +982,7 @@ fn for_each_word(line: &str, out: &mut String, word_fn: &mut dyn FnMut(&str, &mu
 mod tests {
     use super::*;
 
-    fn reply(id: &str, text: &str) -> ChatMessage {
+    fn reply_message(id: &str, text: &str) -> ChatMessage {
         serde_json::from_value(serde_json::json!({
             "id": id,
             "role": "assistant",
@@ -983,6 +990,10 @@ mod tests {
             "blocks": [{"type": "text", "text": text}],
         }))
         .unwrap()
+    }
+
+    fn reply(id: &str, text: &str) -> crate::state::ChatRow {
+        std::sync::Arc::new(reply_message(id, text))
     }
 
     fn form(tags: &[&str]) -> String {
@@ -1139,7 +1150,7 @@ mod tests {
         assert!(tags_answered_in_words("Q12:").is_empty());
     }
 
-    fn user(id: &str, text: &str) -> ChatMessage {
+    fn user_message(id: &str, text: &str) -> ChatMessage {
         serde_json::from_value(serde_json::json!({
             "id": id,
             "role": "user",
@@ -1147,6 +1158,10 @@ mod tests {
             "blocks": [{"type": "text", "text": text}],
         }))
         .unwrap()
+    }
+
+    fn user(id: &str, text: &str) -> crate::state::ChatRow {
+        std::sync::Arc::new(user_message(id, text))
     }
 
     /// A question answered in the reader's own words after it was asked is answered everywhere the

@@ -10,6 +10,12 @@ use ghostex_gx_protocol::ChatMessage;
 use std::time::{Duration, Instant};
 
 /// A host directory the size of a busy computer's: every session the sidebar lists.
+
+/// The rows as the core holds them (`ChatRow`).
+fn shared(rows: &[ChatMessage]) -> Vec<ghostex_gx_chat_core::state::ChatRow> {
+    rows.iter().cloned().map(std::sync::Arc::new).collect()
+}
+
 fn directory(renamed: usize) -> Vec<KnownSession> {
     (0..400)
         .map(|index| KnownSession {
@@ -52,8 +58,8 @@ fn a_long_transcript_refreshes_without_rebuilding_what_is_settled() {
     println!("{} messages", rows.len());
     let mut state = ChatState::default();
     state.session.agent = export["agent"].as_str().map(str::to_string);
-    state.messages.composed = rows.clone();
-    state.messages.list = rows;
+    state.messages.composed = shared(&rows);
+    state.messages.list = shared(&rows);
     state.transcript_view.session_directory = directory(0);
     state.transcript_view.session_directory_revision = 1;
     let context = ChatContext {

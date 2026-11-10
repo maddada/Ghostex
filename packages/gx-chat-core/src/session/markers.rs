@@ -4,6 +4,7 @@
 //! `session-chat-returned-prompt.ts`. A marker is the row that says "a command went to the
 //! terminal"; it retires against the agent's own record of the same command.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource};
 
 use crate::session::constants::{
@@ -28,10 +29,7 @@ pub fn append_marker(markers: &[CommandMarker], marker: CommandMarker) -> Vec<Co
 ///
 /// `compaction_records` is what the authoritative transcript records NOW, so a `/compact` marker
 /// can retire the moment its own compaction lands.
-pub fn markers_as_messages(
-    markers: &[CommandMarker],
-    compaction_records: usize,
-) -> Vec<ChatMessage> {
+pub fn markers_as_messages(markers: &[CommandMarker], compaction_records: usize) -> Vec<ChatRow> {
     markers
         .iter()
         .filter_map(|marker| {
@@ -85,6 +83,7 @@ pub fn markers_as_messages(
                 custom_message: None,
             })
         })
+        .map(std::sync::Arc::new)
         .collect()
 }
 
@@ -92,18 +91,15 @@ pub fn markers_as_messages(
 ///
 /// `/clear` mutates the transcript ASYNCHRONOUSLY: hide the current transcript immediately so the
 /// chat reflects the command before the agent writes a replacement session.
-pub fn apply_marker_boundaries(
-    messages: &[ChatMessage],
-    markers: &[CommandMarker],
-) -> Vec<ChatMessage> {
+pub fn apply_marker_boundaries(messages: &[ChatRow], markers: &[CommandMarker]) -> Vec<ChatRow> {
     apply_marker_boundaries_in(messages.to_vec(), markers)
 }
 
 /// [`apply_marker_boundaries`] on a list the caller owns, filtered in place.
 pub fn apply_marker_boundaries_in(
-    mut messages: Vec<ChatMessage>,
+    mut messages: Vec<ChatRow>,
     markers: &[CommandMarker],
-) -> Vec<ChatMessage> {
+) -> Vec<ChatRow> {
     let mut clear_sent_at: Option<i64> = None;
     for marker in markers {
         if is_clear_command(&marker.command) {
@@ -138,7 +134,7 @@ fn message_text_lower(message: &ChatMessage) -> String {
 /// same moment, so a mid-response Stop shows one row, not two.
 pub fn retire_interrupt_markers(
     markers: &[CommandMarker],
-    transcript: &[ChatMessage],
+    transcript: &[ChatRow],
 ) -> Vec<CommandMarker> {
     if !markers
         .iter()

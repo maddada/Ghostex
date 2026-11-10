@@ -2,6 +2,7 @@
 //!
 //! Ported from `packages/shared/session-chat-controller/native-presentation.ts`.
 
+use crate::state::ChatRow;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -116,7 +117,7 @@ fn message_keys(message: &ChatMessage) -> Map<String, Value> {
 pub fn project_message(
     message: &ChatMessage,
     forms: &std::cell::OnceCell<Vec<QuestionForm>>,
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     agent_path: &str,
     working_directory: Option<&str>,
     line_breaks: AgentLineBreaks,
@@ -525,7 +526,7 @@ pub struct Projection {
     /// The forms and question pages, oldest first (`open_questions.rs`).
     pub askers: Vec<Asker>,
     /// Ids that shipped as placeholders and want a backfill batch.
-    pub backfill: Vec<ChatMessage>,
+    pub backfill: Vec<ChatRow>,
     /// The minimap rail for this pass.
     ///
     /// `NativeChatPresentation.update` builds the rail inside the same result object as the items
@@ -543,7 +544,7 @@ pub struct Projection {
 /// the rows a deferred read brought back (`section_part`), if they are here.
 fn turn_end(
     turn: &crate::transcript::turns::CompletedWorkTurn,
-    loaded: Option<&[ChatMessage]>,
+    loaded: Option<&[ChatRow]>,
 ) -> Option<i64> {
     turn.final_message
         .as_ref()
@@ -570,7 +571,7 @@ fn turn_end(
 /// CDXC:SessionChat 2026-11-03 WHY: an OMP background job's result, IRC message or advisor note that wakes the agent after its reply opens a turn of its own, so the reply before it stays in view. Timed alone, the newest such turn took the working card's "Worked for" line and the "Previous turn" fold from the prompt, and the card read the wake-up's few seconds instead of the run. The prompt's turn keeps both and is timed from the prompt to the agent's newest reply, which is the time the chat showed when OMP rows opened no turn; a wake-up answered without a reply adds nothing, as it did not then either. A Claude background task's end arrives as a user row and keeps its own turn's line, as before.
 fn turn_worked_label(
     turn: &crate::transcript::turns::CompletedWorkTurn,
-    loaded: Option<&[ChatMessage]>,
+    loaded: Option<&[ChatRow]>,
     later: &[RenderItem],
 ) -> String {
     let mut end = turn_end(turn, loaded);
@@ -598,7 +599,7 @@ fn turn_worked_label(
 /// alone, as [`turn_worked_label`] runs a prompt's time on through them.
 fn turn_times(
     turn: &crate::transcript::turns::CompletedWorkTurn,
-    loaded: Option<&[ChatMessage]>,
+    loaded: Option<&[ChatRow]>,
 ) -> (Option<i64>, Option<i64>, Option<i64>) {
     let end = turn_end(turn, loaded);
     let extends_to = if is_omp_wake_kind(&turn.user) {
@@ -640,12 +641,12 @@ pub(crate) fn latest_worked_turn(items: &[RenderItem], working: bool) -> Option<
 /// rules over different messages, a different `agentPath` and a cache of their own, which is why
 /// the pass is parameterised rather than reading `ChatState` directly.
 pub struct ProjectionScope<'a> {
-    pub messages: &'a [ChatMessage],
+    pub messages: &'a [ChatRow],
     pub working: bool,
     pub summary: bool,
     /// The rows a `loadWork` read brought back, keyed by the turn's user-message id. A child
     /// transcript has none of its own.
-    pub deferred: &'a BTreeMap<String, Vec<ChatMessage>>,
+    pub deferred: &'a BTreeMap<String, Vec<ChatRow>>,
     /// `/root` for the session, the child's own path inside the subagent viewer.
     pub agent_path: &'a str,
     /// Shortens the paths on file-change cards. Module level in the TypeScript, so both instances
@@ -726,7 +727,7 @@ pub fn line_breaks(state: &ChatState) -> AgentLineBreaks {
 pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> ProjectionScope<'a> {
     // The answers are read here too, so each tag's link carries whether its question is answered
     // or skipped; answers still sending or queued count already.
-    let mut sent = page_answers_in(&state.messages.composed);
+    let mut sent = page_answers_in(crate::state::messages_of(&state.messages.composed));
     for pending in crate::questions::open_questions::answers_on_the_way(state) {
         if !sent.iter().any(|known| known.page_id == pending.page_id) {
             sent.push(pending);
@@ -782,7 +783,7 @@ pub fn project_cached(
     cache: &mut ProjectionCache,
     scope: &ProjectionScope<'_>,
     context: &ChatContext,
-    message: &ChatMessage,
+    message: &ChatRow,
 ) -> Arc<Value> {
     Arc::clone(&cached_entry(cache, scope, context, message).model)
 }
@@ -792,7 +793,7 @@ fn cached_entry<'c>(
     cache: &'c mut ProjectionCache,
     scope: &ProjectionScope<'_>,
     context: &ChatContext,
-    message: &ChatMessage,
+    message: &ChatRow,
 ) -> &'c mut ProjectedMessage {
     let stale = cache
         .get(&message.id)
@@ -849,13 +850,19 @@ fn drawn(mut model: Arc<Value>, draw: Draw) -> Arc<Value> {
 fn project_entry(
     scope: &ProjectionScope<'_>,
     context: &ChatContext,
-    message: &ChatMessage,
+    message: &ChatRow,
 ) -> ProjectedMessage {
     // A background task's end is projected (and its details read) as the tool calls it reports;
     // an OMP job's call ran as long as OMP recorded, which no row's time says.
     let task_spans = crate::transcript::background_rows::background_task_spans(message);
     let arrived = message;
     let source = background_task_source(arrived);
+    // The entry shares the row it was projected from (`ChatRow`); only a background row turned
+    // into its tool calls holds a row of its own beside the one that arrived.
+    let (source_row, arrived_row) = match &source {
+        std::borrow::Cow::Borrowed(_) => (Arc::clone(arrived), None),
+        std::borrow::Cow::Owned(turned) => (Arc::new(turned.clone()), Some(Arc::clone(arrived))),
+    };
     let message = &*source;
     // How long each call ran comes from the rows as they arrived, before the fold merged them.
     let mut spans = tool_spans(
@@ -882,9 +889,9 @@ fn project_entry(
         Vec::new()
     };
     ProjectedMessage {
-        arrived: matches!(source, std::borrow::Cow::Owned(_)).then(|| arrived.clone()),
+        arrived: arrived_row,
         unanswered: crate::transcript::tool_card::has_unanswered_call(&message.blocks),
-        source: source.into_owned(),
+        source: source_row,
         model: Arc::new(model),
         in_work_fold: None,
         line_breaks: scope.line_breaks,
@@ -897,8 +904,9 @@ fn project_entry(
 /// the same of its words are question tags (a new question links words an older reply already had).
 ///
 /// CDXC:SessionChat 2026-10-30 WHY: the message is compared as it arrived, not as the tool calls a background row is turned into. Turning an unchanged OMP job row again on every check copied and split each job's whole result just to find nothing had changed.
-fn fresh(entry: &ProjectedMessage, message: &ChatMessage, scope: &ProjectionScope<'_>) -> bool {
-    entry.arrived.as_ref().unwrap_or(&entry.source) == message
+fn fresh(entry: &ProjectedMessage, message: &ChatRow, scope: &ProjectionScope<'_>) -> bool {
+    let projected = entry.arrived.as_ref().unwrap_or(&entry.source);
+    (Arc::ptr_eq(projected, message) || **projected == **message)
         && entry.line_breaks == scope.line_breaks
         && linked_words(&entry.tag_words, &scope.question_tags) == entry.linked_tags
         && crate::transcript::tool_card::card_fresh(&entry.model, entry.unanswered, scope.working)
@@ -945,7 +953,7 @@ pub(crate) struct Builder<'a> {
     context: &'a ChatContext,
     cache: &'a mut ProjectionCache,
     eager_from: usize,
-    pub(crate) backfill: Vec<ChatMessage>,
+    pub(crate) backfill: Vec<ChatRow>,
     /// Every id this pass has drawn a row for, so a second, different message with the same id
     /// never evicts the first one's cache entry.
     pub(crate) used: std::collections::HashSet<String>,
@@ -990,7 +998,7 @@ impl<'a> Builder<'a> {
     }
 
     /// `projected`: the cached model when the cache holds this exact message.
-    fn projected(&mut self, message: &ChatMessage, draw: Draw) -> Option<Arc<Value>> {
+    fn projected(&mut self, message: &ChatRow, draw: Draw) -> Option<Arc<Value>> {
         let scope = self.scope;
         self.cache
             .get_mut(&message.id)
@@ -1006,18 +1014,13 @@ impl<'a> Builder<'a> {
     /// each other on every batch), or a row a batch of this run already projected and that is
     /// still out of date. Queuing either kept the zero-delay backfill re-running the whole
     /// projection for ever.
-    fn message_or_placeholder(
-        &mut self,
-        message: &ChatMessage,
-        eager: bool,
-        draw: Draw,
-    ) -> Arc<Value> {
+    fn message_or_placeholder(&mut self, message: &ChatRow, eager: bool, draw: Draw) -> Arc<Value> {
         if let Some(model) = self.projected(message, draw) {
             self.used.insert(message.id.clone());
             return model;
         }
         if let Some(&at) = self.queued.get(&message.id) {
-            if self.backfill[at] == *message {
+            if Arc::ptr_eq(&self.backfill[at], message) || *self.backfill[at] == **message {
                 return drawn(Arc::new(placeholder(message)), draw);
             }
         }
@@ -1035,7 +1038,7 @@ impl<'a> Builder<'a> {
             return drawn_from(entry, draw);
         }
         self.queued.insert(message.id.clone(), self.backfill.len());
-        self.backfill.push(message.clone());
+        self.backfill.push(Arc::clone(message));
         self.last_queued = Some(self.current);
         drawn(Arc::new(placeholder(message)), draw)
     }
@@ -1152,11 +1155,11 @@ pub fn build_scope(
     let turns: Vec<_> = projection
         .summary_turns
         .iter()
-        .map(|turn| (&turn.user, turn.final_message.as_ref()))
+        .map(|turn| (&*turn.user, turn.final_message.as_deref()))
         .collect();
     let minimap = crate::extras::minimap::project_minimap_turns(&turns, &item_index);
     prune_cache(cache, scope, &used);
-    let page_answers = page_answers_in(scope.messages);
+    let page_answers = page_answers_in(crate::state::messages_of(scope.messages));
     let answered_pages: Vec<String> = page_answers
         .iter()
         .map(|answers| answers.page_id.clone())
@@ -1383,8 +1386,7 @@ fn turn_items(
                 keeps the same cards and ships nothing.
                 */
                 let mut files: Vec<Value> = Vec::new();
-                let sources: Vec<&ChatMessage> =
-                    work.iter().chain(turn.final_message.iter()).collect();
+                let sources: Vec<&ChatRow> = work.iter().chain(turn.final_message.iter()).collect();
                 for message in sources {
                     if let Value::Array(rows) = builder
                         .message_or_placeholder(message, eager, Draw::Read)
@@ -1423,8 +1425,11 @@ fn turn_items(
                     // The rows are still on the server: only the files are known until it opens.
                     0
                 } else {
-                    let rows: Vec<&ChatMessage> =
-                        work.iter().chain(turn.final_message.iter()).collect();
+                    let rows: Vec<&ChatMessage> = work
+                        .iter()
+                        .chain(turn.final_message.iter())
+                        .map(|row| &**row)
+                        .collect();
                     tool_call_count(&rows)
                 };
                 let stats = counted_work_stats(tool_calls, changed_files);

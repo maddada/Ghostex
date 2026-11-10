@@ -12,6 +12,7 @@
 //! what reads as "chat is missing messages". Only the records the terminal never shows either
 //! (system reminders, hook plumbing) stay hidden.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource};
 use serde_json::{json, Map, Value};
 
@@ -489,13 +490,13 @@ fn model_set_by_command_output(text: &str) -> Option<ModelDefaultOutput> {
 
 /// CDXC:SessionChat 2026-10-01 DECISION:
 /// User: "i dont like seeing these 2 like this, please combine the 2 where it makes sense" about a "Set model to Sonnet 5.5" pill followed by a "Set effort level to Low" pill. A model pick saved as the default runs `/model` then `/effort`, and Claude records each output as its own turn; an `/effort` output that comes straight after a `/model` output that named no effort folds into it, so the pair reads as the one sentence a session-only pick prints ("Set model to Sonnet 5.5 with Low effort"). Supersedes the 2026-09-09 decision's separate effort pill beside the model change; `/effort` on its own keeps its own pill.
-pub fn fold_model_effort_pairs(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn fold_model_effort_pairs(messages: &[ChatRow]) -> Vec<ChatRow> {
     let output_text = |message: &ChatMessage| {
         let text = js_trim(&joined_text(&message.blocks)).to_string();
         (harness_injected_turn_label(&text).as_deref() == Some("Local command output"))
             .then_some(text)
     };
-    let mut folded: Vec<ChatMessage> = Vec::with_capacity(messages.len());
+    let mut folded: Vec<ChatRow> = Vec::with_capacity(messages.len());
     for message in messages {
         let effort = output_text(message)
             .as_deref()
@@ -513,7 +514,7 @@ pub fn fold_model_effort_pairs(messages: &[ChatMessage]) -> Vec<ChatMessage> {
         let (said, rest) = body.split_at(model.scope_end);
         let sentence = format!("{said} with `{effort}` effort{rest}");
         if let Some(previous) = folded.last_mut() {
-            previous.blocks = vec![ChatBlock::Text {
+            std::sync::Arc::make_mut(previous).blocks = vec![ChatBlock::Text {
                 text: crate::session::app_commands::escaped_marker(
                     "local-command-stdout",
                     &sentence,
@@ -951,7 +952,7 @@ pub fn is_command_turn(message: &ChatMessage) -> bool {
 }
 
 /// Drop only the never-surfaced turns; collapsed markers stay in the list.
-pub fn drop_hidden_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn drop_hidden_messages(messages: &[ChatRow]) -> Vec<ChatRow> {
     messages
         .iter()
         .filter(|message| !is_hidden_message(message))

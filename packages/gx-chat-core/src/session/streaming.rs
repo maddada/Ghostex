@@ -3,6 +3,7 @@
 //! Ported from `packages/core-ui/chat/session-chat-streaming.ts` and
 //! `session-chat-send-classification.ts`.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource};
 
 use crate::session::constants::STREAMING_ID;
@@ -29,7 +30,7 @@ fn assistant_text(message: Option<&ChatMessage>) -> String {
 /// (strictly longer and not a substring of the last assistant turn), and only while working. A
 /// stale preview from a finished turn never shows.
 pub fn derive_streaming_text(
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     preview_text: Option<&str>,
     working: bool,
 ) -> Option<String> {
@@ -40,7 +41,7 @@ pub fn derive_streaming_text(
     if text.is_empty() {
         return None;
     }
-    let last = assistant_text(messages.last());
+    let last = assistant_text(messages.last().map(|message| &**message));
     if last.contains(text) || text.chars().count() <= last.chars().count() {
         return None;
     }

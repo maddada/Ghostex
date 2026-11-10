@@ -426,10 +426,10 @@ impl Ledger {
         forked_at: Option<i64>,
         page_answered: impl Fn(&str) -> bool,
     ) -> Vec<OpenAsker> {
-        let messages: Vec<ChatMessage> = self
+        let messages: Vec<ghostex_gx_chat_core::state::ChatRow> = self
             .asking
             .iter()
-            .map(|(message, _)| message.clone())
+            .map(|(message, _)| std::sync::Arc::new(message.clone()))
             .collect();
         let turn_of: HashMap<&str, usize> = self
             .asking

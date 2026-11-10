@@ -12,6 +12,11 @@ use serde_json::{json, Value};
 const THREAD: &str = "S90:P3lv0:G1co8";
 const T0: i64 = 1_793_420_000_000;
 
+/// The rows as the core holds them (`ChatRow`).
+fn shared(rows: &[ChatMessage]) -> Vec<ghostex_gx_chat_core::state::ChatRow> {
+    rows.iter().cloned().map(std::sync::Arc::new).collect()
+}
+
 fn message(value: Value) -> ChatMessage {
     serde_json::from_value(value).expect("a chat message")
 }
@@ -65,8 +70,8 @@ fn state_with(mut rows: Vec<ChatMessage>, deliveries: Option<Value>) -> ChatStat
     let mut state = ChatState::default();
     state.session.agent = Some("claude".into());
     state.session.agent_message_deliveries = deliveries;
-    state.messages.composed = rows.clone();
-    state.messages.list = rows;
+    state.messages.composed = shared(&rows);
+    state.messages.list = shared(&rows);
     state
 }
 
@@ -273,10 +278,10 @@ fn a_report_that_arrives_mid_turn_does_not_draw_the_send_twice() {
     state
         .transcript_view
         .deferred
-        .insert("u1".to_string(), vec![call, result]);
+        .insert("u1".to_string(), shared(&[call, result]));
     state
         .transcript_view
         .deferred
-        .insert("u2".to_string(), vec![later]);
+        .insert("u2".to_string(), shared(&[later]));
     assert_eq!(sent_cards(&state).len(), 1, "{:?}", sent_cards(&state));
 }

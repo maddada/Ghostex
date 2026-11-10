@@ -613,7 +613,7 @@ pub(crate) mod tests {
         assert!(mark_line(&["Bad [Yes](ghostex-answer:) tag."], 0).is_none());
     }
 
-    fn message(id: &str, role: ChatRole, text: &str) -> ChatMessage {
+    fn message_message(id: &str, role: ChatRole, text: &str) -> ChatMessage {
         serde_json::from_value(json!({
             "id": id,
             "role": if role == ChatRole::User { "user" } else { "assistant" },
@@ -621,6 +621,10 @@ pub(crate) mod tests {
             "blocks": [{"type": "text", "text": text}],
         }))
         .unwrap()
+    }
+
+    fn message(id: &str, role: ChatRole, text: &str) -> crate::state::ChatRow {
+        std::sync::Arc::new(message_message(id, role, text))
     }
 
     #[test]
@@ -640,10 +644,11 @@ pub(crate) mod tests {
         .form();
         let reply =
             crate::transcript::question_forms::answers_message(&form, &json!({"Q9": "Yes"}));
-        let answered = crate::transcript::page_answers::page_answers_in(&[
-            ask.clone(),
-            message("u", ChatRole::User, &reply),
-        ]);
+        let answered =
+            crate::transcript::page_answers::page_answers_in(crate::state::messages_of(&[
+                ask.clone(),
+                message("u", ChatRole::User, &reply),
+            ]));
         let ids: Vec<String> = answered
             .iter()
             .map(|answers| answers.page_id.clone())
@@ -723,10 +728,12 @@ pub(crate) mod tests {
                 message("u", ChatRole::User, &reply),
             ],
         ] {
-            let ids: Vec<String> = crate::transcript::page_answers::page_answers_in(&messages)
-                .into_iter()
-                .map(|answers| answers.page_id)
-                .collect();
+            let ids: Vec<String> = crate::transcript::page_answers::page_answers_in(
+                crate::state::messages_of(&messages),
+            )
+            .into_iter()
+            .map(|answers| answers.page_id)
+            .collect();
             assert_eq!(ids, [form.id.clone()]);
             let found = askers(&messages, &ids);
             assert_eq!(found.len(), 2, "one asker per copy");

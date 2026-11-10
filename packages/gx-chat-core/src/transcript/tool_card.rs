@@ -9,6 +9,7 @@
 //!
 //! CDXC:SessionChat 2026-11-09 DECISION: User, on the page that merged the cards preview into the rows: design C, "one quiet line per run, rows inside" (Q1960), a shut run with a failure shows only the red "1 failed" count (Q1961), a long output shows its first 12 lines and "Show all" (Q1962), background tasks keep today's two rows (Q1963), runs open in Detailed view and shut in Simple (Q1964), the phone in the same release (Q1965); then "let's keep the current way how things work as is ... still keep the new behavior under a toggle please. also 1 thing we must keep is the relly cool shimmering effect on the currently in progress tool calls like we have now in Tool call cards". Settings > Extensions > Experimental > Tool call lines (`chatToolCallLines`, off) draws this card's data as that quiet line (`lineTitle` is its words: the call's own for a run of one), and the hosts build the card when either switch is on. A run that starts a background task or reports one ending is marked `background`, and Tool call lines draw it as the rows it was; the cards preview keeps its card (a cancelled OMP job's stopped look, 2026-10-30).
 
+use crate::state::ChatRow;
 use std::collections::HashMap;
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
@@ -892,7 +893,7 @@ pub fn has_unanswered_call(blocks: &[ChatBlock]) -> bool {
 /// header and rows move as they change; it no longer decides whether the card is open (the
 /// 2026-11-08 decision above), so a row streamed from the terminal taking its place changes no
 /// card's height.
-pub fn live_card_id(messages: &[ChatMessage], working: bool) -> Option<String> {
+pub fn live_card_id(messages: &[ChatRow], working: bool) -> Option<String> {
     if !working {
         return None;
     }

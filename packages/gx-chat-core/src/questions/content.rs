@@ -137,7 +137,7 @@ pub fn refresh(state: &mut ChatState) {
 mod tests {
     use super::*;
 
-    fn reply(id: &str, text: &str) -> ChatMessage {
+    fn reply_message(id: &str, text: &str) -> ChatMessage {
         serde_json::from_value(serde_json::json!({
             "id": id,
             "role": "assistant",
@@ -146,6 +146,10 @@ mod tests {
             "blocks": [{"type": "text", "text": text}],
         }))
         .unwrap()
+    }
+
+    fn reply(id: &str, text: &str) -> crate::state::ChatRow {
+        std::sync::Arc::new(reply_message(id, text))
     }
 
     #[test]

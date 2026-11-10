@@ -140,7 +140,7 @@ fn write_record(
 /// is measured.
 fn text_units(snapshot: &FoldedSnapshot, limit: usize) -> usize {
     let mut units = 0usize;
-    for message in &snapshot.result.messages {
+    for message in &snapshot.rows {
         units += utf16_units(message.id.as_bytes());
         for block in &message.blocks {
             units += match block {
@@ -194,14 +194,16 @@ pub fn adopt(state: &mut ChatState, value: Option<&str>, context: &ChatContext) 
     // `Math.max(SESSION_CHAT_INITIAL_LIMIT, stored.requestedWindow ?? stored.snapshot.messages.length)`.
     let window = stored
         .requested_window
-        .unwrap_or(stored.snapshot.result.messages.len() as u32)
+        .unwrap_or(stored.snapshot.rows.len() as u32)
         .max(INITIAL_LIMIT);
     state.messages.limit = state.messages.limit.max(window).min(MAX_LIMIT);
     state.messages.position.epoch = Some(stored.snapshot.result.epoch);
     state.messages.position.seq = stored.snapshot.result.seq;
     apply_draft_agent_carriage(state, &stored.snapshot.result);
-    apply_authoritative(state, &stored.snapshot.result, true, false, context);
-    state.messages.snapshot = Some(stored.snapshot);
+    apply_authoritative(state, &stored.snapshot.read_result(), true, false, context);
+    let mut snapshot = stored.snapshot;
+    crate::session::merge::share_with_list(&mut snapshot.rows, &state.messages);
+    state.messages.snapshot = Some(snapshot);
     state.messages.authoritative_revision += 1;
     // Hydration is not a fold of its own: `emitSnapshot()` does NOT call `schedulePersistence()`,
     // so the record the core has just read must not be rewritten with a fresh stamp.

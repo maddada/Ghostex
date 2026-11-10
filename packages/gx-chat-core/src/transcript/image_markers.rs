@@ -2,6 +2,7 @@
 //!
 //! Ported from `packages/core-ui/chat/session-chat-image-transcript-markers.ts`.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource};
 
 use crate::transcript::jsstr::{is_js_space, js_trim};
@@ -103,8 +104,8 @@ pub fn image_prompt_marker_starts_message(message: &ChatMessage) -> bool {
 
 /// Folds a `[Image: source: …]` marker row onto the prompt that follows it, so a picture the reader
 /// attached renders as an image block rather than as two lines of bookkeeping.
-pub fn normalize_image_transcript_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
-    let mut normalized: Vec<ChatMessage> = Vec::with_capacity(messages.len());
+pub fn normalize_image_transcript_messages(messages: &[ChatRow]) -> Vec<ChatRow> {
+    let mut normalized: Vec<ChatRow> = Vec::with_capacity(messages.len());
     let mut index = 0;
     while index < messages.len() {
         let message = &messages[index];
@@ -131,14 +132,14 @@ pub fn normalize_image_transcript_messages(messages: &[ChatMessage]) -> Vec<Chat
                 alt: None,
             }];
             blocks.extend(strip_first_image_prompt_marker(&next.blocks));
-            folded.blocks = blocks;
+            std::sync::Arc::make_mut(&mut folded).blocks = blocks;
             normalized.push(folded);
             index += 2;
             continue;
         }
 
         let mut row = message.clone();
-        row.blocks = match image_path {
+        std::sync::Arc::make_mut(&mut row).blocks = match image_path {
             Some(path) => vec![ChatBlock::ImageRef {
                 path: Some(path),
                 url: None,

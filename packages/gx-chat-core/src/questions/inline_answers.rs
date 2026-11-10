@@ -636,7 +636,7 @@ mod tests {
         assert!(!params["text"].as_str().unwrap().contains("Changed from"));
     }
 
-    fn reply(id: &str, text: &str) -> ghostex_gx_protocol::ChatMessage {
+    fn reply_message(id: &str, text: &str) -> ghostex_gx_protocol::ChatMessage {
         serde_json::from_value(json!({
             "id": id,
             "role": "assistant",
@@ -644,6 +644,10 @@ mod tests {
             "blocks": [{"type": "text", "text": text}],
         }))
         .unwrap()
+    }
+
+    fn reply(id: &str, text: &str) -> crate::state::ChatRow {
+        std::sync::Arc::new(reply_message(id, text))
     }
 
     /// The chat after `replies`, as the transcript projection reads them: their one-click forms

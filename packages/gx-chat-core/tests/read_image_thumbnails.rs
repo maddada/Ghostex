@@ -7,6 +7,11 @@ use serde_json::{json, Value};
 
 const T0: i64 = 1_793_420_000_000;
 
+/// The rows as the core holds them (`ChatRow`).
+fn shared(rows: &[ChatMessage]) -> Vec<ghostex_gx_chat_core::state::ChatRow> {
+    rows.iter().cloned().map(std::sync::Arc::new).collect()
+}
+
 fn message(value: Value) -> ChatMessage {
     serde_json::from_value(value).expect("a chat message")
 }
@@ -50,8 +55,8 @@ fn state_with(agent: &str, mut rows: Vec<ChatMessage>) -> ChatState {
     }
     let mut state = ChatState::default();
     state.session.agent = Some(agent.into());
-    state.messages.composed = rows.clone();
-    state.messages.list = rows;
+    state.messages.composed = shared(&rows);
+    state.messages.list = shared(&rows);
     state
 }
 

@@ -2,6 +2,7 @@
 //!
 //! Ported from `packages/core-ui/chat/session-chat-local-command-transcript.ts`.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource};
 
 /*
@@ -32,7 +33,7 @@ fn text_block(block: Option<&ChatBlock>) -> Option<&str> {
 
 /// Splits Codex's two-block local-command row into the command and its output, so each gets its own
 /// marker. Identical text to the rows gxserver replays from its archive.
-pub fn normalize_local_command_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn normalize_local_command_messages(messages: &[ChatRow]) -> Vec<ChatRow> {
     let mut normalized = Vec::with_capacity(messages.len());
     for message in messages {
         let command = text_block(message.blocks.first());
@@ -47,11 +48,13 @@ pub fn normalize_local_command_messages(messages: &[ChatMessage]) -> Vec<ChatMes
             continue;
         }
         let mut first = message.clone();
-        first.id = format!("{}:command", message.id);
-        first.blocks = vec![message.blocks[0].clone()];
+        let edit = std::sync::Arc::make_mut(&mut first);
+        edit.id = format!("{}:command", message.id);
+        edit.blocks = vec![message.blocks[0].clone()];
         let mut second = message.clone();
-        second.id = format!("{}:output", message.id);
-        second.blocks = vec![message.blocks[1].clone()];
+        let edit = std::sync::Arc::make_mut(&mut second);
+        edit.id = format!("{}:output", message.id);
+        edit.blocks = vec![message.blocks[1].clone()];
         normalized.push(first);
         normalized.push(second);
     }
@@ -244,7 +247,7 @@ CDXC:SessionChat 2026-10-07 DECISION:
 User: a `!` shell command sent to the agent ("! aws login") showed nothing in chat, then two plain "Local command" / "Local command output" rows; "let's please just show this in a new component similar to the ones we already have". Claude writes a `!` command as two user rows, `<bash-input> cmd</bash-input>` and `<bash-stdout>…</bash-stdout><bash-stderr>…</bash-stderr>` (its own output HTML-escaped), and only once the command has finished; gxserver writes a Codex `!` command as the same pair of escaped markers in one row, split above. The pair folds into ONE user row holding the command as a shell tool call and the output (stdout, then stderr) as its result, so every renderer draws the tool card where the user's message sits and the row opens its own turn, which the collapsed markers never did (summary mode filed them under the previous turn's work, or dropped them when no turn came before).
 SEE-ALSO: session/pending.rs (the echo drawn as this card until the row lands), apps/desktop/src/app/native_chat/transcript.rs and apps/mobile/app/src/chat (the card in the user's place).
 */
-pub fn fold_shell_commands(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn fold_shell_commands(messages: &[ChatRow]) -> Vec<ChatRow> {
     let mut folded = Vec::with_capacity(messages.len());
     let mut index = 0;
     while index < messages.len() {
@@ -267,7 +270,11 @@ pub fn fold_shell_commands(messages: &[ChatMessage]) -> Vec<ChatMessage> {
             .get(next)
             .filter(|row| row.role == ChatRole::User)
             .and_then(|row| shell_command_output(&joined_text(row)));
-        folded.push(shell_command_message(message, &command, output.clone()));
+        folded.push(std::sync::Arc::new(shell_command_message(
+            message,
+            &command,
+            output.clone(),
+        )));
         if output.is_some() {
             folded.extend(messages[index + 1..next].iter().cloned());
             index = next + 1;
@@ -283,9 +290,9 @@ pub fn fold_shell_commands(messages: &[ChatMessage]) -> Vec<ChatMessage> {
 /// the same send a second time, so it is left out; the command's own rows replace the echo once the
 /// queue releases it.
 pub fn without_shell_echo_queue_rows(
-    transcript: Vec<ChatMessage>,
-    pending: &[ChatMessage],
-) -> Vec<ChatMessage> {
+    transcript: Vec<ChatRow>,
+    pending: &[ChatRow],
+) -> Vec<ChatRow> {
     let commands: Vec<String> = pending
         .iter()
         .filter(|message| is_shell_command_message(message))
@@ -325,10 +332,10 @@ const LIVE_SHELL_START_SLACK_MS: i64 = 10_000;
 /// has no echo and gets its own running card, until the transcript records a `!` row for that run.
 /// Either way the recorded card replaces it once the command ends, and the output never shows twice.
 pub fn with_live_shell_output(
-    mut pending: Vec<ChatMessage>,
+    mut pending: Vec<ChatRow>,
     activity: Option<&serde_json::Value>,
-    transcript: &[ChatMessage],
-) -> Vec<ChatMessage> {
+    transcript: &[ChatRow],
+) -> Vec<ChatRow> {
     let Some(activity) = activity else {
         return pending;
     };
@@ -341,7 +348,10 @@ pub fn with_live_shell_output(
         stdout: field("detail").unwrap_or_default().to_string(),
         stderr: String::new(),
     };
-    if let Some(index) = pending.iter().rposition(is_shell_command_message) {
+    if let Some(index) = pending
+        .iter()
+        .rposition(|message| is_shell_command_message(message))
+    {
         let echo_command = match pending[index].blocks.first() {
             Some(ChatBlock::ToolCall { input, .. }) => input
                 .get("command")
@@ -350,7 +360,11 @@ pub fn with_live_shell_output(
                 .to_string(),
             _ => command.to_string(),
         };
-        pending[index] = shell_command_message(&pending[index], &echo_command, Some(output));
+        pending[index] = std::sync::Arc::new(shell_command_message(
+            &pending[index],
+            &echo_command,
+            Some(output),
+        ));
         return pending;
     }
     let detected_at = field("detectedAt").unwrap_or_default();
@@ -387,7 +401,11 @@ pub fn with_live_shell_output(
         mention_paths: None,
         custom_message: None,
     };
-    pending.push(shell_command_message(&template, command, Some(output)));
+    pending.push(std::sync::Arc::new(shell_command_message(
+        &template,
+        command,
+        Some(output),
+    )));
     pending
 }
 

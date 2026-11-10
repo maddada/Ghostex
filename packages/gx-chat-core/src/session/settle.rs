@@ -105,8 +105,8 @@ pub fn before_compose(state: &mut ChatState, context: &ChatContext) {
 /// The list pending echoes are reconciled against, built once per settle on first use.
 fn reconciled<'a>(
     state: &ChatState,
-    slot: &'a mut Option<Vec<ghostex_gx_protocol::ChatMessage>>,
-) -> &'a [ghostex_gx_protocol::ChatMessage] {
+    slot: &'a mut Option<Vec<crate::state::ChatRow>>,
+) -> &'a [crate::state::ChatRow] {
     slot.get_or_insert_with(|| pending_transcript(state, &state.messages.boundaried))
 }
 

@@ -4,6 +4,7 @@
 //! Owned by family a. It is the half of the composed list that has no authoritative record yet,
 //! and every entry here is retired by the transcript row that replaces it.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatMessage, StartupDelivery};
 
 /// The optimistic half of the transcript.
@@ -17,7 +18,7 @@ pub struct PendingState {
     pub markers: Vec<CommandMarker>,
     /// Each distinct transient line the agent painted over its own status row, kept until a
     /// transcript row carries the same text.
-    pub terminal_status_messages: Vec<ChatMessage>,
+    pub terminal_status_messages: Vec<ChatRow>,
     /// The message the agent is painting right now, shown as the streaming bubble.
     pub terminal_stream: Option<TerminalStream>,
     /// The tool row read off the screen, and the hold that bridges the terminal's repaint gaps.

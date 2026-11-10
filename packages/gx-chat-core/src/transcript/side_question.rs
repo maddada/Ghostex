@@ -4,6 +4,7 @@
 //! output (server/src/session_chat_app_command.rs, `attach_side_answer`). The chat shows the pair as
 //! one folded row instead of a "Slash command" marker and a "Local command output" marker.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 use serde_json::{json, Value};
 
@@ -62,7 +63,7 @@ fn stdout_body(message: &ChatMessage) -> Option<String> {
 /// Folds every answered `/btw` command row and its output row into one side-question row, placed
 /// where the question was asked. The folded row keeps the command row's time and source; its
 /// blocks are the question and the answer.
-pub fn fold_side_questions(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn fold_side_questions(messages: &[ChatRow]) -> Vec<ChatRow> {
     let questions: Vec<(String, String)> = messages
         .iter()
         .filter_map(|message| side_question(message).map(|question| (message.id.clone(), question)))
@@ -86,7 +87,7 @@ pub fn fold_side_questions(messages: &[ChatMessage]) -> Vec<ChatMessage> {
         let answer = messages
             .iter()
             .find(|row| row.id == format!("{}:output", message.id))
-            .and_then(stdout_body)
+            .and_then(|message| stdout_body(message))
             .filter(|answer| !answer.is_empty());
         // Until gxserver has read the answer, the card above the composer is the side question;
         // a question closed before Claude answered leaves nothing to keep.
@@ -94,8 +95,9 @@ pub fn fold_side_questions(messages: &[ChatMessage]) -> Vec<ChatMessage> {
             continue;
         };
         let mut row = message.clone();
-        row.id = format!("{SIDE_QUESTION_ID_PREFIX}{}", message.id);
-        row.blocks = vec![
+        let edit = std::sync::Arc::make_mut(&mut row);
+        edit.id = format!("{SIDE_QUESTION_ID_PREFIX}{}", message.id);
+        edit.blocks = vec![
             ChatBlock::Text {
                 text: question.clone(),
             },
@@ -150,12 +152,12 @@ pub fn live_side_question(state: &crate::state::ChatState) -> Option<String> {
 
 /// CDXC:SessionChat 2026-09-27 DECISION:
 /// User: a sent side question showed twice, as the card above the composer and as the row in the transcript; only the card shows until the user clicks Close, then the row takes its place. The newest row asking the card's question is left out while the card is open. A question Claude cut short with `…` matches the full text it stands for.
-pub fn hide_live_side_question(messages: &mut Vec<ChatMessage>, question: &str) {
+pub fn hide_live_side_question(messages: &mut Vec<ChatRow>, question: &str) {
     hide_newest_side_question(messages, question);
 }
 
 /// [`hide_live_side_question`], saying whether `messages` held a row asking it.
-pub fn hide_newest_side_question(messages: &mut Vec<ChatMessage>, question: &str) -> bool {
+pub fn hide_newest_side_question(messages: &mut Vec<ChatRow>, question: &str) -> bool {
     match messages
         .iter()
         .rposition(|message| asks_side_question(message, question))

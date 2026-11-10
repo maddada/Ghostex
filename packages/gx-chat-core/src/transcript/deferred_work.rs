@@ -9,6 +9,7 @@
 //! The LRU cache is load bearing and is ported with it: reopening a section the user already
 //! expanded must not walk history again, which on a long conversation is several round trips.
 
+use crate::state::ChatRow;
 use std::collections::BTreeMap;
 
 use serde_json::Value;
@@ -51,7 +52,7 @@ pub struct DeferredWalk {
     /// The section's LAST message has been seen, so everything from here on belongs to it.
     pub found_end: bool,
     /// The rows collected so far, newest first until the walk finishes and reverses them.
-    pub messages: Vec<ChatMessage>,
+    pub messages: Vec<ChatRow>,
     /// Every cursor already asked for, so a server that repeats an offset ends the walk.
     pub seen: Vec<i64>,
 }
@@ -61,7 +62,7 @@ pub enum WalkStep {
     /// Ask for the page before `cursor`.
     ReadPage { cursor: i64 },
     /// The section is complete, newest-first order already undone.
-    Done { messages: Vec<ChatMessage> },
+    Done { messages: Vec<ChatRow> },
     /// The walk cannot finish, and this is the message the row shows.
     Failed { message: String },
 }
@@ -140,7 +141,7 @@ impl DeferredWalk {
                     // A message sent mid-turn is shown here as the main list shows it.
                     let message =
                         crate::session::appended_notes::shown_message(&message).unwrap_or(message);
-                    self.messages.push(message);
+                    self.messages.push(std::sync::Arc::new(message));
                 }
             }
         }
@@ -170,8 +171,8 @@ impl DeferredWalk {
 /// A turn is kept only when the chat holds it from its prompt to the `endId` gxserver folded it to, so a turn held in part still loads from history.
 pub fn keep_held_work(
     held: &MessagesState,
-    next: &[ChatMessage],
-    loaded: &mut BTreeMap<String, Vec<ChatMessage>>,
+    next: &[ChatRow],
+    loaded: &mut BTreeMap<String, Vec<ChatRow>>,
 ) {
     let held_at = |id: &str| {
         let at = *held.index_by_id.get(id)?;
@@ -205,7 +206,7 @@ fn cache_key(before_offset: i64, start_id: &str, end_id: &str) -> String {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CachedWork {
     pub key: String,
-    pub messages: Vec<ChatMessage>,
+    pub messages: Vec<ChatRow>,
     pub bytes: usize,
 }
 
@@ -217,7 +218,7 @@ pub struct DeferredWorkCache {
 
 impl DeferredWorkCache {
     /// A hit, moved to the end so the next eviction takes something older.
-    pub fn take_fresh(&mut self, key: &str) -> Option<Vec<ChatMessage>> {
+    pub fn take_fresh(&mut self, key: &str) -> Option<Vec<ChatRow>> {
         let at = self.entries.iter().position(|entry| entry.key == key)?;
         let entry = self.entries.remove(at);
         let messages = entry.messages.clone();
@@ -226,7 +227,7 @@ impl DeferredWorkCache {
     }
 
     /// Stores a walked section, unless it alone is over the budget.
-    pub fn store(&mut self, key: &str, messages: &[ChatMessage]) {
+    pub fn store(&mut self, key: &str, messages: &[ChatRow]) {
         let bytes = serialized_bytes(messages);
         if bytes > DEFERRED_WORK_CACHE_BYTES {
             return;
@@ -256,7 +257,7 @@ impl DeferredWorkCache {
 }
 
 /// `JSON.stringify(messages).length * 2`: UTF-16 code units, two bytes each.
-fn serialized_bytes(messages: &[ChatMessage]) -> usize {
+fn serialized_bytes(messages: &[ChatRow]) -> usize {
     serde_json::to_string(messages)
         .map(|text| text.chars().map(|character| character.len_utf16()).sum())
         .unwrap_or(0)

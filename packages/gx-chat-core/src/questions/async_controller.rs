@@ -4,7 +4,7 @@
 //! is promise based; here the same steps are one state transition plus the effects the host
 //! performs, and the answers arrive back as events.
 
-use ghostex_gx_protocol::ChatMessage;
+use crate::state::ChatRow;
 
 use crate::document::{AsyncQuestions, PendingAsyncQuestion, QuestionDraft};
 use crate::effect::Effect;
@@ -26,7 +26,7 @@ pub const SKIP_FAILED: &str = "Could not skip this question. Please try again.";
 /// The questions still open, after this client's and the server's retirements.
 pub fn pending(
     state: &AsyncQuestionsState,
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     retired_ids: &[String],
 ) -> Vec<PendingAsyncQuestion> {
     pending_async_questions(messages)
@@ -40,7 +40,7 @@ pub fn pending(
 /// The strip as the renderer draws it.
 pub fn project(
     state: &AsyncQuestionsState,
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     can_send: bool,
     working: bool,
     retired_ids: &[String],
@@ -213,7 +213,7 @@ pub fn write_settled(state: &mut AsyncQuestionsState, error: Option<&str>) {
 /// The answer the send or skip carries, or `None` when nothing may be sent right now.
 pub fn submission(
     state: &AsyncQuestionsState,
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     can_send: bool,
     skip: bool,
     retired_ids: &[String],

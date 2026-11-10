@@ -117,9 +117,13 @@ fn records(rows: &[(&str, &str)]) -> Vec<Value> {
 }
 
 fn chat_state(rows: &[Value]) -> ghostex_gx_chat_core::ChatState {
-    let messages: Vec<ChatMessage> = rows
+    let messages: Vec<ghostex_gx_chat_core::state::ChatRow> = rows
         .iter()
-        .map(|row| serde_json::from_value(row.clone()).expect("a chat row"))
+        .map(|row| {
+            std::sync::Arc::new(
+                serde_json::from_value::<ChatMessage>(row.clone()).expect("a chat row"),
+            )
+        })
         .collect();
     let mut state = ghostex_gx_chat_core::ChatState::default();
     state.session.agent = Some("omp".into());

@@ -10,6 +10,7 @@
 //! Its cache lives on [`crate::state::SubagentState::view`] and is thrown away by every
 //! `restart()`, which is what the TypeScript's `this.presentation = this.projector()` does.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::ChatMessage;
 use serde_json::Value;
 
@@ -24,10 +25,11 @@ use crate::transcript::presentation::{build_scope, row_detail_scope, ProjectionS
 /// A message the wire shape cannot describe is dropped rather than failing the whole page: the
 /// TypeScript hands `page.messages` straight to `update()` and a row it cannot read simply draws
 /// nothing.
-fn page_messages(page: &Value) -> Vec<ChatMessage> {
+fn page_messages(page: &Value) -> Vec<ChatRow> {
     messages(page)
         .into_iter()
         .filter_map(|message| serde_json::from_value::<ChatMessage>(message).ok())
+        .map(std::sync::Arc::new)
         .collect()
 }
 
@@ -38,7 +40,7 @@ fn page_messages(page: &Value) -> Vec<ChatMessage> {
 /// directory; the session's copy is the one with a writer.
 fn scope<'a>(
     view: &'a TranscriptViewState,
-    messages: &'a [ChatMessage],
+    messages: &'a [ChatRow],
     working: bool,
     working_directory: Option<&'a str>,
     line_breaks: AgentLineBreaks,
@@ -227,7 +229,7 @@ pub fn advance(state: &mut ChatState, context: &ChatContext) -> bool {
         .backfill
         .len()
         .saturating_sub(crate::state::BACKFILL_BATCH);
-    let batch: Vec<ChatMessage> = view.backfill.split_off(batch_start);
+    let batch: Vec<ChatRow> = view.backfill.split_off(batch_start);
     view.backfilled
         .extend(batch.iter().map(|message| message.id.clone()));
     let mut cache = std::mem::take(&mut view.projected);

@@ -17,6 +17,11 @@ use serde_json::json;
 const SENT_AT: i64 = 1_793_933_658_000;
 const MESSAGE: &str = "[Image #1](/Users/madda/.local/share/ghostex/i/1793933604436.png) when i click update on one of these please show a spinner next to it and show spinner on the download button";
 
+/// The rows as the core holds them (`ChatRow`).
+fn shared(rows: &[ChatMessage]) -> Vec<ghostex_gx_chat_core::state::ChatRow> {
+    rows.iter().cloned().map(std::sync::Arc::new).collect()
+}
+
 fn at(now_ms: i64) -> ChatContext {
     ChatContext {
         now_ms: now_ms as f64,
@@ -37,7 +42,7 @@ fn working_coordinator() -> ChatState {
     let mut state = ChatState::default();
     state.session.agent = Some("claude".into());
     state.session.server_working = true;
-    state.messages.list = vec![
+    state.messages.list = shared(&[
         row("u0", "user", "check the release patches", SENT_AT - 60_000),
         row(
             "a0",
@@ -45,7 +50,7 @@ fn working_coordinator() -> ChatState {
             "Applying those two with fuzz.",
             SENT_AT - 5_000,
         ),
-    ];
+    ]);
     state.messages.list_revision += 1;
     state
 }
@@ -69,7 +74,7 @@ fn user_rows(state: &ChatState) -> Vec<String> {
 }
 
 fn records(state: &mut ChatState, rows: Vec<ChatMessage>, now_ms: i64) {
-    state.messages.list.extend(rows);
+    state.messages.list.extend(shared(&rows));
     state.messages.list_revision += 1;
     before_compose(state, &at(now_ms));
 }

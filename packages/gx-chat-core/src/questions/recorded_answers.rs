@@ -85,12 +85,17 @@ pub fn rpc_settled(
 ) -> Option<Vec<Effect>> {
     let id = state.questions.recorded_answers.reads.remove(&request_id)?;
     if let RpcOutcome::Ok { result } = outcome {
-        let messages: Vec<ghostex_gx_protocol::ChatMessage> = result
+        let messages: Vec<crate::state::ChatRow> = result
             .get("messages")
             .cloned()
-            .and_then(|value| serde_json::from_value(value).ok())
-            .unwrap_or_default();
-        if let Some(found) = page_answers_in(&messages)
+            .and_then(|value| {
+                serde_json::from_value::<Vec<ghostex_gx_protocol::ChatMessage>>(value).ok()
+            })
+            .unwrap_or_default()
+            .into_iter()
+            .map(std::sync::Arc::new)
+            .collect();
+        if let Some(found) = page_answers_in(crate::state::messages_of(&messages))
             .into_iter()
             .find(|answers| answers.page_id == id)
         {
@@ -112,12 +117,16 @@ mod tests {
 
     const FORM: &str = "```questions\n{\"title\":\"Pick\",\"questions\":[{\"tag\":\"Q1\",\"title\":\"Which?\",\"choices\":[\"A\",\"B\"]}]}\n```";
 
-    fn reply(id: &str, text: &str) -> ChatMessage {
+    fn reply_message(id: &str, text: &str) -> ChatMessage {
         serde_json::from_value(json!({
             "id": id, "role": "assistant", "source": "transcript", "timestamp": 1,
             "blocks": [{"type": "text", "text": text}],
         }))
         .unwrap()
+    }
+
+    fn reply(id: &str, text: &str) -> crate::state::ChatRow {
+        std::sync::Arc::new(reply_message(id, text))
     }
 
     /// A chat whose loaded rows end at a form's turn, with the index recording its answers later.

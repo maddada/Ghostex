@@ -213,7 +213,7 @@ pub fn advance(state: &mut ChatState, context: &ChatContext) -> bool {
     // queue holds the MESSAGES the projection met, not ids looked up in the composed list, because
     // a completed turn's work rows come from the `loadWork` reads and are in no list at all. Each
     // is projected NOW and cached, so the refresh below reads whole rows for them.
-    let batch: Vec<ghostex_gx_protocol::ChatMessage> = view.backfill.split_off(batch_start);
+    let batch: Vec<crate::state::ChatRow> = view.backfill.split_off(batch_start);
     view.backfilled
         .extend(batch.iter().map(|message| message.id.clone()));
     let mut cache = std::mem::take(&mut state.transcript_view.projected);

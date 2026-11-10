@@ -2,6 +2,7 @@
 //!
 //! Ported from `packages/shared/session-chat-presentation/transcript.ts`.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::ChatMessage;
 
 use crate::transcript::foreign::{merge_messages_with, order_messages};
@@ -18,7 +19,7 @@ use crate::transcript::turns::{
     wakes_settled_agent, CompletedWorkTurn, RenderItem, SummaryModeTurn,
 };
 
-pub fn normalize_chat_transcript(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn normalize_chat_transcript(messages: &[ChatRow]) -> Vec<ChatRow> {
     // A failed command inside a Codex script marks the script's result before its hidden exit row
     // goes with the other harness rows (`command_exits.rs`).
     let ordered = crate::transcript::command_exits::link_command_exits(order_messages(messages));
@@ -31,7 +32,7 @@ pub fn normalize_chat_transcript(messages: &[ChatMessage]) -> Vec<ChatMessage> {
 
 /// A row that woke the agent after its reply opens a new turn, so it is not transparent: the tool
 /// calls the agent then makes belong to that turn, not to the reply before it.
-pub fn fold_chat_transcript(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn fold_chat_transcript(messages: &[ChatRow]) -> Vec<ChatRow> {
     let wakes: Vec<&str> = (0..messages.len())
         .filter(|at| wakes_settled_agent(messages, *at))
         .map(|at| messages[at].id.as_str())
@@ -56,10 +57,7 @@ pub fn passes_over_tool_burst(message: &ChatMessage, wakes: bool) -> bool {
 
 /// A completed turn's work, with the rows a deferred read brought back merged in. `deferred` is the
 /// whole section the turn's `section` names; the turn takes its own part of it.
-pub fn completed_chat_work(
-    turn: &CompletedWorkTurn,
-    deferred: Option<&[ChatMessage]>,
-) -> Vec<ChatMessage> {
+pub fn completed_chat_work(turn: &CompletedWorkTurn, deferred: Option<&[ChatRow]>) -> Vec<ChatRow> {
     let rows = match deferred.map(|section| section_part(turn, section)) {
         Some(deferred) => {
             let final_id = turn
@@ -71,7 +69,7 @@ pub fn completed_chat_work(
                 .position(|message| Some(message.id.as_str()) == final_id);
             /* CDXC:SessionChat 2026-10-07 WHY:
             gxserver folds a turn up to its last row, so a seam after the reply (a compaction, or a model or effort change made between turns) comes back with the turn's work although the turn already draws it after itself; kept, it showed twice. A slash command gxserver archived after the reply comes back the same way and opens its own turn (`completed_work_render_items`). */
-            let filtered: Vec<ChatMessage> = deferred
+            let filtered: Vec<ChatRow> = deferred
                 .iter()
                 .enumerate()
                 .filter(|(at, message)| {
@@ -92,10 +90,7 @@ pub fn completed_chat_work(
 /// section is not in it), up to the OMP wake-up that opens the next turn.
 ///
 /// CDXC:SessionChat 2026-10-30 WHY: gxserver folds a prompt and the OMP wake-ups the agent answered after it into one `deferredWork` stretch, the shape every chat core reads, so an older chat that does not open turns at OMP rows still reaches all of the work through the prompt. This core opens a turn at each such wake-up (`wakes_settled_agent`) and cuts the loaded stretch at them, so each fold holds its own work, whichever of their folds loaded it.
-pub(crate) fn section_part<'a>(
-    turn: &CompletedWorkTurn,
-    section: &'a [ChatMessage],
-) -> &'a [ChatMessage] {
+pub(crate) fn section_part<'a>(turn: &CompletedWorkTurn, section: &'a [ChatRow]) -> &'a [ChatRow] {
     let start = if turn.user.deferred_work.is_some() {
         0
     } else {
@@ -115,8 +110,8 @@ pub(crate) fn section_part<'a>(
 /// Everything the projection reads off one message list.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct TranscriptProjection {
-    pub normalized: Vec<ChatMessage>,
-    pub rendered: Vec<ChatMessage>,
+    pub normalized: Vec<ChatRow>,
+    pub rendered: Vec<ChatRow>,
     pub items: Vec<RenderItem>,
     pub final_ids: Vec<String>,
     pub summary_turns: Vec<SummaryModeTurn>,
@@ -135,7 +130,7 @@ pub struct TranscriptProjection {
 /// hands it an empty list, exactly as the TypeScript default did. `grouped` is Agent work Reduced
 /// or Quiet outside the Summary view (`completed_work_render_items`).
 pub fn project_chat_transcript(
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     working: bool,
     interacted_message_ids: &[String],
     live_side_question: Option<&str>,
@@ -160,7 +155,7 @@ pub fn project_chat_transcript(
 /// the forms this stretch itself redoes beside its projection: those strip the prefix too, so the
 /// caller can only use the stretch alone when there are none.
 pub(crate) fn project_chat_segment(
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     working: bool,
     prior_redone: &[(String, String)],
     grouped: bool,
@@ -173,7 +168,7 @@ pub(crate) fn project_chat_segment(
 /// [`project_chat_segment`] with the side-question card open above the composer: the newest row of
 /// the stretch asking its question is left out, and the flag says whether there was one.
 pub(crate) fn project_chat_segment_with(
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     working: bool,
     prior_redone: &[(String, String)],
     live_side_question: Option<&str>,
@@ -197,7 +192,7 @@ pub(crate) fn project_chat_segment_with(
 }
 
 fn project_normalized(
-    normalized: Vec<ChatMessage>,
+    normalized: Vec<ChatRow>,
     hidden_rows: Vec<String>,
     working: bool,
     interacted_message_ids: &[String],

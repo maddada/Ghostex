@@ -303,7 +303,7 @@ pub fn boot_read(
         state.messages.limit = state
             .messages
             .limit
-            .max(cached.result.messages.len() as u32)
+            .max(cached.rows.len() as u32)
             .min(MAX_LIMIT);
         // A retained fold whose identity contradicts the cache belongs to a conversation this one
         // has moved on from, so its read-only draft-agent fields stay out.
@@ -311,7 +311,9 @@ pub fn boot_read(
         if matching {
             apply_draft_agent_carriage(state, &cached.result);
         }
-        apply_authoritative(state, &cached.result, matching, false, context);
+        apply_authoritative(state, &cached.read_result(), matching, false, context);
+        let mut cached = cached;
+        crate::session::merge::share_with_list(&mut cached.rows, &state.messages);
         state.messages.snapshot = Some(cached);
         state.messages.authoritative_revision += 1;
         // The host handed this fold over; writing it straight back would only restamp it.
@@ -420,6 +422,8 @@ fn frame_arrived(state: &mut ChatState, frame: &ChatFrame, context: &ChatContext
                         );
             }
             apply_authoritative(state, &own, true, true, context);
+            let mut folded = folded;
+            crate::session::merge::share_with_list(&mut folded.rows, &state.messages);
             state.messages.snapshot = Some(folded);
             state.messages.authoritative_revision += 1;
             if moved || before != FrameIdentity::capture(state) {
@@ -447,9 +451,11 @@ fn frame_arrived(state: &mut ChatState, frame: &ChatFrame, context: &ChatContext
                         // `setTranscript(mergerRef.current.list)` on a retraction.
                         state.messages.new_composition_identity();
                     }
-                    crate::session::fold::fold_append_into(&mut folded, appended);
-                    if !appended.messages.is_empty() {
-                        state.messages.apply_append(&appended.messages);
+                    // The frame's rows, held once by the fold and the list alike.
+                    let rows = crate::session::merge::rows_of(&appended.messages);
+                    crate::session::fold::fold_append_into(&mut folded, appended, &rows);
+                    if !rows.is_empty() {
+                        state.messages.apply_append(&rows);
                         // `setTranscript(mergerRef.current.list)`: `applySessionChatMergerAppend`
                         // copies the list, and a row it replaced or added is a new object, so the
                         // assembler never sees a suffix extension by identity.
@@ -493,10 +499,10 @@ fn frame_arrived(state: &mut ChatState, frame: &ChatFrame, context: &ChatContext
                     let mut previous = state.messages.snapshot.take();
                     let rows = previous
                         .as_mut()
-                        .map(|previous| std::mem::take(&mut previous.result.messages));
+                        .map(|previous| std::mem::take(&mut previous.rows));
                     let mut folded = fold_state(previous.as_ref(), StateCarrier::State(frame));
                     if let Some(rows) = rows {
-                        folded.result.messages = rows;
+                        folded.rows = rows;
                     }
                     state.messages.snapshot = Some(folded);
                     let before = FrameIdentity::capture(state);
@@ -780,7 +786,7 @@ fn page_read_settled(
         // A replacement rebuilt the tail while this page was in flight.
         return Vec::new();
     }
-    let older: Vec<ghostex_gx_protocol::ChatMessage> = read
+    let older: Vec<crate::state::ChatRow> = read
         .messages
         .iter()
         .filter(
@@ -794,6 +800,7 @@ fn page_read_settled(
             },
         )
         .cloned()
+        .map(std::sync::Arc::new)
         .collect();
     for message in &older {
         state.messages.note_arrival(message, false);

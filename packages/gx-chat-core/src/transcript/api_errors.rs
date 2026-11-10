@@ -4,6 +4,7 @@
 //! User: "make errors like this one have a nice design please" (the plain "API Error: Can't reach the API server … (ENOTFOUND)" line a Claude turn ended with) and "i noticed you didn't retry when i got this error please fix! should've retried!". A connection or server failure the agent recorded is drawn as a compact card: an icon, a short human title, a plain sentence under it with the agent's own words behind Details (`kind_body`, 2026-11-03), and the retry gxserver runs for it (waiting for the network, the countdown, the hourly tries after the quick ones, stopped). Retry now and Stop retrying sit on the card. Once anything follows the failed row (the continuation, or the user's own message) the card collapses to one quiet line.
 //! SEE-ALSO: server/src/accounts/api_errors.rs (detection, the quick tries and `apiRetry`), apps/desktop/src/app/native_chat/api_error_card.rs and apps/mobile/app/src/chat/native/cards/ApiErrorCard.tsx (the two renderers).
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 use serde_json::{json, Value};
 
@@ -117,12 +118,13 @@ pub fn api_error_presentation(message: &ChatMessage) -> Value {
 
 /// The failed-call row nothing has answered yet: the newest user or agent row is the failure
 /// itself. A continuation, a message the user sent, or a reply closes it.
-fn open_failure(messages: &[ChatMessage]) -> Option<&ChatMessage> {
+fn open_failure(messages: &[ChatRow]) -> Option<&ChatMessage> {
     messages
         .iter()
         .rev()
         .find(|message| matches!(message.role, ChatRole::User | ChatRole::Assistant))
         .filter(|message| is_transient(message))
+        .map(|message| &**message)
 }
 
 fn clock(ms: i64, context: &ChatContext) -> String {
@@ -236,7 +238,7 @@ pub fn card_covers_stream_notice(state: &ChatState) -> bool {
     let messages = &state.messages.composed;
     let unanswered = messages
         .iter()
-        .rposition(is_transient)
+        .rposition(|message| is_transient(message))
         .is_some_and(|failure| {
             !messages[failure + 1..]
                 .iter()

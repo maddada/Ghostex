@@ -10,6 +10,7 @@
 //! CDXC:SessionChat 2026-10-24 DECISION: User, on Codex's thinking in Simple mode: "thinking has to be switched to a simple expandible area, it can't be this big card like it is now for codex. do same for all the agents we support chat for please". A thought is one slim row shaped like a tool row (brain tile, "Thinking…" while it is written or "Thought" after, then its line), closed by default, one click opening the full text below it; no bordered card. The running turn's thought is drawn that way in every mode, and in Simple mode every thought is, so a run of short Codex reasoning summaries reads as quiet lines between the calls instead of bold paragraphs. Supersedes the 2026-10-23 card look (ferpart's #272 request 1); what that decision chose stays: it starts closed while it streams, shows the newest finished line with no word count, and there is no setting to hide thinking. Drawn by the desktop's `native_chat/thinking_card.rs` and the phone's `ThinkingLine` in `MessageRow.tsx`.
 //!
 //! CDXC:SessionChat 2026-11-02 DECISION: User, asked whether the calls under a running thought stay in view or fold the way Claude's steps fold under its sentences: "Fold them like Claude, for every agent". While a turn runs, a thought that owns calls folds them behind its line the way an agent's sentence folds its calls behind its chevron: the line ends with "N tool calls" and a chevron that opens them, on the same default as a sentence's calls (open in detailed or verbose mode, closed in Simple mode, and open while one of them waits on an approval through `toolsOpen`), separate from the click on the line that opens the thought's text. Supersedes the 2026-10-24 rule that "the calls a thought made stay in view below it". Inside a turn's work fold the calls stay listed flat (`toolsFlat`, the 2026-10-21 decision in `tool_rows.rs`), and with Tool call cards on they stay the card after it.
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 use serde_json::{json, Value};
 
@@ -23,14 +24,17 @@ pub struct RunningThinking {
 }
 
 impl RunningThinking {
-    pub fn new(messages: &[ChatMessage], working: bool) -> Self {
+    pub fn new(messages: &[ChatRow], working: bool) -> Self {
         if !working {
             return Self {
                 ids: Vec::new(),
                 live: None,
             };
         }
-        let start = messages.iter().rposition(opens_turn).map_or(0, |at| at + 1);
+        let start = messages
+            .iter()
+            .rposition(|message| opens_turn(message))
+            .map_or(0, |at| at + 1);
         let tail = &messages[start.min(messages.len())..];
         let ids = tail
             .iter()
@@ -151,15 +155,20 @@ pub fn thinking_row(body: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::{thinking_row, RunningThinking};
+    use crate::state::ChatRow;
     use ghostex_gx_protocol::ChatMessage;
     use serde_json::{json, Value};
     use std::sync::Arc;
 
-    fn message(id: &str, role: &str, blocks: Value) -> ChatMessage {
+    fn message_message(id: &str, role: &str, blocks: Value) -> ChatMessage {
         serde_json::from_value(json!({
             "id": id, "role": role, "blocks": blocks, "timestamp": 1, "source": "transcript"
         }))
         .unwrap()
+    }
+
+    fn message(id: &str, role: &str, blocks: Value) -> crate::state::ChatRow {
+        std::sync::Arc::new(message_message(id, role, blocks))
     }
 
     fn call(id: &str) -> Value {
@@ -172,7 +181,7 @@ mod tests {
 
     /// A running turn: the prompt, a thought that owns the two calls it made, and a newer thought
     /// still being written. The rows are folded the way the transcript folds them.
-    fn running_turn() -> Vec<ChatMessage> {
+    fn running_turn() -> Vec<ChatRow> {
         vec![
             message(
                 "u1",
@@ -195,7 +204,7 @@ mod tests {
         ]
     }
 
-    fn row(message: &ChatMessage, messages: &[ChatMessage]) -> Arc<Value> {
+    fn row(message: &ChatMessage, messages: &[ChatRow]) -> Arc<Value> {
         Arc::new(crate::transcript::presentation::project_message(
             message,
             &std::cell::OnceCell::new(),

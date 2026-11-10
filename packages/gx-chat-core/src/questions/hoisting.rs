@@ -9,6 +9,7 @@ twice.
 */
 //! Port of `packages/shared/session-chat-presentation/question-hoisting.ts`.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage};
 
 use crate::questions::exchange_answers::{answered_question_exchange, QuestionExchange};
@@ -35,7 +36,7 @@ pub fn message_question_exchanges(message: &ChatMessage) -> Vec<QuestionExchange
 }
 
 /// Every answered exchange a completed turn's work carries, lifted out of the fold.
-pub fn hoisted_question_exchanges(work: &[ChatMessage]) -> Vec<HoistedExchange> {
+pub fn hoisted_question_exchanges(work: &[ChatRow]) -> Vec<HoistedExchange> {
     let mut out = Vec::new();
     for message in work {
         for (index, exchange) in message_question_exchanges(message).into_iter().enumerate() {

@@ -1,7 +1,6 @@
+use crate::state::ChatRow;
 use std::collections::HashSet;
 use std::sync::Arc;
-
-use ghostex_gx_protocol::ChatMessage;
 
 use crate::document::TranscriptItem;
 use crate::extras::minimap::{minimap_rows, minimap_shows};
@@ -112,7 +111,7 @@ fn build_after(
     // it is open nothing joins the prefix, so that row is in the stretch or already settled.
     let live_side_question = crate::transcript::side_question::live_side_question(state);
     let approval_wait = crate::transcript::approval_wait::approval_wait(state);
-    let rows_after = |settled: &SettledPrefix| -> Vec<ChatMessage> {
+    let rows_after = |settled: &SettledPrefix| -> Vec<ChatRow> {
         order[settled.messages.len()..]
             .iter()
             .map(|at| composed[*at].clone())
@@ -458,7 +457,7 @@ fn build_after(
         let turns: Vec<_> = projection
             .summary_turns
             .iter()
-            .map(|turn| (&turn.user, turn.final_message.as_ref()))
+            .map(|turn| (&*turn.user, turn.final_message.as_deref()))
             .collect();
         let mut rows: Vec<MinimapMarkerRow> = settled
             .chunks
@@ -503,7 +502,7 @@ fn build_after(
         .flat_map(|chunk| chunk.final_ids.iter().cloned())
         .collect();
     final_ids.extend(projection.final_ids);
-    let mut backfill: Vec<ChatMessage> = settled
+    let mut backfill: Vec<ChatRow> = settled
         .chunks
         .iter()
         .flat_map(|chunk| chunk.queued.iter().cloned())

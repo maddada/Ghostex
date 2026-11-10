@@ -279,7 +279,7 @@ fn written_picture_paths(text: &str) -> Vec<String> {
 impl SeenPictures {
     /// Read off `messages`' user rows and the digests the chat has (`picture_digests`).
     pub fn new(
-        messages: &[ghostex_gx_protocol::ChatMessage],
+        messages: &[crate::state::ChatRow],
         digests: &std::collections::HashMap<String, u64>,
     ) -> Self {
         use ghostex_gx_protocol::{ChatBlock, ChatRole};

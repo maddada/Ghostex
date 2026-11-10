@@ -12,10 +12,11 @@
 //! CDXC:SessionChat 2026-10-14 DECISION:
 //! User: "When I answered the question in the chat view (in the HTML visual modal), it took about 5 seconds for the answer to show in the chat. I want it as fast as possible. Could be an optimistic update with a spinner at the bottom left of the answers card until confirmed, but I want the user to see that the action had an effect faster." The answers card shows at once with a spinner at its bottom left, the form or page reads Answered, the confirmed card takes its place without a jump, and a failed delivery turns the card into an error with Retry that keeps the answers.
 
+use crate::state::ChatRow;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource, StartupDelivery};
+use ghostex_gx_protocol::{ChatBlock, ChatRole, ChatSource, StartupDelivery};
 
 use crate::session::pending::message_is_after_pending_timestamp;
 use crate::session::text::normalize_pending_text;
@@ -41,7 +42,7 @@ impl AnswerIndex {
         self.pages.contains_key(page_id)
     }
 
-    fn from_rows(transcript: &[ChatMessage]) -> Self {
+    fn from_rows(transcript: &[ChatRow]) -> Self {
         let mut index = Self::default();
         for (at, message) in transcript.iter().enumerate() {
             if message.role != ChatRole::User || message.source != ChatSource::Transcript {
@@ -69,7 +70,7 @@ impl AnswerIndex {
         index
     }
 
-    fn is_after(&self, transcript: &[ChatMessage], at: usize, pending: &PendingSend) -> bool {
+    fn is_after(&self, transcript: &[ChatRow], at: usize, pending: &PendingSend) -> bool {
         pending
             .after_message_id
             .as_deref()
@@ -312,7 +313,7 @@ pub(crate) fn observe_loaded(state: &mut ChatState) {
 /// Match real transcript rows to the sends they confirm, including rows read by Resources.
 pub(crate) fn observe_rows(
     forms: &mut BTreeMap<String, FormState>,
-    transcript: &[ChatMessage],
+    transcript: &[ChatRow],
     pending: &[PendingSend],
 ) {
     if forms.is_empty() {
@@ -329,7 +330,7 @@ pub(crate) fn observe_rows(
 fn observe_index(
     forms: &mut BTreeMap<String, FormState>,
     index: &AnswerIndex,
-    transcript: &[ChatMessage],
+    transcript: &[ChatRow],
     pending: &[PendingSend],
 ) {
     if index.pages.is_empty() {
@@ -490,8 +491,8 @@ fn observe_index(
 
 /// Keeps the answer echoes in step: one for each form send in flight, none for answers the
 /// transcript already carries.
-pub fn settle(state: &mut ChatState, context: &ChatContext, transcript: &[ChatMessage]) {
-    let confirmed: Vec<String> = page_answers_in(transcript)
+pub fn settle(state: &mut ChatState, context: &ChatContext, transcript: &[ChatRow]) {
+    let confirmed: Vec<String> = page_answers_in(crate::state::messages_of(transcript))
         .into_iter()
         .map(|answers| answers.page_id)
         .collect();

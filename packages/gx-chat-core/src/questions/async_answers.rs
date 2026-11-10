@@ -4,7 +4,8 @@
 //! questions Codex asks without stopping: they arrive on an assistant row and are retired by the
 //! user turn that answers them, not by any tool result.
 
-use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource};
+use crate::state::ChatRow;
+use ghostex_gx_protocol::{ChatBlock, ChatRole, ChatSource};
 
 pub use crate::document::PendingAsyncQuestion;
 
@@ -38,7 +39,7 @@ pub fn async_answer_prefix(title: &str) -> String {
 /// The questions still open, oldest first.
 ///
 /// Only an answer to that question retires it; unrelated messages and tool results do not.
-pub fn pending_async_questions(messages: &[ChatMessage]) -> Vec<PendingAsyncQuestion> {
+pub fn pending_async_questions(messages: &[ChatRow]) -> Vec<PendingAsyncQuestion> {
     let mut pending: Vec<PendingAsyncQuestion> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
     for message in messages {

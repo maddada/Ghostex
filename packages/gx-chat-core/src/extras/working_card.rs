@@ -215,7 +215,7 @@ fn reads_subagent_report(state: &ChatState) -> bool {
             .iter()
             .rev()
             .find(|row| !passed_over_before_wake(row))
-            .is_some_and(is_subagent_report)
+            .is_some_and(|row| is_subagent_report(row))
 }
 
 /// The two labels name the same call: equal once their spacing and case are set aside.

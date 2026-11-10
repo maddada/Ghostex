@@ -370,14 +370,14 @@ pub fn apply_authoritative(
                 Some(deferred) => {
                     let mut next = message.clone();
                     next.deferred_work = Some(deferred);
-                    next
+                    std::sync::Arc::new(next)
                 }
-                None => message.clone(),
+                None => std::sync::Arc::new(message.clone()),
             }
         }));
         rows
     } else {
-        result.messages.clone()
+        crate::session::merge::rows_of(&result.messages)
     };
     // `setTranscript(mergerRef.current.list)` is always a new array, but the assembler memo
     // behind it hands back the same `messages` when the new list is a suffix extension of the

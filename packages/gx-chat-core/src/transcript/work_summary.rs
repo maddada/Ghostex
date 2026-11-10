@@ -3,6 +3,7 @@
 //!
 //! CDXC:SessionChat 2026-10-18 DECISION: User picked the "proposed" work and reply look (docs/2026-10-10/chat-cards-questions/06-work.html): "Worked for 2m 5s" carries its counts beside it (tool calls, files; the failure chip was dropped 2026-10-12, see `work_stats`) so the closed fold still tells the story; tool rows get a check or cross and their duration on the right, and a failed call is tinted and says what failed. The same day the user took back the design's labelled reply toolbar (Copy · Annotate · Save): a reply's actions stay the icon-only buttons shown on hover. The GPUI chat (`completed_work_row.rs`, `tool_run.rs`) and the phone (`TranscriptItemRow.tsx`, `ToolRows.tsx`) draw what this file decides. User (2026-10-18): "Say Worked for 12s not Worked 12s. this is in all places we mention how long we worked please", superseding the design's "Worked 2m 5s" wording (`turns::worked_duration_label`).
 
+use crate::state::ChatRow;
 use std::collections::HashMap;
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage};
@@ -51,7 +52,7 @@ pub fn tool_duration_label(ms: i64) -> String {
 /// records no call id, or whose result is not in yet, has no duration.
 pub fn tool_durations<'a>(
     message: &ChatMessage,
-    timelines: impl IntoIterator<Item = &'a [ChatMessage]>,
+    timelines: impl IntoIterator<Item = &'a [ChatRow]>,
 ) -> HashMap<String, i64> {
     tool_spans(message, timelines)
         .into_iter()
@@ -68,7 +69,7 @@ pub fn tool_durations<'a>(
 /// (`tool_card.rs`).
 pub fn tool_spans<'a>(
     message: &ChatMessage,
-    timelines: impl IntoIterator<Item = &'a [ChatMessage]>,
+    timelines: impl IntoIterator<Item = &'a [ChatRow]>,
 ) -> HashMap<String, (i64, i64)> {
     let mut wanted: HashMap<&str, (Option<i64>, Option<i64>)> = HashMap::new();
     for block in &message.blocks {

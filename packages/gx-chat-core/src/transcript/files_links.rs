@@ -22,7 +22,8 @@
 //! SEE-ALSO: server/src/session_files_links.rs (reads every session's transcript and calls
 //! [`collect`]), composer/files_links.rs (the button, the card and its filter).
 
-use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
+use crate::state::ChatRow;
+use ghostex_gx_protocol::{ChatBlock, ChatRole};
 use markdown::mdast::Node;
 use markdown::ParseOptions;
 use serde::{Deserialize, Serialize};
@@ -207,7 +208,7 @@ fn earlier(a: &FilesLinksMention, b: &FilesLinksMention) -> bool {
 }
 
 /// Every item the messages mention, newest mention first.
-pub fn collect(messages: &[ChatMessage]) -> Vec<FilesLinksItem> {
+pub fn collect(messages: &[ChatRow]) -> Vec<FilesLinksItem> {
     let mut collector = Collector::default();
     for message in messages {
         let user = match message.role {
@@ -388,7 +389,7 @@ pub fn collect(messages: &[ChatMessage]) -> Vec<FilesLinksItem> {
 
 /// The same over the wire rows gxserver reads; a row this build cannot read is skipped.
 pub fn collect_values(messages: &[Value]) -> Vec<FilesLinksItem> {
-    let messages: Vec<ChatMessage> = messages
+    let messages: Vec<ChatRow> = messages
         .iter()
         .filter_map(|message| serde_json::from_value(message.clone()).ok())
         .collect();

@@ -5,6 +5,7 @@
 //! (`docs/2026-09-21/rust-chat/FAMILY-BRIEF.md`). `PROGRESS.md` lists them under "to fold into"
 //! their owner; when that family lands the real thing, this module shrinks to nothing.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatMessage, ChatRole};
 
 use crate::transcript::jsstr::{ascii_lower, js_trim, js_trim_start};
@@ -61,9 +62,9 @@ fn sort_rank(message: &ChatMessage) -> u8 {
 /// The TypeScript's last tie-break before the id was a `WeakMap` of arrival order, which only the
 /// incremental assembler filled. A list that reaches the projection through a read has no entries
 /// in it, so the id decides, which is what this reproduces.
-pub fn order_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn order_messages(messages: &[ChatRow]) -> Vec<ChatRow> {
     let mut ordered = messages.to_vec();
-    ordered.sort_by(order_cmp);
+    ordered.sort_by(|left, right| order_cmp(left, right));
     ordered
 }
 
@@ -89,7 +90,7 @@ pub fn order_key(message: &ChatMessage) -> (u8, Option<i64>) {
 ///
 /// The source-priority argument the TypeScript took is its default here, because the deferred rows
 /// this merges carry the same source as the turn's own work.
-pub fn merge_messages_with(existing: &[ChatMessage], incoming: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn merge_messages_with(existing: &[ChatRow], incoming: &[ChatRow]) -> Vec<ChatRow> {
     let mut list = existing.to_vec();
     for message in incoming {
         match list.iter().position(|entry| entry.id == message.id) {

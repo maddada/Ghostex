@@ -10,6 +10,7 @@
 //! record. The hidden row is then dropped with the other harness rows.
 //! SEE-ALSO: server/src/session_chat_decode_codex.rs (`CODEX_COMMAND_EXIT_PREFIX`).
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 use serde_json::Value;
 
@@ -52,7 +53,7 @@ fn leads_with_exit_code(output: &str) -> bool {
 }
 
 /// The messages with every failed command's exit given to the result of the call that ran it.
-pub fn link_command_exits(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
+pub fn link_command_exits(messages: Vec<ChatRow>) -> Vec<ChatRow> {
     if !messages
         .iter()
         .any(|message| command_exit(message).is_some())
@@ -73,7 +74,28 @@ pub fn link_command_exits(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
             }
             continue;
         }
-        for block in &mut message.blocks {
+        // Only a row whose result takes an exit is copied (`ChatRow`); the others are read.
+        let takes_exit = message.blocks.iter().any(|block| {
+            matches!(block, ChatBlock::ToolResult { call_id: Some(id), .. }
+                if exits.iter().any(|(known, _)| known == id))
+        });
+        if !takes_exit {
+            for block in &message.blocks {
+                match block {
+                    ChatBlock::ToolCall {
+                        call_id: Some(id),
+                        input,
+                        ..
+                    } => open.push((id.clone(), input.clone())),
+                    ChatBlock::ToolResult {
+                        call_id: Some(id), ..
+                    } => open.retain(|(open_id, _)| open_id != id),
+                    _ => {}
+                }
+            }
+            continue;
+        }
+        for block in &mut std::sync::Arc::make_mut(message).blocks {
             match block {
                 ChatBlock::ToolCall {
                     call_id: Some(id),
@@ -107,14 +129,18 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn message(id: &str, role: &str, blocks: Value) -> ChatMessage {
+    fn message_message(id: &str, role: &str, blocks: Value) -> ChatMessage {
         serde_json::from_value(json!({
             "id": id, "role": role, "blocks": blocks, "timestamp": 1, "source": "transcript"
         }))
         .unwrap()
     }
 
-    fn exit_row(id: &str, code: i64, command: &str) -> ChatMessage {
+    fn message(id: &str, role: &str, blocks: Value) -> crate::state::ChatRow {
+        std::sync::Arc::new(message_message(id, role, blocks))
+    }
+
+    fn exit_row(id: &str, code: i64, command: &str) -> crate::state::ChatRow {
         message(
             id,
             "system",
@@ -122,7 +148,7 @@ mod tests {
         )
     }
 
-    fn call(id: &str, script: &str) -> ChatMessage {
+    fn call(id: &str, script: &str) -> crate::state::ChatRow {
         message(
             id,
             "assistant",
@@ -130,7 +156,7 @@ mod tests {
         )
     }
 
-    fn result(id: &str, output: &str) -> ChatMessage {
+    fn result(id: &str, output: &str) -> crate::state::ChatRow {
         message(
             &format!("r-{id}"),
             "tool",
@@ -138,7 +164,7 @@ mod tests {
         )
     }
 
-    fn result_of(messages: &[ChatMessage], id: &str) -> (String, Option<bool>) {
+    fn result_of(messages: &[ChatRow], id: &str) -> (String, Option<bool>) {
         messages
             .iter()
             .flat_map(|message| &message.blocks)

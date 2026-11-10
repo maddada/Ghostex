@@ -5,6 +5,7 @@
 //! CDXC:SessionChat 2026-10-11 SEE-ALSO:
 //! native_markdown.rs marks the fence with the form's id; questions/forms.rs keeps the reader's picks and sends them; apps/desktop/src/app/native_chat/question_form.rs and apps/mobile/app/src/chat/native/transcript/QuestionForm.tsx draw it; skills/ghostex-visuals/SKILL.md teaches the grammar. Change them together.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 
 pub use ghostex_gx_visual::questions::{
@@ -118,8 +119,8 @@ pub fn form_fences(markdown: &str) -> Vec<(String, String)> {
 /// Every form the agent's replies hold, oldest first, once each. A block that only withdraws
 /// earlier questions (`open_questions.rs`) is not a form. A block that could not be read is
 /// marked `resent` once gxserver's message asking for it again is in the transcript.
-pub fn question_forms(messages: &[ChatMessage]) -> Vec<QuestionForm> {
-    let (mut forms, resent) = form_entries(messages, &[]);
+pub fn question_forms(messages: &[ChatRow]) -> Vec<QuestionForm> {
+    let (mut forms, resent) = form_entries(crate::state::messages_of(messages), &[]);
     mark_resent(&mut forms, &resent);
     forms
 }
@@ -127,8 +128,8 @@ pub fn question_forms(messages: &[ChatMessage]) -> Vec<QuestionForm> {
 /// The forms the replies in `messages` hold that `prior` (the forms of the messages before them)
 /// does not, and the ids gxserver's messages among them asked to have sent again: the reading half
 /// of [`question_forms`], before [`mark_resent`].
-pub fn form_entries(
-    messages: &[ChatMessage],
+pub fn form_entries<'a>(
+    messages: impl IntoIterator<Item = &'a ChatMessage>,
     prior: &[QuestionForm],
 ) -> (Vec<QuestionForm>, Vec<String>) {
     let mut forms: Vec<QuestionForm> = Vec::new();
@@ -181,7 +182,7 @@ pub fn mark_resent(forms: &mut [QuestionForm], resent: &[String]) {
 ///
 /// CDXC:SessionChat 2026-10-21 DECISION:
 /// User (Q366): "Hide it entirely": once the questions were sent again successfully, the failed card disappears from the transcript and only the working form shows; the resend row (Ghostex's own message to the agent) goes with it. The re-ask is any readable form in the agent's replies between the resend row and the next user message.
-pub fn hide_redone_forms(messages: &mut Vec<ChatMessage>) -> Vec<String> {
+pub fn hide_redone_forms(messages: &mut Vec<ChatRow>) -> Vec<String> {
     let redone = redone_forms(messages);
     if redone.is_empty() {
         return Vec::new();
@@ -192,7 +193,7 @@ pub fn hide_redone_forms(messages: &mut Vec<ChatMessage>) -> Vec<String> {
 
 /// The forms [`hide_redone_forms`] drops, as `(form id, id of the resend message)`: each resend
 /// message the agent answered with a form that reads, before the next user message.
-pub fn redone_forms(messages: &[ChatMessage]) -> Vec<(String, String)> {
+pub fn redone_forms(messages: &[ChatRow]) -> Vec<(String, String)> {
     let mut redone: Vec<(String, String)> = Vec::new();
     for (at, message) in messages.iter().enumerate() {
         if message.role != ChatRole::User {
@@ -222,7 +223,7 @@ pub fn redone_forms(messages: &[ChatMessage]) -> Vec<(String, String)> {
 
 /// Takes the ```questions blocks of the `redone` forms out of every reply, and a reply left with
 /// nothing out of the list.
-pub fn strip_redone_forms(messages: &mut Vec<ChatMessage>, redone: &[(String, String)]) {
+pub fn strip_redone_forms(messages: &mut Vec<ChatRow>, redone: &[(String, String)]) {
     if redone.is_empty() {
         return;
     }
@@ -230,6 +231,20 @@ pub fn strip_redone_forms(messages: &mut Vec<ChatMessage>, redone: &[(String, St
         if message.role != ChatRole::Assistant {
             return true;
         }
+        // Only a reply that holds a redone form is copied (`ChatRow`); the others are kept as they are.
+        let holds_redone = message.blocks.iter().any(|block| {
+            let ChatBlock::Text { text } = block else {
+                return false;
+            };
+            fence_spans(text).into_iter().any(|(_, _, language, body)| {
+                is_questions_language(&language)
+                    && redone.iter().any(|(id, _)| *id == form_id(&body))
+            })
+        });
+        if !holds_redone {
+            return true;
+        }
+        let message = std::sync::Arc::make_mut(message);
         let mut stripped = false;
         for block in &mut message.blocks {
             let ChatBlock::Text { text } = block else {

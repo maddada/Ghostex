@@ -389,11 +389,15 @@ fn a_waiting_call_says_it_waits() {
     assert_eq!(fields["toolCardLive"], true);
 }
 
-fn message(id: &str, role: &str, blocks: Value) -> ChatMessage {
+fn message_message(id: &str, role: &str, blocks: Value) -> ChatMessage {
     serde_json::from_value(json!({
         "id": id, "role": role, "blocks": blocks, "timestamp": 1, "source": "transcript"
     }))
     .unwrap()
+}
+
+fn message(id: &str, role: &str, blocks: Value) -> crate::state::ChatRow {
+    std::sync::Arc::new(message_message(id, role, blocks))
 }
 
 #[test]

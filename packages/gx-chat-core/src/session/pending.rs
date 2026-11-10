@@ -7,6 +7,7 @@
 //! constructors wrote an explicit id or an explicit `null`. `None` here is that `null`: no prior
 //! row, so the boundary falls back to the send time.
 
+use crate::state::ChatRow;
 use std::collections::BTreeMap;
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource, StartupDelivery};
@@ -76,21 +77,26 @@ pub(crate) fn message_is_after_pending_timestamp(
 
 /// `messagesAfterPendingBoundary`.
 pub fn messages_after_boundary<'a>(
-    messages: &'a [ChatMessage],
+    messages: &'a [ChatRow],
     pending: &PendingSend,
 ) -> Vec<&'a ChatMessage> {
     let Some(after_id) = pending.after_message_id.as_ref() else {
         return messages
             .iter()
+            .map(|message| &**message)
             .filter(|message| message_is_after_pending_timestamp(message, pending))
             .collect();
     };
     match messages.iter().position(|message| &message.id == after_id) {
-        Some(index) => messages[index + 1..].iter().collect(),
+        Some(index) => messages[index + 1..]
+            .iter()
+            .map(|message| &**message)
+            .collect(),
         // A bounded read can page the boundary out: fall back to the send time, never to an
         // arbitrary older prompt.
         None => messages
             .iter()
+            .map(|message| &**message)
             .filter(|message| message_is_after_pending_timestamp(message, pending))
             .collect(),
     }
@@ -316,7 +322,7 @@ enum Mode {
 
 fn filter_pending_sends(
     pending: &[PendingSend],
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     mode: Mode,
 ) -> Vec<PendingSend> {
     // A send still waiting for its pictures has not left, so no transcript row can be it: it stays,
@@ -341,7 +347,7 @@ fn filter_pending_sends(
 
 fn filter_sent_pending_sends(
     pending: &[PendingSend],
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     mode: Mode,
 ) -> Vec<PendingSend> {
     // CDXC:SessionChat 2026-10-10 WHY: matching an echo normalizes the text of every user message in the transcript, and this runs on every event the core handles (a live update, the composer's width while a panel slides). With nothing pending the answer is always nothing, so a very long thread no longer pays for its whole history on each event.
@@ -394,7 +400,7 @@ fn filter_sent_pending_sends(
     let glued = if still_open.len() < 2 {
         Vec::new()
     } else {
-        let all_rows: Vec<&ChatMessage> = messages.iter().collect();
+        let all_rows: Vec<&ChatMessage> = messages.iter().map(|message| &**message).collect();
         select_pending_indices_represented(&still_open, &texts(&all_rows))
     };
 
@@ -487,16 +493,13 @@ fn filter_sent_pending_sends(
 /// an assistant or other turn has landed after the matching user text. Otherwise a first turn
 /// flashes the empty state before the reply arrives. A local command acknowledgment retires its
 /// echo immediately, because it needs no reply.
-pub fn prune_pending_sends(pending: &[PendingSend], messages: &[ChatMessage]) -> Vec<PendingSend> {
+pub fn prune_pending_sends(pending: &[PendingSend], messages: &[ChatRow]) -> Vec<PendingSend> {
     filter_pending_sends(pending, messages, Mode::Advanced)
 }
 
 /// Visibility rule (hide the echo): identical structure, but counting ALL user messages, so an
 /// echo is hidden as soon as the transcript carries its user row.
-pub fn visible_pending_sends(
-    pending: &[PendingSend],
-    messages: &[ChatMessage],
-) -> Vec<PendingSend> {
+pub fn visible_pending_sends(pending: &[PendingSend], messages: &[ChatRow]) -> Vec<PendingSend> {
     filter_pending_sends(pending, messages, Mode::Matching)
 }
 
@@ -528,7 +531,7 @@ pub fn assign_occurrence(existing: &[PendingSend], entry: PendingSend) -> Pendin
 }
 
 /// `sessionChatPendingSendsAsMessages`: the echoes, as transcript rows.
-pub fn pending_sends_as_messages(pending: &[PendingSend]) -> Vec<ChatMessage> {
+pub fn pending_sends_as_messages(pending: &[PendingSend]) -> Vec<ChatRow> {
     pending
         .iter()
         .map(|entry| {
@@ -580,10 +583,10 @@ pub fn pending_sends_as_messages(pending: &[PendingSend]) -> Vec<ChatMessage> {
                 .strip_prefix('!')
                 .map(str::trim)
                 .filter(|command| entry.shell_command && !command.is_empty());
-            match command {
+            std::sync::Arc::new(match command {
                 Some(command) => shell_command_message(&echo, command, None),
                 None => echo,
-            }
+            })
         })
         .collect()
 }

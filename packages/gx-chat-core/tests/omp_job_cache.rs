@@ -22,6 +22,11 @@ thread_local! {
     static BYTES: Cell<usize> = const { Cell::new(0) };
 }
 
+/// The rows as the core holds them (`ChatRow`).
+fn shared(rows: &[ChatMessage]) -> Vec<ghostex_gx_chat_core::state::ChatRow> {
+    rows.iter().cloned().map(std::sync::Arc::new).collect()
+}
+
 fn count(bytes: usize) {
     // `try_with`: a thread that is shutting down has no counters left and is not measured.
     if COUNTING.try_with(Cell::get).unwrap_or(false) {
@@ -119,7 +124,7 @@ fn an_unchanged_job_delivery_is_looked_up_again_without_allocating() {
         .into_iter()
         .map(|statuses| {
             let mut state = ChatState::default();
-            state.messages.composed = vec![delivery(statuses)];
+            state.messages.composed = shared(&[delivery(statuses)]);
             let mut scope = scope(&state, &state.transcript_view);
             scope.working = true;
             scope.tool_cards = true;

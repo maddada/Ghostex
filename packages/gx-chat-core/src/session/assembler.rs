@@ -12,7 +12,11 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
+use std::sync::Arc;
+
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatSource};
+
+use crate::state::ChatRow;
 
 use crate::session::constants::{
     LAUNCH_PENDING_ID_PREFIX, PENDING_ID_PREFIX, STREAMING_ID, TERMINAL_TOOL_ID_PREFIX,
@@ -26,13 +30,13 @@ use crate::session::constants::{
 /// never consult it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
-    pub message: ChatMessage,
+    pub message: ChatRow,
     pub arrival: Option<usize>,
 }
 
 impl Row {
     /// A row with no file position, which is every client- and hook-sourced message.
-    pub fn new(message: ChatMessage) -> Self {
+    pub fn new(message: ChatRow) -> Self {
         Self {
             message,
             arrival: None,
@@ -40,7 +44,7 @@ impl Row {
     }
 
     /// The transport list, stamped with its own order.
-    pub fn stamped(messages: &[ChatMessage]) -> Vec<Self> {
+    pub fn stamped(messages: &[ChatRow]) -> Vec<Self> {
         messages
             .iter()
             .enumerate()
@@ -261,7 +265,7 @@ fn merge_one(
             return None;
         }
         // A different row wearing the same id: keep both under a derived key.
-        row.message.id = shadowed_id(&row.message);
+        Arc::make_mut(&mut row.message).id = shadowed_id(&row.message);
         if let Some(shadow) = by_id.get(&row.message.id).cloned() {
             if supersedes(&row.message, &shadow.message) {
                 replace_entry(by_id, by_turn, &shadow, row);
@@ -373,9 +377,9 @@ fn order_is_total<'a>(rows: impl Iterator<Item = &'a ChatMessage>) -> bool {
 /// [`assembled_messages`], with what [`AssembledTail::extend`] needs to add rows pushed after it,
 /// when the list allows that: one source, unique ids, a total order.
 pub fn assembled_with_tail(
-    list: &[ChatMessage],
+    list: &[ChatRow],
     revision: u64,
-) -> (Vec<ChatMessage>, Option<AssembledTail>) {
+) -> (Vec<ChatRow>, Option<AssembledTail>) {
     let assembled = assembled_messages(list);
     let tail = (|| {
         let source = list.first()?.source.clone();
@@ -386,10 +390,10 @@ pub fn assembled_with_tail(
         if !list.iter().all(|message| ids.insert(message.id.clone())) {
             return None;
         }
-        if !order_is_total(list.iter()) {
+        if !order_is_total(list.iter().map(|message| &**message)) {
             return None;
         }
-        let newest = list.iter().map(order_group).max()?;
+        let newest = list.iter().map(|message| order_group(message)).max()?;
         Some(AssembledTail {
             revision,
             len: list.len(),
@@ -407,10 +411,10 @@ impl AssembledTail {
     /// `pushed` says since when the list only had rows pushed at its end.
     pub fn extend(
         &mut self,
-        list: &[ChatMessage],
+        list: &[ChatRow],
         revision: u64,
         pushed: crate::state::PushedSince,
-    ) -> Option<Vec<ChatMessage>> {
+    ) -> Option<Vec<ChatRow>> {
         if pushed.revision > self.revision || pushed.len > self.len || self.len > list.len() {
             return None;
         }
@@ -422,7 +426,7 @@ impl AssembledTail {
                 && ids.insert(message.id.as_str())
                 && order_group(message) > self.newest
         });
-        if !fits || !order_is_total(added.iter()) {
+        if !fits || !order_is_total(added.iter().map(|message| &**message)) {
             return None;
         }
         let mut order: Vec<usize> = (self.len..list.len()).collect();
@@ -432,7 +436,7 @@ impl AssembledTail {
                 (&list[*right], &list[*right].id, *right),
             )
         });
-        if let Some(newest) = added.iter().map(order_group).max() {
+        if let Some(newest) = added.iter().map(|message| order_group(message)).max() {
             self.newest = newest;
         }
         self.ids
@@ -455,7 +459,7 @@ impl AssembledTail {
 /// so on a list of one source (every transcript read so far is all `transcript`) it can merge
 /// nothing, and the keys are computed only for the rare row whose id another row already holds.
 /// Computing them all was most of the cost of each new row on a long chat.
-pub fn assembled_messages(list: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn assembled_messages(list: &[ChatRow]) -> Vec<ChatRow> {
     enum Outcome {
         Drop,
         Replace(usize),
@@ -465,7 +469,7 @@ pub fn assembled_messages(list: &[ChatMessage]) -> Vec<ChatMessage> {
     let keys: Vec<String> = if single_source {
         Vec::new()
     } else {
-        list.iter().map(turn_key).collect()
+        list.iter().map(|message| turn_key(message)).collect()
     };
     let mut computed: Vec<Option<String>> = if single_source {
         vec![None; list.len()]
@@ -566,7 +570,7 @@ pub fn assembled_messages(list: &[ChatMessage]) -> Vec<ChatMessage> {
             let (at, id) = &entries[index];
             let mut message = list[*at].clone();
             if &message.id != id {
-                message.id = id.clone();
+                Arc::make_mut(&mut message).id = id.clone();
             }
             message
         })

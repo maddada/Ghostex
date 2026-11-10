@@ -426,14 +426,19 @@ pub fn merge(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::ChatRow;
     use crate::transcript::open_questions::{asker_entries, settle_askers, Found};
 
-    fn reply(id: &str, at: i64, text: &str) -> ChatMessage {
+    fn reply_message(id: &str, at: i64, text: &str) -> ChatMessage {
         serde_json::from_value(serde_json::json!({
             "id": id, "role": "assistant", "source": "transcript", "timestamp": at,
             "blocks": [{"type": "text", "text": text}],
         }))
         .unwrap()
+    }
+
+    fn reply(id: &str, at: i64, text: &str) -> crate::state::ChatRow {
+        std::sync::Arc::new(reply_message(id, at, text))
     }
 
     fn form(tag: &str, title: &str) -> String {
@@ -445,12 +450,12 @@ mod tests {
     const PAGE: &str = "```visual\n{\"page\":{\"title\":\"Notes\",\"url\":\"http://127.0.0.1:1/visual/0123456789abcdef0123456789abcdef\"}}\n```";
     const CHART: &str = "```visual\n{\"title\":\"Runs\",\"rows\":[{\"stats\":[{\"label\":\"Passed\",\"value\":3}]}]}\n```";
 
-    fn index(messages: &[ChatMessage], answered: &[String]) -> Vec<ResourceEntry> {
+    fn index(messages: &[ChatRow], answered: &[String]) -> Vec<ResourceEntry> {
         let mut entries = Vec::new();
         let mut found: Vec<Found> = Vec::new();
         for message in messages {
             append_unique(&mut entries, scan_message(message));
-            found.extend(asker_entries(std::slice::from_ref(message), &found));
+            found.extend(asker_entries(std::iter::once(&**message), &found));
         }
         settle(entries, &settle_askers(&found, answered))
     }
@@ -638,7 +643,7 @@ mod tests {
             replies += 1;
             let message = reply(&format!("m{lines}"), lines as i64, &text);
             append_unique(&mut entries, scan_message(&message));
-            found.extend(asker_entries(std::slice::from_ref(&message), &found));
+            found.extend(asker_entries(std::iter::once(&*message), &found));
         }
         let index = settle(entries, &settle_askers(&found, &answered));
         let count = |kind: &str, status: &str| {

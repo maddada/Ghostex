@@ -14,7 +14,7 @@
 //! The envelope is written by server/src/visual_pages/answers.rs; the cards are drawn by apps/desktop/src/app/native_chat/page_answers.rs and visual.rs, and on the phone by apps/mobile/app/src/chat/native/transcript/PageAnswersCard.tsx and VisualBlock.tsx. Change them together.
 
 use crate::questions::form_links::{plain_words, word_runs};
-use ghostex_gx_protocol::{ChatMessage, ChatRole};
+use ghostex_gx_protocol::ChatRole;
 use serde_json::{json, Value};
 
 use crate::transcript::jsstr::js_trim;
@@ -108,10 +108,12 @@ pub fn parse_page_answers(text: &str) -> Option<PageAnswers> {
 
 /// The answers this transcript received, one per page or question form (the latest sent, where the
 /// first one arrived).
-pub fn page_answers_in(messages: &[ChatMessage]) -> Vec<PageAnswers> {
+pub fn page_answers_in<'a>(
+    messages: impl IntoIterator<Item = &'a ghostex_gx_protocol::ChatMessage>,
+) -> Vec<PageAnswers> {
     let mut found: Vec<PageAnswers> = Vec::new();
     for message in messages
-        .iter()
+        .into_iter()
         .filter(|message| message.role == ChatRole::User)
     {
         if let Some((answers, _)) = split_page_answers(&prose_markdown(&message.blocks)) {

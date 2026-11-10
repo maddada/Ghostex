@@ -6,6 +6,7 @@
 //! User, of a question form older than the loaded rows: "Please show it floating so I can answer it without scrolling all the way up to it, or I can see the answer that I did without scrolling all the way up to it", "Even in the regular case, when I click on it from the resources, just don't scroll me up. Just show it floating in a modal ... Make sure the modal is not too tall or wide. The size of it should make sense. Also, it needs to have a button to go to the actual chat." So a click on a form or chart in the list opens it in a modal and the chat stays where it is. The modal draws the form's own card (`questionForms[id]`), so the picks, Other, notes, Send, For later and Remove are the card's, over the card's own answer path; an answered or Canceled form reads read-only; a withdrawn one says so. A form older than the loaded rows has no row to draw, so its reply (and its answers message) is read back on demand by byte offset (`readSessionChatResource`, server/src/session_chat_resources.rs): two seeks, no frame grows, and no transcript is read. When that read cannot find it, the modal says why. Pages keep opening in their page window.
 //! "Go to chat" scrolls to the form; when it is older than the loaded rows, it reads the window of history that ends at that reply (a jump read: `beforeOffset` just past the reply's offset, which leaves the chat's own "Load earlier" cursor where it was) and scrolls once the reply is among the rows, instead of paging in every message between, which a 626 MB transcript cannot afford. The Previous question pill, with only older questions waiting, goes the same way.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::ChatMessage;
 use serde_json::{json, Value};
 
@@ -243,7 +244,7 @@ pub fn rpc_settled(
     modal.loading = false;
     match outcome {
         RpcOutcome::Ok { result } => {
-            let messages: Vec<ChatMessage> = result
+            let messages: Vec<ChatRow> = result
                 .get("messages")
                 .cloned()
                 .and_then(|value| serde_json::from_value(value).ok())
@@ -261,7 +262,7 @@ pub fn rpc_settled(
                 modal.form = question_forms(&messages)
                     .into_iter()
                     .find(|form| form.id == id && form.error.is_empty());
-                modal.answers = page_answers_in(&messages)
+                modal.answers = page_answers_in(crate::state::messages_of(&messages))
                     .into_iter()
                     .find(|answers| answers.page_id == id);
                 modal.missing = modal.form.is_none().then(|| {
@@ -475,12 +476,16 @@ mod tests {
             "atMs": 5, "offset": offset})
     }
 
-    fn reply(id: &str, text: &str) -> ChatMessage {
+    fn reply_message(id: &str, text: &str) -> ChatMessage {
         serde_json::from_value(json!({
             "id": id, "role": "assistant", "source": "transcript", "timestamp": 1,
             "blocks": [{"type": "text", "text": text}],
         }))
         .unwrap()
+    }
+
+    fn reply(id: &str, text: &str) -> crate::state::ChatRow {
+        std::sync::Arc::new(reply_message(id, text))
     }
 
     const FORM: &str = "```questions\n{\"title\":\"Pick\",\"questions\":[{\"tag\":\"Q1\",\"title\":\"Which?\",\"choices\":[\"A\",\"B\"]}]}\n```";

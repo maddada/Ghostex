@@ -17,13 +17,14 @@ pub fn reply_markdown(state: &ChatState, message_id: &str) -> Option<String> {
         .transcript_view
         .projected
         .get(message_id)
-        .map(|projected| &projected.source)
+        .map(|projected| &*projected.source)
         .or_else(|| {
             state
                 .messages
                 .composed
                 .iter()
                 .find(|message| message.id == message_id)
+                .map(|message| &**message)
         })?;
     // Only the agent's own messages are read: never yours, a tool call or the agent's thinking.
     (message.role == ChatRole::Assistant)

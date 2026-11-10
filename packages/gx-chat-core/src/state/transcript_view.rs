@@ -21,10 +21,10 @@
 //!    decides which rows are whole, [`TranscriptViewState::backfill`] is the queue the next batch
 //!    drains, and the batch is taken from the END of the queue, newest first.
 
+use crate::state::ChatRow;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use ghostex_gx_protocol::ChatMessage;
 use serde_json::Value;
 
 use crate::document::{DeferredWorkRow, RowDetails};
@@ -81,7 +81,7 @@ pub struct TranscriptViewState {
     /// inside the subagent viewer.
     pub agent_path: String,
     /// The rows a `loadWork` read brought back, keyed by the turn's user-message id.
-    pub deferred: BTreeMap<String, Vec<ChatMessage>>,
+    pub deferred: BTreeMap<String, Vec<ChatRow>>,
     /// The messages whose full projection has been built, with the source each was built from.
     ///
     /// `NativeChatPresentation.modelsById`. A row not in here, and not inside the eager tail, ships
@@ -95,7 +95,7 @@ pub struct TranscriptViewState {
     /// Messages rather than ids, as `NativeChatPresentation.backfill` holds them: a completed
     /// turn's work rows come from the `loadWork` reads and are in no list an id could be looked up
     /// in, and an id that never resolved kept the zero-delay timer firing on every tick.
-    pub backfill: Vec<ChatMessage>,
+    pub backfill: Vec<ChatRow>,
     /// The ids a backfill batch has projected since the queue was last empty.
     ///
     /// CDXC:SessionChat 2026-10-23 WHY: A row a batch has just projected that the next pass still
@@ -219,11 +219,11 @@ pub struct TranscriptViewState {
 /// them change a copy.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProjectedMessage {
-    pub source: ChatMessage,
+    pub source: ChatRow,
     /// The row as it arrived, when `source` is the tool calls a background row was turned into
     /// (`background_task_source`): the cache is judged by it, so an unchanged row is not turned
     /// again to check.
-    pub arrived: Option<ChatMessage>,
+    pub arrived: Option<ChatRow>,
     pub model: Arc<Value>,
     /// Set while `model` carries the work-fold marks, with what they replaced, so a row drawn
     /// outside a fold gets the model exactly as projected.
@@ -244,7 +244,7 @@ pub struct ProjectedMessage {
 pub struct ProjectionInputs {
     /// The rows themselves, for a projector whose list has no identity of its own (the subagent
     /// viewer); empty for the session's transcript, whose identity is `composition_identity`.
-    pub composed: Vec<ChatMessage>,
+    pub composed: Vec<ChatRow>,
     /// The composed array's identity, which the TypeScript compares instead of its rows
     /// (`MessagesState::compose_generation`: a new array whenever the memo re-ran).
     pub composition_identity: u64,

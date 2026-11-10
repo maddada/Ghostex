@@ -14,6 +14,18 @@ use ghostex_gx_protocol::ChatMessage;
 use crate::session::fold::FoldedSnapshot;
 use crate::wire::StreamPosition;
 
+/// One transcript row as the core holds it: shared by every list that carries it (the
+/// authoritative list, the retained fold, the assembled and composed lists, the settled prefix and
+/// the projection cache), and copied only by a place that changes it (`Arc::make_mut`).
+///
+/// CDXC:SessionChat 2026-11-10 WHY: each of those places held its own deep copy of every row, so a new row cost 27 KB of live heap, 11.6 times its JSON, 69% of it in the six copies (memharness replay of 1,000 appended rows on a 200-row chat). The wire type (`ghostex_gx_protocol::ChatMessage`) stays as it is for gxserver and every reader of the records; only the core shares it.
+pub type ChatRow = std::sync::Arc<ChatMessage>;
+
+/// The messages of a row list, for a reader that takes them one by one.
+pub fn messages_of(rows: &[ChatRow]) -> impl Iterator<Item = &ChatMessage> + Clone {
+    rows.iter().map(|row| &**row)
+}
+
 /// A revision of `MessagesState::list` and the list's length then.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PushedSince {
@@ -25,12 +37,12 @@ pub struct PushedSince {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct MessagesState {
     /// The authoritative list in first-seen order, id-deduplicated by the merger.
-    pub list: Vec<ChatMessage>,
+    pub list: Vec<ChatRow>,
     /// `id` to index into `list`. Ordered so a rebuild is deterministic across platforms.
     pub index_by_id: BTreeMap<String, usize>,
     /// The list the renderer sees: the transcript plus markers, terminal statuses, the streaming
     /// bubble and the pending echoes, in the composition order of `controller.ts`.
-    pub composed: Vec<ChatMessage>,
+    pub composed: Vec<ChatRow>,
     /// The retained fold: every frame and read merged into one read result.
     ///
     /// This is what the store keeps and what persistence writes, so it stays a wire value rather
@@ -122,7 +134,7 @@ pub struct MessagesState {
     ///
     /// The TypeScript memoises it on the transcript's identity and the markers; rebuilding it on
     /// every event re-keyed and re-sorted the whole transcript once a second on a working session.
-    pub boundaried: Vec<ChatMessage>,
+    pub boundaried: Vec<ChatRow>,
     pub boundaried_key: Option<crate::session::composition::BoundariedKey>,
     /// Bumped whenever `list` changes (`replace_list`, `apply_append`, `remove_ids`), which is
     /// what `boundaried` is rebuilt on.

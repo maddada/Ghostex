@@ -19,6 +19,7 @@ pub mod document;
 pub mod error_card;
 pub mod events;
 pub mod fold;
+mod fold_serialize;
 pub mod frame_publish;
 pub mod markers;
 pub mod merge;

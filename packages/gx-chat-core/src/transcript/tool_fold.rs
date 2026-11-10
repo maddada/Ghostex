@@ -5,6 +5,7 @@
 //! `callId` names (Claude and Codex record one; their parallel calls finish out of order), and a
 //! result without one with the oldest call still unanswered, in document order.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 
 /// One call with the result that answered it; either half can be missing.
@@ -137,10 +138,10 @@ pub fn takes_tool_burst_row(message: &ChatMessage) -> bool {
 /// (collapsed harness markers) but must not break a fold run: a system reminder injected between an
 /// assistant turn and its tool rows would otherwise strand the tools in a separate bubble.
 pub fn fold_tool_messages(
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     is_transparent: &dyn Fn(&ChatMessage) -> bool,
-) -> Vec<ChatMessage> {
-    let mut output: Vec<ChatMessage> = Vec::with_capacity(messages.len());
+) -> Vec<ChatRow> {
+    let mut output: Vec<ChatRow> = Vec::with_capacity(messages.len());
     let mut anchor_index: Option<usize> = None;
     let mut anchor_takes = false;
     for message in messages {
@@ -153,7 +154,9 @@ pub fn fold_tool_messages(
         // took changed its blocks.
         if step == ToolBurstStep::Joins && anchor_takes {
             let index = anchor_index.expect("an anchor that takes a run has an index");
-            output[index].blocks.extend(message.blocks.iter().cloned());
+            std::sync::Arc::make_mut(&mut output[index])
+                .blocks
+                .extend(message.blocks.iter().cloned());
             continue;
         }
         output.push(message.clone());

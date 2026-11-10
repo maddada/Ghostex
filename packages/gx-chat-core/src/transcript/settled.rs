@@ -34,6 +34,7 @@
 //!    running turn's rows join an active chunk only while they are hidden and no approval is up,
 //!    since a chunk has hidden them for good.
 
+use crate::state::ChatRow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -132,7 +133,7 @@ struct Chunk {
     /// Its reasoning rows, and the thinking card each was drawn with (`Some(live)`) or without.
     thinking: Vec<(String, Option<bool>)>,
     /// Its folded `/btw` rows, which the side-question card above the composer can hide.
-    side_rows: Vec<ChatMessage>,
+    side_rows: Vec<ChatRow>,
     /// Where its render items, summary turns and rows start in the whole list.
     first_render: usize,
     first_turn: usize,
@@ -147,7 +148,7 @@ struct Chunk {
     item_count: usize,
     used: HashSet<String>,
     /// Its rows drawn as placeholders, in order, and the newest render item that drew one.
-    queued: Vec<ChatMessage>,
+    queued: Vec<ChatRow>,
     last_queued: Option<usize>,
     /// It drew a row projected outside the cache, which every pass projects again.
     off_cache: bool,
@@ -157,7 +158,7 @@ struct Chunk {
     lookups: RecipientLookups,
     tagged: Vec<TaggedRow>,
     /// The loaded work each of its completed turns was built with.
-    deferred: Vec<(String, Option<Vec<ChatMessage>>)>,
+    deferred: Vec<(String, Option<Vec<ChatRow>>)>,
 }
 
 /// What a check of the chunks' names reads ([`SettledPrefix::checked_names`]).
@@ -182,7 +183,7 @@ struct Unresolved {
 pub struct SettledPrefix {
     key: SettledKey,
     /// The prefix's rows as they arrived, in the order the projection sorts them.
-    messages: Vec<ChatMessage>,
+    messages: Vec<ChatRow>,
     /// The composition the prefix was last checked against, the revision of that list's head
     /// (`TranscriptPart`), and that list's sorted order: an unchanged composition (a backfill
     /// batch, a tick) needs no second check, and one that kept its head needs only its tail checked.
@@ -240,7 +241,7 @@ pub type SharedChunks = Vec<Arc<Vec<TranscriptItem>>>;
 type OrderRun = ((u8, Option<i64>), usize, bool, bool);
 
 /// The list as the projection sorts it, as positions in `messages`.
-fn sorted_positions(messages: &[ChatMessage]) -> Vec<usize> {
+fn sorted_positions(messages: &[ChatRow]) -> Vec<usize> {
     let mut order: Vec<usize> = (0..messages.len()).collect();
     order.sort_by(|left, right| order_cmp(&messages[*left], &messages[*right]));
     order
@@ -313,7 +314,7 @@ fn restarts_response(projection: &TranscriptProjection) -> bool {
 
 /// Whether some user row of `rows` asks the agent to send a ```questions block again, whose answer
 /// a later row could bring.
-fn asks_resend(rows: &[ChatMessage]) -> bool {
+fn asks_resend(rows: &[ChatRow]) -> bool {
     rows.iter().any(|row| {
         row.role == ChatRole::User
             && crate::transcript::question_forms::resend_form_id(
@@ -327,7 +328,7 @@ fn asks_resend(rows: &[ChatMessage]) -> bool {
 /// it sorts strictly after the row before it (two prompts delivered in the same millisecond do
 /// not), it has a byte offset (a row without one folds into a deferred turn before it), and it
 /// splits no `/btw` question from its answer and no two rows sharing an id.
-fn seams(rows: &[ChatMessage], summary: bool, grouped: bool) -> Vec<usize> {
+fn seams(rows: &[ChatRow], summary: bool, grouped: bool) -> Vec<usize> {
     cuts(rows, |row| {
         opens_turn(row, summary, grouped) && row.byte_offset.is_some()
     })
@@ -335,13 +336,13 @@ fn seams(rows: &[ChatMessage], summary: bool, grouped: bool) -> Vec<usize> {
 
 /// The rows of the running turn (sorted) an active chunk can end before, by the same rules
 /// ([`opens_active_stretch`]).
-fn active_seams(rows: &[ChatMessage]) -> Vec<usize> {
+fn active_seams(rows: &[ChatRow]) -> Vec<usize> {
     cuts(rows, opens_active_stretch)
 }
 
 /// Every row after the first of `rows` that `opens`, sorts strictly after the row before it, and
 /// splits no `/btw` question from its answer and no two rows sharing an id.
-fn cuts(rows: &[ChatMessage], opens: impl Fn(&ChatMessage) -> bool) -> Vec<usize> {
+fn cuts(rows: &[ChatRow], opens: impl Fn(&ChatMessage) -> bool) -> Vec<usize> {
     let mut seams: Vec<usize> = (1..rows.len())
         .filter(|at| {
             let row = &rows[*at];
@@ -522,11 +523,11 @@ impl SettledPrefix {
 
     /// Whether `rest` (sorted, the rows right after the prefix) can follow it: the sort, the seam,
     /// the `/btw` pairs and the ids. An empty prefix reaches into nothing.
-    fn can_follow(&self, rest: &[ChatMessage]) -> bool {
+    fn can_follow(&self, rest: &[ChatRow]) -> bool {
         let Some(first) = rest.first() else {
             return false;
         };
-        if order_is_ambiguous(rest.iter()) {
+        if order_is_ambiguous(rest.iter().map(|message| &**message)) {
             return false;
         }
         if self.messages.is_empty() {
@@ -611,7 +612,7 @@ impl SettledPrefix {
         let turns: Vec<_> = projection
             .summary_turns
             .iter()
-            .map(|turn| (&turn.user, turn.final_message.as_ref()))
+            .map(|turn| (&*turn.user, turn.final_message.as_deref()))
             .collect();
         let chunk = Chunk {
             start: rows.0,
@@ -680,7 +681,7 @@ impl SettledPrefix {
     /// `None` when they would share an id with it.
     fn absorb(
         &mut self,
-        rows: &[ChatMessage],
+        rows: &[ChatRow],
         projection: &TranscriptProjection,
         built: &mut Unresolved,
         arrival_at: &[usize],
@@ -734,7 +735,7 @@ impl SettledPrefix {
     /// on) say something to them: the prefix's merged with theirs, in the order the rows arrived
     /// (`arrival_at`, by sorted place). `None` when they say nothing, and the prefix's scans are
     /// the whole answer.
-    fn later_scans(&self, arrival_at: &[usize], stretch: &[ChatMessage]) -> Option<Scans> {
+    fn later_scans(&self, arrival_at: &[usize], stretch: &[ChatRow]) -> Option<Scans> {
         let held = self.messages.len();
         let later: Vec<ScanRow> = stretch
             .iter()
@@ -755,7 +756,7 @@ impl SettledPrefix {
         state: &ChatState,
         scans: &Scans,
         later_found: bool,
-        stretch: &[ChatMessage],
+        stretch: &[ChatRow],
     ) -> (Vec<Asker>, Vec<QuestionTag>) {
         let mut sent = scans.answers.clone();
         for pending in crate::questions::open_questions::answers_on_the_way(state) {
@@ -827,7 +828,7 @@ impl SettledPrefix {
             || chunk.queued.iter().any(|message| {
                 scope.backfilled.contains(&message.id)
                     || cache.get(&message.id).is_some_and(|entry| {
-                        entry.source == *message
+                        (Arc::ptr_eq(&entry.source, message) || *entry.source == **message)
                             && entry.line_breaks == scope.line_breaks
                             && linked_words(&entry.tag_words, &scope.question_tags)
                                 == entry.linked_tags
@@ -1043,8 +1044,8 @@ impl SettledPrefix {
         let grouped = scope.grouped_work && !summary;
         let composed = &state.messages.composed;
         let order = sorted_positions(composed);
-        let sorted: Vec<ChatMessage> = order.iter().map(|at| composed[*at].clone()).collect();
-        if order_is_ambiguous(sorted.iter()) {
+        let sorted: Vec<ChatRow> = order.iter().map(|at| composed[*at].clone()).collect();
+        if order_is_ambiguous(sorted.iter().map(|message| &**message)) {
             return None;
         }
         // The stretch after the prefix starts at the newest seam; with none (no turn closed yet) the
@@ -1212,7 +1213,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
     }) else {
         return crate::transcript::presentation::scope(state, view);
     };
-    let stretch: Vec<ChatMessage> = settled.order[settled.messages.len()..]
+    let stretch: Vec<ChatRow> = settled.order[settled.messages.len()..]
         .iter()
         .map(|at| composed[*at].clone())
         .collect();

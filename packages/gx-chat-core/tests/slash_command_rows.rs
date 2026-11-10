@@ -19,6 +19,11 @@ use serde_json::{json, Value};
 use std::cell::OnceCell;
 use std::collections::HashMap;
 
+/// The rows as the core holds them (`ChatRow`).
+fn shared(rows: &[ChatMessage]) -> Vec<ghostex_gx_chat_core::state::ChatRow> {
+    rows.iter().cloned().map(std::sync::Arc::new).collect()
+}
+
 fn user_row(id: &str, text: &str) -> ChatMessage {
     serde_json::from_value(json!({
         "id": id,
@@ -34,7 +39,7 @@ fn projected(message: &ChatMessage) -> Value {
     project_message(
         message,
         &OnceCell::new(),
-        std::slice::from_ref(message),
+        &[std::sync::Arc::new((message).clone())],
         "claude",
         None,
         AgentLineBreaks::default(),
@@ -47,9 +52,13 @@ fn projected(message: &ChatMessage) -> Value {
 }
 
 fn surfaced(rows: &[ChatMessage]) -> Vec<Value> {
+    surfaced_rows(&shared(rows))
+}
+
+fn surfaced_rows(rows: &[ghostex_gx_chat_core::state::ChatRow]) -> Vec<Value> {
     surface_skill_invocation_user_turns(rows)
         .iter()
-        .map(projected)
+        .map(|row| projected(row))
         .collect()
 }
 
@@ -162,7 +171,7 @@ fn live_command_sent_from_chat_is_a_bubble_then_a_note() {
         })],
         &[],
     );
-    let rows = surfaced(&live);
+    let rows = surfaced_rows(&live);
     assert_eq!(rows.len(), 2);
     assert_bubble(&rows[0], "/rename Fix parser");
     assert_eq!(rows[1]["suppressed"]["kind"], "status");
@@ -175,7 +184,7 @@ fn live_command_sent_from_chat_is_a_bubble_then_a_note() {
 /// The model, effort and Fast mode controls type their commands; the result row is the record.
 #[test]
 fn model_command_stays_hidden_behind_its_result() {
-    let rows = surface_skill_invocation_user_turns(&[
+    let rows = surface_skill_invocation_user_turns(&shared(&[
         user_row(
             "c1",
             "<command-name>/model</command-name>\n<command-args>sonnet</command-args>",
@@ -184,8 +193,8 @@ fn model_command_stays_hidden_behind_its_result() {
             "c2",
             "<local-command-stdout>Set model to Sonnet 5.5 for this session only</local-command-stdout>",
         ),
-    ]);
-    let projected: Vec<Value> = rows.iter().map(projected).collect();
+    ]));
+    let projected: Vec<Value> = rows.iter().map(|row| projected(row)).collect();
     assert!(is_hidden_message(&rows[0]));
     assert_eq!(
         projected[1]["suppressed"]["label"],
@@ -197,7 +206,7 @@ fn model_command_stays_hidden_behind_its_result() {
 /// A slash command opens its own turn, so it keeps its scroll mark; its output opens none.
 #[test]
 fn the_command_opens_a_turn_and_its_output_does_not() {
-    let rows = surface_skill_invocation_user_turns(&[
+    let rows = surface_skill_invocation_user_turns(&shared(&[
         user_row(
             "c1",
             "<command-name>/rename</command-name>\n<command-args>X</command-args>",
@@ -206,7 +215,7 @@ fn the_command_opens_a_turn_and_its_output_does_not() {
             "c2",
             "<local-command-stdout>Session renamed to: X</local-command-stdout>",
         ),
-    ]);
+    ]));
     assert!(opens_turn(&rows[0]));
     assert!(!opens_turn(&rows[1]));
 }

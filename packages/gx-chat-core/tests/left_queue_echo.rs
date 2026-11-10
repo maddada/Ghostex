@@ -17,6 +17,11 @@ use serde_json::{json, Value};
 const OPENED: f64 = 1_793_461_000_000.0;
 const ANSWERS: &str = "<ghostex-page-answers page=\"8a3b144d8039afda078e02b869d222cf\" title=\"Restore Claude Code settings.json\">\n{\n  \"Restore settings.json from which copy?\": \"5 Oct\"\n}\n</ghostex-page-answers>";
 
+/// The rows as the core holds them (`ChatRow`).
+fn shared(rows: &[ChatMessage]) -> Vec<ghostex_gx_chat_core::state::ChatRow> {
+    rows.iter().cloned().map(std::sync::Arc::new).collect()
+}
+
 fn queued_row(id: &str, text: &str) -> Value {
     json!({
         "id": id, "text": text, "startupSend": false, "state": "queued",
@@ -140,7 +145,7 @@ fn a_send_older_than_the_loaded_rows_goes_quietly() {
         "blocks": [{ "type": "text", "text": "later work" }],
     }))
     .expect("a chat message");
-    state.messages.list = vec![newer];
+    state.messages.list = shared(&[newer]);
     state.messages.list_revision += 1;
     state.messages.has_more = true;
     *state.session.queue_prompts = Some(Vec::new());
@@ -273,7 +278,7 @@ fn a_transcript_row_replaces_the_echo_inside_the_gap() {
         "blocks": [{ "type": "text", "text": ANSWERS }],
     }))
     .expect("a chat message");
-    state.messages.list = vec![recorded];
+    state.messages.list = shared(&[recorded]);
     state.messages.list_revision += 1;
     before_compose(&mut state, &at(OPENED + 2_500.0));
     assert!(state.pending.sends.is_empty());

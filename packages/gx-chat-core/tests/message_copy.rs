@@ -29,7 +29,7 @@ fn projected(message: &ChatMessage) -> Value {
     project_message(
         message,
         &OnceCell::new(),
-        std::slice::from_ref(message),
+        &[std::sync::Arc::new((message).clone())],
         "claude",
         None,
         AgentLineBreaks::default(),

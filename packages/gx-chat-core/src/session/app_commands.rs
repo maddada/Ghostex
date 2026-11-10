@@ -13,6 +13,7 @@
 //! rendering both would double the row, while Codex writes nothing, which is the whole reason these
 //! exist.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource};
 use serde_json::Value;
 
@@ -178,7 +179,7 @@ fn command_key(command: &str) -> String {
 /// Paired the way `merge_session_chat_local_commands` in gxserver pairs the archive on a read: the
 /// same command, recorded within 30 seconds after the send, one record per send.
 fn agent_record_of_send(
-    transcript: &[ChatMessage],
+    transcript: &[ChatRow],
     command: &str,
     sent_at_ms: i64,
     claimed: &[usize],
@@ -207,10 +208,7 @@ fn agent_record_of_send(
 }
 
 /// `sessionChatAppCommandsAsMessages`.
-pub fn app_commands_as_messages(
-    commands: &[Value],
-    transcript: &[ChatMessage],
-) -> Vec<ChatMessage> {
+pub fn app_commands_as_messages(commands: &[Value], transcript: &[ChatRow]) -> Vec<ChatRow> {
     // Built on first use: most turns carry no command this applies to, and it parses every
     // transcript row, which made each keystroke on a long chat pay for the whole transcript.
     let recorded_cell = std::cell::OnceCell::new();
@@ -339,7 +337,7 @@ pub fn app_commands_as_messages(
             sent_at_or_null(entry),
         ));
     }
-    rows
+    rows.into_iter().map(std::sync::Arc::new).collect()
 }
 
 /// CDXC:SessionChat 2026-09-10 WHY:
@@ -349,7 +347,7 @@ pub fn app_commands_as_messages(
 /// marker is the same fact twice, drawn as a user bubble beside a `Slash command` row.
 pub fn local_command_identities(
     app_commands: &[Value],
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
 ) -> Vec<(String, String)> {
     // Insertion-ordered, because the TypeScript's `Map` was and the consumer takes the FIRST
     // unconsumed match.
@@ -394,11 +392,11 @@ pub fn local_command_identities(
 
 /// `retireSessionChatMarkersCoveredByLocalCommands`.
 pub fn retire_markers_covered_by_local_commands(
-    marker_messages: &[ChatMessage],
+    marker_messages: &[ChatRow],
     app_commands: &[Value],
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     markers: &[CommandMarker],
-) -> Vec<ChatMessage> {
+) -> Vec<ChatRow> {
     let covered = local_command_identities(app_commands, messages);
     let mut consumed: Vec<&str> = Vec::new();
     let mut kept = Vec::new();
@@ -426,10 +424,7 @@ pub fn retire_markers_covered_by_local_commands(
 
 /// `reconcileSessionChatLocalCommandOutput`: keep the archived command's position while live probes
 /// refine its result.
-pub fn reconcile_local_command_output(
-    messages: &[ChatMessage],
-    commands: &[Value],
-) -> Vec<ChatMessage> {
+pub fn reconcile_local_command_output(messages: &[ChatRow], commands: &[Value]) -> Vec<ChatRow> {
     let mut result = messages.to_vec();
     for command in commands {
         if !flag(command, "localCommand") {
@@ -453,9 +448,10 @@ pub fn reconcile_local_command_output(
             continue;
         };
         let mut row = result[at].clone();
-        row.id = format!("{id}:output");
-        row.blocks = vec![ChatBlock::Text { text: body }];
-        row.timestamp = Some(result[at].timestamp.unwrap_or(0) + 1);
+        let output = std::sync::Arc::make_mut(&mut row);
+        output.id = format!("{id}:output");
+        output.blocks = vec![ChatBlock::Text { text: body }];
+        output.timestamp = Some(result[at].timestamp.unwrap_or(0) + 1);
         match result.iter().position(|message| message.id == row.id) {
             Some(output_at) => {
                 // A native transcript result remains authoritative over a screen capture.

@@ -16,6 +16,7 @@
 //! order, so once it holds a row newer than the sample and the status still has no match, its own
 //! row can never arrive.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource};
 use serde_json::Value;
 
@@ -161,7 +162,7 @@ pub fn terminal_stream_from_activity(
 /// one is the same sentence with more of it visible, so it replaces that row's text in place and
 /// keeps the row's id and position; a sample that is a prefix of a row already held brings nothing
 /// new.
-pub fn merge_terminal_status(current: &[ChatMessage], transient: &ChatMessage) -> Vec<ChatMessage> {
+pub fn merge_terminal_status(current: &[ChatRow], transient: &ChatMessage) -> Vec<ChatRow> {
     let text = message_text(transient);
     if text.is_empty() {
         return current.to_vec();
@@ -173,12 +174,12 @@ pub fn merge_terminal_status(current: &[ChatMessage], transient: &ChatMessage) -
         }
         if text.starts_with(&existing_text) {
             let mut next = current.to_vec();
-            next[index].blocks = transient.blocks.clone();
+            std::sync::Arc::make_mut(&mut next[index]).blocks = transient.blocks.clone();
             return next;
         }
     }
     let mut next = current.to_vec();
-    next.push(transient.clone());
+    next.push(std::sync::Arc::new(transient.clone()));
     next
 }
 
@@ -186,7 +187,7 @@ pub fn merge_terminal_status(current: &[ChatMessage], transient: &ChatMessage) -
 ///
 /// A tool's bullet can be read before its `⎿` gutter has been painted, in which case it arrived as
 /// a status. The moment the same row is recognised as a tool, that status row is its twin and goes.
-pub fn without_terminal_status(current: &[ChatMessage], tool: &ChatMessage) -> Vec<ChatMessage> {
+pub fn without_terminal_status(current: &[ChatRow], tool: &ChatMessage) -> Vec<ChatRow> {
     let text = message_text(tool);
     current
         .iter()
@@ -201,9 +202,9 @@ pub fn without_terminal_status(current: &[ChatMessage], tool: &ChatMessage) -> V
 /// `unreconciledSessionChatTerminalStatuses`: the transient rows the transcript has not caught up
 /// with yet.
 pub fn unreconciled_terminal_statuses(
-    statuses: &[ChatMessage],
-    transcript: &[ChatMessage],
-) -> Vec<ChatMessage> {
+    statuses: &[ChatRow],
+    transcript: &[ChatRow],
+) -> Vec<ChatRow> {
     if statuses.is_empty() {
         return Vec::new();
     }
@@ -354,7 +355,7 @@ fn same_word_any_tense(shown: &str, kept: &str) -> bool {
 
 /// `sessionChatTerminalToolRetired`: a terminal preview is redundant once its call is recorded or
 /// the transcript advances beyond it.
-pub fn terminal_tool_retired(tool: &ChatMessage, transcript: &[ChatMessage]) -> bool {
+pub fn terminal_tool_retired(tool: &ChatMessage, transcript: &[crate::state::ChatRow]) -> bool {
     let label = joined_text(tool, " ");
     let detail = terminal_tool_detail(tool);
     let command = detail
@@ -431,7 +432,7 @@ pub fn terminal_tool_retired(tool: &ChatMessage, transcript: &[ChatMessage]) -> 
 /// CDXC:AgentScreenDetection 2026-09-11 WHY:
 /// The agent paints informational warnings with the same bullet as assistant prose but saves them
 /// as system rows, so assistant-only matching left the terminal preview beside the saved warning.
-pub fn terminal_stream_retired(stream: &TerminalStream, transcript: &[ChatMessage]) -> bool {
+pub fn terminal_stream_retired(stream: &TerminalStream, transcript: &[ChatRow]) -> bool {
     let mut message_rows_seen = 0usize;
     let mut latest: Option<i64> = None;
     let mut newest_row = true;

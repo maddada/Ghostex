@@ -26,6 +26,11 @@ use std::collections::HashMap;
 const T0: i64 = 1_793_363_400_000;
 const MINUTE: i64 = 60_000;
 
+/// The rows as the core holds them (`ChatRow`).
+fn shared(rows: &[ChatMessage]) -> Vec<ghostex_gx_chat_core::state::ChatRow> {
+    rows.iter().cloned().map(std::sync::Arc::new).collect()
+}
+
 fn context() -> ChatContext {
     ChatContext {
         now_ms: (T0 + 30 * MINUTE) as f64,
@@ -141,7 +146,7 @@ fn projected(message: &ChatMessage) -> Value {
     project_message(
         message,
         &OnceCell::new(),
-        std::slice::from_ref(message),
+        &[std::sync::Arc::new((message).clone())],
         "omp",
         None,
         AgentLineBreaks::default(),
@@ -156,7 +161,7 @@ fn projected(message: &ChatMessage) -> Value {
 /// The whole transcript document for a settled chat, as JSON.
 fn document(messages: Vec<ChatMessage>) -> Vec<Value> {
     let mut state = ChatState::default();
-    state.messages.composed = messages;
+    state.messages.composed = shared(&messages);
     build(&state, &context())
         .items
         .iter()
@@ -164,13 +169,13 @@ fn document(messages: Vec<ChatMessage>) -> Vec<Value> {
         .collect()
 }
 
-fn ids(rows: &[ChatMessage]) -> Vec<&str> {
+fn ids(rows: &[ghostex_gx_chat_core::state::ChatRow]) -> Vec<&str> {
     rows.iter().map(|row| row.id.as_str()).collect()
 }
 
 /// The verbose transcript's items: `message:<id>` or `work:<opener>-><final or none>`.
 fn shape(messages: &[ChatMessage], working: bool) -> Vec<String> {
-    project_chat_transcript(messages, working, &[], None, false)
+    project_chat_transcript(&shared(messages), working, &[], None, false)
         .items
         .iter()
         .map(|item| match item {
@@ -188,7 +193,7 @@ fn shape(messages: &[ChatMessage], working: bool) -> Vec<String> {
 
 /// The work folded under the turn `opener` opened.
 fn folded(messages: &[ChatMessage], opener: &str) -> Vec<String> {
-    project_chat_transcript(messages, false, &[], None, false)
+    project_chat_transcript(&shared(messages), false, &[], None, false)
         .items
         .iter()
         .find_map(|item| match item {
@@ -306,7 +311,7 @@ fn a_cancelled_job_reads_as_stopped_neither_done_nor_failed() {
     let card = project_message(
         &source,
         &OnceCell::new(),
-        std::slice::from_ref(&source),
+        &[std::sync::Arc::new((&source).clone())],
         "omp",
         None,
         AgentLineBreaks::default(),
@@ -323,7 +328,7 @@ fn a_cancelled_job_reads_as_stopped_neither_done_nor_failed() {
     let rows = project_message(
         &claude,
         &OnceCell::new(),
-        std::slice::from_ref(&claude),
+        &[std::sync::Arc::new((&claude).clone())],
         "claude",
         None,
         AgentLineBreaks::default(),
@@ -571,7 +576,7 @@ fn an_omp_wake_up_after_the_reply_opens_its_own_turn() {
             messages[4].custom_message.as_ref().unwrap().custom_type
         );
         assert_eq!(
-            project_chat_transcript(&messages, false, &[], None, false).final_ids,
+            project_chat_transcript(&shared(&messages), false, &[], None, false).final_ids,
             ["a1", "a2"]
         );
         // The rows before the wake-up stay in the first turn's fold; the wake-up folds with its own.
@@ -636,7 +641,7 @@ fn summary_mode_keeps_the_reply_before_an_omp_wake_up() {
             T0 + 6 * MINUTE,
         ),
     ];
-    let turns = project_chat_transcript(&messages, false, &[], None, false).summary_turns;
+    let turns = project_chat_transcript(&shared(&messages), false, &[], None, false).summary_turns;
     assert_eq!(turns.len(), 1, "a wake-up opens no summary turn of its own");
     assert_eq!(
         turns[0].final_message.as_ref().map(|row| row.id.as_str()),
@@ -934,8 +939,8 @@ fn show_rows(state: &mut ChatState, rows: &[ChatMessage]) {
     for (index, row) in rows.iter_mut().enumerate() {
         row.byte_offset = Some(100 * (index as u64 + 1));
     }
-    state.messages.list = rows.clone();
-    state.messages.composed = rows;
+    state.messages.list = shared(&rows);
+    state.messages.composed = shared(&rows);
     state.messages.compose_generation += 1;
 }
 

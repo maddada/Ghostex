@@ -5,6 +5,7 @@
 //! transcript, then terminal statuses, then app commands, then markers, then the streaming
 //! bubble, then the pending tool row, then the pending echoes.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource};
 
 use crate::session::app_commands::{
@@ -32,7 +33,7 @@ use crate::transcript::noise::is_compaction_record;
 ///
 /// The optimistic "Ran /compact" marker retires against this count: once the agent has said the
 /// compaction happened, a client-side "we sent it" row would sit BELOW the result it announced.
-pub fn compaction_records(messages: &[ChatMessage]) -> usize {
+pub fn compaction_records(messages: &[crate::state::ChatRow]) -> usize {
     messages
         .iter()
         .filter(|message| is_compaction_record(message))
@@ -73,13 +74,13 @@ fn normalized_text(message: &ChatMessage) -> String {
 ///
 /// CDXC:SessionChat 2026-11-02 DECISION:
 /// User, about the grey "Slash command · /rename …" and "Local command output · …" rows: "i dont like how these look, they dont look like the other parts of the chat transcript". They picked "D. Your bubble, then a note" and "Yes, every agent": every slash command, built-in or skill, typed in the chat or in the terminal, for every agent, is the user's own bubble with the command in monospace (`slash_command_markdown` in `transcript/local_command.rs`), and its printed output is a status note under it (`suppressed_turn_presentation` in `transcript/noise.rs`). Supersedes the 2026-09-27 rule that kept the agent's built-in commands as `Slash command` rows. The model, effort and Fast mode controls' commands stay hidden: their result row is the one record.
-pub fn surface_skill_invocation_user_turns(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn surface_skill_invocation_user_turns(messages: &[ChatRow]) -> Vec<ChatRow> {
     surface_skill_invocation_user_turns_in(messages.to_vec())
 }
 
 /// [`surface_skill_invocation_user_turns`] on a list the caller owns, rewritten in place rather
 /// than copied twice.
-pub fn surface_skill_invocation_user_turns_in(mut messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
+pub fn surface_skill_invocation_user_turns_in(mut messages: Vec<ChatRow>) -> Vec<ChatRow> {
     for message in &mut messages {
         let plain_text = message
             .blocks
@@ -108,7 +109,7 @@ pub fn surface_skill_invocation_user_turns_in(mut messages: Vec<ChatMessage>) ->
         } else {
             format!("/{}", short_command_name(&envelope.name))
         };
-        message.blocks = vec![ChatBlock::Text {
+        std::sync::Arc::make_mut(message).blocks = vec![ChatBlock::Text {
             text: if envelope.args.is_empty() {
                 token
             } else {
@@ -133,7 +134,7 @@ pub fn short_command_name(name: &str) -> &str {
 /// Startup sends hydrate as pending bubbles even for `/usage`. Its command acknowledgment can
 /// arrive before any transcript exists, and it never needs an assistant reply, so pending
 /// reconciliation must include the server's live local-command records.
-pub fn pending_transcript(state: &ChatState, boundaried: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn pending_transcript(state: &ChatState, boundaried: &[ChatRow]) -> Vec<ChatRow> {
     let local: Vec<serde_json::Value> = state
         .session
         .app_commands
@@ -183,7 +184,7 @@ pub struct ComposeKey {
     pub preview_text: Option<String>,
     pub sends: Vec<crate::state::PendingSend>,
     pub markers: Vec<crate::state::CommandMarker>,
-    pub statuses: Vec<ChatMessage>,
+    pub statuses: Vec<ChatRow>,
     pub stream: Option<crate::state::TerminalStream>,
     pub visible_tool: Option<ChatMessage>,
     pub queue: Option<Vec<serde_json::Value>>,
@@ -274,7 +275,7 @@ pub fn compose_cached(state: &mut ChatState, preview_text: Option<&str>, working
 ///
 /// This is `boundaried` in the TypeScript, and it is what every later step measures against.
 /// [`refresh_boundaried`] keeps the answer on the state; this is the rebuild.
-pub fn boundaried_transcript(state: &ChatState) -> Vec<ChatMessage> {
+pub fn boundaried_transcript(state: &ChatState) -> Vec<ChatRow> {
     let surfaced = surface_skill_invocation_user_turns_in(assembled_messages(&state.messages.list));
     apply_marker_boundaries_in(surfaced, &state.pending.markers)
 }
@@ -285,7 +286,7 @@ pub fn boundaried_transcript(state: &ChatState) -> Vec<ChatMessage> {
 pub struct TranscriptPartKey {
     pub boundaried: BoundariedKey,
     pub app_commands: Vec<serde_json::Value>,
-    pub pending: Vec<ChatMessage>,
+    pub pending: Vec<ChatRow>,
     pub async_questions_since: Option<i64>,
 }
 
@@ -302,7 +303,7 @@ pub struct TranscriptPart {
 ///
 /// Everything with no authoritative record yet rides in the tail, in the order `controller.ts`
 /// builds it; the head is the transcript with the archived local commands reconciled into it.
-pub fn compose(state: &ChatState, preview_text: Option<&str>, working: bool) -> Vec<ChatMessage> {
+pub fn compose(state: &ChatState, preview_text: Option<&str>, working: bool) -> Vec<ChatRow> {
     compose_after(state, preview_text, working, Vec::new()).0
 }
 
@@ -317,12 +318,12 @@ fn compose_after(
     state: &ChatState,
     preview_text: Option<&str>,
     working: bool,
-    previous: Vec<ChatMessage>,
-) -> (Vec<ChatMessage>, TranscriptPart) {
+    previous: Vec<ChatRow>,
+) -> (Vec<ChatRow>, TranscriptPart) {
     let rebuilt;
     let boundaried_current =
         state.messages.boundaried_key.as_ref() == Some(&BoundariedKey::of(state));
-    let boundaried: &[ChatMessage] = if boundaried_current {
+    let boundaried: &[ChatRow] = if boundaried_current {
         &state.messages.boundaried
     } else {
         rebuilt = boundaried_transcript(state);
@@ -432,7 +433,7 @@ fn compose_after(
     // every composition made each new message on a long chat pay for the whole history.
     let authoritative_text = std::cell::OnceCell::new();
     // Counting the compactions classifies every transcript row, which only a marker reads.
-    let marker_messages: Vec<ChatMessage> = if state.pending.markers.is_empty() {
+    let marker_messages: Vec<ChatRow> = if state.pending.markers.is_empty() {
         Vec::new()
     } else {
         markers_as_messages(
@@ -448,7 +449,7 @@ fn compose_after(
                     boundaried
                         .iter()
                         .filter(|message| matches!(message.source, ChatSource::Transcript))
-                        .map(normalized_text)
+                        .map(|message| normalized_text(message))
                         .filter(|text| !text.is_empty())
                         .collect::<Vec<String>>()
                 })
@@ -464,7 +465,7 @@ fn compose_after(
 
     // Order, from `controller.ts`: the transient terminal statuses, then the app-command rows, then
     // the markers, then the streaming bubble, then the pending echoes.
-    let mut tail: Vec<ChatMessage> =
+    let mut tail: Vec<ChatRow> =
         unreconciled_terminal_statuses(&state.pending.terminal_status_messages, boundaried);
     tail.extend(surface_skill_invocation_user_turns(
         &app_commands_as_messages(&state.session.app_commands, transcript),
@@ -480,7 +481,7 @@ fn compose_after(
             && !terminal_stream_retired(stream, boundaried)
     });
     // `derive_streaming_text` reads only the last row of the transcript plus the pending echoes.
-    let with_pending: Vec<ChatMessage> = pending_messages
+    let with_pending: Vec<ChatRow> = pending_messages
         .last()
         .or(boundaried.last())
         .cloned()
@@ -497,7 +498,7 @@ fn compose_after(
             .map(|text| without_trailing_section_titles(&text).to_string()),
     };
     if let Some(text) = streaming_text.filter(|text| !text.is_empty()) {
-        tail.push(streaming_message(&text));
+        tail.push(std::sync::Arc::new(streaming_message(&text)));
     }
     // CDXC:SessionChat 2026-10-18 DECISION: User (Q253, "card"): the pending tool card and the working row become one card (`extras::working_card`, since 2026-10-18 in its own row right above the composer). The pending tool no longer rides in the tail as a row of its own; the card's label shows it. Supersedes the 2026-10-17 open "Running now" section, gone with the card's opening ("let's make the pill itself not expandable at all").
     tail.extend(pending_messages);
@@ -508,13 +509,13 @@ fn compose_after(
 }
 
 /// An async question older than the retirement stamp is no longer offered.
-fn retire_async_questions(state: &ChatState, messages: &mut [ChatMessage]) {
+fn retire_async_questions(state: &ChatState, messages: &mut [ChatRow]) {
     if let Some(since) = state.session.async_questions_since {
         for message in messages {
             if message.async_questions.is_some()
                 && message.timestamp.is_some_and(|stamp| stamp < since)
             {
-                message.async_questions = None;
+                std::sync::Arc::make_mut(message).async_questions = None;
             }
         }
     }

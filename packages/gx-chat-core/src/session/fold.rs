@@ -15,7 +15,7 @@
 use ghostex_gx_protocol::{
     ChatAppendedFrame, ChatSnapshotFrame, ChatStateFrame, ChatStatus, ReadSessionChatResult, Tri,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use crate::jsnum::{js_number_of, js_number_value};
@@ -33,11 +33,14 @@ use crate::session::view_state::transcript_status_after_state;
 /// `extra` never holds a key `result` owns, because both are written flat into one object: the
 /// frame keys are the only ones the fold adds, and the read below leaves the result's own keys
 /// out of it.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+///
+/// The transcript rides in `rows`, shared with the authoritative list ([`crate::state::ChatRow`]);
+/// `result.messages` stays empty, and the record writes `rows` in its place
+/// (`session::fold_serialize`).
+#[derive(Clone, Debug, PartialEq)]
 pub struct FoldedSnapshot {
-    #[serde(flatten)]
     pub result: ReadSessionChatResult,
-    #[serde(flatten)]
+    pub rows: Vec<crate::state::ChatRow>,
     pub extra: Map<String, Value>,
 }
 
@@ -56,19 +59,20 @@ impl<'de> Deserialize<'de> for FoldedSnapshot {
         // The transcript is the bulk of a record and always the result's, so it is read on its
         // own instead of being copied into the probe that finds the result's keys.
         let messages = entries.shift_remove("messages");
-        let mut result: ReadSessionChatResult =
+        let result: ReadSessionChatResult =
             serde_json::from_value(Value::Object(entries.clone())).map_err(D::Error::custom)?;
         let owned = match serde_json::to_value(&result) {
             Ok(Value::Object(owned)) => owned,
             _ => Map::new(),
         };
-        result.messages = match messages {
+        let rows: Vec<ghostex_gx_protocol::ChatMessage> = match messages {
             None | Some(Value::Null) => Vec::new(),
             Some(rows) => serde_json::from_value(rows).map_err(D::Error::custom)?,
         };
         entries.retain(|key, _| !owned.contains_key(key));
         Ok(Self {
             result,
+            rows: rows.into_iter().map(std::sync::Arc::new).collect(),
             extra: entries,
         })
     }
@@ -97,10 +101,23 @@ impl<'de> serde::de::Visitor<'de> for FirstEntryWins {
 }
 
 impl FoldedSnapshot {
-    /// A folded snapshot with no frame keys.
-    pub fn new(result: ReadSessionChatResult) -> Self {
+    /// The fold as the read result it stands for, rows included: for applying a retained fold the
+    /// way a read is applied, which copies the rows once.
+    pub fn read_result(&self) -> ReadSessionChatResult {
+        let mut result = self.result.clone();
+        result.messages = self.rows.iter().map(|row| (**row).clone()).collect();
+        result
+    }
+
+    /// A folded snapshot with no frame keys, its rows moved out of `result`.
+    pub fn new(mut result: ReadSessionChatResult) -> Self {
+        let rows = std::mem::take(&mut result.messages)
+            .into_iter()
+            .map(std::sync::Arc::new)
+            .collect();
         Self {
             result,
+            rows,
             extra: Map::new(),
         }
     }
@@ -150,7 +167,7 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
     if !state_only {
         // A window is rebuilt through the merger so two rows sharing an API response id both
         // survive and the index never points at the wrong row.
-        folded.result.messages = merge_messages(&[], &folded.result.messages);
+        folded.rows = merge_messages(&[], &folded.rows);
     }
 
     folded.result.status = if state_only {
@@ -323,24 +340,29 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
 /// `foldSessionChatAppend`: new rows, and nothing else that is not on the frame.
 pub fn fold_append(previous: &FoldedSnapshot, event: &ChatAppendedFrame) -> FoldedSnapshot {
     let mut folded = previous.clone();
-    fold_append_into(&mut folded, event);
+    let rows = crate::session::merge::rows_of(&event.messages);
+    fold_append_into(&mut folded, event, &rows);
     folded
 }
 
 /// [`fold_append`] into the retained fold itself, which every appended frame would otherwise copy
-/// whole, twice.
-pub fn fold_append_into(folded: &mut FoldedSnapshot, event: &ChatAppendedFrame) {
+/// whole, twice. `rows` are the frame's rows as the list takes them too, so both hold one copy.
+pub fn fold_append_into(
+    folded: &mut FoldedSnapshot,
+    event: &ChatAppendedFrame,
+    rows: &[crate::state::ChatRow],
+) {
     folded.result.epoch = event.base.epoch;
     folded.result.seq = event.base.seq;
     if !event.superseded_message_ids.is_empty() {
-        folded.result.messages.retain(|message| {
+        folded.rows.retain(|message| {
             !event
                 .superseded_message_ids
                 .iter()
                 .any(|id| id == &message.id)
         });
     }
-    crate::session::merge::merge_messages_into(&mut folded.result.messages, &event.messages);
+    crate::session::merge::merge_messages_into(&mut folded.rows, rows);
     if let Some(lifecycle) = event.lifecycle.clone() {
         folded.result.lifecycle = Some(lifecycle);
     }
@@ -618,6 +640,7 @@ fn empty_result() -> ReadSessionChatResult {
 /// `appCommands` as a new array.
 pub fn snapshot_frame_result(frame: &ChatSnapshotFrame) -> ReadSessionChatResult {
     let mut result = snapshot_as_result(frame, None).result;
+    result.messages = frame.messages.clone();
     result.epoch = frame.base.epoch;
     result.seq = frame.base.seq;
     result
@@ -640,7 +663,7 @@ fn snapshot_as_result(
     let mut folded = previous
         .cloned()
         .unwrap_or_else(|| FoldedSnapshot::new(empty_result()));
-    folded.result.messages = frame.messages.clone();
+    folded.rows = crate::session::merge::rows_of(&frame.messages);
     folded.result.has_more = frame.has_more;
     folded.result.has_more_exact = frame.has_more_exact;
     folded.result.before_offset = frame.before_offset;
@@ -683,7 +706,9 @@ fn read_as_result(
     let mut folded = previous
         .cloned()
         .unwrap_or_else(|| FoldedSnapshot::new(empty_result()));
-    folded.result = result.clone();
+    let FoldedSnapshot { result, rows, .. } = FoldedSnapshot::new(result.clone());
+    folded.result = result;
+    folded.rows = rows;
     folded
 }
 

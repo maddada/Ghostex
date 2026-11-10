@@ -6,6 +6,7 @@
 //! status from the transcript lifecycle; the client re-checks the lifecycle so a terminal boundary
 //! can settle a stale "working" signal without waiting for the next frame.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{
     ChatBlock, ChatMessage, ChatRole, ChatSource, ChatStatus, TurnLifecycle, TurnLifecycleState,
 };
@@ -47,7 +48,7 @@ pub fn lifecycle_terminates_current_turn(
 /// Whether the transcript's last row is assistant prose written after the turn began, which is the
 /// recovery path for a turn whose lifecycle never settled.
 pub fn trailing_assistant_post_dates(
-    transcript: &[ChatMessage],
+    transcript: &[ChatRow],
     working_started_at: Option<i64>,
 ) -> bool {
     let Some(started) = working_started_at else {
@@ -74,7 +75,7 @@ pub fn derive_working_override(
     lifecycle: Option<&TurnLifecycle>,
     working_started_at: Option<i64>,
     has_working_subagents: bool,
-    transcript: &[ChatMessage],
+    transcript: &[ChatRow],
 ) -> WorkingOverride {
     if !working {
         return WorkingOverride::None;
@@ -304,6 +305,7 @@ fn newest_row(state: &crate::state::ChatState) -> Option<&ChatMessage> {
         .iter()
         .rev()
         .find(|row| row.source == ChatSource::Transcript && row.role != ChatRole::System)
+        .map(|row| &**row)
 }
 
 /// Agent work Quiet: what a Stop leaves. An unanswered question at the newest row no longer holds

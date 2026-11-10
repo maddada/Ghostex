@@ -8,6 +8,7 @@
 //! implementation, drawn by the GPUI chat and the phone's native chat. Supersedes the 2026-09-17
 //! decision that kept React as the desktop default with GPUI opt-in.
 
+use crate::state::ChatRow;
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, DeferredWork};
 
 use crate::transcript::background_rows::{is_background_task_row, OMP_ASYNC_RESULT};
@@ -23,9 +24,9 @@ use crate::transcript::system_cards::{OMP_ADVISOR, OMP_IRC_INCOMING};
 /// One finished user turn: the prompt, the work under it, and the reply that settled it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompletedWorkTurn {
-    pub user: ChatMessage,
-    pub final_message: Option<ChatMessage>,
-    pub work: Vec<ChatMessage>,
+    pub user: ChatRow,
+    pub final_message: Option<ChatRow>,
+    pub work: Vec<ChatRow>,
     /// The `deferredWork` that holds this turn's rows still on the server: the prompt's own, or,
     /// for a turn an OMP delivery opened, the prompt's before it.
     pub section: Option<DeferredWork>,
@@ -37,19 +38,19 @@ pub struct CompletedWorkTurn {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SummaryModeTurn {
     pub active: bool,
-    pub active_work: Vec<ChatMessage>,
+    pub active_work: Vec<ChatRow>,
     /// The replies the agent gave before `final_message` in the same turn, oldest first.
-    pub earlier_replies: Vec<ChatMessage>,
-    pub final_message: Option<ChatMessage>,
-    pub user: ChatMessage,
+    pub earlier_replies: Vec<ChatRow>,
+    pub final_message: Option<ChatRow>,
+    pub user: ChatRow,
     /// The rows that end a turn the agent wrote no reply to (a command's output, an interruption).
-    pub outcome: Vec<ChatMessage>,
+    pub outcome: Vec<ChatRow>,
     /// While the turn runs: the id of the agent's newest row, whose tool calls start open so the
     /// running call shows. `None` once the turn has settled.
     pub running_row: Option<String>,
     /// The agent's messages in the turn that hold generated content (a page card, a question form
     /// or a chart), drawn in full under the prompt and never inside a fold (`content_rows`).
-    pub cards: Vec<ChatMessage>,
+    pub cards: Vec<ChatRow>,
 }
 
 /// The agent's rows of `work` that hold generated content: a published page's card, a question
@@ -58,7 +59,7 @@ pub struct SummaryModeTurn {
 /// CDXC:SessionChat 2026-10-27 DECISION:
 /// User: "in summary mode view please make the inline htmls appear shown not hidden under folds so i can scroll to older inline htmls", then "when i pick "Summary" please always show these: "Html" "Q&A" "Charts", messages that contain them shouoldn't be hidden under toggles". In summary mode every message of a turn that holds a page card (```visual page from `ghostex show`), a question form or a chart is drawn in full under the prompt, and the turn's "Agent reply" and "Active work" folds leave it out, so it is never folded and never drawn twice. Supersedes the same day's rule that hoisted only the cards and only while their fold was closed. Normal mode is unchanged.
 /// SEE-ALSO: apps/desktop/src/app/native_chat/transcript.rs and apps/mobile/app/src/chat/native/transcript/TranscriptItemRow.tsx draw them.
-pub fn content_rows(work: &[ChatMessage]) -> Vec<ChatMessage> {
+pub fn content_rows(work: &[ChatRow]) -> Vec<ChatRow> {
     work.iter()
         .filter(|row| row.role == ChatRole::Assistant && row.id != STREAMING_ID)
         .filter(|row| {
@@ -101,7 +102,7 @@ pub fn is_subagent_report(message: &ChatMessage) -> bool {
 /// One entry of the verbose transcript.
 #[derive(Clone, Debug, PartialEq)]
 pub enum RenderItem {
-    Message(Box<ChatMessage>),
+    Message(ChatRow),
     CompletedWork(Box<CompletedWorkTurn>),
 }
 
@@ -137,7 +138,7 @@ pub fn opens_turn(message: &ChatMessage) -> bool {
 ///
 /// CDXC:SessionChat 2026-10-13 DECISION: User: "ok if the issue was that i had summary mode on, i think we should just expand the currently running agent's work even in this status you know? (the stuff under the last user message basically needs to not be all hidden like this)" and "also yea why not, if you can show the description of the tool call would be nice". While a summary-mode turn runs, its "Active work" fold starts open (`workOpen`) and the agent's newest row opens its tool calls (`running_row`, `toolsOpen`), so the work under the last prompt shows as it does with summary mode off; the reader can close the fold for the rest of that turn, and the settled turn folds as before. (A tool row's description label, which this decision first gave Simple mode, now applies in every mode: see `tool_description` in `tool_summary.rs`.) Supersedes the same day's rule that kept the newest message and running row in view under a closed fold. Exception (the chat look's contributor, 2026-11-09, merged by the user): under Agent work Reduced and Quiet the running work starts shut and Quiet hides it while the agent runs (`presentation::turn_items`).
 pub fn summary_mode_turns(
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     final_assistant_message_ids: &[String],
     is_working: bool,
 ) -> Vec<SummaryModeTurn> {
@@ -213,16 +214,12 @@ pub fn summary_mode_turns(
 ///
 /// `wakes` are the OMP rows that woke the agent after a reply (`opens_omp_turn`), which end a
 /// stretch as a background task's user row does.
-fn earlier_replies(
-    work: &[ChatMessage],
-    final_message: &ChatMessage,
-    wakes: &[&str],
-) -> Vec<ChatMessage> {
+fn earlier_replies(work: &[ChatRow], final_message: &ChatMessage, wakes: &[&str]) -> Vec<ChatRow> {
     let Some(final_at) = work.iter().position(|row| row.id == final_message.id) else {
         return Vec::new();
     };
     let mut replies = Vec::new();
-    let mut reply: Option<&ChatMessage> = None;
+    let mut reply: Option<&ChatRow> = None;
     for row in &work[..final_at] {
         if row.role == ChatRole::User || wakes.contains(&row.id.as_str()) {
             if let Some(settled) = reply.take() {
@@ -251,9 +248,9 @@ pub fn is_visible_assistant_artifact(message: &ChatMessage) -> bool {
 /// Under Agent work Reduced or Quiet (`grouped`) a subagent's report is work too
 /// ([`completed_work_render_items`]).
 pub fn partition_completed_work(
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     grouped: bool,
-) -> (Vec<ChatMessage>, Vec<ChatMessage>) {
+) -> (Vec<ChatRow>, Vec<ChatRow>) {
     let mut visible_artifacts = Vec::new();
     let mut collapsed_work = Vec::new();
     for message in messages {
@@ -301,7 +298,7 @@ pub(crate) fn is_omp_wake_kind(message: &ChatMessage) -> bool {
 }
 
 /// An OMP row that woke the agent after its reply (`wakes_settled_agent`), and so opens a turn.
-pub(crate) fn opens_omp_turn(messages: &[ChatMessage], index: usize) -> bool {
+pub(crate) fn opens_omp_turn(messages: &[ChatRow], index: usize) -> bool {
     is_omp_wake_kind(&messages[index]) && wakes_settled_agent(messages, index)
 }
 
@@ -312,7 +309,7 @@ pub(crate) fn opens_omp_turn(messages: &[ChatMessage], index: usize) -> bool {
 ///
 /// CDXC:SessionChat 2026-10-20 DECISION:
 /// User: "we're collapsing the agent message i want to actually read (last agent message of a turn) whenever a new message from the agent due to a watcher (just says something like "Linear watcher: nothing new") [...] instead if we get multiple agent final messages in a row but without a user message or messages from another agent etc. then we need to show the multiple agent last turn replies". Every turn the agent finishes is a turn with its own final reply, whether a prompt or a wake-up started it: each reply stays in view as a reply (flush, with its actions), with only its own work folded above it, and a short watcher reply after it never turns it back into commentary. A notification that lands while the agent is still mid-response (its last row is a tool call) is not a wake-up and ends nothing. Supersedes the rule that only a prompt, never a harness row, ended a turn's reply (`final_assistant_message_ids`).
-pub fn wakes_settled_agent(messages: &[ChatMessage], index: usize) -> bool {
+pub fn wakes_settled_agent(messages: &[ChatRow], index: usize) -> bool {
     let message = &messages[index];
     let omp = is_omp_wake_kind(message);
     if !omp {
@@ -345,7 +342,7 @@ pub fn wakes_settled_agent(messages: &[ChatMessage], index: usize) -> bool {
         .iter()
         .rev()
         .find(|row| !passed_over_before_wake(row))
-        .is_some_and(is_settled_reply)
+        .is_some_and(|message| is_settled_reply(message))
 }
 
 /// A row [`wakes_settled_agent`] looks past for the row before a delivery: a row the chat never
@@ -383,8 +380,11 @@ fn is_agent_work_row(row: &ChatMessage) -> bool {
 ///
 /// CDXC:SessionChat 2026-11-09 DECISION:
 /// Agent work Reduced and Quiet treat a report from one of the session's own subagents (`<agent-message from="…">`, a user row) and the harness's `<task-notification>` as the agent's work. User, agreeing to the behaviour: under Reduced they are a step in the turn's line, and opening the line shows the report's card; under Quiet they sit behind the reply's work button, and while the agent runs the status line says it is reading the subagent's report; they never open a turn of their own, and a report that wakes an idle agent shows (under Quiet) only the reply it writes. So the report's turn folds with the report in it ([`completed_work_render_items`]), which merges it into the line of the message it answers (`grouped_work.rs`), and the words a report cut short fold as commentary. Messages from other sessions or agents (`ghostex agents send`, `<cross-session-message>`) stay cards: they are real messages. Default is unchanged: the report is its own card there (the 2026-09-30 decision on `parse_cross_session_message`).
-pub(crate) fn report_lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
-    messages.get(at).is_some_and(is_subagent_report) && lands_mid_response(messages, at)
+pub(crate) fn report_lands_mid_response(messages: &[ChatRow], at: usize) -> bool {
+    messages
+        .get(at)
+        .is_some_and(|message| is_subagent_report(message))
+        && lands_mid_response(messages, at)
 }
 
 /// Under Reduced and Quiet: whether the row at `at` opens a turn that is the agent's work landing
@@ -393,7 +393,7 @@ pub(crate) fn report_lands_mid_response(messages: &[ChatMessage], at: usize) -> 
 /// the rows after it (`deferredWork`), which opens a turn here so those rows still load.
 ///
 /// CDXC:SessionChat 2026-11-09 WHY: gxserver's collapsed history cuts a turn at every user row, so a task notification after a subagent's report holds the rest of the response in its own `deferredWork`; read as one of the turn's calls, that section was never loaded and the line's steps stopped at the notification. Default still reads it the old way.
-fn work_lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
+fn work_lands_mid_response(messages: &[ChatRow], at: usize) -> bool {
     report_lands_mid_response(messages, at)
         || messages.get(at).is_some_and(|row| {
             is_background_task_row(row)
@@ -404,12 +404,12 @@ fn work_lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
 
 /// Whether the agent's last row before `at` is not a finished reply ([`is_settled_reply`]), past
 /// the rows a wake-up test looks past.
-fn lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
+fn lands_mid_response(messages: &[ChatRow], at: usize) -> bool {
     !messages[..at]
         .iter()
         .rev()
         .find(|row| !passed_over_before_wake(row))
-        .is_some_and(is_settled_reply)
+        .is_some_and(|message| is_settled_reply(message))
 }
 
 /// Where the response the agent is CURRENTLY producing begins: the last user row that is a genuine
@@ -420,7 +420,7 @@ fn lands_mid_response(messages: &[ChatMessage], at: usize) -> bool {
 /// mid-response and a prompt the agent CLI is still holding in its queue both arrive as user rows;
 /// neither starts a new response, so neither may settle the one in flight. Falls back to 0 when no
 /// such row exists (stitched scroll-back that opens mid-conversation).
-pub(crate) fn active_response_start_index(messages: &[ChatMessage]) -> usize {
+pub(crate) fn active_response_start_index(messages: &[ChatRow]) -> usize {
     (0..messages.len())
         .rev()
         .find(|at| is_accepted_user_prompt(&messages[*at]) || wakes_settled_agent(messages, *at))
@@ -430,7 +430,7 @@ pub(crate) fn active_response_start_index(messages: &[ChatMessage]) -> usize {
 /// One copy affordance per response: the last assistant text before the next user turn.
 /// The ids are returned in transcript order, not sorted: the document's `finalIds` is the
 /// JavaScript `Set`'s insertion order and the renderer keys rows off it.
-pub fn final_assistant_message_ids(messages: &[ChatMessage], is_working: bool) -> Vec<String> {
+pub fn final_assistant_message_ids(messages: &[ChatRow], is_working: bool) -> Vec<String> {
     let mut ids: Vec<String> = Vec::new();
     let mut final_assistant_id: Option<String> = None;
     let active_start = if is_working {
@@ -511,10 +511,10 @@ pub fn final_assistant_message_ids(messages: &[ChatMessage], is_working: bool) -
 /// `grouped` is Agent work Reduced or Quiet (`transcript/chat_look.rs`), where every finished turn
 /// folds and a subagent's report is the agent's work ([`report_lands_mid_response`]).
 pub fn completed_work_render_items(
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     is_working: bool,
     interacted_message_ids: &[String],
-    raw_messages: &[ChatMessage],
+    raw_messages: &[ChatRow],
     grouped: bool,
 ) -> (Vec<RenderItem>, Vec<String>) {
     let mut items = Vec::new();
@@ -533,7 +533,7 @@ pub fn completed_work_render_items(
     while index < messages.len() {
         let message = &messages[index];
         if message.role != ChatRole::User && !opens_omp_turn(messages, index) {
-            items.push(RenderItem::Message(Box::new(message.clone())));
+            items.push(RenderItem::Message(message.clone()));
             index += 1;
             continue;
         }
@@ -561,7 +561,9 @@ pub fn completed_work_render_items(
             next_user_index += 1;
         }
         let turn_messages = &messages[index + 1..next_user_index];
-        let final_index = turn_messages.iter().rposition(has_agent_response_content);
+        let final_index = turn_messages
+            .iter()
+            .rposition(|message| has_agent_response_content(message));
         // Stopped after its last text: the turn folds with no final reply, and the marker (kept in view by `partition_completed_work`) ends it.
         let interrupted = final_index.is_some_and(|at| {
             turn_messages[at + 1..]
@@ -586,15 +588,18 @@ pub fn completed_work_render_items(
             .iter()
             .any(|row| interacted_message_ids.contains(&row.id));
         let interacted_grouped_diff = interacted_message_ids.contains(&message.id);
-        let folds_without_reply =
-            grouped && (opener_is_work || turn_messages.iter().any(is_agent_work_row));
+        let folds_without_reply = grouped
+            && (opener_is_work
+                || turn_messages
+                    .iter()
+                    .any(|message| is_agent_work_row(message)));
         if (section.is_none() && final_index.is_none() && !interrupted && !folds_without_reply)
             || (index >= active_start && !interacted_grouped_diff)
             || interacted_inline_diff
         {
-            items.push(RenderItem::Message(Box::new(message.clone())));
+            items.push(RenderItem::Message(message.clone()));
             for turn_message in turn_messages {
-                items.push(RenderItem::Message(Box::new(turn_message.clone())));
+                items.push(RenderItem::Message(turn_message.clone()));
             }
             index = next_user_index;
             continue;
@@ -611,10 +616,14 @@ pub fn completed_work_render_items(
         // A turn folded with no reply (Reduced, Quiet) ends with its last piece of work.
         let tail_from = final_index.or_else(|| {
             grouped
-                .then(|| turn_messages.iter().rposition(is_agent_work_row))
+                .then(|| {
+                    turn_messages
+                        .iter()
+                        .rposition(|message| is_agent_work_row(message))
+                })
                 .flatten()
         });
-        let trailing_compactions: Vec<&ChatMessage> = tail_from
+        let trailing_compactions: Vec<&ChatRow> = tail_from
             .map_or(&[][..], |at| &turn_messages[at + 1..])
             .iter()
             .filter(|row| is_turn_seam(row))
@@ -626,7 +635,7 @@ pub fn completed_work_render_items(
             .unwrap_or(raw_messages.len());
         let final_id = final_message.as_ref().map(|row| row.id.clone());
         if !opener_is_work {
-            items.push(RenderItem::Message(Box::new(message.clone())));
+            items.push(RenderItem::Message(message.clone()));
         }
         let work_start = if opener_is_work {
             raw_start
@@ -653,7 +662,7 @@ pub fn completed_work_render_items(
         items.extend(
             trailing_compactions
                 .into_iter()
-                .map(|row| RenderItem::Message(Box::new(row.clone()))),
+                .map(|row| RenderItem::Message(row.clone())),
         );
         index = next_user_index;
     }
@@ -667,7 +676,7 @@ pub fn completed_work_render_items(
 /// `settled_at` is the fold memory, the newest message id at the moment the transcript settled.
 /// Returns the working flag the projection uses and records the settle.
 pub fn sticky_transcript_working(
-    messages: &[ChatMessage],
+    messages: &[ChatRow],
     working: bool,
     settled_at: &mut Option<String>,
 ) -> bool {
@@ -681,7 +690,7 @@ pub fn sticky_transcript_working(
 }
 
 /// Whether a recorded settle still stands: the newest row is the one the transcript settled on.
-pub fn sticky_fold_holds(messages: &[ChatMessage], settled_at: Option<&str>) -> bool {
+pub fn sticky_fold_holds(messages: &[ChatRow], settled_at: Option<&str>) -> bool {
     settled_at.is_some() && messages.last().map(|message| message.id.as_str()) == settled_at
 }
 
@@ -717,7 +726,7 @@ pub fn worked_duration_label(started_at: Option<i64>, completed_at: Option<i64>)
 mod tests {
     use super::*;
 
-    fn row(id: &str, role: &str, text: &str) -> ChatMessage {
+    fn row_message(id: &str, role: &str, text: &str) -> ChatMessage {
         serde_json::from_value(serde_json::json!({
             "id": id,
             "role": role,
@@ -727,12 +736,16 @@ mod tests {
         .unwrap()
     }
 
+    fn row(id: &str, role: &str, text: &str) -> crate::state::ChatRow {
+        std::sync::Arc::new(row_message(id, role, text))
+    }
+
     const PAGE: &str = "```visual\n{\"page\":{\"title\":\"Mockups\",\"url\":\"http://127.0.0.1:1/visual/0123456789abcdef0123456789abcdef\"}}\n```";
     const FORM: &str = "```questions\n{\"questions\":[{\"tag\":\"Q1\",\"title\":\"Ship it?\",\"choices\":[\"Yes\",\"No\"]}]}\n```";
 
     const CHART: &str = "```visual\n{\"title\":\"Weekly runs\",\"mark\":\"bar\",\"data\":{\"values\":[{\"a\":1}]},\"encoding\":{}}\n```";
 
-    fn agent_message(id: &str, body: &str) -> ChatMessage {
+    fn agent_message(id: &str, body: &str) -> crate::state::ChatRow {
         row(
             id,
             "user",
@@ -783,7 +796,7 @@ mod tests {
             row("w2", "assistant", "Running the checks now."),
         ];
         let (visible, folded) = partition_completed_work(&work, false);
-        let ids = |rows: &[ChatMessage]| rows.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
+        let ids = |rows: &[ChatRow]| rows.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
         assert_eq!(ids(&visible), ["w1"]);
         assert_eq!(ids(&folded), ["w2"]);
         let withdraw = "```questions\n{\"withdraw\":[\"Q1\"]}\n```";
