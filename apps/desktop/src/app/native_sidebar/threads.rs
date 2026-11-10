@@ -232,8 +232,11 @@ pub(super) const BADGE_TEXT_SIZE: f32 = 13.55;
 /// CDXC:Coordinators 2026-09-30 WHY:
 /// A coordinator looks like any other session of its agent otherwise, and its thread rows alone do not say which row they hang from once the list scrolls (or once the tree is folded). What the numbers mean is gx-core's `RowNesting::coordinator_badge`.
 ///
-/// CDXC:Coordinators 2026-11-09 DECISION:
-/// User, of an idle coordinator's lone crew icon: "remove this icon when no workers are active pls". The Project sidebar's coordinator row shows the badge only while a thread under it waits for approval, waits on the user or works; an idle coordinator (gx-core's `Idle` tone) draws none there. On a Unified card with threads the crew count is the fold toggle (maintainer on #528: "with the crew count as the fold toggle"), so Sebastian chose to always draw it there, grey while idle, with the number of its threads (`unified/threads.rs`); this supersedes the 2026-10-29 wording for the Unified card only. The phone's SessionRow.tsx and Unified card follow.
+/// CDXC:Coordinators 2026-10-29 DECISION:
+/// User, of an idle coordinator's lone crew icon: "remove this icon when no workers are active pls". The Project sidebar's coordinator row shows the badge only while a thread under it waits for approval, waits on the user or works; an idle coordinator (gx-core's `Idle` tone) draws none there. The phone's SessionRow.tsx follows.
+///
+/// CDXC:Coordinators 2026-11-09 WHY:
+/// On a Unified card with threads the crew count is the fold toggle (the user's 2026-11-09 decision on #528 in gx-core `unified_sidebar/tree.rs`), so it always shows there, grey while idle, with the number of its threads (`unified/threads.rs`; the phone's Unified card follows); the decision above holds for the Project sidebar.
 pub(crate) fn coordinator_badge(
     session: &NativeSidebarSession,
     appearance: &SidebarAppearance,
