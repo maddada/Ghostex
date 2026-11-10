@@ -190,7 +190,11 @@ fn rescan_folder(index: &mut FolderIndex, folder: &Path, home: &Path) {
                     continue;
                 };
                 PayloadSummary {
-                    modified: payload.modified.unwrap_or(modified),
+                    // The listing's time, taken before the text was read: a write renamed into
+                    // place in between pairs newer text with the older time, which only makes the
+                    // next rescan read the file again. The time looked up after the read could pair
+                    // the old text with the new time and keep it until the session writes again.
+                    modified,
                     login: payload_login(&payload.payload, home, &mut logins),
                     windows: RATE_LIMIT_WINDOWS.map(|key| window_reading(&payload.payload, key)),
                 }
