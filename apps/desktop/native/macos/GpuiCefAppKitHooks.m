@@ -409,12 +409,20 @@ GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
              (__bridge void *)gpuiRootView) != 0;
 }
 
-static BOOL GhostexGpuiResponderIsChromiumContent(id responder) {
+/*
+ CDXC:Hotkeys 2026-11-10 WHY:
+ User: "when i do left arrow here it inserts an empty character or space. please fix, this was fixed before now happening again". Chromium's view class exists only once the web runtime is loaded, which is a few seconds after launch (the warm-up), or later when the runtime first installs or updates in the background (GitHub #530, 2026-11-10). This lookup was cached on its first call, and since 2026-11-08 every keyDown makes that call, so a key pressed before the runtime loaded cached "no Chromium" for the whole run: no web view was ever recognised, the stray-key filter (GhostexGpuiCEFChromiumInsertText) was never installed and arrows went to GPUIView's input context, which typed a blank into the page's field. A missing class is now looked up again on the next call; only a found class is kept.
+ */
+static Class GhostexGpuiChromiumContentClass(void) {
   static Class contentClass = nil;
-  static dispatch_once_t once;
-  dispatch_once(&once, ^{
+  if (!contentClass) {
     contentClass = NSClassFromString(@"RenderWidgetHostViewCocoa");
-  });
+  }
+  return contentClass;
+}
+
+static BOOL GhostexGpuiResponderIsChromiumContent(id responder) {
+  Class contentClass = responder ? GhostexGpuiChromiumContentClass() : nil;
   return contentClass && [responder isKindOfClass:contentClass];
 }
 
@@ -1685,27 +1693,32 @@ static void GhostexGpuiCEFChromiumInsertText(id self, SEL _cmd, id string,
 }
 
 static void GhostexGpuiCEFInstallChromiumTextInputFilter(void) {
-  static dispatch_once_t once;
-  dispatch_once(&once, ^{
-    Class contentClass = NSClassFromString(@"RenderWidgetHostViewCocoa");
-    SEL selector = @selector(insertText:replacementRange:);
-    Method method =
-        contentClass ? class_getInstanceMethod(contentClass, selector) : NULL;
-    if (!method) {
-      return;
-    }
-    IMP original = method_getImplementation(method);
-    // Chromium defines the method on this class; adding it here only matters if a
-    // future Chromium inherits it, which must never patch the superclass.
-    if (class_addMethod(contentClass, selector,
-                        (IMP)GhostexGpuiCEFChromiumInsertText,
-                        method_getTypeEncoding(method))) {
-      g_ghostexGpuiCEFChromiumInsertText = original;
-    } else {
-      g_ghostexGpuiCEFChromiumInsertText = method_setImplementation(
-          method, (IMP)GhostexGpuiCEFChromiumInsertText);
-    }
-  });
+  // Not dispatch_once: a call before the web runtime loads finds no class and must leave the
+  // install to a later call (CDXC:Hotkeys 2026-11-10 at GhostexGpuiChromiumContentClass).
+  // Every caller runs on the main thread.
+  static BOOL installed = NO;
+  if (installed) {
+    return;
+  }
+  Class contentClass = GhostexGpuiChromiumContentClass();
+  SEL selector = @selector(insertText:replacementRange:);
+  Method method =
+      contentClass ? class_getInstanceMethod(contentClass, selector) : NULL;
+  if (!method) {
+    return;
+  }
+  installed = YES;
+  IMP original = method_getImplementation(method);
+  // Chromium defines the method on this class; adding it here only matters if a
+  // future Chromium inherits it, which must never patch the superclass.
+  if (class_addMethod(contentClass, selector,
+                      (IMP)GhostexGpuiCEFChromiumInsertText,
+                      method_getTypeEncoding(method))) {
+    g_ghostexGpuiCEFChromiumInsertText = original;
+  } else {
+    g_ghostexGpuiCEFChromiumInsertText = method_setImplementation(
+        method, (IMP)GhostexGpuiCEFChromiumInsertText);
+  }
 }
 
 static void GhostexGpuiCEFBrowserViewAddSubview(id self, SEL _cmd,

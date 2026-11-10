@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Arrow keys move the caret in a Ghostex page's note box again:** Left and the other arrows, Home/End, Page keys and Delete, with Option or Shift too, no longer type a blank into a page's text field, the Code view or another web view when a key was pressed before the web runtime finished loading (for example while it updated in the background after an app update).
 - **The Grok extension is called Grok Bot:** its sidebar button tooltip, its Settings rows (Grok Bot start page, Grok Bot logins) and its Built-in switch now say Grok Bot.
 - **No more stray "23;24;28;32;42c" in an agent's terminal:** when a session was also open on a second computer (a Windows one in particular), switching to its terminal could type that text into the agent's prompt and shrink the terminal to the other computer's size, because the other computer's terminal answering a question from the agent was taken for typing. Fixed for sessions started after Ghostex is updated on the computer that runs them.
 - **OpenCode threads open on their conversation, also on another computer:** a thread a coordinator starts (here or with `--computer`) now shows the conversation in its terminal instead of OpenCode's empty start page, and a thread on another computer is no longer listed as Finished while it's still working, even when that computer still runs an older Ghostex. The terminal half needs Ghostex updated on the computer running OpenCode.
