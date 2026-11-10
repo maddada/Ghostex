@@ -14,10 +14,22 @@ use std::time::Duration;
 use serde_json::json;
 use web_time::Instant;
 
+use super::store::ChatStore;
 use crate::support_logs::{self, GpuiDiagnosticScenario, GpuiSupportLog};
 
 /// At most one summary a minute, and only when a counter moved.
 const SUMMARY_INTERVAL: Duration = Duration::from_secs(60);
+
+/// How far the app's heap must have moved since the last summary to count as a moved counter.
+///
+/// CDXC:Memory 2026-11-10 WHY: the heap changes on every allocation, so comparing it exactly would
+/// write a summary every minute even with every chat idle. A megabyte still catches the slow growth
+/// the memory audit is after (1.2 to 1.9 GB of heap against about 105 MB of chats).
+const HEAP_MOVED_BYTES: usize = 1024 * 1024;
+
+/// How many chats' row counts one summary lists. The sanitizer keeps the first 32 entries of an
+/// array with no marker, so the list is capped here, largest chats first.
+const CHAT_ROWS_LISTED: usize = 24;
 
 /// What the host counts between two summaries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -66,6 +78,8 @@ pub(super) struct HostCounters {
 pub(super) struct HostDiagnostics {
     considered_at: Option<Instant>,
     written: Option<HostCounters>,
+    /// The heap's bytes in use when the last summary was written.
+    heap_written: Option<usize>,
 }
 
 impl HostDiagnostics {
@@ -73,8 +87,16 @@ impl HostDiagnostics {
     ///
     /// Without it a run with no refusal would leave no trace that the Rust brain ran at all, which
     /// is the first thing to check when the switch is flipped.
-    pub(super) fn summary(&mut self, counters: &HostCounters) {
-        if self.written.as_ref() == Some(counters)
+    ///
+    /// `store` is read only when a summary is written, for its per-chat row counts.
+    pub(super) fn summary(&mut self, counters: &HostCounters, store: &ChatStore) {
+        let heap = heap_counts();
+        let heap_moved = match (self.heap_written, heap) {
+            (Some(written), Some(heap)) => written.abs_diff(heap.in_use_bytes) >= HEAP_MOVED_BYTES,
+            (None, Some(_)) => true,
+            (_, None) => false,
+        };
+        if (self.written.as_ref() == Some(counters) && !heap_moved)
             || self
                 .considered_at
                 .is_some_and(|at| at.elapsed() < SUMMARY_INTERVAL)
@@ -86,6 +108,7 @@ impl HostDiagnostics {
             return;
         }
         self.written = Some(counters.clone());
+        self.heap_written = heap.map(|heap| heap.in_use_bytes);
         // The sanitizer drops object entries past the first 32 with no marker, so the three maps are
         // capped here rather than silently truncated there.
         let effects: BTreeMap<&str, u64> = counters
@@ -122,9 +145,73 @@ impl HostDiagnostics {
                 "chatsReleased": counters.chats_released,
                 "settleRoundsExhausted": counters.settle_rounds_exhausted,
                 "savesForgotten": counters.saves_forgotten,
+                // The app's own Rust heap (`crate::heap_counter`), absent from the web build.
+                "heap": heap.map(|heap| json!({
+                    "inUseBytes": heap.in_use_bytes,
+                    "peakBytes": heap.peak_bytes,
+                    "liveAllocations": heap.live_allocations,
+                    "totalAllocations": heap.total_allocations,
+                })),
+                "chatRows": chat_rows(store),
             }),
         );
     }
+}
+
+/// How many message rows each retained chat holds, largest first, as
+/// `[list, composed, snapshot, projected, built]`: the authoritative transcript, the list the
+/// renderer sees, the retained fold's messages, the per-message projections and the built rows.
+///
+/// CDXC:Memory 2026-11-10 WHY: the memory audit found the 24 chats hold about 105 MB offline while
+/// the app's heap sat at 1.2 to 1.9 GB. Each chat holds its transcript several times over, so the
+/// five counts side by side show which copy grows. Numbers only, in no chat's order but size: no
+/// key, id or title of a chat reaches the record.
+fn chat_rows(store: &ChatStore) -> Vec<[usize; 5]> {
+    let mut rows: Vec<[usize; 5]> = store
+        .keys()
+        .iter()
+        .filter_map(|key| store.get(key))
+        .map(|retained| {
+            let state = retained.core.state();
+            [
+                state.messages.list.len(),
+                state.messages.composed.len(),
+                state
+                    .messages
+                    .snapshot
+                    .as_ref()
+                    .map_or(0, |snapshot| snapshot.result.messages.len()),
+                state.transcript_view.projected.len(),
+                state.transcript_view.items.len(),
+            ]
+        })
+        .collect();
+    rows.sort_unstable_by(|a, b| b.cmp(a));
+    rows.truncate(CHAT_ROWS_LISTED);
+    rows
+}
+
+/// The app's heap counters. The web build has no counting allocator (its crate root is not
+/// `apps/desktop/src/main.rs`), so it writes none.
+#[cfg(not(target_family = "wasm"))]
+fn heap_counts() -> Option<crate::heap_counter::HeapCounts> {
+    Some(crate::heap_counter::counts())
+}
+
+#[cfg(target_family = "wasm")]
+fn heap_counts() -> Option<HeapCountsAbsent> {
+    None
+}
+
+/// Stands in for `HeapCounts` where there is none, so the summary's fields still type-check.
+#[cfg(target_family = "wasm")]
+#[allow(dead_code)]
+#[derive(Clone, Copy)]
+struct HeapCountsAbsent {
+    in_use_bytes: usize,
+    peak_bytes: usize,
+    live_allocations: usize,
+    total_allocations: u64,
 }
 
 /// Both gates: Show debug UI controls, and the chat's own diagnostic scenario.

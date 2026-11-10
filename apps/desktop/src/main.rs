@@ -20,6 +20,7 @@ mod component_store;
 mod fold_motion;
 mod ghostty_kit;
 mod ghostty_vt;
+mod heap_counter;
 mod host_name;
 mod hotkey_label;
 #[cfg(target_os = "linux")]

@@ -227,7 +227,7 @@ pub(super) fn turn(world: &mut World, command: Option<HostCommand>) {
     world.counters.sessions_retained = world.store.len();
     world.counters.sessions_evicted = world.store.evicted;
     let counters = world.counters.clone();
-    world.diagnostics.summary(&counters);
+    world.diagnostics.summary(&counters, &world.store);
 }
 
 /// Drops the chat this thread was working on when its brain panicked.
