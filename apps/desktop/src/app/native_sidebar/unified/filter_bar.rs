@@ -203,6 +203,9 @@ impl GhostexGpuiApp {
         let chip_elements = shown.iter().enumerate().map(|(position, &index)| {
             let chip = &chips[index];
             let remove = chip.remove.clone();
+            // Keyed by what the chip removes (its filter kind and option), so removing one never hands
+            // its focus to the chip that moves into its place.
+            let stop_key = chip.remove.to_string();
             let label = chip.label.clone();
             let tooltip = chip.label.clone();
             let tile = chip.repo_key.as_ref().map(|key| {
@@ -280,7 +283,7 @@ impl GhostexGpuiApp {
                     .map(|button| {
                         self.sidebar_focus_stop(
                             button,
-                            format!("unified-filter-remove:{index}"),
+                            format!("unified-filter-remove:{stop_key}"),
                             SidebarStopPlace::Fixed,
                             appearance,
                             cx,
@@ -303,7 +306,7 @@ impl GhostexGpuiApp {
             .map(|chip| {
                 self.sidebar_focus_stop(
                     chip,
-                    format!("unified-filter-chip:{index}"),
+                    format!("unified-filter-chip:{stop_key}"),
                     SidebarStopPlace::Fixed,
                     appearance,
                     cx,
