@@ -895,7 +895,7 @@ pub fn work_value(threads: &[Value], items: &[WorkItem], all: bool, now: DateTim
     // The asks waiting on the user, each naming its item, for Needs you and Blocked.
     let asks: Vec<Value> = items
         .iter()
-        // A finished item's open task is still the user's (`withdraw_open_asks`).
+        // A finished item's open question or task is still the user's (`withdraw_open_asks`).
         .filter(|item| item.dropped_at.is_none())
         .flat_map(|item| {
             item.asks.iter().filter(|ask| ask.is_open()).map(|ask| {
@@ -980,21 +980,19 @@ fn highest_ask_tag(items: &[WorkItem]) -> u64 {
         .unwrap_or(0)
 }
 
-/// A finished or dropped item's threads leave it alone; anything else on it ends with it: its
-/// open asks are withdrawn, except, when it finishes (`keep_tasks`), a task the user still has
-/// to do, which stays under Needs you until they mark it done.
+/// A dropped item's open asks end with it. A finished item keeps them: a question or a task the
+/// user still has stays under Needs you until they answer it or mark it done, or the coordinator
+/// withdraws it (`item ask --withdraw`).
 ///
 /// CDXC:Coordinators 2026-11-10 DECISION:
 /// User, through the coordinator, of "item done" withdrawing a "Remove the test app from Paired
 /// devices" task: item done must not silently withdraw an open ask that is a task for the user;
-/// it stays under Needs you until he marks it done. A question (an ask with answers) is moot once
-/// its work is finished and is withdrawn as before; dropping the work withdraws everything.
-fn withdraw_open_asks(item: &mut WorkItem, at: &str, keep_tasks: bool) {
-    for ask in item
-        .asks
-        .iter_mut()
-        .filter(|ask| ask.is_open() && !(keep_tasks && ask.answers.is_empty()))
-    {
+/// it stays under Needs you until he marks it done. Then the same for a question: "Post the
+/// thank-you note on PR #537?" showed as Withdrawn after its item was done, and "a question that
+/// still waits for the user must outlive its item just like a task does". Only dropping the work
+/// withdraws its asks.
+fn withdraw_open_asks(item: &mut WorkItem, at: &str) {
+    for ask in item.asks.iter_mut().filter(|ask| ask.is_open()) {
         ask.settled_at = Some(at.to_string());
         ask.withdrawn = true;
     }
@@ -1192,13 +1190,13 @@ pub fn handle_work_request(
             item.status = "finished".to_string();
             item.finished_at = Some(now.clone());
             item.waits.clear();
-            withdraw_open_asks(&mut item, &now, true);
+            // Its open asks stay the user's (`withdraw_open_asks`).
             let words = item.now.clone();
             item.record("done", words, &now);
         }
         "drop" => {
             item.dropped_at = Some(now.clone());
-            withdraw_open_asks(&mut item, &now, false);
+            withdraw_open_asks(&mut item, &now);
             item.record("drop", "", &now);
         }
         "restore" => {
