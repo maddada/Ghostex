@@ -280,7 +280,7 @@ impl GhostexGpuiApp {
                     .map(|button| {
                         self.sidebar_focus_stop(
                             button,
-                            format!("unified-filter-remove:{label}"),
+                            format!("unified-filter-remove:{index}"),
                             SidebarStopPlace::Fixed,
                             appearance,
                             cx,
@@ -303,7 +303,7 @@ impl GhostexGpuiApp {
             .map(|chip| {
                 self.sidebar_focus_stop(
                     chip,
-                    format!("unified-filter-chip:{label}"),
+                    format!("unified-filter-chip:{index}"),
                     SidebarStopPlace::Fixed,
                     appearance,
                     cx,
