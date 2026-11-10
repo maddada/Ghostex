@@ -160,7 +160,63 @@ impl NativeChatView {
         let p = p;
         let s = p.scale;
         self.begin_row_find(index, main, &p);
-        let content = match item {
+        // Quiet View: the line, the rows under it and what stays in view after it (quiet_view.rs).
+        let content = match main.then(|| self.quiet_row(index)).flatten() {
+            Some(place) => match self.quiet_row_content(items, index, place, &p, window, cx) {
+                Some(content) => content,
+                None => {
+                    self.detail_rows.end_row();
+                    self.row_find = None;
+                    self.row_label_find = None;
+                    return div().w_full().into_any_element();
+                }
+            },
+            None => self.item_content(item, items.get(index + 1), main, &p, window, cx),
+        };
+        let flush = main && self.quiet_row_is_railed(index);
+        self.detail_rows.end_row();
+        self.row_find = None;
+        self.row_label_find = None;
+        if self.disclosure_motion.borrow().running() {
+            window.request_animation_frame();
+        }
+        let question_marker = main.then(|| self.question_row_marker(index)).flatten();
+        div()
+            .w_full()
+            .flex()
+            .justify_center()
+            .children(question_marker)
+            // The header is window chrome and does not zoom with the chat, so its height is unscaled.
+            .when(index == 0, |this| {
+                let header = if main && self.under_workarea_header {
+                    crate::app::consts::WORKAREA_HEADER_HEIGHT
+                } else {
+                    0.0
+                };
+                this.pt(px(32.0 * s + header))
+            })
+            // A row on an opened quiet line's rail keeps the rail through the gap below it.
+            .child(if flush {
+                self.transcript_row_column(&p).pb_0().child(content)
+            } else {
+                self.transcript_row_column(&p).child(content)
+            })
+            .into_any_element()
+    }
+
+    /// One row's content as the full view draws it.
+    pub(super) fn item_content(
+        &mut self,
+        item: &TranscriptItem,
+        next: Option<&TranscriptItem>,
+        main: bool,
+        p: &ChatAppearance,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let p = p.clone();
+        let s = p.scale;
+        match item {
             TranscriptItem::Summary {
                 id,
                 user,
@@ -278,36 +334,13 @@ impl NativeChatView {
             TranscriptItem::CompletedWork { .. } => self.completed_work_row(item, &p, window, cx),
             TranscriptItem::GroupedWork { .. } => self.grouped_work_row(item, &p, window, cx),
             TranscriptItem::Message { message } => {
-                self.message_item_row(message, items.get(index + 1), &p, window, cx)
+                self.message_item_row(message, next, &p, window, cx)
             }
             // A kind this build does not know draws its `message`, as every unknown kind did.
             TranscriptItem::Unknown(row) => {
-                self.message_item_row(&row["message"], items.get(index + 1), &p, window, cx)
+                self.message_item_row(&row["message"], next, &p, window, cx)
             }
-        };
-        self.detail_rows.end_row();
-        self.row_find = None;
-        self.row_label_find = None;
-        if self.disclosure_motion.borrow().running() {
-            window.request_animation_frame();
         }
-        let question_marker = main.then(|| self.question_row_marker(index)).flatten();
-        div()
-            .w_full()
-            .flex()
-            .justify_center()
-            .children(question_marker)
-            // The header is window chrome and does not zoom with the chat, so its height is unscaled.
-            .when(index == 0, |this| {
-                let header = if main && self.under_workarea_header {
-                    crate::app::consts::WORKAREA_HEADER_HEIGHT
-                } else {
-                    0.0
-                };
-                this.pt(px(32.0 * s + header))
-            })
-            .child(self.transcript_row_column(&p).child(content))
-            .into_any_element()
     }
 
     /// A message row of the list, `next` the row below it.
@@ -475,7 +508,9 @@ impl NativeChatView {
         if self.in_summary_turn || self.in_subagent || message["role"] != "assistant" {
             return row;
         }
-        let cards = self.work_cards_under(&text(message, "id"));
+        let mut cards = self.work_cards_under(&text(message, "id"));
+        // Under Quiet View the line after the reply holds its work item lines (quiet_view.rs).
+        cards.retain(|card| !self.quiet_holds_card(card));
         match self.work_card_stack(&cards, p, cx) {
             Some(stack) => div()
                 .flex()

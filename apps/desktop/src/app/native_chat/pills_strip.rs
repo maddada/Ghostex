@@ -35,6 +35,9 @@ use web_time::Instant;
 fn view_chip_icon(id: &str) -> &'static str {
     match id {
         "summary" => "titlebar/list-check.svg",
+        // Quiet View's chip (gx-chat-core `transcript/quiet_view.rs` `view_chip`).
+        "quiet" => "titlebar/eye-off.svg",
+        "full" => "titlebar/eye.svg",
         _ => "titlebar/list-details.svg",
     }
 }

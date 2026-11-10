@@ -148,6 +148,9 @@ pub(crate) struct NativeChatView {
     /// True while an opened quiet line's steps render (Agent work Reduced or Quiet,
     /// quiet_work.rs): each call draws as a quiet step instead of a tool row.
     pub(super) quiet_steps: bool,
+    /// Quiet View's lines of the current snapshot, read once per snapshot (quiet_view.rs).
+    pub(super) quiet_lines_cache:
+        std::cell::RefCell<Option<(usize, std::rc::Rc<super::quiet_view::QuietLines>)>>,
     /// The message under the pointer while Message spacing is Compact, whose footer row shows its
     /// buttons (message_spacing.rs).
     pub(super) hovered_message: Option<String>,
@@ -530,6 +533,7 @@ impl NativeChatView {
             in_work_fold: false,
             hide_file_changes: false,
             quiet_steps: false,
+            quiet_lines_cache: Default::default(),
             hovered_message: None,
             hidden_work: None,
             disclosure_motion: Default::default(),
