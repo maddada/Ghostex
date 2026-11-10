@@ -12,7 +12,7 @@
 use gpui::{Hsla, rgb};
 use std::sync::LazyLock;
 
-pub(crate) const CHAT_BODY_FONT: &str = "DM Sans";
+pub(crate) const CHAT_BODY_FONT: &str = ".SystemUIFont";
 pub(crate) const CHAT_MONO_FONT: &str = "JetBrainsMono Nerd Font";
 
 pub(crate) const PROSE_SIZE: f32 = 14.0;
