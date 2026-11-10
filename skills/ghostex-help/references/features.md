@@ -3562,9 +3562,11 @@ version of the Projects features in Cursor and Claude Code.
   status dots overlapping in place of its own, and a card whose thread needs you
   (an approval, a question, stuck or failed) leaves the Moving shelf for the top
   of the list. A parked or snoozed thread sits on its own shelf instead. A
-  search or a computer, project or Space pick that matches a thread keeps its
-  coordinator's card and shows the way to the thread even while folded; shelves
-  and project groups you folded stay folded. Opening a thread from anywhere
+  search that matches a thread shows the way to it under its coordinator's card
+  even while folded. A computer, project or Space pick keeps the card when a
+  thread matches; it shows the way to that thread only when the coordinator
+  itself is left out by the pick, and otherwise the card stays as you folded it.
+  Shelves and project groups you folded stay folded. Opening a thread from anywhere
   unfolds its coordinator. Threads count as sessions in the computer tabs and
   Quick Access, not in the list's shelf and project counts. On the phone, a
   thread on another computer nests under its coordinator when the coordinator's
