@@ -22,6 +22,23 @@ pub(super) fn open_message(state: &str) -> Option<Value> {
     owns(state).then(|| json!({ "initialTab": state }))
 }
 
+/// The `collab` state with Collab installed and nothing shared or logged yet, whether or not the
+/// configured gxserver has the extension: the page's empty lists.
+pub(super) fn collab_stand_in(path: &str, params: &Value) -> Option<Value> {
+    match (path, params["op"].as_str()) {
+        ("/api/extensionComponents", Some("list")) => Some(json!({
+            "components": [{ "name": "collab", "installed": true, "version": "0.1.0" }]
+        })),
+        ("/api/collab", Some("read")) => Some(json!({
+            "installed": true,
+            "config": { "enabled": true },
+            "shares": []
+        })),
+        ("/api/collab", Some("audit")) => Some(json!({ "entries": [] })),
+        _ => None,
+    }
+}
+
 pub(super) fn gxserver_rpc_available() -> bool {
     !super::super::env("GHOSTEX_NATIVE_MODAL_DEMO_GXSERVER_URL").is_empty()
 }

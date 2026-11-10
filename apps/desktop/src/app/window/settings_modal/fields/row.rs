@@ -773,6 +773,20 @@ fn list_item(
         .into_any_element()
 }
 
+/// A line of quiet text as a row of a section's card: an empty list ("No chat is shared right
+/// now."), a note under a list or a message about it, padded like every other row.
+///
+/// CDXC:Settings 2026-11-10 DECISION:
+/// User, of Collab's "No chat is shared right now." and "Nothing yet. Every guest message ..."
+/// drawn with no padding inside their section's rounded card, the text touching its edge: "these
+/// are so ugly man. please do a check all over settings for anything like this and fix". Every
+/// empty list and note inside a card is this row: the row inset ([`card_inset`]) with the plain
+/// quiet [`static_note`], the look Secrets' "No 1Password account yet." already had. Never put a
+/// bare [`static_note`] in a card (it has no padding), nor a boxed one (a box inside the card).
+pub(crate) fn settings_note_row(p: &SettingsPalette, value: impl Into<SharedString>) -> AnyElement {
+    card_inset(static_note(p, value, false))
+}
+
 /// `StaticNoteField`'s value box.
 pub(crate) fn static_note(
     p: &SettingsPalette,
