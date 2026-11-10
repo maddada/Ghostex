@@ -108,17 +108,6 @@ impl GhostexGpuiApp {
                         .when(under_lights, |button| button.invisible())
                         .child(self.render_sidebar_collapse_button(None, cx)),
                 )
-                // The Agents Panel toggle follows the sidebar toggle wherever that one is
-                // drawn; while the docked Search row owns it, that row draws this one too. The
-                // 4pt is that row's gap, so the icon does not jump when the sidebar collapses.
-                .child(
-                    div()
-                        .relative()
-                        .ml(px(4.0))
-                        .top(px(0.5))
-                        .when(under_lights, |button| button.invisible())
-                        .child(self.render_workarea_header_agents_toggle(None, cx)),
-                )
             })
             /*
             CDXC:Navigation 2026-08-19:

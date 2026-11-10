@@ -176,7 +176,7 @@ nothing on the left.
 pub(crate) const WINDOW_CONTROLS_LEADING_RESERVE: f32 = 88.0;
 
 /// CDXC:Titlebar 2026-09-23 DECISION:
-/// User: on Windows and Linux the Toggle sidebar and Agents Panel buttons sit at the top left of
+/// User: on Windows and Linux the Toggle sidebar button sits at the top left of
 /// the sidebar, as on macOS, from the same code; the only difference is that macOS clears its
 /// traffic lights first. This is the button's window x on every OS, whichever of the docked
 /// Search row or the collapsed header draws it. Off macOS it is the reveal edge strip's width, so
@@ -420,7 +420,6 @@ pub(crate) const TITLEBAR_ICON_PANEL_BOTTOM: &str = "titlebar/panel-bottom.svg";
 pub(crate) const TITLEBAR_ICON_PANEL_RIGHT: &str = "titlebar/panel-right.svg";
 
 pub(crate) const TITLEBAR_ICON_TERMINAL: &str = "titlebar/terminal-2.svg";
-pub(crate) const TITLEBAR_ICON_MESSAGE: &str = "titlebar/message.svg";
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 pub(crate) const TITLEBAR_ICON_WINDOW_MINIMIZE: &str = "titlebar/window-minimize.svg";

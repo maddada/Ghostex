@@ -3,7 +3,7 @@
 //!
 //! CDXC:Bots 2026-09-27 DECISION:
 //! User: the Bots entry is a Hermes-logo button.
-//! With Spaces on it is the last slot of the Space row, after a hairline, and can't be edited, deleted or dragged like a Space; with Spaces off it is a toggle in the sidebar's top row between the Agents Panel toggle and Search.
+//! With Spaces on it is the last slot of the Space row, after a hairline, and can't be edited, deleted or dragged like a Space; with Spaces off it is a toggle in the sidebar's top row between the Toggle sidebar button and Search.
 //! Only one of the two exists at a time, and neither exists while Bots is switched off in Settings > Extensions.
 //! While Bots is showing it draws a back arrow instead of the logo, so it reads as the way back to the projects; this supersedes the logo-only look of 2026-09-26.
 
