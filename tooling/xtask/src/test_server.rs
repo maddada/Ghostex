@@ -667,9 +667,13 @@ fn taken_server_ids(server: &Server) -> std::collections::HashSet<String> {
     for entry in fs::read_dir(servers_root()).into_iter().flatten().flatten() {
         let other = entry.file_name().to_string_lossy().into_owned();
         if other != server.name {
-            if let Ok(other) = Server::load(&other) {
-                taken.extend(read_server_id(&other.identity_file()));
-            }
+            // Both layouts' identity files, whether or not the record loads: an invalid record can still belong to a running server, and its id must stay taken (an id is not secret, so reading it through a link is harmless).
+            taken.extend(read_server_id(
+                &entry.path().join("home/state/gxserver/identity.json"),
+            ));
+            taken.extend(read_server_id(
+                &tmp_home(&other).join("state/gxserver/identity.json"),
+            ));
         }
     }
     for folder in default_zmx_dirs() {
