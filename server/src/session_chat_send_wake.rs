@@ -68,16 +68,37 @@ pub(crate) async fn starting_session_refusal(
     if !missing {
         return None;
     }
-    let outcome = wake_session(state, &target.project_id, &target.session_id).await;
-    record_wake(
-        state,
-        &target.project_id,
-        &target.session_id,
-        &outcome,
-        "The session's zmx daemon was not running when the message was sent.",
+    // CDXC:SessionChat 2026-11-10 WHY: waking a closed session resumes its agent, which on a slow
+    // computer outlasted the 15 seconds `ghostex agents send` waits for this answer: the send printed
+    // no status, the coordinator sent again, and the message was held twice (GitHub #531). The send
+    // waits for the wake up to `SEND_WAKE_WAIT`; a wake still going then finishes on its own while
+    // the message is held for the starting agent (a failure is retried by the queue scheduler).
+    let (wake_state, project_id, session_id) = (
+        state.clone(),
+        target.project_id.clone(),
+        target.session_id.clone(),
     );
-    Some(wake_refusal(outcome))
+    let mut wake = tokio::spawn(async move {
+        let outcome = wake_session(&wake_state, &project_id, &session_id).await;
+        record_wake(
+            &wake_state,
+            &project_id,
+            &session_id,
+            &outcome,
+            "The session's zmx daemon was not running when the message was sent.",
+        );
+        outcome
+    });
+    match tokio::time::timeout(SEND_WAKE_WAIT, &mut wake).await {
+        Ok(Ok(outcome)) => Some(wake_refusal(outcome)),
+        Ok(Err(_)) | Err(_) => Some(starting(
+            "The session is waking up; Ghostex types the message once its agent is ready.",
+        )),
+    }
 }
+
+/// How long a send waits for the session it wakes before holding the message.
+const SEND_WAKE_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
 
 /// What a send that woke the session answers. A wake that failed for a reason time can fix holds
 /// the message like a starting agent: the queue scheduler wakes the session again until it is up
@@ -700,6 +721,27 @@ pub(crate) fn queue_startup_send(
     target: &SessionChatSendTarget,
     text: &str,
 ) -> RoutedResponse {
+    // CDXC:SessionChat 2026-11-10 WHY: an agent that resends a message while the first copy still
+    // waits for the starting agent (GitHub #531: a coordinator whose send printed no status) gets the
+    // held copy back instead of a second one. The chat box (a `draftVersion`) is left alone: a
+    // person may mean to send the same words twice.
+    if params.get("draftVersion").is_none_or(Value::is_null) {
+        if let Some(held) = held_startup_send_with_text(state, target, text) {
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(
+                    request_id,
+                    json!({
+                        "queued": true,
+                        "textBytes": text.len(),
+                        "queuedPromptId": held,
+                        "alreadyHeld": true,
+                    }),
+                ),
+            );
+        }
+    }
     let mut startup_params = params.clone();
     startup_params.insert("startupSend".to_string(), json!(true));
     match crate::session_chat_queue::handle_session_chat_queue_endpoint(
@@ -729,4 +771,26 @@ pub(crate) fn queue_startup_send(
         }
         Err(error) => domain_error_response(endpoint_path, request_id, error),
     }
+}
+
+/// The id of a message with exactly this text already held for the session's starting agent.
+fn held_startup_send_with_text(
+    state: &AppState,
+    target: &SessionChatSendTarget,
+    text: &str,
+) -> Option<String> {
+    let db = open_gxserver_database(&state.paths).ok()?;
+    crate::session_chat_queue::read_session_chat_queue_snapshot_with(
+        &db,
+        &target.project_id,
+        &target.session_id,
+    )
+    .queue
+    .into_iter()
+    .find(|prompt| {
+        prompt.startup_send
+            && prompt.state == crate::session_chat_queue::SESSION_CHAT_QUEUE_STATE_QUEUED
+            && prompt.text == text
+    })
+    .map(|prompt| prompt.id)
 }

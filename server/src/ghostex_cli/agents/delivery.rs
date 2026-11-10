@@ -149,6 +149,8 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         } else {
             ("accepted", "This request id was already sent; Ghostex did not type it again. The recipient's transcript does not show it yet. Read its chat before sending a new message.")
         }
+    } else if result["alreadyHeld"] == json!(true) {
+        ("pending", "The same message is already waiting for the recipient to start, so Ghostex did not queue it again; it is typed once the recipient's input box appears.")
     } else if transcript_shows(&read_payload, &body, &rows_before, &flags) {
         ("delivered", "The recipient's transcript shows the message.")
     } else if !receipt["queuedPromptId"].is_null() {
