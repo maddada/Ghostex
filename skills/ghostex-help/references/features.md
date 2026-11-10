@@ -3561,7 +3561,10 @@ version of the Projects features in Cursor and Claude Code.
   rest wait behind an "N older threads" row. A folded card shows its threads'
   status dots overlapping in place of its own, and a card whose thread needs you
   (an approval, a question, stuck or failed) leaves the Moving shelf for the top
-  of the list. A parked or snoozed thread sits on its own shelf instead. A
+  of the list. A parked or snoozed thread sits on its own shelf instead, and a
+  thread whose coordinator is outside the active Space or in a hidden project
+  shows as its own card (a search then finds it there, not under the
+  coordinator). A
   search that matches a thread shows the way to it under its coordinator's card
   even while folded. A computer, project or Space pick keeps the card when a
   thread matches; it shows the way to that thread only when the coordinator
