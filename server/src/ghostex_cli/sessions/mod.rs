@@ -22,6 +22,7 @@ mod inventory;
 mod js_values;
 mod mobile_summary;
 mod persisted;
+mod summary_memo;
 
 pub use attach_metadata::*;
 use cli_session::*;
@@ -31,6 +32,8 @@ pub use inventory::*;
 pub(crate) use js_values::*;
 pub use mobile_summary::*;
 use persisted::*;
+pub(crate) use summary_memo::note_gxserver_request;
+use summary_memo::*;
 
 // Moved bodies reach sibling modules of the parent through `super::<module>::…`
 // paths; these imports keep those paths resolving from inside this directory.

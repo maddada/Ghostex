@@ -1,7 +1,7 @@
 use serde_json::{json, Map, Value};
 
 use crate::ghostex_cli::args::{parse_args, FlagValue, Flags};
-use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
+use crate::ghostex_cli::output::{is_failed_cli_result, print_json, render_json};
 use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 use crate::ghostex_cli::{actions, sessions_brief, set_exit_code};
 
@@ -22,6 +22,13 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
      * hides the launcher rows until the next poll.
      */
     if flags.truthy("json") && flags.truthy("mobileSummary") {
+        // A repeat within two seconds is answered from the last run's printed text (summary_memo.rs).
+        let memo_key = summary_memo_key(args);
+        if let Some(printed) = read_summary_memo(&memo_key) {
+            print!("{printed}");
+            return Ok(());
+        }
+        let started_ms = now_ms();
         let result = fetch_session_list_result(flags, true)?;
         let settings = crate::ghostex_cli::settings::read_settings_file().unwrap_or_default();
         // The phone lists no Actions while the Actions extension is off on this computer.
@@ -43,7 +50,9 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
             insert_global_quick_actions_capability(&mut merged);
         }
         insert_built_in_features(&mut merged);
-        print_json(&Value::Object(merged));
+        let printed = format!("{}\n", render_json(&Value::Object(merged)));
+        write_summary_memo(&memo_key, started_ms, &printed);
+        print!("{printed}");
         return Ok(());
     }
     let result = fetch_session_list_result(flags, true)?;

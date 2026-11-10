@@ -1,12 +1,14 @@
 use serde_json::Value;
 
 pub fn print_json(value: &Value) {
+    println!("{}", render_json(value));
+}
+
+/// The text `print_json` prints, without its trailing newline.
+pub fn render_json(value: &Value) -> String {
     let mut normalized = value.clone();
     normalize_js_numbers(&mut normalized);
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&normalized).unwrap_or_else(|_| "null".to_string())
-    );
+    serde_json::to_string_pretty(&normalized).unwrap_or_else(|_| "null".to_string())
 }
 
 /*

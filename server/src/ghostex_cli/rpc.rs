@@ -441,6 +441,18 @@ pub fn request_gxserver_envelope(
     body: &Value,
     flags: &Flags,
 ) -> CliResult<Value> {
+    let answer = send_gxserver_envelope(target, pathname, body, flags);
+    // Marked once the request is answered, so a summary read that started before it is not reused.
+    crate::ghostex_cli::sessions::note_gxserver_request(pathname);
+    answer
+}
+
+fn send_gxserver_envelope(
+    target: &Target,
+    pathname: &str,
+    body: &Value,
+    flags: &Flags,
+) -> CliResult<Value> {
     refuse_relayed_answer(body)?;
     let marked = with_agent_caller(pathname, body);
     let body = marked.as_ref().unwrap_or(body);
