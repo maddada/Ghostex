@@ -11,10 +11,21 @@
 //! for any client; snapshot and replaced frames always carry them in full and reset the memory.
 //! SEE-ALSO: packages/gx-chat-core/src/session/apply.rs (`apply_state_frame`), server/src/server/ws.rs.
 
-use std::collections::HashMap;
-use std::hash::{DefaultHasher, Hash, Hasher};
+//!
+//! CDXC:SessionChat 2026-11-10 WHY:
+//! That pass was 4.6% of gxserver's busy time: every socket serialized each frame's heavy fields to
+//! hash them and deep copied the whole frame to drop the repeats, and a full-mode socket gets every
+//! chat's frames, so the work repeated per socket. The frame's digests are now worked out once per
+//! event (written straight into the hasher, no text built) and kept on the shared event, and the
+//! trimmed copy for each set of left-out fields is built once, without the fields it leaves out,
+//! and shared by every socket that leaves out the same ones (its wire text is then written once
+//! too). Each socket still keeps its own memory of what it sent, so what it receives is unchanged.
 
-use serde_json::Value;
+use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hasher};
+use std::sync::Mutex;
+
+use serde_json::{Map, Value};
 
 use crate::events::EventPayload;
 
@@ -34,61 +45,126 @@ pub(crate) struct ChatFrameMemory {
     sent: HashMap<(String, String), HashMap<&'static str, u64>>,
 }
 
+/// What every socket needs of one chat frame: its chat, whether it resets the memory, the digest
+/// of each omittable field it carries, and the trimmed copies built so far, by left-out fields.
+#[derive(Debug)]
+pub(crate) struct ChatFrameShare {
+    chat: (String, String),
+    full: bool,
+    digests: [Option<u64>; 5],
+    trimmed: Mutex<Vec<(u8, EventPayload)>>,
+}
+
+/// Feeds serialized JSON to the hasher as it is written.
+struct HashWriter<'a>(&'a mut DefaultHasher);
+
+impl std::io::Write for HashWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.write(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 fn digest(value: &Value) -> u64 {
     let mut hasher = DefaultHasher::new();
     // Serialized, so equal JSON hashes equal whatever its map order in memory.
-    serde_json::to_string(value)
-        .unwrap_or_default()
-        .hash(&mut hasher);
+    let _ = serde_json::to_writer(HashWriter(&mut hasher), value);
     hasher.finish()
+}
+
+fn share_of(event: &EventPayload) -> Option<&ChatFrameShare> {
+    event
+        .chat_frame_share()
+        .get_or_init(|| build_share(event).map(Box::new))
+        .as_deref()
+}
+
+fn build_share(event: &Value) -> Option<ChatFrameShare> {
+    let object = event.as_object()?;
+    let kind = object
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let full = matches!(kind, "sessionChatSnapshot" | "sessionChatReplaced");
+    if !full && kind != "sessionChatState" {
+        return None;
+    }
+    let project_id = object.get("projectId").and_then(Value::as_str)?;
+    let session_id = object.get("sessionId").and_then(Value::as_str)?;
+    Some(ChatFrameShare {
+        chat: (project_id.to_string(), session_id.to_string()),
+        full,
+        digests: OMITTABLE_FIELDS.map(|field| object.get(field).map(digest)),
+        trimmed: Mutex::new(Vec::new()),
+    })
+}
+
+impl ChatFrameShare {
+    /// The frame without the fields `left_out` marks, built once per set and shared.
+    fn trimmed(&self, event: &EventPayload, left_out: u8) -> EventPayload {
+        let build = || {
+            let entries: Vec<(&String, &Value)> = event.as_object().into_iter().flatten().collect();
+            // The key order the frame had when each left-out field was removed in turn with
+            // `Map::remove` (a swap remove: the last key takes the removed key's place), so the
+            // frame's text stays byte for byte what it was.
+            let mut order: Vec<usize> = (0..entries.len()).collect();
+            for (index, field) in OMITTABLE_FIELDS.iter().enumerate() {
+                if left_out & (1 << index) == 0 {
+                    continue;
+                }
+                if let Some(position) = order.iter().position(|entry| entries[*entry].0 == field) {
+                    order.swap_remove(position);
+                }
+            }
+            let kept: Map<String, Value> = order
+                .into_iter()
+                .map(|entry| (entries[entry].0.clone(), entries[entry].1.clone()))
+                .collect();
+            EventPayload::from(Value::Object(kept))
+        };
+        let Ok(mut trimmed) = self.trimmed.lock() else {
+            return build();
+        };
+        if let Some((_, payload)) = trimmed.iter().find(|(mask, _)| *mask == left_out) {
+            return payload.clone();
+        }
+        let payload = build();
+        trimmed.push((left_out, payload.clone()));
+        payload
+    }
 }
 
 impl ChatFrameMemory {
     /// `event` as it goes out on this socket: a state frame without the fields it repeats.
     pub(crate) fn pass(&mut self, event: EventPayload) -> EventPayload {
-        let Some(object) = event.as_object() else {
+        let Some(share) = share_of(&event) else {
             return event;
         };
-        let kind = object
-            .get("type")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        let full = matches!(kind, "sessionChatSnapshot" | "sessionChatReplaced");
-        if !full && kind != "sessionChatState" {
-            return event;
-        }
-        let (Some(project_id), Some(session_id)) = (
-            object.get("projectId").and_then(Value::as_str),
-            object.get("sessionId").and_then(Value::as_str),
-        ) else {
-            return event;
+        let memory = match self.sent.get_mut(&share.chat) {
+            Some(memory) => memory,
+            None => self.sent.entry(share.chat.clone()).or_default(),
         };
-        let memory = self
-            .sent
-            .entry((project_id.to_string(), session_id.to_string()))
-            .or_default();
-        if full {
+        if share.full {
             memory.clear();
         }
-        let mut repeated = Vec::new();
-        for field in OMITTABLE_FIELDS {
-            let Some(value) = object.get(field) else {
+        let mut left_out = 0_u8;
+        for (index, (field, hash)) in OMITTABLE_FIELDS.iter().zip(share.digests).enumerate() {
+            let Some(hash) = hash else {
                 continue;
             };
-            let hash = digest(value);
-            if !full && memory.get(field) == Some(&hash) {
-                repeated.push(field);
+            if !share.full && memory.get(field) == Some(&hash) {
+                left_out |= 1 << index;
             } else {
                 memory.insert(field, hash);
             }
         }
-        if repeated.is_empty() {
+        if left_out == 0 {
             return event;
         }
-        let mut trimmed = object.clone();
-        for field in repeated {
-            trimmed.remove(field);
-        }
-        EventPayload::from(Value::Object(trimmed))
+        share.trimmed(&event, left_out)
     }
 }

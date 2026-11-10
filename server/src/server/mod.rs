@@ -129,7 +129,7 @@ pub mod background_tasks;
 mod bot_sync;
 mod browser_tcp;
 mod cef_devtools;
-mod chat_frame_dedupe;
+pub(crate) mod chat_frame_dedupe;
 mod close_after_done_runtime;
 pub mod commit_message_generation;
 mod coordinator_close;

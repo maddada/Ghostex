@@ -22,6 +22,9 @@ pub struct EventPayload(Arc<EventPayloadInner>);
 struct EventPayloadInner {
     value: Value,
     text: OnceLock<axum::extract::ws::Utf8Bytes>,
+    /// A chat state frame's side field digests and trimmed copies, shared by every socket
+    /// (server/chat_frame_dedupe.rs); `None` for any other event.
+    chat_frame: OnceLock<Option<Box<crate::server::chat_frame_dedupe::ChatFrameShare>>>,
 }
 
 impl From<Value> for EventPayload {
@@ -29,6 +32,7 @@ impl From<Value> for EventPayload {
         Self(Arc::new(EventPayloadInner {
             value,
             text: OnceLock::new(),
+            chat_frame: OnceLock::new(),
         }))
     }
 }
@@ -42,6 +46,12 @@ impl std::ops::Deref for EventPayload {
 }
 
 impl EventPayload {
+    pub(crate) fn chat_frame_share(
+        &self,
+    ) -> &OnceLock<Option<Box<crate::server::chat_frame_dedupe::ChatFrameShare>>> {
+        &self.0.chat_frame
+    }
+
     pub(crate) fn text(&self) -> axum::extract::ws::Utf8Bytes {
         self.0
             .text
