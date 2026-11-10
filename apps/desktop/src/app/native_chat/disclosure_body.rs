@@ -7,11 +7,12 @@
 //! `muted-foreground` at 42%, stretched over the whole body, with the content
 //! starting a fixed distance to the right of it. Everything that opens onto
 //! more rows uses it, so a reader can see at a glance which rows belong to the
-//! heading they expanded: the turn's "Worked for Xs" log, a reasoning row's
+//! heading they expanded: a reasoning row's
 //! detail and tool run, an expanded tool's arguments and result, and the
 //! "+N previous tool calls" and "N tool calls" groups. Pressing the rail closes
 //! the disclosure it belongs to, as React's `.ghostex-chat-expansion-rail`
-//! button did.
+//! button did. A finished turn's "Worked for" log has no rail since 2026-11-10
+//! (completed_work_row.rs).
 
 use super::appearance::ChatAppearance;
 use super::state::NativeChatView;
@@ -31,9 +32,6 @@ pub(super) enum DisclosureRail {
     /// One tool row's own detail, indented past the tool rows around it.
     /// React's `.ghostex-chat-work-detail`.
     ToolDetail,
-    /// A finished turn's work log under its "Worked" summary, with the rows hung further off
-    /// the line (gx-chat-core `work_summary.rs`).
-    Work,
 }
 
 impl DisclosureRail {
@@ -45,7 +43,6 @@ impl DisclosureRail {
         match self {
             Self::Marker => 17.0,
             Self::ToolDetail => 29.5,
-            Self::Work => 23.0,
         }
     }
 }
