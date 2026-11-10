@@ -242,7 +242,7 @@ impl GhostexGpuiApp {
                 self.open_gpui_make_coordinator_modal(open_message, cx);
             }
             GpuiAppModalKind::RemoteSetup => {
-                self.open_gpui_remote_setup_modal(open_message, cx);
+                self.open_gpui_connect_device_modal(open_message, cx);
             }
             GpuiAppModalKind::Worktree => {
                 self.open_gpui_create_worktree_modal(open_message, cx);
@@ -477,6 +477,10 @@ impl GhostexGpuiApp {
         if crate::app::window::quick_access::QuickAccessTabId::from_modal_kind(modal.kind).is_some()
         {
             self.dispatch_gpui_quick_access_command(serde_json::json!({ "type": "closed" }), cx);
+        }
+        // A pairing request the Connect a phone window showed gets its notice back.
+        if modal.kind == GpuiAppModalKind::RemoteSetup {
+            self.owner_security_show_pending_pairing_requests(cx);
         }
         modal
             .window

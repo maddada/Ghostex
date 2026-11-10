@@ -924,6 +924,11 @@ impl RemoteTab {
         cx.notify();
     }
 
+    /// Opens the Connect a phone window (`device`: `phone` or `computer`), which closes Settings.
+    pub(super) fn open_connect_device(&self, device: &str, cx: &mut App) {
+        self.post(json!({ "type": "openConnectDevice", "device": device }), cx);
+    }
+
     pub(super) fn post(&self, message: Value, cx: &mut App) {
         post_store_message(&self.store, message, cx);
     }

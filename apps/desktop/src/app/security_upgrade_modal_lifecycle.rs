@@ -302,7 +302,7 @@ impl GhostexGpuiApp {
             self.set_security_notice_computer_pairing(
                 &machine_id,
                 NoticeComputerPairing::Failed(
-                    "That isn't a whole Easy Connect code. On the other computer, open Show QR and copy the Easy Connect code again.".to_string(),
+                    "That isn't a whole Easy Connect code. On the other computer, open Settings > Remote, click Connect a computer, then Copy the code again.".to_string(),
                 ),
             );
             return;

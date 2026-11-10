@@ -215,7 +215,7 @@ impl GpuiAppModalKind {
             Self::OpenTargets => "Ghostex Open Targets",
             Self::Onboarding => "Welcome to Ghostex",
             Self::RemoteGxserverInstall => "Ghostex Remote Setup",
-            Self::RemoteSetup => "Ghostex Mobile & Remote",
+            Self::RemoteSetup => "Connect a phone",
             Self::Worktree => "Ghostex Add Worktree",
             Self::DeleteWorktree => "Ghostex Delete Worktree",
             Self::RenameWorktree => "Ghostex Rename Worktree",

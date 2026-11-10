@@ -199,6 +199,18 @@ impl GhostexGpuiApp {
             {
                 self.run_quick_access_command_row(command_type, command, window, cx);
             }
+            // Settings > Remote's Connect a phone and Connect a computer (tabs/remote/).
+            "openConnectDevice" => {
+                let device = command
+                    .get("device")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("phone")
+                    .to_string();
+                self.open_app_modal_from_bridge(
+                    serde_json::json!({ "type": "open", "modal": "remoteSetup", "device": device }),
+                    cx,
+                );
+            }
             // Settings > Remote's Pair again line (tabs/remote/pair_again.rs).
             "openSecurityUpgradeNotice" => {
                 self.reopen_gpui_security_upgrade_modal(cx);

@@ -97,7 +97,7 @@ pub fn parse_computer_pairing_code(params: &Value) -> Result<ComputerPairingCode
         bail!("The Easy Connect code has no address or port.");
     }
     if code.secret.is_empty() {
-        bail!("This code can't pair a computer by itself. On the other computer, open Settings > Remote, click Show QR, then Copy Easy Connect code, and paste that code here.");
+        bail!("This code can't pair a computer by itself. On the other computer, open Settings > Remote, click Connect a computer, then Copy the code, and paste that code here.");
     }
     Ok(code)
 }
@@ -252,7 +252,7 @@ fn post(local_port: u16, path: &str, params: Value, timeout: Duration) -> Result
         .build()
         .send(body.to_string().as_str())
         .map_err(|error| {
-            anyhow!("Reached the other computer, but its Ghostex did not answer ({error}). Keep its Show QR window open and try again.")
+            anyhow!("Reached the other computer, but its Ghostex did not answer ({error}). Keep its Connect a computer window open and try again.")
         })?;
     let answer: Value = crate::http_agent::read_json(response)
         .context("the other computer answered with no JSON")?;

@@ -480,9 +480,14 @@ fn qr_placeholder(
         .focus_visible(move |this| this.border_color(hsla(focus_border)))
         .tooltip(super::super::super::fields::tooltip_text("Show QR"))
         .on_click(cx.listener(move |tab, _: &ClickEvent, window, cx| {
+            // Easy Connect's code shows in the Connect a phone window (CDXC:RemotePairing
+            // 2026-11-10 in window/connect_device_modal.rs); the Tailscale code keeps its popup.
+            if card == PathCard::EasyConnect {
+                tab.open_connect_device("phone", cx);
+                return;
+            }
             tab.qr_preview = Some(card);
             tab.qr_preview_focus.focus(window, cx);
-            // Ask at once, so a locked Easy Connect opens to the new phone without a poll's wait.
             tab.refresh_fast(cx);
             cx.notify();
         }))
@@ -794,13 +799,7 @@ fn computer_panel(
             ButtonSize::Sm,
             false,
             None,
-            move |tab: &mut RemoteTab, window, cx| {
-                tab.qr_preview = Some(PathCard::EasyConnect);
-                tab.qr_preview_focus.focus(window, cx);
-                // Ask at once, so the code with its secret is there when the sheet opens.
-                tab.refresh_fast(cx);
-                cx.notify();
-            },
+            move |tab: &mut RemoteTab, _window, cx| tab.open_connect_device("computer", cx),
             cx,
         );
         meta = meta.child(h_flex().mt(px(2.0)).gap(px(8.0)).child(button));
