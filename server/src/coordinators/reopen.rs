@@ -85,13 +85,14 @@ pub fn prepare_reopen(
 
 /// BLOCKING. Reopens the planned thread unless it was reopened, or marked done again, since the
 /// plan: checked again in one writer transaction, so a Mark Done landing meanwhile wins. With
-/// `watch` (`(message, sent_at_ms)`), the message gets the delivery watch, the one that reports a
-/// reply too fast for a supervisor tick to see. Returns whether it reopened the thread.
+/// `watch` (`(message, carried images, sent_at_ms)`), the message gets the delivery watch, the one
+/// that reports a reply too fast for a supervisor tick to see (an image-only message is watched by
+/// its image). Returns whether it reopened the thread.
 pub fn apply_reopen(
     db: &Connection,
     repository: &DomainRepository<'_>,
     plan: &ReopenPlan,
-    watch: Option<(&str, i64)>,
+    watch: Option<(&str, bool, i64)>,
 ) -> Result<bool, DomainStateError> {
     let own_transaction = db.is_autocommit();
     let transaction = if own_transaction {
@@ -107,9 +108,9 @@ pub fn apply_reopen(
         Some(thread) if reopenable(&thread, plan.send_ms) => {
             set_thread_resolved(db, project_id, session_id, false)?;
             set_parked(repository, &plan.thread_key, false)?;
-            if let Some((message, sent_ms)) = watch {
-                let excerpt = super::delivery::pending_message_excerpt(message);
-                if !super::delivery::delivery_needles(&excerpt).is_empty() {
+            if let Some((message, has_images, sent_ms)) = watch {
+                if let Some(excerpt) = super::delivery::watched_message_excerpt(message, has_images)
+                {
                     let sent_at = chrono::DateTime::from_timestamp_millis(sent_ms)
                         .unwrap_or_else(Utc::now)
                         .to_rfc3339_opts(SecondsFormat::Millis, true);

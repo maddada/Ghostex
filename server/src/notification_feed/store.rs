@@ -140,12 +140,25 @@ pub(crate) fn insert_notification_feed_row_beside(
     db: &Connection,
     row: NewNotificationFeedRow,
 ) -> DomainResult<Value> {
-    let id = uuid::Uuid::new_v4().to_string();
     db.execute(
-        "DELETE FROM notification_feed WHERE sessionId = ?1 AND readAt IS NULL AND kind = ?2 AND title = ?3",
-        params![row.session_id, row.kind, row.title],
+        "DELETE FROM notification_feed WHERE sessionId = ?1 AND readAt IS NULL AND kind = ?2 AND title = ?3 AND COALESCE(attentionEventId, '') <> ?4",
+        params![
+            row.session_id,
+            row.kind,
+            row.title,
+            COORDINATOR_REPORTS_NOTICE_MARK
+        ],
     )
     .map_err(sql_error)?;
+    insert_row_superseding_nothing(db, row)
+}
+
+/// Inserts the row as it is, removing no other row, then prunes past the retention limit.
+fn insert_row_superseding_nothing(
+    db: &Connection,
+    row: NewNotificationFeedRow,
+) -> DomainResult<Value> {
+    let id = uuid::Uuid::new_v4().to_string();
     db.execute(
         r#"
         INSERT INTO notification_feed (
@@ -256,7 +269,7 @@ pub(crate) fn mark_session_send_failure_read(
 
 /// Writes a coordinator's "stopped getting reports" row (marked with
 /// `COORDINATOR_REPORTS_NOTICE_MARK`), replacing only its own earlier unread one: the coordinator's
-/// other unread rows stay.
+/// other unread rows stay, a chat-send failure with the same title included.
 pub(crate) fn insert_coordinator_reports_notice(
     db: &Connection,
     mut row: NewNotificationFeedRow,
@@ -267,7 +280,7 @@ pub(crate) fn insert_coordinator_reports_notice(
         params![row.session_id, COORDINATOR_REPORTS_NOTICE_MARK],
     )
     .map_err(sql_error)?;
-    insert_notification_feed_row_beside(db, row)
+    insert_row_superseding_nothing(db, row)
 }
 
 /// The coordinator's reports went out again: its "stopped getting reports" row goes read.

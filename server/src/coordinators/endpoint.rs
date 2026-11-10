@@ -211,7 +211,7 @@ pub fn handle_coordinator_endpoint(
                     .filter(|thread| thread.coordinator_key() == coordinator_key);
                 if params.get("messageDelivered").and_then(Value::as_bool) == Some(true) {
                     if let Some(thread) = thread.as_ref() {
-                        acknowledge_delivered(db, thread)?;
+                        acknowledge_delivered(db, thread, text(params, "pendingMessage"))?;
                     }
                     return Ok(CoordinatorEndpointOutput {
                         result: json!({ "linked": false, "reopened": false, "heldReport": null, "watchingDelivery": false }),
@@ -401,12 +401,32 @@ fn watch_pending_message(
     Ok(true)
 }
 
-/// The sender read its message in the thread's transcript (`ghostex agents send`'s confirmation),
-/// so the watch stops; it never reopens a thread.
+/// The sender read its message in the thread's transcript (`ghostex agents send`'s and
+/// `start-thread`'s confirmation), so the watch stops; it never reopens a thread. `confirmed` is the
+/// message it read: a confirmation of an older message leaves a newer one watched. A confirmation
+/// without one (an older CLI) only stops the watch, as it always did.
 ///
 /// CDXC:Coordinators 2026-11-10 WHY:
 /// The confirmation used to drop the watch outright, and a reply too fast for a supervisor tick to see then lost its report: the watch's transcript match is what marks such a thread seen working. So an open thread whose message is still watched, and that has not been reported on since the message was sent, is marked seen working first, as the supervisor's own match does (`pending_delivery` in server/src/server/coordinator_runtime.rs). A report recorded after the send means that turn was reported already, and marking it again would report it twice.
-fn acknowledge_delivered(db: &Connection, thread: &ThreadRecord) -> Result<(), DomainStateError> {
+fn acknowledge_delivered(
+    db: &Connection,
+    thread: &ThreadRecord,
+    confirmed: Option<String>,
+) -> Result<(), DomainStateError> {
+    let Some(confirmed) = confirmed else {
+        return drop_thread_pending_message(db, &thread.project_id, &thread.session_id);
+    };
+    let watched = thread
+        .pending_message
+        .as_deref()
+        .map(super::delivery::normalize_delivery_text);
+    if watched
+        != Some(super::delivery::normalize_delivery_text(
+            &super::delivery::pending_message_excerpt(&confirmed),
+        ))
+    {
+        return Ok(());
+    }
     let parse = |value: &str| chrono::DateTime::parse_from_rfc3339(value).ok();
     let unreported_since_send = match (
         thread.pending_message_at.as_deref().and_then(parse),

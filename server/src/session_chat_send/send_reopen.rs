@@ -1,8 +1,9 @@
 //! The `/api/sendSessionChatMessage` route's send: the plain send, plus what a message from a
 //! caller means for coordinators. It reopens a done thread it is sent to (coordinators/reopen.rs)
 //! and asks a coordinator Ghostex gave up on to try its reports again
-//! (`request_report_retry`, server/src/server/coordinator_runtime.rs). gxserver's own sends
-//! (reports, nudges, automations) call `handle_send_session_chat_message_http` and do neither.
+//! (`request_report_retry`, server/src/server/coordinator_report_retry.rs). gxserver's own sends
+//! (reports, nudges, automations) call `handle_send_session_chat_message_http` and do neither, and
+//! a raw key (`key`, such as Shift+Tab's mode change) is no message, so it does neither either.
 
 use super::*;
 
@@ -34,7 +35,7 @@ pub(crate) async fn handle_send_session_chat_message_from(
         request_id,
         body,
         move |state, endpoint_path, request_id, body| async move {
-            let target = target_key(&body);
+            let target = target_key(&body).filter(|_| is_message(&body));
             let plan = match &target {
                 Some(key) => plan_reopen(&state, &attempt_caller, key, started_ms).await,
                 None => None,
@@ -47,8 +48,7 @@ pub(crate) async fn handle_send_session_chat_message_from(
             let mut fields = Map::new();
             fields.insert(REOPEN_CHECKED.to_string(), json!(true));
             if let Some(plan) = plan {
-                let text = message_text(&body);
-                if run_reopen(&state, plan.clone(), Some((text, started_ms))).await {
+                if run_reopen(&state, plan.clone(), sent_message(&body, started_ms)).await {
                     fields.insert("reopenedThread".to_string(), json!(true));
                     fields.insert("heldReport".to_string(), json!(plan.held_report));
                 }
@@ -82,7 +82,7 @@ async fn recover_replayed_reopen(
     ) else {
         return response;
     };
-    if !response.response.status().is_success() {
+    if !response.response.status().is_success() || !is_message(body) {
         return response;
     }
     let (response, result) = read_result(response).await;
@@ -99,17 +99,35 @@ async fn recover_replayed_reopen(
     else {
         return response;
     };
-    let Some(plan) = plan_reopen(state, caller, &target, send_ms).await else {
-        return response;
-    };
-    if !run_reopen(state, plan, Some((message_text(body), send_ms))).await {
-        return response;
+    let mut fields = Map::new();
+    fields.insert(REOPEN_CHECKED.to_string(), json!(true));
+    if let Some(plan) = plan_reopen(state, caller, &target, send_ms).await {
+        if run_reopen(state, plan, sent_message(body, send_ms)).await {
+            fields.insert("reopenedThread".to_string(), json!(true));
+            fields.insert("heldReport".to_string(), Value::Null);
+        }
     }
-    edit_result(response, |result| {
-        result.insert("reopenedThread".to_string(), json!(true));
-        result.insert("heldReport".to_string(), Value::Null);
-    })
-    .await
+    // Stored with the send, so the next replay answers the same without checking again.
+    let mut stored = result.unwrap_or_default();
+    stored.remove("duplicate");
+    stored.extend(fields.clone());
+    crate::session_chat_send_requests::mark_sent(&state.paths, &ledger_key, &Value::Object(stored));
+    edit_result(response, |result| result.extend(fields)).await
+}
+
+/// A message, not a raw key: `key` carries a keystroke with no text (send_http.rs).
+fn is_message(body: &Value) -> bool {
+    body.pointer("/params/key").is_none_or(Value::is_null)
+}
+
+/// What the delivery watch looks for: the message's text, whether it carried images (an
+/// image-only message has no text to find), and when it was sent.
+fn sent_message(body: &Value, sent_ms: i64) -> Option<(String, bool, i64)> {
+    let has_images = body
+        .pointer("/params/imagePaths")
+        .and_then(Value::as_array)
+        .is_some_and(|paths| !paths.is_empty());
+    Some((message_text(body), has_images, sent_ms))
 }
 
 fn target_key(body: &Value) -> Option<SessionKey> {
@@ -152,14 +170,20 @@ async fn plan_reopen(
 }
 
 /// Reopens the planned thread and republishes it; true when it reopened.
-async fn run_reopen(state: &AppState, plan: ReopenPlan, watch: Option<(String, i64)>) -> bool {
+async fn run_reopen(
+    state: &AppState,
+    plan: ReopenPlan,
+    watch: Option<(String, bool, i64)>,
+) -> bool {
     let state = state.clone();
     tokio::task::spawn_blocking(move || {
         let Ok(db) = open_gxserver_database(&state.paths) else {
             return false;
         };
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-        let watch = watch.as_ref().map(|(text, sent)| (text.as_str(), *sent));
+        let watch = watch
+            .as_ref()
+            .map(|(text, images, sent)| (text.as_str(), *images, *sent));
         let reopened = apply_reopen(&db, &repository, &plan, watch).unwrap_or(false);
         if reopened {
             let _ = crate::server::schedule_presentation_session_delta(

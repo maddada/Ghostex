@@ -339,7 +339,7 @@ pub(super) fn start_thread(parsed: &ParsedArgs) -> CliResult<()> {
         &flags,
     )?;
     if matches!(outcome, BriefOutcome::Started) && remote_server_id.is_none() {
-        agents::confirm_coordinator_delivery(coordinator, &thread, &flags);
+        agents::confirm_coordinator_delivery(coordinator, &thread, task.trim(), &flags);
     }
     let (status, note) = match &outcome {
         BriefOutcome::Started => ("started", "Its transcript shows the brief: it is working on it.".to_string()),
