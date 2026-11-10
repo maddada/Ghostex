@@ -123,8 +123,31 @@ impl NativeChatView {
         let scale = appearance.scale;
         let content = super::child_window::content_bounds(window);
         let view = self.bounds.get();
-        let within = if view.size.width > px(0.0) && view.size.height > px(0.0) {
-            Bounds::new(content.origin + view.origin, view.size)
+        // It stays inside the chat column (the chat box's width, which is the transcript's) of the
+        // chat's own window; opened from the floating Work card or the columns, inside that window.
+        //
+        // CDXC:Coordinators 2026-11-11 WHY:
+        // A Reply near the right edge opened its box past the chat column, out to the window's
+        // edge: the box was kept only inside the whole chat view.
+        let in_chat_window = self
+            .open_main_window(cx)
+            .is_none_or(|main| main == window.window_handle());
+        let column = self.composer_bounds.get();
+        let within = if !in_chat_window {
+            content
+        } else if view.size.width > px(0.0) && view.size.height > px(0.0) {
+            let (left, right) = if column.size.width > px(0.0) {
+                (
+                    column.left().max(view.left()),
+                    column.right().min(view.right()),
+                )
+            } else {
+                (view.left(), view.right())
+            };
+            Bounds::from_corners(
+                content.origin + Point::new(left, view.top()),
+                content.origin + Point::new(right, view.bottom()),
+            )
         } else {
             content
         };
