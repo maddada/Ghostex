@@ -120,6 +120,7 @@ mod sidebar_drag;
 mod sidebar_drop_queue;
 mod sidebar_flags;
 mod sidebar_focus_route;
+mod sidebar_keyboard;
 mod sidebar_lifecycle;
 mod sidebar_list;
 mod sidebar_list_inputs;

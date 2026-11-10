@@ -190,6 +190,7 @@ pub const HOTKEY_SETTINGS_SECTIONS: J = J::Arr(&[
                 J::Str("createSession"),
                 J::Str("openNewWindow"),
                 J::Str("focusLastTerminal"),
+                J::Str("focusSidebar"),
                 J::Str("openCommandPalette"),
                 J::Str("openSessionSearchPalette"),
                 J::Str("openProjectSearchPalette"),

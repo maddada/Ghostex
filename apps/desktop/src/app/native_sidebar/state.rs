@@ -67,6 +67,17 @@ pub(crate) struct NativeSidebarState {
     /// This frame's project header probes; `hovered_group` follows them.
     pub(crate) header_hover: super::project_hover::ProjectHeaderHoverProbes,
     pub(crate) hovered_session: Option<String>,
+    /// The Focus Sidebar hotkey's keyboard mode (gx_store/sidebar_keyboard.rs, desktop only): the
+    /// focus handle the session list takes the keyboard on, the row the arrows are on (drawn as
+    /// `hovered_session`), and where the keyboard goes back to.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(crate) keyboard_focus: Option<gpui::FocusHandle>,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(crate) keyboard_cursor: Option<String>,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(crate) keyboard_return_terminal: bool,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(crate) keyboard_return_focus: Option<gpui::FocusHandle>,
     /// The row whose floating links card is open (window/session_links_card.rs on the desktop,
     /// web_host/session_links.rs in the web build).
     pub(crate) links_card_session: Option<String>,

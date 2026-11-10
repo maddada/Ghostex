@@ -621,7 +621,11 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:AppModal 2026-11-10 DECISION:
 /// The coordinator, for the user: Help must not change on main before the next release, so Close buttons on the right (Settings > Interface > Advanced, macOS) is held the same way; its hand-written paragraph waits in the held help patch (release-11.3.1/help/close-buttons-left.patch).
-pub const HELD_FROM_HELP_FILES: &[&str] = &["closeButtonsOnRight", "dimInactiveProjects"];
+///
+/// CDXC:Hotkeys 2026-11-11 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so the Focus Sidebar hotkey (#558) is held the same way; a hotkey id here leaves the hotkey out of `hotkeys.md` and `settings-catalog.json`, and its Help waits in the held help patch (release-11.3.1/help/focus-sidebar-hotkey.patch).
+pub const HELD_FROM_HELP_FILES: &[&str] =
+    &["closeButtonsOnRight", "dimInactiveProjects", "focusSidebar"];
 
 /// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
 /// `agentWritable` (CDXC:Security 2026-11-10 above `number_range`).
@@ -769,6 +773,9 @@ pub fn published_catalog() -> Catalog {
     catalog
         .settings
         .retain(|entry| !HELD_FROM_HELP_FILES.contains(&entry.key.as_str()));
+    catalog
+        .hotkeys
+        .retain(|hotkey| !HELD_FROM_HELP_FILES.contains(&hotkey.id));
     for entry in &mut catalog.settings {
         if let Some((_, title, subtitle, advanced)) = HELD_ROW_WORDING
             .iter()
