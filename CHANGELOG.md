@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Terminal pictures stay after Ghostex reconnects to a session (computer):** a picture a program drew in a terminal (Kitty graphics, like `kitten icat` or an agent's chart) now comes back when Ghostex restarts or reattaches to the session, and stays when the pane is resized. Pictures that already scrolled into the history are still not brought back. Applies to sessions started after the update.
 - **The chat icon at the top of the sidebar is gone (computer):** it was a second button beside Hide sidebar that folded the Agents Panel, and it looked like a chat button. Expand side panel (Cmd+Ctrl+E, or the expand button at the end of the view tabs) does the same thing and is still there.
 - **On Windows, Easy Connect's helpers stop when Ghostex does:** when Ghostex or its background server crashed or was ended from Task Manager on a Windows PC, the helper programs behind Easy Connect kept running, and a leftover one could make the next connection stall every few seconds. They now end with the program that started them, as they already did on macOS and Linux.
 - **A keychain prompt can no longer hold a computer on "Connecting":** after an update, macOS can ask whether Ghostex may change an item it saved in your keychain. Until that prompt was answered, the computer stayed on "Connecting" and nothing said why. Ghostex now connects first and saves in the background, and tries the save again later if it fails. Every connect also leaves a start and a finish line in the remote log, so a connect that is stuck can be seen there.
