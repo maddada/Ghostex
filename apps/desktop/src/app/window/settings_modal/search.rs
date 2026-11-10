@@ -492,6 +492,13 @@ impl GeneralSearch {
         !js_trim(&self.query).is_empty()
     }
 
+    /// Whether this is the Advanced fold's pass. A row that is not a setting (a link to another
+    /// page, a button strip) belongs to the page body's pass only, or it draws twice with the
+    /// same element ids once the fold opens.
+    pub(crate) fn is_advanced_pass(&self) -> bool {
+        self.tier == Some(RowTier::Advanced)
+    }
+
     /// Whether a row that stands for several settings (Card details, Animations, Transcript
     /// width) belongs to this pass: while browsing, the tier of its first key decides, so the row
     /// renders once; a search shows it when any of its keys matches.
