@@ -17,10 +17,14 @@ use std::time::Duration;
 /// CDXC:SessionChat 2026-09-19 WHY:
 /// The rungs are Chromium's preset zoom factors kept inside the 70% to 200% range Settings offers,
 /// so the same number of presses lands on the same percentage as the React chat did on web and mobile, and
-/// every rung is also a multiple of the shared 5% step.
+/// every rung of the old ladder is still one.
 /// SEE-ALSO: packages/settings-catalog/src/data/limits.rs owns the range and step; packages/settings-catalog/src/data/defaults.rs the default. The Files text zoom (native_docs/text_zoom.rs) steps the same rungs.
-const ZOOM_PERCENT_RUNGS: [f32; 10] = [
-    70.0, 75.0, 80.0, 90.0, 100.0, 110.0, 125.0, 150.0, 175.0, 200.0,
+///
+/// CDXC:Zoom 2026-11-10 DECISION:
+/// User (desktop app): "when we scale we're scaling too big of step (with cmd + = or - i mean). please half the steps". Every gap of the ladder is halved by one extra rung in the middle, so a press around 100% moves 5% (it moved 10%) and the larger gaps above and below move 12.5% or 7.5% instead of 25% or 15%. The rungs are table values, not a running sum, so any number of presses lands on exactly 100% and on the same rung as before; 70%, 200% and Cmd+0 are unchanged, and a saved value off the ladder (an older scale, a Settings slider) still steps to the next rung that way.
+const ZOOM_PERCENT_RUNGS: [f32; 19] = [
+    70.0, 72.5, 75.0, 77.5, 80.0, 85.0, 90.0, 95.0, 100.0, 105.0, 110.0, 117.5, 125.0, 137.5,
+    150.0, 162.5, 175.0, 187.5, 200.0,
 ];
 
 /// Matches the Settings sliders' debounce (`NUMERIC_SETTINGS_DEBOUNCE`): a held chord shows
@@ -260,20 +264,20 @@ mod tests {
 
     #[test]
     fn zoom_steps_through_the_rungs_and_resets_to_100() {
-        assert_eq!(step_zoom_percent(100.0, ZoomStep::In), 110.0);
-        assert_eq!(step_zoom_percent(110.0, ZoomStep::In), 125.0);
-        assert_eq!(step_zoom_percent(100.0, ZoomStep::Out), 90.0);
-        assert_eq!(step_zoom_percent(90.0, ZoomStep::Out), 80.0);
+        assert_eq!(step_zoom_percent(100.0, ZoomStep::In), 105.0);
+        assert_eq!(step_zoom_percent(110.0, ZoomStep::In), 117.5);
+        assert_eq!(step_zoom_percent(100.0, ZoomStep::Out), 95.0);
+        assert_eq!(step_zoom_percent(90.0, ZoomStep::Out), 85.0);
         assert_eq!(step_zoom_percent(175.0, ZoomStep::Reset), 100.0);
         assert_eq!(step_zoom_percent(70.0, ZoomStep::Reset), 100.0);
     }
 
     #[test]
     fn zoom_between_rungs_lands_on_the_next_one() {
-        // A Settings slider value off the ladder (5% steps) steps to the nearest rung that way.
-        assert_eq!(step_zoom_percent(105.0, ZoomStep::In), 110.0);
-        assert_eq!(step_zoom_percent(105.0, ZoomStep::Out), 100.0);
-        assert_eq!(step_zoom_percent(135.0, ZoomStep::In), 150.0);
+        // A Settings slider value off the ladder steps to the nearest rung that way.
+        assert_eq!(step_zoom_percent(107.0, ZoomStep::In), 110.0);
+        assert_eq!(step_zoom_percent(107.0, ZoomStep::Out), 105.0);
+        assert_eq!(step_zoom_percent(135.0, ZoomStep::In), 137.5);
         assert_eq!(step_zoom_percent(135.0, ZoomStep::Out), 125.0);
     }
 
