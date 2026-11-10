@@ -395,6 +395,17 @@ impl NativeChatView {
         self.show_chat_menu(rows, trigger, 260.0, window, cx);
     }
 
+    /// The microphone was pressed: the pointer on it is no longer one that came to rest there, so
+    /// the hover menu stays shut until it has left the button and come back (`hover_dictation`).
+    ///
+    /// CDXC:Dictate 2026-11-10 WHY: With a recording waiting for Transcribe previous, the hover menu that was armed when the pointer reached the microphone was not called off by a press, so a click made within its delay started a recording and the menu then opened over it. That menu is a window of its own that takes the keyboard from the main window, where the caret stops being drawn, and a click that closes it leaves the keyboard where the click landed: the box being dictated into could be left without it (user: "bazen fokus orada değil başka bir şeyde oldu"). A press also makes GPUI report the button as not hovered, so the pointer can count as entering it again while it never left, possibly once the words are in. So a press calls off a waiting menu and none is armed until the pointer has really left the button, which that report cannot tell from a press: the button's own bounds and the window's exit say so (composer.rs). It is the same for the chat box, as the 2026-10-20 decision at the top of this file asks ("Pressing the microphone … never takes focus from the chat box").
+    pub(super) fn press_dictation(&mut self) {
+        self.dictate_pressed.set(true);
+        if let Some(control) = self.dictation.as_mut() {
+            control.hover = None;
+        }
+    }
+
     /// The pointer entered or left the microphone.
     pub(super) fn hover_dictation(
         &mut self,
@@ -403,6 +414,10 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) {
         if !dictation_drawn() {
+            return;
+        }
+        // Still the pointer that pressed the microphone (`press_dictation`).
+        if hovered && self.dictate_pressed.get() {
             return;
         }
         let dictate = self.dictate(window, cx);
@@ -813,7 +828,10 @@ impl NativeChatView {
             slot => format!("{form}:{}", slot.as_u64().unwrap_or_default()),
         };
         for modal in [false, true] {
-            if self.inputs_mut(modal).contains_key(&key) {
+            // A copy that is drawn takes the answer. The transcript's box takes words just heard
+            // also while it has no input: it is the dictation's own target, and the sync that
+            // makes its input shows them (`sync_form_input_in`), or drops them with the box.
+            if self.inputs_mut(modal).contains_key(&key) || (!modal && dictated.heard) {
                 let copy = (modal, key.clone());
                 let dictated = match self.dictated_boxes.remove(&copy) {
                     Some(waiting) => dictated.clone().after(waiting),
@@ -831,6 +849,8 @@ impl NativeChatView {
     /// copy showing anything else holds an edit the core has not answered yet, whose own answer
     /// brings its text. The transcript's box, where a dictation started, takes the keyboard unless
     /// the Resources modal is open.
+    ///
+    /// CDXC:Dictate 2026-11-10 WHY: After a dictation into a box nobody had typed in, the caret stood before the words instead of after them (user: "cursor'ı cümlenin başına indiriyor. Aslında en sonuna indirmesi lazım"). Such a box is still waiting for its saved draft (`FormInput::settled`), so the document that carried the words filled it through `set_value`, which puts a multi-line input's caret at the start, and this function then found the words already shown and left the caret alone. A box's sync therefore runs this before that fill (`sync_form_input_in`), and a copy that already shows words just heard gets the core's caret too, for the document that arrives before the answer. The same happened to a target whose input was made after the answer: a form sent while the recording ran loses its inputs, a refused send opens it again, and words that arrived before the next draw found no input to keep their answer for, so the new input was made from the draft with the caret at the start and without the keyboard. The answer for the transcript's box is therefore kept until that box's next sync (`dictation_inserted`), which shows it in the input it makes or drops it with a box that is no longer there; an answer is never kept for a copy that is opened later.
     pub(super) fn show_dictated(
         &mut self,
         modal: bool,
@@ -850,7 +870,8 @@ impl NativeChatView {
         let input = entry.input.clone();
         let current = input.read(cx).value().to_string();
         let adopts = dictated.supersedes.contains(&current);
-        if adopts || current == dictated.content {
+        let shows = current == dictated.content;
+        if adopts || shows {
             entry.settled = true;
             entry.core = dictated.core.clone();
             entry.rev = dictated.rev;
@@ -862,10 +883,11 @@ impl NativeChatView {
         let takes_keyboard =
             dictated.heard && !modal && self.snapshot["resourceModal"]["id"].is_null();
         input.update(cx, |input, cx| {
+            let caret = super::form_attachments::utf16_to_byte(&dictated.content, dictated.caret);
             if adopts {
-                let caret =
-                    super::form_attachments::utf16_to_byte(&dictated.content, dictated.caret);
                 input.replace_all(dictated.content, window, cx);
+            }
+            if adopts || (shows && dictated.heard) {
                 input.set_selected_range(caret..caret, cx);
             }
             if takes_keyboard {

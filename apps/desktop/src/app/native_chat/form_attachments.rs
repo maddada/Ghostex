@@ -12,10 +12,9 @@ use super::{
 };
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, Entity, InteractiveElement as _, IntoElement, MouseDownEvent,
-    ParentElement as _, Styled as _, Window, div, px, rgb,
+    AnyElement, Context, InteractiveElement as _, IntoElement, MouseDownEvent, ParentElement as _,
+    Styled as _, Window, div, px, rgb,
 };
-use gpui_component::input::TextareaState;
 use serde_json::{Value, json};
 use std::time::Duration;
 

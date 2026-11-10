@@ -351,6 +351,8 @@ pub(crate) struct NativeChatView {
     pub(super) code_expanded: HashSet<String>,
     /// The composer's dictation session, made the first time the reader presses Dictate.
     pub(crate) dictation: super::dictation::Dictation,
+    /// The microphone was pressed and the pointer has not left it since (`hover_dictation`).
+    pub(super) dictate_pressed: std::rc::Rc<std::cell::Cell<bool>>,
     pub(crate) list: gpui::ListState,
     /// Set while a transcript field has focus: whether tail following resumes when it leaves (scroll_bottom.rs).
     pub(super) transcript_focus_follow: std::cell::Cell<Option<bool>>,
@@ -637,6 +639,7 @@ impl NativeChatView {
             code_wrap_default: false,
             code_expanded: HashSet::new(),
             dictation: None,
+            dictate_pressed: Default::default(),
             list,
             transcript_host: None,
             composer_host: None,

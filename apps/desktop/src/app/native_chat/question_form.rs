@@ -271,6 +271,11 @@ impl NativeChatView {
             .rsplit_once(':')
             .and_then(|(_, slot)| form["dictated"][slot].as_u64())
             .unwrap_or(0);
+        // Before the saved draft below: the document that carries a dictation's words must not
+        // fill a box nobody has typed in as if it were one (`show_dictated`).
+        if self.inputs_mut(modal).contains_key(&key) {
+            self.show_dictated(modal, &key, window, cx);
+        }
         if let Some(entry) = self.inputs_mut(modal).get_mut(&key) {
             if entry.placeholder != hint {
                 entry.placeholder = hint.clone();
@@ -288,7 +293,6 @@ impl NativeChatView {
                     .input
                     .update(cx, |state, cx| state.set_value(value, window, cx));
             }
-            self.show_dictated(modal, &key, window, cx);
             return;
         }
         let settled = !value.is_empty();
@@ -349,7 +353,7 @@ impl NativeChatView {
             },
         );
         self.inputs_mut(modal).insert(
-            key,
+            key.clone(),
             FormInput {
                 input,
                 _subscription: subscription,
@@ -365,6 +369,8 @@ impl NativeChatView {
                 reference_draft: None,
             },
         );
+        // Words that arrived while this box had no input (`dictation_inserted`).
+        self.show_dictated(modal, &key, window, cx);
     }
 
     /// Paints nothing; placed after the transcript list so its paint reads the bounds the form's
