@@ -67,7 +67,7 @@ impl GpuiVisualPageModalWindow {
     fn note_questions_left(&mut self, left: bool, cx: &mut Context<Self>) {
         if self.questions_left != left {
             self.questions_left = left;
-            (self.host)(VisualPageModalCommand::QuestionsLeft, cx);
+            (self.host)(VisualPageModalCommand::TabChanged, cx);
         }
     }
 

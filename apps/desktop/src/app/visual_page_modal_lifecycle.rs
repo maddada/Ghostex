@@ -252,7 +252,8 @@ impl GhostexGpuiApp {
         {
             self.remove_native_app_modal_window(cx);
         }
-        let title = text("title").unwrap_or_else(|| "Ghostex page".to_string());
+        // A plain link to a page's address brings no title; the window takes the page's own.
+        let title = text("title");
         let source_session = text("sourceSessionId")
             .and_then(|id| id.parse::<u64>().ok())
             .map(TerminalSessionId);
@@ -331,7 +332,7 @@ impl GhostexGpuiApp {
         remote_project: Option<GpuiRemoteProjectReference>,
         cx: &mut gpui::Context<Self>,
     ) {
-        if matches!(command, VisualPageModalCommand::QuestionsLeft) {
+        if matches!(command, VisualPageModalCommand::TabChanged) {
             cx.notify();
             return;
         }
@@ -339,7 +340,7 @@ impl GhostexGpuiApp {
             return;
         }
         let url = match command {
-            VisualPageModalCommand::QuestionsLeft => return,
+            VisualPageModalCommand::TabChanged => return,
             VisualPageModalCommand::Hide => {
                 self.hide_visual_page_modal(cx);
                 return;

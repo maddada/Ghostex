@@ -69,9 +69,9 @@ pub(crate) enum VisualPageModalCommand {
     /// A click away or the Hide button: the window is put aside, still running
     /// (app/visual_page_hidden.rs).
     Hide,
-    /// Whether a question on the page is still unanswered changed (`source.rs`), for the dot on
-    /// its tab while it is hidden.
-    QuestionsLeft,
+    /// What its tab shows while it is hidden changed: whether a question is unanswered
+    /// (`source.rs`), or the page's own title arrived for a page opened without one.
+    TabChanged,
     /// Closes the window and opens the page in the reader's browser.
     OpenInBrowser { url: String },
     /// A link the page opened (a new window or `target=_blank`), for the app to route by the
@@ -97,8 +97,11 @@ pub(crate) struct GpuiVisualPageModalWindow {
     shown_at: Instant,
     palette: ModalPalette,
     url: String,
-    /// The page's title, for screen readers: the page shows its own.
+    /// The page's title, for screen readers and its tab while hidden: the page shows its own.
     title: String,
+    /// `title` came with the open (a page card); a page opened from a plain link to its address
+    /// has none, so it takes the page's own title once the page reports it.
+    title_known: bool,
     /// What the page is loaded from: `url` with the app's theme and `gx-floating=1`.
     page_url: String,
     /// The card's open message, for opening it again behind the web runtime's install prompt.
@@ -137,7 +140,7 @@ impl GpuiVisualPageModalWindow {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         url: String,
-        title: String,
+        title: Option<String>,
         open_message: serde_json::Value,
         palette: ModalPalette,
         host: VisualPageModalHost,
@@ -194,7 +197,8 @@ impl GpuiVisualPageModalWindow {
             shown_at: Instant::now(),
             palette,
             url,
-            title,
+            title_known: title.is_some(),
+            title: title.unwrap_or_else(|| "Ghostex page".to_string()),
             page_url,
             open_message,
             surface: None,
@@ -295,15 +299,18 @@ impl GpuiVisualPageModalWindow {
             let async_cx = cx.to_async();
             let foreground = cx.foreground_executor().clone();
             Rc::new(move |event| {
-                if !matches!(event, cef::BrowserPageMetadataEvent::CloseRequested) {
-                    return;
-                }
+                let page_title = match event {
+                    cef::BrowserPageMetadataEvent::CloseRequested => None,
+                    cef::BrowserPageMetadataEvent::TitleChanged(title) => Some(title),
+                    _ => return,
+                };
                 let modal = modal.clone();
                 let mut async_cx = async_cx.clone();
                 foreground
                     .spawn(async move {
-                        let _ = modal.update(&mut async_cx, |this, cx| {
-                            (this.host)(VisualPageModalCommand::Close, cx);
+                        let _ = modal.update(&mut async_cx, |this, cx| match page_title {
+                            None => (this.host)(VisualPageModalCommand::Close, cx),
+                            Some(title) => this.take_page_title(title, cx),
                         });
                     })
                     .detach();
@@ -466,6 +473,19 @@ impl GpuiVisualPageModalWindow {
     fn click_away(&mut self, cx: &mut Context<Self>) {
         if !self.hidden {
             (self.host)(VisualPageModalCommand::Hide, cx);
+        }
+    }
+
+    /// A page opened without a title (a plain link to its address) is named by its own title,
+    /// which its tab shows while it is hidden.
+    fn take_page_title(&mut self, title: String, cx: &mut Context<Self>) {
+        let title = title.trim();
+        if self.title_known || title.is_empty() || title.starts_with("http") {
+            return;
+        }
+        if self.title != title {
+            self.title = title.to_string();
+            (self.host)(VisualPageModalCommand::TabChanged, cx);
         }
     }
 

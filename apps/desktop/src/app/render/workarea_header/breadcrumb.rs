@@ -207,12 +207,12 @@ impl GhostexGpuiApp {
                                 .text_color(titlebar_text_color())
                                 .child(title),
                         )
-                    })
-                    .children(
-                        hidden_page_tabs
-                            .into_iter()
-                            .map(|tab| self.render_hidden_visual_page_tab(tab, cx)),
-                    ),
+                    }),
             )
+            // Outside the title's row, which clips its text: the tabs' floating x overhangs a
+            // tab's corner and must not be cut off (render/workarea_header/hidden_pages.rs).
+            .when(!hidden_page_tabs.is_empty(), |this| {
+                this.child(self.render_hidden_visual_page_tabs(hidden_page_tabs, cx))
+            })
     }
 }

@@ -19,13 +19,38 @@ use crate::*;
 const TAB_HEIGHT: f32 = 24.0;
 const TAB_GAP: f32 = 8.0;
 const TAB_NAME_MAX_WIDTH: f32 = 200.0;
-/// The floating x: the toasts' round x at this size, overhanging the tab's corner by `X_OUTSET`.
+/// The floating x: the toasts' round x at this size, overhanging the tab's corner by `X_OUTSET`
+/// sideways and `X_RISE` upwards.
+///
+/// CDXC:SessionChat 2026-11-11 WHY: User, of the x drawn 6pt above the tab: "This is cut off". The tabs sat in the title's row, which is only as tall as the header's buttons (27pt) and clips its text, so the x lost its upper half. The tabs now sit beside that row, and the x rises 4pt above a tab whose top is 7pt below the header's top edge (36pt header, 24pt tab, the title's 1pt nudge), so 3pt are left; the row ends with `X_OUTSET` of room for an x on the right.
 const X_SIZE: f32 = 16.0;
 const X_OUTSET: f32 = 6.0;
+const X_RISE: f32 = 4.0;
 const DOT_SIZE: f32 = 7.0;
 
 impl GhostexGpuiApp {
-    pub(crate) fn render_hidden_visual_page_tab(
+    /// The hidden pages' tabs after the breadcrumb's title, oldest first.
+    pub(crate) fn render_hidden_visual_page_tabs(
+        &self,
+        tabs: Vec<HiddenVisualPageTab>,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        gpui::div()
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            // The title's 1pt nudge (breadcrumb.rs), so a tab's text lines up with it.
+            .relative()
+            .top(px(1.0))
+            .when(!close_buttons_on_left(), |row| row.pr(px(X_OUTSET)))
+            .children(
+                tabs.into_iter()
+                    .map(|tab| self.render_hidden_visual_page_tab(tab, cx)),
+            )
+            .into_any_element()
+    }
+
+    fn render_hidden_visual_page_tab(
         &self,
         tab: HiddenVisualPageTab,
         cx: &mut gpui::Context<Self>,
@@ -37,7 +62,7 @@ impl GhostexGpuiApp {
             div()
                 .id(("hidden-page-tab-close", key))
                 .absolute()
-                .top(px(-X_OUTSET))
+                .top(px(-X_RISE))
                 .map(|button| {
                     if close_buttons_on_left() {
                         button.left(px(-X_OUTSET))
