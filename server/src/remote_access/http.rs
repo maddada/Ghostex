@@ -286,7 +286,8 @@ pub(crate) async fn handle_remote_access_http(
             }
             tokio::task::spawn_blocking(move || {
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
-                Ok(json!({ "addresses": easy_connect_addresses(&status) }))
+                let door = crate::tailcat::known_door_address(&paths, status.relay.host.as_deref());
+                Ok(json!({ "addresses": easy_connect_addresses_with_door(&status, door) }))
             })
             .await
         }
@@ -532,7 +533,13 @@ pub(crate) async fn handle_remote_access_http(
                     let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                     object.insert(
                         "easyConnectAddresses".to_string(),
-                        json!(easy_connect_addresses(&status)),
+                        json!(easy_connect_addresses_with_door(
+                            &status,
+                            crate::tailcat::known_door_address(
+                                &paths,
+                                status.relay.host.as_deref()
+                            ),
+                        )),
                     );
                 }
                 Ok(result)
