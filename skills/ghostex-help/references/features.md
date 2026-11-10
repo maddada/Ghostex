@@ -3572,8 +3572,9 @@ version of the Projects features in Cursor and Claude Code.
   Shelves and project groups you folded stay folded. Opening a thread from anywhere
   unfolds its coordinator. Threads count as sessions in the computer tabs and
   Quick Access, not in the list's shelf and project counts. On the phone, a
-  thread on another computer nests under its coordinator when the coordinator's
-  computer runs a version after 11.2.2.
+  thread on another computer nests under its coordinator when both the
+  coordinator's computer and the thread's computer run a version after 11.2.2;
+  otherwise the thread shows as its own card.
 - **Finished threads are closed**: once the coordinator has checked and
   committed a thread's work and expects nothing more from it, it marks the
   thread done and closes its session, so the sidebar keeps only work in flight
