@@ -28,15 +28,28 @@ use crate::app::native_sidebar::threads::{
 /// A thread row's height, unscaled.
 const THREAD_ROW_HEIGHT: f32 = 26.0;
 
-/// "Show 3 threads" / "Hide threads": what the crew count does.
+/// What a click on the crew count does: "Hide threads" when the user unfolded it; "Keep threads
+/// open" while a search holds it open (the click saves it unfolded); otherwise what the unfold
+/// shows: "Show 3 threads", "Show 2 threads (5 older)", or "Show threads (20 older)" when every
+/// thread waits behind the older-threads row.
 fn crew_label(card: &UnifiedCard) -> Option<String> {
     let crew = card.crew.as_ref()?;
-    Some(if crew.open {
+    let plural = |count: u16| if count == 1 { "thread" } else { "threads" };
+    Some(if crew.unfolded {
         "Hide threads".to_string()
-    } else if crew.total == 1 {
-        "Show 1 thread".to_string()
+    } else if crew.open {
+        "Keep threads open".to_string()
+    } else if crew.listed == 0 {
+        format!("Show threads ({} older)", crew.older)
+    } else if crew.older > 0 && !crew.older_shown {
+        format!(
+            "Show {} {} ({} older)",
+            crew.listed,
+            plural(crew.listed),
+            crew.older
+        )
     } else {
-        format!("Show {} threads", crew.total)
+        format!("Show {} {}", crew.total, plural(crew.total))
     })
 }
 
@@ -175,13 +188,13 @@ impl GhostexGpuiApp {
                     depth,
                     branch,
                     pull_request,
-                    other_machine,
+                    machine,
                 } => self.render_unified_thread_row(
                     thread,
                     *depth,
                     branch.as_deref(),
                     *pull_request,
-                    *other_machine,
+                    machine.as_deref(),
                     hud,
                     appearance,
                     cx,
@@ -226,7 +239,7 @@ impl GhostexGpuiApp {
         depth: u8,
         branch: Option<&str>,
         pull_request: Option<u64>,
-        other_machine: bool,
+        machine: Option<&str>,
         hud: &Value,
         appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
@@ -318,12 +331,7 @@ impl GhostexGpuiApp {
                         .text_color(appearance.muted),
                 )
             })
-            .when_some(
-                other_machine
-                    .then(|| thread.machine_short_label.clone())
-                    .flatten(),
-                |row, machine| row.child(meta(machine)),
-            )
+            .when_some(machine, |row, machine| row.child(meta(machine.to_owned())))
             .when_some(branch, |row, branch| {
                 row.child(
                     h_flex()

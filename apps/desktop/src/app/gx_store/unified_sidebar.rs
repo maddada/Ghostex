@@ -66,6 +66,9 @@ pub(crate) struct UnifiedSidebarHost {
     /// The branch each card last showed, by machine and row id, for the card's third line while
     /// its branch is not known (`unified_branch_line`).
     last_branches: HashMap<(MachineId, String), String>,
+    /// The row the newest reveal brought on screen: listed with the coordinators above it while
+    /// their other older threads stay tucked (gx-core `UnifiedFolds::reveal`). Not saved.
+    reveal_target: Option<String>,
     /// The moment the booked rebuild is for, when a nested thread stops being recent or a snoozed
     /// one wakes (gx-core `UnifiedSidebarView::deadline_ms`).
     deadline_booked: Option<i64>,
@@ -113,6 +116,13 @@ impl UnifiedSidebarHost {
             .find(|session| session.row.is_borrowed_thread())
             .or_else(|| rows().next())
             .map(|session| session.row.sidebar_session_id.clone())
+    }
+
+    /// The coordinators' saved folds, with the newest reveal's target.
+    fn folds(&self) -> ghostex_gx_core::unified_sidebar::UnifiedFolds {
+        let mut folds = self.saved.folds();
+        folds.reveal.clone_from(&self.reveal_target);
+        folds
     }
 
     /// A Quick Access pick waiting to filter the list gives way to a filter set since.
@@ -326,7 +336,7 @@ impl UnifiedSidebarHost {
         let settings = unified_settings(list_inputs);
         let has_projects = inputs.iter().any(|input| !input.view.groups.is_empty());
         let scope = unified_space_scope(store, list_inputs);
-        let folds = self.saved.folds();
+        let folds = self.folds();
         let mut view = build_unified_sidebar_folded(
             &inputs,
             settings,
@@ -496,7 +506,20 @@ impl UnifiedSidebarHost {
                             branch: own_branch.filter(|own| Some(own.as_str()) != branch),
                             pull_request: pull_request_of(thread)
                                 .filter(|number| Some(*number) != pull_request_of(row)),
-                            other_machine: thread.machine != row.machine,
+                            // The computer that runs the thread, when it is not the card's, this
+                            // computer included (a local thread of a remote coordinator).
+                            machine: (thread.machine != row.machine).then(|| {
+                                chips.get(&thread.machine).map_or_else(
+                                    || {
+                                        if thread.machine.is_local() {
+                                            super::machine_short_names::local_computer_name()
+                                        } else {
+                                            thread.machine_label.clone().unwrap_or_default()
+                                        }
+                                    },
+                                    |(_, short)| short.clone(),
+                                )
+                            }),
                         })
                     }
                     UnifiedTreeLine::Older { coordinator, depth } => {
@@ -685,8 +708,9 @@ struct HiddenReveal {
     spot: UnifiedRevealSpot,
     /// The filter that lets it through, when the current one leaves it out.
     filter: Option<UnifiedFilter>,
-    /// Its coordinator, when the row waits behind that coordinator's older-threads row.
-    list_older_of: Option<String>,
+    /// The row waits behind its coordinator's older-threads row, so it is listed as the reveal's
+    /// target rather than listing every older thread.
+    older: bool,
 }
 
 impl UnifiedSidebarHost {
@@ -717,7 +741,7 @@ impl UnifiedSidebarHost {
         // Inside the active Space: a card of another Space is fetched by the Space switch, not by
         // lifting the filter.
         let scope = unified_space_scope(core.presentation(), list_inputs);
-        let folds = self.saved.folds();
+        let folds = self.folds();
         let build = |filter: &UnifiedFilter| {
             build_unified_sidebar_folded(
                 &inputs,
@@ -733,13 +757,10 @@ impl UnifiedSidebarHost {
             // A thread the filter keeps only for a sibling's sake is shown once the filter lets
             // it through too.
             let filter = self.filter.admitting(found.row);
-            let list_older_of = (!found.row.shown && filter.is_none())
-                .then(|| found.ancestors.last().cloned())
-                .flatten();
             Some(HiddenReveal {
                 spot: found.reveal_spot(),
                 filter,
-                list_older_of,
+                older: !found.row.shown,
             })
         };
         reveal(&build(&self.filter)).or_else(|| {
@@ -932,8 +953,9 @@ impl GhostexGpuiApp {
                     host.pending_project_clear();
                     rebuild = true;
                 }
-                if let Some(key) = hidden.list_older_of {
-                    rebuild |= host.saved.older_shown_coordinators.insert(key);
+                if hidden.older {
+                    host.reveal_target = Some(sidebar_session_id.to_string());
+                    rebuild = true;
                 }
                 rebuild |= !hidden.spot.ancestors.is_empty();
                 hidden.spot

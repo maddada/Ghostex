@@ -53,8 +53,9 @@ pub(crate) enum UnifiedCardLine {
         branch: Option<String>,
         /// Its pull request number, when the card does not show it.
         pull_request: Option<u64>,
-        /// It runs on another computer than the card's.
-        other_machine: bool,
+        /// The short name of the computer that runs it, when that is not the card's computer (this
+        /// computer included).
+        machine: Option<String>,
     },
     /// The "N older threads" / "Hide older threads" row of a coordinator.
     Older {
