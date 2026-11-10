@@ -158,7 +158,7 @@ const HELD_COLOR: u32 = 0x8b78f0;
 const HOLD_COLOR: u32 = 0x7fa1c4;
 
 /// A tag's tint (`BoardTag::tone`), or `None` for the muted chip.
-fn tone_color(tone: &str) -> Option<u32> {
+pub(super) fn tone_color(tone: &str) -> Option<u32> {
     match tone {
         "question" => Some(crate::app::native_sidebar::status::QUESTION_COLOR),
         "bad" => Some(crate::app::native_sidebar::status::APPROVAL_COLOR),

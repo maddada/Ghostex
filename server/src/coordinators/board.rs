@@ -101,6 +101,43 @@ fn text(value: &Value, key: &str) -> String {
         .to_string()
 }
 
+/// The GitHub PRs and issues work items link to (`item add --link`), by when an item last showed
+/// one, so the links pass reads their state as it reads a thread's links
+/// (server/session_links_sync.rs `refresh_link_caches`). A link no item has shown for an hour is
+/// forgotten.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User, of the Work panel's chips "#536" and "#538" grey beside a green "#526": why. A thread's
+/// link (`ghostex link add`) was read for its state; an item's own link never was, so it stayed
+/// grey (an issue) or would show green whatever its state (a PR). A GitHub PR or issue chip looks
+/// the same wherever its link came from: its real state's colour once read, neutral until then.
+fn item_github_links_seen(
+) -> &'static std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>> {
+    static SEEN: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>>,
+    > = std::sync::OnceLock::new();
+    SEEN.get_or_init(Default::default)
+}
+
+/// Notes that an item shows `link`, when it is a GitHub PR or issue.
+pub(crate) fn note_item_github_link(link: &str) {
+    if crate::work_mode::repo_and_number_of_url(link).is_none() {
+        return;
+    }
+    if let Ok(mut seen) = item_github_links_seen().lock() {
+        seen.insert(link.to_string(), std::time::Instant::now());
+    }
+}
+
+/// The GitHub PR and issue links items showed in the last hour.
+pub(crate) fn item_github_links() -> Vec<String> {
+    let Ok(mut seen) = item_github_links_seen().lock() else {
+        return Vec::new();
+    };
+    seen.retain(|_, at| at.elapsed() < std::time::Duration::from_secs(3600));
+    seen.keys().cloned().collect()
+}
+
 /// A GitHub PR's number from its URL.
 fn pull_request_number(url: &str) -> Option<u64> {
     let (_, rest) = url.split_once("/pull/")?;
@@ -363,7 +400,14 @@ pub fn add_tag_looks(board: &mut Value, custom_tags: &Value) {
 pub(crate) fn item_link(link: &str) -> Value {
     if let Some((_, rest)) = link.split_once("/issues/") {
         let number = rest.split(['/', '?', '#']).next().unwrap_or_default();
-        return json!({ "kind": "issue", "label": format!("#{number}"), "url": link });
+        let mut out = json!({ "kind": "issue", "label": format!("#{number}"), "url": link });
+        // Its state once read, as a thread's issue link shows it (`note_item_github_link`).
+        if let Some(info) = crate::work_mode::cached_work_github_issue_url(link) {
+            if let Some(state) = info.state.as_deref() {
+                out["state"] = json!(state);
+            }
+        }
+        return out;
     }
     if link.contains("linear.app/") {
         let identifier = link

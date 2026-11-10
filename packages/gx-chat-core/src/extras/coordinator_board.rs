@@ -325,6 +325,25 @@ fn markdown_link(label: &str, destination: &str) -> String {
     format!("[{label}]({destination})")
 }
 
+/// A GitHub PR or issue link's colour, the same on a board chip and a work item card's part:
+/// merged, closed, failing or running checks, open, or neutral while its state is unknown.
+pub fn link_tone(link: &Value) -> &'static str {
+    let kind = text(link, "kind");
+    let state = text(link, "state");
+    match (kind, state, text(link, "checks")) {
+        ("pr", "merged", _) => "merged",
+        ("pr", "closed", _) | ("issue", "closed", _) => "closed",
+        // A draft, or a PR not read yet: neutral until its state is known (Q2167 follow-up,
+        // the user's "#536 grey, #526 green"; server/src/coordinators/board.rs
+        // `note_item_github_link`).
+        ("pr", "draft" | "", _) => "",
+        ("pr", _, "failing") => "bad",
+        ("pr", _, "pending") => "running",
+        ("pr", _, _) | ("issue", "open", _) => "good",
+        _ => "",
+    }
+}
+
 /// A row gxserver sent, worded.
 fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
     let open = |url: &str| json!({"type": "openMarkdownLink", "href": url});
@@ -394,16 +413,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
     let mut has_pr = false;
     for link in row["links"].as_array().into_iter().flatten() {
         let kind = text(link, "kind");
-        let state = text(link, "state");
-        let tone = match (kind, state, text(link, "checks")) {
-            ("pr", "merged", _) => "merged",
-            ("pr", "closed", _) | ("issue", "closed", _) => "closed",
-            ("pr", "draft", _) => "",
-            ("pr", _, "failing") => "bad",
-            ("pr", _, "pending") => "running",
-            ("pr", _, _) | ("issue", "open", _) => "good",
-            _ => "",
-        };
+        let tone = link_tone(link);
         has_pr |= kind == "pr";
         let mut chip = tag(kind, text(link, "label"), tone);
         if let Some(url) = link.get("url").and_then(Value::as_str) {

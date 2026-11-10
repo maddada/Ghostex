@@ -139,6 +139,12 @@ pub fn waits_line(item: &Value) -> String {
 /// links. Never "You" or "Coordinator": the card's status already says whose turn it is.
 ///
 /// CDXC:Coordinators 2026-11-10 DECISION:
+/// User (Q2205 "A. Quiet links with the agent's logo"): each part of the bottom line is its own
+/// quiet link at the chat's text size, the thread with its agent's logo, a GitHub PR or issue with
+/// its state, a file, the steps, wrapping to a second line and never cut. "make sure fonts in the
+/// card are all same as font of chat, use other stuff to differentiate not font size".
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
 /// User (Q2167), of the first cards: "i don't like the tags u have shown at the bottom pls remove
 /// the border and make them look better also i don't know wtf is You there, just remove it". The
 /// chips are an icon and muted words with no outline or fill (the renderers), and an owner shows
@@ -153,6 +159,8 @@ pub fn item_chips(item: &Value) -> Vec<Value> {
         chips.push(json!({
             "kind": "thread",
             "label": title,
+            // Its agent's logo (Q2205 A).
+            "agentIcon": crate::transcript::agent_message_card::agent_icon(text(thread, "agent"), ""),
             "command": {
                 "type": "openCoordinatorThread",
                 "serverId": text(thread, "serverId"),
@@ -179,12 +187,19 @@ pub fn item_chips(item: &Value) -> Vec<Value> {
     }
     for link in item["links"].as_array().into_iter().flatten() {
         let url = text(link, "url");
-        let label = match text(link, "kind") {
-            "pr" => format!("PR {}", text(link, "label")),
-            "issue" => format!("Issue {}", text(link, "label")),
-            _ => text(link, "label").to_string(),
+        let kind = text(link, "kind");
+        // A GitHub PR or issue: GitHub's mark, its number and its state in the state's colour
+        // (the board chips' `link_tone`), whichever way the link came (Q2205 A).
+        let mut chip = if matches!(kind, "pr" | "issue") {
+            json!({
+                "kind": "github",
+                "label": text(link, "label"),
+                "state": text(link, "state"),
+                "tone": crate::extras::coordinator_board::link_tone(link),
+            })
+        } else {
+            json!({ "kind": if kind == "link" { "file" } else { "link" }, "label": text(link, "label") })
         };
-        let mut chip = json!({ "kind": if text(link, "kind") == "link" { "file" } else { "link" }, "label": label });
         if !url.is_empty() {
             chip["command"] = json!({ "type": "openMarkdownLink", "href": url });
         }
@@ -325,18 +340,22 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
                 else {
                     continue;
                 };
+                // A withdrawn ask draws nothing under the reply: it stays in the item's history
+                // and the Work panel.
+                //
+                // CDXC:Coordinators 2026-11-10 DECISION:
+                // User, of "Q2209 · After the next rebuild, look at the header: are the Claude
+                // and Grok Bot buttons in the rig…" cut before its Withdrawn: "this doesn't tell
+                // me question withdrawn.. and actually no need to show question withdrawn by
+                // itself". The folds that remain keep their outcome (the answer, the status) and
+                // time whole, and only the question or title gives way (`foldOutcome`).
+                if ask["withdrawn"] == true {
+                    continue;
+                }
                 let key = format!("work-ask:{reference}:{tag}");
                 let picked = answers.get(&key).map(String::as_str);
                 let open = ask["open"] == true && picked.is_none();
-                let answered = if ask["withdrawn"] == true {
-                    "Withdrawn".to_string()
-                } else {
-                    text(ask, "answered")
-                        .to_string()
-                        .chars()
-                        .take(200)
-                        .collect()
-                };
+                let answered: String = text(ask, "answered").chars().take(200).collect();
                 let at = at_ms(text(event, "at")).unwrap_or(first_at);
                 let line = if ask["holds"] == true {
                     format!("{} waits on this", text(item, "title"))
@@ -357,15 +376,12 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
                 } else {
                     Vec::new()
                 };
-                let ask_fold = format!(
-                    "{tag} \u{b7} {} \u{b7} {}",
-                    text(ask, "text"),
-                    if answered.is_empty() {
-                        "answered"
-                    } else {
-                        answered.as_str()
-                    }
-                );
+                let ask_fold = format!("{tag} \u{b7} {}", text(ask, "text"));
+                let ask_outcome = if answered.is_empty() {
+                    "Answered".to_string()
+                } else {
+                    answered.clone()
+                };
                 if ask["open"] == true {
                     open_asks.push(OpenAsk {
                         key: key.clone(),
@@ -393,11 +409,11 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
                         "chips": ask_chips,
                         "buttons": buttons,
                         "busy": picked.is_some() && ask["open"] == true,
-                        // A settled ask's line: a check once answered or done, a cross once
-                        // withdrawn.
-                        "foldStatus": if ask["withdrawn"] == true { "dropped" } else if ask["open"] == true { ask_status } else { "finished" },
+                        // A settled ask's line: a check once answered or done.
+                        "foldStatus": if ask["open"] == true { ask_status } else { "finished" },
                         "answered": answered,
                         "foldText": ask_fold,
+                        "foldOutcome": ask_outcome,
                         "time": clock(at, context),
                     }),
                 ));
@@ -462,6 +478,7 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
                     "age": crate::transcript::message_time::age_label(now_ms, updated),
                     "at": updated,
                     "foldText": fold_text,
+                    "foldOutcome": status_label(text(last, "status")),
                     "foldStatus": text(last, "status"),
                     "time": clock(last_at, context),
                 }),

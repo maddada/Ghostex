@@ -762,6 +762,7 @@ pub fn item_value(item: &WorkItem, context: &WorkContext<'_>, history: usize) ->
     }
     // Its link as the board showed it: a PR with its checks, an issue, a ticket or a file.
     if !item.link.is_empty() {
+        super::board::note_item_github_link(&item.link);
         if let Some(pr) = super::board::item_pr(&item.link) {
             out["links"] = json!([{
                 "kind": "pr",

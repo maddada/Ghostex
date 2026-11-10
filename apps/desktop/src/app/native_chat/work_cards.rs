@@ -154,8 +154,9 @@ impl NativeChatView {
             top = top.child(
                 div()
                     .flex_shrink_0()
-                    .text_size(px(12.5 * s))
-                    .text_color(p.card_muted)
+                    .text_size(px(PROSE_SIZE * s))
+                    .line_height(px(PROSE_LINE_HEIGHT * s))
+                    .text_color(p.muted)
                     .child(right),
             );
         }
@@ -187,45 +188,15 @@ impl NativeChatView {
                     .child(line),
             );
         }
-        // An icon and muted words, no outline or fill (Q2167); a thread, link or file opens.
+        // Each part a quiet link at the chat's size: its icon (the thread's agent logo, GitHub's
+        // mark) and muted words, brightening and underlined on hover; a GitHub PR or issue says its
+        // state in that state's colour. Parts wrap to another line, never cut (Q2205 A).
         let chips: Vec<AnyElement> = card["chips"]
             .as_array()
             .into_iter()
             .flatten()
             .enumerate()
-            .map(|(index, chip)| {
-                let command = chip["command"].clone();
-                let label = text(chip, "label");
-                div()
-                    .id(gpui::SharedString::from(format!("work-chip:{key}:{index}")))
-                    .flex()
-                    .flex_shrink(1.0)
-                    .min_w(px(40.0 * s))
-                    .max_w(px(280.0 * s))
-                    .items_center()
-                    .gap(px(5.0 * s))
-                    .h(px(22.0 * s))
-                    .text_size(px(12.5 * s))
-                    .text_color(p.card_muted)
-                    .aria_label(label.clone())
-                    .child(
-                        svg()
-                            .path(chip_icon(&text(chip, "kind")))
-                            .size(px(12.0 * s))
-                            .flex_shrink_0()
-                            .text_color(p.muted),
-                    )
-                    .child(div().min_w_0().truncate().child(label))
-                    .when(command.is_object(), |chip| {
-                        chip.chat_cursor_pointer()
-                            .hover(|style| style.text_color(p.foreground))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.stop_propagation();
-                                this.invoke(command.clone(), cx);
-                            }))
-                    })
-                    .into_any_element()
-            })
+            .map(|(index, chip)| self.work_card_part(chip, &format!("{key}:{index}"), p, cx))
             .collect();
         let busy = card["busy"] == true;
         let buttons: Vec<AnyElement> = card["buttons"]
@@ -302,6 +273,74 @@ impl NativeChatView {
         column.into_any_element()
     }
 
+    /// One part of a card's bottom line (`chips` in gx-chat-core work_cards.rs `item_chips`).
+    fn work_card_part(
+        &self,
+        chip: &Value,
+        id: &str,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let kind = text(chip, "kind");
+        let label = text(chip, "label");
+        let command = chip["command"].clone();
+        let agent = text(chip, "agentIcon");
+        let (icon, icon_color) = match kind.as_str() {
+            "thread" if !agent.is_empty() => (
+                format!("agent-icons/{agent}.svg"),
+                super::new_session_welcome::brand_logo_color(&agent, p),
+            ),
+            "github" => ("titlebar/brand-github.svg".to_string(), p.muted),
+            _ => (chip_icon(&kind).to_string(), p.muted),
+        };
+        let state = text(chip, "state");
+        let state_color = super::coordinator_board::tone_color(&text(chip, "tone"))
+            .map_or(p.muted, |color| gpui::rgb(color).into());
+        let words = div()
+            .min_w_0()
+            .whitespace_normal()
+            .child(label.clone())
+            .when(command.is_object(), |words| {
+                words.hover(|style| style.text_color(p.foreground).underline())
+            });
+        div()
+            .id(gpui::SharedString::from(format!("work-chip:{id}")))
+            .flex()
+            .max_w_full()
+            .min_w_0()
+            .items_center()
+            .gap(px(6.0 * s))
+            .min_h(px(PROSE_LINE_HEIGHT * s))
+            .text_size(px(PROSE_SIZE * s))
+            .line_height(px(PROSE_LINE_HEIGHT * s))
+            .text_color(p.card_muted)
+            .aria_label(if state.is_empty() {
+                label.clone()
+            } else {
+                format!("{label}, {state}")
+            })
+            .child(
+                svg()
+                    .path(icon)
+                    .size(px(14.0 * s))
+                    .flex_shrink_0()
+                    .text_color(icon_color),
+            )
+            .child(words)
+            .when(!state.is_empty(), |part| {
+                part.child(div().flex_shrink_0().text_color(state_color).child(state))
+            })
+            .when(command.is_object(), |part| {
+                part.chat_cursor_pointer()
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(command.clone(), cx);
+                    }))
+            })
+            .into_any_element()
+    }
+
     /// Everything still running, as one quiet row ("Moving · 7" and their names) that opens to a
     /// list; a row of the list goes to that item's newest card (gx-chat-core work_cards.rs
     /// `moving_row`, which holds the user's Q2166).
@@ -375,9 +414,11 @@ impl NativeChatView {
             .min_w_0()
             .flex()
             .flex_col()
-            .rounded(px(8.0 * s))
+            // The work item cards' own background, border and radius.
+            .rounded(px(10.0 * s))
             .border_1()
-            .border_color(p.input_border.opacity(0.7))
+            .border_color(p.input_border)
+            .bg(p.card_panel)
             .overflow_hidden()
             .child(head);
         if open {
@@ -445,7 +486,6 @@ impl NativeChatView {
                             div()
                                 .flex_shrink_0()
                                 .line_height(px(PROSE_LINE_HEIGHT * s))
-                                .text_size(px(12.5 * s))
                                 .text_color(p.muted)
                                 .child(text(row, "age")),
                         )
@@ -473,7 +513,12 @@ impl NativeChatView {
         };
         let (icon, color) = status_look(&status, p);
         let words = text(card, "foldText");
-        let tooltip = words.clone();
+        let outcome = text(card, "foldOutcome");
+        let tooltip = if outcome.is_empty() {
+            words.clone()
+        } else {
+            format!("{words} \u{b7} {outcome}")
+        };
         div()
             .id(gpui::SharedString::from(format!(
                 "work-fold:{}",
@@ -500,18 +545,29 @@ impl NativeChatView {
                     .flex_shrink_0()
                     .text_color(color.opacity(0.8)),
             )
+            // The question or title gives way; the outcome and time stay whole.
             .child(
                 div()
                     .flex_1()
-                    .min_w_0()
+                    .min_w(px(48.0 * s))
                     .truncate()
                     .text_color(p.card_muted)
                     .child(words),
             )
+            .when(!outcome.is_empty(), |line| {
+                line.child(
+                    div()
+                        .flex_shrink_0()
+                        .max_w(px(320.0 * s))
+                        .truncate()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(p.card_muted)
+                        .child(outcome),
+                )
+            })
             .child(
                 div()
                     .flex_shrink_0()
-                    .text_size(px(12.5 * s))
                     .text_color(p.muted)
                     .child(text(card, "time")),
             )
