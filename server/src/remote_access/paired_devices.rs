@@ -332,6 +332,19 @@ pub fn add_tailcat_client_key_when_allow_listed(
     Ok(true)
 }
 
+/// Adds a newly approved device's `client_key` to the allow-list without cutting the devices that
+/// are connected: a helper that carries links keeps running without the key until it next starts,
+/// and the door admits the device meanwhile (CDXC:RemotePairing 2026-11-10 in tailcat/door.rs).
+pub fn add_paired_tailcat_client_key(
+    paths: &GxserverPaths,
+    db: &Connection,
+    tailcat_runtime: &TailcatRuntime,
+    client_key: &str,
+) -> Result<bool> {
+    tailcat_runtime.withhold_new_key_from_busy_helpers(client_key);
+    add_tailcat_client_key_when_allow_listed(paths, db, tailcat_runtime, client_key)
+}
+
 /// Where a paired device registers its own Easy Connect key for this computer.
 pub const EASY_CONNECT_CLIENT_KEY_ENDPOINT: &str = "/api/registerEasyConnectClientKey";
 

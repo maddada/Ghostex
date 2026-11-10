@@ -124,9 +124,14 @@ pub fn apply_tailcat_state_update(
 /// How long one `/api/remotePairingCode` ask keeps Easy Connect open to new phones.
 pub const TAILCAT_PAIRING_WINDOW_HOLD: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// Lifts the allow-list while a pairing code is on screen (CDXC:RemotePairing 2026-10-25 in
-/// `supervisor.rs`); does nothing while the list is empty.
+/// Holds the pairing window open while a pairing code is on screen or a device waits as Pending:
+/// the door runs open and a new device's knock is answered (CDXC:RemotePairing 2026-11-10 in
+/// `door.rs`). The helpers paired devices are on are not touched.
 pub fn hold_tailcat_pairing_window_open(paths: &GxserverPaths, runtime: &TailcatRuntime) {
+    // Every ask after the first only moves the deadline.
+    if runtime.extend_open_pairing_window(TAILCAT_PAIRING_WINDOW_HOLD) {
+        return;
+    }
     let Ok(db) = open_gxserver_database(paths) else {
         return;
     };

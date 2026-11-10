@@ -1,4 +1,5 @@
 pub mod binary;
+pub mod door;
 pub mod http;
 pub(crate) mod install;
 pub mod keys;
@@ -10,6 +11,7 @@ pub mod supervisor;
 pub mod types;
 
 pub use binary::*;
+pub use door::*;
 // `http` exposes only the crate-internal endpoint handler, so its re-export
 // matches that visibility rather than widening it to `pub`.
 pub(crate) use http::*;

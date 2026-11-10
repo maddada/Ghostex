@@ -169,6 +169,14 @@ impl LinkPeers {
         }
     }
 
+    /// Whether this helper has carried no link since it started (or since its links were ended).
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_empty()
+    }
+
     fn take(&self) -> Vec<String> {
         std::mem::take(
             &mut *self
@@ -181,9 +189,22 @@ impl LinkPeers {
     }
 }
 
+/// The full key (`nodekey:<hex>`) of a client the allow-list turned away, when `line` says so.
+pub(crate) fn refused_client_key(line: &str) -> Option<&str> {
+    let key = first_word(line.split("ignoring meow from ").nth(1)?);
+    let hex = key.strip_prefix("nodekey:")?;
+    (hex.len() == 64 && hex.bytes().all(|byte| byte.is_ascii_hexdigit())).then_some(key)
+}
+
 /// Reads one helper's log until it closes, recording every link event and a relay that keeps
-/// resetting; the rest is dropped.
-pub(crate) fn follow_tailcat_log(stream: impl Read, context: LinkLogContext, peers: LinkPeers) {
+/// resetting; the rest is dropped. `refused` hears the key of every client the allow-list turned
+/// away (`door.rs` lets a new device in on it while a pairing code is shown).
+pub(crate) fn follow_tailcat_log(
+    stream: impl Read,
+    context: LinkLogContext,
+    peers: LinkPeers,
+    refused: impl Fn(&str),
+) {
     let mut tracker = LinkTracker::default();
     let mut relay = RelayResets::default();
     let reader = BufReader::new(stream);
@@ -193,6 +214,9 @@ pub(crate) fn follow_tailcat_log(stream: impl Read, context: LinkLogContext, pee
         };
         let line = String::from_utf8_lossy(&line);
         let now = Instant::now();
+        if let Some(key) = refused_client_key(&line) {
+            refused(key);
+        }
         if let Some(event) = tracker.observe(&line, now) {
             peers.note(&event);
             record_link_event(&context, &event);

@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use crate::tailcat::{TailcatRelayMode, TailcatStatusPayload};
+use crate::tailcat::{DoorAddress, LanesAdmitting, TailcatRelayMode, TailcatStatusPayload};
 
 /// How the log and the phone name the public relays' address.
 pub const PUBLIC_RELAY_LABEL: &str = "tailcat.dev";
@@ -55,8 +55,55 @@ pub fn easy_connect_addresses(status: &TailcatStatusPayload) -> Vec<EasyConnectA
 }
 
 /*
+CDXC:RemotePairing 2026-11-10 WHY:
+A device approved while other devices were connected is not on the two helpers above until they next start (they are not restarted for it, tailcat/door.rs), so dialing them first would cost it a ten second wait at each before it reached the door, the one address that lets it in. Its list therefore puts the addresses that admit its key first and names the door among them when neither main helper does; the two main addresses stay on the list behind them, since they admit it from the helpers' next start. A device both helpers admit gets the list exactly as before, without the door. Phones from 11.2.1 dial a list in its order and keep any address, so the longer list changes nothing for them.
+*/
+/// The addresses for the device that dials with `key`, best first. `admits` says which running
+/// helpers let that key in and `door` is the door's address while it runs.
+pub fn easy_connect_addresses_for(
+    status: &TailcatStatusPayload,
+    admits: LanesAdmitting,
+    door: Option<DoorAddress>,
+) -> Vec<EasyConnectAddress> {
+    let listed = easy_connect_addresses(status);
+    let admitted = |address: &EasyConnectAddress| {
+        if address.kind == "public" {
+            admits.public
+        } else {
+            admits.relay
+        }
+    };
+    if listed.iter().all(admitted) {
+        return listed;
+    }
+    let (mut first, later): (Vec<_>, Vec<_>) = listed.into_iter().partition(admitted);
+    if let (true, true, Some(door)) = (first.is_empty(), admits.door, door) {
+        let (relay, kind) = match door.relay_host {
+            Some(host) => (
+                host,
+                match status.relay.mode {
+                    TailcatRelayMode::Custom => "custom",
+                    _ => "ghostex",
+                },
+            ),
+            None => (PUBLIC_RELAY_LABEL.to_string(), "public"),
+        };
+        first.push(EasyConnectAddress {
+            address: door.address,
+            relay,
+            kind,
+            reachable: None,
+        });
+    }
+    first.extend(later);
+    first
+}
+
+/*
 CDXC:RemotePairing 2026-11-06 DECISION:
 User (approved plan, "New pairings"): the pairing QR keeps carrying one address, ours, so it gets no denser; the phone learns the public one from `/api/pairDevice`. Ours goes in only while its relay answered the last check: a QR naming a relay that is down could not pair at all. Copy as text keeps the public address, because computers (connection profiles, `rpc.rs`) and Cloud Boxes stay on it, as the plan allows, and a phone that pastes it learns ours once connected.
+
+CDXC:RemotePairing 2026-11-10 WHY: while a code is shown the QR's one address is the door's (tailcat/door.rs), which sits on our relay under the same rule (only while it answered the last check); `/api/remotePairingCode` falls back to the address below only when the door's helper cannot run.
 */
 pub fn pairing_qr_address(status: &TailcatStatusPayload) -> Option<String> {
     let relay_ready = status.relay.running && status.relay.reachable == Some(true);

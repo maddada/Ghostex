@@ -308,6 +308,13 @@ Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairi
 - `/api/remotePairingCode` gives a code (the one-time nonce) only to `Principal::Owner` with
   `openTunnel: true` (the desktop's Show QR sheet is open); everyone else gets the Easy Connect
   details with empty `payload`/`text` and no `secret`. A code lives 5 minutes and is single-use.
+- How a new device gets past Easy Connect's allow-list to ask at all (`server/src/tailcat/door.rs`):
+  while a code is shown or a device waits as Pending, a third Easy Connect helper (lane `door` in
+  `easyConnect.helper` log lines) runs open and the QR carries its address; the two helpers paired
+  devices are on are never opened and are not restarted for it. The text code names the first
+  helper, where a new key is let in when it knocks (that one helper starts again with it). An
+  approved key is withheld from a helper that carries links until it next starts, and the door
+  admits it meanwhile; a removed key still restarts the helpers at once.
 - `/api/pairDevice` (public) takes `deviceKey` (P-256, `ecdsaP256Sha256`) and optionally the
   phone's `approverKey`, consumes the code, and answers `{ status: "pending", pendingId, words }`.
   It creates a `pairingApproveDevice` approval request (target: the pending id; the detail names

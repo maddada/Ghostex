@@ -118,16 +118,26 @@ pub(crate) async fn handle_remote_access_http(
                 .unwrap_or(false);
             let show_code = open_tunnel && may_show_pairing_code(&caller);
             tokio::task::spawn_blocking(move || {
-                if show_code {
-                    // The Show QR dialog is open: a new phone must get through the allow-list to pair.
+                // The Show QR dialog is open: a new phone must get past the allow-list to pair. It
+                // comes in through the door, whose address the QR then carries; the helpers paired
+                // devices are on are not touched (CDXC:RemotePairing 2026-11-10 in tailcat/door.rs).
+                let door = if show_code {
                     hold_tailcat_pairing_window_open(&paths, &tailcat_runtime);
-                }
+                    tailcat_runtime.wait_for_open_door(DOOR_READY_TIMEOUT)
+                } else {
+                    None
+                };
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                 let identity = cached_remote_access_identity()?;
                 let ssh_port = ssh_port_for_pairing(&status.ports);
                 let mut result = serde_json::Map::new();
+                // Without a door (its helper could not start) the QR names a main helper as
+                // before, where the new phone's knock lets it in.
+                let qr_address = door
+                    .map(|door| door.address)
+                    .or_else(|| pairing_qr_address(&status));
                 if let (Some(qr_address), Some(text_address)) =
-                    (pairing_qr_address(&status), public_pairing_address(&status))
+                    (qr_address, public_pairing_address(&status))
                 {
                     let db = open_gxserver_database(&paths)?;
                     // A closed sheet doesn't drop the live code: the 11.0.1 notice shows the same
@@ -276,7 +286,14 @@ pub(crate) async fn handle_remote_access_http(
             }
             tokio::task::spawn_blocking(move || {
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
-                Ok(json!({ "addresses": easy_connect_addresses(&status) }))
+                // The asking device's own key decides the order (`easy_connect_addresses_for`).
+                let key = match &caller {
+                    Principal::Device { device_id } => open_gxserver_database(&paths)
+                        .ok()
+                        .and_then(|db| device_dial_key(&db, device_id)),
+                    _ => None,
+                };
+                Ok(json!({ "addresses": addresses_for_key(&status, &tailcat_runtime, key.as_deref()) }))
             })
             .await
         }
@@ -501,9 +518,9 @@ pub(crate) async fn handle_remote_access_http(
                 it waited and restarted the helpers, dropping paired phones' links twice. Only a
                 phone or computer pairing through Easy Connect lifts it now.
                 */
-                let over_ssh = pairing_runtime
-                    .pending(&ask.id, crate::security::now_ms())
-                    .is_some_and(|pending| pending.over_ssh);
+                let pending = pairing_runtime.pending(&ask.id, crate::security::now_ms());
+                let over_ssh = pending.as_ref().is_some_and(|pending| pending.over_ssh);
+                let tailcat_client_key = pending.and_then(|pending| pending.tailcat_client_key);
                 let answer = pairing_status(&context, ask)?;
                 if answer.status == PairingStatus::Pending && !over_ssh {
                     hold_tailcat_pairing_window_open(&paths, &tailcat_runtime);
@@ -513,10 +530,16 @@ pub(crate) async fn handle_remote_access_http(
                     (result.as_object_mut(), answer.approved)
                 {
                     object.extend(approved);
+                    // The approval may just have started the helpers again with the new key.
+                    tailcat_runtime.wait_for_main_addresses(MAIN_ADDRESSES_TIMEOUT);
                     let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                     object.insert(
                         "easyConnectAddresses".to_string(),
-                        json!(easy_connect_addresses(&status)),
+                        json!(addresses_for_key(
+                            &status,
+                            &tailcat_runtime,
+                            tailcat_client_key.as_deref()
+                        )),
                     );
                 }
                 Ok(result)
@@ -668,6 +691,42 @@ fn log_new_pairing_code(secret_hash: &str, actor: crate::audit::Actor) {
         crate::audit::Outcome::Done,
         None,
     );
+}
+
+/// How long the first ask of a pairing window waits for the door's helper to publish its address
+/// (a second or two; every later ask finds it running).
+const DOOR_READY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// How long an approved device's answer waits for helpers that are just starting to publish
+/// their addresses.
+const MAIN_ADDRESSES_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// The key a paired device dials this computer with: the one it registered for this computer,
+/// else the one it paired with.
+fn device_dial_key(db: &rusqlite::Connection, device_id: &str) -> Option<String> {
+    let repository = super::repository::RemotePairingRepository::new(db);
+    repository
+        .device_link_key(device_id)
+        .ok()
+        .flatten()
+        .or_else(|| repository.find_device(device_id).ok()??.tailcat_client_key)
+}
+
+/// A device's Easy Connect addresses in the order that lets its `key` in soonest; the plain list
+/// when the key is unknown.
+fn addresses_for_key(
+    status: &crate::tailcat::TailcatStatusPayload,
+    tailcat_runtime: &crate::tailcat::TailcatRuntime,
+    key: Option<&str>,
+) -> Vec<EasyConnectAddress> {
+    match key {
+        Some(key) => easy_connect_addresses_for(
+            status,
+            tailcat_runtime.lanes_admitting(key),
+            tailcat_runtime.door_address(),
+        ),
+        None => easy_connect_addresses(status),
+    }
 }
 
 /// The Easy Connect half of `/api/remotePairingCode`: `payload` (the QR link) only when `code`
