@@ -1119,6 +1119,8 @@ impl NativeChatView {
                 }
                 // The page card's picture (`page_card.rs`), which the view keeps for itself.
                 Some("host") if request["method"] == "pageThumbnail" => self.receive_page_thumbnail(&request["params"], cx),
+                // A work item Reply that did not go opens again with its words (reply_popover.rs).
+                Some("host") if request["method"] == "workReplyFailed" => self.reopen_failed_reply(&request["params"], cx),
                 // The offline-computer card's check and Retry name the chat's machine for the app
                 // (remote_conn/chat_computers.rs).
                 Some("host") if matches!(request["method"].as_str(), Some("checkComputer" | "reconnectComputer")) => {

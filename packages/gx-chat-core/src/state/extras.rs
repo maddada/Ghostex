@@ -115,8 +115,15 @@ pub struct PanelsState {
     /// The answer this client sent for each board card that asks something, by card key.
     pub board_answers: std::collections::BTreeMap<String, String>,
     /// Board answers being recorded with gxserver (op `answer`), by RPC id: the card's key, the
-    /// answer, and the message that goes once it is recorded.
-    pub board_answer_requests: std::collections::BTreeMap<u64, (String, String, String)>,
+    /// answer, the message that goes once it is recorded, and whether it is the user's own words
+    /// (a Reply).
+    pub board_answer_requests: std::collections::BTreeMap<u64, (String, String, String, bool)>,
+    /// Board answers' messages to the coordinator in flight, by RPC id: the card's key, the
+    /// answer, and whether it is a Reply.
+    pub board_answer_sends: std::collections::BTreeMap<u64, (String, String, bool)>,
+    /// Cards whose answer gxserver recorded but whose message did not go: another try sends the
+    /// message without recording it again.
+    pub board_answer_unsent: std::collections::BTreeSet<String>,
     /// The row a board pill in the chat asked the board to show (`board:B4`), and how many times
     /// one was clicked, so the renderers open the board and scroll to it once per click.
     pub board_focus: Option<(String, u64)>,
@@ -160,6 +167,8 @@ impl Default for PanelsState {
             board_change_requests: Default::default(),
             board_answers: Default::default(),
             board_answer_requests: Default::default(),
+            board_answer_sends: Default::default(),
+            board_answer_unsent: Default::default(),
             board_focus: None,
             intro_hidden: false,
             intro_hide_request: None,
