@@ -38,6 +38,9 @@ pub(crate) struct PushRegistration {
     pub(crate) kinds: PushKinds,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) device_id: Option<String>,
+    /// The phone's "Show session names" switch: on, an alert's title leads with the session's title.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) session_names: bool,
     pub(crate) registered_at: String,
 }
 
@@ -50,6 +53,7 @@ impl fmt::Debug for PushRegistration {
             .field("machine_id", &self.machine_id)
             .field("kinds", &self.kinds)
             .field("device_id", &self.device_id)
+            .field("session_names", &self.session_names)
             .field("registered_at", &self.registered_at)
             .finish()
     }

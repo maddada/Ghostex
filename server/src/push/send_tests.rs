@@ -86,6 +86,7 @@ impl Harness {
                 error: kinds.2,
             },
             device_id: None,
+            session_names: false,
             registered_at: "2026-10-31T10:00:00.000Z".to_string(),
         });
         store.write(&data).expect("write store");
@@ -175,6 +176,7 @@ fn alert_event(
         notification_id: notification_id.to_string(),
         agent_name: "OMP".to_string(),
         project_name: "demo-app".to_string(),
+        session_title: String::new(),
         occurred_at_ms,
     }
 }

@@ -417,7 +417,8 @@ fn take_due_silent(shared: &Shared) -> Option<SilentJob> {
 
 /// The phone's current token when the job still applies to it, after charging its budget.
 enum Admission {
-    Send(String),
+    /// The phone's token and its "Show session names" switch.
+    Send((String, bool)),
     Later(i64),
     Drop,
 }
@@ -432,7 +433,7 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
         if !job.event.kind.enabled(&registration.kinds) {
             return None;
         }
-        let token = registration.token.clone();
+        let token = (registration.token.clone(), registration.session_names);
         let first = job.sends == 0;
         let budget = data.budgets.entry(job.machine_id.clone()).or_default();
         if first && !budget.session_free(&job.event.session_id, now) {
@@ -449,7 +450,7 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
         budget.record_alert(now, first.then_some(job.event.session_id.as_str()));
         Some(Admission::Send(token))
     });
-    let token = match admission {
+    let (token, session_names) = match admission {
         Admission::Send(token) => token,
         Admission::Later(at) => {
             job.not_before = at;
@@ -460,8 +461,14 @@ fn send_alert(shared: &Shared, mut job: AlertJob, next_receipt_due: &mut Option<
     };
     let ttl_secs = remaining_secs(job.expires_at, now);
     let has_question = alert_has_question(shared, &job.event);
-    let Some(message) = alert_message(&token, &job.machine_id, &job.event, has_question, ttl_secs)
-    else {
+    let Some(message) = alert_message(
+        &token,
+        &job.machine_id,
+        &job.event,
+        session_names,
+        has_question,
+        ttl_secs,
+    ) else {
         shared.warn("pushMessageTooLarge", "alert");
         return;
     };
@@ -507,7 +514,7 @@ fn send_silent(shared: &Shared, mut job: SilentJob, next_receipt_due: &mut Optio
         return;
     }
     let admission = charge_budget(shared, &job.machine_id, &job.token_hash, |data| {
-        let token = data.registration(&job.machine_id)?.token.clone();
+        let token = (data.registration(&job.machine_id)?.token.clone(), false);
         let budget = data.budgets.entry(job.machine_id.clone()).or_default();
         if !budget.silent_slot_free(now) {
             return Some(Admission::Drop);
@@ -515,7 +522,7 @@ fn send_silent(shared: &Shared, mut job: SilentJob, next_receipt_due: &mut Optio
         budget.record_silent(now);
         Some(Admission::Send(token))
     });
-    let Admission::Send(token) = admission else {
+    let Admission::Send((token, _)) = admission else {
         return;
     };
     let ttl_secs = remaining_secs(job.expires_at, now);

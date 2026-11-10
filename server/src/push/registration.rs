@@ -18,7 +18,14 @@ pub(crate) const DEVICE_ID_MAX: usize = 128;
 pub(crate) const SESSION_ID_MAX: usize = 64;
 pub(crate) const NOTIFICATION_ID_MAX: usize = 128;
 
-const REGISTER_FIELDS: &[&str] = &["action", "token", "machineId", "kinds", "deviceId"];
+const REGISTER_FIELDS: &[&str] = &[
+    "action",
+    "token",
+    "machineId",
+    "kinds",
+    "deviceId",
+    "sessionNames",
+];
 const UNREGISTER_FIELDS: &[&str] = &["action", "machineId"];
 
 enum PushTokenRequest {
@@ -27,6 +34,7 @@ enum PushTokenRequest {
         machine_id: String,
         kinds: PushKinds,
         device_id: Option<String>,
+        session_names: bool,
     },
     Unregister {
         machine_id: String,
@@ -126,11 +134,19 @@ fn parse_push_token_request(body: &Value) -> Result<PushTokenRequest, PushTokenE
                         .to_string(),
                 ),
             };
+            // The phone's "Show session names" switch; a phone that sends none keeps names off.
+            let session_names = match params.get("sessionNames") {
+                None => false,
+                Some(value) => value.as_bool().ok_or_else(|| {
+                    PushTokenError::bad_request("sessionNames must be a boolean.")
+                })?,
+            };
             Ok(PushTokenRequest::Register {
                 token: token.to_string(),
                 machine_id,
                 kinds,
                 device_id,
+                session_names,
             })
         }
         Some("unregister") => {
@@ -209,6 +225,7 @@ fn apply_push_token_request(
             machine_id,
             kinds,
             device_id,
+            session_names,
         } => {
             let device_id = match (caller_device, device_id) {
                 (Some(caller), Some(sent)) if sent != caller => {
@@ -259,6 +276,7 @@ fn apply_push_token_request(
                 machine_id,
                 kinds,
                 device_id,
+                session_names,
                 registered_at: chrono::Utc::now()
                     .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             };
