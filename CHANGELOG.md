@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **A phone's own Easy Connect key no longer costs it a stall:** when an updated phone app registers its own key with a computer (right after pairing, or the first time it connects after the update), the computer now answers before it restarts Easy Connect. The phone reconnects in about a second, where it lost the answer, sat without a connection for six seconds or more and had to ask again.
 - **Waking your computer no longer drops a connection that only needed a moment:** after a wake, a computer whose connection did not answer the first check gets a second one two seconds later and is reconnected only if that fails too, so a link that outlived the sleep (most do over Tailscale and Easy Connect) carries on instead of reconnecting. A connection that is really gone is replaced within about half a minute of the wake.
 
 ## 11.3.0 - 2026-11-10

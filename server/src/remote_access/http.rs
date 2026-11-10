@@ -356,7 +356,11 @@ pub(crate) async fn handle_remote_access_http(
             };
             tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
-                match register_device_link_key(&paths, &db, &tailcat_runtime, &device_id, &client_key)? {
+                // The asking device is connected through the helpers this restarts: answer first.
+                let registered = tailcat_runtime.answer_before_restart(&paths, || {
+                    register_device_link_key(&paths, &db, &tailcat_runtime, &device_id, &client_key)
+                })?;
+                match registered {
                     Ok(changed) => {
                         if changed {
                             crate::audit::record(

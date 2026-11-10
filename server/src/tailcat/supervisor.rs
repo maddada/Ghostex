@@ -21,6 +21,15 @@ const MAX_BACKOFF: Duration = Duration::from_secs(60);
 /// crash restarts fast instead of inheriting the previous crash loop's delay.
 const STABLE_UPTIME: Duration = Duration::from_secs(30);
 const STOP_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long an answer gets to leave through a helper before that helper starts again
+/// (`TailcatRuntime::answer_before_restart`).
+const ANSWER_HEAD_START: Duration = Duration::from_secs(1);
+
+thread_local! {
+    /// `Some` while this thread is inside `TailcatRuntime::answer_before_restart`, and `Some(true)`
+    /// once a reconcile was asked for there.
+    static RECONCILE_AFTER_ANSWER: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
 
 /// The Easy Connect helpers: the first address, on the public relays, which every phone paired
 /// so far holds; the second, on the relay Settings picked (Ghostex's own by default); and the door
@@ -172,6 +181,10 @@ impl TailcatRuntime {
     actually differs; an unrelated settings save must not drop live tunnels.
     */
     pub(crate) fn apply(&self, paths: &GxserverPaths, state: &TailcatState) {
+        // Asked for inside `answer_before_restart`: the saved state is reconciled after the answer.
+        if RECONCILE_AFTER_ANSWER.with(|held| held.replace(held.get().map(|_| true)).is_some()) {
+            return;
+        }
         let _one_at_a_time = self
             .reconciling
             .lock()
@@ -232,6 +245,36 @@ impl TailcatRuntime {
         );
         self.apply_relay(paths, state, &saved);
         self.apply_door(paths, state);
+    }
+
+    /*
+    CDXC:RemotePairing 2026-11-10 WHY:
+    A paired phone registers a key of its own for this computer through the tunnel it is connected by (`/api/registerEasyConnectClientKey`), and taking that key means starting the helpers again, which ends that tunnel. Done before the answer was sent, the answer was lost every time: measured with a lab phone on the phone's own bridge, the request failed after 6 s, the phone kept its shared key, sat 6.7 s without a connection and had to ask a second time. The change is saved at once and the helpers start again a moment after the answer went out, so the phone hears "accepted", dials again on its new key, and its hello (repeated every second) is let in as soon as the helpers are back.
+    SEE-ALSO: server/src/remote_access/http.rs (the endpoint), apps/mobile/app/src/machines/easyConnectLinkKey.ts.
+    */
+    /// Runs `work` with the reconciles it asks for on this thread held back, and runs one from the
+    /// saved state `ANSWER_HEAD_START` after it returned.
+    pub fn answer_before_restart<T>(&self, paths: &GxserverPaths, work: impl FnOnce() -> T) -> T {
+        struct Held;
+        impl Drop for Held {
+            fn drop(&mut self) {
+                RECONCILE_AFTER_ANSWER.with(|held| held.set(None));
+            }
+        }
+        RECONCILE_AFTER_ANSWER.with(|held| held.set(Some(false)));
+        let held = Held;
+        let result = work();
+        let asked = RECONCILE_AFTER_ANSWER.with(|held| held.get()) == Some(true);
+        drop(held);
+        if asked {
+            let runtime = self.clone();
+            let paths = paths.clone();
+            thread::spawn(move || {
+                thread::sleep(ANSWER_HEAD_START);
+                super::status::start_tailcat_from_persisted_state(&paths, &runtime);
+            });
+        }
+        result
     }
 
     /// Brings one of the two main helpers in line with `spec` and the saved allow-list: it serves
