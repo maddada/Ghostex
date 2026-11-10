@@ -10,8 +10,8 @@
     "light": { "background": "#fdf8f8", "border": "#dc2626", "borderAlpha": 0.15, "text": "#b43a3a" }
   },
   "questionTone": {
-    "dark": { "background": "#1d1712", "border": "#fb923c", "borderAlpha": 0.4, "text": "#fdba74" },
-    "light": { "background": "#fff7ed", "border": "#ea580c", "borderAlpha": 0.35, "text": "#c2410c" }
+    "dark": { "background": "#1d1218", "border": "#f472b6", "borderAlpha": 0.4, "text": "#f9a8d4" },
+    "light": { "background": "#fdf2f8", "border": "#be185d", "borderAlpha": 0.35, "text": "#9d174d" }
   },
   "pillGap": 8,
   "questionFlashMs": 1600,

@@ -26,8 +26,8 @@ const IN_PROGRESS_LIGHT: u32 = 0xc68a06;
 
 /// CDXC:MarkedHandovers 2026-11-08 DECISION:
 /// User: "please make Needs you pinkish color in the handover section headings, and make blocked red". "Needs you" takes the sidebar's pink question dot (`QUESTION_COLOR` #f472b6 in native_sidebar/status.rs) and "Blocked" its red dot (`FAILED_COLOR` #ef4444), on the dark chat; the light chat keeps a darker shade of each so the text stays readable on white (pink #be185d, red #dc2626). It replaces the orange #fb923c / #c2410c "Needs you" of 2026-10-12. "Kicked off" had the same pink and moved to sky blue the same day (below).
-const NEED_DARK: u32 = 0xf472b6;
-const NEED_LIGHT: u32 = 0xbe185d;
+pub(super) const NEED_DARK: u32 = 0xf472b6;
+pub(super) const NEED_LIGHT: u32 = 0xbe185d;
 const BLOCKED_DARK: u32 = 0xef4444;
 const BLOCKED_LIGHT: u32 = 0xdc2626;
 
