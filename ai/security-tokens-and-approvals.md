@@ -322,6 +322,11 @@ Code: `server/src/remote_access/pair_device.rs`, `packages/gx-protocol/src/pairi
   approved key goes on the allow-list of both helpers at once (they start again once with it), no
   saved address list names the door, and the door stops when the window closes; a removed key
   still restarts the helpers at once.
+- The relay check (`server/src/tailcat/relay_check.rs`) has a tailcat client key of its own beside
+  each helper's key (`relay-check.private.json`). It is on no allow-list and is never added to
+  one: gxserver says hello with it to this computer's own address, the helper logs the hello and
+  refuses the key, and that log line is all the check uses. While a pairing code is shown its
+  refused hello is not a knock.
 - `/api/pairDevice` (public) takes `deviceKey` (P-256, `ecdsaP256Sha256`) and optionally the
   phone's `approverKey`, consumes the code, and answers `{ status: "pending", pendingId, words }`.
   It creates a `pairingApproveDevice` approval request (target: the pending id; the detail names

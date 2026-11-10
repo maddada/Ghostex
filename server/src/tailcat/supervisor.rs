@@ -664,6 +664,15 @@ impl TailcatRuntime {
         }
     }
 
+    /// The address the helper of `lane` published, while `generation` is still the current one.
+    fn lane_token(&self, lane: TailcatLane, generation: u64) -> Option<String> {
+        let mut inner = self.inner.lock().ok()?;
+        let state = inner.lane(lane);
+        (state.generation == generation)
+            .then(|| state.token.clone())
+            .flatten()
+    }
+
     fn needs_token(&self, lane: TailcatLane, generation: u64) -> bool {
         self.inner.lock().ok().is_some_and(|mut inner| {
             let state = inner.lane(lane);
@@ -733,8 +742,19 @@ fn supervise(
         relay: super::relay_probe::key_relay_label(&spec.key_file),
         logger,
     };
+    // Looks whether the relay still delivers to this helper when a device it carried goes quiet,
+    // and asks for the helper to be started again when it does not (`relay_check.rs`). The door
+    // lives for a minute and is not checked.
+    let relay_check = (lane != TailcatLane::Door).then(|| {
+        let runtime = runtime.clone();
+        super::relay_check::RelayCheck::new(
+            spec.key_file.with_file_name("relay-check.private.json"),
+            Box::new(move || runtime.lane_token(lane, generation)),
+            link_context.clone(),
+        )
+    });
     let mut backoff = INITIAL_BACKOFF;
-    loop {
+    'helper: loop {
         // The blob file is written by the child on startup; a stale one from
         // the previous run must never be reported as this run's token.
         let _ = fs::remove_file(&spec.addr_file);
@@ -761,8 +781,9 @@ fn supervise(
             let context = link_context.clone();
             let peers = peers.clone();
             let runtime = runtime.clone();
+            let relay_check = relay_check.clone();
             thread::spawn(move || {
-                super::link_log::follow_tailcat_log(stderr, context, peers, |key| {
+                super::link_log::follow_tailcat_log(stderr, context, peers, relay_check, |key| {
                     runtime.note_refused(lane, generation, key)
                 })
             });
@@ -784,6 +805,23 @@ fn supervise(
                 super::link_log::record_links_ended(&link_context, &peers, reason);
                 let _ = reply.send(());
                 return;
+            }
+            if relay_check
+                .as_ref()
+                .is_some_and(|check| check.take_restart_request())
+            {
+                // The relay no longer delivers to this helper and it has not noticed: a new one
+                // connects to the relay anew. Same key, so the same address.
+                terminate_process_group(&mut child);
+                super::link_log::record_helper_event(
+                    &link_context,
+                    "stopped",
+                    "relayConnectionSilent",
+                    Some(started_at.elapsed().as_millis() as u64),
+                );
+                super::link_log::record_links_ended(&link_context, &peers, "relayConnectionSilent");
+                start_reason = "relayConnectionSilent";
+                continue 'helper;
             }
             if runtime.needs_token(lane, generation) {
                 if let Some(token) = read_address_blob(&spec.addr_file) {

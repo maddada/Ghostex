@@ -190,11 +190,13 @@ pub(crate) fn refused_client_key(line: &str) -> Option<&str> {
 
 /// Reads one helper's log until it closes, recording every link event and a relay that keeps
 /// resetting; the rest is dropped. `refused` hears the key of every client the allow-list turned
-/// away (`door.rs` lets a new device in on it while a pairing code is shown).
+/// away (`door.rs` lets a new device in on it while a pairing code is shown). `relay_check` reads
+/// every line first and takes out the hellos of its own check (`relay_check.rs`).
 pub(crate) fn follow_tailcat_log(
     stream: impl Read,
     context: LinkLogContext,
     peers: LinkPeers,
+    relay_check: Option<super::relay_check::RelayCheck>,
     refused: impl Fn(&str),
 ) {
     let mut tracker = LinkTracker::default();
@@ -206,6 +208,12 @@ pub(crate) fn follow_tailcat_log(
         };
         let line = String::from_utf8_lossy(&line);
         let now = Instant::now();
+        if relay_check
+            .as_ref()
+            .is_some_and(|check| check.observe(&line))
+        {
+            continue;
+        }
         if let Some(key) = refused_client_key(&line) {
             refused(key);
         }
@@ -321,6 +329,28 @@ pub(crate) fn record_helper_event(
         details["uptimeMs"] = json!(uptime_ms);
     }
     log_record(context, "easyConnect.helper", phase == "exited", details);
+}
+
+/// One look at whether the relay still delivers to a helper (`relay_check.rs`): `phase` is
+/// `answered`, `silent` or `unknown`, and `restarting` says the helper is started again for it.
+pub(crate) fn record_relay_check(
+    context: &LinkLogContext,
+    phase: &str,
+    took_ms: u64,
+    restarting: bool,
+) {
+    log_record(
+        context,
+        "easyConnect.relayCheck",
+        phase == "silent",
+        json!({
+            "lane": context.lane,
+            "relay": context.relay,
+            "phase": phase,
+            "tookMs": took_ms,
+            "restarting": restarting,
+        }),
+    );
 }
 
 /// The end of every link the helper carried, for `reason` (the helper stopped or exited).

@@ -4,6 +4,7 @@ pub mod http;
 pub(crate) mod install;
 pub mod keys;
 pub(crate) mod link_log;
+mod relay_check;
 pub(crate) mod relay_probe;
 pub mod repository;
 pub mod status;
