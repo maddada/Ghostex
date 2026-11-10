@@ -1031,8 +1031,9 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
             "turnId": turn.id,
             "folded": true,
             "foldStatus": if summary.finished { "finished" } else if summary.asks > 0 && words.is_empty() { "needs" } else { "moving" },
-            "foldText": words.join(" \u{b7} "),
-            "foldOutcome": outcome,
+            // A turn that only asked says so as its words ("2 asks"), never an empty line.
+            "foldText": if words.is_empty() { outcome.clone() } else { words.join(" \u{b7} ") },
+            "foldOutcome": if words.is_empty() { String::new() } else { outcome },
             "time": clock(summary.at, context),
         });
         if !summary.item_key.is_empty() {
