@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **OpenCode keeps showing that it's working for the whole turn:** the chat box shows Stop and the working word until OpenCode finishes, also when OpenCode's plugin stops reporting partway through a long turn (it used to show the Send arrow while OpenCode was still working, #529). On computer, web and phone, once Ghostex is updated on the computer running OpenCode.
 - **Cmd+D from a session in a sidebar folder keeps the split:** the new session joins that folder and opens beside it, instead of landing in the project's own list and leaving the folder; Cmd+Shift+D and the other quick creates there do the same, thanks to @roypadina.
 - **A project's buttons work on an entry that merges two copies:** Add Worktree, History, Create Agent and the launcher's agents open for the copy the entry acts on (another computer's, or a second clone), and the Unified sidebar's project menu works for a project the Project sidebar hides, thanks to @sebastianarena.
 - **The VS Code view and the web runtime stay installed across updates:** when an update brings a new version of either, it updates by itself (the view shows "Updating" with its progress) instead of asking again as if it were a first install, and a new version whose download is identical to the one you have is kept without downloading it again (GitHub #530).
