@@ -908,19 +908,27 @@ impl NativeChatView {
         cx.emit(NativeChatEvent::Host(Value::Object(message)));
     }
 
-    /// Apply everything the runtime thread has drained since the last wake.
+    /// Apply everything the runtime thread has drained since the last wake, then ask for one
+    /// redraw.
+    ///
+    /// CDXC:SessionChat 2026-11-10 WHY:
+    /// Measured on the user's running app: one chat update usually drew the chat twice. Every revision ships the transcript splice and the full snapshot together, and each part of an applied frame asked for its own redraw: the first drew at once and the second, inside the 50ms spacing below, armed a trailing redraw, so ten updates a second were twenty full redraws. The parts of every output drained in one wake now ask once, through the same spacing, so a burst still ends with its last state drawn and a stream draws as often as before.
     pub(crate) fn pump(&mut self, cx: &mut Context<Self>) {
         let Some(runtime) = &self.runtime else {
             return;
         };
+        let mut changed = false;
         for output in runtime.take_outputs() {
             match output {
-                ChatRuntimeOutput::Drained(output) => self.apply_output(output, cx),
+                ChatRuntimeOutput::Drained(output) => changed |= self.apply_output(output, cx),
                 ChatRuntimeOutput::Error(error) => {
                     self.error = Some(error);
                     cx.notify();
                 }
             }
+        }
+        if changed {
+            self.notify_if_shown(cx);
         }
     }
 
@@ -962,12 +970,15 @@ impl NativeChatView {
         cx.notify();
     }
 
-    fn apply_output(&mut self, output: DrainedFrame, cx: &mut Context<Self>) {
+    /// Applies one drained frame; true when what the chat draws changed, so `pump` asks for a
+    /// redraw.
+    fn apply_output(&mut self, output: DrainedFrame, cx: &mut Context<Self>) -> bool {
         let DrainedFrame {
             envelope: mut output,
             items_splice,
             subagent_splice,
         } = output;
+        let mut changed = false;
         if let Some(splice) = items_splice {
             let anchor_key = self.transcript_anchor_key();
             // The host ships only the changed window of transcript items (see transcriptItemsSplice in native-host.ts).
@@ -975,20 +986,21 @@ impl NativeChatView {
             let start = splice.start.min(items.len());
             let end = start.saturating_add(splice.delete_count).min(items.len());
             let inserted_len = splice.items.len();
-            items.splice(start..end, splice.items);
+            let replaced: Vec<_> = items.splice(start..end, splice.items).collect();
+            drop_off_main_thread(replaced, cx);
             self.splice_transcript_keyed(start, end, inserted_len, anchor_key);
-            self.notify_if_shown(cx);
+            changed = true;
         }
         if let Some(markers) = output
             .as_object_mut()
             .and_then(|output| output.remove("minimap"))
         {
             self.minimap.adopt(&markers);
-            self.notify_if_shown(cx);
+            changed = true;
         }
         if let Some(splice) = subagent_splice {
             self.apply_subagent_splice(splice);
-            self.notify_if_shown(cx);
+            changed = true;
         }
         if let Some(details) = output
             .as_object_mut()
@@ -997,7 +1009,7 @@ impl NativeChatView {
             self.row_details = details;
             self.list.remeasure();
             self.subagent_list.remeasure();
-            self.notify_if_shown(cx);
+            changed = true;
         }
         if let Some(mut snapshot) = output
             .as_object_mut()
@@ -1020,6 +1032,7 @@ impl NativeChatView {
             let before = std::mem::replace(&mut self.snapshot, Arc::new(snapshot));
             self.remeasure_on_look_change(&before);
             self.adopt_board_focus(&before, cx);
+            drop_off_main_thread(before, cx);
             if ring_moved {
                 cx.emit(NativeChatEvent::SessionDetailsRing);
             }
@@ -1036,7 +1049,7 @@ impl NativeChatView {
                 self.sync_rewind_window(cx);
                 self.sync_suggestion_window(cx);
                 self.load_earlier_if_near_top(cx);
-                self.notify_if_shown(cx);
+                changed = true;
             }
         }
         for request in output["requests"].as_array().into_iter().flatten() {
@@ -1154,6 +1167,7 @@ impl NativeChatView {
                 _ => {}
             }
         }
+        changed
     }
 
     fn rpc(&mut self, request: Value, cx: &mut Context<Self>) {
@@ -1259,4 +1273,12 @@ impl NativeChatView {
         })
         .detach();
     }
+}
+
+/// Frees `value` on a background thread.
+///
+/// CDXC:SessionChat 2026-11-10 WHY:
+/// Measured on the user's running app: nearly all of `apply_output`'s main-thread time was freeing the snapshot each update replaced (a whole chat's state as JSON) and the transcript rows a splice took out. Nothing reads them after the update, so the drop runs off the main thread.
+fn drop_off_main_thread<T: Send + 'static>(value: T, cx: &mut Context<NativeChatView>) {
+    cx.background_spawn(async move { drop(value) }).detach();
 }
