@@ -151,10 +151,13 @@ fn status(code: StatusCode) -> RoutedResponse {
 }
 
 /// The page's content policy for this response, sent as its header and written into the page's own
-/// policy tag (builtin.rs). A browser enforces both, so naming the page's own routes (its answers,
-/// its draft and its scroll position, under `/visual/<id>/`) keeps the page off every other
-/// gxserver route. `id` is a page id and `host` is checked here, so the policy holds nothing that
-/// could end the tag's attribute.
+/// policy tag (builtin.rs), so the browser gets the same resource policy twice. Its connect rule
+/// is the published one's `https:` with this page's own routes over http (its answers, its draft
+/// and its scroll position, under `/visual/<id>/`) in place of `'self'`, so it names no other
+/// gxserver route. What `https:` reaches, and where a redirect from an allowed address leads, are
+/// not narrowed by it, as before. The sandbox is the header's alone: a tag cannot carry one. `id`
+/// is a page id and `host` is checked here, so the policy holds nothing that could end the tag's
+/// attribute.
 ///
 /// CDXC:ServerApi 2026-11-10 WHY:
 /// A page's answers and drafts never left an iPhone: Send said "Not sent yet: Ghostex can't be reached" for good. Only the header named the page's address; the page's own tag said `'self'`, as it is stored (prepare.rs, where the address is not known: each reader reaches the page under its own, the phone under its forward's port). The response's sandbox gives the page an opaque origin, and WebKit matches `'self'` against that origin, so it matched nothing and the tag refused every request the header allowed; Chromium matches it against the address the page was loaded from, so the desktop and Android sent. The tag now carries the same policy as the header. It is not dropped from the served page instead, because a copy of the page that is saved or handed on without this response's header would then run under no policy at all.
