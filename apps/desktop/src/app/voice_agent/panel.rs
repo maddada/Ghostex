@@ -2019,6 +2019,10 @@ impl Render for VoicePanelWindow {
             .role(gpui::Role::Group)
             .aria_label(SharedString::new_static("Voice agent"))
             .track_focus(&self.focus)
+            // Escape in the text box hands the keyboard back before the box can use it.
+            .capture_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                this.text_box_escape(event, window, cx)
+            }))
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 this.panel_key_down(event, window, cx)
             }))
