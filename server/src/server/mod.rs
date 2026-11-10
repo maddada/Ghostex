@@ -167,6 +167,7 @@ pub(crate) use autopilot_http::{handle_autopilot_http, AUTOPILOT_ENDPOINTS};
 pub(crate) use security_http::require_owner_presence;
 pub(crate) use security_http::{presence_outcome, presence_outcome_response};
 pub mod session_state_sync;
+mod shared_settings_watch;
 mod shutdown_bounds;
 mod side_chat_http;
 mod sidebar_spaces_switch;

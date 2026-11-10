@@ -30,6 +30,14 @@ pub(super) async fn route_control_http(
             StatusCode::OK,
             create_authenticated_health(&state),
         ),
+        super::shared_settings_watch::READ_SHARED_SETTINGS_ENDPOINT => {
+            super::shared_settings_watch::handle_read_shared_settings_http(
+                &state,
+                &caller,
+                endpoint.path,
+                request_id,
+            )
+        }
         "/api/recordClientEvent" => {
             handle_record_client_event_http(endpoint.path, request_id, &body_json)
         }

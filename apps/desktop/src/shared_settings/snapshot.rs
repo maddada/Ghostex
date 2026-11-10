@@ -13,15 +13,6 @@ pub struct SharedSidebarSettingsSnapshot {
     object: Arc<Map<String, Value>>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TerminalContentWidth {
-    MaxWidth(f32),
-    Percent(f32),
-    /// At most this percentage of the window: the chat transcript's custom width
-    /// (native_chat/transcript.rs `transcript_column_cap`), which Match chat width follows.
-    WindowPercent(f32),
-}
-
 impl SharedSidebarSettingsSnapshot {
     pub fn empty() -> Self {
         Self {
@@ -550,80 +541,11 @@ impl SharedSidebarSettingsSnapshot {
         )
     }
 
-    pub fn terminal_pane_padding_px(&self) -> (f32, f32) {
-        (
-            read_finite_number_field(
-                &self.object,
-                "terminalPaneHorizontalPaddingPx",
-                DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX,
-            )
-            .clamp(MIN_TERMINAL_PANE_PADDING_PX, MAX_TERMINAL_PANE_PADDING_PX) as f32,
-            read_finite_number_field(
-                &self.object,
-                "terminalPaneVerticalPaddingPx",
-                DEFAULT_TERMINAL_PANE_VERTICAL_PADDING_PX,
-            )
-            .clamp(MIN_TERMINAL_PANE_PADDING_PX, MAX_TERMINAL_PANE_PADDING_PX) as f32,
-        )
-    }
-
     pub fn terminal_pane_layout(
         &self,
         apply_width_mode: bool,
     ) -> (f32, f32, Option<TerminalContentWidth>) {
-        let (horizontal_padding, vertical_padding) = self.terminal_pane_padding_px();
-        let width = if apply_width_mode {
-            let legacy_mode = if strict_bool_field(&self.object, "terminalNarrowerViewEnabled")
-                .unwrap_or(false)
-            {
-                "custom"
-            } else {
-                DEFAULT_TERMINAL_VIEW_WIDTH_MODE
-            };
-            match self
-                .object
-                .get("terminalViewWidthMode")
-                .and_then(Value::as_str)
-                .unwrap_or(legacy_mode)
-            {
-                "match-chat" => {
-                    if strict_bool_field(&self.object, "sessionChatCustomTranscriptWidthEnabled")
-                        .unwrap_or(false)
-                    {
-                        Some(TerminalContentWidth::WindowPercent(
-                            read_finite_number_field(
-                                &self.object,
-                                "sessionChatTranscriptWidthPercent",
-                                DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
-                            )
-                            .clamp(
-                                MIN_TERMINAL_VIEW_WIDTH_PERCENT,
-                                MAX_TERMINAL_VIEW_WIDTH_PERCENT,
-                            ) as f32,
-                        ))
-                    } else {
-                        Some(TerminalContentWidth::MaxWidth(
-                            DEFAULT_CHAT_CONTENT_MAX_WIDTH_PX,
-                        ))
-                    }
-                }
-                "custom" => Some(TerminalContentWidth::Percent(
-                    read_finite_number_field(
-                        &self.object,
-                        "terminalViewWidthPercent",
-                        DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
-                    )
-                    .clamp(
-                        MIN_TERMINAL_VIEW_WIDTH_PERCENT,
-                        MAX_TERMINAL_VIEW_WIDTH_PERCENT,
-                    ) as f32,
-                )),
-                _ => None,
-            }
-        } else {
-            None
-        };
-        (horizontal_padding, vertical_padding, width)
+        terminal_pane_layout_from_settings(&self.object, apply_width_mode)
     }
 
     pub fn terminal_width_applies_to_command_pane_terminals(&self) -> bool {

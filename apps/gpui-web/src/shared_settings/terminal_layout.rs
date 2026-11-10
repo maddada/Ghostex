@@ -1,0 +1,1 @@
+../../../desktop/src/shared_settings/terminal_layout.rs

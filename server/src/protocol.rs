@@ -406,6 +406,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
             Transport::WebSocket,
         ),
         "/api/control/stop" | "/api/control/stopAll" => remote_blocked(path),
+        // The GPUI web build's settings (server/shared_settings_watch.rs): this computer's own clients.
+        "/api/readSharedSettings" => full_local(path),
         "/api/readAgentSettings"
         | "/api/updateAgentSettings"
         | "/api/ingestAgentHookEvent"

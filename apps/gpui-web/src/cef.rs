@@ -8,7 +8,7 @@ pub(crate) fn system_page_color_scheme() -> Option<String> {
     Some(if query.matches() { "light" } else { "dark" }.to_string())
 }
 
-/// The saved settings the desktop's HUD is composed from. gxserver has no settings read the page could call, so the page composes its HUD with the defaults (an empty object).
+/// The saved settings the desktop's HUD is composed from, kept up to date with gxserver's (`app/gx_store/shared_settings_sync.rs`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SidebarRuntimeSettingsSnapshot {
     pub debugging_mode: bool,

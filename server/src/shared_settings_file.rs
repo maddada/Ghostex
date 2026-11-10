@@ -20,6 +20,11 @@ use crate::{
 
 const SETTINGS_FILE_NAME: &str = "native-sidebar-settings.json";
 
+/// Where the settings file is (`server/shared_settings_watch.rs` follows its size and time).
+pub(crate) fn shared_settings_path(paths: &GxserverPaths) -> std::path::PathBuf {
+    paths.app_config_dir.join(SETTINGS_FILE_NAME)
+}
+
 /// The settings as a JSON object. `None` means nothing is configured, which callers read as their
 /// shipped defaults: no settings file, or the system refused the read (logged once per process).
 pub(crate) fn read_shared_settings(paths: &GxserverPaths) -> Option<Value> {

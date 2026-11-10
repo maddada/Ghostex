@@ -42,6 +42,7 @@ pub(crate) mod ghostty_config_values;
 pub(crate) mod normalize;
 pub(crate) mod service;
 pub(crate) mod snapshot;
+pub(crate) mod terminal_layout;
 pub(crate) mod types;
 pub(crate) mod work_area_frame_default;
 
@@ -51,4 +52,5 @@ pub use ghostty_config_values::*;
 pub use normalize::*;
 pub use service::*;
 pub use snapshot::*;
+pub use terminal_layout::*;
 pub use types::*;
