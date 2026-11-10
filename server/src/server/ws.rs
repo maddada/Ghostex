@@ -244,9 +244,12 @@ pub(crate) async fn handle_event_socket_scoped(
             }
         }
     });
+    let thread_patches = super::chat_frame_dedupe::ThreadPatchOptIn::default();
+    let sender_thread_patches = thread_patches.clone();
     let sender_task = tokio::spawn(async move {
-        // Unchanged heavy side fields stay out of state frames (chat_frame_dedupe.rs).
-        let mut chat_frames = super::chat_frame_dedupe::ChatFrameMemory::default();
+        // Unchanged heavy side fields stay out of state frames, and a client that asked gets thread
+        // list patches (chat_frame_dedupe.rs).
+        let mut chat_frames = super::chat_frame_dedupe::ChatFrameMemory::new(sender_thread_patches);
         while let Some(event) = outbound_rx.recv().await {
             let event = chat_frames.pass(event);
             if send_event_message(&mut socket_sender, event).await.is_err() {
@@ -282,6 +285,9 @@ pub(crate) async fn handle_event_socket_scoped(
             if !allowed {
                 continue;
             }
+        }
+        if let Message::Text(text) = &message {
+            super::chat_frame_dedupe::note_client_message(text, &thread_patches);
         }
         if !handle_event_client_message(
             &state,

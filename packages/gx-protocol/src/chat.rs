@@ -319,6 +319,13 @@ pub struct ChatSideState {
     /// session; the Threads panel above its composer. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coordinator_threads: Option<Value>,
+    /// In place of `coordinator_threads` on a state frame: what changed since the list this socket
+    /// last carried (`{ base, ops: [{ path, value } | { path, remove: true }] }`, `base` the base
+    /// list's `revision`). Sent only to a client that asked for it in its subscribe
+    /// (`coordinatorThreadsPatch: true`); the chat core rebuilds the whole list before it applies
+    /// the frame (gx-chat-core session/thread_patch.rs, server/src/server/chat_frame_dedupe.rs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinator_threads_patch: Option<Value>,
     /// This session's side chats (`[{ projectId, sessionId, title, working, lifecycleState,
     /// needsApproval?, needsAnswer?, unread? }]`, server/src/side_chats/panel.rs), carried once it
     /// has had one; the Side chats pill above its composer. Absent means unchanged.
