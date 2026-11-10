@@ -923,7 +923,7 @@ fn finish_pairing(
     super::paired_devices::reload_device_api_tokens(context.db, context.device_tokens)?;
 
     if let Some(client_key) = pending.tailcat_client_key.as_deref() {
-        super::paired_devices::add_paired_tailcat_client_key(
+        super::paired_devices::add_tailcat_client_key_when_allow_listed(
             context.paths,
             context.db,
             context.tailcat_runtime,

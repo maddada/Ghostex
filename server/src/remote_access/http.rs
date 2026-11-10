@@ -286,14 +286,7 @@ pub(crate) async fn handle_remote_access_http(
             }
             tokio::task::spawn_blocking(move || {
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
-                // The asking device's own key decides the order (`easy_connect_addresses_for`).
-                let key = match &caller {
-                    Principal::Device { device_id } => open_gxserver_database(&paths)
-                        .ok()
-                        .and_then(|db| device_dial_key(&db, device_id)),
-                    _ => None,
-                };
-                Ok(json!({ "addresses": addresses_for_key(&status, &tailcat_runtime, key.as_deref()) }))
+                Ok(json!({ "addresses": easy_connect_addresses(&status) }))
             })
             .await
         }
@@ -518,9 +511,9 @@ pub(crate) async fn handle_remote_access_http(
                 it waited and restarted the helpers, dropping paired phones' links twice. Only a
                 phone or computer pairing through Easy Connect lifts it now.
                 */
-                let pending = pairing_runtime.pending(&ask.id, crate::security::now_ms());
-                let over_ssh = pending.as_ref().is_some_and(|pending| pending.over_ssh);
-                let tailcat_client_key = pending.and_then(|pending| pending.tailcat_client_key);
+                let over_ssh = pairing_runtime
+                    .pending(&ask.id, crate::security::now_ms())
+                    .is_some_and(|pending| pending.over_ssh);
                 let answer = pairing_status(&context, ask)?;
                 if answer.status == PairingStatus::Pending && !over_ssh {
                     hold_tailcat_pairing_window_open(&paths, &tailcat_runtime);
@@ -535,11 +528,7 @@ pub(crate) async fn handle_remote_access_http(
                     let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                     object.insert(
                         "easyConnectAddresses".to_string(),
-                        json!(addresses_for_key(
-                            &status,
-                            &tailcat_runtime,
-                            tailcat_client_key.as_deref()
-                        )),
+                        json!(easy_connect_addresses(&status)),
                     );
                 }
                 Ok(result)
@@ -698,36 +687,9 @@ fn log_new_pairing_code(secret_hash: &str, actor: crate::audit::Actor) {
 const DOOR_READY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// How long an approved device's answer waits for helpers that are just starting to publish
-/// their addresses.
-const MAIN_ADDRESSES_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
-
-/// The key a paired device dials this computer with: the one it registered for this computer,
-/// else the one it paired with.
-fn device_dial_key(db: &rusqlite::Connection, device_id: &str) -> Option<String> {
-    let repository = super::repository::RemotePairingRepository::new(db);
-    repository
-        .device_link_key(device_id)
-        .ok()
-        .flatten()
-        .or_else(|| repository.find_device(device_id).ok()??.tailcat_client_key)
-}
-
-/// A device's Easy Connect addresses in the order that lets its `key` in soonest; the plain list
-/// when the key is unknown.
-fn addresses_for_key(
-    status: &crate::tailcat::TailcatStatusPayload,
-    tailcat_runtime: &crate::tailcat::TailcatRuntime,
-    key: Option<&str>,
-) -> Vec<EasyConnectAddress> {
-    match key {
-        Some(key) => easy_connect_addresses_for(
-            status,
-            tailcat_runtime.lanes_admitting(key),
-            tailcat_runtime.door_address(),
-        ),
-        None => easy_connect_addresses(status),
-    }
-}
+/// their addresses (a second or two). Long, because a phone that got no list would keep only the
+/// address it scanned, the door's, which stops answering when the pairing window closes.
+const MAIN_ADDRESSES_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
 /// The Easy Connect half of `/api/remotePairingCode`: `payload` (the QR link) only when `code`
 /// carries a secret (the Show QR sheet), empty otherwise; `text` (Copy as text, and the code another

@@ -169,14 +169,6 @@ impl LinkPeers {
         }
     }
 
-    /// Whether this helper has carried no link since it started (or since its links were ended).
-    pub(crate) fn is_empty(&self) -> bool {
-        self.0
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .is_empty()
-    }
-
     fn take(&self) -> Vec<String> {
         std::mem::take(
             &mut *self

@@ -5,10 +5,10 @@
 //!
 //! What happens instead:
 //! - **The door.** A third helper with a key and address of its own, which exists only for a device that is not on the other two yet. While a pairing code is shown (or a device waits as Pending) it runs open, and the QR carries its address, so a new phone reaches `/api/pairDevice` through it; the other two helpers are not touched. Opening and closing it starts again only this helper.
-//! - **An approved key is added without a restart where that would cut someone.** A helper that has carried a link keeps running with the list it has, and the key is withheld from it until it next starts for another reason (gxserver starting, a removed device, a changed port or relay), when it takes every saved key. A helper that has carried no link starts again with the key at once, which cuts nobody. A key that neither helper serves yet stays admitted at the door, and that device's address list names the door first (`easy_connect_addresses_for`), so the phone keeps working from the moment it is approved.
+//! - **An approved key starts the two helpers again once.** The new device's key goes on the allow-list when its request is approved, and both helpers take it by starting again: the devices connected reconnect once, at the moment the owner approves, where a code shown used to cost them two restarts whether anybody paired or not. The address list the new device is given names those two helpers and never the door, so nothing it saves stops answering when the door closes. The first version of this (4ac828ff7, the same day) held an approved key back from a helper that carried links and let the device live on the door instead; the review of it and the rig showed why that does not hold: tailcat never says when a link leaves, so a helper that once carried one never looks free again and the device stayed on the door alone, and a phone whose saved list named the door first waited 20 s on it (its hello timeout) the first time the door had stopped.
 //! - **A knock.** The text code other computers connect with (and a QR made while the door could not run) names the first helper's address, where a new key is turned away. While a code is shown, the first key turned away at a helper is let in by starting that one helper again with it: one restart of one helper, only when a device really comes, instead of two of both for every code shown. Its client is still saying hello (tailcat repeats it every second for ten), so it gets in without trying again. A key that knocked and did not pair is dropped when the window closes.
 //! - A removed device still restarts the helpers at once: that closes a door, and waiting would leave it open.
-//! SEE-ALSO: supervisor.rs (the reconcile), link_log.rs (`refused_client_key`), server/src/remote_access/easy_connect_addresses.rs, server/src/remote_access/http.rs (`/api/remotePairingCode`), server/src/remote_access/paired_devices.rs (`add_paired_tailcat_client_key`).
+//! SEE-ALSO: supervisor.rs (the reconcile), link_log.rs (`refused_client_key`), server/src/remote_access/easy_connect_addresses.rs, server/src/remote_access/http.rs (`/api/remotePairingCode`), server/src/remote_access/pair_device.rs (the approval adds the key).
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -22,29 +22,14 @@ use super::supervisor::{TailcatLane, TailcatRuntime, TAILCAT_ALLOW_NONE};
 
 /// The most new keys one helper lets in on a knock while one pairing window is open.
 const KNOCKS_PER_WINDOW: usize = 4;
-/// How long a helper that was started again still counts as carrying the devices its
-/// predecessor carried: they take up to a minute to come back, and until then it looks idle.
-const LINKS_RETURN_WITHIN: Duration = Duration::from_secs(5 * 60);
-
-/// Which saved keys each of the two main helpers does not serve yet, and which unsaved keys it
-/// let in on a knock.
+/// The unsaved keys each of the two main helpers let in on a knock.
 #[derive(Default)]
 pub(super) struct Admission {
-    withheld_public: BTreeSet<String>,
-    withheld_relay: BTreeSet<String>,
     knocked_public: BTreeSet<String>,
     knocked_relay: BTreeSet<String>,
 }
 
 impl Admission {
-    fn withheld(&mut self, lane: TailcatLane) -> Option<&mut BTreeSet<String>> {
-        match lane {
-            TailcatLane::Public => Some(&mut self.withheld_public),
-            TailcatLane::Relay => Some(&mut self.withheld_relay),
-            TailcatLane::Door => None,
-        }
-    }
-
     fn knocked(&mut self, lane: TailcatLane) -> Option<&mut BTreeSet<String>> {
         match lane {
             TailcatLane::Public => Some(&mut self.knocked_public),
@@ -53,51 +38,11 @@ impl Admission {
         }
     }
 
-    /// The keys a main helper serves when it keeps running: the saved ones it is not withheld,
-    /// and the ones that knocked.
-    pub(super) fn kept_list(&mut self, lane: TailcatLane, saved: &[String]) -> Vec<String> {
-        // A key that left the allow-list is owed to nobody any more.
-        if let Some(withheld) = self.withheld(lane) {
-            withheld.retain(|key| saved.contains(key));
-        }
-        let withheld = self.withheld(lane).cloned().unwrap_or_default();
-        let mut keys: BTreeSet<String> = saved
-            .iter()
-            .filter(|key| !withheld.contains(*key))
-            .cloned()
-            .collect();
-        keys.extend(self.knocked(lane).cloned().unwrap_or_default());
-        keys.into_iter().collect()
-    }
-
-    /// The keys a main helper serves when it starts again: every saved one, and the ones that
-    /// knocked. Nothing is withheld from it any more.
-    pub(super) fn serve_all(&mut self, lane: TailcatLane, saved: &[String]) -> Vec<String> {
-        if let Some(withheld) = self.withheld(lane) {
-            withheld.clear();
-        }
+    /// The keys a main helper serves: every saved one, and the ones that knocked at it.
+    pub(super) fn served_list(&mut self, lane: TailcatLane, saved: &[String]) -> Vec<String> {
         let mut keys: BTreeSet<String> = saved.iter().cloned().collect();
         keys.extend(self.knocked(lane).cloned().unwrap_or_default());
         keys.into_iter().collect()
-    }
-
-    /// The saved keys no main helper serves: the door admits them. `relay_runs` is whether the
-    /// second helper exists at all.
-    pub(super) fn door_list(&self, saved: &[String], relay_runs: bool) -> Vec<String> {
-        saved
-            .iter()
-            .filter(|key| {
-                self.withheld_public.contains(*key)
-                    && (!relay_runs || self.withheld_relay.contains(*key))
-            })
-            .cloned()
-            .collect()
-    }
-
-    fn withhold(&mut self, lane: TailcatLane, key: &str) {
-        if let Some(withheld) = self.withheld(lane) {
-            withheld.insert(key.to_string());
-        }
     }
 
     /// Lets `key` in at `lane` on its knock; false when it is in already or the window's knocks
@@ -121,9 +66,6 @@ impl Admission {
 
     /// A main helper stopped for good (its relay was turned off): nothing is owed to it.
     pub(super) fn forget_lane(&mut self, lane: TailcatLane) {
-        if let Some(withheld) = self.withheld(lane) {
-            withheld.clear();
-        }
         if let Some(knocked) = self.knocked(lane) {
             knocked.clear();
         }
@@ -188,14 +130,6 @@ pub struct DoorAddress {
     pub relay_host: Option<String>,
 }
 
-/// Which helpers let a key in right now.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct LanesAdmitting {
-    pub public: bool,
-    pub relay: bool,
-    pub door: bool,
-}
-
 impl TailcatRuntime {
     /// The door's address, when its helper runs and has published it.
     pub fn door_address(&self) -> Option<DoorAddress> {
@@ -237,8 +171,8 @@ impl TailcatRuntime {
     }
 
     /// Waits up to `timeout` for a main helper that just started to publish its address. An
-    /// approval on a computer nobody is connected to starts both again with the new key, and the
-    /// answer the new device reads a moment later must still name them.
+    /// approval starts both again with the new key, and the answer the new device reads a moment
+    /// later must name them: they are the only addresses it is given.
     pub fn wait_for_main_addresses(&self, timeout: Duration) {
         let deadline = Instant::now() + timeout;
         loop {
@@ -254,48 +188,6 @@ impl TailcatRuntime {
                 return;
             }
             std::thread::sleep(Duration::from_millis(50));
-        }
-    }
-
-    /// Which running helpers admit `key`.
-    pub fn lanes_admitting(&self, key: &str) -> LanesAdmitting {
-        let Ok(mut inner) = self.inner.lock() else {
-            return LanesAdmitting::default();
-        };
-        let mut admits = |lane: TailcatLane| {
-            let state = inner.lane(lane);
-            state.running
-                && state.spec.as_ref().is_some_and(|spec| {
-                    spec.allowed_client_keys.is_empty()
-                        || spec.allowed_client_keys.iter().any(|listed| listed == key)
-                })
-        };
-        LanesAdmitting {
-            public: admits(TailcatLane::Public),
-            relay: admits(TailcatLane::Relay),
-            door: admits(TailcatLane::Door),
-        }
-    }
-
-    /// Called before a newly approved device's `key` is saved on the allow-list: a main helper
-    /// that has carried a link and does not serve the key yet keeps running without it.
-    pub fn withhold_new_key_from_busy_helpers(&self, key: &str) {
-        let Ok(mut inner) = self.inner.lock() else {
-            return;
-        };
-        for lane in [TailcatLane::Public, TailcatLane::Relay] {
-            let state = inner.lane(lane);
-            let Some(spec) = state.spec.as_ref() else {
-                continue;
-            };
-            let serves = spec.allowed_client_keys.iter().any(|listed| listed == key);
-            let busy = state.peers.as_ref().is_some_and(|peers| !peers.is_empty())
-                || state
-                    .links_cut_at
-                    .is_some_and(|at| at.elapsed() < LINKS_RETURN_WITHIN);
-            if !serves && busy {
-                inner.admission.withhold(lane, key);
-            }
         }
     }
 
