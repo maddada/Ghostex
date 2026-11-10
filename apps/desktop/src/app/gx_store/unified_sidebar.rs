@@ -11,9 +11,9 @@ use std::sync::Arc;
 use ghostex_gx_core::unified_sidebar::{
     UNIFIED_SAVED_STATE_KEY, UnifiedFilter, UnifiedFilterOption, UnifiedMachineInput,
     UnifiedRevealSpot, UnifiedRow, UnifiedSavedState, UnifiedSettings, UnifiedShelf,
-    build_unified_sidebar_scoped, find_unified_row, group_unified_sidebar, move_unified_project,
-    open_unified_reveal, repo_of_project, unified_branch_line, unified_lane_inputs,
-    unified_lane_menu_inputs, unified_machine_spaces, unified_shows_machine,
+    UnifiedTreeLine, build_unified_sidebar_folded, find_unified_row, group_unified_sidebar,
+    move_unified_project, open_unified_reveal, repo_of_project, unified_branch_line,
+    unified_lane_inputs, unified_lane_menu_inputs, unified_machine_spaces, unified_shows_machine,
     unified_space_of_project, unified_space_scope,
 };
 use ghostex_gx_core::{
@@ -26,7 +26,7 @@ use super::sidebar_snapshot::{SnapshotCache, SnapshotInput, snapshot_from_view};
 use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::model::{NativeSidebarGroup, NativeSidebarSession};
 use crate::app::native_sidebar::unified::model::{
-    UnifiedCard, UnifiedGroupView, UnifiedShelfView, UnifiedSidebarSnapshot,
+    UnifiedCard, UnifiedCardLine, UnifiedGroupView, UnifiedShelfView, UnifiedSidebarSnapshot,
 };
 
 /// One machine's neutral list and the snapshot cache its rows are drawn through.
@@ -66,6 +66,9 @@ pub(crate) struct UnifiedSidebarHost {
     /// The branch each card last showed, by machine and row id, for the card's third line while
     /// its branch is not known (`unified_branch_line`).
     last_branches: HashMap<(MachineId, String), String>,
+    /// The moment the booked rebuild is for, when a nested thread stops being recent or a snoozed
+    /// one wakes (gx-core `UnifiedSidebarView::deadline_ms`).
+    deadline_booked: Option<i64>,
 }
 
 impl UnifiedSidebarHost {
@@ -92,6 +95,24 @@ impl UnifiedSidebarHost {
             .values()
             .map(|lane| lane.model.view())
             .find(|view| ghostex_gx_core::view_has_action_project(view, group_id))
+    }
+
+    /// The row id the Unified lists draw `key` under: a borrowed thread's copy in its coordinator's
+    /// lane first, since that is the row nested under the card. The web build reveals it when it
+    /// opens a session.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) fn row_for_session_key(&self, key: &SessionKey) -> Option<String> {
+        let rows = || {
+            self.lanes
+                .values()
+                .flat_map(|lane| lane.model.view().groups.iter())
+                .flat_map(|group| group.core.sessions.iter())
+                .filter(|session| session.row.key.as_ref() == Some(key))
+        };
+        rows()
+            .find(|session| session.row.is_borrowed_thread())
+            .or_else(|| rows().next())
+            .map(|session| session.row.sidebar_session_id.clone())
     }
 
     /// A Quick Access pick waiting to filter the list gives way to a filter set since.
@@ -305,13 +326,27 @@ impl UnifiedSidebarHost {
         let settings = unified_settings(list_inputs);
         let has_projects = inputs.iter().any(|input| !input.view.groups.is_empty());
         let scope = unified_space_scope(store, list_inputs);
-        let mut view =
-            build_unified_sidebar_scoped(&inputs, settings, &self.filter, scope.as_ref(), now_ms);
+        let folds = self.saved.folds();
+        let mut view = build_unified_sidebar_folded(
+            &inputs,
+            settings,
+            &self.filter,
+            scope.as_ref(),
+            &folds,
+            now_ms,
+        );
         // A restored pick of what is hidden or away narrows nothing (`UnifiedFilter::within`), nor
         // does a Space pick of the machine the Space row scopes.
         let filter = self.filter.within(&view.options);
         if filter != self.filter {
-            view = build_unified_sidebar_scoped(&inputs, settings, &filter, scope.as_ref(), now_ms);
+            view = build_unified_sidebar_folded(
+                &inputs,
+                settings,
+                &filter,
+                scope.as_ref(),
+                &folds,
+                now_ms,
+            );
         }
         self.all_repos.clone_from(&view.options.repos);
         let repo_menu_groups = repo_menu_groups(&view.options.repos, &groups);
@@ -330,7 +365,7 @@ impl UnifiedSidebarHost {
                 continue;
             }
             let icon = groups
-                .get(&(row.machine.clone(), row.group.core.group_id.clone()))
+                .get(&(row.lane.clone(), row.group.core.group_id.clone()))
                 .and_then(|group| project_icon(group.project_context.as_ref()));
             if let Some(icon) = icon {
                 icons.insert(row.repo.key.clone(), icon);
@@ -368,6 +403,7 @@ impl UnifiedSidebarHost {
             .chain(&view.working)
             .chain(&view.snoozed)
             .chain(&view.parked)
+            .flat_map(UnifiedRow::rows_in_tree)
         {
             if let Some(branch) = &row.session.row.menu_facts.branch {
                 self.last_branches.insert(
@@ -403,9 +439,9 @@ impl UnifiedSidebarHost {
                 (machine, (name, short))
             })
             .collect();
-        let card = |row: UnifiedRow| -> Option<UnifiedCard> {
+        let base = |row: &UnifiedRow| -> Option<UnifiedCard> {
             let branch_line = unified_branch_line(
-                &row,
+                row,
                 last_branches
                     .get(&(
                         row.machine.clone(),
@@ -414,26 +450,73 @@ impl UnifiedSidebarHost {
                     .map(String::as_str),
             );
             Some(UnifiedCard {
+                // The drawn row lives in the lane that holds it: a borrowed thread's is its
+                // coordinator's computer (gx-core `UnifiedRow::lane`).
                 session: sessions
-                    .get(&(
-                        row.machine.clone(),
-                        row.session.row.sidebar_session_id.clone(),
-                    ))?
+                    .get(&(row.lane.clone(), row.session.row.sidebar_session_id.clone()))?
                     .clone(),
                 row: row.session.row.clone(),
                 repo_icon: icons.get(&row.repo.key).cloned(),
-                repo_key: row.repo.key,
-                repo_label: row.repo.label,
+                repo_key: row.repo.key.clone(),
+                repo_label: row.repo.label.clone(),
                 machine_short_label: row.machine_label.as_ref().map(|label| {
                     chips
                         .get(&row.machine)
                         .map_or_else(|| label.clone(), |(_, short)| short.clone())
                 }),
-                machine_label: row.machine_label,
+                machine_label: row.machine_label.clone(),
                 status: row.status,
                 branch_line,
                 in_group: grouped && row.shelf != UnifiedShelf::Drafts,
+                crew: row.crew.clone(),
+                lines: Vec::new(),
+                statuses_below: Vec::new(),
             })
+        };
+        let pull_request_of = |row: &UnifiedRow| {
+            row.session
+                .row
+                .work
+                .as_ref()
+                .and_then(|work| work.pull_request.as_ref())
+                .map(|pull_request| pull_request.number)
+        };
+        let card = |row: &UnifiedRow| -> Option<UnifiedCard> {
+            let mut top = base(row)?;
+            let branch = row.session.row.menu_facts.branch.as_deref();
+            top.lines = row
+                .drawn_lines()
+                .into_iter()
+                .filter_map(|line| match line {
+                    UnifiedTreeLine::Thread { row: thread, depth } => {
+                        let own_branch = thread.session.row.menu_facts.branch.clone();
+                        Some(UnifiedCardLine::Thread {
+                            card: Box::new(base(thread)?),
+                            depth,
+                            branch: own_branch.filter(|own| Some(own.as_str()) != branch),
+                            pull_request: pull_request_of(thread)
+                                .filter(|number| Some(*number) != pull_request_of(row)),
+                            other_machine: thread.machine != row.machine,
+                        })
+                    }
+                    UnifiedTreeLine::Older { coordinator, depth } => {
+                        let crew = coordinator.crew.as_ref()?;
+                        Some(UnifiedCardLine::Older {
+                            key: crew.key.clone(),
+                            older: crew.older,
+                            shown: crew.older_shown,
+                            depth,
+                        })
+                    }
+                })
+                .collect();
+            top.statuses_below = row
+                .rows_in_tree()
+                .into_iter()
+                .skip(1)
+                .filter_map(|below| below.status)
+                .collect();
+            Some(top)
         };
         let shelves_of = |working: Vec<UnifiedRow>,
                           snoozed: Vec<UnifiedRow>,
@@ -448,7 +531,7 @@ impl UnifiedSidebarHost {
             .filter(|(_, rows)| !rows.is_empty())
             .map(|(shelf, rows)| UnifiedShelfView {
                 shelf,
-                cards: rows.into_iter().filter_map(card).collect(),
+                cards: rows.iter().filter_map(card).collect(),
             })
             .collect()
         };
@@ -486,8 +569,8 @@ impl UnifiedSidebarHost {
                     .collect();
                 let cards: Vec<UnifiedCard> = group
                     .pinned
-                    .into_iter()
-                    .chain(group.active)
+                    .iter()
+                    .chain(&group.active)
                     .filter_map(card)
                     .collect();
                 UnifiedGroupView {
@@ -500,14 +583,14 @@ impl UnifiedSidebarHost {
                 }
             })
             .collect();
-        let drafts = view.drafts.into_iter().filter_map(card).collect();
+        let drafts = view.drafts.iter().filter_map(card).collect();
         let (list, shelves) = if grouped {
             (Vec::new(), Vec::new())
         } else {
             (
                 view.pinned
-                    .into_iter()
-                    .chain(view.active)
+                    .iter()
+                    .chain(&view.active)
                     .filter_map(card)
                     .collect(),
                 shelves_of(view.working, view.snoozed, view.parked),
@@ -526,6 +609,7 @@ impl UnifiedSidebarHost {
             repo_menu_groups,
             space_menu_machine: list_inputs.ui.selected_machine_id.clone(),
             space: scope.map(|scope| scope.label),
+            deadline_ms: view.deadline_ms,
         }
     }
 }
@@ -563,14 +647,20 @@ fn drawn_reveal_spot(
     snapshot: &UnifiedSidebarSnapshot,
     sidebar_session_id: &str,
 ) -> Option<UnifiedRevealSpot> {
+    // A thread drawn under its card counts: its coordinators are open already.
     let holds = |cards: &[UnifiedCard]| {
-        cards
-            .iter()
-            .any(|card| card.session.session_id == sidebar_session_id)
+        cards.iter().any(|card| {
+            card.session.session_id == sidebar_session_id
+                || card.lines.iter().any(|line| {
+                    matches!(line, UnifiedCardLine::Thread { card, .. }
+                        if card.session.session_id == sidebar_session_id)
+                })
+        })
     };
     let spot = |shelf, repo_key: &str| UnifiedRevealSpot {
         shelf,
         repo_key: repo_key.to_string(),
+        ancestors: Vec::new(),
     };
     if holds(&snapshot.drafts) {
         return Some(spot(UnifiedShelf::Drafts, ""));
@@ -590,20 +680,28 @@ fn drawn_reveal_spot(
     })
 }
 
+/// What a reveal opens for a row the drawn list does not show.
+struct HiddenReveal {
+    spot: UnifiedRevealSpot,
+    /// The filter that lets it through, when the current one leaves it out.
+    filter: Option<UnifiedFilter>,
+    /// Its coordinator, when the row waits behind that coordinator's older-threads row.
+    list_older_of: Option<String>,
+}
+
 impl UnifiedSidebarHost {
-    /// Where a card the filter leaves out would sit, and the filter that lets it through
-    /// (`UnifiedFilter::admitting`). One build of the list with nothing filtering, which a reveal
-    /// pays only when the drawn list does not hold the card.
-    fn filtered_out_reveal(
+    /// Where a row the drawn list does not show would sit: a thread inside a folded coordinator,
+    /// behind an older-threads row, or a card or thread the filter leaves out (lifted with
+    /// `UnifiedFilter::admitting`). It builds the list again with the current filter and, when
+    /// that does not hold the row, with nothing filtering, which a reveal pays only when the drawn
+    /// list does not draw the row.
+    fn hidden_reveal(
         &self,
         core: &Core,
         list_inputs: &SidebarInputs,
         sidebar_session_id: &str,
         now_ms: u64,
-    ) -> Option<(UnifiedRevealSpot, UnifiedFilter)> {
-        if self.filter.keeps_everything() {
-            return None;
-        }
+    ) -> Option<HiddenReveal> {
         let machines = unified_machines(core, list_inputs);
         let inputs: Vec<UnifiedMachineInput<'_>> = machines
             .iter()
@@ -618,15 +716,38 @@ impl UnifiedSidebarHost {
             .collect();
         // Inside the active Space: a card of another Space is fetched by the Space switch, not by
         // lifting the filter.
-        let view = build_unified_sidebar_scoped(
-            &inputs,
-            unified_settings(list_inputs),
-            &UnifiedFilter::default(),
-            unified_space_scope(core.presentation(), list_inputs).as_ref(),
-            now_ms,
-        );
-        let row = find_unified_row(&view, sidebar_session_id)?;
-        Some((row.reveal_spot(), self.filter.admitting(row)?))
+        let scope = unified_space_scope(core.presentation(), list_inputs);
+        let folds = self.saved.folds();
+        let build = |filter: &UnifiedFilter| {
+            build_unified_sidebar_folded(
+                &inputs,
+                unified_settings(list_inputs),
+                filter,
+                scope.as_ref(),
+                &folds,
+                now_ms,
+            )
+        };
+        let reveal = |view: &ghostex_gx_core::unified_sidebar::UnifiedSidebarView| {
+            let found = find_unified_row(view, sidebar_session_id)?;
+            // A thread the filter keeps only for a sibling's sake is shown once the filter lets
+            // it through too.
+            let filter = self.filter.admitting(found.row);
+            let list_older_of = (!found.row.shown && filter.is_none())
+                .then(|| found.ancestors.last().cloned())
+                .flatten();
+            Some(HiddenReveal {
+                spot: found.reveal_spot(),
+                filter,
+                list_older_of,
+            })
+        };
+        reveal(&build(&self.filter)).or_else(|| {
+            if self.filter.keeps_everything() {
+                return None;
+            }
+            reveal(&build(&UnifiedFilter::default()))
+        })
     }
 }
 
@@ -704,15 +825,74 @@ impl GhostexGpuiApp {
             &hud,
             now_ms,
         );
+        let deadline = snapshot.deadline_ms;
         self.native_sidebar.unified = Some(Arc::new(snapshot));
         self.track_native_unified_folds();
+        self.gx_store_book_unified_deadline(deadline, cx);
         cx.notify();
+    }
+
+    /// Books one rebuild for when a thread under a card stops being recent (it moves behind its
+    /// coordinator's older-threads row) or a snoozed thread wakes (it nests again). A repaint
+    /// would not do: the tree comes from the build.
+    fn gx_store_book_unified_deadline(
+        &mut self,
+        deadline: Option<i64>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let host = &mut self.gx_store.unified_sidebar;
+        let Some(deadline) = deadline else {
+            host.deadline_booked = None;
+            return;
+        };
+        // A timer for an earlier or equal moment already covers this one.
+        if host
+            .deadline_booked
+            .is_some_and(|booked| booked <= deadline)
+        {
+            return;
+        }
+        host.deadline_booked = Some(deadline);
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_millis() as i64)
+            .unwrap_or_default();
+        let wait = std::time::Duration::from_millis(deadline.saturating_sub(now).max(250) as u64);
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(wait).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.gx_store.unified_sidebar.deadline_booked != Some(deadline) {
+                    return;
+                }
+                this.gx_store.unified_sidebar.deadline_booked = None;
+                this.gx_store_unified_sidebar_changed(&ChangeSummary::default(), cx);
+            });
+        })
+        .detach();
+    }
+
+    /// The crew count's click: folds or unfolds a coordinator's threads (`older` false), or lists
+    /// or tucks its older threads (`older` true), saved per client (CDXC:Sidebar 2026-11-09 in
+    /// gx-core unified_sidebar/tree.rs), and builds the list again.
+    pub(crate) fn gx_store_toggle_unified_coordinator(
+        &mut self,
+        key: &str,
+        older: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let host = &mut self.gx_store.unified_sidebar;
+        if older {
+            host.saved.toggle_older_threads(key);
+        } else {
+            host.saved.toggle_coordinator(key);
+        }
+        host.persist();
+        self.gx_store_unified_sidebar_changed(&ChangeSummary::default(), cx);
     }
 
     /// The Unified half of a reveal: opens what folds the card away so the renderer draws it and
     /// scrolls to it (CDXC:Sidebar 2026-11-05 in gx-core `unified_sidebar/reveal.rs`). Nothing
     /// while the Project sidebar is selected, whose own reveal plan does this for its headings.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn gx_store_unified_reveal(
         &mut self,
         sidebar_session_id: &str,
@@ -727,7 +907,9 @@ impl GhostexGpuiApp {
             .last_inputs
             .settings
             .unified_group_by_project;
-        let mut refilter = false;
+        // Rebuilt when a reveal unfolds a coordinator, lists its older threads or lifts the
+        // filter: the snapshot's threads come from the build.
+        let mut rebuild = false;
         let spot = match drawn_reveal_spot(&snapshot, sidebar_session_id) {
             Some(spot) => spot,
             None => {
@@ -736,7 +918,7 @@ impl GhostexGpuiApp {
                     .map(|elapsed| elapsed.as_millis() as u64)
                     .unwrap_or_default();
                 let store = &self.gx_store;
-                let Some((spot, filter)) = store.unified_sidebar.filtered_out_reveal(
+                let Some(hidden) = store.unified_sidebar.hidden_reveal(
                     &store.core,
                     &store.sidebar_list.last_inputs,
                     sidebar_session_id,
@@ -745,18 +927,24 @@ impl GhostexGpuiApp {
                     return;
                 };
                 let host = &mut self.gx_store.unified_sidebar;
-                host.filter = filter;
-                host.pending_project_clear();
-                refilter = true;
-                spot
+                if let Some(filter) = hidden.filter {
+                    host.filter = filter;
+                    host.pending_project_clear();
+                    rebuild = true;
+                }
+                if let Some(key) = hidden.list_older_of {
+                    rebuild |= host.saved.older_shown_coordinators.insert(key);
+                }
+                rebuild |= !hidden.spot.ancestors.is_empty();
+                hidden.spot
             }
         };
         let host = &mut self.gx_store.unified_sidebar;
         let opened = open_unified_reveal(&mut host.saved, &spot, grouped);
-        if opened || refilter {
+        if opened || rebuild {
             host.persist();
         }
-        if refilter {
+        if rebuild {
             self.gx_store_unified_sidebar_changed(&ChangeSummary::default(), cx);
         } else if opened {
             cx.notify();

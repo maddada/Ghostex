@@ -355,6 +355,9 @@ impl GhostexGpuiApp {
             session.is_focused,
             session.is_visible,
         );
+        // A folded card stands in for the focused thread it hides (CDXC:Coordinators 2026-10-22 in
+        // gx-core sidebar_view/view.rs): the active fill, and the hollow circle by its crew count.
+        let focused = focused || card.crew.as_ref().is_some_and(|crew| crew.contains_active);
         let needs_you = matches!(
             card.status,
             Some(
@@ -381,18 +384,20 @@ impl GhostexGpuiApp {
         let right: AnyElement = if let Some(strip) = strip {
             strip
         } else {
-            status_slot(card, appearance, now).unwrap_or_else(|| {
-                div()
-                    .flex_shrink_0()
-                    .text_size(px(13.55 * scale))
-                    .text_color(chrome_color(0xa6a6a6, 0x424242))
-                    .child(
-                        card.row
-                            .last_interaction_label(now.max(0) as u64)
-                            .unwrap_or_default(),
-                    )
-                    .into_any_element()
-            })
+            super::threads::folded_slot(card, appearance)
+                .or_else(|| status_slot(card, appearance, now))
+                .unwrap_or_else(|| {
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(13.55 * scale))
+                        .text_color(chrome_color(0xa6a6a6, 0x424242))
+                        .child(
+                            card.row
+                                .last_interaction_label(now.max(0) as u64)
+                                .unwrap_or_default(),
+                        )
+                        .into_any_element()
+                })
         };
         let pull_request = card
             .row
@@ -524,12 +529,9 @@ impl GhostexGpuiApp {
                             .when(recede, |title| title.opacity(0.75))
                             .child(session.title().to_owned()),
                     )
-                    // A coordinator's workers are no cards (CDXC:Sidebar 2026-11-04 in gx-core
-                    // unified_sidebar/build.rs), so its card carries the Project sidebar's crew
-                    // badge: how many wait for approval, wait on you or work; nothing while idle.
-                    .children(crate::app::native_sidebar::threads::coordinator_badge(
-                        session, appearance,
-                    ))
+                    // The crew count folds the threads nested under the card (CDXC:Sidebar
+                    // 2026-11-09 in gx-core unified_sidebar/tree.rs).
+                    .children(self.render_unified_crew_toggle(card, appearance, cx))
                     .children(crate::app::native_sidebar::threads::main_coordinator_tag(
                         session, appearance,
                     ))
@@ -616,6 +618,7 @@ impl GhostexGpuiApp {
         CDXC:Sidebar 2026-11-06 WHY:
         A Discord tester: the hover buttons stayed on the first card hovered and did not follow the pointer to the next card until it left the sidebar. The managed tooltip attaches its own `on_hover`, and a GPUI element keeps only one hover listener, so on the card itself it replaced the card's hover tracking (`unified_row_interactions`) as soon as tooltips came on with the pointer inside. The tooltip sits on a wrapper of the card's exact size, so both listeners run.
         */
+        let threads = self.render_unified_thread_lines(card, hud, appearance, cx);
         div()
             .w_full()
             .pb(px(CARD_GAP * scale))
@@ -645,6 +648,7 @@ impl GhostexGpuiApp {
             } else {
                 card_row.into_any_element()
             })
+            .children(threads)
             .into_any_element()
     }
 }
