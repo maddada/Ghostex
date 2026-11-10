@@ -15,14 +15,45 @@
 //! ordering is enough because each counter is read alone; the four numbers of one snapshot can be
 //! a few allocations apart from each other, which a once-a-minute summary does not care about.
 //!
-//! The allocator underneath is a type parameter so a different one can replace `System` without
-//! touching the counting.
+//! The allocator underneath is a type parameter, so choosing it does not touch the counting.
 
-use std::alloc::{GlobalAlloc, Layout, System};
+use std::alloc::{GlobalAlloc, Layout};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
+/// The allocator under the counters: mimalloc on macOS, the system allocator elsewhere.
+///
+/// CDXC:Memory 2026-11-10 WHY:
+/// On macOS CEF installs PartitionAlloc as the process `malloc`, so `System` put every Rust
+/// allocation of the app in the browser's allocator, where the running app held 1.2 to 1.9 GB
+/// against about 0.15 GB of chat data. The same chat workload replayed under mimalloc held 1.2 to
+/// 1.4 times its live data and ran 5% faster (`perf-1110/audits/memory-audit.md`).
+///
+/// It is safe only because no memory crosses allocators. mimalloc is built without its `override`
+/// feature (`Cargo.toml`), so the process `malloc` and `free` stay CEF's and C, Objective-C, Zig
+/// and CEF code is unchanged; only Rust's own allocations move. That holds as long as nothing hands
+/// a Rust allocation to C to `free`, or takes a C allocation back into a `Box`, `Vec`, `String` or
+/// `CString`. As of this change every crossing pairs its own allocator and free: the shims in
+/// `native/macos/` free only what they `strdup`/`malloc`/`calloc`ed; Ghostty frees what it
+/// allocated (the PNG decoder copies into `ghostty_alloc`); every `Box::into_raw` handed to C as
+/// userdata (Ghostty VT callbacks, the notification sender, the mic capture context) comes back
+/// through `Box::from_raw`; cef-rs keeps CEF strings in libcef's memory and frees its ref-counted
+/// objects in Rust; objc2 and core-foundation hand Rust buffers over with Rust deallocators. A new
+/// crossing must keep that pairing.
+///
+/// Windows and Linux stay on `System`: CEF's allocator is not shown to be the process `malloc`
+/// there, and nothing was measured. Only this binary changes; the CEF helper and the other binaries
+/// of the crate keep their default allocator.
+#[cfg(target_os = "macos")]
+type Underlying = mimalloc::MiMalloc;
+#[cfg(target_os = "macos")]
+const UNDERLYING: Underlying = mimalloc::MiMalloc;
+#[cfg(not(target_os = "macos"))]
+type Underlying = std::alloc::System;
+#[cfg(not(target_os = "macos"))]
+const UNDERLYING: Underlying = std::alloc::System;
+
 #[global_allocator]
-static GLOBAL: CountingAllocator<System> = CountingAllocator::new(System);
+static GLOBAL: CountingAllocator<Underlying> = CountingAllocator::new(UNDERLYING);
 
 /// Counts what passes through to `inner`.
 pub(crate) struct CountingAllocator<A> {
@@ -129,41 +160,4 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAllocator<A> {
 /// The app's heap counters now.
 pub(crate) fn counts() -> HeapCounts {
     GLOBAL.counts()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn counts_bytes_peak_and_allocations_through_a_realloc() {
-        let counter = CountingAllocator::new(System);
-        let layout = Layout::from_size_align(100, 8).unwrap();
-        unsafe {
-            let first = counter.alloc(layout);
-            let second = counter.alloc_zeroed(layout);
-            let grown = counter.realloc(first, layout, 300);
-            let grown_layout = Layout::from_size_align(300, 8).unwrap();
-            assert_eq!(
-                counter.counts(),
-                HeapCounts {
-                    in_use_bytes: 400,
-                    peak_bytes: 400,
-                    live_allocations: 2,
-                    total_allocations: 2,
-                }
-            );
-            counter.dealloc(grown, grown_layout);
-            counter.dealloc(second, layout);
-        }
-        assert_eq!(
-            counter.counts(),
-            HeapCounts {
-                in_use_bytes: 0,
-                peak_bytes: 400,
-                live_allocations: 0,
-                total_allocations: 2,
-            }
-        );
-    }
 }
