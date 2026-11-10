@@ -628,6 +628,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/killSession"
         | "/api/readResourceSessionOwners"
         | "/api/listSessions"
+        // The few sessions a CLI selector names by an id, instead of listSessions' every row
+        // (domain/repository/session_find.rs); ids and the rows listSessions would return.
+        | "/api/findSessions"
         | "/api/removeSession"
         | "/api/readSessionText"
         /*

@@ -71,6 +71,49 @@ pub fn fetch_live_gxserver_session_list_for(
         &json!({ "includeStopped": include_stopped }),
         flags,
     )?;
+    cli_session_list_from(
+        flags,
+        &projects_response,
+        Some(&recent_projects_response),
+        &sessions_response,
+        only,
+    )
+}
+
+/// The CLI rows of only the sessions `selector` can name by an id (`/api/findSessions`), built and
+/// filtered as the full list builds them. `None` means the caller lists every session instead: a
+/// gxserver too old to have the lookup (another computer not yet updated), a lookup that failed or
+/// could not cover every id rule, or no row at all (a title, an alias or nothing, which only the
+/// whole list decides).
+///
+/// CDXC:Cli 2026-11-10 WHY: resolving one session listed all of them, stopped ones included
+/// (domain/repository/session_find.rs has the numbers); the candidates are a few rows.
+pub fn fetch_selector_candidates(selector: &str, flags: &Flags) -> Option<Vec<Value>> {
+    let found =
+        call_gxserver_rpc("/api/findSessions", &json!({ "selector": selector }), flags).ok()?;
+    if found.get("complete") != Some(&Value::Bool(true)) {
+        return None;
+    }
+    let rows = found
+        .get("sessions")
+        .and_then(Value::as_array)
+        .filter(|rows| !rows.is_empty())?;
+    let projects_response = call_gxserver_rpc("/api/listProjects", &json!({}), flags).ok()?;
+    let sessions_response = json!({ "sessions": rows, "requestId": found.get("requestId") });
+    let result =
+        cli_session_list_from(flags, &projects_response, None, &sessions_response, None).ok()?;
+    result.get("sessions").and_then(Value::as_array).cloned()
+}
+
+/// The CLI session list from gxserver's project and session answers: active projects only,
+/// stopped sessions only when the flags ask for them, the presentation snapshot overlaid.
+fn cli_session_list_from(
+    flags: &Flags,
+    projects_response: &Value,
+    recent_projects_response: Option<&Value>,
+    sessions_response: &Value,
+    only: Option<&[(String, String)]>,
+) -> CliResult<Value> {
     let empty = Vec::new();
     let projects = projects_response
         .get("projects")
@@ -254,7 +297,7 @@ pub fn fetch_live_gxserver_session_list_for(
     result.insert(
         "recentProjects".to_string(),
         recent_projects_response
-            .get("recentProjects")
+            .and_then(|response| response.get("recentProjects"))
             .cloned()
             .unwrap_or_else(|| json!([])),
     );

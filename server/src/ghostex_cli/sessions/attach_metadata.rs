@@ -224,6 +224,9 @@ pub fn resolve_gxserver_inventory_session(
     let mut list_flags = flags.clone();
     list_flags.insert_bool("all", true);
     list_flags.insert_bool("includeStopped", true);
+    if let Some(session) = resolve_from_id_candidates(selector, &list_flags, flags) {
+        return Ok(Some(session));
+    }
     let result = fetch_gxserver_session_list(&list_flags)?;
     let empty = Vec::new();
     let sessions = result
@@ -294,6 +297,38 @@ pub fn resolve_gxserver_inventory_session(
     Err(CliError::Other(format!(
         "No gxserver session matched \"{selector}\". Pass a title, a session id, a global ref (S…:P…:G…), a zmx name, an agent session id, or the Session ID or Routing ID from Copy Details; ghostex sessions --json lists them."
     )))
+}
+
+/// The session `resolve_gxserver_inventory_session` resolves `selector` to, decided from the few
+/// rows gxserver finds for it by an id (`/api/findSessions`), when they decide it exactly as the
+/// whole list would: one exact session id or global ref, else one open session by the id rules.
+/// `None` sends the caller to the whole list (several matches, a title, an alias, no match).
+///
+/// CDXC:Cli 2026-11-10 WHY: every session action sent with a bare `--session-id` listed all
+/// 10,034 sessions here to resolve it (domain/repository/session_find.rs has the numbers). The
+/// found rows hold every row an id rule matches, so the exact match and the open pool's id rules
+/// pick what they pick over the whole list; the title rules, which come last, need the whole list.
+fn resolve_from_id_candidates(selector: &str, list_flags: &Flags, flags: &Flags) -> Option<Value> {
+    let candidates = super::selector::id_selector_candidates(selector, list_flags)?;
+    let exact: Vec<&Value> = candidates
+        .iter()
+        .filter(|session| {
+            session.get("sessionId").and_then(Value::as_str) == Some(selector)
+                || session.get("globalRef").and_then(Value::as_str) == Some(selector)
+        })
+        .collect();
+    match exact.len() {
+        1 => return Some(exact[0].clone()),
+        0 => {}
+        _ => return None,
+    }
+    let open: Vec<Value> = candidates
+        .iter()
+        .filter(|session| !is_stopped_inventory_session(session))
+        .cloned()
+        .collect();
+    let matches = super::selector::id_rule_matches_in(selector, &open, flags)?;
+    (matches.len() == 1).then(|| matches[0].clone())
 }
 
 fn is_stopped_inventory_session(session: &Value) -> bool {

@@ -86,6 +86,10 @@ pub fn resolve_live_or_closed_session(selector: &str, flags: &Flags) -> CliResul
     }
     let mut with_closed = flags.clone();
     with_closed.insert_bool("includeStopped", true);
+    // One closed session named by an id is found without listing every closed session.
+    if let Some(session) = find_one_by_id(selector, &with_closed) {
+        return Ok(session);
+    }
     let all = sessions::fetch_session_list(&with_closed, false)?;
     resolve_one_listed_session(selector, &all, flags)
 }
@@ -180,54 +184,8 @@ fn resolve_listed_sessions_with_cache<'a>(
             .map(|session| vec![*session])
             .unwrap_or_default());
     }
-    let exact_id_matches: Vec<&Value> = scoped_sessions
-        .iter()
-        .filter(|session| {
-            session.get("sessionId").and_then(Value::as_str) == Some(normalized_selector)
-        })
-        .copied()
-        .collect();
-    if !exact_id_matches.is_empty() {
-        return Ok(exact_id_matches);
-    }
-    if let Some(exact_global_ref) = scoped_sessions.iter().find(|session| {
-        session.get("globalRef").and_then(Value::as_str) == Some(normalized_selector)
-    }) {
-        return Ok(vec![*exact_global_ref]);
-    }
-    if let Some((project_id, session_id)) = normalized_selector.split_once(':') {
-        let routed: Vec<&Value> = scoped_sessions
-            .iter()
-            .filter(|session| {
-                session_project_id(session) == project_id
-                    && session.get("sessionId").and_then(Value::as_str) == Some(session_id)
-            })
-            .copied()
-            .collect();
-        if !routed.is_empty() {
-            return Ok(routed);
-        }
-    }
-    let agent_session_matches: Vec<&Value> = scoped_sessions
-        .iter()
-        .filter(|session| {
-            session.get("agentSessionId").and_then(Value::as_str) == Some(normalized_selector)
-        })
-        .copied()
-        .collect();
-    if !agent_session_matches.is_empty() {
-        return Ok(agent_session_matches);
-    }
-    /*
-     * CDXC:Cli 2026-05-28-10:55:
-     * Terminals export GHOSTEX_SESSION_ID as the provider persistence name
-     * (for example `g-0527-090339`). Resolve that id before falling back to
-     * title matching so generate-title and agent orchestration can target the
-     * current pane reliably.
-     */
-    let provider_matches = rank_provider_session_matches(&scoped_sessions, normalized_selector);
-    if !provider_matches.is_empty() {
-        return Ok(provider_matches);
+    if let Some(matches) = id_rule_matches(normalized_selector, &scoped_sessions) {
+        return Ok(matches);
     }
     if let Some(project_separator_index) = normalized_selector.find(':') {
         if project_separator_index > 0 {
@@ -263,6 +221,109 @@ fn resolve_listed_sessions_with_cache<'a>(
         &scoped_sessions,
         &normalized_selector.to_lowercase(),
     ))
+}
+
+/// The matches of the first id rule that matches anything: the session id, the global ref, the
+/// Routing ID (`project:session`), the agent session id, then the zmx name. `None` when none does,
+/// and the title rules decide. gxserver's `/api/findSessions` serves a superset of every rule here
+/// (domain/repository/session_find.rs); change both together.
+fn id_rule_matches<'a>(selector: &str, sessions: &[&'a Value]) -> Option<Vec<&'a Value>> {
+    let exact_id_matches: Vec<&Value> = sessions
+        .iter()
+        .filter(|session| session.get("sessionId").and_then(Value::as_str) == Some(selector))
+        .copied()
+        .collect();
+    if !exact_id_matches.is_empty() {
+        return Some(exact_id_matches);
+    }
+    if let Some(exact_global_ref) = sessions
+        .iter()
+        .find(|session| session.get("globalRef").and_then(Value::as_str) == Some(selector))
+    {
+        return Some(vec![*exact_global_ref]);
+    }
+    if let Some((project_id, session_id)) = selector.split_once(':') {
+        let routed: Vec<&Value> = sessions
+            .iter()
+            .filter(|session| {
+                session_project_id(session) == project_id
+                    && session.get("sessionId").and_then(Value::as_str) == Some(session_id)
+            })
+            .copied()
+            .collect();
+        if !routed.is_empty() {
+            return Some(routed);
+        }
+    }
+    let agent_session_matches: Vec<&Value> = sessions
+        .iter()
+        .filter(|session| session.get("agentSessionId").and_then(Value::as_str) == Some(selector))
+        .copied()
+        .collect();
+    if !agent_session_matches.is_empty() {
+        return Some(agent_session_matches);
+    }
+    /*
+     * CDXC:Cli 2026-05-28-10:55:
+     * Terminals export GHOSTEX_SESSION_ID as the provider persistence name
+     * (for example `g-0527-090339`). Resolve that id before falling back to
+     * title matching so generate-title and agent orchestration can target the
+     * current pane reliably.
+     */
+    let provider_matches = rank_provider_session_matches(sessions, selector);
+    if !provider_matches.is_empty() {
+        return Some(provider_matches);
+    }
+    None
+}
+
+/// The one session an id-like selector names, from the few rows gxserver finds for it, when that
+/// is exactly what the whole list would resolve it to; `None` sends the caller to the whole list.
+///
+/// CDXC:Cli 2026-11-10 WHY: the whole list with closed sessions is 10,034 rows here
+/// (domain/repository/session_find.rs). The id rules come before the title rules and each is a
+/// filter, so over rows that hold every id match they pick exactly what they pick over the whole
+/// list. Only a single match is taken here: an alias, a title, no match and several matches go
+/// through the whole list, so their sessions and messages (which number the list) stay as they were.
+pub(crate) fn find_one_by_id(selector: &str, flags: &Flags) -> Option<Value> {
+    let candidates = id_selector_candidates(selector, flags)?;
+    let matches = id_rule_matches(
+        normalized_selector(selector),
+        &project_scoped_sessions(&candidates, flags),
+    )?;
+    (matches.len() == 1).then(|| matches[0].clone())
+}
+
+/// `find_one_by_id` for a caller that applies its own rules first: the candidate rows, or `None`
+/// for a selector only the whole list can resolve (empty, or an alias).
+pub(crate) fn id_selector_candidates(selector: &str, flags: &Flags) -> Option<Vec<Value>> {
+    let normalized = normalized_selector(selector);
+    if normalized.is_empty()
+        || normalized
+            .chars()
+            .all(|character| character.is_ascii_digit())
+    {
+        return None;
+    }
+    sessions::fetch_selector_candidates(selector.trim(), flags)
+}
+
+/// `id_rule_matches` over `sessions` after the `--project-id` scope, for a caller holding rows.
+pub(crate) fn id_rule_matches_in<'a>(
+    selector: &str,
+    sessions: &'a [Value],
+    flags: &Flags,
+) -> Option<Vec<&'a Value>> {
+    id_rule_matches(
+        normalized_selector(selector),
+        &project_scoped_sessions(sessions, flags),
+    )
+}
+
+/// The selector as the rules read it: trimmed, without a Copy Details `combined-session:` prefix.
+fn normalized_selector(selector: &str) -> &str {
+    let trimmed = selector.trim();
+    trimmed.strip_prefix("combined-session:").unwrap_or(trimmed)
 }
 
 fn project_scoped_sessions<'a>(sessions: &'a [Value], flags: &Flags) -> Vec<&'a Value> {

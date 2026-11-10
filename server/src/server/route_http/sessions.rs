@@ -307,6 +307,23 @@ pub(super) async fn route_sessions_http(
                 Ok(moved_result("sessions", Value::Array(sessions)))
             },
         ),
+        // The sessions a CLI selector can name by an id (domain/repository/session_find.rs).
+        "/api/findSessions" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, _, params, _| {
+                let selector = params
+                    .get("selector")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let found = repository.find_session_candidates(selector)?;
+                let mut result = moved_result("sessions", Value::Array(found.sessions));
+                result["complete"] = Value::Bool(found.complete);
+                Ok(result)
+            },
+        ),
         "/api/updateSession" => handle_domain_http(
             &state,
             endpoint.path,

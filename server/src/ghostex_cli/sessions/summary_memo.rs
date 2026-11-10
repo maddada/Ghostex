@@ -26,13 +26,15 @@ const MEMO_MS: u64 = 2_000;
 const MEMO_FILE: &str = "cli-mobile-summary-memo.txt";
 const CHANGE_MARK_FILE: &str = "cli-mobile-summary-memo.changed";
 
-/// The summary's own reads; every other gxserver path stamps the change mark.
-const SUMMARY_READ_PATHS: [&str; 5] = [
+/// The summary's own reads, and the session lookup that changes nothing; every other gxserver
+/// path stamps the change mark.
+const SUMMARY_READ_PATHS: [&str; 6] = [
     "/api/listProjects",
     "/api/listRecentProjects",
     "/api/listSessions",
     "/api/readPresentationSnapshot",
     "/api/readSidebarHud",
+    "/api/findSessions",
 ];
 
 pub(crate) fn now_ms() -> u64 {

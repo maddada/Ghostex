@@ -15,6 +15,8 @@ pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     "/api/listProjects",
     "/api/listRecentProjects",
     "/api/listSessions",
+    // The rows a session selector names by an id (`ghostex_cli` resolves one session with it).
+    "/api/findSessions",
     "/api/readPresentationSnapshot",
     "/api/readSidebarHud",
     // `ghostex agents send --main-coordinator --computer <name>` finds that computer's main
