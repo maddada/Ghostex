@@ -636,7 +636,7 @@ fn zmx_endpoint_error_message(error: ZmxEndpointError) -> String {
 /// The user's rule is "we shouldn't have orphaned ones" (`resource_session_owners`). A daemon whose row is gone (a create the previous gxserver died in the middle of, or a row removed while gxserver was down) was never ended: nothing restores it and nothing lists it but Resources, so it kept its agent, its endpoint record and, on Windows, its `windows-sessions` lock forever, and the reporter of GitHub #289 had to end them by hand. Only daemons with this server's name prefix are touched, a name counts as owned when it is a row's derived name, its stored `zmxName` or its provider state's `zmxName`, and the pass reads the live list once, so a row that exists is never ended.
 ///
 /// CDXC:ServerDaemon 2026-11-10 WHY:
-/// The default socket folder is shared with `cargo xtask start --isolated` variants (GHOSTEX_HOME without ZMX_DIR), and server ids (360 of them) can collide, so a name with this server's prefix does not prove the daemon is this server's. On unix a daemon is ended only when the `GHOSTEX_GXSERVER_AUTH_TOKEN_FILE` it was started with is this server's token file, only that verified pid is signalled, and its socket is removed only from this server's current folder when that is the folder the daemon served. Anything unproven is kept and logged.
+/// The default socket folder is shared with `cargo xtask start --isolated` variants (GHOSTEX_HOME without ZMX_DIR), and server ids (360 of them) can collide, so a name with this server's prefix does not prove the daemon is this server's. On unix a daemon is ended only when the `GHOSTEX_GXSERVER_AUTH_TOKEN_FILE` it was started with is this server's token file, only that verified pid is signalled, and anything unproven is kept and logged. gxserver never removes the socket of a daemon it ended: zmx unlinks its own socket when SIGTERM ends it (`daemonLoop` exit in .dependencies/zmx/src/loop.zig), and `zmx list` deletes a socket that refuses connections (`get_session_entries` in .dependencies/zmx/src/util.zig), so a SIGKILLed daemon's leftover goes at the next listing. An unlink here, guarded by a connect probe, could still remove a same-named daemon's socket bound between the probe and the unlink, and a blocking connect could stall startup.
 pub(crate) fn end_unowned_zmx_session_daemons(
     repository: &DomainRepository<'_>,
     logger: &GxserverLogger,
@@ -712,14 +712,13 @@ fn log_unowned_zmx_session_daemon_outcome(
 #[cfg(unix)]
 const ZMX_DAEMON_AUTH_TOKEN_FILE_ENV: &str = "GHOSTEX_GXSERVER_AUTH_TOKEN_FILE";
 
-/// A `zmx run <name>` process proven to be this server's, with the socket folder it resolved from its own environment.
+/// A `zmx run <name>` process proven to be this server's.
 #[cfg(unix)]
 struct VerifiedZmxDaemon {
     name: String,
     pid: i64,
     /// The process's start time, read before and after its command and environment: pid and start time together name one process, so a reused pid never passes as this daemon.
     started: ZmxProcessStart,
-    socket_dir: Option<std::path::PathBuf>,
 }
 
 /// A process start time as the kernel records it (macOS seconds and microseconds, Linux clock ticks since boot).
@@ -783,7 +782,6 @@ fn is_same_zmx_process(pid: i64, started: ZmxProcessStart) -> bool {
 enum ZmxDaemonOwnership {
     Ours {
         started: ZmxProcessStart,
-        socket_dir: Option<std::path::PathBuf>,
     },
     Kept {
         reason: &'static str,
@@ -808,27 +806,6 @@ fn zmx_daemon_environment(pid: i64) -> Result<std::collections::HashMap<String, 
             Some((name.to_string(), value.to_string()))
         })
         .collect())
-}
-
-/// The folder zmx bound its sockets in, resolved from the daemon's own environment the way `Cfg.socketDir` does (and `zmx_socket_directory` in screen_capture.rs).
-#[cfg(unix)]
-fn zmx_daemon_socket_directory(
-    environment: &std::collections::HashMap<String, String>,
-) -> Option<std::path::PathBuf> {
-    let folder = if let Some(zmx_dir) = environment.get("ZMX_DIR") {
-        std::path::PathBuf::from(zmx_dir)
-    } else if let Some(runtime) = environment.get("XDG_RUNTIME_DIR") {
-        std::path::PathBuf::from(runtime).join("zmx")
-    } else {
-        let temporary = environment
-            .get("TMPDIR")
-            .map(String::as_str)
-            .unwrap_or("/tmp")
-            .trim_end_matches('/');
-        let uid = unsafe { libc::getuid() };
-        std::path::PathBuf::from(format!("{temporary}/zmx-{uid}"))
-    };
-    fs::canonicalize(folder).ok()
 }
 
 /// Whether two token paths name the same file, resolved through links (the `legacy_dir/gxserver` compatibility link resolves to the current root). A path that does not resolve proves nothing, so it never matches, even when the text is equal.
@@ -883,13 +860,10 @@ fn zmx_daemon_ownership(
             token_file: Some(token_file.clone()),
         };
     }
-    ZmxDaemonOwnership::Ours {
-        started,
-        socket_dir: zmx_daemon_socket_directory(&environment),
-    }
+    ZmxDaemonOwnership::Ours { started }
 }
 
-/// Ends the unowned names' daemons this server can prove it started, by pid, and logs every daemon and socket it keeps.
+/// Ends the unowned names' daemons this server can prove it started, by pid, and logs every daemon it keeps.
 #[cfg(unix)]
 fn end_verified_unowned_zmx_session_daemons(
     unowned: &[String],
@@ -919,19 +893,15 @@ fn end_verified_unowned_zmx_session_daemons(
             .map(|(pid, _)| *pid)
             .collect();
         if pids.is_empty() {
-            log_kept_zmx_socket(logger, server_id, zmx_name, "noDaemonProcess", None);
+            log_kept_zmx_socket(logger, server_id, zmx_name);
             continue;
         }
         for pid in pids {
             match zmx_daemon_ownership(pid, zmx_name, auth_token_file) {
-                ZmxDaemonOwnership::Ours {
-                    started,
-                    socket_dir,
-                } => verified.push(VerifiedZmxDaemon {
+                ZmxDaemonOwnership::Ours { started } => verified.push(VerifiedZmxDaemon {
                     name: zmx_name.clone(),
                     pid,
                     started,
-                    socket_dir,
                 }),
                 ZmxDaemonOwnership::Kept { reason, token_file } => {
                     let _ = logger.log(GxserverLogInput {
@@ -956,75 +926,21 @@ fn end_verified_unowned_zmx_session_daemons(
     if verified.is_empty() {
         return;
     }
-    let own_socket_dir = fs::canonicalize(super::zmx_socket_directory()).ok();
     for (daemon, outcome) in verified
         .iter()
         .zip(terminate_verified_zmx_session_daemons(&verified))
     {
+        #[cfg(target_os = "macos")]
         if outcome.is_ok() {
-            #[cfg(target_os = "macos")]
             cleanup_macos_zmx_launchd_job(&daemon.name);
-            if daemon.socket_dir.is_some() && daemon.socket_dir == own_socket_dir {
-                if let Some(reason) =
-                    zmx_socket_now_serves_another_daemon(&daemon.name, own_socket_dir.as_deref())
-                {
-                    log_kept_zmx_socket(logger, server_id, &daemon.name, reason, None);
-                } else {
-                    remove_zmx_session_socket(&daemon.name);
-                }
-            } else {
-                log_kept_zmx_socket(
-                    logger,
-                    server_id,
-                    &daemon.name,
-                    "otherFolder",
-                    Some((daemon.socket_dir.as_deref(), own_socket_dir.as_deref())),
-                );
-            }
         }
         log_unowned_zmx_session_daemon_outcome(logger, server_id, &daemon.name, &outcome);
     }
 }
 
-/// Why the socket an ended daemon left at `<own folder>/<name>` must not be removed, or `None` when it is only that daemon's leftover. A daemon of another profile can bind the same name in this folder once the ended one let it go, so the socket is kept while anything answers on it, or while any live `zmx run <name>` process resolves its socket folder to this one.
+/// A name `zmx list` showed without any `zmx run` process: its socket is left to zmx, whose next listing deletes it once it refuses connections.
 #[cfg(unix)]
-fn zmx_socket_now_serves_another_daemon(
-    zmx_name: &str,
-    own_socket_dir: Option<&std::path::Path>,
-) -> Option<&'static str> {
-    let socket = super::zmx_session_socket_path(zmx_name);
-    if fs::symlink_metadata(&socket).is_err() {
-        return None;
-    }
-    match std::os::unix::net::UnixStream::connect(&socket) {
-        Ok(_) => return Some("socketAnswers"),
-        Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {}
-        Err(_) => return Some("socketUnchecked"),
-    }
-    let Ok(ps_output) = read_process_snapshot() else {
-        return Some("socketUnchecked");
-    };
-    zmx_daemon_processes(&ps_output)
-        .into_iter()
-        .filter(|(_, name)| name == zmx_name)
-        .any(|(pid, _)| match zmx_daemon_environment(pid) {
-            Ok(environment) => {
-                zmx_daemon_socket_directory(&environment).as_deref() == own_socket_dir
-            }
-            Err(()) => true,
-        })
-        .then_some("anotherDaemonUsesName")
-}
-
-#[cfg(unix)]
-fn log_kept_zmx_socket(
-    logger: &GxserverLogger,
-    server_id: &str,
-    zmx_name: &str,
-    reason: &str,
-    folders: Option<(Option<&std::path::Path>, Option<&std::path::Path>)>,
-) {
-    let (daemon_folder, own_folder) = folders.unwrap_or((None, None));
+fn log_kept_zmx_socket(logger: &GxserverLogger, server_id: &str, zmx_name: &str) {
     let _ = logger.log(GxserverLogInput {
         level: LogLevel::Warn,
         event: "unownedSessionDaemonSocketKept".to_string(),
@@ -1032,12 +948,10 @@ fn log_kept_zmx_socket(
         request_id: None,
         client: None,
         duration_ms: None,
-        error: Some("A session terminal's socket was left in place because nothing shows it belongs to this server's ended session terminal.".to_string()),
+        error: Some("A session terminal's socket was left in place because no session terminal process runs for it.".to_string()),
         details: Some(json!({
             "providerSessionId": zmx_name,
-            "reason": reason,
-            "daemonSocketFolder": daemon_folder.map(|path| path.display().to_string()),
-            "serverSocketFolder": own_folder.map(|path| path.display().to_string()),
+            "reason": "noDaemonProcess",
         })),
     });
 }

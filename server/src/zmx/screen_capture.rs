@@ -65,7 +65,7 @@ const ZMX_SCREEN_CAPTURE_TAIL_BYTES: usize = 256 * 1024;
 /// this same environment into every daemon it launches, and the macOS launchd
 /// supervisor already watches the resulting path as its liveness signal.
 #[cfg(unix)]
-pub(crate) fn zmx_socket_directory() -> PathBuf {
+fn zmx_socket_directory() -> PathBuf {
     if let Some(zmx_dir) = std::env::var_os("ZMX_DIR") {
         return PathBuf::from(zmx_dir);
     }
