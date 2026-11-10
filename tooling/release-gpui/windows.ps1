@@ -510,6 +510,12 @@ finally {
 }
 
 $CurrentPackagePattern = "^$([regex]::Escape($PackId))-$EscapedVersion-$([regex]::Escape($Channel))-(full|delta)\.nupkg$"
+if ($CertumSigning) {
+    # The last gate before the manifest (CDXC:Release 2026-11-10 in certum-verify-package.ps1).
+    $FullPackage = Get-ChildItem $Output -File -Filter "*-full.nupkg" | Where-Object { $_.Name -match $CurrentPackagePattern } | Select-Object -First 1
+    if (-not $FullPackage) { throw "No full update package to check the Certum signatures in" }
+    & (Join-Path $ScriptDir "certum-verify-package.ps1") -Package $FullPackage.FullName -Installer $Installer -WorkDir (Join-Path $SigningRoot "signature-check")
+}
 $UpdateArtifacts = @(Get-ChildItem $Output -File -Filter "*.nupkg" | Where-Object { $_.Name -match $CurrentPackagePattern } | ForEach-Object { $_.FullName })
 foreach ($feed in @($FeedName, "assets.$Channel.json", "RELEASES-$Channel")) {
     $path = Join-Path $Output $feed

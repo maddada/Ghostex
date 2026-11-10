@@ -178,9 +178,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
-      # signer: certum (both CERTUM_SIMPLYSIGN_* secrets set), else signpath
-      # (SIGNPATH_API_TOKEN set), else none. The SignPath steps below run only
-      # for signpath; Certum signs inside the single package step.
+      # signer: none when signing was not requested; else certum (both
+      # CERTUM_SIMPLYSIGN_* secrets set), else signpath (SIGNPATH_API_TOKEN
+      # set), else the job fails rather than ship unsigned. The SignPath steps
+      # below run only for signpath; Certum signs inside the package step.
       - name: Decide who signs this build
         id: signing
         shell: bash
@@ -200,8 +201,9 @@ jobs:
             echo "SignPath signs the Windows ${{ inputs.arch }} build: organization $SIGNPATH_ORGANIZATION_ID, project $SIGNPATH_PROJECT_SLUG, policy $SIGNPATH_SIGNING_POLICY_SLUG, artifact configuration $SIGNPATH_ARTIFACT_CONFIGURATION_SLUG."
             echo "signer=signpath" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice title=Windows build is unsigned::Neither the CERTUM_SIMPLYSIGN_EMAIL and CERTUM_SIMPLYSIGN_TOTP secrets nor SIGNPATH_API_TOKEN are configured (a fork, or signing setup is unfinished), so the Windows ${{ inputs.arch }} build is packaged unsigned. See docs/code-signing.md."
-            echo "signer=none" >> "$GITHUB_OUTPUT"
+            # CDXC:Release 2026-11-10 DECISION: signing was asked for, so never ship unsigned.
+            echo "::error title=Windows signing is not configured::Signing was requested, but neither the CERTUM_SIMPLYSIGN_EMAIL and CERTUM_SIMPLYSIGN_TOTP secrets nor SIGNPATH_API_TOKEN are configured. Set them (docs/code-signing.md) or dispatch with sign off."
+            exit 1
           fi
       # Component tags are published to a separate repository that
       # github.token cannot write; fail before any build work when the PAT is

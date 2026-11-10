@@ -5,7 +5,7 @@ Ghostex's Windows packages are Authenticode-signed inside the Windows release jo
 - **Certum** (preferred): the user's own "Open Source Code Signing in the Cloud" certificate, used whenever the `CERTUM_SIMPLYSIGN_EMAIL` and `CERTUM_SIMPLYSIGN_TOTP` secrets exist.
 - **SignPath** (fallback): the SignPath Foundation open-source program, used when only `SIGNPATH_API_TOKEN` exists.
 
-With neither, the Windows job logs a notice ("Windows build is unsigned") and ships unsigned.
+**Releases are signed with Certum** (user decision 2026-11-10, "windows has to be signed release please!", first release 11.3.0). A Windows job that was asked to sign never ships unsigned: with no signer configured the job (and the release's preflight) fails, a failed SimplySign login fails the job, and the last packaging step checks every program in the finished package and the installer before the release can use them.
 
 ## Which builds are signed
 
@@ -13,11 +13,11 @@ With neither, the Windows job logs a notice ("Windows build is unsigned") and sh
 
 | Mode | Certum secrets set | Only `SIGNPATH_API_TOKEN` set | Nothing set |
 | --- | --- | --- | --- |
-| `auto` (default) | signed with Certum | signed only when `SIGNPATH_SIGNING_POLICY_SLUG` is `release-signing` | unsigned |
+| `auto` (default) | signed with Certum | signed only when `SIGNPATH_SIGNING_POLICY_SLUG` is `release-signing` | unsigned (says why) |
 | `required` | signed with Certum | signed with the configured SignPath policy (test-signing by default) | the dispatch fails |
 | `off` | unsigned | unsigned | unsigned |
 
-The dispatcher prints the outcome and its reason, for example `Windows signing: enabled (Certum): the Certum SimplySign secrets are configured`. In the job, the step *Decide who signs this build* picks `certum`, `signpath` or `none` by the same order.
+The dispatcher prints the outcome and its reason. For a release it must print `Windows signing: enabled (Certum): the Certum SimplySign secrets are configured`; anything else (`disabled: ...` or `enabled (SignPath)`) means the Certum secrets are gone, so stop and fix that before dispatching. In the job, the step *Decide who signs this build* picks `certum`, `signpath` or `none` by the same order.
 
 # Certum
 
@@ -40,13 +40,15 @@ The private key exists only in Certum's SimplySign cloud. Certum limits a certif
 Certum offers no API or command-line login for this product. The supported way to use the key is **SimplySign Desktop**, which mounts it as a virtual smart card after you log in with the account e-mail and a one-time code from the SimplySign mobile app. The release does the same on GitHub's Windows runners, as other open-source projects do:
 
 1. *Install SimplySign Desktop for Certum signing* downloads SimplySign Desktop 9.4.5.95 from `files.certum.eu`, checks its pinned SHA-256 and that Asseco signed it, and installs it silently (`tooling/release-gpui/certum-simplysign-login.ps1 -Install`).
-2. *Log in to SimplySign for Certum signing* computes the current one-time code from the TOTP seed in `CERTUM_SIMPLYSIGN_TOTP` (RFC 6238; SimplySign uses HMAC-SHA256, 6 digits, 30 seconds), types the e-mail and code into the login window, and waits until the certificate with the configured thumbprint and its key appear in `Cert:\CurrentUser\My`. At most two attempts, so a wrong seed cannot lock the account. The seed and every code are masked and never printed. The x64 and ARM64 jobs log in at the same time to the same account, and Certum accepts each code only once, so x64 uses even and ARM64 odd 30-second windows. The script exports the x64 `signtool.exe` (also on ARM64, where SimplySign runs emulated and the ARM64 signtool cannot load its x64 smart-card driver).
+2. *Log in to SimplySign for Certum signing* computes the current one-time code from the TOTP seed in `CERTUM_SIMPLYSIGN_TOTP` (RFC 6238; SimplySign uses HMAC-SHA256, 6 digits, 30 seconds), types the e-mail and code into the login window, and waits until the certificate with the configured thumbprint and its key appear in `Cert:\CurrentUser\My`. At most two attempts, so a wrong seed cannot lock the account. The seed and every code are masked and never printed. The x64 and ARM64 jobs log in at the same time to the same account, and Certum accepts each code only once, so x64 uses even and ARM64 odd 30-second windows; two sessions at once are fine (test runs 42735888099 and 42735891804 overlapped and both signed). The script exports the x64 `signtool.exe` (also on ARM64, where SimplySign runs emulated and the ARM64 signtool cannot load its x64 smart-card driver).
+   The ARM64 runner image (`windows-11-vs2026-arm`) starts with Windows' "Choose privacy settings for your device" screen over the desktop (process `WWAHost`), and once it is closed Windows Search holds the focus. The script closes the first, presses Escape for the second, and types only when SimplySign is the focused window; if Windows still keeps the focus elsewhere it fills the fields and presses Login through UI Automation instead. It logs the window titles, the focused window and SimplySign's own text (never an edit field), and on failure the job uploads `certum-diagnostics-windows-<arch>` with screenshots taken before anything was typed.
 3. *Stage and package the installer and update packages* runs `windows.ps1`'s single `package` phase with `GHOSTEX_WINDOWS_SIGNER=certum`, which signs in place with `tooling/release-gpui/certum-sign.ps1` (`signtool sign /sha1 <thumbprint> /fd sha256 /tr http://time.certum.pl /td sha256`):
    - every unsigned `.exe`/`.dll`/`.node` of the staged app (`Ghostex.exe`, `ghostex-gpui-runtime.exe`, `ghostex-gpui-cef-helper.exe`, `GhostexEditor.exe`, `gxserver.exe`, `wmx.exe`, ...) before `vpk pack`, then `resources/build-identity.json` is re-sealed because it fingerprints `gxserver.exe` and `wmx.exe`;
    - during `vpk pack`, through `--signTemplate`, the `Update.exe` (`Squirrel.exe`) and launcher stub Velopack generates;
    - the inner `Ghostex-Velopack-Setup.exe`, after its package is stored uncompressed (rewriting it later would break the signature);
    - the customer-facing `ghostex-<version>-windows-<arch>.exe`, after bundling.
    Every file must come out `Valid`, signed by the configured thumbprint and timestamped, or the release fails. The native editor under `code-server/` is third-party and is not signed, as with SignPath.
+   Last, `tooling/release-gpui/certum-verify-package.ps1` reads every `.exe`/`.dll`/`.node` back out of the finished full update package, plus the installer, and fails the job unless each one is `Valid`, signed by the thumbprint and timestamped (about 9 files per architecture: the installer, `Ghostex.exe`, `ghostex-gpui-runtime.exe`, `ghostex-gpui-cef-helper.exe`, `GhostexEditor.exe`, `gxserver.exe`, `wmx.exe`, `Squirrel.exe`, `Ghostex_ExecutionStub.exe`). The job log ends that step with `Checked N Windows files: every one is Valid, signed by E81B... and timestamped`.
 4. *Log out of SimplySign* stops SimplySign Desktop at the end of the job, also on failure.
 
 A SimplySign session lasts about 2 hours, so the login runs right before the package step, the only one that signs.
@@ -77,15 +79,37 @@ The SimplySign app does not show its seed, so the seed comes from an activation 
 3. Scan that QR code with the SimplySign app on your phone **and** take a screenshot of it, then decode the screenshot. Phone and CI then share the seed and both keep working. (Re-activating most likely replaces the previous seed, so scan the new code on the phone in the same sitting.)
 4. Put the URI into `CERTUM_SIMPLYSIGN_TOTP` with `gh secret set` and delete the screenshot.
 
+## After a release: check the signatures
+
+For each architecture, download the customer installer and the full update package from the release and check the installer and two files inside the package:
+
+```bash
+v=11.3.0; arch=x64   # then arm64
+gh release download v$v -R maddada/Ghostex -p "ghostex-$v-windows-$arch.exe" -p "Ghostex-$v-win-$arch-stable-full.nupkg" -D /tmp/sigcheck-$arch
+unzip -q -o /tmp/sigcheck-$arch/Ghostex-$v-win-$arch-stable-full.nupkg 'lib/app/Ghostex.exe' 'lib/app/resources/native/gxserver.exe' -d /tmp/sigcheck-$arch/pkg
+```
+
+On Windows: `signtool verify /pa /v <file>` must end with `Successfully verified`, show `Issued to: Open Source Developer Mohamad Yahia Youssef` (SHA1 hash `E81BEDC91DEA38C8BB2DA3651E161ADA280B6734`) chaining to `Certum Trusted Network CA`, and `The signature is timestamped`. Or run `tooling/release-gpui/certum-verify-package.ps1 -Package <full.nupkg> -Installer <installer.exe> -Thumbprint E81BEDC91DEA38C8BB2DA3651E161ADA280B6734`, which checks every file.
+
+On a Mac: `osslsigncode verify -CAfile <bundle> -TSA-CAfile <bundle> -in <file>` (`brew install osslsigncode`), where the bundle is Certum Trusted Network CA 2 (`http://repository.certum.pl/ctnca2.cer`, converted to PEM) plus `/etc/ssl/cert.pem`. It must print `Serial : 0436C352E3CB5E9769206A31B40CE463`, `Timestamp Server Signature verification: ok`, `Signature verification: ok` and `Succeeded`.
+
+## If the SimplySign login fails during a release
+
+The Windows job fails at *Log in to SimplySign for Certum signing*; nothing is published for that architecture and it never ships unsigned. Then:
+
+1. Read the step log: the `[before login]`, `[login window]` and `[attempt N ...]` lines show which window had the focus, what SimplySign's window said, and whether its login window closed (login accepted) or stayed open. The `certum-diagnostics-windows-<arch>` artifact has the screenshots.
+2. Re-run only the failed job: `gh run rerun <run-id> -R maddada/Ghostex --failed`. Each attempt computes fresh codes, and the staged release waits for the platform (see the release skill's recovery steps).
+3. If it fails the same way twice, do not switch signing off: the user decided releases are signed. Report the exact step and error. A SimplySign window text such as an invalid code or a blocked account means the seed or the account needs the user (a new activation QR, see *Getting the TOTP seed*).
+
 ## Testing Certum signing on one architecture
 
-`release-gpui-windows.yml` has a `sign` input for a standalone dispatch, so one architecture can be signed without a release: `gh workflow run release-gpui-windows.yml -R maddada/Ghostex --ref <branch> -f version=<version> -f arch=x64 -f sign=true`. A standalone run builds the native editor itself (slow) and still publishes its CEF and code-server components to the components repository, like any Windows run; it publishes no Ghostex release. Check the *Log in to SimplySign* step and that the package step reports every file as `Signed ... with Certum`.
+`release-gpui-windows.yml` has a `sign` input for a standalone dispatch, so one architecture can be signed without a release: `gh workflow run release-gpui-windows.yml -R maddada/Ghostex --ref <branch> -f version=<version> -f arch=x64 -f sign=true`. The version must be newer than the latest published release and have a CHANGELOG section (Velopack refuses to pack an equal or older version), so test from a throwaway branch with such a section. A standalone run builds the native editor itself (slow) and still publishes its CEF and code-server components to the components repository when they are missing, like any Windows run; it publishes no Ghostex release.
 
-## Things to confirm on the first Certum run
+## First runs (2026-11-10)
 
-- The login automation drives SimplySign Desktop's window with keystrokes. A new SimplySign version or an unexpected dialog can break it; the version is pinned, and a failed login fails the job (it never ships unsigned when Certum is configured). If it fails, re-run the job; the step log lists the certificates it saw.
-- Both architectures log in to one account at once. If Certum ends the first session when the second logs in, signing fails on one architecture with an error from signtool; then the jobs need to sign one after the other.
-- The ARM64 runner image (`windows-11-vs2026-arm`) has not run SimplySign yet. The script dismisses the first-run dialogs the ARM64 images are known to show.
+- x64 full build [42722607361](https://github.com/maddada/Ghostex/actions/runs/42722607361): logged in on the first attempt; all 9 files signed and verified.
+- ARM64: the first runs failed on the runner's first-run screen and focus ([42722612240](https://github.com/maddada/Ghostex/actions/runs/42722612240), [42730081540](https://github.com/maddada/Ghostex/actions/runs/42730081540)); fixed as described in *How the job signs*, then the login-only test [42735888099](https://github.com/maddada/Ghostex/actions/runs/42735888099) and the full build [42736451973](https://github.com/maddada/Ghostex/actions/runs/42736451973) passed.
+- Certum allows 5000 signatures a month; a release uses about 20.
 
 # SignPath
 
