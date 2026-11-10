@@ -2903,8 +2903,8 @@
     },
     {
       "key": "grokWebStartPage",
-      "title": "Grok start page",
-      "subtitle": "The page the Grok view opens on, for every Grok login: grok.com, or a page of your own such as one of your Grok bots. Left empty, or not a web address, it opens grok.com. Shown while the Grok extension is on.",
+      "title": "Grok Bot start page",
+      "subtitle": "The page the Grok Bot view opens on, for every Grok Bot login: grok.com, or a page of your own such as one of your Grok bots. Left empty, or not a web address, it opens grok.com. Shown while the Grok Bot extension is on.",
       "tab": "tools",
       "tabTitle": "Files & Links",
       "section": "browser",
@@ -2915,8 +2915,8 @@
     },
     {
       "key": "grokWebLogins",
-      "title": "Grok logins",
-      "subtitle": "The Grok logins the bar above the Grok page switches between, each with its own sign-in. Add one there or here; removing one signs it out. Shown while the Grok extension is on.",
+      "title": "Grok Bot logins",
+      "subtitle": "The Grok Bot logins the bar above the Grok Bot page switches between, each with its own sign-in. Add one there or here; removing one signs it out. Shown while the Grok Bot extension is on.",
       "tab": "tools",
       "tabTitle": "Files & Links",
       "section": "browser",
@@ -11512,7 +11512,7 @@
     {
       "key": "claudeWebHidden",
       "title": "Turn off Claude",
-      "subtitle": "Turn off Claude: the Claude button in the sidebar's top row and the Claude view, which shows claude.ai with a bar to switch between your saved Claude accounts. Off by default; each account's claude.ai sign-in is kept.",
+      "subtitle": "Turn off Claude: the Claude button in the header and the Claude view, which shows claude.ai with a bar to switch between your saved Claude accounts. Off by default; each account's claude.ai sign-in is kept.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11523,8 +11523,8 @@
     },
     {
       "key": "grokWebHidden",
-      "title": "Turn off Grok",
-      "subtitle": "Turn off Grok: the Grok button in the sidebar and the Grok view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.",
+      "title": "Turn off Grok Bot",
+      "subtitle": "Turn off Grok Bot: the Grok Bot button in the header and the Grok Bot view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",

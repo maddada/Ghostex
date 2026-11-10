@@ -2,7 +2,8 @@
 //!
 //! CDXC:Build 2026-11-06 DECISION:
 //! User: "Build a one-command throwaway gxserver for agents and threads to test against, so nobody has to piece one together by hand or touch the user's real gxserver." Threads each spent about 20 minutes on zmx links, a dev port, GHOSTEX_HOME and the CLI environment, and some left login-recovery LaunchAgents behind.
-//! Each server lives in ~/.local/share/agent-work/Ghostex/test-servers/<name>/: `home/` is its GHOSTEX_HOME, `gxserver/bin/` holds copies of the debug gxserver and ghostex CLI next to a `zmx` link (gxserver resolves zmx beside its own binary, server/src/toolchain.rs), and `env.sh` points a shell at it. The copies keep a running server and its CLI stable while other threads rebuild server/target.
+//! Each server keeps its record, copies and logs in ~/.local/share/agent-work/Ghostex/test-servers/<name>/ and its GHOSTEX_HOME (state, auth, the zmx socket folder `zmx/`) in /tmp/gxts-<uid>-<name>/ (see `tmp_home`); a server made before that move keeps its `home/` in the folder. `gxserver/bin/` holds copies of the debug gxserver and ghostex CLI next to a `zmx` link (gxserver resolves zmx beside its own binary, server/src/toolchain.rs), and `env.sh` points a shell at it. The copies keep a running server and its CLI stable while other threads rebuild server/target.
+//! CDXC:Build 2026-11-09 WHY: the home is in /tmp because a socket path is capped at 103 bytes, and on a computer whose home sits on another volume (`/Volumes/<disk>/<user>`) `<home>/zmx` was already too long for any `--name`, so no test server could start. Keeping the zmx folder inside GHOSTEX_HOME also keeps gxserver's own ownership rule (`zmx_socket_directory_is_shared`: ZMX_DIR inside GHOSTEX_HOME) true, so its unowned-daemon cleanup works without any change in gxserver. /tmp is shared by every account, so the folder is named after the user id and is used only while it is a real directory of this user that nobody else can open (`create_private_home`). A /tmp home disappears when the computer restarts, which is fine for a throwaway server: `remove` still clears its record. The checks stop another account's folder or a link from being used; they do not defend against another process of the same user swapping the folder between check and use, since that process can already read the token file and stop any server directly.
 //! The server starts with every inherited GHOSTEX_*/ZMX_* variable removed: an agent's shell carries its own session's identity and the real server's base URL and token file, which would otherwise reach the CLI and the sessions it starts.
 //! CDXC:Build 2026-11-06 WHY: the agent CLIs' own variables are removed too (`INHERITED_PREFIXES`). A test server started from a Claude thread inherited its `CLAUDE_CONFIG_DIR` (that thread's claude-swap account folder) and `CLAUDECODE`/`CLAUDE_CODE_*`, so every Claude session it started ran on the thread's account folder instead of the plain login; Codex's `CODEX_HOME` and `CODEX_*` sandbox variables would do the same for Codex.
 //! SEE-ALSO: server/src/server/macos_login_recovery.rs (an isolated profile installs no login-recovery agent), AGENTS.md "Test against a throwaway gxserver".
@@ -54,11 +55,35 @@ pub fn run(args: &[String]) -> Res<i32> {
             let name = single_name(rest)?;
             let folder = servers_root().join(name);
             if folder.join(RECORD_FILE).is_file() {
-                stop(&Server::load(name)?)?;
-            } else if !folder.is_dir() {
+                // Loading checks the recorded home before anything is stopped or deleted; only that server's own home is ever removed.
+                let server = Server::load(name)?;
+                stop(&server)?;
+                // Folders outside the server's own folder: the home, and a socket folder that is not inside it.
+                if !server.home.starts_with(&folder) {
+                    remove_private_home(&server.home)?;
+                }
+                if !server.zmx_dir.starts_with(&folder) && !server.zmx_dir.starts_with(&server.home)
+                {
+                    // A separate socket folder goes only when it is empty: sockets left in it belong to daemons that may still run (stop could not list them), and deleting the folder would make them unreachable.
+                    if is_private_directory(&server.zmx_dir).unwrap_or(false)
+                        && fs::remove_dir(&server.zmx_dir).is_err()
+                    {
+                        println!(
+                            "Kept {}: it still holds zmx sockets of sessions that may be running.",
+                            server.zmx_dir.display()
+                        );
+                    }
+                }
+            } else if !folder.is_dir() && fs::symlink_metadata(tmp_home(name)).is_err() {
                 bail!("No test server named {name} ({}).", folder.display());
+            } else {
+                // CDXC:Build 2026-11-10 WHY: a start that died after it made /tmp/gxts-<uid>-<name> but before its record was written leaves that home with no record to name it; `remove` clears it here (it is derived from the name, and only removed while it is a private folder of this user), so the name is free again and nothing lingers in /tmp.
+                #[cfg(unix)]
+                remove_private_home(&tmp_home(name))?;
             }
-            fs::remove_dir_all(&folder)?;
+            if folder.is_dir() {
+                fs::remove_dir_all(&folder)?;
+            }
             println!("Removed {}.", folder.display());
             Ok(0)
         }
@@ -79,6 +104,10 @@ struct Server {
     name: String,
     port: u16,
     folder: PathBuf,
+    /// GHOSTEX_HOME: `tmp_home` for a server made now, the record's `home` (`<folder>/home` or `tmp_home`) for one that exists.
+    home: PathBuf,
+    /// ZMX_DIR: `<home>/zmx`, or `tmp_home` for the few servers made while the socket folder alone was in /tmp (their record names it).
+    zmx_dir: PathBuf,
 }
 
 impl Server {
@@ -87,6 +116,8 @@ impl Server {
             name: name.to_string(),
             port,
             folder: servers_root().join(name),
+            home: tmp_home(name),
+            zmx_dir: tmp_home(name).join("zmx"),
         }
     }
 
@@ -102,11 +133,49 @@ impl Server {
         let Some(port) = record["port"].as_u64().and_then(|p| u16::try_from(p).ok()) else {
             bail!("{} has no port.", record_path.display());
         };
-        Ok(Self::new(name, port))
+        let mut server = Self::new(name, port);
+        // The paths the record names are used only when they are one of the two places this command puts them, and then always in the spelling built here, never the recorded one (a trailing slash compares equal but makes the system follow a link), so a hand-edited record never makes `remove` delete some other folder.
+        let own_home = server.folder.join("home");
+        server.home = match record["home"].as_str().map(PathBuf::from) {
+            None => own_home,
+            Some(recorded) if recorded == own_home => own_home,
+            Some(recorded) if recorded == tmp_home(name) => tmp_home(name),
+            Some(recorded) => bail!(
+                "{} names the home {}, which is neither {} nor {}. Nothing was touched; fix or delete that folder by hand.",
+                record_path.display(),
+                recorded.display(),
+                own_home.display(),
+                tmp_home(name).display()
+            ),
+        };
+        server.zmx_dir = server.home.join("zmx");
+        if let Some(zmx_dir) = record["zmxDir"].as_str().map(PathBuf::from) {
+            if zmx_dir == tmp_home(name) {
+                server.zmx_dir = tmp_home(name);
+            } else if zmx_dir != server.zmx_dir {
+                bail!(
+                    "{} names the zmx folder {}, not {}. Nothing was touched; fix or delete that folder by hand.",
+                    record_path.display(),
+                    zmx_dir.display(),
+                    server.zmx_dir.display()
+                );
+            }
+        }
+        // Before any command reads this server's token or sends it a stop: a home that exists must be a real private directory of this user, not a link to another server's home.
+        #[cfg(unix)]
+        for dir in [&server.home, &server.zmx_dir] {
+            if fs::symlink_metadata(dir).is_ok() && !is_private_directory(dir)? {
+                bail!(
+                    "{} is not a private folder of this user (a link, another owner or open permissions), so test server {name} is left alone. Nothing was touched; fix or delete it by hand.",
+                    dir.display()
+                );
+            }
+        }
+        Ok(server)
     }
 
     fn home(&self) -> PathBuf {
-        self.folder.join("home")
+        self.home.clone()
     }
     fn bin(&self) -> PathBuf {
         self.folder.join("gxserver/bin")
@@ -123,9 +192,9 @@ impl Server {
     fn log_file(&self) -> PathBuf {
         self.folder.join("gxserver.log")
     }
-    /// Its own zmx socket folder (ZMX_DIR), never the default one the real server uses (CDXC:Build 2026-11-06 at `ensure_isolated`).
+    /// Its own zmx socket folder (ZMX_DIR) inside its home, never the default one the real server uses (CDXC:Build 2026-11-06 at `ensure_isolated`).
     fn zmx_dir(&self) -> PathBuf {
-        self.home().join("zmx")
+        self.zmx_dir.clone()
     }
     fn identity_file(&self) -> PathBuf {
         self.home().join("state/gxserver/identity.json")
@@ -145,8 +214,9 @@ impl Server {
             .is_some_and(|record| record["zmxDir"].is_string())
     }
 
+    /// The server's token, read only through a home that is a real private directory of this user at the moment of reading; a missing home (a /tmp home lost in a restart) or a link there means "not running" and nothing is read, so the token is never sent anywhere through it.
     fn token(&self) -> Option<String> {
-        let token = fs::read_to_string(self.token_file()).ok()?;
+        let token = read_private_token(&self.home, "state/gxserver/auth/token")?;
         let token = token.trim();
         (!token.is_empty()).then(|| token.to_string())
     }
@@ -257,7 +327,7 @@ fn validate_name(name: &str) -> Res {
     {
         bail!("A test server name uses letters, digits, '.', '_' and '-' only (got `{name}`).");
     }
-    // The zmx socket path (<home>/zmx/<session>) must fit macOS's 104-byte socket address.
+    // The zmx socket path (/tmp/gxts-<uid>-<name>/zmx/<session>) must fit macOS's 104-byte socket address.
     if name.len() > MAX_NAME_LENGTH {
         bail!("A test server name has at most {MAX_NAME_LENGTH} characters (got `{name}`).");
     }
@@ -348,7 +418,14 @@ fn start(args: &[String]) -> Res<i32> {
         );
     }
 
-    if let Some(existing) = name.as_deref().and_then(|name| Server::load(name).ok()) {
+    // Only a missing record means "start fresh": an invalid one is refused, never overwritten.
+    let existing = match name.as_deref() {
+        Some(name) if servers_root().join(name).join(RECORD_FILE).exists() => {
+            Some(Server::load(name)?)
+        }
+        _ => None,
+    };
+    if let Some(existing) = &existing {
         if existing.health().is_some() {
             println!(
                 "Test server {} already runs on port {}.",
@@ -357,8 +434,8 @@ fn start(args: &[String]) -> Res<i32> {
             if !existing.record_has_own_zmx_dir() {
                 eprintln!("Warning: it was started before test servers had their own zmx folder and server id check. Run `cargo xtask test-server stop {0}` and start it again.", existing.name);
             }
-            add_projects(&existing, &projects)?;
-            print_env(&existing);
+            add_projects(existing, &projects)?;
+            print_env(existing);
             return Ok(0);
         }
         if port.is_none() {
@@ -375,7 +452,14 @@ fn start(args: &[String]) -> Res<i32> {
         None => pick_port()?,
     };
     let name = name.unwrap_or_else(|| format!("t{port}"));
-    let server = Server::new(&name, port);
+    // A server that exists keeps the home its record names, so one made before the move to /tmp keeps working where it is.
+    let server = match existing {
+        Some(mut existing) => {
+            existing.port = port;
+            existing
+        }
+        None => Server::new(&name, port),
+    };
     prepare_folder(&server, &debug)?;
     ensure_isolated(&server)?;
     server.write_env_file()?;
@@ -409,8 +493,102 @@ fn start(args: &[String]) -> Res<i32> {
     Ok(0)
 }
 
+/// The home of a test server made now: /tmp/gxts-<uid>-<name>.
+fn tmp_home(name: &str) -> PathBuf {
+    #[cfg(unix)]
+    let uid = unsafe { libc::getuid() }.to_string();
+    #[cfg(not(unix))]
+    let uid = std::env::var("USERNAME").unwrap_or_default();
+    PathBuf::from(format!("/tmp/gxts-{uid}-{name}"))
+}
+
+/// Makes `home` (0700) and refuses it unless it is a real directory of this user that nobody else can open: /tmp is shared by every account, so a folder another account made first, or a link to one, is not this server's.
+#[cfg(unix)]
+fn create_private_home(home: &Path) -> Res {
+    use std::os::unix::fs::DirBuilderExt;
+    fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(home)?;
+    if !is_private_directory(home)? {
+        bail!(
+            "Refusing to start: {} is not a private folder of this user (a link, another owner or open permissions). Remove it and start again.",
+            home.display()
+        );
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn is_private_directory(path: &Path) -> Res<bool> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = fs::symlink_metadata(path)?;
+    Ok(meta.is_dir() && meta.uid() == unsafe { libc::getuid() } && meta.mode() & 0o077 == 0)
+}
+
+/// Reads `relative` inside `home` through one directory handle: the home is opened without following a link, checked (owner and permissions) on that handle, and the file is then opened relative to it, so a link put at the home path after a check cannot redirect the read (CDXC:Build 2026-11-09 WHY: another account can create `/tmp/gxts-<uid>-<name>` as a link to a running server's home while this server's record survives a restart, and the token read through it would be sent to whoever listens on this server's port).
+#[cfg(unix)]
+fn read_private_token(home: &Path, relative: &str) -> Option<String> {
+    use std::ffi::CString;
+    use std::io::Read;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::io::FromRawFd;
+    let home = CString::new(home.as_os_str().as_bytes()).ok()?;
+    let relative = CString::new(relative).ok()?;
+    let directory = unsafe {
+        libc::open(
+            home.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
+    };
+    if directory < 0 {
+        return None;
+    }
+    // Closed on every path out of this function, by the File that owns it.
+    let directory = unsafe { fs::File::from_raw_fd(directory) };
+    let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+    use std::os::unix::io::AsRawFd;
+    if unsafe { libc::fstat(directory.as_raw_fd(), &mut stat) } != 0
+        || stat.st_uid != unsafe { libc::getuid() }
+        || u32::from(stat.st_mode) & 0o077 != 0
+    {
+        return None;
+    }
+    let file = unsafe {
+        libc::openat(
+            directory.as_raw_fd(),
+            relative.as_ptr(),
+            libc::O_RDONLY | libc::O_CLOEXEC,
+        )
+    };
+    if file < 0 {
+        return None;
+    }
+    let mut text = String::new();
+    unsafe { fs::File::from_raw_fd(file) }
+        .read_to_string(&mut text)
+        .ok()?;
+    Some(text)
+}
+
+/// Deletes a home outside the server's folder, only when it is still the private directory this command made.
+#[cfg(unix)]
+fn remove_private_home(home: &Path) -> Res {
+    if fs::symlink_metadata(home).is_err() {
+        return Ok(());
+    }
+    if !is_private_directory(home)? {
+        bail!(
+            "Not deleting {}: it is not a private folder of this user (a link, another owner or open permissions).",
+            home.display()
+        );
+    }
+    fs::remove_dir_all(home)?;
+    Ok(())
+}
+
 /// CDXC:Build 2026-11-06 DECISION:
-/// User: test servers shared the real zmx socket folder, and one that drew the real server's id (S90; ids are `S` + digit + letter-or-digit, 360 in all) ended every real session as "unowned" each time it started (05:58, 06:09 and 06:17 on 2026-11-06). Each test server therefore gets its own ZMX_DIR inside its home and a server id no other gxserver here uses, and this refuses to launch one whose zmx folder is a default (shared) one or whose id is taken. gxserver also no longer ends unowned daemons from a shared folder (`zmx_socket_directory_is_shared`, server/src/zmx/screen_capture.rs).
+/// User: test servers shared the real zmx socket folder, and one that drew the real server's id (S90; ids are `S` + digit + letter-or-digit, 360 in all) ended every real session as "unowned" each time it started (05:58, 06:09 and 06:17 on 2026-11-06). Each test server therefore gets its own ZMX_DIR and a server id no other gxserver here uses, and this refuses to launch one whose zmx folder is a default (shared) one or whose id is taken. gxserver also no longer ends unowned daemons from a shared folder (`zmx_socket_directory_is_shared`, server/src/zmx/screen_capture.rs).
 fn ensure_isolated(server: &Server) -> Res {
     let zmx_dir = server.zmx_dir();
     #[cfg(unix)]
@@ -420,14 +598,15 @@ fn ensure_isolated(server: &Server) -> Res {
             .recursive(true)
             .mode(0o700)
             .create(&zmx_dir)?;
+        // A socket folder outside the home (the intermediate layout a few servers were made with) is in /tmp too, so it gets the same check as the home.
+        if !zmx_dir.starts_with(server.home()) && !is_private_directory(&zmx_dir)? {
+            bail!(
+                "Refusing to start: {} is not a private folder of this user (a link, another owner or open permissions). Remove it and start again.",
+                zmx_dir.display()
+            );
+        }
     }
     let canonical = fs::canonicalize(&zmx_dir)?;
-    if !canonical.starts_with(fs::canonicalize(server.home())?) {
-        bail!(
-            "Refusing to start: the zmx folder {} is outside the test server's home.",
-            canonical.display()
-        );
-    }
     for shared in default_zmx_dirs() {
         if fs::canonicalize(&shared).is_ok_and(|shared| shared == canonical) {
             bail!(
@@ -500,9 +679,14 @@ fn taken_server_ids(server: &Server) -> std::collections::HashSet<String> {
         &xdg_state_root().join("ghostex/gxserver/identity.json"),
     ));
     for entry in fs::read_dir(servers_root()).into_iter().flatten().flatten() {
-        if entry.file_name().to_string_lossy() != server.name {
+        let other = entry.file_name().to_string_lossy().into_owned();
+        if other != server.name {
+            // Both layouts' identity files, whether or not the record loads: an invalid record can still belong to a running server, and its id must stay taken (an id is not secret, so reading it through a link is harmless).
             taken.extend(read_server_id(
                 &entry.path().join("home/state/gxserver/identity.json"),
+            ));
+            taken.extend(read_server_id(
+                &tmp_home(&other).join("state/gxserver/identity.json"),
             ));
         }
     }
@@ -626,13 +810,7 @@ fn pick_port() -> Res<u16> {
 
 fn prepare_folder(server: &Server, debug: &Path) -> Res {
     #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(server.home())?;
-    }
+    create_private_home(&server.home())?;
     let bin = server.bin();
     fs::create_dir_all(&bin)?;
     for binary in ["gxserver", "ghostex"] {
@@ -970,7 +1148,18 @@ fn list() -> Res<i32> {
         .into_iter()
         .flatten()
         .flatten()
-        .filter_map(|entry| Server::load(&entry.file_name().to_string_lossy()).ok())
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            match Server::load(&name) {
+                Ok(server) => Some(server),
+                Err(error) => {
+                    if entry.path().join(RECORD_FILE).exists() {
+                        println!("{name:<20} invalid: {error}");
+                    }
+                    None
+                }
+            }
+        })
         .collect();
     servers.sort_by(|a, b| a.name.cmp(&b.name));
     if servers.is_empty() {

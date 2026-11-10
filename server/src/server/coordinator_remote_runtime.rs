@@ -84,6 +84,28 @@ pub(super) fn observe_remote_session(session: Option<&Value>) -> RemoteObservati
     }
 }
 
+/// The agent of a row in the other computer's presentation snapshot.
+fn remote_session_agent(session: &Value) -> Option<&str> {
+    session
+        .get("agentId")
+        .or_else(|| session.get("agentName"))
+        .and_then(Value::as_str)
+}
+
+/// Whether an OpenCode thread on another computer is still running its turn by OpenCode's own
+/// record: the chat's `lifecycle`, which that computer's gxserver reads from OpenCode's service.
+///
+/// CDXC:RemoteMachines 2026-11-10 WHY:
+/// GitHub #538: a computer on Ghostex 11.2.1 reads OpenCode's working only from its TUI plugin, which reports nothing while the TUI shows another page, so its row said idle and the coordinator here listed the thread as Finished for the 15 minutes it went on working. That computer's own fix (opencode_turn_activity.rs, which reports working from the service) needs it updated; until then this side checks the service's record through the chat before it reports such a thread finished. The check runs only on the pass that would report it, and an unreadable chat leaves the report as it was.
+fn remote_opencode_turn_running(computer: &ConnectedComputer, thread: &RemoteThreadRecord) -> bool {
+    remote_rpc(
+        computer,
+        "/api/readSessionChat",
+        json!({ "projectId": thread.project_id, "sessionId": thread.session_id, "limit": 1 }),
+    )
+    .is_some_and(|chat| chat.pointer("/lifecycle/state").and_then(Value::as_str) == Some("working"))
+}
+
 /// The id and text of the last assistant message in a `readSessionChat` answer.
 pub(super) fn last_assistant_message(chat: &Value) -> Option<(Option<String>, String)> {
     chat.get("messages")
@@ -421,6 +443,25 @@ pub(super) fn tick_at(
                 }
                 RemoteObservation::Closed => Some(RemoteReport::Closed),
                 RemoteObservation::Idle | RemoteObservation::Sleeping => None,
+            };
+            let report = if matches!(report, Some(RemoteReport::Finished))
+                && session
+                    .as_ref()
+                    .is_some_and(|session| remote_session_agent(session) == Some("opencode"))
+            {
+                // The read goes over the network: deliveries may take the lock meanwhile.
+                drop(guard);
+                let still_running = remote_opencode_turn_running(&computer, &thread);
+                guard = memory.lock().unwrap_or_else(|error| error.into_inner());
+                if still_running {
+                    observed_working = true;
+                    guard.not_working_since.remove(&key);
+                    None
+                } else {
+                    report
+                }
+            } else {
+                report
             };
             let report = match report {
                 None if observation == RemoteObservation::Idle

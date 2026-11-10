@@ -72,9 +72,12 @@ impl From<ffi::GhosttyStyle> for VtStyle {
 /// [`clear_dirty`](Self::clear_dirty). Updates never clear dirty state, and
 /// clearing one layer never clears the other (see module CDXC).
 pub struct VtRenderState {
-    raw: ffi::GhosttyRenderState,
+    pub(crate) raw: ffi::GhosttyRenderState,
     row_iter: ffi::GhosttyRenderStateRowIterator,
     cells: ffi::GhosttyRenderStateRowCells,
+    /// Allocated on the first [`images`](Self::images) call.
+    pub(crate) image_iter: ffi::GhosttyRenderStateImageIterator,
+    pub(crate) image_pixels: VtImagePixelCache,
 }
 
 // SAFETY: the render state is a self-contained snapshot after update; like
@@ -109,6 +112,8 @@ impl VtRenderState {
             raw,
             row_iter,
             cells,
+            image_iter: std::ptr::null_mut(),
+            image_pixels: VtImagePixelCache::default(),
         })
     }
 
@@ -234,6 +239,9 @@ impl VtRenderState {
 impl Drop for VtRenderState {
     fn drop(&mut self) {
         unsafe {
+            if !self.image_iter.is_null() {
+                ffi::ghostty_render_state_image_iterator_free(self.image_iter);
+            }
             ffi::ghostty_render_state_row_cells_free(self.cells);
             ffi::ghostty_render_state_row_iterator_free(self.row_iter);
             ffi::ghostty_render_state_free(self.raw);

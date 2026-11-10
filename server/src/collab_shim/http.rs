@@ -439,6 +439,18 @@ pub(crate) mod approvals {
             Waiting::Owner(params) => Waiting::Owner(strip(params)),
             Waiting::Install(params) => Waiting::Install(strip(params)),
         };
+        // Kept with the request too, so approving it after a gxserver restart still runs it.
+        if let Some(security) = SECURITY.get() {
+            let (kind, params) = match &waiting {
+                Waiting::Owner(params) => ("owner", params),
+                Waiting::Install(params) => ("install", params),
+            };
+            security.approvals.attach(
+                approval_id,
+                COLLAB_RESUME,
+                json!({ "caller": caller, "kind": kind, "params": params }),
+            );
+        }
         with_book(|book| {
             book.waiting
                 .insert(approval_id.to_string(), (caller.clone(), waiting));
@@ -446,6 +458,42 @@ pub(crate) mod approvals {
                 .entry(approval_id.to_string())
                 .or_insert_with(|| (caller.clone(), crate::security::now_ms()));
         });
+    }
+
+    /// The kind of data a waiting Collab call keeps with its approval request.
+    const COLLAB_RESUME: &str = "collab";
+
+    /// The security state, for [`await_call`] (set by [`start`] when gxserver starts).
+    static SECURITY: OnceLock<crate::security::SecurityState> = OnceLock::new();
+
+    /// At gxserver start: the calls still waiting on an approval when it stopped wait again; one
+    /// approved meanwhile runs now.
+    fn restore_waiting(state: &Arc<AppState>) {
+        let now = crate::security::now_ms();
+        for (request, saved) in state.security.approvals.resumable(COLLAB_RESUME, now) {
+            let Ok(caller) = serde_json::from_value::<Principal>(saved["caller"].clone()) else {
+                continue;
+            };
+            let Some(params) = saved["params"].as_object().cloned() else {
+                continue;
+            };
+            let waiting = match saved["kind"].as_str() {
+                Some("install") => Waiting::Install(params),
+                _ => Waiting::Owner(params),
+            };
+            with_book(|book| {
+                book.waiting
+                    .insert(request.id.clone(), (caller.clone(), waiting));
+                book.asked
+                    .insert(request.id.clone(), (caller, request.created_at_ms));
+            });
+            if request.status == ghostex_gx_protocol::approval::ApprovalStatus::Approved {
+                let state = state.clone();
+                tokio::spawn(async move {
+                    finish(&state, &request.id).await;
+                });
+            }
+        }
     }
 
     /// `caller`'s Collab approval requests of the last minutes, oldest first.
@@ -540,7 +588,9 @@ pub(crate) mod approvals {
 
     /// Follows the approval stream for the life of gxserver.
     pub(crate) fn start(state: Arc<AppState>) {
+        let _ = SECURITY.set(state.security.clone());
         let mut events = state.security.subscribe();
+        restore_waiting(&state);
         tokio::spawn(async move {
             loop {
                 match events.recv().await {

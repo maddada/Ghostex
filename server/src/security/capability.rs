@@ -32,7 +32,7 @@ impl SessionRole {
 }
 
 /// The caller behind a request's token, settled once at the auth gate.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum Principal {
     /// The desktop app's owner session (`gxo_`), minted after it proved the owner key, held

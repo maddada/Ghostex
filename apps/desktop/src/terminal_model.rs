@@ -95,6 +95,9 @@ struct PtyWriteRequest {
 
 pub type Rgb = ffi::GhosttyColorRgb;
 
+/// The Kitty graphics Unicode placeholder (U+10EEEE).
+const KITTY_PLACEHOLDER: char = '\u{10EEEE}';
+
 /// How to spawn the shell process behind a terminal model.
 #[derive(Clone, Debug)]
 pub struct TerminalSpawnConfig {
@@ -305,6 +308,10 @@ pub struct TerminalSnapshot {
     pub scrollbar: VtScrollbar,
     /// The alternate screen (a full-screen TUI's own buffer) is the active screen.
     pub alternate_screen: bool,
+    /// Kitty graphics pictures on screen, in draw order (layer, then z).
+    pub images: Vec<ghostty_vt::VtImage>,
+    /// The cell size in pixels the terminal last got with `resize`; the pictures' pixel offsets and sizes are in these units.
+    pub cell_size_px: (u32, u32),
     /// Active 256-color palette (for palette-indexed consumers).
     #[allow(dead_code)]
     // snapshot shape: mirrors the libghostty-vt palette even where the gpui renderer resolves colours itself
@@ -455,6 +462,8 @@ impl TerminalModel {
             })?;
 
         let mut vt = VtTerminal::new(config.cols, config.rows, config.max_scrollback)?;
+        // Inline pictures (#536): the element draws what `snapshot` collects. Only the direct medium (`t=d`) is on, libghostty-vt's default; see `KITTY_IMAGE_STORAGE_LIMIT_BYTES`.
+        vt.set_kitty_image_storage_limit(ghostty_vt::KITTY_IMAGE_STORAGE_LIMIT_BYTES)?;
         let clipboard_writes: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
         {
             // Terminal → host hooks. write_pty fires inside feed() on the
@@ -1246,7 +1255,7 @@ impl TerminalModel {
         let render_state = self.render_state.as_mut().ok_or(VtError {
             code: ffi::GHOSTTY_INVALID_VALUE,
         })?;
-        let (scrollbar, alternate_screen) = {
+        let (scrollbar, alternate_screen, images) = {
             let mut terminal = self.terminal.lock().expect("terminal lock poisoned");
             let terminal = terminal.as_mut().ok_or(VtError {
                 code: ffi::GHOSTTY_INVALID_VALUE,
@@ -1255,6 +1264,8 @@ impl TerminalModel {
             (
                 terminal.scrollbar()?,
                 terminal.alternate_screen_active().unwrap_or(false),
+                // Pixels are read from the terminal, so this stays under the lock; a picture that can't be read is skipped rather than costing the frame.
+                render_state.images(terminal).unwrap_or_default(),
             )
         };
 
@@ -1279,7 +1290,10 @@ impl TerminalModel {
                         char::from_u32(*codepoint).unwrap_or(char::REPLACEMENT_CHARACTER)
                     });
                     let base = chars.next().unwrap_or(' ');
-                    let combining: Option<Box<str>> = if codepoints.len() > 1 {
+                    // A Kitty placeholder cell is where a picture shows (`images` positions it); its character and the diacritics that number it are not text to draw.
+                    let placeholder = base == KITTY_PLACEHOLDER;
+                    let base = if placeholder { ' ' } else { base };
+                    let combining: Option<Box<str>> = if codepoints.len() > 1 && !placeholder {
                         Some(chars.collect::<String>().into_boxed_str())
                     } else {
                         None
@@ -1331,6 +1345,8 @@ impl TerminalModel {
             cursor_color: colors.cursor_has_value.then_some(colors.cursor),
             scrollbar,
             alternate_screen,
+            images,
+            cell_size_px: self.cell_size_px,
             palette: colors.palette,
         })
     }

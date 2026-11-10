@@ -169,6 +169,36 @@ pub(crate) fn ensure_conversation(
     Ok(client)
 }
 
+/// Creates the conversation a terminal is about to open with `opencode --session <id>` (the
+/// session's own id, in the folder the chat sends to), before the TUI starts.
+///
+/// CDXC:SessionChat 2026-11-10 WHY:
+/// GitHub #538: OpenCode 2.2.6's TUI started with `--session <id>` for a conversation that does not exist yet shows its empty start page and stays there, and the first chat send then creates that conversation through the service (`ensure_conversation`), so the work ran in a conversation the terminal never showed. A coordinator's thread starts its agent and then sends its task, so it always lost that race (reproduced on macOS too; it looked like a remote-only bug). Creating the conversation first makes the TUI open it, as it does when the send comes first. When the service cannot be reached the launch goes on as before; the TUI starts the service itself.
+pub(crate) fn create_before_terminal_launch(
+    session: &Value,
+    project: Option<&Value>,
+    startup_text: &str,
+) {
+    if crate::session_chat_composer::session_chat_composer_agent_id(session).as_deref()
+        != Some("opencode")
+    {
+        return;
+    }
+    let Ok(id) = super::session_id(session) else {
+        return;
+    };
+    let opens_it = startup_text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .windows(2)
+        .any(|pair| pair[0] == "--session" && pair[1].trim_matches(['"', '\'']) == id);
+    if !opens_it {
+        return;
+    }
+    let directory = crate::session_git_status::effective_session_git_cwd(session, project);
+    let _ = ensure_conversation(&id, directory.as_deref());
+}
+
 /// Whether a chat with no readable conversation can still take its first message: the service
 /// has no conversation by that id yet, or it is not running and an OpenCode 2 can start it.
 pub(crate) fn awaits_first_message(id: &str) -> bool {

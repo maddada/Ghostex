@@ -362,8 +362,10 @@ fn approval_action(
             ),
         ),
     };
+    // The same device asking again (a new QR scan, or Ask again) replaces its waiting request.
     ActionRequest::new(SensitiveAction::PairingApproveDevice, summary)
         .target(pending_id)
+        .replaces(format!("device:{key_id}"))
         .detail(detail)
         .params(json!({
             "pendingId": pending_id,
@@ -459,37 +461,37 @@ pub fn begin_pairing(
         device_id: Some(pending_id.clone()),
         ..Default::default()
     };
-    let (request, _) = security
-        .approvals
-        .create(&Principal::Anonymous, requester, &action, now);
-    security.publish(SecurityEvent::ApprovalRequested {
-        request: request.clone(),
-    });
+    let created = security.open_request(&Principal::Anonymous, requester, &action, now);
+    pairing_runtime.drop_replaced(&created.replaced);
+    let request = created.request;
     // The security log records the ask (`pairing.request`) in the route, with its outcome.
 
-    pairing_runtime.insert_pending(PendingPairing {
-        id: pending_id.clone(),
-        name: params.device_name.clone(),
-        platform: params.platform.clone(),
-        ssh_public_key: params.ssh_public_key.trim().to_string(),
-        kind: params.kind,
-        over_ssh: false,
-        nonce: String::new(),
-        tailcat_client_key: params.tailcat_client_key.clone(),
-        device_key: StoredDeviceKey {
-            algorithm: device_key.algorithm.clone(),
-            public_key: device_key.public_key.clone(),
-            key_id,
+    pairing_runtime.insert_waiting(
+        security,
+        PendingPairing {
+            id: pending_id.clone(),
+            name: params.device_name.clone(),
+            platform: params.platform.clone(),
+            ssh_public_key: params.ssh_public_key.trim().to_string(),
+            kind: params.kind,
+            over_ssh: false,
+            nonce: String::new(),
+            tailcat_client_key: params.tailcat_client_key.clone(),
+            device_key: StoredDeviceKey {
+                algorithm: device_key.algorithm.clone(),
+                public_key: device_key.public_key.clone(),
+                key_id,
+            },
+            approver_key,
+            words: words.clone(),
+            action,
+            approval_id: request.id.clone(),
+            requested_at_ms: now,
+            expires_at_ms: request.expires_at_ms,
+            last_ask_ms: 0,
+            state: PendingState::Waiting,
         },
-        approver_key,
-        words: words.clone(),
-        action,
-        approval_id: request.id.clone(),
-        requested_at_ms: now,
-        expires_at_ms: request.expires_at_ms,
-        last_ask_ms: 0,
-        state: PendingState::Waiting,
-    });
+    );
 
     let identity = read_remote_access_identity()?;
     Ok(PairingStarted {
@@ -634,35 +636,35 @@ pub fn begin_ssh_pairing(
         device_id: Some(pending_id.clone()),
         ..Default::default()
     };
-    let (request, _) = security
-        .approvals
-        .create(&Principal::Anonymous, requester, &action, now);
-    security.publish(SecurityEvent::ApprovalRequested {
-        request: request.clone(),
-    });
-    pairing_runtime.insert_pending(PendingPairing {
-        id: pending_id.clone(),
-        name: params.device_name.clone(),
-        platform: params.platform.clone(),
-        ssh_public_key: String::new(),
-        kind: PairingDeviceKind::Phone,
-        over_ssh: true,
-        nonce: nonce.clone(),
-        tailcat_client_key: None,
-        device_key: StoredDeviceKey {
-            algorithm: device_key.algorithm.clone(),
-            public_key: device_key.public_key.clone(),
-            key_id,
+    let created = security.open_request(&Principal::Anonymous, requester, &action, now);
+    pairing_runtime.drop_replaced(&created.replaced);
+    let request = created.request;
+    pairing_runtime.insert_waiting(
+        security,
+        PendingPairing {
+            id: pending_id.clone(),
+            name: params.device_name.clone(),
+            platform: params.platform.clone(),
+            ssh_public_key: String::new(),
+            kind: PairingDeviceKind::Phone,
+            over_ssh: true,
+            nonce: nonce.clone(),
+            tailcat_client_key: None,
+            device_key: StoredDeviceKey {
+                algorithm: device_key.algorithm.clone(),
+                public_key: device_key.public_key.clone(),
+                key_id,
+            },
+            approver_key,
+            words: words.clone(),
+            action,
+            approval_id: request.id.clone(),
+            requested_at_ms: now,
+            expires_at_ms: request.expires_at_ms,
+            last_ask_ms: 0,
+            state: PendingState::Waiting,
         },
-        approver_key,
-        words: words.clone(),
-        action,
-        approval_id: request.id.clone(),
-        requested_at_ms: now,
-        expires_at_ms: request.expires_at_ms,
-        last_ask_ms: 0,
-        state: PendingState::Waiting,
-    });
+    );
     let identity = read_remote_access_identity()?;
     Ok(SshPairingStarted {
         started: PairingStarted {

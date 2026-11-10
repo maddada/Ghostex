@@ -1,7 +1,8 @@
 //! The approval API (`crate::security`, GitHub #495) and the helper sensitive routes call.
 //!
 //! - `/api/listApprovalRequests` → `{ requests }`, pending, oldest first (owner's devices).
-//! - `/api/readApprovalRequest` `{ id }` → `{ request }` (its requester or the owner's devices).
+//! - `/api/readApprovalRequest` `{ id }` → `{ request, current? }` (its requester or the owner's
+//!   devices); `current` is the newest request that replaced this one.
 //! - `/api/approveApprovalRequest` `{ id, keyId, signature }` → `{ request }` (owner's devices).
 //! - `/api/denyApprovalRequest` `{ id }` → `{ request }` (owner's devices).
 //! - `/api/listApproverKeys` → `{ keys }`; `/api/removeApproverKey` `{ keyId }` (owner's devices).
@@ -399,12 +400,18 @@ fn handle(
             Ok(json!({ "requests": security.approvals.list_pending(now) }))
         }
         security::APPROVALS_READ_ENDPOINT => {
+            // A replaced request points at the newest one (`current`), so a card holding the
+            // old id moves there (CDXC:Security 2026-11-10 in security/approvals.rs).
             let ReadApprovalParams { id } = parse(params)?;
-            security
+            let request = security
                 .approvals
                 .read(&id, caller, now)
-                .map(|request| json!({ "request": request }))
-                .ok_or(("notFound", "No such approval request.".to_string()))
+                .ok_or(("notFound", security::GONE_MESSAGE.to_string()))?;
+            let mut answer = json!({ "request": request });
+            if let Some(current) = security.approvals.replacement(&request, caller, now) {
+                answer["current"] = json!(current);
+            }
+            Ok(answer)
         }
         security::APPROVALS_APPROVE_ENDPOINT => {
             // Plain: the click of one of your devices (the route needs `DecideApprovals`). An
@@ -528,6 +535,8 @@ pub(crate) const APPROVALS_REQUIRE_PRESENCE: &str = "approvalsRequirePresence";
 fn approval_error(error: &security::ApprovalError) -> (&'static str, String) {
     let code = match error {
         security::ApprovalError::NotFound => "notFound",
+        security::ApprovalError::Expired(_) => "expired",
+        security::ApprovalError::Replaced(_) => "replaced",
         security::ApprovalError::OwnRequest => "forbidden",
         security::ApprovalError::Key(security::ApproverKeyError::SignatureMismatch)
         | security::ApprovalError::Key(security::ApproverKeyError::UnknownKey) => "forbidden",

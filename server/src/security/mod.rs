@@ -24,7 +24,8 @@ mod presence;
 mod session_tokens;
 
 pub use approvals::{
-    params_digest, ActionRequest, ApprovalError, ApprovalStore, APPROVED_TTL_MS, PENDING_TTL_MS,
+    expired_message, params_digest, ActionRequest, ApprovalError, ApprovalStore, Created,
+    APPROVED_TTL_MS, GONE_MESSAGE, PENDING_TTL_MS,
 };
 pub use approver_keys::{
     approver_key_id, key_id_of, verify_approval_signature, ApproverKeyError, ApproverKeys,
@@ -41,7 +42,7 @@ pub use session_tokens::{
 
 use std::{path::PathBuf, sync::Arc};
 
-use ghostex_gx_protocol::approval::ApproverKey;
+use ghostex_gx_protocol::approval::{ApprovalRequester, ApproverKey};
 use tokio::sync::broadcast;
 
 /// Pending requests, oldest first (owner's devices).
@@ -141,8 +142,36 @@ impl SecurityState {
             .remembered
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = saved.remembered_approvals;
+        state.approvals = ApprovalStore::load(
+            auth_dir.join(approvals::APPROVAL_REQUESTS_FILE_NAME),
+            now_ms(),
+        );
         state.persist_path = Some(Arc::new(path));
         Ok(state)
+    }
+
+    /// A request for `action` from `caller`: the one it already has waiting, or a new one, which
+    /// replaces its older ones for the same thing. Tells the cards (`approvalRequestsChanged`):
+    /// the new request, and each replaced one as expired with `replacedBy`.
+    pub fn open_request(
+        &self,
+        caller: &Principal,
+        requested_by: ApprovalRequester,
+        action: &ActionRequest,
+        now_ms: u64,
+    ) -> approvals::Created {
+        let created = self.approvals.create(caller, requested_by, action, now_ms);
+        for request in &created.replaced {
+            self.publish(SecurityEvent::ApprovalExpired {
+                request: request.clone(),
+            });
+        }
+        if created.is_new {
+            self.publish(SecurityEvent::ApprovalRequested {
+                request: created.request.clone(),
+            });
+        }
+        created
     }
 
     /// Writes the keys and session token hashes to disk (no-op without a path).

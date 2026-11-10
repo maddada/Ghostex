@@ -333,7 +333,7 @@ impl GhostexGpuiApp {
         let picker = h_flex()
             .id("ghostex-gpui-grok-web-login-picker")
             .role(gpui::Role::Button)
-            .aria_label("Switch Grok login")
+            .aria_label("Switch Grok Bot login")
             .min_w_0()
             .flex_shrink(1.0)
             .h(px(TITLEBAR_CONTROL_HEIGHT))

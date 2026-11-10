@@ -14,7 +14,9 @@ use ghostex_gx_protocol::pairing::PendingDevice;
 use serde_json::Value;
 
 use super::repository::{RemotePairingRepository, StoredDeviceKey};
-use crate::security::ActionRequest;
+use crate::security::{ActionRequest, SecurityState};
+use ghostex_gx_protocol::approval::{ApprovalRequest, SensitiveAction};
+use serde_json::json;
 
 /*
 CDXC:RemotePairing 2026-09-03:
@@ -207,8 +209,9 @@ impl RemotePairingSecret {
 #[derive(Clone, Default)]
 pub struct RemotePairingRuntime {
     live_secret: Arc<Mutex<Option<RemotePairingSecret>>>,
-    /// Phones waiting for approval (pairing v2), by pending id. In memory on purpose, like the
-    /// approval requests they wait on: a restart drops both and the phone scans again.
+    /// Phones waiting for approval (pairing v2), by pending id. A waiting one is also kept with
+    /// its approval request ([`PendingPairing::saved`]), so after a gxserver restart it waits
+    /// again ([`RemotePairingRuntime::restore_waiting`]) and the card shown before still pairs it.
     pending: Arc<Mutex<HashMap<String, PendingPairing>>>,
     /// The last renewal timestamp each device key signed, so a renewal can't be replayed.
     renewals: Arc<Mutex<HashMap<String, u64>>>,
@@ -256,7 +259,91 @@ pub enum PendingState {
     },
 }
 
+/// The kind of data a waiting pairing keeps with its approval request (`ApprovalStore::attach`).
+pub const PAIRING_RESUME: &str = "pairing";
+
 impl PendingPairing {
+    /// What a waiting pairing keeps with its approval request: everything but the request's own
+    /// id and expiry, which come back with it.
+    pub fn saved(&self) -> Value {
+        json!({
+            "id": self.id,
+            "name": self.name,
+            "platform": self.platform,
+            "sshPublicKey": self.ssh_public_key,
+            "kind": match self.kind {
+                super::pair_device::PairingDeviceKind::Phone => "phone",
+                super::pair_device::PairingDeviceKind::Computer => "computer",
+            },
+            "overSsh": self.over_ssh,
+            "nonce": self.nonce,
+            "tailcatClientKey": self.tailcat_client_key,
+            "deviceKey": {
+                "algorithm": self.device_key.algorithm,
+                "publicKey": self.device_key.public_key,
+                "keyId": self.device_key.key_id,
+            },
+            "approverKey": self.approver_key,
+            "words": self.words,
+            "action": {
+                "target": self.action.target,
+                "params": self.action.params,
+                "summary": self.action.summary,
+                "detail": self.action.detail,
+                "replaces": self.action.replaces,
+            },
+            "requestedAtMs": self.requested_at_ms,
+            "lastAskMs": self.last_ask_ms,
+        })
+    }
+
+    /// The waiting pairing [`PendingPairing::saved`] kept with `request`.
+    pub fn from_saved(saved: &Value, request: &ApprovalRequest) -> Option<Self> {
+        let text = |value: &Value| value.as_str().map(str::to_string);
+        let action = &saved["action"];
+        let mut approval = ActionRequest::new(
+            SensitiveAction::PairingApproveDevice,
+            text(&action["summary"])?,
+        )
+        .params(action["params"].clone());
+        if let Some(target) = text(&action["target"]) {
+            approval = approval.target(target);
+        }
+        if let Some(detail) = text(&action["detail"]) {
+            approval = approval.detail(detail);
+        }
+        if let Some(key) = text(&action["replaces"]) {
+            approval = approval.replaces(key);
+        }
+        Some(Self {
+            id: text(&saved["id"])?,
+            name: text(&saved["name"])?,
+            platform: text(&saved["platform"])?,
+            ssh_public_key: text(&saved["sshPublicKey"]).unwrap_or_default(),
+            kind: serde_json::from_value(saved["kind"].clone()).ok()?,
+            over_ssh: saved["overSsh"].as_bool().unwrap_or(false),
+            nonce: text(&saved["nonce"]).unwrap_or_default(),
+            tailcat_client_key: text(&saved["tailcatClientKey"]),
+            device_key: StoredDeviceKey {
+                algorithm: text(&saved["deviceKey"]["algorithm"])?,
+                public_key: text(&saved["deviceKey"]["publicKey"])?,
+                key_id: text(&saved["deviceKey"]["keyId"])?,
+            },
+            approver_key: serde_json::from_value(saved["approverKey"].clone())
+                .ok()
+                .flatten(),
+            words: serde_json::from_value(saved["words"].clone()).ok()?,
+            action: approval,
+            approval_id: request.id.clone(),
+            requested_at_ms: saved["requestedAtMs"]
+                .as_u64()
+                .unwrap_or(request.created_at_ms),
+            expires_at_ms: request.expires_at_ms,
+            last_ask_ms: saved["lastAskMs"].as_u64().unwrap_or(0),
+            state: PendingState::Waiting,
+        })
+    }
+
     pub fn summary(&self) -> PendingDevice {
         PendingDevice {
             id: self.id.clone(),
@@ -323,6 +410,42 @@ impl RemotePairingRuntime {
 
     pub fn insert_pending(&self, pending: PendingPairing) {
         self.pending_map().insert(pending.id.clone(), pending);
+    }
+
+    /// Keeps `pending` waiting and saves it with its approval request, so it waits again after a
+    /// gxserver restart.
+    pub fn insert_waiting(&self, security: &SecurityState, pending: PendingPairing) {
+        security
+            .approvals
+            .attach(&pending.approval_id, PAIRING_RESUME, pending.saved());
+        self.insert_pending(pending);
+    }
+
+    /// Drops the waiting pairings whose requests `replaced` lists (a newer ask from the same
+    /// device replaced them).
+    pub fn drop_replaced(&self, replaced: &[ApprovalRequest]) {
+        self.pending_map().retain(|_, pending| {
+            !replaced
+                .iter()
+                .any(|request| request.id == pending.approval_id)
+        });
+    }
+
+    /// At gxserver start: the pairings still waiting (or approved, not yet picked up by the phone)
+    /// when it stopped wait again under the same pending id, words and expiry.
+    pub fn restore_waiting(&self, security: &SecurityState) -> usize {
+        let now = crate::security::now_ms();
+        let restored: Vec<_> = security
+            .approvals
+            .resumable(PAIRING_RESUME, now)
+            .into_iter()
+            .filter_map(|(request, saved)| PendingPairing::from_saved(&saved, &request))
+            .collect();
+        let count = restored.len();
+        for pending in restored {
+            self.insert_pending(pending);
+        }
+        count
     }
 
     /// The live entry for `id`; lapsed entries are dropped on the way.

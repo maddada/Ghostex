@@ -3,8 +3,9 @@
 //!
 //! Written whole, through a temporary file and a rename, mode 0600 in the 0700 auth folder.
 //! The projects the owner let an agent session reach are written too, until that session is
-//! closed or deleted. Approval requests and owner sessions are never written: they live minutes, or only in the
-//! desktop app's memory.
+//! closed or deleted. Owner session tokens are never written (only their hashes): they live only in
+//! the desktop app's memory. Approval requests are saved beside it, in `approval-requests.json`
+//! (`approvals.rs`), the same way.
 
 use std::{
     fs, io,
@@ -79,11 +80,16 @@ pub fn save(path: &Path, state: &PersistedSecurity) -> io::Result<()> {
     let mut state = state.clone();
     state.version = 1;
     let text = serde_json::to_string_pretty(&state).map_err(io::Error::other)?;
+    write_file_private(path, text.as_bytes())
+}
+
+/// Writes `bytes` to `path` whole, through a temporary file and a rename, mode 0600.
+pub fn write_file_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
     let temp = path.with_extension(format!("json.tmp-{}", std::process::id()));
-    write_private(&temp, text.as_bytes())?;
+    write_private(&temp, bytes)?;
     fs::rename(&temp, path)
 }
 

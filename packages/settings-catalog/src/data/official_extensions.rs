@@ -370,7 +370,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // User: claude.ai inside Ghostex "has to be built in extension", not an external Ghostex extension from the Store. Enabled, it adds a sidebar button that opens a global page, with "different claude profiles for each account" to switch between. The 2026-10-28 decision in apps/desktop/src/app/claude_web/takeover.rs supersedes "switches to a global page that just keeps just my sidebar shown": turning Claude on now hides the sidebar too. A whole-feature entry with a new key (`claudeWebHidden`, default on = hidden, so it starts off like Actions) because the settings file stores every default. Off removes the sidebar button and the Claude view; each account's claude.ai sign-in is kept.
     // SEE-ALSO: apps/desktop/src/app/claude_web/ (the view, the button and the account bar).
     J::Obj(&[
-        ("description", J::Str("Use claude.ai inside Ghostex from a button in the sidebar's top bar, with one sign-in per saved Claude account and a bar above the page to switch between them.")),
+        ("description", J::Str("Use claude.ai inside Ghostex from a button in the header, with one sign-in per saved Claude account and a bar above the page to switch between them.")),
         ("category", J::Str("features")),
         ("id", J::Str("claudeWeb")),
         ("placement", J::Str("feature")),
@@ -382,13 +382,13 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // User: "let's please add an extension to the app like the claude one that opens different claude accounts but this one is to open different grok bot logins". Built like Claude: its own sidebar button beside Claude's, the page in the sessions column's place with the same takeover (apps/desktop/src/app/claude_web/takeover.rs), and a bar above the page to switch logins. Ghostex has no saved Grok accounts, so the logins are its own (`grokWebLogins`), each a named browser profile with its own cookies; the bar adds one, Settings > Files & Links > Browser renames and removes them. The start page is one setting for every login (`grokWebStartPage`, grok.com by default; the coordinator, for the user: "that url is mine but it should open grok.com usually"), as Claude has no per-account settings. A whole-feature entry with a new key (`grokWebHidden`, default on = hidden, so it starts off like Claude). Off removes the button, the page and the two rows; every login's sign-in is kept.
     // SEE-ALSO: apps/desktop/src/app/claude_web/grok.rs (the logins and the bar), apps/desktop/src/app/claude_web/place.rs (Claude or Grok).
     J::Obj(&[
-        ("description", J::Str("Use grok.com inside Ghostex from a button in the sidebar, with several Grok logins kept apart, each with its own sign-in, and a bar above the page to switch between them or add another.")),
+        ("description", J::Str("Use grok.com inside Ghostex from a button in the header, with several Grok logins kept apart, each with its own sign-in, and a bar above the page to switch between them or add another.")),
         ("category", J::Str("features")),
         ("id", J::Str("grokWeb")),
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("grokWebHidden")),
         ("appWide", J::Bool(true)),
-        ("title", J::Str("Grok")),
+        ("title", J::Str("Grok Bot")),
         ("settingKeys", J::Arr(&[J::Str("grokWebStartPage"), J::Str("grokWebLogins")])),
     ]),
     // CDXC:Extensions 2026-10-19 DECISION:

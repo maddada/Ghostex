@@ -565,7 +565,9 @@ pub(crate) const BROWSER_ADDRESS_ONLY_CEF_URL: &str = "about:blank";
 
 pub(crate) const BROWSER_ZOOM_EPSILON: f64 = 0.001;
 
-pub(crate) const TERMINAL_FONT_ZOOM_STEP: f32 = 1.0;
+/// CDXC:Zoom 2026-11-10 DECISION:
+/// Halved from 1.0 with the Interface scale rungs (User: "please half the steps"); the focused terminal's own zoom steps half a point, inside the same 8 to 32 point range.
+pub(crate) const TERMINAL_FONT_ZOOM_STEP: f32 = 0.5;
 
 pub(crate) const BROWSER_PROFILE_DEFAULT_ID: u64 = 1;
 

@@ -17,6 +17,12 @@ pub type GhosttyTerminal = *mut c_void;
 pub type GhosttyRenderState = *mut c_void;
 pub type GhosttyRenderStateRowIterator = *mut c_void;
 pub type GhosttyRenderStateRowCells = *mut c_void;
+pub type GhosttyRenderStateImageIterator = *mut c_void;
+/// Borrowed from the terminal (`GHOSTTY_TERMINAL_DATA_KITTY_GRAPHICS`);
+/// invalid after any call that changes the terminal.
+pub type GhosttyKittyGraphics = *mut c_void;
+/// Borrowed from a `GhosttyKittyGraphics`; null when the image is unknown.
+pub type GhosttyKittyGraphicsImage = *mut c_void;
 
 /// Opaque cell value (`GhosttyCell` in screen.h).
 pub type GhosttyCell = u64;
@@ -45,6 +51,88 @@ pub const GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X: GhosttyRenderStateData = 
 pub const GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y: GhosttyRenderStateData = 16;
 pub const GHOSTTY_RENDER_STATE_DATA_CURSOR: GhosttyRenderStateData = 18;
 pub const GHOSTTY_RENDER_STATE_DATA_COLORS: GhosttyRenderStateData = 19;
+pub const GHOSTTY_RENDER_STATE_DATA_IMAGE_ITERATOR: GhosttyRenderStateData = 22;
+pub const GHOSTTY_RENDER_STATE_DATA_IMAGE_PLACEMENTS_GENERATION: GhosttyRenderStateData = 23;
+
+/// render.h `GhosttyImageProtocol`.
+pub type GhosttyImageProtocol = c_int;
+pub const GHOSTTY_IMAGE_PROTOCOL_KITTY: GhosttyImageProtocol = 0;
+
+/// types.h `GhosttyImageLayer`: draw order is below-background, cell
+/// backgrounds, below-text, text, above-text; z orders within a layer.
+pub type GhosttyImageLayer = c_int;
+pub const GHOSTTY_IMAGE_LAYER_BELOW_BACKGROUND: GhosttyImageLayer = 0;
+pub const GHOSTTY_IMAGE_LAYER_BELOW_TEXT: GhosttyImageLayer = 1;
+pub const GHOSTTY_IMAGE_LAYER_ABOVE_TEXT: GhosttyImageLayer = 2;
+
+/// render.h `GhosttyRenderStateImageData`. Pixel values use the cell size
+/// passed to `ghostty_terminal_resize`.
+pub type GhosttyRenderStateImageData = c_int;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_PROTOCOL: GhosttyRenderStateImageData = 1;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_IMAGE_ID: GhosttyRenderStateImageData = 2;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_IMAGE_GENERATION: GhosttyRenderStateImageData = 3;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_LAYER: GhosttyRenderStateImageData = 4;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_Z: GhosttyRenderStateImageData = 5;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_VIEWPORT_COL: GhosttyRenderStateImageData = 6;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_VIEWPORT_ROW: GhosttyRenderStateImageData = 7;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_GRID_COLS: GhosttyRenderStateImageData = 8;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_GRID_ROWS: GhosttyRenderStateImageData = 9;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_CELL_OFFSET_X: GhosttyRenderStateImageData = 10;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_CELL_OFFSET_Y: GhosttyRenderStateImageData = 11;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_PIXEL_WIDTH: GhosttyRenderStateImageData = 12;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_PIXEL_HEIGHT: GhosttyRenderStateImageData = 13;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_X: GhosttyRenderStateImageData = 14;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_Y: GhosttyRenderStateImageData = 15;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_WIDTH: GhosttyRenderStateImageData = 16;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_HEIGHT: GhosttyRenderStateImageData = 17;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_KITTY_PLACEMENT_ID: GhosttyRenderStateImageData = 18;
+pub const GHOSTTY_RENDER_STATE_IMAGE_DATA_KITTY_KIND: GhosttyRenderStateImageData = 19;
+
+/// kitty_graphics.h `GhosttyKittyGraphicsData`.
+pub type GhosttyKittyGraphicsData = c_int;
+pub const GHOSTTY_KITTY_GRAPHICS_DATA_GENERATION: GhosttyKittyGraphicsData = 2;
+
+/// kitty_graphics.h `GhosttyKittyImageFormat`. Stored images are always
+/// decoded, so PNG is never reported for a stored image.
+pub type GhosttyKittyImageFormat = c_int;
+pub const GHOSTTY_KITTY_IMAGE_FORMAT_RGB: GhosttyKittyImageFormat = 0;
+pub const GHOSTTY_KITTY_IMAGE_FORMAT_RGBA: GhosttyKittyImageFormat = 1;
+pub const GHOSTTY_KITTY_IMAGE_FORMAT_PNG: GhosttyKittyImageFormat = 2;
+pub const GHOSTTY_KITTY_IMAGE_FORMAT_GRAY_ALPHA: GhosttyKittyImageFormat = 3;
+pub const GHOSTTY_KITTY_IMAGE_FORMAT_GRAY: GhosttyKittyImageFormat = 4;
+
+/// kitty_graphics.h `GhosttyKittyGraphicsImageData`.
+pub type GhosttyKittyGraphicsImageData = c_int;
+pub const GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_ID: GhosttyKittyGraphicsImageData = 1;
+pub const GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_WIDTH: GhosttyKittyGraphicsImageData = 3;
+pub const GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_HEIGHT: GhosttyKittyGraphicsImageData = 4;
+pub const GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_FORMAT: GhosttyKittyGraphicsImageData = 5;
+pub const GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_PIXELS: GhosttyKittyGraphicsImageData = 7;
+pub const GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_GENERATION: GhosttyKittyGraphicsImageData = 9;
+
+/// sys.h `GhosttySysOption`.
+pub type GhosttySysOption = c_int;
+pub const GHOSTTY_SYS_OPT_DECODE_PNG: GhosttySysOption = 2;
+
+/// sys.h `GhosttySysImage`: 8-bit RGBA, rows top to bottom, no padding.
+/// `data` must come from `ghostty_alloc` with the callback's allocator;
+/// the library owns it once the callback returns true.
+#[repr(C)]
+pub struct GhosttySysImage {
+    pub width: u32,
+    pub height: u32,
+    pub data: *mut u8,
+    pub data_len: usize,
+}
+
+/// sys.h `GhosttySysDecodePngFn`.
+pub type GhosttySysDecodePngFn = unsafe extern "C" fn(
+    userdata: *mut c_void,
+    allocator: *const c_void,
+    data: *const u8,
+    data_len: usize,
+    out: *mut GhosttySysImage,
+) -> bool;
 
 pub type GhosttyRenderStateOption = c_int;
 pub const GHOSTTY_RENDER_STATE_OPT_DIRTY: GhosttyRenderStateOption = 1;
@@ -190,6 +278,9 @@ pub const GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND: GhosttyTerminalOption = 12;
 pub const GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND: GhosttyTerminalOption = 13;
 pub const GHOSTTY_TERMINAL_OPT_COLOR_CURSOR: GhosttyTerminalOption = 14;
 pub const GHOSTTY_TERMINAL_OPT_COLOR_PALETTE: GhosttyTerminalOption = 15;
+/// `uint64_t*` bytes; zero turns the Kitty graphics protocol off entirely
+/// (no query replies), NULL restores the library default of 10 MB.
+pub const GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT: GhosttyTerminalOption = 16;
 pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE: GhosttyTerminalOption = 27;
 pub const GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES: GhosttyTerminalOption = 28;
 pub const GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ: GhosttyTerminalOption = 39;
@@ -212,6 +303,7 @@ pub const GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING: GhosttyTerminalData = 11;
 pub const GHOSTTY_TERMINAL_DATA_TITLE: GhosttyTerminalData = 12;
 pub const GHOSTTY_TERMINAL_DATA_PWD: GhosttyTerminalData = 13;
 pub const GHOSTTY_TERMINAL_DATA_MODE: GhosttyTerminalData = 37;
+pub const GHOSTTY_TERMINAL_DATA_KITTY_GRAPHICS: GhosttyTerminalData = 30;
 pub const GHOSTTY_TERMINAL_DATA_CLIPBOARD_WRITE_MAX_BYTES: GhosttyTerminalData = 40;
 
 pub type GhosttyTerminalScreen = c_int;
@@ -730,6 +822,40 @@ unsafe extern "C" {
         option: GhosttyRenderStateOption,
         value: *const c_void,
     ) -> GhosttyResult;
+    pub fn ghostty_render_state_image_iterator_new(
+        allocator: *const c_void,
+        out_iterator: *mut GhosttyRenderStateImageIterator,
+    ) -> GhosttyResult;
+    pub fn ghostty_render_state_image_iterator_free(iterator: GhosttyRenderStateImageIterator);
+    pub fn ghostty_render_state_image_iterator_next(
+        iterator: GhosttyRenderStateImageIterator,
+    ) -> bool;
+    pub fn ghostty_render_state_image_get(
+        iterator: GhosttyRenderStateImageIterator,
+        data: GhosttyRenderStateImageData,
+        out: *mut c_void,
+    ) -> GhosttyResult;
+
+    pub fn ghostty_kitty_graphics_get(
+        graphics: GhosttyKittyGraphics,
+        data: GhosttyKittyGraphicsData,
+        out: *mut c_void,
+    ) -> GhosttyResult;
+    pub fn ghostty_kitty_graphics_image(
+        graphics: GhosttyKittyGraphics,
+        image_id: u32,
+    ) -> GhosttyKittyGraphicsImage;
+    pub fn ghostty_kitty_graphics_image_get(
+        image: GhosttyKittyGraphicsImage,
+        data: GhosttyKittyGraphicsImageData,
+        out: *mut c_void,
+    ) -> GhosttyResult;
+
+    /// Process-wide and not thread-safe: set before any terminal parses.
+    pub fn ghostty_sys_set(option: GhosttySysOption, value: *const c_void) -> GhosttyResult;
+    pub fn ghostty_alloc(allocator: *const c_void, len: usize) -> *mut u8;
+    pub fn ghostty_free(allocator: *const c_void, ptr: *mut u8, len: usize);
+
     pub fn ghostty_render_state_row_iterator_new(
         allocator: *const c_void,
         out_iterator: *mut GhosttyRenderStateRowIterator,

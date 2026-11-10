@@ -392,6 +392,11 @@ pub async fn run_gxserver_foreground(
     session_stall_runtime::start_session_stall_runtime(state.clone());
     network_status_runtime::start_network_status_runtime(state.clone());
     autopilot_runtime::start_autopilot_runtime(state.clone());
+    // Waiting requests come back from `auth/approval-requests.json`; so do the pairings and
+    // Collab calls they finish (CDXC:Security 2026-11-10 in security/approvals.rs).
+    state
+        .remote_pairing_runtime
+        .restore_waiting(&state.security);
     crate::collab_shim::http::approvals::start(state.clone());
     crate::collab_shim::sidecar::start_supervisor(state.clone());
     coordinator_remote_runtime::start_coordinator_remote_runtime(state.clone());

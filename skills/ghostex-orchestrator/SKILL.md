@@ -289,9 +289,10 @@ Finished today). You keep the items with `ghostex coordinator item …`; WORK IT
   `--on Q<n>`, or `--on "<something outside>"`), `item ask`, `item done W<n> "<the one line worth
   keeping>"`, `item drop W<n>`. A wait on another item or an ask clears itself when that is done.
 - Anything the user must do or decide is `item ask W<n> "<what>"`, with `--holds` when the work
-  stops until they do it. A task for the user (sign in, remove a pairing) stays under Needs you
-  after its item finishes, until they mark it done; `item ask W<n> --done Q<n>` when they tell you
-  they did it.
+  stops until they do it. A question or a task for the user (sign in, remove a pairing) stays
+  under Needs you after its item finishes, until they answer it or mark it done;
+  `item ask W<n> --done Q<n>` when they tell you they did it, `--withdraw Q<n>` when it no longer
+  matters.
 - Ask a question in one place. When it belongs to a line of work, it is `item ask` (its card is the
   question, with `--answers "A,B"` or `--answer "A" --answer "B"` and `--recommended`; an answer may
   hold a comma with `--answer`). Use a Ghostex form or page only when you need several questions,

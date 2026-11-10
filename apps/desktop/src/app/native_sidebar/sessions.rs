@@ -315,7 +315,7 @@ impl GhostexGpuiApp {
                     // A coordinator's thread nested from another computer this app has not connected to yet: connect, then open it.
                     if mode == "focus" && borrowed_thread && app.open_borrowed_thread_row_when_connected(&session_id, cx) { return; }
                     // The page Claude's sidebar button opened over the sessions closes first, so the
-                    // session shows (CDXC:Extensions 2026-10-25 in app/claude_web/sidebar_button.rs).
+                    // session shows (CDXC:Extensions 2026-10-25 in app/claude_web/header_buttons.rs).
                     if mode == "focus" { app.close_sidebar_extension_view(window, cx); }
                     app.dispatch_native_sidebar_ui(json!({"type": "selectSession", "sessionId": session_id, "mode": mode}), cx);
                     if mode == "focus" {

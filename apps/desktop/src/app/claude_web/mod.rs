@@ -1,12 +1,12 @@
-//! Claude and Grok, built-in extensions: claude.ai or grok.com opened from the sidebar's bottom bar
+//! Claude and Grok, built-in extensions: claude.ai or grok.com opened from buttons in the work area header
 //! in place of the sessions column, on the picked saved Claude account's own claude.ai sign-in or
 //! the picked Grok login's own profile. Per-concern files; this barrel stays thin.
 mod accounts;
 mod column;
 mod grok;
 mod header;
+mod header_buttons;
 mod place;
-mod sidebar_button;
 mod takeover;
 mod view;
 

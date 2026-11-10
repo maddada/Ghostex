@@ -35,10 +35,12 @@ pub mod ffi;
 
 mod host_callbacks;
 mod input_encoders;
+mod kitty_graphics;
 mod render_state;
 mod terminal;
 
 pub use host_callbacks::*;
 pub use input_encoders::*;
+pub use kitty_graphics::*;
 pub use render_state::*;
 pub use terminal::*;
