@@ -9,8 +9,8 @@ use std::collections::{BTreeSet, HashMap};
 
 use crate::keys::SessionKey;
 use crate::sidebar_view::{
-    is_recent_thread, recent_thread_deadline_ms, session_is_snoozed,
-    CoordinatorBadge, FoldedStatus, RowNesting, SessionRow, ThreadTally,
+    is_recent_thread, recent_thread_deadline_ms, session_is_snoozed, CoordinatorBadge,
+    FoldedStatus, RowNesting, SessionRow, ThreadTally,
 };
 
 use super::build::{came_back_ms, machine_key, UnifiedFilter, UnifiedRow, UnifiedSettings};
@@ -22,6 +22,10 @@ pub struct UnifiedFolds {
     pub unfolded: BTreeSet<String>,
     /// Coordinators whose older threads are listed.
     pub older_shown: BTreeSet<String>,
+    /// The row a reveal is bringing on screen (its `sidebar_session_id`): listed like a busy thread,
+    /// with the threads above it, while its siblings' older threads stay tucked. Held by the client
+    /// for the reveal, never saved.
+    pub reveal: Option<String>,
 }
 
 /// The name a coordinator's fold and older-threads state are saved under: its computer, project
@@ -170,10 +174,10 @@ pub(super) fn nest_unified_rows(
     }
     let narrowing = !filter.query.trim().is_empty();
     for top in &mut tops {
-        let facts = gather(top, filter, now_ms);
+        let facts = gather(top, filter, folds.reveal.as_deref(), now_ms);
         // A card kept only for what is under it shows the way to the match.
         let narrowed = narrowing || !top.matched;
-        lay_out(top, folds, narrowed, facts.matched);
+        lay_out(top, folds, narrowing, narrowed, facts.matched);
         mark_active(top, false);
         lift(top);
     }
@@ -198,7 +202,12 @@ fn assemble(
 
 /// Sets each row's own `matched`, sorts every row's threads busy first, and returns the facts of
 /// the subtree.
-fn gather(row: &mut UnifiedRow, filter: &UnifiedFilter, now_ms: u64) -> Subtree {
+fn gather(
+    row: &mut UnifiedRow,
+    filter: &UnifiedFilter,
+    reveal: Option<&str>,
+    now_ms: u64,
+) -> Subtree {
     row.matched = filter.keeps(row);
     let session = &row.session;
     let mut facts = Subtree {
@@ -206,12 +215,13 @@ fn gather(row: &mut UnifiedRow, filter: &UnifiedFilter, now_ms: u64) -> Subtree 
         listed: is_recent_thread(&session.row, now_ms)
             || needs_you(&session.row)
             || session.is_focused
-            || session.is_visible,
+            || session.is_visible
+            || reveal == Some(session.row.sidebar_session_id.as_str()),
         rank: busy_rank(&session.row),
     };
     let mut ranked: Vec<(Subtree, UnifiedRow)> = std::mem::take(&mut row.threads)
         .into_iter()
-        .map(|mut child| (gather(&mut child, filter, now_ms), child))
+        .map(|mut child| (gather(&mut child, filter, reveal, now_ms), child))
         .collect();
     ranked.sort_by(|(left_facts, left), (right_facts, right)| {
         left_facts
@@ -249,6 +259,7 @@ fn gather(row: &mut UnifiedRow, filter: &UnifiedFilter, now_ms: u64) -> Subtree 
 fn lay_out(
     row: &mut UnifiedRow,
     folds: &UnifiedFolds,
+    query: bool,
     narrowing: bool,
     subtree_matched: bool,
 ) {
@@ -266,10 +277,15 @@ fn lay_out(
     let narrowed = narrowing && !row.matched;
     let listed = row.threads.iter().filter(|child| child.shown).count();
     let total = row.threads.len();
+    let match_below = row.threads.iter().any(|child| child.subtree_matched);
+    // A text search opens a folded row whose threads match, even one it matched itself (a
+    // coordinator and its thread both named "API"); a filter pick that keeps the row itself leaves
+    // its fold alone.
+    let forced = !narrowed && query && !unfolded && match_below;
     let open = if narrowed {
-        row.threads.iter().any(|child| child.subtree_matched)
+        match_below
     } else {
-        unfolded
+        unfolded || forced
     };
     let mut tally = ThreadTally::default();
     let bump = |count: &mut u16| *count = count.saturating_add(1);
@@ -282,7 +298,7 @@ fn lay_out(
             _ => {}
         }
         let listed_child = child.shown;
-        child.shown = if narrowed {
+        child.shown = if narrowed || forced {
             child.subtree_matched
         } else {
             listed_child || older_shown || (narrowing && child.subtree_matched)
@@ -305,7 +321,7 @@ fn lay_out(
         listed: u16::try_from(listed).unwrap_or(u16::MAX),
         older: u16::try_from(total - listed).unwrap_or(u16::MAX),
         older_shown,
-        older_row: open && !narrowed && total > listed,
+        older_row: open && !narrowed && !forced && total > listed,
         badge: RowNesting {
             threads: tally,
             ..RowNesting::default()
@@ -316,7 +332,7 @@ fn lay_out(
     });
     for child in &mut row.threads {
         let matched = child.subtree_matched;
-        lay_out(child, folds, narrowing, matched);
+        lay_out(child, folds, query, narrowing, matched);
     }
 }
 

@@ -77,6 +77,7 @@ impl UnifiedSavedState {
         UnifiedFolds {
             unfolded: self.unfolded_coordinators.clone(),
             older_shown: self.older_shown_coordinators.clone(),
+            reveal: None,
         }
     }
 

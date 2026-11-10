@@ -89,7 +89,7 @@ pub(crate) fn tally_threads<'a>(
 
 /// Deeper trees are drawn flat past this, so a coordinator of coordinators still reads as a tree
 /// without running out of row width.
-const MAX_DEPTH: u8 = 3;
+pub(crate) const MAX_DEPTH: u8 = 3;
 // `RowNesting::passing_lines` keeps one bit per level.
 const _: () = assert!(MAX_DEPTH < u8::BITS as u8);
 

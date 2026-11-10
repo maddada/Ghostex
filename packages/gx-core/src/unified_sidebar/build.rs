@@ -270,13 +270,17 @@ fn drawn_lines_into<'a>(row: &'a UnifiedRow, depth: u8, lines: &mut Vec<UnifiedT
         return;
     };
     for child in row.threads.iter().filter(|child| child.shown) {
-        lines.push(UnifiedTreeLine::Thread { row: child, depth });
+        // Drawn no deeper than the Project sidebar's tree; the tree itself goes on.
+        lines.push(UnifiedTreeLine::Thread {
+            row: child,
+            depth: depth.min(crate::sidebar_view::MAX_THREAD_DEPTH),
+        });
         drawn_lines_into(child, depth.saturating_add(1), lines);
     }
     if crew.older_row {
         lines.push(UnifiedTreeLine::Older {
             coordinator: row,
-            depth,
+            depth: depth.min(crate::sidebar_view::MAX_THREAD_DEPTH),
         });
     }
 }
