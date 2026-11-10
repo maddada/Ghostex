@@ -98,6 +98,29 @@ pub fn handle_with_ids(
         ActionKind::JumpToWorkCard => {
             crate::extras::coordinator_board::focus_row(state, text(action, "key"))
         }
+        // A work ask snoozed from its card: out of the dock and the counts until its end
+        // (server/src/coordinators/work.rs `snooze`).
+        ActionKind::SnoozeWorkAsk => {
+            let request_id = next_request_id();
+            state.extras.panels.board_change_requests.insert(request_id);
+            let key = text(action, "key").to_string();
+            let hours = action.param("hours").and_then(Value::as_u64).unwrap_or(1);
+            let until = context.now_millis() + hours as i64 * 3_600_000;
+            state.extras.panels.work_snoozed.insert(key, until);
+            state.core.request_publish();
+            vec![crate::effect::Effect::SendRpc {
+                request_id,
+                method: crate::wire::ChatRpcMethod::CoordinatorBoard,
+                params: Box::new(serde_json::json!({
+                    "projectId": state.identity.project_id,
+                    "sessionId": state.identity.session_id,
+                    "op": "snooze",
+                    "item": text(action, "item"),
+                    "ask": text(action, "ask"),
+                    "hours": hours,
+                })),
+            }]
+        }
         // A finished-work card leaves the dock (work_cards.rs `dock`).
         ActionKind::DismissWorkDockCard => {
             state

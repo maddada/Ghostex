@@ -105,6 +105,75 @@ pub fn set(state: &mut ChatState, id: &str, later: bool) -> Vec<Effect> {
     }]
 }
 
+/// `snoozeQuestion {id, hours}`: puts a form or page off For later for `hours` (1, 6 or 24); gxserver
+/// brings it back by itself at the end (server/src/session_chat_open_questions.rs `LATER_UNTIL_KEY`).
+/// A snooze again on one already put off moves its end.
+///
+/// CDXC:SessionChat 2026-11-10 DECISION:
+/// User: "for any ask i should be able to click 'Snooze' and snooze it for 1h 6h 24h or cancel it".
+/// Snooze is For later with an end, not a second kind of putting off; Cancel is the removal
+/// (`remove`) that also tells the agent (`cancel`).
+pub fn snooze(state: &mut ChatState, id: &str, hours: u64) -> Vec<Effect> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Vec::new();
+    }
+    let request_id = state.core.allocate_request_id();
+    state
+        .questions
+        .later
+        .pending
+        .insert(id.to_string(), (true, request_id));
+    state.core.request_publish();
+    vec![Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::AnswerSessionChatPrompt,
+        params: Box::new(json!({
+            "kind": "questionForLater",
+            "questionId": id,
+            "later": true,
+            "hours": hours.clamp(1, 24 * 14),
+            "projectId": state.identity.project_id,
+            "sessionId": state.identity.session_id,
+        })),
+    }]
+}
+
+/// `cancelQuestion {id}`: removes a form or page for good (`remove`) and tells the agent which
+/// questions the user cancelled, as an answer is sent back.
+pub fn cancel(state: &mut ChatState, id: &str) -> Vec<Effect> {
+    let tags: Vec<String> = state
+        .transcript_view
+        .askers
+        .iter()
+        .find(|asker| asker.id == id)
+        .map(|asker| asker.tags.clone())
+        .unwrap_or_default();
+    let mut effects = remove(state, id);
+    if effects.is_empty() {
+        return effects;
+    }
+    let text = if tags.is_empty() {
+        "I cancelled your questions there: no need to ask them again.".to_string()
+    } else {
+        format!(
+            "I cancelled {}: no need to ask {} again.",
+            tags.join(", "),
+            if tags.len() == 1 { "it" } else { "them" }
+        )
+    };
+    let request_id = state.core.allocate_request_id();
+    effects.push(Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::SendSessionChatMessage,
+        params: Box::new(json!({
+            "text": text,
+            "sendRequestId": format!("question-cancel-{}-{id}", state.identity.session_id),
+        })),
+    });
+    effects
+}
+
 /// The call's answer, or `None` when it is not one of these. A refusal drops the change and says
 /// why; a success keeps it shown until the wire carries it (`settle`).
 pub fn rpc_settled(

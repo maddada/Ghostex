@@ -337,20 +337,12 @@ impl NativeChatView {
         let s = p.scale;
         let key = text(card, "key");
         let body = p.strengthened(p.prose);
-        div()
+        let top = div()
             .w_full()
             .min_w_0()
             .flex()
             .items_center()
             .gap(px(8.0 * s))
-            .px(px(12.0 * s))
-            .py(px(8.0 * s))
-            .rounded(px(10.0 * s))
-            .border_1()
-            .border_color(p.input_border)
-            .bg(p.card_panel)
-            .text_size(px(PROSE_SIZE * s))
-            .line_height(px(PROSE_LINE_HEIGHT * s))
             .child(
                 svg()
                     .path("titlebar/help-circle.svg")
@@ -381,7 +373,27 @@ impl NativeChatView {
                 card["command"].clone(),
                 p,
                 cx,
-            ))
+            ));
+        div()
+            .w_full()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap(px(4.0 * s))
+            .px(px(12.0 * s))
+            .py(px(8.0 * s))
+            .rounded(px(10.0 * s))
+            .border_1()
+            .border_color(p.input_border)
+            .bg(p.card_panel)
+            .text_size(px(PROSE_SIZE * s))
+            .line_height(px(PROSE_LINE_HEIGHT * s))
+            .child(top)
+            // Snooze and Cancel under it, as on an ask's card.
+            .children(
+                self.snooze_cancel_row(card, p, cx)
+                    .map(|controls| div().pl(px(22.0 * s)).child(controls)),
+            )
             .into_any_element()
     }
 
@@ -604,7 +616,106 @@ impl NativeChatView {
                     }),
             );
         }
+        if let Some(controls) = self.snooze_cancel_row(card, p, cx) {
+            column = column.child(div().pl(px(22.0 * s)).child(controls));
+        }
         column.into_any_element()
+    }
+
+    /// Snooze (1 hour, 6 hours or 24 hours, opened from a quiet "Snooze") and Cancel, on a docked
+    /// ask, form or page (gx-chat-core work_cards.rs `snooze_choices`); `None` when it offers neither.
+    fn snooze_cancel_row(
+        &self,
+        card: &Value,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
+        let choices: Vec<Value> = card["snooze"].as_array().cloned().unwrap_or_default();
+        let cancel = card["cancel"].clone();
+        if choices.is_empty() && !cancel.is_object() {
+            return None;
+        }
+        let s = p.scale;
+        let key = text(card, "key");
+        let open_key = format!("snooze-open:{key}");
+        let open = self.expanded.contains(&open_key);
+        let quiet = |id: String, label: &str| {
+            div()
+                .id(gpui::SharedString::from(id))
+                .role(gpui::Role::Button)
+                .aria_label(label.to_string())
+                .flex_shrink_0()
+                .text_color(p.muted)
+                .chat_cursor_pointer()
+                .hover(|style| style.text_color(p.foreground))
+                .child(label.to_string())
+        };
+        let mut row = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_x(px(14.0 * s))
+            .gap_y(px(4.0 * s))
+            .text_size(px(PROSE_SIZE * s))
+            .line_height(px(PROSE_LINE_HEIGHT * s));
+        if !choices.is_empty() {
+            let toggle = open_key.clone();
+            row = row.child(
+                quiet(
+                    format!("work-snooze:{key}"),
+                    if open { "Snooze for" } else { "Snooze" },
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    if !this.expanded.remove(&toggle) {
+                        this.expanded.insert(toggle.clone());
+                    }
+                    cx.notify();
+                })),
+            );
+            if open {
+                for (index, choice) in choices.iter().enumerate() {
+                    let command = choice["command"].clone();
+                    let close = open_key.clone();
+                    row = row.child(
+                        div()
+                            .id(gpui::SharedString::from(format!(
+                                "work-snooze:{key}:{index}"
+                            )))
+                            .role(gpui::Role::Button)
+                            .aria_label(format!("Snooze for {}", text(choice, "label")))
+                            .px(px(8.0 * s))
+                            .rounded(px(6.0 * s))
+                            .bg(p.foreground.opacity(0.06))
+                            .text_color(p.card_muted)
+                            .chat_cursor_pointer()
+                            .hover(|style| style.bg(p.foreground.opacity(0.1)))
+                            .child(text(choice, "label"))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.expanded.remove(&close);
+                                this.invoke(command.clone(), cx);
+                            })),
+                    );
+                }
+            }
+        }
+        if cancel.is_object() {
+            row = row.child(
+                quiet(format!("work-cancel:{key}"), "Cancel")
+                    .tooltip(|window, cx| {
+                        gpui_component::tooltip::Tooltip::new(
+                            "Cancel it for good and tell the agent",
+                        )
+                        .build(window, cx)
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(cancel.clone(), cx);
+                    })),
+            );
+        }
+        Some(row.into_any_element())
     }
 
     /// One part of a card's bottom line (`chips` in gx-chat-core work_cards.rs `item_chips`).

@@ -1011,7 +1011,6 @@ pub fn open_resource(state: &mut ChatState, context: &ChatContext, id: &str) -> 
     show(state, context, id)
 }
 
-
 /// The query that opens a published page read-only (server/src/visual_pages/serve.rs): its
 /// answers are not sent, because they would go to the thread that posted it and not to the
 /// coordinator the reader is talking to.
@@ -1079,7 +1078,6 @@ pub(crate) fn newest_one_click_ask_for_test(
 ) -> Option<(String, String)> {
     newest_one_click_ask(state, tag)
 }
-
 
 /// Scrolls to the row holding `message_id` and flashes `target` there; false when no row holds it.
 pub(crate) fn jump_to_row(
@@ -1287,7 +1285,10 @@ mod tests {
         state.session.resource_index = vec![indexed("old", "form", "waiting", 1_000)].into();
         assert_eq!(project(&state, &ChatContext::default()).count, 1);
         let effects = previous(&mut state, &ChatContext::default());
-        assert!(!effects.is_empty(), "the click reads the form back for the popup");
+        assert!(
+            !effects.is_empty(),
+            "the click reads the form back for the popup"
+        );
         assert!(state
             .questions
             .resource_modal
@@ -1330,7 +1331,10 @@ mod tests {
             Some("open"),
             "the next click lands there again"
         );
-        assert!(state.questions.open_questions.jump.is_none(), "nothing scrolls");
+        assert!(
+            state.questions.open_questions.jump.is_none(),
+            "nothing scrolls"
+        );
     }
 
     #[test]

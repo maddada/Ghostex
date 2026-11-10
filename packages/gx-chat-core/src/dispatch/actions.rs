@@ -80,6 +80,8 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::JumpToQuestion
         | ActionKind::QuestionForLater
         | ActionKind::QuestionRemove
+        | ActionKind::SnoozeQuestion
+        | ActionKind::CancelQuestion
         | ActionKind::QuestionListFilter
         | ActionKind::OpenResource
         | ActionKind::CloseResource
@@ -187,6 +189,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::CoordinatorBoardAnswer
         | ActionKind::JumpToWorkCard
         | ActionKind::DismissWorkDockCard
+        | ActionKind::SnoozeWorkAsk
         | ActionKind::InsertBoardReference
         | ActionKind::HideCoordinatorIntro
         | ActionKind::ToggleAutopilot
@@ -367,6 +370,7 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::CoordinatorBoardAnswer
         | ActionKind::JumpToWorkCard
         | ActionKind::DismissWorkDockCard
+        | ActionKind::SnoozeWorkAsk
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
         | ActionKind::ToggleAutopilot
@@ -438,6 +442,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::CoordinatorBoardAnswer
             | ActionKind::JumpToWorkCard
             | ActionKind::DismissWorkDockCard
+            | ActionKind::SnoozeWorkAsk
             | ActionKind::InsertBoardReference
             | ActionKind::HideCoordinatorIntro
             | ActionKind::ToggleAutopilot

@@ -276,6 +276,27 @@ fn ask_buttons(item: &Value, ask: &Value, key: &str, picked: Option<&str>) -> Ve
         .collect()
 }
 
+/// Whether an open ask is snoozed now: gxserver's `snoozedUntil`, or a snooze sent from here.
+fn snoozed(ask: &Value, key: &str, state: &ChatState, now_ms: i64) -> bool {
+    at_ms(text(ask, "snoozedUntil")).is_some_and(|until| until > now_ms)
+        || state
+            .extras
+            .panels
+            .work_snoozed
+            .get(key)
+            .is_some_and(|until| *until > now_ms)
+}
+
+/// Snooze for 1, 6 or 24 hours, as the dock's cards offer it (`command` per hours).
+fn snooze_choices(snooze: impl Fn(u64) -> Value) -> Value {
+    Value::Array(
+        [(1, "1 hour"), (6, "6 hours"), (24, "24 hours")]
+            .into_iter()
+            .map(|(hours, label)| json!({ "label": label, "command": snooze(hours) }))
+            .collect(),
+    )
+}
+
 /// An ask's card: its question, what waits on it, the work it belongs to, and its buttons while
 /// open; folded once settled (its answer whole in `foldOutcome`).
 fn ask_card(
@@ -310,7 +331,21 @@ fn ask_card(
     } else {
         Vec::new()
     };
+    let snooze = snooze_choices(
+        |hours| json!({ "type": "snoozeWorkAsk", "key": key, "item": reference, "ask": tag, "hours": hours }),
+    );
+    let cancel = json!({
+        "type": "coordinatorBoardAnswer",
+        "op": "cancel",
+        "key": key,
+        "item": reference,
+        "ask": tag,
+        "label": "Cancelled",
+        "text": format!("{reference} {tag}: I cancelled this question; no need to ask it again."),
+    });
     json!({
+        "snooze": if open { snooze } else { Value::Null },
+        "cancel": if open { cancel } else { Value::Null },
         "key": key,
         "kind": "ask",
         "folded": ask["open"] != true,
@@ -377,6 +412,10 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
                 continue;
             }
             let key = format!("work-ask:{}:{}", text(item, "ref"), text(ask, "tag"));
+            // A snoozed ask waits out of the dock until its end.
+            if snoozed(ask, &key, state, now_ms) {
+                continue;
+            }
             let at = at_ms(text(ask, "askedAt")).unwrap_or(now_ms);
             cards.push((
                 at,
@@ -497,6 +536,10 @@ fn question_dock_cards(state: &ChatState) -> Vec<Value> {
                 "title": if asker.title.is_empty() { "Questions" } else { asker.title.as_str() },
                 "line": format!("{open} {noun} open \u{b7} {}", if form { "Form" } else { "Page" }),
                 "command": { "type": "openResource", "id": asker.id },
+                "snooze": snooze_choices(
+                    |hours| json!({ "type": "snoozeQuestion", "id": asker.id, "hours": hours }),
+                ),
+                "cancel": { "type": "cancelQuestion", "id": asker.id },
             })
         })
         .collect()
@@ -633,11 +676,13 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
                 let key = format!("work-ask:{reference}:{tag}");
                 let at = at_ms(text(event, "at")).unwrap_or(first_at);
                 if ask["open"] == true {
-                    open_asks.push(OpenAsk {
-                        key: key.clone(),
-                        anchor: anchor.to_string(),
-                        at,
-                    });
+                    if !snoozed(ask, &key, state, now_ms) {
+                        open_asks.push(OpenAsk {
+                            key: key.clone(),
+                            anchor: anchor.to_string(),
+                            at,
+                        });
+                    }
                     // An open ask waits in the dock above the chat box (`dock`), not here.
                     continue;
                 }

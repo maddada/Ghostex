@@ -1517,7 +1517,8 @@ pub fn answer(
     let mut body = json!({
         "projectId": state.identity.project_id,
         "sessionId": state.identity.session_id,
-        "op": "answer",
+        // `cancel` withdraws a work ask for good (work.rs); its message goes the same way.
+        "op": if field("op") == "cancel" { "cancel" } else { "answer" },
         "item": item,
         "answer": label,
     });

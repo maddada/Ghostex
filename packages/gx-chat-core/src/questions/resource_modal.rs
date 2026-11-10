@@ -873,7 +873,10 @@ mod tests {
         let mut state = ChatState::default();
         state.session.resource_index = vec![index_entry(&id, "form", Some(7_000))].into();
         let effects = crate::questions::open_questions::previous(&mut state, &context);
-        assert!(matches!(&effects[..], [Effect::SendRpc { .. }]), "{effects:?}");
+        assert!(
+            matches!(&effects[..], [Effect::SendRpc { .. }]),
+            "{effects:?}"
+        );
         assert!(state
             .questions
             .resource_modal

@@ -251,6 +251,11 @@ async fn answer_session_chat_prompt(
         };
         let remove = kind == "questionRemove";
         let later = params.get("later").and_then(Value::as_bool).unwrap_or(true);
+        // Snooze: For later for this many hours (session_chat_open_questions.rs `LATER_UNTIL_KEY`).
+        let hours = params
+            .get("hours")
+            .and_then(Value::as_u64)
+            .filter(|hours| (1..=24 * 14).contains(hours));
         let worker_state = state.clone();
         let (project_id, session_id) = (target.project_id.clone(), target.session_id.clone());
         let result = tokio::task::spawn_blocking(move || {
@@ -268,6 +273,7 @@ async fn answer_session_chat_prompt(
                     &session_id,
                     &question_id,
                     later,
+                    hours,
                 )
             }
         })
