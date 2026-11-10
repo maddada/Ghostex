@@ -54,7 +54,7 @@ const DOCK_LEAD: f32 = 23.0;
 /// The rows' width before the dock has painted once (the chat box's own width).
 const DOCK_ROW_WIDTH_GUESS: f32 = 736.0;
 /// How many lines an opened row's question shows before its "more".
-const DOCK_QUESTION_LINES: usize = 4;
+pub(super) const DOCK_QUESTION_LINES: usize = 4;
 
 /// How wide `label` is in the chat's font at `size` (both unscaled).
 fn dock_text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
@@ -666,51 +666,58 @@ impl NativeChatView {
             );
         }
         let beside = !open || fit;
-        // The question: one cut line closed; opened, up to four lines and then "more".
-        let more_key = format!("dock-row-more:{key}");
+        // The question: one cut line closed. Opened, the title whole and its detail under it in
+        // the quieter colour, four lines and then "more"; with no detail the title takes that rule.
         let title_width =
             row_width - DOCK_LEAD - age_width - if beside { all_width + DOCK_GAP } else { 0.0 };
-        let long = open
-            && dock_text_width(&title, PROSE_SIZE, p, cx)
-                > title_width.max(80.0) * (DOCK_QUESTION_LINES as f32 - 0.25);
-        let whole = long && self.expanded.contains(&more_key);
-        let question = div()
-            .flex_1()
-            .min_w_0()
-            .text_color(body)
-            .when(!open, |title| title.truncate())
-            .when(open, |title| title.whitespace_normal())
-            .when(long && !whole, |title| {
-                title.line_clamp(DOCK_QUESTION_LINES).text_ellipsis()
-            })
-            .child(title.to_string());
-        let question = if long {
-            let more_key = more_key.clone();
+        let detail = text(row, "body");
+        let question = if !open {
+            div()
+                .flex_1()
+                .min_w_0()
+                .text_color(body)
+                .truncate()
+                .child(title.to_string())
+                .into_any_element()
+        } else if detail.is_empty() {
+            div()
+                .flex_1()
+                .min_w_0()
+                .child(self.ask_detail(
+                    &format!("title:{key}"),
+                    &title,
+                    title_width,
+                    body,
+                    PROSE_SIZE,
+                    PROSE_LINE_HEIGHT,
+                    p,
+                    cx,
+                ))
+                .into_any_element()
+        } else {
             div()
                 .flex_1()
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .child(question)
+                .gap(px(2.0 * s))
                 .child(
                     div()
-                        .id(gpui::SharedString::from(format!("dock-row-more:{key}")))
-                        .role(gpui::Role::Button)
-                        .aria_expanded(whole)
-                        .text_color(p.muted)
-                        .chat_cursor_pointer()
-                        .hover(|style| style.text_color(p.foreground))
-                        .child(if whole { "less" } else { "more" })
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            cx.stop_propagation();
-                            if !this.expanded.remove(&more_key) {
-                                this.expanded.insert(more_key.clone());
-                            }
-                            cx.notify();
-                        })),
+                        .whitespace_normal()
+                        .text_color(body)
+                        .child(title.to_string()),
                 )
-        } else {
-            question
+                .child(self.ask_detail(
+                    &format!("detail:{key}"),
+                    &detail,
+                    title_width,
+                    p.card_muted,
+                    PROSE_SIZE,
+                    PROSE_LINE_HEIGHT,
+                    p,
+                    cx,
+                ))
+                .into_any_element()
         };
         let mut head = div()
             .id(gpui::SharedString::from(format!("dock-row-head:{key}")))
@@ -856,6 +863,73 @@ impl NativeChatView {
             .bg(p.foreground.opacity(0.03))
             .child(head)
             .child(under)
+            .into_any_element()
+    }
+
+    /// Words that show four lines and then "more", which shows the rest ("less" folds them
+    /// again): a work ask's detail under its title, or a long question with no detail, on a dock
+    /// row and on an opened Work panel or Columns card. `width` is the room the words wrap in
+    /// (unscaled), `size` and `line_height` their text's.
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// User: an ask has a short title and a description ("please we need to tell the agent to
+    /// write a easy to understand title, and then the description can describe more"); the
+    /// opened row shows the title and the detail under it in the quieter colour, with the four
+    /// lines then "more" rule picked for a very long question.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn ask_detail(
+        &self,
+        id: &str,
+        words: &str,
+        width: f32,
+        color: gpui::Hsla,
+        size: f32,
+        line_height: f32,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let more_key = format!("more:{id}");
+        let long = dock_text_width(words, size, p, cx)
+            > width.max(80.0) * (DOCK_QUESTION_LINES as f32 - 0.25);
+        let whole = long && self.expanded.contains(&more_key);
+        let text_block = div()
+            .min_w_0()
+            .whitespace_normal()
+            .text_size(px(size * s))
+            .line_height(px(line_height * s))
+            .text_color(color)
+            .when(long && !whole, |words| {
+                words.line_clamp(DOCK_QUESTION_LINES).text_ellipsis()
+            })
+            .child(words.to_string());
+        if !long {
+            return text_block.into_any_element();
+        }
+        div()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .child(text_block)
+            .child(
+                div()
+                    .id(gpui::SharedString::from(format!("more:{id}")))
+                    .role(gpui::Role::Button)
+                    .aria_expanded(whole)
+                    .text_size(px(size * s))
+                    .line_height(px(line_height * s))
+                    .text_color(p.muted)
+                    .chat_cursor_pointer()
+                    .hover(|style| style.text_color(p.foreground))
+                    .child(if whole { "less" } else { "more" })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        if !this.expanded.remove(&more_key) {
+                            this.expanded.insert(more_key.clone());
+                        }
+                        cx.notify();
+                    })),
+            )
             .into_any_element()
     }
 

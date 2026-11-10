@@ -227,7 +227,12 @@ fn expanded_card_height(row: &Value) -> f32 {
     } else {
         lines(&line) * 19.0 + 6.0
     };
-    20.0 + lines(&text(row, "title")) * 20.0 + body + 28.0 + 32.0
+    // A work ask's detail under its title, four lines at most until "more" (`board_card`).
+    let detail = match text(row, "body").as_str() {
+        "" => 0.0,
+        words => lines(words).min(super::work_cards::DOCK_QUESTION_LINES as f32 + 1.0) * 19.0 + 6.0,
+    };
+    20.0 + lines(&text(row, "title")) * 20.0 + detail + body + 28.0 + 32.0
 }
 
 /// The board's content height (unscaled): its header, each group's line, an open group's rows
@@ -1403,6 +1408,21 @@ impl NativeChatView {
                     .children(self.board_restore_button(row, p, cx)),
             );
         if expanded {
+            // A work ask's longer explanation under its short title, in the quieter colour: four
+            // lines, then "more" (the dock row's rule, work_cards.rs `ask_detail`).
+            let body = text(row, "body");
+            if !body.is_empty() {
+                card = card.child(self.ask_detail(
+                    &key,
+                    &body,
+                    inner_width,
+                    p.card_muted,
+                    13.0,
+                    19.0,
+                    p,
+                    cx,
+                ));
+            }
             // Its latest line (a thread's report or what it is on, an item's note), whole.
             let line = Some(text(row, "detail"))
                 .filter(|line| !line.is_empty())

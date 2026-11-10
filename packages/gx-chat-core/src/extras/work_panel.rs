@@ -215,6 +215,8 @@ fn ask_row(item: &Value, ask: &Value, now_ms: i64) -> Value {
         "askRow": true,
         "group": if !snoozed.is_empty() { "later" } else if holds { "blocked" } else { "needs" },
         "title": text(ask, "text"),
+        // Its longer explanation under the short title (`item ask --detail`).
+        "body": text(ask, "detail"),
         "detail": detail,
         "note": if steps.is_empty() { detail.clone() } else { format!("{detail} \u{b7} Steps: {steps}") },
         "at": text(ask, "askedAt"),

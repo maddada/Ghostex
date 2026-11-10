@@ -380,6 +380,8 @@ fn ask_card(
         "folded": ask["open"] != true,
         "ref": reference,
         "title": text(ask, "text"),
+        // Its longer explanation under the short title (`item ask --detail`), "" for none.
+        "body": text(ask, "detail"),
         "status": ask_status,
         "statusLabel": status_label(ask_status),
         "tag": tag,
@@ -470,6 +472,7 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
                 "kind": "ask",
                 "status": card["status"],
                 "title": card["title"],
+                "body": card["body"],
                 "age": card["age"],
                 // The work it belongs to is its link (`chips`), not a second line.
                 "detail": [card["line"]],

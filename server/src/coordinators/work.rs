@@ -63,7 +63,16 @@ pub struct WorkThread {
 pub struct WorkAsk {
     /// Its question tag (`Q2101`), "" for an ask moved from the board without one.
     pub tag: String,
+    /// What it asks, as its title: one short plain question or instruction.
     pub text: String,
+    /// The longer explanation under the title (why, what to check, where), "" for none; asks
+    /// stored before it read as "".
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// User, of dock rows showing the first words of a whole paragraph: "please we need to tell
+    /// the agent to write a easy to understand title, and then the description can describe
+    /// more". `item ask W7 "<title>" --detail "<the rest>"`.
+    pub detail: String,
     /// One-click answers, the recommended one ending in `*` ("Yes*,No"); "" for a task.
     pub answers: String,
     /// The work stops until the user does it: the item is Blocked while it is open.
@@ -658,7 +667,11 @@ fn ask_value(ask: &WorkAsk) -> Value {
         "open": ask.is_open(),
         "askedAt": ask.asked_at,
     });
-    for (key, value) in [("steps", &ask.steps), ("answered", &ask.answered)] {
+    for (key, value) in [
+        ("detail", &ask.detail),
+        ("steps", &ask.steps),
+        ("answered", &ask.answered),
+    ] {
         if !value.is_empty() {
             out[key] = json!(value);
         }
@@ -1162,6 +1175,7 @@ pub fn handle_work_request(
             item.asks.push(WorkAsk {
                 tag: tag.clone(),
                 text: words.clone(),
+                detail: param_text(params, "detail").unwrap_or_default(),
                 answers: param_text(params, "answers").unwrap_or_default(),
                 holds: params.get("holds").and_then(Value::as_bool) == Some(true),
                 steps: param_text(params, "steps").unwrap_or_default(),

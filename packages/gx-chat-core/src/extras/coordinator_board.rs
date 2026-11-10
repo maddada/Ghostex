@@ -154,6 +154,10 @@ pub struct BoardRow {
     /// it up ("iPhone push · Holds it up", work_panel.rs); "" elsewhere.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub lead: String,
+    /// A work item ask's longer explanation under its short title (`item ask --detail`), which
+    /// an opened card shows in the quieter colour; "" elsewhere.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub body: String,
     /// The card is open: it shows its whole line of work and its buttons (one card at a time).
     #[serde(default)]
     pub expanded: bool,
@@ -569,6 +573,7 @@ fn board_row(row: &Value, now_ms: i64, picked: Option<&str>) -> BoardRow {
         },
         answers,
         lead: String::new(),
+        body: text(row, "body").to_string(),
         key: text(row, "key").to_string(),
         title: title.to_string(),
         detail: text(row, "detail").to_string(),
@@ -856,6 +861,7 @@ fn question_rows(state: &ChatState, now_ms: i64) -> Vec<BoardRow> {
                         note: String::new(),
                         answers: Vec::new(),
                         lead: String::new(),
+                        body: String::new(),
                         // A question leaves by being answered, or put off For later in Resources.
                         remove: Value::Null,
                         restore: Value::Null,

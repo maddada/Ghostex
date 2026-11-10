@@ -116,6 +116,7 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
         ("until", "until"),
         ("steps", "steps"),
         ("tag", "tag"),
+        ("detail", "detail"),
     ] {
         if let Some(value) = flag_text(&parsed.flags, flag) {
             params.insert(key.into(), json!(value));
@@ -293,6 +294,10 @@ pub(super) fn item(args: &[String], parsed: &ParsedArgs) -> CliResult<()> {
                     ""
                 }
             );
+            let detail = agents::text(&ask, "detail");
+            if !detail.is_empty() {
+                println!("  {detail}");
+            }
             println!("  {}", one_line(&item));
         }
         "settle" => println!("{name}: ask settled. {}", one_line(&item)),
@@ -452,6 +457,10 @@ fn print_item(item: &Value, full: bool) {
                 format!(" [{}]", answers.join(" | "))
             }
         );
+        let detail = agents::text(ask, "detail");
+        if !detail.is_empty() {
+            println!("        {detail}");
+        }
     }
     for wait in item["waits"].as_array().into_iter().flatten() {
         let until = agents::text(wait, "until");

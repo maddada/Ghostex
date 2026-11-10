@@ -30,8 +30,8 @@ USAGE
                               [--release <name>] [--json]
   ghostex coordinator item now <W7> "<where it stands>" [--thread <thread-ref>]... [--json]
   ghostex coordinator item step <W7> "<step>" [--done] [--chore] [--json]
-  ghostex coordinator item ask <W7> "<what you ask>" [--answers "A,B" | --answer "A" --answer "B"]
-                              [--recommended B]
+  ghostex coordinator item ask <W7> "<title>" [--detail "<the rest>"]
+                              [--answers "A,B" | --answer "A" --answer "B"] [--recommended B]
                               [--holds] [--steps <file|url>] [--tag Q12] [--json]
   ghostex coordinator item ask <W7> (--done <Q12> | --withdraw <Q12>) [--json]
   ghostex coordinator item wait <W7> --on <W8|Q12|"words">... [--until <when>] ["<line>"] [--json]
@@ -244,7 +244,11 @@ WORK ITEMS
   append, say where it stands now. step records a step (--done when it is);
   --chore keeps a rebuild or test run out of sight: chores are never shown.
   ask puts something before the user, with a question tag (the next after the
-  chat's, or --tag Q12 for one already asked in the chat): one-click answers
+  chat's, or --tag Q12 for one already asked in the chat). Its title is one
+  short plain question or instruction a person understands at a glance, about
+  ten words, with no item names or code names ("Ship the new pairing screen
+  today?"); everything else (why, what to check, where) goes in --detail, which
+  shows under the title when the user opens the row. One-click answers
   with --answers (commas split them; write \, for a comma inside an answer,
   or give each with --answer "Too small to read, simplify it"), the steps to
   follow with --steps, and --holds when the work
