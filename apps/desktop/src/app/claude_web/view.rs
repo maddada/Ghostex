@@ -58,9 +58,9 @@ pub(crate) fn grok_web_view() -> GpuiCustomView {
     );
     GpuiCustomView {
         id: ExtensionId::new(GROK_WEB_VIEW_ID).expect("built-in view ID"),
-        title: "Grok".into(),
+        title: "Grok Bot".into(),
         enabled: settings.grok_web_enabled(),
         url: start,
-        definition: json!({"id": GROK_WEB_VIEW_ID, "name": "Grok", "availability": "all"}),
+        definition: json!({"id": GROK_WEB_VIEW_ID, "name": "Grok Bot", "availability": "all"}),
     }
 }

@@ -388,7 +388,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("placement", J::Str("feature")),
         ("settingsKey", J::Str("grokWebHidden")),
         ("appWide", J::Bool(true)),
-        ("title", J::Str("Grok")),
+        ("title", J::Str("Grok Bot")),
         ("settingKeys", J::Arr(&[J::Str("grokWebStartPage"), J::Str("grokWebLogins")])),
     ]),
     // CDXC:Extensions 2026-10-19 DECISION:

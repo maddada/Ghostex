@@ -417,8 +417,8 @@ fn browser_section(
     if g.visible("browser", "grokWebStartPage") {
         let spec = g.spec(
             "grokWebStartPage",
-            "Grok start page",
-            "The page the Grok view opens on, for every Grok login: grok.com, or a page of your own such as one of your Grok bots. Left empty, or not a web address, it opens grok.com.",
+            "Grok Bot start page",
+            "The page the Grok Bot view opens on, for every Grok Bot login: grok.com, or a page of your own such as one of your Grok bots. Left empty, or not a web address, it opens grok.com.",
         );
         let value = g.values.string("grokWebStartPage");
         rows.push(text_field(
@@ -438,8 +438,8 @@ fn browser_section(
     if g.visible("browser", "grokWebLogins") {
         let spec = g.spec(
             "grokWebLogins",
-            "Grok logins",
-            "The logins the bar above the Grok page switches between, each signed in on its own. Removing one signs it out.",
+            "Grok Bot logins",
+            "The logins the bar above the Grok Bot page switches between, each signed in on its own. Removing one signs it out.",
         );
         let value = g.values.value("grokWebLogins");
         rows.push(grok_logins_field(

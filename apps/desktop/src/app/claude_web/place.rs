@@ -34,7 +34,7 @@ impl WebPlace {
     pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Claude => "Claude",
-            Self::Grok => "Grok",
+            Self::Grok => "Grok Bot",
         }
     }
 
