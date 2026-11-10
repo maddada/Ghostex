@@ -90,15 +90,19 @@ pub const PLAYBOOK_OVERRIDES_PRECEDENCE: &str = "The user wrote these overrides 
 ///
 /// CDXC:Coordinators 2026-11-07 DECISION:
 /// User: "Let us actually make people override parts of the original playbook, not edit it ok? So they have a section for overriding any part of the playbook so this way updates still work and all that. we need to add a note that what the user mentions in the override below takes higher precedence than the playbook instructions since the playbook instructions are general while the overrides are specific to the actual current user". Ghostex's playbook is never edited any more; the user's overrides (one text for every coordinator) follow it under their own heading with that precedence line.
+/// The reply format every coordinator's guide ends with (see `coordinator_guide_for`).
+pub const COORDINATOR_REPLY_FORMAT: &str = "Reply format: your work items are your status. Each reply is a couple of sentences of news, then only what a card cannot hold (a cause or diagnosis, a caveat or risk, a draft to paste, the reasoning behind a recommendation), short and in plain prose; Ghostex draws a card under it for each line of work you changed this turn (see \"Work items\"). Write no status sections (Done, Kicked off, In progress, Needs you and the rest) and no section marker emoji (✅, 🔄, ❓ and the others), even where a \"Marked handovers\" note elsewhere in your instructions asks for them: that note is for the user's other sessions, not for coordinators.";
+
 pub fn coordinator_guide_for(playbook: &str, overrides: &str, paths: &GxserverPaths) -> String {
     let playbook = playbook.trim();
-    let mut guide = if crate::agents::orchestrator_plain_replies(paths) {
-        format!(
-            "{playbook}\n\nReply format: the user chose plain answers for coordinators. Write your handovers as ordinary text with your own headings, without section marker emoji.\n"
-        )
-    } else {
-        format!("{playbook}\n\n{}\n", crate::agents::MARKED_HANDOVERS_NOTE)
-    };
+    // CDXC:Coordinators 2026-11-10 DECISION:
+    // User (Q2166 "A"): for coordinators the work item cards take over the handover's status
+    // sections, while the Marked handovers setting keeps working for every other session. So a
+    // coordinator's guide carries this reply format instead of the marked-handovers note, and says
+    // that note (which reaches its launch when the setting is on) is not for it. Orchestrators
+    // answer without markers (`orchestratorPlainReplies`) changes nothing for it any more.
+    let _ = paths;
+    let mut guide = format!("{playbook}\n\n{COORDINATOR_REPLY_FORMAT}\n");
     let overrides = overrides.trim();
     if !overrides.is_empty() {
         guide.push_str(&format!(
