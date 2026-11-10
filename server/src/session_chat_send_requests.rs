@@ -358,6 +358,39 @@ pub(crate) fn mark_sent(paths: &GxserverPaths, key: &SendRequestKey, result: &Va
     }
 }
 
+/// Settles an interrupted attempt the transcript proved arrived, unless another replay of it
+/// settled it first: then that replay's stored answer stands and is returned, so two replays
+/// running at once answer the same.
+///
+/// CDXC:SessionChat 2026-11-11 FIX:
+/// GitHub #554 (a comment of its author's): two replays of a send cut off by a restart both saw it unsettled, and the second one's plain "recovered" answer overwrote what the first stored, the thread reopen it had recorded included (session_chat_send/send_reopen.rs). Only nothing was delivered twice; the answers differed. The first settle wins now.
+pub(crate) fn mark_recovered(paths: &GxserverPaths, key: &SendRequestKey, result: &Value) -> Value {
+    let Ok(db) = open_gxserver_database(paths) else {
+        return result.clone();
+    };
+    let changed = db
+        .execute(
+            r#"
+            UPDATE session_chat_send_requests SET state = 'sent', response = ?4, updatedAtMs = ?5
+            WHERE projectId = ?1 AND sessionId = ?2 AND sendRequestId = ?3 AND state <> 'sent'
+            "#,
+            params![
+                key.project_id,
+                key.session_id,
+                key.send_request_id,
+                result.to_string(),
+                now_ms()
+            ],
+        )
+        .unwrap_or(0);
+    if changed > 0 {
+        return result.clone();
+    }
+    stored_send_result(paths, key)
+        .map(Value::Object)
+        .unwrap_or_else(|| result.clone())
+}
+
 /// Whether the session's transcript records a user turn carrying the text since the interrupted
 /// attempt began. False when it cannot tell (no text to match, no transcript yet).
 pub(crate) async fn interrupted_send_arrived(
@@ -480,8 +513,11 @@ where
                 )
                 .await
                 {
-                    let result = json!({ "queued": true, "recoveredAfterRestart": true });
-                    mark_sent(&state.paths, &key, &result);
+                    let result = mark_recovered(
+                        &state.paths,
+                        &key,
+                        &json!({ "queued": true, "recoveredAfterRestart": true }),
+                    );
                     return replay(endpoint_path, request_id, result, &send_request_id);
                 }
                 return with_send_request_id(
