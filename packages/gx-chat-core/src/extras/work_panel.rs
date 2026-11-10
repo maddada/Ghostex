@@ -19,7 +19,7 @@
 //! SEE-ALSO: packages/gx-chat-core/src/extras/coordinator_board.rs (the wording, folds and menus),
 //! packages/gx-chat-core/src/extras/work_cards.rs (the same items as cards in the chat).
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::extras::work_cards::{owner_words, waits_line};
 
@@ -58,8 +58,9 @@ fn group_of(status: &str) -> &'static str {
     }
 }
 
-/// An item's own chips after the board's: who has the ball, its steps, what it asks of the user.
-fn item_chips(item: &Value, status: &str) -> Vec<Value> {
+/// An item's own chips after the board's: who has the ball, its steps, what it asks of the user
+/// (its open asks not snoozed at `now_ms`: a snoozed one waits in Later, so it is not "for you").
+fn item_chips(item: &Value, status: &str, now_ms: i64) -> Vec<Value> {
     let mut chips = Vec::new();
     let owner = owner_words(item);
     let waiting_says = status == "waiting" && !waits_line(item).is_empty();
@@ -84,7 +85,7 @@ fn item_chips(item: &Value, status: &str) -> Vec<Value> {
         .as_array()
         .into_iter()
         .flatten()
-        .filter(|ask| ask["open"] == true)
+        .filter(|ask| ask["open"] == true && !snoozed_at(ask, now_ms))
         .count();
     if open > 0 {
         chips.push(
@@ -95,7 +96,7 @@ fn item_chips(item: &Value, status: &str) -> Vec<Value> {
 }
 
 /// An item's row, in the shape of a board item row.
-fn item_row(item: &Value, group: &str, status: &str) -> Value {
+fn item_row(item: &Value, group: &str, status: &str, now_ms: i64) -> Value {
     let reference = text(item, "ref");
     let mut line = text(item, "now").to_string();
     if status == "waiting" {
@@ -122,7 +123,7 @@ fn item_row(item: &Value, group: &str, status: &str) -> Value {
             line.clone()
         },
         "at": text(item, "at"),
-        "workChips": item_chips(item, status),
+        "workChips": item_chips(item, status, now_ms),
     });
     for key in ["reason", "release", "link", "tag", "tagLook", "links", "pr"] {
         if let Some(value) = item.get(key).filter(|value| !value.is_null()) {
@@ -329,7 +330,7 @@ pub fn work_board_at(work: &Value, now_ms: i64) -> Value {
                 .flatten()
                 .any(|thread| thread["state"] == "waiting" || thread["stuck"] == true);
         if !only_asking {
-            push(group, item_row(item, group, status));
+            push(group, item_row(item, group, status, now_ms));
         }
     }
     let groups: Vec<Value> = WORK_GROUPS

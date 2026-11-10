@@ -20,7 +20,7 @@
 use std::collections::BTreeMap;
 
 use ghostex_gx_protocol::ChatRole;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::state::{ChatContext, ChatState};
 
@@ -150,7 +150,7 @@ pub fn waits_line(item: &Value) -> String {
 /// the border and make them look better also i don't know wtf is You there, just remove it". The
 /// chips are an icon and muted words with no outline or fill (the renderers), and an owner shows
 /// only where it says something the card does not: which thread has the work.
-pub fn item_chips(item: &Value) -> Vec<Value> {
+pub fn item_chips(item: &Value, now_ms: i64) -> Vec<Value> {
     let mut chips = Vec::new();
     for thread in item["threads"].as_array().into_iter().flatten() {
         let title = text(thread, "title");
@@ -181,7 +181,11 @@ pub fn item_chips(item: &Value) -> Vec<Value> {
         .as_array()
         .into_iter()
         .flatten()
-        .filter(|ask| ask["open"] == true)
+        // A snoozed ask waits in Later until its snooze ends, so it is not "for you" meanwhile.
+        .filter(|ask| {
+            ask["open"] == true
+                && !at_ms(text(ask, "snoozedUntil")).is_some_and(|until| until > now_ms)
+        })
         .count();
     if open > 0 && !matches!(text(item, "status"), "needs" | "blocked") {
         chips.push(json!({ "kind": "question", "label": format!("{open} for you") }));
@@ -799,7 +803,7 @@ fn dock_item_card(item: &Value, now_ms: i64, done_key: Option<String>) -> Value 
         "status": status,
         "statusLabel": status_label(status),
         "line": line,
-        "chips": item_chips(item),
+        "chips": item_chips(item, now_ms),
         "age": crate::transcript::message_time::age_label(now_ms, at),
         "at": at,
     });
