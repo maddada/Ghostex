@@ -380,6 +380,7 @@ fn expected_of(case: &Value) -> Value {
     let folds = UnifiedFolds {
         unfolded: strings(&case["folds"]["unfolded"]).into_iter().collect(),
         older_shown: strings(&case["folds"]["olderShown"]).into_iter().collect(),
+        reveal: case["folds"]["reveal"].as_str().map(str::to_string),
     };
     let view = build_unified_sidebar_folded(&inputs, settings, &filter, None, &folds, now);
     let mut crews = BTreeMap::new();
@@ -923,6 +924,14 @@ fn cases() -> Vec<Value> {
             "machines": tree_machines(),
         }),
         json!({
+            "name": "a revealed older thread is listed with its coordinators unfolded, its siblings' older threads stay tucked",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {},
+            "folds": {"unfolded": ["local|p|lead"], "reveal": "old"},
+            "machines": tree_machines(),
+        }),
+        json!({
             "name": "a coordinator's older threads and a sub-coordinator's threads listed",
             "nowMs": now,
             "settings": {"workingSection": true, "parking": true},
@@ -936,6 +945,39 @@ fn cases() -> Vec<Value> {
             "settings": {"workingSection": true, "parking": true},
             "filter": {"query": "deepest"},
             "machines": tree_machines(),
+        }),
+        json!({
+            "name": "a search matching a folded coordinator and one of its threads opens it to that thread",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {"query": "api"},
+            "machines": [{
+                "machine": "local", "label": "Local", "serverId": "S1",
+                "projects": [{"projectId": "p", "title": "p", "path": "/p"}],
+                "sessions": [
+                    session("api-lead", "p", json!({"title": "API coordinator", "isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000})),
+                    session("api-tests", "p", json!({"title": "API tests", "createdMs": 10, "lastInteractionMs": 9_100_000, "coordinatorProjectId": "p", "coordinatorSessionId": "api-lead"})),
+                    session("docs", "p", json!({"title": "Docs", "createdMs": 10, "lastInteractionMs": 9_200_000, "coordinatorProjectId": "p", "coordinatorSessionId": "api-lead"})),
+                ],
+            }],
+        }),
+        json!({
+            "name": "a chain of unfolded coordinators is drawn no deeper than the Project sidebar's tree",
+            "nowMs": now,
+            "settings": {"workingSection": true, "parking": true},
+            "filter": {},
+            "folds": {"unfolded": ["local|p|c1", "local|p|c2", "local|p|c3", "local|p|c4"]},
+            "machines": [{
+                "machine": "local", "label": "Local", "serverId": "S1",
+                "projects": [{"projectId": "p", "title": "p", "path": "/p"}],
+                "sessions": [
+                    session("c1", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000})),
+                    session("c2", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000, "coordinatorProjectId": "p", "coordinatorSessionId": "c1"})),
+                    session("c3", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000, "coordinatorProjectId": "p", "coordinatorSessionId": "c2"})),
+                    session("c4", "p", json!({"isCoordinator": true, "createdMs": 10, "lastInteractionMs": 9_000_000, "coordinatorProjectId": "p", "coordinatorSessionId": "c3"})),
+                    session("leaf", "p", json!({"createdMs": 10, "lastInteractionMs": 9_000_000, "coordinatorProjectId": "p", "coordinatorSessionId": "c4"})),
+                ],
+            }],
         }),
         json!({
             "name": "a computer filter keeps a coordinator for its thread on that computer",
