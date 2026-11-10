@@ -104,6 +104,33 @@ impl GhostexGpuiApp {
         self.refresh_web_new_thread_picker_accounts(cx);
     }
 
+    /// The sidebar's New session button (native_sidebar/new_session_row.rs): the picker's first
+    /// row, the agent picked last, started in the open project without the picker, as the
+    /// desktop's New Agent Session does (new_agent_session.rs). Before any agent is known the
+    /// picker opens instead.
+    pub(crate) fn start_new_agent_session(&mut self, cx: &mut Context<Self>) {
+        let hud_agents = self
+            .new_thread_picker_agents
+            .clone()
+            .or_else(|| {
+                self.native_sidebar
+                    .snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.hud["agents"].as_array().cloned())
+            })
+            .unwrap_or_default();
+        let primary = crate::app::gx_store::read_primary_agent_launcher_id();
+        let Some(agent) = rows::order_new_thread_picker_agents(&hud_agents, primary.as_deref())
+            .into_iter()
+            .next()
+        else {
+            self.open_gpui_new_thread_picker(cx);
+            return;
+        };
+        let message = json!({ "type": "runSidebarAgent", "agentId": agent.agent_id });
+        self.dispatch_gpui_sidebar_host_message(message, cx);
+    }
+
     fn close_web_new_thread_picker(&mut self, cx: &mut Context<Self>) {
         if let Some(picker) = self.web_host.new_thread_picker.take() {
             let _ = picker

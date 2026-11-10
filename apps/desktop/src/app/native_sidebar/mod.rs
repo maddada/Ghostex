@@ -30,6 +30,7 @@ pub(crate) use menu_state::{SIDEBAR_MENU_ROW_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIG
 pub(crate) mod menus;
 pub(crate) mod model;
 pub(crate) mod navigation;
+mod new_session_row;
 #[cfg(target_os = "macos")]
 mod pointer;
 mod project_header;

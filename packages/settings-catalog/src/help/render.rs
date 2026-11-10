@@ -1,6 +1,6 @@
 //! `settings.md` and `hotkeys.md`: the catalog as Markdown for the Ghostex Help skill and `ghostex guide`.
 
-use super::{catalog, CatalogEntry, ValueType, GENERATOR};
+use super::{CatalogEntry, ValueType, GENERATOR};
 use crate::json::{ToJson, J};
 
 fn format_default(value: Option<&J>) -> String {
@@ -175,9 +175,10 @@ pub fn settings_markdown() -> String {
     trim_double_newline(text)
 }
 
-/// `skills/ghostex-help/references/hotkeys.md`.
+/// `skills/ghostex-help/references/hotkeys.md`, with the descriptions held until their release
+/// (`HELD_HOTKEY_WORDING`).
 pub fn hotkeys_markdown() -> String {
-    let catalog = catalog();
+    let catalog = super::published_catalog();
     let mut lines: Vec<String> = vec![
         "# Ghostex hotkeys reference".into(),
         String::new(),

@@ -1,4 +1,5 @@
-//! The Unified sidebar's header: the filter bar, the filter, Add project and New session.
+//! The Unified sidebar's header: the filter bar and the filter. Add project and New session are
+//! the New session row above it (native_sidebar/new_session_row.rs).
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -13,11 +14,11 @@ use super::model::UnifiedSidebarSnapshot;
 use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
 
-/// The header's side padding, its three buttons and the gap before each, before the zoom.
+/// The header's side padding, its one button (the filter) and the gap before it, before the zoom.
 const HEADER_PADDING: f32 = 8.0;
 const HEADER_BUTTON: f32 = 26.0;
 const HEADER_GAP: f32 = 2.0;
-const HEADER_BUTTONS: f32 = 3.0;
+const HEADER_BUTTONS: f32 = 1.0;
 
 /// The filter menu: projects (by repository), machines and Spaces, each a pick that narrows the
 /// list, ticked while it does. Typing narrows its rows (`SidebarMenuSearch`), and a project's row
@@ -214,7 +215,7 @@ impl GhostexGpuiApp {
     }
 
     /// The filter bar (filter_bar.rs), then the filter's icon, marked while anything narrows the
-    /// list, Add project and New session.
+    /// list.
     pub(in crate::app::native_sidebar) fn render_native_unified_header(
         &mut self,
         unified: &UnifiedSidebarSnapshot,
@@ -304,31 +305,6 @@ impl GhostexGpuiApp {
                         );
                     },
                 )),
-            )
-            .child(
-                icon_button(
-                    "native-unified-add-project",
-                    "Add project".to_string(),
-                    "titlebar/folder-plus.svg",
-                )
-                .on_click(cx.listener(|app, _, _, cx| {
-                    cx.stop_propagation();
-                    app.dispatch_native_sidebar_ui(
-                        json!({"type": "sidebarAction", "action": "addProject"}),
-                        cx,
-                    );
-                })),
-            )
-            .child(
-                icon_button(
-                    "native-unified-new-session",
-                    "New session".to_string(),
-                    "titlebar/edit.svg",
-                )
-                .on_click(cx.listener(|app, _, _, cx| {
-                    cx.stop_propagation();
-                    app.open_unified_new_session(cx);
-                })),
             )
             .into_any_element()
     }

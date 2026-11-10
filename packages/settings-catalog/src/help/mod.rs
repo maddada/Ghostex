@@ -642,6 +642,17 @@ pub fn api_may_write(_key: &str, agent_writable: bool) -> bool {
 /// The coordinator, for the user (#535, merged as it came): Transcript width's new subtitle (a share of the window and only a maximum) waits in the held help patch with the rest of that change's Help.
 pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[];
 
+/// Hotkeys whose new description is held out of the committed Help files until a release ships
+/// it: the hotkey id, then the description the Help files keep meanwhile. The release that ships
+/// the change empties this list and regenerates.
+///
+/// CDXC:Hotkeys 2026-11-10 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so New Thread in Active Project's description, which now names Coordinator among the picker's rows, waits in the held help patch (release-11.3.1/help/sidebar-new-button.patch).
+pub const HELD_HOTKEY_WORDING: &[(&str, &str)] = &[(
+    "openNewThreadPalette",
+    "Pick an agent, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
+)];
+
 /// Rows that moved to another page, held at their old place in the committed Help files until a
 /// release ships the move: the key, the tab id and title, the section id and title, the title and
 /// subtitle the Help files keep, and the key of the row they followed there.
@@ -747,6 +758,13 @@ pub fn published_catalog() -> Catalog {
                 runtime_options: None,
             },
         );
+    }
+    // A hotkey whose new description is held (`HELD_HOTKEY_WORDING`) keeps the one it had.
+    for hotkey in &mut catalog.hotkeys {
+        if let Some((_, description)) = HELD_HOTKEY_WORDING.iter().find(|(id, _)| *id == hotkey.id)
+        {
+            hotkey.description = description;
+        }
     }
     catalog
         .settings

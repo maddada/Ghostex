@@ -49,11 +49,23 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let scale = appearance.scale;
+        // The New session row sits right under the top row (new_session_row.rs); the machine tabs
+        // follow it with a gap of their own, and the Spaces row keeps the mockup's 9pt below it.
+        let machine_tabs = self.render_native_machine_tabs(snapshot, appearance, window, cx);
+        let tabs_shown = machine_tabs.is_some();
         v_flex()
             .w_full()
             .flex_shrink_0()
-            .children(self.render_native_machine_tabs(snapshot, appearance, window, cx))
-            .child(div().h(px(13.0 * scale)).flex_shrink_0())
+            .child(self.render_native_sidebar_new_session_row(appearance, cx))
+            .when(tabs_shown, |stack| {
+                stack.child(div().h(px(8.0 * scale)).flex_shrink_0())
+            })
+            .children(machine_tabs)
+            .child(
+                div()
+                    .h(px(if tabs_shown { 13.0 } else { 9.0 } * scale))
+                    .flex_shrink_0(),
+            )
             .children(self.render_native_sidebar_space_row(snapshot, appearance, true, cx))
             .children(self.render_native_sidebar_chief(snapshot, appearance, false, cx))
             .into_any_element()
