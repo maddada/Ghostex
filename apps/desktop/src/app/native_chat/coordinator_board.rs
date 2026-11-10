@@ -333,6 +333,9 @@ pub(crate) struct CoordinatorBoardView {
     /// The dock's top edge at its last paint, `None` while it is not drawn: the work items list
     /// its header's button opens sits above the dock instead of over it (work_cards.rs).
     pub(super) dock_top: std::rc::Rc<std::cell::Cell<Option<gpui::Pixels>>>,
+    /// The dock's rows' width at its last paint (unscaled), 0 before the first: what decides
+    /// whether a row's answers fit beside its question (work_cards.rs `dock_row`).
+    pub(super) dock_width: std::rc::Rc<std::cell::Cell<f32>>,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only

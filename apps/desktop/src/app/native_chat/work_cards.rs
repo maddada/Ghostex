@@ -45,6 +45,70 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
 /// A chip's glyph by what it says.
 /// The dock's cards stop growing here (unscaled) and scroll inside it.
 const DOCK_MAX_HEIGHT: f32 = 360.0;
+/// A dock row's metrics (unscaled): the rows' inset in the dock, a row's side padding, the gap
+/// between its parts, and the glyph with its gap that leads every line.
+const DOCK_LIST_PAD: f32 = 4.0;
+const DOCK_ROW_PAD_X: f32 = 8.0;
+const DOCK_GAP: f32 = 10.0;
+const DOCK_LEAD: f32 = 23.0;
+/// The rows' width before the dock has painted once (the chat box's own width).
+const DOCK_ROW_WIDTH_GUESS: f32 = 736.0;
+/// How many lines an opened row's question shows before its "more".
+const DOCK_QUESTION_LINES: usize = 4;
+
+/// How wide `label` is in the chat's font at `size` (both unscaled).
+fn dock_text_width(label: &str, size: f32, p: &ChatAppearance, cx: &gpui::App) -> f32 {
+    if label.is_empty() {
+        return 0.0;
+    }
+    let system = gpui::WindowTextSystem::new(cx.text_system().clone());
+    let run = gpui::TextRun {
+        len: label.len(),
+        font: gpui::Font {
+            weight: gpui::FontWeight::MEDIUM,
+            ..gpui::font(p.font.clone())
+        },
+        ..Default::default()
+    };
+    system
+        .shape_line(label.to_owned().into(), px(size * p.scale), &[run], None)
+        .width
+        .as_f32()
+        / p.scale
+}
+
+/// One answer button's width (unscaled), as `tone_button` draws it: its label, its 11px sides
+/// and border, an icon (`icon`) or the star or check (`mark`) with their gaps.
+fn dock_button_width(
+    label: &str,
+    icon: bool,
+    mark: bool,
+    p: &ChatAppearance,
+    cx: &gpui::App,
+) -> f32 {
+    dock_text_width(label, 13.0, p, cx)
+        + 24.0
+        + if icon { 20.0 } else { 0.0 }
+        + if mark { 16.0 } else { 0.0 }
+}
+
+/// A run of answer buttons' width with their 6px gaps.
+fn buttons_width(widths: &[f32]) -> f32 {
+    widths.iter().sum::<f32>() + 6.0 * widths.len().saturating_sub(1) as f32
+}
+
+/// What a row with no answers shows in their place: Open for a page or form, Reply for a
+/// question with no preset answers (`work_actions.rs` `work_row_action`).
+fn dock_row_action(row: &Value) -> Option<&'static str> {
+    if row["open"].is_object() {
+        Some("Open")
+    } else if row["reply"].is_object() {
+        Some("Reply")
+    } else {
+        None
+    }
+}
+
 /// The fold key that shows every dock row in place instead of the first `limit`.
 const DOCK_ALL_ROWS: &str = "dock-rows:all";
 /// The dock's cards fold by themselves while the draft is longer than this.
@@ -280,11 +344,21 @@ impl NativeChatView {
         // Its top edge, which the work items list opens above (chat_pills.rs `toggle_pill_menu`),
         // so the list never covers the button that opened it.
         let top = self.board.dock_top.clone();
+        // Its rows' width, which decides what fits beside a question (`dock_row`); a change draws
+        // the rows again at the new width.
+        let width = self.board.dock_width.clone();
         Some(
             surface
                 .child(
                     gpui::canvas(
-                        move |bounds, _, _| top.set(Some(bounds.top())),
+                        move |bounds, window, _| {
+                            top.set(Some(bounds.top()));
+                            let inner = (bounds.size.width.as_f32() - 2.0) / s;
+                            if (width.get() - inner).abs() > 0.5 {
+                                width.set(inner);
+                                window.refresh();
+                            }
+                        },
                         |_, _, _, _| {},
                     )
                     .absolute()
@@ -483,8 +557,21 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// One dock row: its status glyph, title, answer buttons and age; open, its full text, links
-    /// and actions.
+    /// One dock row. Its first line is its status glyph, its question, the answers that fit
+    /// beside it and its age, which stays at the top right open or closed. Closed it stays one
+    /// line: the answers that fit, then "+N" for the rest (a click opens the row). Opened, the
+    /// question shows four lines and then "more"; the answers stay beside it when they fit and go
+    /// under it when they do not; the last line holds the work item's name and what waits on it,
+    /// with the icon buttons at its right end.
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// User, picking on the dock rows page (rows-page.html) after a long question was squeezed
+    /// into a narrow column beside five answers: an opened row's answers sit "beside the question
+    /// when they fit, under it when they do not", where fit means they leave the question at least
+    /// half the row (B); a closed row whose answers do not fit shows "the answers that fit, then
+    /// +3" and stays one line (B); the icon buttons go "at the right end of the row's last line"
+    /// (A); a very long question shows "four lines, then more" (B). Also as drawn: the age stays
+    /// at the top right, and the work item's name and "Nothing waits on it" share one line.
     fn dock_row(&self, row: &Value, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
         let s = p.scale;
         let key = text(row, "key");
@@ -493,36 +580,152 @@ impl NativeChatView {
         let (icon, color) = status_look(&text(row, "status"), p);
         let body = p.strengthened(p.prose);
         let busy = row["busy"] == true;
-        // The dock's answers, the look every place shares (work_actions.rs).
+        let title = text(row, "title");
+        let age = text(row, "age");
+        // The answers, the look every place shares (work_actions.rs); a row with none shows what
+        // it asks for in their place (Open or Reply).
         let answers: Vec<Value> = row["buttons"].as_array().cloned().unwrap_or_default();
-        let mut buttons = self.work_answer_buttons(&key, &answers, busy, p, cx);
-        // A row with no answers shows what it asks for in their place, in their look: a page or
-        // form with questions its Open, a question with no preset answers its Reply. A click on
-        // the row itself still opens it.
-        //
-        // CDXC:Coordinators 2026-11-10 DECISION:
-        // User: every row shows what a click does; a Ghostex page with questions gets an Open
-        // button where answers would be, and a question with no preset answers a Reply button.
-        if answers.is_empty() && row["needs"] == true {
-            if let Some(button) = self.work_row_action(&key, row, p, cx) {
-                buttons.push(button);
+        let action = if answers.is_empty() && row["needs"] == true {
+            dock_row_action(row)
+        } else {
+            None
+        };
+        // What fits: the answers may take the first line while the question keeps half the row.
+        let row_width = match self.board.dock_width.get() {
+            width if width > 0.0 => width,
+            _ => DOCK_ROW_WIDTH_GUESS,
+        } - 2.0 * DOCK_LIST_PAD
+            - 2.0 * DOCK_ROW_PAD_X;
+        let age_width = if age.is_empty() {
+            0.0
+        } else {
+            dock_text_width(&age, PROSE_SIZE, p, cx) + DOCK_GAP
+        };
+        let beside_room = row_width - DOCK_LEAD - age_width - row_width / 2.0;
+        let widths: Vec<f32> = match &action {
+            Some(label) => vec![dock_button_width(label, true, false, p, cx)],
+            None => answers
+                .iter()
+                .map(|answer| {
+                    dock_button_width(
+                        &text(answer, "label"),
+                        false,
+                        answer["recommended"] == true || answer["picked"] == true,
+                        p,
+                        cx,
+                    )
+                })
+                .collect(),
+        };
+        let all_width = buttons_width(&widths);
+        let fit = all_width <= beside_room;
+        // Closed: the answers that fit, then "+N"; opened, all of them beside or under.
+        let shown = if open || fit {
+            widths.len()
+        } else {
+            let mut shown = widths.len();
+            while shown > 0 {
+                let rest = widths.len() - shown;
+                let chip = if rest > 0 {
+                    dock_button_width(&format!("+{rest}"), false, false, p, cx) + 6.0
+                } else {
+                    0.0
+                };
+                if buttons_width(&widths[..shown]) + chip <= beside_room {
+                    break;
+                }
+                shown -= 1;
             }
-        }
+            shown
+        };
+        let mut buttons: Vec<AnyElement> = match &action {
+            Some(_) => self.work_row_action(&key, row, p, cx).into_iter().collect(),
+            None => self.work_answer_buttons(&key, &answers[..shown], busy, p, cx),
+        };
+        let rest = widths.len().saturating_sub(shown);
         let toggle = open_key.clone();
+        if !open && rest > 0 {
+            let toggle = toggle.clone();
+            buttons.push(
+                self.tone_button(
+                    gpui::SharedString::from(format!("dock-row-rest:{key}")),
+                    &format!("+{rest}"),
+                    None,
+                    super::tone_card::ToneButton::Secondary,
+                    None,
+                    false,
+                    p,
+                )
+                .aria_label(format!("{rest} more answers"))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.expanded.insert(toggle.clone());
+                    cx.notify();
+                }))
+                .into_any_element(),
+            );
+        }
+        let beside = !open || fit;
+        // The question: one cut line closed; opened, up to four lines and then "more".
+        let more_key = format!("dock-row-more:{key}");
+        let title_width =
+            row_width - DOCK_LEAD - age_width - if beside { all_width + DOCK_GAP } else { 0.0 };
+        let long = open
+            && dock_text_width(&title, PROSE_SIZE, p, cx)
+                > title_width.max(80.0) * (DOCK_QUESTION_LINES as f32 - 0.25);
+        let whole = long && self.expanded.contains(&more_key);
+        let question = div()
+            .flex_1()
+            .min_w_0()
+            .text_color(body)
+            .when(!open, |title| title.truncate())
+            .when(open, |title| title.whitespace_normal())
+            .when(long && !whole, |title| {
+                title.line_clamp(DOCK_QUESTION_LINES).text_ellipsis()
+            })
+            .child(title.to_string());
+        let question = if long {
+            let more_key = more_key.clone();
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(question)
+                .child(
+                    div()
+                        .id(gpui::SharedString::from(format!("dock-row-more:{key}")))
+                        .role(gpui::Role::Button)
+                        .aria_expanded(whole)
+                        .text_color(p.muted)
+                        .chat_cursor_pointer()
+                        .hover(|style| style.text_color(p.foreground))
+                        .child(if whole { "less" } else { "more" })
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            if !this.expanded.remove(&more_key) {
+                                this.expanded.insert(more_key.clone());
+                            }
+                            cx.notify();
+                        })),
+                )
+        } else {
+            question
+        };
         let mut head = div()
             .id(gpui::SharedString::from(format!("dock-row-head:{key}")))
             .w_full()
             .min_w_0()
             .flex()
-            .flex_wrap()
             .items_start()
-            .gap_x(px(10.0 * s))
-            .gap_y(px(4.0 * s))
-            .px(px(8.0 * s))
+            .gap(px(DOCK_GAP * s))
+            .px(px(DOCK_ROW_PAD_X * s))
             .py(px(6.0 * s))
             .rounded(px(8.0 * s))
             .chat_cursor_pointer()
-            .hover(|style| style.bg(p.foreground.opacity(0.04)))
+            .when(!open, |head| {
+                head.hover(|style| style.bg(p.foreground.opacity(0.04)))
+            })
             .child(
                 div()
                     .h(px(PROSE_LINE_HEIGHT * s))
@@ -531,24 +734,27 @@ impl NativeChatView {
                     .flex_shrink_0()
                     .child(svg().path(icon).size(px(13.0 * s)).text_color(color)),
             )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w(px(160.0 * s))
-                    .when(!open, |title| title.truncate())
-                    .when(open, |title| title.whitespace_normal())
-                    .text_color(body)
-                    .child(text(row, "title")),
-            );
-        if !buttons.is_empty() {
-            head = head.child(div().flex().flex_wrap().gap(px(6.0 * s)).children(buttons));
+            .child(question);
+        let mut under_answers = Vec::new();
+        if beside {
+            if !buttons.is_empty() {
+                head = head.child(
+                    div()
+                        .flex_shrink_0()
+                        .flex()
+                        .gap(px(6.0 * s))
+                        .children(buttons),
+                );
+            }
+        } else {
+            under_answers = buttons;
         }
         head = head
             .child(
                 div()
                     .flex_shrink_0()
                     .text_color(p.muted)
-                    .child(text(row, "age")),
+                    .child(age.to_string()),
             )
             .on_click(cx.listener(move |this, _, _, cx| {
                 if !this.expanded.remove(&toggle) {
@@ -559,46 +765,60 @@ impl NativeChatView {
         if !open {
             return div().w_full().child(head).into_any_element();
         }
-        // Open: its full text, its links, then its actions as quiet buttons.
-        let mut detail = div()
+        // Opened: the answers that did not fit, then one last line with the work it belongs to and
+        // what waits on it, the icon buttons at its right end.
+        let mut under = div()
             .w_full()
             .min_w_0()
             .flex()
             .flex_col()
             .gap(px(4.0 * s))
-            .pl(px(31.0 * s))
-            .pr(px(8.0 * s))
+            .pl(px((DOCK_ROW_PAD_X + DOCK_LEAD) * s))
+            .pr(px(DOCK_ROW_PAD_X * s))
             .pb(px(8.0 * s));
-        for line in row["detail"].as_array().into_iter().flatten() {
-            let line = line.as_str().unwrap_or_default();
-            if !line.is_empty() {
-                detail = detail.child(
-                    div()
-                        .whitespace_normal()
-                        .text_color(p.card_muted)
-                        .child(line.to_string()),
-                );
-            }
+        if !under_answers.is_empty() {
+            under = under.child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap(px(6.0 * s))
+                    .children(under_answers),
+            );
         }
-        let chips: Vec<AnyElement> = row["chips"]
+        let mut parts: Vec<AnyElement> = row["chips"]
             .as_array()
             .into_iter()
             .flatten()
             .enumerate()
             .map(|(index, chip)| self.work_card_part(chip, &format!("dock:{key}:{index}"), p, cx))
             .collect();
-        if !chips.is_empty() {
-            detail = detail.child(
+        let said: Vec<String> = row["detail"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect();
+        if !said.is_empty() {
+            if !parts.is_empty() {
+                parts.push(
+                    div()
+                        .text_color(p.muted)
+                        .opacity(0.6)
+                        .child("\u{b7}")
+                        .into_any_element(),
+                );
+            }
+            parts.push(
                 div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_x(px(14.0 * s))
-                    .gap_y(px(4.0 * s))
-                    .children(chips),
+                    .min_w_0()
+                    .whitespace_normal()
+                    .text_color(p.card_muted)
+                    .child(said.join(" \u{b7} "))
+                    .into_any_element(),
             );
         }
-        // The actions every item repeats, as icon buttons (work_actions.rs).
         let actions = json!({
             "reply": row["reply"],
             "open": row["open"],
@@ -606,17 +826,36 @@ impl NativeChatView {
             "dismiss": row["dismiss"],
             "snooze": row["snooze"],
         });
-        if let Some(icons) =
-            self.work_action_icons(&key, &actions, &text(row, "mention"), false, p, cx)
-        {
-            detail = detail.child(div().pt(px(2.0 * s)).child(icons));
+        let icons = self.work_action_icons(&key, &actions, &text(row, "mention"), false, p, cx);
+        if !parts.is_empty() || icons.is_some() {
+            under = under.child(
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .flex()
+                    .items_end()
+                    .gap(px(8.0 * s))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .min_h(px(28.0 * s))
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap_x(px(8.0 * s))
+                            .gap_y(px(4.0 * s))
+                            .children(parts),
+                    )
+                    .children(icons.map(|icons| div().flex_shrink_0().child(icons))),
+            );
         }
         div()
             .w_full()
             .rounded(px(8.0 * s))
             .bg(p.foreground.opacity(0.03))
             .child(head)
-            .child(detail)
+            .child(under)
             .into_any_element()
     }
 

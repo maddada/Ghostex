@@ -95,10 +95,19 @@ impl NativeChatView {
     ) -> Option<AnyElement> {
         let open = row["open"].clone();
         let reply = row["reply"].clone();
-        let (label, id) = if open.is_object() {
-            ("Open", format!("work-row-open:{key}"))
+        // Each carries its icon, so it reads as an action and not as an answer.
+        let (label, icon, id) = if open.is_object() {
+            (
+                "Open",
+                "titlebar/arrow-up-right.svg",
+                format!("work-row-open:{key}"),
+            )
         } else if reply.is_object() {
-            ("Reply", format!("work-row-reply:{key}"))
+            (
+                "Reply",
+                "titlebar/arrow-back-up.svg",
+                format!("work-row-reply:{key}"),
+            )
         } else {
             return None;
         };
@@ -106,7 +115,7 @@ impl NativeChatView {
             self.tone_button(
                 gpui::SharedString::from(id),
                 label,
-                None,
+                Some(icon),
                 ToneButton::Secondary,
                 None,
                 false,
