@@ -39,9 +39,9 @@ use gpui::{
     Focusable, Font, FontWeight, GlobalElementId, HighlightStyle, Hitbox, HitboxBehavior, Hsla,
     InspectorElementId, InteractiveElement, IntoElement, KeyBinding, LayoutId, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, ParentElement, PathBuilder, Pixels,
-    Point, Render, RenderImage, ScrollHandle, SharedString, StatefulInteractiveElement, Style,
-    Styled, TextRun, UTF16Selection, Window, WrappedLine, actions, div, fill, hsla, point, px,
-    relative, rgb, rgba, size,
+    Point, Render, RenderImage, ScrollHandle, SharedString, Size, StatefulInteractiveElement,
+    Style, Styled, TextRun, UTF16Selection, Window, WrappedLine, actions, div, fill, hsla, point,
+    px, relative, rgb, rgba, size,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -358,6 +358,58 @@ struct DiagMenu {
     scroll: ScrollHandle,
     /// Whether the "Turn into" flyout is open (hover-opened; dies with the menu).
     turn_into: bool,
+    /// Local change (Ghostex Docs): where the menu, its "Turn into" row and the flyout were
+    /// last drawn, which places the flyout (`turn_into_flyout_place`).
+    geometry: std::rc::Rc<std::cell::Cell<TurnIntoGeometry>>,
+}
+
+/// Local change (Ghostex Docs): the drawn boxes the "Turn into" flyout is placed from, in window
+/// space; `None` until drawn once.
+#[derive(Clone, Copy, Default)]
+struct TurnIntoGeometry {
+    menu: Option<Bounds<Pixels>>,
+    row: Option<Bounds<Pixels>>,
+    flyout: Option<Size<Pixels>>,
+}
+
+/// Local change (Ghostex Docs): the "Turn into" flyout's top-left in window space and the height
+/// it may take. It opens beside its row and grows down; it goes up from the row only when there
+/// is no room below, to the menu's left only when there is no room at its right, is held inside
+/// the window on every side, and scrolls when it is taller than the window.
+///
+/// User: "why turn into goes up and gets cut off pls fix" (2026-11-10): the flyout sat on the
+/// menu's bottom edge and grew upward, so near the top of the window its first rows were off
+/// screen.
+fn turn_into_flyout_place(
+    menu: Bounds<Pixels>,
+    row: Bounds<Pixels>,
+    flyout: Size<Pixels>,
+    viewport: Size<Pixels>,
+) -> (Point<Pixels>, Pixels) {
+    const MARGIN: f32 = 4.;
+    const GAP: f32 = 2.;
+    // The flyout's first row lines up with the "Turn into" row (its 4px padding and border).
+    const INSET: f32 = 5.;
+    let margin = px(MARGIN);
+    let max_h = (viewport.height - margin * 2.).max(px(0.));
+    let height = flyout.height.min(max_h);
+    let right_side = menu.right() + px(GAP);
+    let left_side = menu.left() - px(GAP) - flyout.width;
+    let x = if right_side + flyout.width <= viewport.width - margin || left_side < margin {
+        right_side
+    } else {
+        left_side
+    };
+    let x = x.min(viewport.width - margin - flyout.width).max(margin);
+    let down = row.top() - px(INSET);
+    let up = row.bottom() + px(INSET) - height;
+    let y = if down + height <= viewport.height - margin || up < margin {
+        down
+    } else {
+        up
+    };
+    let y = y.min(viewport.height - margin - height).max(margin);
+    (point(x, y), max_h)
 }
 
 /// A block kind the right-click "Turn into" menu converts between —
@@ -4248,6 +4300,7 @@ impl EditorState {
                     suggestions: Vec::new(),
                     scroll: ScrollHandle::new(),
                     turn_into: false,
+                    geometry: Default::default(),
                 });
             } else {
                 self.move_to(offset, cx);
@@ -4284,6 +4337,7 @@ impl EditorState {
             suggestions: suggestions.into_iter().map(SharedString::from).collect(),
             scroll: ScrollHandle::new(),
             turn_into: false,
+            geometry: Default::default(),
         });
         cx.notify();
     }
@@ -5866,7 +5920,30 @@ impl Render for EditorState {
                     suggestions,
                     scroll,
                     turn_into: menu_turn_into,
+                    geometry,
                 } = menu;
+                // Records a drawn box into the menu's geometry, and redraws once when the
+                // flyout's own size first arrives or changes, so it is placed from what it is.
+                let this = cx.entity().downgrade();
+                let measure = |record: fn(&mut TurnIntoGeometry, Bounds<Pixels>) -> bool| {
+                    let geometry = geometry.clone();
+                    let editor = this.clone();
+                    gpui::canvas(
+                        move |bounds, _, cx| {
+                            let mut g = geometry.get();
+                            let changed = record(&mut g, bounds);
+                            geometry.set(g);
+                            if changed {
+                                let _ = editor.update(cx, |_, cx| cx.notify());
+                            }
+                        },
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                };
                 let count = suggestions.len();
                 // Menu chrome from the host's theme (fallbacks match the former
                 // hardcoded dark menu when no markdown style is set).
@@ -6123,6 +6200,11 @@ impl Render for EditorState {
                 let cur_kind = self.block_kind_at(self.row_col(self.selected_range.start).0);
                 let turn_row = div()
                     .id("menu-turn-into")
+                    .relative()
+                    .child(measure(|g, b| {
+                        g.row = Some(b);
+                        false
+                    }))
                     .flex_shrink_0()
                     .px(px(10.))
                     .py(px(3.))
@@ -6179,11 +6261,25 @@ impl Render for EditorState {
                     // An absolute sibling of the (overflow-clipped) menu box —
                     // out of flow, so it can't inflate the anchored bounds and
                     // re-trigger the window snap (the slash-flyout lesson).
+                    // Local change (Ghostex Docs): placed by `turn_into_flyout_place`, from
+                    // where the menu and its row were drawn; hidden for the one frame before
+                    // they first are.
+                    let g = geometry.get();
+                    let viewport = window.viewport_size();
+                    let flyout_size = g.flyout.unwrap_or(size(px(160.), px(320.)));
+                    let placed = g.menu.zip(g.row).map(|(menu, row)| {
+                        let (at, max_h) = turn_into_flyout_place(menu, row, flyout_size, viewport);
+                        (at - menu.origin, max_h)
+                    });
+                    let (offset, max_h) = placed.unwrap_or((point(px(0.), px(0.)), viewport.height));
                     div()
+                        .id("menu-turn-into-flyout")
                         .absolute()
-                        .left(gpui::relative(1.))
-                        .bottom(px(0.))
-                        .ml(px(2.))
+                        .left(offset.x)
+                        .top(offset.y)
+                        .opacity(if placed.is_some() { 1. } else { 0. })
+                        .max_h(max_h)
+                        .overflow_y_scroll()
                         .occlude()
                         .min_w(px(140.))
                         .cursor(CursorStyle::Arrow)
@@ -6196,8 +6292,24 @@ impl Render for EditorState {
                         .text_size(px(13.))
                         .flex()
                         .flex_col()
-                        .py(px(4.))
-                        .children(rows)
+                        .child(
+                            // The rows' own size (the box may be capped and scrolled), plus
+                            // the 1px border, is the flyout's size.
+                            div()
+                                .relative()
+                                .flex_shrink_0()
+                                .flex()
+                                .flex_col()
+                                .py(px(4.))
+                                .children(rows)
+                                .child(measure(|g, b| {
+                                    let drawn =
+                                        size(b.size.width + px(2.), b.size.height + px(2.));
+                                    let changed = g.flyout != Some(drawn);
+                                    g.flyout = Some(drawn);
+                                    changed
+                                })),
+                        )
                 });
 
                 // Deferred + anchored to a window-space top layer with `.occlude()`,
@@ -6220,6 +6332,11 @@ impl Render for EditorState {
                                 .shadow_md()
                                 // Clip rows + thumb to the rounded box.
                                 .overflow_hidden()
+                                .child(measure(|g, b| {
+                                    let changed = g.menu.map(|m| m.origin) != Some(b.origin);
+                                    g.menu = Some(b);
+                                    changed && g.row.is_some()
+                                }))
                                 .text_color(menu_fg)
                                 .text_size(px(13.))
                                 // A click anywhere outside the menu dismisses it.
