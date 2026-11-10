@@ -157,8 +157,8 @@ impl GhostexGpuiApp {
     }
 
     /// A link a published page opened, shown outside the floating window (the Files view): it
-    /// goes to the reader's browser, unless it names the page's machine's own localhost, which only
-    /// the Browser on that machine's network reaches.
+    /// opens where a chat link opens (`open_visual_page_web_link`), unless it names the page's
+    /// machine's own localhost, which only the Browser on that machine's network reaches.
     pub(crate) fn open_visual_page_link(
         &mut self,
         url: String,
@@ -180,7 +180,18 @@ impl GhostexGpuiApp {
             (Some(_), None) if gpui_remote_link_is_loopback(&url) => return,
             _ => url,
         };
-        let _ = gpui_open_external_http_url(&url);
+        self.open_visual_page_web_link(url, cx);
+    }
+
+    /// CDXC:SessionChat 2026-11-10 DECISION: User: "links inside the inline html need to open it inside the app's browser if i pick that in settings for opening links please". A web link clicked in a Ghostex page (the floating window or the Files view) takes the chat link's path (`open_session_chat_link`), so "Open links in embedded browser" decides between the app's Browser and the system browser, as it does for a link in the transcript. The page's own anchors and other schemes never get here: the page bootstrap (server/src/visual_pages/theme.rs `PAGE_BOOTSTRAP`) only sends other http(s) documents out as new windows.
+    fn open_visual_page_web_link(&mut self, url: String, cx: &mut gpui::Context<Self>) {
+        let app = cx.weak_entity();
+        // The link path needs the main window, which this command does not carry.
+        cx.defer(move |cx| {
+            let _ = app.update_in(cx, |app, window, cx| {
+                app.open_session_chat_link(&url, None, false, false, window, cx);
+            });
+        });
     }
 
     /// Opens the floating window for the `visualPage` open message the chat's page card sends
@@ -297,7 +308,8 @@ impl GhostexGpuiApp {
             }
             VisualPageModalCommand::OpenInBrowser { url } => {
                 self.close_native_app_modal_from_bridge(cx);
-                url
+                let _ = gpui_open_external_http_url(&url);
+                return;
             }
             VisualPageModalCommand::RefreshFailed { message } => {
                 self.dispatch_gpui_app_modal_toast(
@@ -308,9 +320,9 @@ impl GhostexGpuiApp {
                 );
                 return;
             }
-            // A link the page opened goes to the reader's browser and leaves the page open,
-            // unless it names the page's machine's own localhost, which only the Browser on that
-            // machine's network reaches.
+            // A link the page opened opens where a chat link opens (`open_visual_page_web_link`)
+            // and leaves the page open, unless it names the page's machine's own localhost, which
+            // only the Browser on that machine's network reaches.
             VisualPageModalCommand::OpenLink { url } => {
                 let target = remote_project.as_ref().and_then(|remote_project| {
                     self.gpui_remote_gxserver_request_target(&remote_project.remote_machine_id)
@@ -332,7 +344,7 @@ impl GhostexGpuiApp {
                 }
             }
         };
-        let _ = gpui_open_external_http_url(&url);
+        self.open_visual_page_web_link(url, cx);
     }
 }
 
