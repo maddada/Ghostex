@@ -208,6 +208,8 @@ impl UpdatesTab {
         let tab = match item["kind"].as_str() {
             // Another computer's item is finished on that computer, reached from Settings > Remote.
             _ if other_computer => SettingsTabId::Remote,
+            // The Easy Connect helper (server/src/updates/items.rs) lives on Settings > Remote.
+            _ if item["id"] == "easyConnect" => SettingsTabId::Remote,
             Some("extension") => SettingsTabId::Extensions,
             Some("agent") => SettingsTabId::Agents,
             Some("helper") => SettingsTabId::Accounts,

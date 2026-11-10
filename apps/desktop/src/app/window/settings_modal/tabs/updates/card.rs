@@ -49,6 +49,7 @@ pub(super) fn item_icon(p: &SettingsPalette, item: &Value, size: f32) -> AnyElem
         "code" => "titlebar/brand-vscode.svg",
         "cef" => "modals/settings/browser.svg",
         "collab" => "modals/settings/users.svg",
+        "easyConnect" => "modals/settings/plug-connected.svg",
         "extension" => "modals/settings/puzzle.svg",
         "node" => "modals/settings/brand-nodejs.svg",
         "uv" => "modals/settings/brand-python.svg",

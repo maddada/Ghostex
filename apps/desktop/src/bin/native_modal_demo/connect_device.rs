@@ -1,7 +1,9 @@
 //! Preview of the Connect a phone window. States: `code` (default: the QR, waiting for a phone),
 //! `preparing` (turning SSH access on, never answers), `failed` (turning on failed), `ask` (a phone
 //! scanned: its three words and Approve), `connected` (after Approve), `computer` (Connect a
-//! computer's code), `presence` (`ask` with Approve asking for Touch ID first).
+//! computer's code), `presence` (`ask` with Approve asking for Touch ID first), `helper` (the
+//! Easy Connect helper isn't installed: Install runs a pretend install, then the code shows),
+//! `helper-failed` (its install failed), `helper-installing` (an install that already runs).
 use super::connect_device_modal::*;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
 use gpui_component::Root;
@@ -69,6 +71,19 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                                 cx,
                             )
                         }),
+                        "helper" => with_view(&slot, cx, |modal, cx| modal.needs_helper(None, cx)),
+                        "helper-failed" => with_view(&slot, cx, |modal, cx| {
+                            modal.needs_helper(
+                                Some("Ghostex couldn't download what the Easy Connect helper needs. Check that this computer is online, then try again.".to_string()),
+                                cx,
+                            )
+                        }),
+                        "helper-installing" => with_view(&slot, cx, |modal, cx| {
+                            modal.helper_install_progress(
+                                Some("Downloading the build tools… 42% of 66 MB".to_string()),
+                                cx,
+                            )
+                        }),
                         "failed" => with_view(&slot, cx, |modal, cx| {
                             modal.prepared(
                                 Err("SSH access could not be turned on. Remote Login is managed by your organization.".to_string()),
@@ -77,6 +92,27 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                         }),
                         _ => with_view(&slot, cx, |modal, cx| modal.prepared(Ok(()), cx)),
                     }
+                })
+                .detach();
+            }
+            ConnectDeviceCommand::InstallHelper => {
+                cx.spawn(async move |cx| {
+                    let steps = [
+                        "Downloading the build tools… 12% of 66 MB",
+                        "Downloading the build tools… 64% of 66 MB",
+                        "Unpacking the build tools…",
+                        "Building the Easy Connect helper. This takes a few minutes…",
+                        "Finishing up…",
+                    ];
+                    for step in steps {
+                        with_view(&slot, cx, |modal, cx| {
+                            modal.helper_install_progress(Some(step.to_string()), cx)
+                        });
+                        cx.background_executor().timer(Duration::from_millis(900)).await;
+                    }
+                    with_view(&slot, cx, |modal, cx| modal.helper_installed(cx));
+                    cx.background_executor().timer(Duration::from_millis(500)).await;
+                    with_view(&slot, cx, |modal, cx| modal.prepared(Ok(()), cx));
                 })
                 .detach();
             }
