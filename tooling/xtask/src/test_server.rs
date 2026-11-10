@@ -524,6 +524,13 @@ fn ensure_isolated(server: &Server) -> Res {
             .recursive(true)
             .mode(0o700)
             .create(&zmx_dir)?;
+        // A socket folder outside the home (the intermediate layout a few servers were made with) is in /tmp too, so it gets the same check as the home.
+        if !zmx_dir.starts_with(server.home()) && !is_private_directory(&zmx_dir)? {
+            bail!(
+                "Refusing to start: {} is not a private folder of this user (a link, another owner or open permissions). Remove it and start again.",
+                zmx_dir.display()
+            );
+        }
     }
     let canonical = fs::canonicalize(&zmx_dir)?;
     for shared in default_zmx_dirs() {
