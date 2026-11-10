@@ -14,6 +14,7 @@
 //! | `drafts` | `ghostex.sessionChat.draft.<sessionKey>` | [`StoredDraftRecord`] as JSON, or legacy raw text |
 //! | `summary` | `ghostex.sessionChat.summary.<sessionKey>` | `"1"` or `"0"` |
 //! | `verbose` | `ghostex.sessionChat.verbose.<sessionKey>` | `"1"`, `"0"`, or absent |
+//! | `quietView` | `ghostex.sessionChat.quietView.<sessionKey>` | `"1"`, `"0"`, or absent |
 //! | `returnedPrompts` | `ghostex.sessionChat.returnedPrompts.applied` | family a's applied-id list |
 //!
 //! The recovery checkpoints (`ghostex.sessionChat.recovery.`), the save outbox
@@ -36,6 +37,9 @@ pub const VERBOSE_STORE: &str = "verbose";
 /// The per-session Normal record (`"1"` Normal, `"0"` Detailed, absent follows Default to Detailed
 /// view): with `summary` and `verbose` it is the chat's one view level (transcript/view_level.rs).
 pub const SIMPLE_STORE: &str = "simple";
+/// The per-session Quiet View choice from the chat's View menu (`"1"` on, `"0"` off, absent
+/// follows the default; `transcript/quiet_view.rs`).
+pub const QUIET_VIEW_STORE: &str = "quietView";
 /// `composer('submitted', {text, version})`: clear the stored draft when it still holds the
 /// submitted revision, record the send in the host's sent history, and flush.
 ///
@@ -247,6 +251,14 @@ pub fn draft_key(session_key: &str) -> crate::event::StorageKey {
 pub fn summary_key(session_key: &str) -> crate::event::StorageKey {
     crate::event::StorageKey {
         store: SUMMARY_STORE.to_string(),
+        suffix: session_key.to_string(),
+    }
+}
+
+/// `ghostex.sessionChat.quietView.<sessionKey>`.
+pub fn quiet_view_key(session_key: &str) -> crate::event::StorageKey {
+    crate::event::StorageKey {
+        store: QUIET_VIEW_STORE.to_string(),
         suffix: session_key.to_string(),
     }
 }

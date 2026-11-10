@@ -49,6 +49,15 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
                 state.transcript_view.projection_inputs = None;
             }
         }
+        if key.store == crate::composer::storage::QUIET_VIEW_STORE {
+            if let (Some(next), None) = (
+                state.transcript_view.pending_quiet_view_override.take(),
+                error,
+            ) {
+                state.transcript_view.quiet_view_override = next;
+                crate::transcript::quiet_view::sync(state);
+            }
+        }
         if key.store == crate::composer::storage::VERBOSE_STORE {
             if let (Some(next), None) =
                 (state.transcript_view.pending_verbose_override.take(), error)

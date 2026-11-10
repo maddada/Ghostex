@@ -59,6 +59,19 @@ pub fn assemble_with(
     let board = crate::extras::coordinator_board::project_kept(state, context, &mut cache.board);
     extras::document_with_board(state, context, &mut document, board);
     crate::read_aloud::document(state, context, &mut document);
+    // After the work item lines and relayed approvals, which the quiet lines read.
+    document.quiet_view = crate::transcript::quiet_view::document(
+        state,
+        context,
+        document
+            .work_cards
+            .value()
+            .unwrap_or(&serde_json::Value::Null),
+        document
+            .relayed_approvals
+            .value()
+            .unwrap_or(&serde_json::Value::Null),
+    );
     document
 }
 

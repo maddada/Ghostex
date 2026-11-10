@@ -247,6 +247,10 @@ pub struct ComposerBootRead {
     /// The Simple override, or absent to follow the setting (`state/transcript_view.rs`).
     #[serde(default)]
     pub simple_override: Value,
+    /// The chat's own Quiet View choice, or absent to follow the default
+    /// (`transcript/quiet_view.rs`).
+    #[serde(default)]
+    pub quiet_view: Value,
 }
 
 /// The socket's state, which decides whether the core waits or re-reads.
@@ -326,6 +330,10 @@ pub struct ChatSettings {
     /// keeps what the core has.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chat_look: Option<ghostex_gx_protocol::ChatLookSettings>,
+    /// The three Quiet View settings (`transcript/quiet_view.rs`). Absent from a host that draws
+    /// no Quiet View (the phone), whose chats stay in the full view.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quiet_view: Option<crate::transcript::quiet_view::QuietViewSettings>,
 }
 
 /// A size or position only the renderer can know, folded back into the document.

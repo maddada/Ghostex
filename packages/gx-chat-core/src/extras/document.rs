@@ -120,6 +120,8 @@ pub fn document_with_board(
     into.view_chips = chat_pills::view_chips(crate::transcript::view_level::view_level(
         &state.transcript_view,
     ));
+    into.view_chips
+        .extend(crate::transcript::quiet_view::view_chip(state));
     into.working_card = working_card::working_card(state, &into.working_strip, &into.chat_pills);
     into.agent_fleet_strip = Tri::Value(fleet_strip);
     into.agent_tasks_panel = Tri::Value(tasks_panel);

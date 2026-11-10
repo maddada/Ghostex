@@ -554,7 +554,10 @@ fn settings_moved(
             !state.transcript_view.chat_look_from_host
                 || state.transcript_view.chat_look.with_settings(look)
                     != state.transcript_view.chat_look
-        }))
+        })
+        || settings
+            .quiet_view
+            .is_some_and(|quiet| Some(quiet) != state.transcript_view.quiet_view_settings))
     .then(|| Event::SettingsChanged(Box::new(settings.clone())))
 }
 

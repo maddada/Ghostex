@@ -47,6 +47,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ToggleSummary
         | ActionKind::SetVerbose
         | ActionKind::SetDetailLevel
+        | ActionKind::SetQuietView
         | ActionKind::LoadWork
         | ActionKind::RewindOpen
         | ActionKind::RewindCancel

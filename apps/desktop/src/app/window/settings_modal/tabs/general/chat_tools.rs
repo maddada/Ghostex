@@ -207,6 +207,10 @@ fn chat_section(
             cx,
         ));
     }
+    // CDXC:SessionChat 2026-11-11 SEE-ALSO: Quiet View's user decision is in packages/gx-chat-core/src/transcript/quiet_view.rs.
+    rows.extend(page.toggle(g, s, "chatQuietViewCoordinators", "Coordinators open in Quiet View", "A coordinator's chat shows your messages, its replies, pages and questions, and folds everything between two replies (reports from threads, messages it sent, tool calls) into one line you can click open. A chat's own choice in More actions > View comes first.", false, cx));
+    rows.extend(page.toggle(g, s, "chatQuietViewChats", "Other chats open in Quiet View", "Every other chat opens in Quiet View too: the work between two replies folds into one line you can click open. A chat's own choice in More actions > View comes first.", false, cx));
+    rows.extend(page.toggle(g, s, "chatQuietViewExpandLast", "Expand the last turn in Quiet View", "Show the work after the newest reply, or the turn that is running, open instead of as one line. It folds once a newer reply comes.", false, cx));
     rows.extend(page.toggle(g, s, "sessionChatKeepComposerExpanded", "Keep chat box expanded while scrolling", "Keep the desktop chat box at full size while you scroll the transcript instead of shrinking it as you scroll up and growing it back at the end.", false, cx));
     rows.extend(page.toggle(g, s, "sessionChatConfirmEscapeInterrupt", "Press Escape twice to interrupt", "While the agent is working, the first Escape asks you to press Escape again within 2 seconds before it interrupts. Turn off to interrupt on the first Escape.", false, cx));
     // CDXC:Settings 2026-11-02 SEE-ALSO: the user's words on Default to Detailed view (an Advanced row) are in packages/settings-catalog/src/general/chat.rs.

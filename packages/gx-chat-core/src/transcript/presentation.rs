@@ -1536,6 +1536,16 @@ fn turn_items(
                         extends_to_ms,
                         tool_calls,
                         changed,
+                        // A section still on the server, with gxserver's count of its calls.
+                        held: turn
+                            .section
+                            .as_ref()
+                            .filter(|_| section.is_none())
+                            .and_then(|held| {
+                                Some((held.start_id.clone(), held.tool_call_count? as usize))
+                            })
+                            .into_iter()
+                            .collect(),
                         ..WorkTally::default()
                     }),
                 }

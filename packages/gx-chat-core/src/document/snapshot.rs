@@ -339,6 +339,10 @@ pub struct Document {
     /// `messageLayout` is the effective layout and `spacing` shows only at Compact. Family b.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chat_look: Option<crate::transcript::chat_look::ChatLook>,
+    /// Quiet View (`transcript/quiet_view.rs`): the chat's choice, its default and the quiet
+    /// lines; absent where the host sends no Quiet View settings (the phone). Family b.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quiet_view: Option<crate::transcript::quiet_view::QuietViewDocument>,
 
     // ---- modes and loading -----------------------------------------------
     pub summary_mode: bool,

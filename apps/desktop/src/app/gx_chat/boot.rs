@@ -71,6 +71,7 @@ pub(super) fn read(session_key: &str, now_ms: i64, errors: &mut BootReads) -> Co
     let summary_mode = decode_summary(load("summary", session_key, now_ms, errors).as_deref());
     let verbose_override = decode_verbose(load("verbose", session_key, now_ms, errors).as_deref());
     let simple_override = decode_verbose(load("simple", session_key, now_ms, errors).as_deref());
+    let quiet_view = decode_verbose(load("quietView", session_key, now_ms, errors).as_deref());
     ComposerBootRead {
         session_key: session_key.to_string(),
         client_id,
@@ -96,6 +97,10 @@ pub(super) fn read(session_key: &str, now_ms: i64, errors: &mut BootReads) -> Co
         },
         simple_override: match simple_override {
             Some(simple) => Value::Bool(simple),
+            None => Value::Null,
+        },
+        quiet_view: match quiet_view {
+            Some(on) => Value::Bool(on),
             None => Value::Null,
         },
     }
@@ -178,6 +183,18 @@ pub(super) fn chat_settings() -> ChatSettings {
                         == Some(true),
                 ),
                 spacing: option("chatMessageSpacing"),
+            }
+        }),
+        // Quiet View (gx-chat-core `transcript/quiet_view.rs`), the same way: a web page whose
+        // settings have not arrived says nothing, and its chats stay in the full view until then.
+        quiet_view: (!object.is_empty()).then(|| {
+            let switch = |key: &str, default: bool| {
+                object.get(key).and_then(Value::as_bool).unwrap_or(default)
+            };
+            ghostex_gx_chat_core::transcript::quiet_view::QuietViewSettings {
+                coordinators: switch("chatQuietViewCoordinators", true),
+                chats: switch("chatQuietViewChats", false),
+                expand_last: switch("chatQuietViewExpandLast", false),
             }
         }),
     }

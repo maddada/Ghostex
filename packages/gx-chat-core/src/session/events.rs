@@ -166,6 +166,9 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
             if let Some(look) = &settings.chat_look {
                 crate::transcript::chat_look::apply_from_host(&mut state.transcript_view, look);
             }
+            if let Some(quiet) = settings.quiet_view {
+                crate::transcript::quiet_view::apply_settings(state, quiet);
+            }
             state.core.request_publish();
             Vec::new()
         }
@@ -278,6 +281,9 @@ pub fn boot_read(
         }
         if let Some(look) = &settings.chat_look {
             crate::transcript::chat_look::apply_from_host(&mut state.transcript_view, look);
+        }
+        if let Some(quiet) = settings.quiet_view {
+            crate::transcript::quiet_view::apply_settings(state, quiet);
         }
     }
     let config = state.session.boot_config.clone().unwrap_or_default();

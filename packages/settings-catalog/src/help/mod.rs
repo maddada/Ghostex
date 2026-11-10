@@ -624,8 +624,17 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:Hotkeys 2026-11-11 DECISION:
 /// The coordinator, for the user: Help must not change on main before the next release, so the Focus Sidebar hotkey (#558) is held the same way; a hotkey id here leaves the hotkey out of `hotkeys.md` and `settings-catalog.json`, and its Help waits in the held help patch (release-11.3.1/help/focus-sidebar-hotkey.patch).
-pub const HELD_FROM_HELP_FILES: &[&str] =
-    &["closeButtonsOnRight", "dimInactiveProjects", "focusSidebar"];
+///
+/// CDXC:SessionChat 2026-11-11 DECISION:
+/// The coordinator, for the user: Help must not change on main before the next release, so the three Quiet View rows (Settings > Chat > Advanced) are held the same way; their Help waits in the held help patch (release-11.3.1/help/quiet-view.patch).
+pub const HELD_FROM_HELP_FILES: &[&str] = &[
+    "closeButtonsOnRight",
+    "dimInactiveProjects",
+    "focusSidebar",
+    "chatQuietViewCoordinators",
+    "chatQuietViewChats",
+    "chatQuietViewExpandLast",
+];
 
 /// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
 /// `agentWritable` (CDXC:Security 2026-11-10 above `number_range`).

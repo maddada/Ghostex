@@ -49,6 +49,7 @@ pub mod presentation;
 pub mod prose;
 pub mod question_exchange;
 pub mod question_forms;
+pub mod quiet_view;
 pub mod raw_html;
 pub mod read_images;
 pub mod routine_cards;

@@ -72,6 +72,9 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
     // in for "this is a new array".
     // `update()` runs the sticky fold before its change check, so a working blip over an unchanged
     // transcript rebuilds nothing.
+    // Quiet View follows the chat's choice, its view and whether it is a coordinator's, which
+    // can arrive after the boot (`transcript/quiet_view.rs`).
+    crate::transcript::quiet_view::sync(state);
     crate::session::working::track_quiet_card(state);
     let holds_open = crate::session::working::quiet_holds_turn_open(state);
     let live = crate::session::working::transcript_working(state) || holds_open;

@@ -62,6 +62,7 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
     let mut read_images: Vec<Value> = Vec::new();
     let mut turns = Vec::with_capacity(run.len());
     let (mut messages, mut answers, mut cards_in_fold) = (0, 0, false);
+    let mut held: Vec<(String, usize)> = Vec::new();
     for item in run {
         let TranscriptItem::CompletedWork {
             id: turn_id,
@@ -96,6 +97,11 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
         messages += tally.messages;
         answers += tally.answers;
         cards_in_fold |= turn_folds;
+        for section in &tally.held {
+            if !held.iter().any(|(start, _)| *start == section.0) {
+                held.push(section.clone());
+            }
+        }
         for path in tally.changed {
             if !changed.contains(&path) {
                 changed.push(path);
@@ -198,6 +204,16 @@ fn merge(run: Vec<TranscriptItem>, hidden: Option<&[String]>) -> TranscriptItem 
         work_button,
         work_carrier,
         cards_in_fold,
+        tally: Box::new(crate::document::WorkTally {
+            started_ms: started,
+            ended_ms: ended,
+            extends_to_ms: ended,
+            tool_calls,
+            changed,
+            messages,
+            answers,
+            held,
+        }),
     }
 }
 
