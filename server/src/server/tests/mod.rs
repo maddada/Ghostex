@@ -19,6 +19,7 @@ mod push;
 mod push_delivery;
 mod remote_thread_stall;
 mod renderer_and_titles;
+mod session_chat_agent_gone;
 mod settings_sync_appearance;
 mod voice_remote_sessions;
 #[cfg(unix)]

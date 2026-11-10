@@ -69,7 +69,7 @@ pub(crate) struct SessionChatReadResolution {
     /// The agents turned on in Settings › Agents (`crate::agents::enabled_agent_icons`), in the
     /// fingerprint so a long-polling phone learns when one is turned on or off.
     enabled_agent_icons: Vec<String>,
-    fingerprint: String,
+    pub(crate) fingerprint: String,
 }
 
 impl SessionChatReadResolution {
@@ -255,6 +255,11 @@ pub(crate) fn resolve_session_chat_read_state(
     Still cache-only: no detection, no spawn, on this 500ms loop.
     */
     let screen = cached_session_chat_screen_state(state, project_id, session_id);
+    // An agent gone with no notice saying so wakes a long-poller (a phone over SSH), which reads
+    // it from the result; hashed only when set, so a running agent keeps the fingerprint it had.
+    if screen.agent_gone {
+        screen.agent_gone.hash(&mut hasher);
+    }
     match screen.activity {
         Some(activity) => {
             activity.kind.hash(&mut hasher);

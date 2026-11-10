@@ -65,13 +65,19 @@ pub(crate) fn agent_start_failure(
     if transcript == Transcript::Unreadable {
         notice.detail = Some(LOST_CHAT_DETAIL.to_string());
     }
-    agent_process_gone(&session).then(|| with_missing_agent_command(notice))
+    // An unreadable snapshot proves nothing.
+    (agent_process_running(&session, false) == Some(false))
+        .then(|| with_missing_agent_command(notice))
 }
 
 /// Whether the session's agent came up, wrote its conversation and is gone now: the screen is back
 /// at a shell prompt and no agent process runs in the session, the same reading as a failed start
-/// ([`agent_start_failure`]) for a session that has a conversation. It is no card: the chat only
-/// stops waiting on an agent that is not there (`agentGone` on the chat's state).
+/// ([`agent_start_failure`]) for a session that has a conversation, held for the same settle time.
+/// It is no card: the chat only stops waiting on an agent that is not there (`agentGone` on the
+/// chat's state). Once confirmed it stays until an agent process is back in the session or the
+/// conversation grows, whatever the screen shows: a command typed at that shell (`sleep 100`) is
+/// not the agent coming back. The process read is the shared cached snapshot, since a dead agent
+/// whose Working never cleared is probed about every second.
 ///
 /// CDXC:SessionChat 2026-11-09 DECISION:
 /// Sebastian picked a silent signal (Q43, option B) for an agent that dies without the "agent exited" notice (killed, crashed): gxserver tells the chat the agent is not running and Agent work Quiet shows the words it held back, as it does on that notice. No card, no notice and nothing new on screen, and it must not reach the account recovery that keys off the "agent exited" notice, so it is not one.
@@ -82,32 +88,124 @@ pub(crate) fn agent_left_conversation(
     session_id: &str,
     screen_text: &str,
 ) -> bool {
-    if agent_start_failure_notice(screen_text).is_none() {
+    let key = format!("{project_id}:{session_id}");
+    let shell_prompt = agent_start_failure_notice(screen_text).is_some();
+    let watches = || AGENT_GONE.lock().unwrap_or_else(|error| error.into_inner());
+    let watch = watches().get(&key).copied();
+    // Nothing seen yet and the agent's screen is up: no read at all.
+    if watch.is_none() && !shell_prompt {
         return false;
     }
-    let Some(session) = repository
+    let session = repository
         .get_session(project_id, session_id)
         .ok()
-        .flatten()
-    else {
+        .flatten();
+    let conversation = session
+        .as_ref()
+        .filter(|session| !crate::agentbox::is_agentbox_session(session))
+        .map(conversation_file)
+        .filter(|(transcript, _)| *transcript == Transcript::Written);
+    let (Some(session), Some((_, path))) = (session, conversation) else {
+        watches().remove(&key);
         return false;
     };
-    !crate::agentbox::is_agentbox_session(&session)
-        && conversation_on_disk(&session) == Transcript::Written
-        && agent_process_gone(&session)
+    let reading = GoneReading {
+        shell_prompt,
+        agent_process: agent_process_running(&session, true),
+        conversation_len: path
+            .and_then(|path| std::fs::metadata(path).ok())
+            .map(|metadata| metadata.len()),
+    };
+    let (next, gone) = advance_gone_watch(watch, reading, Instant::now());
+    match next {
+        Some(next) => watches().insert(key, next),
+        None => watches().remove(&key),
+    };
+    gone
 }
 
-/// No process runs in the session's terminal besides its shell, read from the snapshot the send
-/// heal trusts. An unreadable snapshot proves nothing.
-fn agent_process_gone(session: &Value) -> bool {
-    let Ok(zmx_name) = crate::zmx::provider_zmx_session_name(session) else {
-        return false;
-    };
-    crate::zmx::read_zmx_session_process_identities(
-        std::slice::from_ref(&zmx_name),
-        &crate::resume_lookup::home_dir(),
+/// Per session, `project:session`: an agent seen gone, waiting out the settle or confirmed.
+static AGENT_GONE: LazyLock<Mutex<HashMap<String, GoneWatch>>> = LazyLock::new(Default::default);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GoneWatch {
+    /// When the screen was first seen back at the shell with no agent process.
+    since: Instant,
+    /// Once confirmed, the conversation's size then (`None` when unreadable).
+    confirmed_at: Option<Option<u64>>,
+}
+
+/// What one probe saw of a session whose agent wrote its conversation.
+#[derive(Clone, Copy, Debug)]
+struct GoneReading {
+    shell_prompt: bool,
+    /// Whether an agent process runs in the session; `None` when the snapshot is unreadable.
+    agent_process: Option<bool>,
+    conversation_len: Option<u64>,
+}
+
+/// One step of [`agent_left_conversation`]: the watch to keep and whether the agent is gone.
+fn advance_gone_watch(
+    watch: Option<GoneWatch>,
+    reading: GoneReading,
+    now: Instant,
+) -> (Option<GoneWatch>, bool) {
+    // An agent process in the session again: it runs.
+    if reading.agent_process == Some(true) {
+        return (None, false);
+    }
+    if let Some(
+        watch @ GoneWatch {
+            confirmed_at: Some(len),
+            ..
+        },
+    ) = watch
+    {
+        // A conversation that grew was written by an agent that came back.
+        let grew = matches!((reading.conversation_len, len), (Some(now_len), Some(then)) if now_len > then);
+        return if grew {
+            (None, false)
+        } else {
+            (Some(watch), true)
+        };
+    }
+    if !reading.shell_prompt {
+        return (None, false);
+    }
+    // An unreadable snapshot proves nothing either way.
+    if reading.agent_process.is_none() {
+        return (watch, false);
+    }
+    let watch = watch.unwrap_or(GoneWatch {
+        since: now,
+        confirmed_at: None,
+    });
+    if now.duration_since(watch.since) < START_FAILURE_SETTLE {
+        return (Some(watch), false);
+    }
+    (
+        Some(GoneWatch {
+            confirmed_at: Some(reading.conversation_len),
+            ..watch
+        }),
+        true,
     )
-    .is_ok_and(|identities| !identities.contains_key(&zmx_name))
+}
+
+/// Whether an agent process runs in the session's terminal, read from the snapshot the send heal
+/// trusts (`cached`: the shared two-second snapshot); `None` when it is unreadable.
+fn agent_process_running(session: &Value, cached: bool) -> Option<bool> {
+    let zmx_name = crate::zmx::provider_zmx_session_name(session).ok()?;
+    let names = std::slice::from_ref(&zmx_name);
+    let home = crate::resume_lookup::home_dir();
+    let identities = if cached {
+        crate::zmx::read_cached_zmx_session_process_identities(names, &home)
+    } else {
+        crate::zmx::read_zmx_session_process_identities(names, &home)
+    };
+    identities
+        .ok()
+        .map(|identities| identities.contains_key(&zmx_name))
 }
 
 /// The name the card gives the session's agent (Q1122): "Claude Code couldn't start", not "The
@@ -175,15 +273,20 @@ enum Transcript {
 
 /// Whether the session's agent has written a conversation, so it came up at least once.
 fn conversation_on_disk(session: &Value) -> Transcript {
+    conversation_file(session).0
+}
+
+/// [`conversation_on_disk`], with the conversation's file when Ghostex found one.
+fn conversation_file(session: &Value) -> (Transcript, Option<std::path::PathBuf>) {
     let Some(agent_session_id) = read_runtime_text(session, "agentSessionId") else {
-        return Transcript::Missing;
+        return (Transcript::Missing, None);
     };
     let agent = crate::session_chat_follower::session_chat_agent_for_session(session);
     // An agent whose transcript Ghostex cannot find reported an id, which only a running agent does.
     let Some(transcript_agent) =
         crate::session_chat::resolve_session_chat_transcript_agent(agent.as_deref())
     else {
-        return Transcript::Written;
+        return (Transcript::Written, None);
     };
     match crate::session_chat::resolve_session_chat_transcript_path(
         transcript_agent,
@@ -192,11 +295,11 @@ fn conversation_on_disk(session: &Value) -> Transcript {
     )
     .filter(|path| path.is_file())
     {
-        None => Transcript::Missing,
+        None => (Transcript::Missing, None),
         Some(path) if crate::agent_transcripts::transcript_has_records(&path) => {
-            Transcript::Written
+            (Transcript::Written, Some(path))
         }
-        Some(_) => Transcript::Unreadable,
+        Some(path) => (Transcript::Unreadable, Some(path)),
     }
 }
 
@@ -204,6 +307,58 @@ fn conversation_on_disk(session: &Value) -> Transcript {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn reading(shell_prompt: bool, agent_process: Option<bool>, len: u64) -> GoneReading {
+        GoneReading {
+            shell_prompt,
+            agent_process,
+            conversation_len: Some(len),
+        }
+    }
+
+    /// Killed mid-call: the shell's prompt with no agent process, held for the settle time, then
+    /// the agent is gone until it comes back, whatever is typed at the shell.
+    #[test]
+    fn a_confirmed_absence_holds_until_an_agent_comes_back() {
+        let start = Instant::now();
+        let step = |watch, reading, after: u64| {
+            advance_gone_watch(watch, reading, start + Duration::from_secs(after))
+        };
+        // A resumed conversation shows the prompt a moment before its agent launches.
+        let (watch, gone) = step(None, reading(true, Some(false), 100), 0);
+        assert!(!gone, "not before the settle time");
+        let (watch, gone) = step(watch, reading(true, Some(false), 100), 3);
+        assert!(!gone);
+        let (watch, gone) = step(watch, reading(true, Some(false), 100), 9);
+        assert!(gone, "confirmed after the settle time");
+        // `sleep 100` typed at the shell: no prompt, still no agent.
+        let (watch, gone) = step(watch, reading(false, Some(false), 100), 10);
+        assert!(gone, "a command at the shell is not the agent coming back");
+        let (watch, gone) = step(watch, reading(false, None, 100), 11);
+        assert!(gone, "an unreadable snapshot changes nothing");
+        // The agent is started again.
+        let (watch, gone) = step(watch, reading(false, Some(true), 100), 12);
+        assert!(!gone && watch.is_none());
+        // Confirmed again, then its conversation grows: an agent wrote it.
+        let (watch, _) = step(None, reading(true, Some(false), 100), 20);
+        let (watch, gone) = step(watch, reading(true, Some(false), 100), 29);
+        assert!(gone);
+        let (watch, gone) = step(watch, reading(false, Some(false), 140), 30);
+        assert!(!gone && watch.is_none());
+    }
+
+    /// The prompt goes before the settle time: nothing is held.
+    #[test]
+    fn a_prompt_that_goes_before_the_settle_time_starts_over() {
+        let start = Instant::now();
+        let (watch, _) = advance_gone_watch(None, reading(true, Some(false), 1), start);
+        let (watch, gone) = advance_gone_watch(
+            watch,
+            reading(false, Some(false), 1),
+            start + Duration::from_secs(2),
+        );
+        assert!(!gone && watch.is_none());
+    }
 
     #[test]
     fn the_card_names_the_cli_the_user_picked() {
