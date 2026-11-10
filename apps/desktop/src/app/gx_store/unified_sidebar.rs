@@ -66,6 +66,12 @@ pub(crate) struct UnifiedSidebarHost {
     /// The branch each card last showed, by machine and row id, for the card's third line while
     /// its branch is not known (`unified_branch_line`).
     last_branches: HashMap<(MachineId, String), String>,
+    /// A reveal asked for before the list held its row (the list not built yet, or the row's computer
+    /// not loaded, as when the web build opens a session from its link on load), tried again after
+    /// each build until the row is there.
+    pending_reveal: Option<String>,
+    /// The same for a session the web build opened by its key before any list held its row.
+    pending_reveal_key: Option<SessionKey>,
     /// The row the newest reveal brought on screen: listed with the coordinators above it while
     /// their other older threads stay tucked (gx-core `UnifiedFolds::reveal`). Not saved.
     reveal_target: Option<String>,
@@ -819,6 +825,9 @@ impl GhostexGpuiApp {
             .settings
             .unified_sidebar
         {
+            // The Project sidebar reveals its own rows.
+            self.gx_store.unified_sidebar.pending_reveal = None;
+            self.gx_store.unified_sidebar.pending_reveal_key = None;
             if self.native_sidebar.unified.is_some() {
                 self.gx_store.unified_sidebar.lanes.clear();
                 self.native_sidebar.unified = None;
@@ -850,6 +859,18 @@ impl GhostexGpuiApp {
         self.native_sidebar.unified = Some(Arc::new(snapshot));
         self.track_native_unified_folds();
         self.gx_store_book_unified_deadline(deadline, cx);
+        if let Some(pending) = self.gx_store.unified_sidebar.pending_reveal.take() {
+            self.gx_store_unified_reveal(&pending, cx);
+        }
+        let host = &mut self.gx_store.unified_sidebar;
+        if let Some(row_id) = host
+            .pending_reveal_key
+            .as_ref()
+            .and_then(|key| host.row_for_session_key(key))
+        {
+            host.pending_reveal_key = None;
+            self.gx_store_unified_reveal(&row_id, cx);
+        }
         cx.notify();
     }
 
@@ -911,6 +932,24 @@ impl GhostexGpuiApp {
         self.gx_store_unified_sidebar_changed(&ChangeSummary::default(), cx);
     }
 
+    /// The Unified reveal of a session the web build opens by its key: now when a list holds its row,
+    /// else once one does.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub(crate) fn gx_store_unified_reveal_session(
+        &mut self,
+        session: &SessionKey,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let host = &mut self.gx_store.unified_sidebar;
+        match host.row_for_session_key(session) {
+            Some(row_id) => {
+                host.pending_reveal_key = None;
+                self.gx_store_unified_reveal(&row_id, cx);
+            }
+            None => host.pending_reveal_key = Some(session.clone()),
+        }
+    }
+
     /// The Unified half of a reveal: opens what folds the card away so the renderer draws it and
     /// scrolls to it (CDXC:Sidebar 2026-11-05 in gx-core `unified_sidebar/reveal.rs`). Nothing
     /// while the Project sidebar is selected, whose own reveal plan does this for its headings.
@@ -920,8 +959,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let Some(snapshot) = self.native_sidebar.unified.clone() else {
+            self.gx_store.unified_sidebar.pending_reveal = Some(sidebar_session_id.to_string());
             return;
         };
+        self.gx_store.unified_sidebar.pending_reveal = None;
         let grouped = self
             .gx_store
             .sidebar_list
@@ -945,6 +986,11 @@ impl GhostexGpuiApp {
                     sidebar_session_id,
                     now_ms,
                 ) else {
+                    // Its computer's rows have not arrived yet: try again once they have.
+                    let host = &mut self.gx_store.unified_sidebar;
+                    if host.session_key_for_row(sidebar_session_id).is_none() {
+                        host.pending_reveal = Some(sidebar_session_id.to_string());
+                    }
                     return;
                 };
                 let host = &mut self.gx_store.unified_sidebar;

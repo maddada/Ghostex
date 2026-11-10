@@ -281,9 +281,7 @@ impl GhostexGpuiApp {
         // does not compile; the Unified half opens what folds the row away, so a thread opened
         // from a Workers list or a link unfolds its coordinator (CDXC:Sidebar 2026-11-09 in gx-core
         // unified_sidebar/tree.rs).
-        if let Some(row_id) = self.gx_store.unified_sidebar.row_for_session_key(&session) {
-            self.gx_store_unified_reveal(&row_id, cx);
-        }
+        self.gx_store_unified_reveal_session(&session, cx);
         self.gx_store_handle(
             Event::Intent(Intent::FocusSession {
                 session,
