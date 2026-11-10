@@ -306,8 +306,11 @@ impl Render for VoicePanelDemo {
                     })
                     .into_any_element(),
             })
+            .child(controls::status_strip(strip, colors, |_, _| {
+                eprintln!("stop talking")
+            }))
             .children(self.text_box.as_ref().map(|text_box| {
-                div().px(px(12.0)).pb(px(8.0)).child(
+                div().flex_shrink_0().px(px(12.0)).pb(px(8.0)).child(
                     div()
                         .rounded(px(8.0))
                         .border_1()
@@ -325,9 +328,6 @@ impl Render for VoicePanelDemo {
                                 .text_size(px(12.5)),
                         ),
                 )
-            }))
-            .child(controls::status_strip(strip, colors, |_, _| {
-                eprintln!("stop talking")
             }))
             .child(
                 h_flex()
@@ -412,6 +412,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     let scroll = ScrollHandle::new();
     if state == "scrolled" {
         scroll.set_offset(point(px(0.0), px(-20.0)));
+    }
+    // A typed turn just arrived: the transcript follows its end, as the panel's does.
+    if state == "typed" {
+        scroll.scroll_to_bottom();
     }
     let _ = super::open_modal_window(
         panel.width.as_f32(),

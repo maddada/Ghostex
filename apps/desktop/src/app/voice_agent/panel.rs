@@ -2031,13 +2031,13 @@ impl Render for VoicePanelWindow {
             .child(self.header(snapshot, &colors, cx))
             .children(self.focus_strip(snapshot, &colors, cx))
             .child(self.body(snapshot, &colors, cx))
-            .when(snapshot.phase == VoicePhase::Live, |this| {
-                this.child(self.text_box(&colors))
-            })
             .when(
                 matches!(snapshot.phase, VoicePhase::Starting | VoicePhase::Live),
                 |this| this.child(self.status_strip(snapshot, &colors, cx)),
             )
+            .when(snapshot.phase == VoicePhase::Live, |this| {
+                this.child(self.text_box(&colors))
+            })
             .child(self.footer(snapshot, &colors, cx))
             .when(self.holding_talk, |this| {
                 this.child(self.talk_release_listener(cx))

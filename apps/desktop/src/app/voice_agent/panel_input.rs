@@ -125,10 +125,12 @@ impl VoicePanelWindow {
         });
     }
 
-    /// The box under the transcript. A press on it gives the panel the keyboard, as a press on the
-    /// transcript does.
+    /// The box under the transcript and the status strip, on the buttons. It keeps its height and
+    /// grows upward to five lines, then scrolls; the transcript gives way and ends above it. A
+    /// press on it gives the panel the keyboard, as a press on the transcript does.
     pub(super) fn text_box(&self, colors: &PanelColors) -> AnyElement {
         div()
+            .flex_shrink_0()
             .px(px(12.0))
             .pb(px(8.0))
             .child(
