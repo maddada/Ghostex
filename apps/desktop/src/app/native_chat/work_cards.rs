@@ -45,6 +45,8 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
 /// A chip's glyph by what it says.
 /// The dock's cards stop growing here (unscaled) and scroll inside it.
 const DOCK_MAX_HEIGHT: f32 = 360.0;
+/// The fold key that shows every dock row in place instead of the first `limit`.
+const DOCK_ALL_ROWS: &str = "dock-rows:all";
 /// The dock's cards fold by themselves while the draft is longer than this.
 const DOCK_FOLDS_PAST_CHARS: usize = 280;
 
@@ -227,6 +229,14 @@ impl NativeChatView {
         if open {
             let limit = dock["limit"].as_u64().unwrap_or(4) as usize;
             let hidden = rows.len().saturating_sub(limit);
+            // "N more need you" opens the rest here, under the first rows, and "Show fewer" folds
+            // them back; past `DOCK_MAX_HEIGHT` the rows scroll inside the dock. The header's work
+            // items button stays the way to the whole list.
+            //
+            // CDXC:Coordinators 2026-11-10 DECISION:
+            // User: the more line opens the rest of the rows in place, inside the dock, instead of
+            // the Work panel at Needs you, with a way to fold them back.
+            let all = hidden > 0 && self.expanded.contains(DOCK_ALL_ROWS);
             let mut list = div()
                 .id("work-dock-rows")
                 .w_full()
@@ -236,11 +246,10 @@ impl NativeChatView {
                 .flex()
                 .flex_col()
                 .p(px(4.0 * s));
-            for row in rows.iter().take(limit) {
+            for row in rows.iter().take(if all { rows.len() } else { limit }) {
                 list = list.child(self.dock_row(row, p, cx));
             }
             if hidden > 0 {
-                let more = dock["more"].clone();
                 list = list.child(
                     div()
                         .id("work-dock-more")
@@ -252,9 +261,17 @@ impl NativeChatView {
                         .text_color(p.muted)
                         .chat_cursor_pointer()
                         .hover(|style| style.text_color(p.foreground))
-                        .child(format!("{hidden} more need you"))
+                        .aria_expanded(all)
+                        .child(if all {
+                            "Show fewer".to_string()
+                        } else {
+                            format!("{hidden} more need you")
+                        })
                         .on_click(cx.listener(move |this, _, _, cx| {
-                            this.invoke(more.clone(), cx);
+                            if !this.expanded.remove(DOCK_ALL_ROWS) {
+                                this.expanded.insert(DOCK_ALL_ROWS.to_string());
+                            }
+                            cx.notify();
                         })),
                 );
             }
@@ -478,7 +495,19 @@ impl NativeChatView {
         let busy = row["busy"] == true;
         // The dock's answers, the look every place shares (work_actions.rs).
         let answers: Vec<Value> = row["buttons"].as_array().cloned().unwrap_or_default();
-        let buttons = self.work_answer_buttons(&key, &answers, busy, p, cx);
+        let mut buttons = self.work_answer_buttons(&key, &answers, busy, p, cx);
+        // A row with no answers shows what it asks for in their place, in their look: a page or
+        // form with questions its Open, a question with no preset answers its Reply. A click on
+        // the row itself still opens it.
+        //
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User: every row shows what a click does; a Ghostex page with questions gets an Open
+        // button where answers would be, and a question with no preset answers a Reply button.
+        if answers.is_empty() && row["needs"] == true {
+            if let Some(button) = self.work_row_action(&key, row, p, cx) {
+                buttons.push(button);
+            }
+        }
         let toggle = open_key.clone();
         let mut head = div()
             .id(gpui::SharedString::from(format!("dock-row-head:{key}")))
