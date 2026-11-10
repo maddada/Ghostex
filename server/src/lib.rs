@@ -99,6 +99,7 @@ pub(crate) mod session_chat_account_sign_in;
 pub mod session_chat_agent_fleet;
 pub(crate) mod session_chat_agent_restart;
 pub mod session_chat_agent_tasks;
+pub(crate) mod session_chat_agent_tasks_transcript;
 pub mod session_chat_antigravity_mirror;
 pub mod session_chat_antigravity_permission;
 pub mod session_chat_antigravity_status;

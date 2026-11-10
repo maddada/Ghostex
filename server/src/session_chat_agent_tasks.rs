@@ -125,11 +125,21 @@ pub fn read_session_chat_agent_tasks(
     if agent_session_id.is_empty() {
         return None;
     }
-    read_session_chat_agent_tasks_in(
+    let mut tasks = read_session_chat_agent_tasks_in(
         &claude_config_directory(agent_session_path)
             .join(CLAUDE_TASKS_DIRECTORY)
             .join(agent_session_id),
-    )
+    )?;
+    // CDXC:SessionChat 2026-11-10: the store outlives the CLI's own list (a restarted process starts
+    // empty and leaves the old files), so what the transcript says the CLI answered decides what stays.
+    if let Some(evidence) = agent_session_path
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .and_then(crate::session_chat_agent_tasks_transcript::read_task_evidence)
+    {
+        tasks.tasks.retain(|task| evidence.keeps(&task.id));
+    }
+    (!tasks.tasks.is_empty()).then_some(tasks)
 }
 
 pub(crate) fn read_session_chat_agent_tasks_in(store: &Path) -> Option<SessionChatAgentTasks> {
