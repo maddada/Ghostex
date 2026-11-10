@@ -5488,10 +5488,11 @@ card on the Lock Screen and the counts in the Dynamic Island. It starts with
 Ghostex open while agents work or wait, lists waiting agents first, then working
 agents and briefly those that just finished. Each row leads with its session's
 name, as the Sessions list shows it, then its project, state and time; the icon
-tells which agent it is, and prompts and replies are never shown. **Show
-session names** on the same page is on by default: anyone who sees your Lock
-Screen can read the names, so turn it off to list agents by their own names
-instead. Tap a row to open its session; a question
+tells which agent it is. Prompts and replies are not shown, but a session's
+name can come from your messages. **Show session names** on the same page is on
+by default: anyone who sees your Lock Screen can read the names, so turn it off
+to list agents by their own names instead. Tap a row to open its session; a
+question
 opens at its question card. It ends 15 minutes after Ghostex first notices that
 no agent is working or waiting, or when you turn it off; while iOS keeps the app
 suspended, it ends the next time Ghostex runs. If a computer needs a newer
@@ -5508,8 +5509,9 @@ The widget shows the app's last saved update, with **Updated** and its time,
 not a continuous connection; opening Ghostex refreshes it, and a background
 wake for a push can refresh it too. It lists each agent under its session's
 name, or under the agent's own name when **Settings > Live Activity > Show
-session names** is off, with its project, state and time, never prompt or reply
-text. Tap the widget to open Ghostex.
+session names** is off, with its project, state and time. Prompts and replies
+are not shown, but a session's name can come from your messages. Tap the widget
+to open Ghostex.
 
 Ghostex combines two sources to know whether a session is working, waiting for
 you, or done, and there is no setting for it. Its own detection reads each
