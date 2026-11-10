@@ -14,6 +14,7 @@ mod disclosure;
 pub(crate) mod drag;
 mod drag_source;
 mod empty;
+pub(crate) mod focus_order;
 mod gbots_departments;
 pub(crate) mod gbots_rows;
 mod host;

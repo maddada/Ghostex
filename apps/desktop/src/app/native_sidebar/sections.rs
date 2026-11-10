@@ -94,6 +94,7 @@ impl GhostexGpuiApp {
         // This supersedes the 2026-09-16 rule of letting the heading run through the sidebar's right edge for the native sidebar.
         let owner = super::menus::MenuOwner::default();
         let menu_owner = owner.clone();
+        let stop_key = format!("section:{key}");
         h_flex()
             .id(format!("native-sidebar-section-{key}"))
             .on_prepaint(super::menus::record_menu_owner(&owner))
@@ -171,6 +172,15 @@ impl GhostexGpuiApp {
                             cx,
                         );
                     }),
+                )
+            })
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    stop_key,
+                    super::focus_order::SidebarStopPlace::List,
+                    appearance,
+                    cx,
                 )
             })
             .into_any_element()

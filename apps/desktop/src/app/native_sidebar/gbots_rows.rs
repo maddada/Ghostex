@@ -274,6 +274,7 @@ impl GhostexGpuiApp {
         let hover_key = format!("gbots-heading-{storage_id}");
         let hovered = self.native_sidebar.hovered_section.as_ref() == Some(&hover_key);
         let fold_id = storage_id.to_string();
+        let stop_key = format!("gbots-heading:{storage_id}");
         let owner = super::menus::MenuOwner::default();
         let menu_owner = owner.clone();
         h_flex()
@@ -376,6 +377,15 @@ impl GhostexGpuiApp {
                     cx,
                 );
             })
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    stop_key,
+                    super::focus_order::SidebarStopPlace::List,
+                    appearance,
+                    cx,
+                )
+            })
             .into_any_element()
     }
 
@@ -467,6 +477,7 @@ impl GhostexGpuiApp {
         .iter()
         .any(|key| count(key));
         let fold_id = group.group_id.clone();
+        let stop_key = format!("gbot:{}", group.group_id);
         let mut tooltip = if look.title.is_empty() {
             look.name.clone()
         } else {
@@ -598,6 +609,15 @@ impl GhostexGpuiApp {
                     cx,
                 );
             })
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    stop_key,
+                    super::focus_order::SidebarStopPlace::List,
+                    appearance,
+                    cx,
+                )
+            })
             .into_any_element()
     }
 
@@ -631,6 +651,15 @@ impl GhostexGpuiApp {
                 cx.stop_propagation();
                 app.run_native_sidebar_gbots_command(&command, window, cx);
             }))
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    format!("gbot-empty:{}", group.group_id),
+                    super::focus_order::SidebarStopPlace::List,
+                    appearance,
+                    cx,
+                )
+            })
             .into_any_element()
     }
 

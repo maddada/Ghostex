@@ -448,6 +448,15 @@ impl GhostexGpuiApp {
                             cx.stop_propagation();
                             app.toggle_native_sidebar_usage_visible(cx);
                         }))
+                        .map(|button| {
+                            self.sidebar_focus_stop(
+                                button,
+                                "navigation:usage",
+                                super::focus_order::SidebarStopPlace::Fixed,
+                                appearance,
+                                cx,
+                            )
+                        })
                         .managed_discrete_tooltip_with_placement(
                             ManagedTooltipPlacement::AboveLeft,
                             tooltip_delay,

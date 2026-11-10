@@ -31,6 +31,7 @@ impl GhostexGpuiApp {
         let Some(snapshot) = self.native_sidebar.snapshot.clone() else {
             return div().size_full().into_any_element();
         };
+        self.native_sidebar.focus_stops.begin_frame();
         // The list keeps showing the outgoing Space while its exit fade runs; the selector row above it already shows the new one.
         let content = self
             .native_sidebar
@@ -87,6 +88,13 @@ impl GhostexGpuiApp {
         } else {
             None
         };
+        // The project header pinned at the top: focusing it reveals nothing, its pinned copy shows.
+        let pinned_header = if classic {
+            self.native_sticky_project_group_id(&content, &appearance)
+        } else {
+            None
+        };
+        let reveal_scale = appearance.scale;
         // Built once per frame for the Commands row's button and whichever strip can draw: the
         // pinned one and the peek are exclusive (`sidebar_usage_visible`).
         let usage_meters = self.account_usage_meters();
@@ -206,6 +214,12 @@ impl GhostexGpuiApp {
                             .on_children_prepainted(move |_, window, cx| {
                                 view.update(cx, |app, cx| {
                                     app.update_native_sidebar_scroll(window, cx);
+                                    app.reveal_focused_native_sidebar_stop(
+                                        reveal_scale,
+                                        pinned_header.as_deref(),
+                                        window,
+                                        cx,
+                                    );
                                     app.update_native_space_transition(window, cx);
                                     // The store's own request wins over the publish's.
                                     //
@@ -447,7 +461,7 @@ impl GhostexGpuiApp {
             )
             .children(
                 classic
-                    .then(|| self.render_native_sticky_project(&content, &appearance, cx))
+                    .then(|| self.render_native_sticky_project(&content, &appearance, window, cx))
                     .flatten(),
             )
             .children(self.render_native_sidebar_usage_peek(

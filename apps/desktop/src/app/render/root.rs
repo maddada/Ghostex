@@ -387,7 +387,9 @@ impl Render for GhostexGpuiApp {
                 }
             }))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                // A focused sidebar control takes Enter and Space as its click (native_sidebar/focus_order.rs); nothing here may also type them into a terminal or the chat.
                 if this.native_sidebar_input_owns_focus(window, cx)
+                    || this.native_sidebar_stop_focused(window)
                     || this.terminal_search_input_owns_keyboard_focus(window, cx)
                     || this.browser_find_input_owns_keyboard_focus(window, cx)
                 {

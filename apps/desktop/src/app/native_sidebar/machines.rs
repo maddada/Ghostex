@@ -336,6 +336,7 @@ impl GhostexGpuiApp {
         } else {
             icon.into_any_element()
         };
+        let stop_key = format!("machine-tab:{id}");
         h_flex()
             .id(format!("native-sidebar-machine-{id}"))
             .relative()
@@ -446,6 +447,15 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 })
+            })
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    stop_key,
+                    super::focus_order::SidebarStopPlace::Fixed,
+                    appearance,
+                    cx,
+                )
             })
             .into_any_element()
     }

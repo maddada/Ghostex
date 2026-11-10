@@ -100,6 +100,8 @@ pub(crate) struct NativeSidebarState {
     pub(crate) session_card_bounds: std::collections::HashMap<String, gpui::Bounds<gpui::Pixels>>,
     /// Armed Delayed Send / Close After Done labels by sidebar session id, for every session rather than only the rows the snapshot shows (session_chat_armed_actions.rs).
     pub(crate) armed_actions: std::collections::HashMap<String, serde_json::Value>,
+    /// The keyboard focus order's stops (focus_order.rs).
+    pub(crate) focus_stops: super::focus_order::SidebarFocusStops,
 }
 
 impl NativeSidebarState {

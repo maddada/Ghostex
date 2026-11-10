@@ -17,6 +17,7 @@ use super::model::{UnifiedCard, UnifiedShelfView};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::chrome_color;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
+use crate::app::native_sidebar::focus_order::SidebarStopPlace;
 
 /// `in 12m`, `in 3h`, `in 2d`: when a snoozed session wakes.
 fn wake_label(wake_at_ms: i64, now: i64) -> String {
@@ -45,6 +46,7 @@ impl GhostexGpuiApp {
         // Drafts starts open and the rest folded, so the set holds whichever was toggled away
         // from that. A reveal opens it through the same key (gx-core `unified_sidebar/reveal.rs`).
         let key = unified_shelf_key(kind, project);
+        let stop_key = key.clone();
         let open = unified_shelf_open(&self.gx_store.unified_sidebar.saved, kind, &key);
         v_flex()
             .w_full()
@@ -87,7 +89,16 @@ impl GhostexGpuiApp {
                         }
                         host.persist();
                         cx.notify();
-                    })),
+                    }))
+                    .map(|header| {
+                        self.sidebar_focus_stop(
+                            header,
+                            format!("unified-shelf:{stop_key}"),
+                            SidebarStopPlace::List,
+                            appearance,
+                            cx,
+                        )
+                    }),
             )
             .when(open, |column| {
                 column.children(shelf.cards.iter().map(|card| {

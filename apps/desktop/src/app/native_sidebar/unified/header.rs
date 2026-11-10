@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use super::model::UnifiedSidebarSnapshot;
 use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
+use crate::app::native_sidebar::focus_order::SidebarStopPlace;
 
 /// The header's side padding, its three buttons and the gap before each, before the zoom.
 const HEADER_PADDING: f32 = 8.0;
@@ -291,19 +292,19 @@ impl GhostexGpuiApp {
                         },
                     )
                 })
-                .on_click(cx.listener(
-                    move |_, event: &gpui::ClickEvent, window, cx| {
-                        cx.stop_propagation();
-                        Self::show_unified_filter_menu(
-                            &menu,
-                            owner.get(),
-                            event,
-                            scale,
-                            window,
-                            cx,
-                        );
-                    },
-                )),
+                .on_click(cx.listener(move |_, event: &gpui::ClickEvent, window, cx| {
+                    cx.stop_propagation();
+                    Self::show_unified_filter_menu(&menu, owner.get(), event, scale, window, cx);
+                }))
+                .map(|button| {
+                    self.sidebar_focus_stop(
+                        button,
+                        "unified-header:filter",
+                        SidebarStopPlace::Fixed,
+                        appearance,
+                        cx,
+                    )
+                }),
             )
             .child(
                 icon_button(
@@ -317,7 +318,16 @@ impl GhostexGpuiApp {
                         json!({"type": "sidebarAction", "action": "addProject"}),
                         cx,
                     );
-                })),
+                }))
+                .map(|button| {
+                    self.sidebar_focus_stop(
+                        button,
+                        "unified-header:add-project",
+                        SidebarStopPlace::Fixed,
+                        appearance,
+                        cx,
+                    )
+                }),
             )
             .child(
                 icon_button(
@@ -328,7 +338,16 @@ impl GhostexGpuiApp {
                 .on_click(cx.listener(|app, _, _, cx| {
                     cx.stop_propagation();
                     app.open_unified_new_session(cx);
-                })),
+                }))
+                .map(|button| {
+                    self.sidebar_focus_stop(
+                        button,
+                        "unified-header:new-session",
+                        SidebarStopPlace::Fixed,
+                        appearance,
+                        cx,
+                    )
+                }),
             )
             .into_any_element()
     }

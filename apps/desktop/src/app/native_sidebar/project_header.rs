@@ -28,6 +28,7 @@ impl GhostexGpuiApp {
         group: &NativeSidebarGroup,
         hud: &Value,
         appearance: &SidebarAppearance,
+        pinned: bool,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let id = group.group_id.clone();
@@ -432,6 +433,16 @@ impl GhostexGpuiApp {
                 cx.stop_propagation();
                 app.dispatch_native_sidebar_ui(json!({"type": "toggleGroup", "groupId": id}), cx);
             }))
+            // The header in the list is the stop; its pinned copy only mirrors it (sticky.rs).
+            .when(!pinned, |row| {
+                self.sidebar_focus_stop(
+                    row,
+                    super::focus_order::project_header_stop_key(&group.group_id),
+                    super::focus_order::SidebarStopPlace::List,
+                    appearance,
+                    cx,
+                )
+            })
             .into_any_element()
     }
 }

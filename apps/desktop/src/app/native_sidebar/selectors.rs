@@ -117,7 +117,8 @@ impl GhostexGpuiApp {
             h_flex().id("native-sidebar-space-track").sidebar_drop_target("space-row", String::new(), None, cx).w_full().h(px(40.0 * scale)).pb(px(12.0 * scale)).px(px(6.5 * scale)).justify_center().gap(px(4.0 * scale))
                 .when(user_spaces.is_empty(), |row| row.child(h_flex().id("native-sidebar-create-space").role(gpui::Role::Button).aria_label("Create space").flex_shrink_0().h(px(28.0 * scale)).px(px(10.0 * scale)).gap(px(6.0 * scale)).rounded(px(6.0 * scale)).border_1().border_color(appearance.muted.opacity(0.25)).text_size(px(12.0 * scale))
                     .text_color(appearance.chrome_label).child(titlebar_svg_icon("titlebar/plus.svg", 14.0 * scale, appearance.chrome_icon)).child("Create space")
-                    .on_click(cx.listener(|app, _, _, cx| { cx.stop_propagation(); app.dispatch_native_sidebar_ui(json!({"type": "editSpace"}), cx); }))))
+                    .on_click(cx.listener(|app, _, _, cx| { cx.stop_propagation(); app.dispatch_native_sidebar_ui(json!({"type": "editSpace"}), cx); }))
+                    .map(|button| self.sidebar_focus_stop(button, "space:create", super::focus_order::SidebarStopPlace::Fixed, appearance, cx))))
                 .children(visible.into_iter().chain(snapshot.spaces.iter().filter(|space| space.id == "other")).map(|space| self.render_native_sidebar_space(space, &visible_ids, appearance, cx)))
                 .when(overflow, |row| row.child(div().id("native-sidebar-more-spaces").on_prepaint(super::menus::record_menu_owner(&more_owner)).role(gpui::Role::Button).aria_label("More spaces").size(px(28.0 * scale)).flex().items_center().justify_center().rounded(px(6.0 * scale)).hover(|row| row.bg(appearance.hover))
                     .child(titlebar_svg_icon("titlebar/dots.svg", 16.0 * scale, appearance.chrome_icon))
@@ -127,7 +128,8 @@ impl GhostexGpuiApp {
                         if !items.is_empty() { items.push(json!({"separator": true})); }
                         items.push(json!({"label": "New Space", "icon": "plus", "command": {"type": "editSpace"}}));
                         Self::show_native_sidebar_menu_hung(&json!(items), more_owner.get(), None, Some(("more-spaces".to_owned(), super::menus::press_position(event))), event.position(), scale, window, cx);
-                    }))))
+                    }))
+                    .map(|button| self.sidebar_focus_stop(button, "space:more", super::focus_order::SidebarStopPlace::Fixed, appearance, cx))))
                 .when(with_bots && snapshot.bots_enabled, |row| row.child(self.render_native_sidebar_bots_space_slot(snapshot.bots_mode, appearance, cx)))
             .into_any_element(),
         )
@@ -315,6 +317,15 @@ impl GhostexGpuiApp {
                     );
                 }),
             )
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    format!("space:{}", space.id),
+                    super::focus_order::SidebarStopPlace::Fixed,
+                    appearance,
+                    cx,
+                )
+            })
             .into_any_element()
     }
 }

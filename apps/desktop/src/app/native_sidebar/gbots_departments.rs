@@ -74,6 +74,7 @@ impl GhostexGpuiApp {
         let owner = super::menus::MenuOwner::default();
         let menu_owner = owner.clone();
         let fold_id = storage_id.clone();
+        let stop_key = format!("gbots-department:{storage_id}");
         h_flex()
             .id(format!("native-sidebar-gbots-department-{storage_id}"))
             .on_prepaint(super::menus::record_menu_owner(&owner))
@@ -154,6 +155,15 @@ impl GhostexGpuiApp {
                     window,
                     cx,
                 );
+            })
+            .map(|row| {
+                self.sidebar_focus_stop(
+                    row,
+                    stop_key,
+                    super::focus_order::SidebarStopPlace::List,
+                    appearance,
+                    cx,
+                )
             })
             .into_any_element()
     }
