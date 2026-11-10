@@ -66,9 +66,32 @@ impl NativeChatView {
     pub(super) fn has_reply_actions(&self, message: &Value) -> bool {
         message["role"] == "assistant"
             && message["actionContent"]["copyable"] == true
-            && self.snapshot["finalIds"]
+            && self.is_final_reply(message)
+    }
+
+    /// Whether `message` is a turn's final answer (the snapshot's `finalIds`).
+    ///
+    /// CDXC:SessionChat 2026-11-10 WHY:
+    /// Measured on the user's running app: 6.3% of the main thread's busy time was this check, which every transcript row asked (twice) on every render by scanning `finalIds` and looking the message's id up again for each entry. The ids are kept as a set until the snapshot is replaced; the cache holds the snapshot weakly, so a replaced (or copied-on-write) snapshot always builds a new one.
+    fn is_final_reply(&self, message: &Value) -> bool {
+        let Some(id) = message["id"].as_str() else {
+            return false;
+        };
+        let mut cache = self.final_ids.borrow_mut();
+        let current = std::sync::Arc::as_ptr(&self.snapshot);
+        if cache
+            .as_ref()
+            .is_none_or(|(built_from, _)| built_from.as_ptr() != current)
+        {
+            let ids = self.snapshot["finalIds"]
                 .as_array()
-                .is_some_and(|ids| ids.iter().any(|id| id == &message["id"]))
+                .into_iter()
+                .flatten()
+                .filter_map(|id| id.as_str().map(str::to_owned))
+                .collect();
+            *cache = Some((std::sync::Arc::downgrade(&self.snapshot), ids));
+        }
+        cache.as_ref().is_some_and(|(_, ids)| ids.contains(id))
     }
 
     /// A turn's final answer with no tool calls of its own: it is drawn flush with the chat column,
@@ -80,9 +103,7 @@ impl NativeChatView {
             && message["tools"]
                 .as_array()
                 .is_none_or(|tools| tools.is_empty())
-            && self.snapshot["finalIds"]
-                .as_array()
-                .is_some_and(|ids| ids.iter().any(|id| id == &message["id"]))
+            && self.is_final_reply(message)
     }
 
     pub(super) fn reply_marker(&self, p: &ChatAppearance) -> AnyElement {

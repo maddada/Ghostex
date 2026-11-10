@@ -280,20 +280,7 @@ impl NativeChatView {
 
     /// How wide `label` is in a pill (unscaled), which dropping it frees.
     fn pill_label_width(&self, label: &str, p: &ChatAppearance, cx: &gpui::App) -> f32 {
-        if label.is_empty() {
-            return 0.0;
-        }
-        let system = gpui::WindowTextSystem::new(cx.text_system().clone());
-        let run = gpui::TextRun {
-            len: label.len(),
-            font: gpui::font(p.font.clone()),
-            ..Default::default()
-        };
-        system
-            .shape_line(label.to_owned().into(), px(13.0 * p.scale), &[run], None)
-            .width
-            .as_f32()
-            / p.scale
+        super::fonts::label_width(label, &p.font, 13.0 * p.scale, cx) / p.scale
     }
 
     /// The view status chip at the strip's left: a click goes back to Normal view, and it shows an X

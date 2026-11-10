@@ -169,10 +169,7 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let card = message
-            .get("toolCard")
-            .filter(|card| card.is_object())?
-            .clone();
+        let card = message.get("toolCard").filter(|card| card.is_object())?;
         let s = p.scale;
         let id = text(message, "id");
         let key = format!("tool-card:{id}");
@@ -186,7 +183,7 @@ impl NativeChatView {
         let motion = self.disclosure_frame(&key, open, cx);
         let animate = (running || live) && !cx.reduce_motion();
         let (surface, border, hairline, _, _, _) = card_colors(p);
-        let entries = card["entries"].as_array().cloned().unwrap_or_default();
+        let entries = card["entries"].as_array().map_or(&[][..], Vec::as_slice);
 
         // Settings > Extensions > Experimental > Tool call lines: the card's header without its
         // box, and its calls as rows on the rail under it.
@@ -196,7 +193,7 @@ impl NativeChatView {
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .child(self.tool_card_header(&key, &card, open, animate, true, p, cx));
+                .child(self.tool_card_header(&key, card, open, animate, true, p, cx));
             if open || motion.is_some() {
                 let rows: Vec<AnyElement> = entries
                     .iter()
@@ -234,7 +231,7 @@ impl NativeChatView {
             .border_color(border)
             .bg(surface)
             .overflow_hidden()
-            .child(self.tool_card_header(&key, &card, open, animate, false, p, cx));
+            .child(self.tool_card_header(&key, card, open, animate, false, p, cx));
         if open || motion.is_some() {
             let rows: Vec<AnyElement> = entries
                 .iter()
@@ -286,7 +283,7 @@ impl NativeChatView {
         let (card_surface, _, _, hover, _, _) = card_colors(p);
         // A line has no box: its circles are cut out of the chat's own background.
         let surface = if line { p.background } else { card_surface };
-        let icons = card["icons"].as_array().cloned().unwrap_or_default();
+        let icons = card["icons"].as_array().map_or(&[][..], Vec::as_slice);
         let mut stack = div().flex().items_center().flex_shrink_0();
         let (disc, ring_color, ring_width) = stack_colors(surface, p);
         let ring = |tile: gpui::Div, index: usize| {

@@ -65,7 +65,7 @@ impl NativeChatView {
         {
             return self.tool_card(message, p, cx).into_iter().collect();
         }
-        let tools = message["tools"].as_array().cloned().unwrap_or_default();
+        let tools = message["tools"].as_array().map_or(&[][..], Vec::as_slice);
         if tools.is_empty() {
             return Vec::new();
         }

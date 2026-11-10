@@ -102,27 +102,25 @@ impl NativeChatView {
     }
 
     /// The cards that sit under the reply `message_id`.
-    pub(super) fn work_cards_under(&self, message_id: &str) -> Vec<Value> {
+    pub(super) fn work_cards_under(&self, message_id: &str) -> Vec<&Value> {
         self.work_cards()
             .iter()
             .filter(|card| card["anchorId"].as_str() == Some(message_id))
-            .cloned()
             .collect()
     }
 
     /// The cards of a summary-mode turn (`turnId`), drawn under the turn, outside its folds.
-    pub(super) fn work_cards_of_turn(&self, turn_id: &str) -> Vec<Value> {
+    pub(super) fn work_cards_of_turn(&self, turn_id: &str) -> Vec<&Value> {
         self.work_cards()
             .iter()
             .filter(|card| card["turnId"].as_str() == Some(turn_id))
-            .cloned()
             .collect()
     }
 
     /// A column of cards, or `None` when there are none.
     pub(super) fn work_card_stack(
         &self,
-        cards: &[Value],
+        cards: &[&Value],
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
