@@ -29,7 +29,14 @@ pub struct FoundSessions {
 }
 
 impl DomainRepository<'_> {
-    pub fn find_session_candidates(&self, selector: &str) -> DomainResult<FoundSessions> {
+    /// `extra_zmx_names` adds the sessions with those zmx names (the surfaces Codex's hook last
+    /// reported under the selector as its agent session id, which the live identity repair has not
+    /// copied into the row yet).
+    pub fn find_session_candidates(
+        &self,
+        selector: &str,
+        extra_zmx_names: &[String],
+    ) -> DomainResult<FoundSessions> {
         let trimmed = selector.trim();
         // The CLI reads a pasted Copy Details Session ID without its prefix; both forms are served.
         let forms: Vec<&str> = [Some(trimmed), trimmed.strip_prefix("combined-session:")]
@@ -75,16 +82,8 @@ impl DomainRepository<'_> {
                 form.split_once('/').map(|(_, name)| name.trim()),
             ];
             for name in names.into_iter().flatten() {
-                let Some(rest) = name
-                    .strip_prefix(self.server_id.as_str())
-                    .and_then(|rest| rest.strip_prefix('-'))
-                else {
-                    continue;
-                };
-                for (project_id, session_id) in splits(rest, '-') {
-                    if self.session_exists(project_id, session_id)? {
-                        add(&mut keys, project_id.to_string(), session_id.to_string());
-                    }
+                for (project_id, session_id) in self.keys_for_zmx_name(name)? {
+                    add(&mut keys, project_id, session_id);
                 }
             }
             // The agent session id, which lives in the runtime settings JSON: the rows whose text
@@ -127,10 +126,32 @@ impl DomainRepository<'_> {
                 }
             }
         }
+        for name in extra_zmx_names {
+            for (project_id, session_id) in self.keys_for_zmx_name(name)? {
+                add(&mut keys, project_id, session_id);
+            }
+        }
         Ok(FoundSessions {
             sessions: self.sessions_in_list_order(&keys)?,
             complete,
         })
+    }
+
+    /// The sessions whose zmx name `server-project-session` (`create_zmx_session_name`) is `name`.
+    fn keys_for_zmx_name(&self, name: &str) -> DomainResult<Vec<(String, String)>> {
+        let Some(rest) = name
+            .strip_prefix(self.server_id.as_str())
+            .and_then(|rest| rest.strip_prefix('-'))
+        else {
+            return Ok(Vec::new());
+        };
+        let mut keys = Vec::new();
+        for (project_id, session_id) in splits(rest, '-') {
+            if self.session_exists(project_id, session_id)? {
+                keys.push((project_id.to_string(), session_id.to_string()));
+            }
+        }
+        Ok(keys)
     }
 
     fn session_keys_where(

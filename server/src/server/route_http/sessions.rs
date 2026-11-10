@@ -259,46 +259,12 @@ pub(super) async fn route_sessions_http(
                 of them reports an actual change.
                 */
                 let sessions = list_sessions(project_id.as_deref())?;
-                /*
-                CDXC:StateSync 2026-11-10 WHY:
-                Phones re-ran `ghostex sessions --json --mobile-summary` several times a second,
-                and each run's listSessions ran the three passes (the zmx process scan, a parse of
-                the Codex hook file, a stat of every sidecar): about 400 of 3,605 busy samples of
-                gxserver. The passes only copy what agents and zmx report outside gxserver into the
-                rows, so they now run at most every 5 seconds, as the snapshot's do (2026-09-18
-                above): a session's reported state, process identity or missing zmx provider can
-                reach this list up to 5 seconds late. Every write gxserver makes itself (a CLI
-                action, a rename, a new session) is in the rows this reads, so a caller that
-                changes a session and then lists sees its change at once. A list without stopped
-                sessions shares the snapshot's gate; a list with them has its own, because only it
-                carries the title repair to stopped rows, and the snapshot would otherwise take
-                nearly every turn of a shared gate.
-                */
-                let passes_due = if include_stopped {
-                    full_session_list_sync_due()
-                } else {
-                    presentation_snapshot_sync_due()
-                };
-                let mut sessions_changed = false;
-                if passes_due {
-                    sessions_changed = sync_session_state_sidecars(
-                        &state,
-                        db,
-                        repository,
-                        &sessions,
-                        "list-sessions",
-                    )?;
-                    sessions_changed |=
-                        sync_zmx_provider_existence(&state, db, repository, &sessions)?;
-                    sessions_changed |= sync_live_zmx_process_identities(
-                        &state,
-                        db,
-                        repository,
-                        &sessions,
-                        None,
-                        "list-sessions",
-                    )?;
-                }
+                // The three repair passes run on this list's rows that are due, at most every 5
+                // seconds per session (server/session_repair_gate.rs). Every write gxserver makes
+                // itself (a CLI action, a rename, a new session) is in the rows already, so a
+                // caller that changes a session and then lists sees its change at once.
+                let sessions_changed =
+                    run_due_repair_passes(&state, db, repository, &sessions, "list-sessions")?;
                 let sessions = if sessions_changed {
                     list_sessions(project_id.as_deref())?
                 } else {
@@ -313,12 +279,64 @@ pub(super) async fn route_sessions_http(
             endpoint.path,
             request_id,
             &body_json,
-            |repository, _, params, _| {
+            |repository, db, params, _| {
                 let selector = params
                     .get("selector")
                     .and_then(Value::as_str)
                     .unwrap_or_default();
-                let found = repository.find_session_candidates(selector)?;
+                /*
+                CDXC:Cli 2026-11-10 WHY:
+                A hook reports a new agent session id straight to gxserver, which writes it into
+                the row, so a just-started session resolves at once. A Codex fork or in-TUI resume
+                changes the id later, and only the live identity repair copies it from
+                `codex-hook-sessions.json` into the row. The surfaces that file maps to this
+                selector are found too and repaired now, so such a session resolves by its new
+                id without waiting for its repair window. The found rows get their due repairs
+                like any list's (server/session_repair_gate.rs).
+                */
+                let wanted = selector.trim();
+                let wanted_bare = wanted.strip_prefix("combined-session:").unwrap_or(wanted);
+                let hooked: Vec<String> =
+                    crate::agent_hooks::read_codex_hook_session_identities(&state.paths)
+                        .iter()
+                        .filter(|(_, identity)| {
+                            let id = identity.agent_session_id.trim();
+                            !id.is_empty() && (id == wanted || id == wanted_bare)
+                        })
+                        .map(|(surface, _)| surface.clone())
+                        .collect();
+                let mut found = repository.find_session_candidates(selector, &hooked)?;
+                let mut changed = run_due_repair_passes(
+                    &state,
+                    db,
+                    repository,
+                    &found.sessions,
+                    "find-sessions",
+                )?;
+                let hooked_rows: Vec<Value> = found
+                    .sessions
+                    .iter()
+                    .filter(|session| {
+                        session
+                            .get("zmxName")
+                            .and_then(Value::as_str)
+                            .is_some_and(|name| hooked.iter().any(|hooked| hooked == name))
+                    })
+                    .cloned()
+                    .collect();
+                if !hooked_rows.is_empty() {
+                    changed |= sync_live_zmx_process_identities(
+                        &state,
+                        db,
+                        repository,
+                        &hooked_rows,
+                        None,
+                        "find-sessions",
+                    )?;
+                }
+                if changed {
+                    found = repository.find_session_candidates(selector, &hooked)?;
+                }
                 let mut result = moved_result("sessions", Value::Array(found.sessions));
                 result["complete"] = Value::Bool(found.complete);
                 Ok(result)
@@ -511,28 +529,16 @@ pub(super) async fn route_sessions_http(
                 behind sync_live_zmx_process_identities ran continuously (13%
                 of gxserver's CPU in a sample). The passes repair durable rows,
                 so a read within a few seconds of the last pass sees the same
-                rows it would have repaired; run them at most every 5 seconds.
+                rows it would have repaired; they run at most every 5 seconds,
+                per session since 2026-11-10 (server/session_repair_gate.rs).
                 */
-                let mut sessions_changed = false;
-                if presentation_snapshot_sync_due() {
-                    sessions_changed = sync_session_state_sidecars(
-                        &state,
-                        db,
-                        repository,
-                        &sessions,
-                        "read-presentation-snapshot",
-                    )?;
-                    sessions_changed |=
-                        sync_zmx_provider_existence(&state, db, repository, &sessions)?;
-                    sessions_changed |= sync_live_zmx_process_identities(
-                        &state,
-                        db,
-                        repository,
-                        &sessions,
-                        None,
-                        "read-presentation-snapshot",
-                    )?;
-                }
+                let sessions_changed = run_due_repair_passes(
+                    &state,
+                    db,
+                    repository,
+                    &sessions,
+                    "read-presentation-snapshot",
+                )?;
                 let sessions = if sessions_changed { list()? } else { sessions };
                 read_presentation_snapshot_in_sequence(&state, db, server_id, sessions)
                     .map(|snapshot| json!({ "snapshot": snapshot }))
