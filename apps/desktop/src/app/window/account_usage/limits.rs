@@ -163,8 +163,8 @@ impl AccountUsagePanel {
                         )),
                 ),
             );
-            if self.resets_open {
-                card = card.child(self.render_resets(cx));
+            if self.resets_fold.present() {
+                card = card.child(self.render_resets_fold(cx));
             }
         }
         card.into_any_element()

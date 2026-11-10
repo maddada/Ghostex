@@ -168,10 +168,11 @@ impl GhostexGpuiApp {
                 ));
                 apply_frosted_menu_blur(popup_window);
                 prepare_gpui_titlebar_popup_window_chrome(popup_window);
-                if matches!(
-                    kind,
-                    GpuiTitlebarPopupKind::AccountUsage(_) | GpuiTitlebarPopupKind::Notifications
-                ) {
+                // The usage panel fades in once it has fitted itself to its content
+                // (CDXC:AgentProviders 2026-11-11 in account_usage/panel.rs).
+                if matches!(kind, GpuiTitlebarPopupKind::AccountUsage(_)) {
+                    crate::app::window::popup_frame::hide_popup_window(popup_window);
+                } else if matches!(kind, GpuiTitlebarPopupKind::Notifications) {
                     crate::app::window::popup_frame::fade_in_popup_window(
                         popup_window,
                         cx.reduce_motion(),
