@@ -720,10 +720,15 @@ On the phone, Unified hides the computer tabs: Computers in the menu at the top
 of the Sessions list picks a computer, adds one or opens Manage computers. A
 computer that can't connect shows its name and the problem over the list, with
 Reconnect and Remote Settings. Add project asks which computer when you have
-several. On the phone the agent menu that starts a session shows its project on
-top (tap it to pick any project, recent ones first) and a row of computer chips
-starting on the last one used for that project; New session, a project's "+"
-and the "+" on a project in the filter all open it.
+several. On the phone, the pencil at the top of the Sessions list (New session,
+next to the bell, in both the Unified and the Project layout) lists every
+project on every computer, recent ones first, with a search field and a chip for
+each computer, starting on the one you used last for that project. Tap a project
+and the agent you last picked there starts in a new chat, where you can still
+change the agent, model, worktree, project or computer before you send the first
+message. If that computer isn't connected, it says so. A project's "+" and the
+"+" on a project in the filter open the agent menu instead, which shows its
+project on top (tap it to pick any project) and the same computer chips.
 
 The Unified sidebar has its own hover strip (`unifiedSessionCardHoverButtons`):
 by default Snooze, Park and Close always show on a hovered card and the chevron
