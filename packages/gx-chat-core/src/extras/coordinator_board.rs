@@ -985,7 +985,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
     };
     let (needs, blocked, moving) = (count("needs"), count("blocked"), count("moving"));
     let mut meta = Vec::new();
-    // The Work panel's header: "3 for you · 1 blocked · 2 moving" (the design page's words).
+    // The Work panel's header: "3 for you · 1 blocked · 2 in progress".
     if work_mode {
         if needs > 0 {
             meta.push(format!("{needs} for you"));
@@ -994,7 +994,7 @@ pub fn coordinator_board(state: &ChatState, context: &ChatContext) -> Option<Coo
             meta.push(format!("{blocked} blocked"));
         }
         if moving > 0 {
-            meta.push(format!("{moving} moving"));
+            meta.push(format!("{moving} in progress"));
         }
         let later = count("later");
         if meta.is_empty() && later > 0 {

@@ -19,7 +19,8 @@ const USAGE: &str = "Usage: ghostex coordinator item [add|now|step|ask|wait|done
 const HEADINGS: [(&str, &str); 6] = [
     ("needs", "Needs you"),
     ("blocked", "Blocked"),
-    ("moving", "Moving"),
+    // In progress, never Moving (server/src/coordinators/work.rs `status_heading`).
+    ("moving", "In progress"),
     ("waiting", "Waiting"),
     ("later", "Later"),
     ("finished", "Finished today"),
@@ -341,7 +342,7 @@ fn owner_words(item: &Value) -> String {
     }
 }
 
-/// `iPhone voice calls · Moving · Coordinator · 3 of 4 steps · 1m`, then where it stands.
+/// `iPhone voice calls · In progress · Coordinator · 3 of 4 steps · 1m`, then where it stands.
 fn one_line(item: &Value) -> String {
     let mut parts = vec![
         agents::text(item, "title").to_string(),

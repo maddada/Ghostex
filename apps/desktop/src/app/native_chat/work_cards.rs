@@ -43,6 +43,43 @@ pub(super) fn status_look(status: &str, p: &ChatAppearance) -> (&'static str, gp
 }
 
 /// A chip's glyph by what it says.
+/// The opened Moving list draws as a table once the transcript is at least this wide (unscaled):
+/// its Item, Who and Age columns plus a "Where it stands" column of at least 260 px, so neither
+/// text column is squeezed below a few words a line.
+const MOVING_TABLE_MIN_WIDTH: f32 = 640.0;
+const MOVING_ITEM_COLUMN: f32 = 200.0;
+const MOVING_WHO_COLUMN: f32 = 110.0;
+const MOVING_AGE_COLUMN: f32 = 36.0;
+
+/// Who has a line of work, as an icon: the thread's agent logo, GitHub's mark, the user, the
+/// coordinator's hat, or a clock for something else outside.
+fn who_icon(who: &Value, p: &ChatAppearance) -> AnyElement {
+    let agent = text(who, "agentIcon");
+    let (path, color) = match text(who, "kind").as_str() {
+        "thread" if !agent.is_empty() => (
+            format!("agent-icons/{agent}.svg"),
+            super::new_session_welcome::brand_logo_color(&agent, p),
+        ),
+        "thread" => ("titlebar/robot.svg".to_string(), p.muted),
+        "github" => ("titlebar/brand-github.svg".to_string(), p.muted),
+        "you" => (
+            "titlebar/user.svg".to_string(),
+            gpui::rgb(crate::app::native_sidebar::status::QUESTION_COLOR).into(),
+        ),
+        "coordinator" => (
+            "titlebar/coordinator-captain-hat-small.svg".to_string(),
+            p.muted,
+        ),
+        _ => ("titlebar/clock.svg".to_string(), p.muted),
+    };
+    svg()
+        .path(path)
+        .size(px(14.0 * p.scale))
+        .flex_shrink_0()
+        .text_color(color)
+        .into_any_element()
+}
+
 fn chip_icon(kind: &str) -> &'static str {
     match kind {
         "thread" => "titlebar/robot.svg",
@@ -380,10 +417,12 @@ impl NativeChatView {
                     .flex_shrink_0()
                     .text_color(p.muted),
             )
+            // The same 14 px as the list's who-has-it icons under it (the user's "make this icon
+            // bigger for the ones inside the list").
             .child(
                 svg()
                     .path(icon)
-                    .size(px(12.0 * s))
+                    .size(px(14.0 * s))
                     .flex_shrink_0()
                     .text_color(color),
             )
@@ -394,13 +433,44 @@ impl NativeChatView {
                     .text_color(body)
                     .child(text(card, "title")),
             )
+            // Closed, it says who has what ("1 with you · 1 on GitHub · 5 threads"), what is
+            // with the user in the question colour.
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .truncate()
                     .text_color(p.card_muted)
-                    .when(!open, |summary| summary.child(text(card, "summary"))),
+                    .when(!open, |summary| {
+                        summary
+                            .children(
+                                card["summaryParts"]
+                                    .as_array()
+                                    .into_iter()
+                                    .flatten()
+                                    .enumerate()
+                                    .flat_map(|(index, part)| {
+                                        let tone = super::coordinator_board::tone_color(&text(
+                                            part, "tone",
+                                        ))
+                                        .map_or(p.card_muted, |color| gpui::rgb(color).into());
+                                        [
+                                            (index > 0)
+                                                .then(|| " \u{b7} ".to_string().into_any_element()),
+                                            Some(
+                                                gpui::div()
+                                                    .flex_shrink_0()
+                                                    .text_color(tone)
+                                                    .child(text(part, "text"))
+                                                    .into_any_element(),
+                                            ),
+                                        ]
+                                    })
+                                    .flatten(),
+                            )
+                            .flex()
+                            .gap(px(0.0))
+                    }),
             )
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
@@ -422,85 +492,199 @@ impl NativeChatView {
             .overflow_hidden()
             .child(head);
         if open {
-            for (index, row) in card["rows"].as_array().into_iter().flatten().enumerate() {
-                let (row_icon, row_color) = status_look(&text(row, "status"), p);
-                let command = row["command"].clone();
-                let line = text(row, "line");
-                column = column.child(
-                    div()
-                        .id(gpui::SharedString::from(format!(
-                            "work-moving-row:{key}:{index}"
-                        )))
-                        .role(gpui::Role::Button)
-                        .aria_label(text(row, "title"))
-                        .w_full()
-                        .min_w_0()
-                        .flex()
-                        .items_start()
-                        .gap(px(8.0 * s))
-                        .px(px(12.0 * s))
-                        .py(px(6.0 * s))
-                        .border_t_1()
-                        .border_color(p.input_border.opacity(0.5))
-                        .text_size(px(PROSE_SIZE * s))
-                        .child(
-                            div()
-                                .h(px(PROSE_LINE_HEIGHT * s))
-                                .flex()
-                                .items_center()
-                                .pl(px(20.0 * s))
-                                .child(
-                                    svg()
-                                        .path(row_icon)
-                                        .size(px(11.0 * s))
-                                        .flex_shrink_0()
-                                        .text_color(row_color),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .flex()
-                                .flex_col()
-                                .child(
-                                    div()
-                                        .min_w_0()
-                                        .truncate()
-                                        .line_height(px(PROSE_LINE_HEIGHT * s))
-                                        .text_color(body)
-                                        .child(text(row, "title")),
-                                )
-                                .when(!line.is_empty(), |cell| {
-                                    cell.child(
-                                        div()
-                                            .min_w_0()
-                                            .truncate()
-                                            .line_height(px(PROSE_LINE_HEIGHT * s))
-                                            .text_color(p.card_muted)
-                                            .child(line.clone()),
-                                    )
-                                }),
-                        )
-                        .child(
-                            div()
-                                .flex_shrink_0()
-                                .line_height(px(PROSE_LINE_HEIGHT * s))
-                                .text_color(p.muted)
-                                .child(text(row, "age")),
-                        )
-                        .when(command.is_object(), |row| {
-                            row.chat_cursor_pointer()
-                                .hover(|style| style.bg(p.foreground.opacity(0.04)))
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    cx.stop_propagation();
-                                    this.invoke(command.clone(), cx);
-                                }))
-                        }),
-                );
-            }
+            // The pane, capped at the transcript column. Not `transcript_text_width`: it asks the
+            // transcript list for the minimap's gutter while that list is drawing this row.
+            let width = self
+                .bounds
+                .get()
+                .size
+                .width
+                .as_f32()
+                .min(self.transcript_column_cap(p));
+            let wide = width / s >= MOVING_TABLE_MIN_WIDTH;
+            column = column.child(self.work_moving_list(card, wide, p, cx));
         }
         column.into_any_element()
+    }
+
+    /// The opened Moving list, grouped by who has each line of work (gx-chat-core `who_has`, which
+    /// holds the user's Q2207): on a wide chat the compact table (Item, Where it stands, Who,
+    /// Age), else rows with the full text; quiet group labels, no hairlines between rows.
+    fn work_moving_list(
+        &self,
+        card: &Value,
+        wide: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let key = text(card, "key");
+        let body = p.strengthened(p.prose);
+        let mut list = div()
+            .w_full()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .px(px(12.0 * s))
+            .pb(px(8.0 * s))
+            .text_size(px(PROSE_SIZE * s))
+            .line_height(px(PROSE_LINE_HEIGHT * s));
+        if wide {
+            list = list.child(
+                div()
+                    .flex()
+                    .gap(px(16.0 * s))
+                    .pt(px(2.0 * s))
+                    .text_color(p.muted)
+                    .child(
+                        div()
+                            .w(px(MOVING_ITEM_COLUMN * s))
+                            .flex_shrink_0()
+                            .child("Item"),
+                    )
+                    .child(div().flex_1().min_w_0().child("Where it stands"))
+                    .child(
+                        div()
+                            .w(px(MOVING_WHO_COLUMN * s))
+                            .flex_shrink_0()
+                            .child("Who"),
+                    )
+                    .child(
+                        div()
+                            .w(px(MOVING_AGE_COLUMN * s))
+                            .flex_shrink_0()
+                            .flex()
+                            .justify_end()
+                            .child("Age"),
+                    ),
+            );
+        }
+        let groups: Vec<&Value> = card["groups"].as_array().into_iter().flatten().collect();
+        let mut current = String::new();
+        for (index, row) in card["rows"].as_array().into_iter().flatten().enumerate() {
+            let group = text(row, "group");
+            if group != current {
+                current = group.clone();
+                let count = groups
+                    .iter()
+                    .find(|entry| entry["key"] == group.as_str())
+                    .and_then(|entry| entry["count"].as_u64())
+                    .unwrap_or(0);
+                list = list.child(
+                    div()
+                        .pt(px(8.0 * s))
+                        .pb(px(2.0 * s))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(p.muted)
+                        .child(format!("{} \u{b7} {count}", text(row, "groupLabel"))),
+                );
+            }
+            let command = row["command"].clone();
+            let line = text(row, "line");
+            let who = &row["who"];
+            let mut drawn = div()
+                .id(gpui::SharedString::from(format!(
+                    "work-moving-row:{key}:{index}"
+                )))
+                .role(gpui::Role::Button)
+                .aria_label(format!("{}, {}", text(row, "title"), text(who, "label")))
+                .w_full()
+                .min_w_0()
+                .flex()
+                .items_start()
+                .py(px(4.0 * s))
+                .rounded(px(6.0 * s));
+            drawn = if wide {
+                drawn
+                    .gap(px(16.0 * s))
+                    .child(
+                        div()
+                            .w(px(MOVING_ITEM_COLUMN * s))
+                            .flex_shrink_0()
+                            .whitespace_normal()
+                            .text_color(body)
+                            .child(text(row, "title")),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .whitespace_normal()
+                            .text_color(p.card_muted)
+                            .child(line),
+                    )
+                    .child(
+                        div()
+                            .w(px(MOVING_WHO_COLUMN * s))
+                            .flex_shrink_0()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.0 * s))
+                            .h(px(PROSE_LINE_HEIGHT * s))
+                            .text_color(p.card_muted)
+                            .child(who_icon(who, p))
+                            .child(div().min_w_0().truncate().child(text(who, "label"))),
+                    )
+                    .child(
+                        div()
+                            .w(px(MOVING_AGE_COLUMN * s))
+                            .flex_shrink_0()
+                            .flex()
+                            .justify_end()
+                            .text_color(p.muted)
+                            .child(text(row, "age")),
+                    )
+            } else {
+                drawn
+                    .gap(px(8.0 * s))
+                    .child(
+                        div()
+                            .w(px(20.0 * s))
+                            .h(px(PROSE_LINE_HEIGHT * s))
+                            .flex_shrink_0()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(who_icon(who, p)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .whitespace_normal()
+                                    .text_color(body)
+                                    .child(text(row, "title")),
+                            )
+                            .when(!line.is_empty(), |cell| {
+                                cell.child(
+                                    div()
+                                        .whitespace_normal()
+                                        .text_color(p.card_muted)
+                                        .child(line.clone()),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .text_color(p.muted)
+                            .child(text(row, "age")),
+                    )
+            };
+            list = list.child(drawn.when(command.is_object(), |row| {
+                row.chat_cursor_pointer()
+                    .hover(|style| style.bg(p.foreground.opacity(0.04)))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(command.clone(), cx);
+                    }))
+            }));
+        }
+        list.into_any_element()
     }
 
     /// An item's earlier card, or a settled ask: one quiet line, its status's glyph, what that turn

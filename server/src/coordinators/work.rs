@@ -403,7 +403,11 @@ pub fn status_heading(status: &str) -> &'static str {
     match status {
         "needs" => "Needs you",
         "blocked" => "Blocked",
-        "moving" => "Moving",
+        // CDXC:Coordinators 2026-11-10 DECISION:
+        // User: "Please don't say Moving say In Progress. Moving isn't clear to me" (and on 2026-11-07, of
+        // the board: "rename to in progress please"). Wherever the user reads it, the `moving` status is
+        // "In progress"; the stored value stays `moving` and `--status` takes `moving` or `in-progress`.
+        "moving" => "In progress",
         "waiting" => "Waiting",
         "later" => "Later",
         "finished" => "Finished",

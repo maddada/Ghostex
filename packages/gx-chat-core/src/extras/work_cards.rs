@@ -87,7 +87,8 @@ pub fn status_label(status: &str) -> &'static str {
     match status {
         "needs" => "Needs you",
         "blocked" => "Blocked",
-        "moving" => "Moving",
+        // In progress, never Moving (`work_panel.rs` `WORK_GROUPS` holds the user's words).
+        "moving" => "In progress",
         "waiting" => "Waiting",
         "later" => "Later",
         "finished" => "Finished",
@@ -524,7 +525,7 @@ fn moving_row(
         .filter(|(_, _, _, card)| card["anchorId"] == anchor.as_str() && card["folded"] != true)
         .map(|(_, _, _, card)| text(card, "ref"))
         .collect();
-    let mut rows: Vec<(i64, Value)> = Vec::new();
+    let mut rows: Vec<(u8, i64, Value)> = Vec::new();
     for item in items.iter().filter(|item| item["kind"] == "item") {
         let status = text(item, "status");
         let reference = text(item, "ref");
@@ -538,12 +539,16 @@ fn moving_row(
             .filter(|(_, _, _, card)| card["kind"] == "item" && card["ref"] == reference)
             .max_by_key(|(turn, _, _, _)| *turn)
             .map(|(_, _, _, card)| card);
+        let (rank, group, group_label, who) = who_has(item);
         let mut row = json!({
             "ref": reference,
             "title": text(item, "title"),
             "status": status,
             "line": text(item, "now"),
             "age": crate::transcript::message_time::age_label(now_ms, at),
+            "group": group,
+            "groupLabel": group_label,
+            "who": who,
         });
         if let Some(target) = target {
             row["command"] = json!({
@@ -552,13 +557,63 @@ fn moving_row(
                 "key": target["key"],
             });
         }
-        rows.push((at, row));
+        rows.push((rank, at, row));
     }
     if rows.is_empty() {
         return None;
     }
-    rows.sort_by(|left, right| right.0.cmp(&left.0));
-    let titles: Vec<&str> = rows.iter().map(|(_, row)| text(row, "title")).collect();
+    // By who has it (with you, waiting outside, threads, the coordinator), newest first in each.
+    rows.sort_by(|left, right| left.0.cmp(&right.0).then(right.1.cmp(&left.1)));
+    let mut groups: Vec<Value> = Vec::new();
+    for (_, _, row) in &rows {
+        match groups.last_mut() {
+            Some(group) if group["key"] == row["group"] => {
+                group["count"] = json!(group["count"].as_u64().unwrap_or(0) + 1);
+            }
+            _ => groups.push(json!({
+                "key": row["group"],
+                "label": row["groupLabel"],
+                "kind": row["who"]["kind"],
+                "count": 1,
+            })),
+        }
+    }
+    // The closed row says who has what: "1 with you · 1 on GitHub · 5 threads".
+    let count_of = |kind: &str| {
+        groups
+            .iter()
+            .filter(|group| group["kind"] == kind)
+            .map(|group| group["count"].as_u64().unwrap_or(0))
+            .sum::<u64>()
+    };
+    let mut parts: Vec<Value> = Vec::new();
+    let you = count_of("you");
+    if you > 0 {
+        parts.push(json!({ "text": format!("{you} with you"), "tone": "question" }));
+    }
+    let github = count_of("github");
+    if github > 0 {
+        parts.push(json!({ "text": format!("{github} on GitHub"), "tone": "" }));
+    }
+    let outside = count_of("outside");
+    if outside > 0 {
+        parts.push(json!({ "text": format!("{outside} waiting outside"), "tone": "" }));
+    }
+    let threads = count_of("thread");
+    if threads > 0 {
+        let noun = if threads == 1 { "thread" } else { "threads" };
+        parts.push(json!({ "text": format!("{threads} {noun}"), "tone": "" }));
+    }
+    let coordinator = count_of("coordinator");
+    if coordinator > 0 {
+        parts.push(json!({ "text": format!("{coordinator} with the coordinator"), "tone": "" }));
+    }
+    let who_summary = parts
+        .iter()
+        .map(|part| text(part, "text"))
+        .collect::<Vec<_>>()
+        .join(" \u{b7} ");
+    let titles: Vec<&str> = rows.iter().map(|(_, _, row)| text(row, "title")).collect();
     Some((
         turn.start_ms,
         4,
@@ -568,11 +623,101 @@ fn moving_row(
             "kind": "moving",
             "anchorId": anchor,
             "turnId": turn.id,
-            "title": format!("Moving \u{b7} {}", rows.len()),
+            "title": format!("In progress \u{b7} {}", rows.len()),
             "summary": titles.join(", "),
-            "rows": rows.into_iter().map(|(_, row)| row).collect::<Vec<_>>(),
+            "whoSummary": who_summary,
+            "summaryParts": parts,
+            "groups": groups,
+            "rows": rows.into_iter().map(|(_, _, row)| row).collect::<Vec<_>>(),
         }),
     ))
+}
+
+/// Who has a moving item, for the Moving list's groups: the user when it asks them something, the
+/// outside thing it waits on (GitHub, a review), the threads working on it, else the coordinator.
+/// Returns its group's rank, key and label, and `{kind, label, agentIcon}` for its icon and the
+/// table's Who column.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User (Q2207 "B. Grouped by who has it", with "i like the table for wider screen but then
+/// switch to not table when narrower screen"): the opened Moving list groups its rows by who has
+/// them under quiet labels, With you first, then waiting on something outside, then threads
+/// working; a wide chat draws them as the compact table (Item, Where it stands, Who, Age), a
+/// narrow one and the phone as rows with the full text. The list keeps only Moving items (the
+/// user's "why 12 waiting here??"), so "waiting outside" is a moving item whose thread works
+/// while it also waits on something the coordinator named (`item wait --on`).
+fn who_has(item: &Value) -> (u8, String, String, Value) {
+    let asks_you = item["asks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|ask| ask["open"] == true);
+    let waits: Vec<&Value> = item["waits"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|wait| wait["open"] == true)
+        .collect();
+    if asks_you || waits.iter().any(|wait| wait["kind"] == "ask") {
+        return (
+            0,
+            "you".to_string(),
+            "With you".to_string(),
+            json!({ "kind": "you", "label": "You" }),
+        );
+    }
+    if let Some(wait) = waits.iter().find(|wait| wait["kind"] == "outside") {
+        let label = text(wait, "label");
+        let lower = label.to_lowercase();
+        let github = lower.contains("github")
+            || lower.contains("pull request")
+            || lower.contains("pr #")
+            || lower
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|word| word == "ci");
+        return if github {
+            (
+                1,
+                "outside:github".to_string(),
+                "Waiting on GitHub".to_string(),
+                json!({ "kind": "github", "label": "GitHub" }),
+            )
+        } else {
+            (
+                1,
+                format!("outside:{label}"),
+                format!("Waiting on {label}"),
+                json!({ "kind": "outside", "label": label }),
+            )
+        };
+    }
+    let threads: Vec<&Value> = item["threads"].as_array().into_iter().flatten().collect();
+    if let Some(first) = threads.first() {
+        let agent = text(first, "agent");
+        let mut name = crate::transcript::agent_message_card::agent_display_name(agent, agent);
+        if name.is_empty() {
+            name = "Thread".to_string();
+        }
+        if threads.len() > 1 {
+            name = format!("{name} \u{d7}{}", threads.len());
+        }
+        return (
+            2,
+            "threads".to_string(),
+            "Threads working".to_string(),
+            json!({
+                "kind": "thread",
+                "label": name,
+                "agentIcon": crate::transcript::agent_message_card::agent_icon(agent, ""),
+            }),
+        );
+    }
+    (
+        3,
+        "coordinator".to_string(),
+        "With the coordinator".to_string(),
+        json!({ "kind": "coordinator", "label": "Coordinator" }),
+    )
 }
 
 /// An open ask the ? pill counts and steps to: its card's key and the reply it sits under.
