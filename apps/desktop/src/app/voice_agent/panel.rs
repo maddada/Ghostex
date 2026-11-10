@@ -1694,8 +1694,7 @@ impl VoicePanelWindow {
     }
 
     /// The remembered last conversation, above the transcript while the call is live: the
-    /// Continue / Start fresh card, the "Remembering" line (click it for the whole summary), or
-    /// "Forgot the last conversation."
+    /// Continue / Start fresh card or the "Remembering" line (click it for the whole summary).
     fn memory_block(
         &self,
         snapshot: &PanelSnapshot,
@@ -1884,19 +1883,7 @@ impl VoicePanelWindow {
                         .into_any_element(),
                 )
             }
-            (VoiceMemoryState::Forgotten, _) => Some(
-                h_flex()
-                    .flex_shrink_0()
-                    .mx(px(12.0))
-                    .mt(px(10.0))
-                    .gap(px(6.0))
-                    .items_center()
-                    .text_size(px(11.5))
-                    .text_color(colors.muted)
-                    .child(titlebar_svg_icon(ICON_TRASH, 12.0, colors.muted))
-                    .child("Forgot the last conversation.")
-                    .into_any_element(),
-            ),
+            // Discarding stays silent: the card just goes away (user, 2026-11-11: "remove the forgot last conversation thing").
             _ => None,
         }
     }
