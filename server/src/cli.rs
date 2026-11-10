@@ -181,18 +181,13 @@ pub async fn run(args: Vec<String>) -> Result<()> {
 /// CDXC:VoiceMode 2026-10-20 SEE-ALSO: `voiceAgent` means `/api/voice` (conversation and dictation) and `/api/readVoiceAgent` exist (docs/2026-10-20/voice-mode/voice-agent-client-contract.md).
 /// CDXC:Notifications 2026-10-31 SEE-ALSO: `notificationStream` means `/api/events?stream=notifications` carries only notification feed changes and the daemon's start and stop (`notification_event_matches` in server/src/server/ws.rs); an older daemon would send that socket its whole hub, so the phone opens it only behind this flag and otherwise polls the feed.
 /// CDXC:Notifications 2026-11-01 SEE-ALSO: `pushNotifications` means `/api/registerPushToken` exists and this daemon pushes finished, needs-input and failed notices and agent starts to the registered phones (server/src/push/); the phone shows its push switches only behind this flag, since an older daemon has no such route.
-const ENDPOINT_CAPABILITIES: [&str; 8] = [
+const ENDPOINT_CAPABILITIES: [&str; 7] = [
     "sendRequestLedger",
     "voiceAgent",
     ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_NOTIFICATION_STREAM,
     ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_PUSH_NOTIFICATIONS,
     // A phone signing in over SSH may pair through that login (`/api/pairOverSsh`, GitHub #495).
     "pairOverSsh",
-    // A phone signing in over SSH works here before its pairing is approved (everything the token
-    // file allows), so the phone shows the pairing as one quiet line instead of a card
-    // (CDXC:Security 2026-11-10, Q2110, in security/policy.rs). Older gxservers don't say it, and
-    // the phone keeps its card there.
-    "sshPhoneWorksUnpaired",
     // Approvals are plain clicks here (no signature, no approver key): newer apps stop signing
     // (CDXC:Security 2026-11-10 in security/policy.rs). `/api/securityStatus` says it too.
     "plainApprovals",
@@ -1258,7 +1253,6 @@ mod tests {
                 Value::from("notificationStream"),
                 Value::from("pushNotifications"),
                 Value::from("pairOverSsh"),
-                Value::from("sshPhoneWorksUnpaired"),
                 Value::from("plainApprovals"),
                 Value::from("easyConnectClientKeys"),
             ]

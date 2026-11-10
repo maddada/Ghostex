@@ -8,16 +8,13 @@ use std::{
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use ghostex_gx_protocol::approval::{
-    approval_signing_payload, ApprovalRequest, ApprovalRequester, ApprovalStatus, SensitiveAction,
+    ApprovalRequest, ApprovalRequester, ApprovalStatus, SensitiveAction,
 };
 use rand::Rng;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use super::{
-    approver_keys::{verify_approval_signature, ApproverKeyError, ApproverKeys},
-    Principal,
-};
+use super::{approver_keys::ApproverKeyError, Principal};
 
 /// How long a request waits for the owner.
 pub const PENDING_TTL_MS: u64 = 10 * 60 * 1000;
@@ -41,24 +38,6 @@ pub struct ActionRequest {
     pub shared: bool,
     /// How long the request waits for the owner, when not [`PENDING_TTL_MS`].
     pub pending_ttl_ms: Option<u64>,
-    /// What gxserver does itself the moment the owner approves (see [`ApprovalEffect`]).
-    pub on_approve: Option<ApprovalEffect>,
-}
-
-/*
-CDXC:Security 2026-11-10 WHY:
-A Ghostex user with four computers approved "Let <Mac> (Ghostex app) act as the owner of Ghostex on this computer" on a connected computer, and the Mac still couldn't answer that computer's requests: the key went in only when the Mac's call came back with the approval within its two minutes (it asked again only when the owner next acted there), and its approver key then needed a second approval that the connected computer's app never showed. A key the owner approves now goes in the moment they approve it, whoever comes back for it.
-*/
-/// What gxserver does itself when the owner approves a request, before (and whether or not) the
-/// asking call comes back with its approval.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ApprovalEffect {
-    /// Enroll these keys: the owner key another computer's app asked to add (with that app's
-    /// approver key, so the one approval also lets it answer requests here), or an approver key.
-    EnrollKeys {
-        owner: Option<ghostex_gx_protocol::approval::ApproverKey>,
-        approver: Option<ghostex_gx_protocol::approval::ApproverKey>,
-    },
 }
 
 impl ActionRequest {
@@ -71,14 +50,7 @@ impl ActionRequest {
             detail: None,
             shared: false,
             pending_ttl_ms: None,
-            on_approve: None,
         }
-    }
-
-    /// Runs `effect` the moment the owner approves (see [`ApprovalEffect`]).
-    pub fn on_approve(mut self, effect: ApprovalEffect) -> Self {
-        self.on_approve = Some(effect);
-        self
     }
 
     /*
@@ -165,7 +137,6 @@ struct StoredRequest {
     requester: Principal,
     /// [`ActionRequest::shared`]: any caller that can ask may read and spend it.
     shared: bool,
-    on_approve: Option<ApprovalEffect>,
 }
 
 impl StoredRequest {
@@ -226,7 +197,6 @@ impl ApprovalStore {
                 request: request.clone(),
                 requester: requester.clone(),
                 shared: action.shared,
-                on_approve: action.on_approve.clone(),
             },
         );
         (request, true)
@@ -253,38 +223,6 @@ impl ApprovalStore {
             .get(id)
             .filter(|stored| stored.open_to(caller))
             .map(|stored| stored.request.clone())
-    }
-
-    /// Checks `signature` from approver key `key_id` over the request's signing payload and
-    /// marks it approved.
-    pub fn approve(
-        &self,
-        id: &str,
-        key_id: &str,
-        signature_b64: &str,
-        keys: &ApproverKeys,
-        server_id: &str,
-        now_ms: u64,
-    ) -> Result<ApprovalRequest, ApprovalError> {
-        let mut requests = self.lock();
-        sweep(&mut requests, now_ms);
-        let stored = requests.get_mut(id).ok_or(ApprovalError::NotFound)?;
-        match &stored.request.status {
-            ApprovalStatus::Pending => {}
-            ApprovalStatus::Expired => return Err(ApprovalError::Expired),
-            other => return Err(ApprovalError::NotPending(other.clone())),
-        }
-        let key = keys
-            .get(key_id)
-            .ok_or(ApprovalError::Key(ApproverKeyError::UnknownKey))?;
-        let payload = approval_signing_payload(server_id, &stored.request)
-            .map_err(|error| ApprovalError::BadPayload(error.to_string()))?;
-        verify_approval_signature(&key, &payload, signature_b64).map_err(ApprovalError::Key)?;
-        stored.request.status = ApprovalStatus::Approved;
-        stored.request.decided_at_ms = Some(now_ms);
-        stored.request.decided_by = Some(key.key_id.clone());
-        stored.request.expires_at_ms = now_ms + APPROVED_TTL_MS;
-        Ok(stored.request.clone())
     }
 
     /// Approves request `id` on a click of `by` (one of your devices, checked by the route): no
@@ -314,13 +252,6 @@ impl ApprovalStore {
         });
         stored.request.expires_at_ms = now_ms + APPROVED_TTL_MS;
         Ok(stored.request.clone())
-    }
-
-    /// What request `id` does when approved ([`ApprovalEffect`]), if anything.
-    pub fn effect_of(&self, id: &str) -> Option<ApprovalEffect> {
-        self.lock()
-            .get(id)
-            .and_then(|stored| stored.on_approve.clone())
     }
 
     /// Denying needs no signature: saying no only closes a door.

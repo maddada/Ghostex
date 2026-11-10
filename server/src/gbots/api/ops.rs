@@ -20,12 +20,6 @@ pub(crate) fn handles(op: &str) -> bool {
     )
 }
 
-/// The ops that open a GBot to apps, which ask your approval first (sharing memory only when it
-/// turns it on).
-pub(crate) fn opens_api(op: &str) -> bool {
-    matches!(op, "apiOn" | "apiNewKey" | "apiShareMemory")
-}
-
 fn text<'a>(params: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
     params
         .get(key)
@@ -223,38 +217,4 @@ pub(crate) fn run(
             "Unknown GBots op {other}: use api, apiOn, apiNewKey, apiOff or apiShareMemory."
         ))),
     }
-}
-
-/// What an approval for `apiOn`, `apiNewKey` or `apiShareMemory` names: the GBot (when it
-/// exists; an unknown GBot is refused by the op without asking) and its routines' names.
-pub(crate) struct ApprovalSubject {
-    pub bot_id: String,
-    pub name: String,
-    pub routines: Vec<String>,
-    /// Its key's chats read its memory already, or will once New key keeps that.
-    pub shares_memory: bool,
-}
-
-pub(crate) fn approval_subject(
-    state: &AppState,
-    params: &Map<String, Value>,
-) -> Option<ApprovalSubject> {
-    let reference = text(params, "bot")?;
-    let db = crate::storage::open_gxserver_database(&state.paths).ok()?;
-    let bot = crate::gbots::record::find_bot(&db, reference).ok()??;
-    let routines = crate::automations::bot_routines(&db, &bot.bot_id)
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|routine| routine["name"].as_str().map(str::to_string))
-        .collect();
-    let shares_memory = live_key(&db, &bot.bot_id)
-        .ok()
-        .flatten()
-        .is_some_and(|key| key.share_memory);
-    Some(ApprovalSubject {
-        bot_id: bot.bot_id,
-        name: bot.name,
-        routines,
-        shares_memory,
-    })
 }

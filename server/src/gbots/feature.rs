@@ -28,15 +28,6 @@ pub(crate) fn gbots_on(paths: &GxserverPaths) -> bool {
     crate::chief::chief_on(paths) && switch_on_in(settings.as_ref())
 }
 
-/// Whether Chief of Staff adds GBots without asking you (`gbotsChiefAddsOnItsOwn`, on by default).
-pub(crate) fn chief_adds_on_its_own(paths: &GxserverPaths) -> bool {
-    crate::shared_settings_file::read_shared_settings(paths)
-        .as_ref()
-        .and_then(|settings| settings.get("gbotsChiefAddsOnItsOwn"))
-        .and_then(Value::as_bool)
-        .unwrap_or(true)
-}
-
 /// What a caller is told while GBots are off. Only the user turns them on (neither key is
 /// agent-writable), so it names Settings, not a command.
 pub(crate) fn gbots_off_message(paths: &GxserverPaths) -> String {

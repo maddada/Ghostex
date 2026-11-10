@@ -50,30 +50,6 @@ pub(crate) fn run(
     }
 }
 
-/// Whether turning the day watch on would add its GBot (none yet, or it was removed), which asks
-/// for approval like adding any GBot (server/src/server/security_gates.rs). A request `run` would
-/// refuse anyway (a bad brief time, Connectors off, neither Gmail nor Google Calendar connected)
-/// asks nobody: the user would approve and then hear what to connect.
-pub(crate) fn adds_bot(state: &AppState, params: &Map<String, Value>) -> bool {
-    let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
-        return false;
-    };
-    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let Ok(record) = store::read(&db) else {
-        return false;
-    };
-    if !matches!(watch_bot(&db, &record), Ok(None))
-        || brief_time(params).is_err()
-        || !crate::connectors::connectors_enabled(&state.paths)
-    {
-        return false;
-    }
-    let workspace = watch_workspace(state, &db, &repository, None);
-    super::offer::connected_apps(&state.paths, &workspace)
-        .iter()
-        .any(|app| app == "gmail" || app == "googlecalendar")
-}
-
 /// The day watch's GBot, while it is still there.
 fn watch_bot(db: &Connection, record: &DayWatchRecord) -> Result<Option<Bot>, DomainStateError> {
     match record.bot_id.as_deref() {

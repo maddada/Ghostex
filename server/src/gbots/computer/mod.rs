@@ -29,7 +29,7 @@ use crate::server::AppState;
 pub(crate) use home::{
     brief_section, forward_home, handle_gbots_remote_http, remember_state, GBOTS_REMOTE_ENDPOINT,
 };
-pub(crate) use ops::{computer_status, handles, run, widening_approval, ComputerCaller};
+pub(crate) use ops::{computer_status, handles, run, ComputerCaller};
 pub(crate) use remote_chat::remote_chat_summary;
 pub(crate) use store::{list_remote_chats, Place};
 
@@ -90,28 +90,6 @@ pub(crate) fn hand_to_box(
     cloud_box::hand_to_box(
         state, db, repository, bot, &computer, box_id, project_id, session_id, task,
     )
-}
-
-/// The approval a chat on `bot_reference`'s Cloud Box needs when anyone but the owner's devices
-/// starts it: the summary and the box id (security_gates.rs).
-pub(crate) fn cloud_box_chat_approval(
-    state: &AppState,
-    bot_reference: &str,
-) -> Option<(String, String)> {
-    let db = crate::storage::open_gxserver_database(&state.paths).ok()?;
-    let bot = super::record::find_bot(&db, bot_reference).ok()??;
-    let computer = store::read(&db, &bot.bot_id).ok()?;
-    let Place::CloudBox(box_id) = &computer.place else {
-        return None;
-    };
-    Some((
-        format!(
-            "Start a chat with {} on its Cloud Box {}",
-            bot.name,
-            computer.label()
-        ),
-        box_id.clone(),
-    ))
 }
 
 /// Closes every open chat of a GBot on other computers (it is being removed): each one there when

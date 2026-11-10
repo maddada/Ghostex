@@ -220,7 +220,6 @@ pub(crate) fn route_security_http(
                 Err(EnrollRefusal::Reply(code, message)) => {
                     reply(StatusCode::OK, Err((code, message)))
                 }
-                Err(EnrollRefusal::Response(response)) => response,
             },
         );
     }
@@ -250,16 +249,12 @@ const OWNER_APPROVAL_NEEDED: &str = "ownerApprovalNeeded";
 /// `/api/enrollOwnerKey`'s optional second key: the same app's approver key. Enrolled with the
 /// first owner key while no approver key is, and with a later owner key on the one approval that
 /// lets it in, so the app that may act as the owner here can also answer requests here without a
-/// second approval nobody would see (CDXC:Security 2026-11-10 at `security::ApprovalEffect`).
+/// second approval nobody would see (CDXC:Security 2026-11-10 in security/policy.rs).
 /// Older apps don't send it and keep today's two steps.
 const APPROVER_KEY_PARAM: &str = "approverKey";
 
-/// How long another computer's request to act as the owner here waits for an answer.
-const OWNER_KEY_REQUEST_TTL_MS: u64 = 24 * 60 * 60 * 1000;
-
 enum EnrollRefusal {
     Reply(&'static str, String),
-    Response(RoutedResponse),
 }
 
 /// `/api/enrollOwnerKey` and `/api/enrollApproverKey`. The first key of each kind is taken on
@@ -425,38 +420,8 @@ fn handle(
             } else {
                 key_id
             };
-            /*
-            CDXC:Security 2026-11-08 WHY:
-            Windows repro of GitHub #508: the user entered the PIN for "Let the agents on SSH repro
-            test and this computer reach each other" and the request stayed pending in the
-            security log, because a computer counted as approved only once the call that waited
-            on the request came back with it, and that call never ran again. Approving a
-            computer's request now lets it in for the 30 days at once; the waiting call, when it
-            runs, finds it approved.
-            */
-            if matches!(
-                request.action,
-                ghostex_gx_protocol::approval::SensitiveAction::ComputerGrant
-                    | ghostex_gx_protocol::approval::SensitiveAction::ComputerRegister
-            ) {
-                if let Some(server_id) = request.target.as_deref() {
-                    security.approve_computer(server_id, now);
-                }
-            }
             // Asked once, kept for good (CDXC:Security 2026-11-10 in security/policy.rs).
             security.remember_approved(&request, now);
-            // A key the owner approved goes in now (CDXC:Security 2026-11-10 at
-            // `security::ApprovalEffect`).
-            if let Some(security::ApprovalEffect::EnrollKeys { owner, approver }) =
-                security.approvals.effect_of(&id)
-            {
-                if let Some(key) = owner {
-                    enroll_approved_key(state, caller, true, key, now);
-                }
-                if let Some(key) = approver {
-                    enroll_approved_key(state, caller, false, key, now);
-                }
-            }
             security.publish(security::SecurityEvent::ApprovalApproved {
                 request: request.clone(),
                 key_id,

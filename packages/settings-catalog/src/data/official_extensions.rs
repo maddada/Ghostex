@@ -143,7 +143,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("title", J::Str("Bot automations")),
     ]),
     // CDXC:GBots 2026-11-08 DECISION:
-    // User: native GBots show "under Chief of Staff in Main Hub"; the GBots switch stays and turns them on or off, and needs Main Hub on (`requiresExtension: chief`). Off by default under a key that enables (`gbotsEnabled`); turning it on needs the owner's presence (security_relaxing.rs). Supersedes the 2026-11-06 entry, which put the previous GBots in the Bots space.
+    // User: native GBots show "under Chief of Staff in Main Hub"; the GBots switch stays and turns them on or off, and needs Main Hub on (`requiresExtension: chief`). Off by default under a key that enables (`gbotsEnabled`). Supersedes the 2026-11-06 entry, which put the previous GBots in the Bots space.
     J::Obj(&[
         ("appWide", J::Bool(true)),
         ("description", J::Str("Your own team of bots under Chief of Staff in Main Hub, each with its own instructions and memory, running on your Claude Code or Codex. Needs Main Hub.")),

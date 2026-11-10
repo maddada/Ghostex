@@ -29,7 +29,7 @@ use crate::domain::{DomainRepository, DomainStateError};
 use crate::gbots::changes::Change;
 use crate::server::AppState;
 
-pub(crate) use import::{digest, file_text, TEAM_CHANGE};
+pub(crate) use import::TEAM_CHANGE;
 pub(crate) use presets::with_preset;
 
 /// Whether `op` is one of these.
@@ -206,18 +206,4 @@ pub(crate) fn undo(
     remove: &mut dyn FnMut(&str) -> Result<Value, DomainStateError>,
 ) -> Result<Value, DomainStateError> {
     import::undo(db, change, by, remove)
-}
-
-/// What the approval for a `teamImport` names: the team's name, its GBots' names and the file's
-/// digest; `None` when the file can't be read (the endpoint refuses it then, without asking).
-pub(crate) fn import_approval_summary(
-    params: &Map<String, Value>,
-) -> Option<(String, Vec<String>, String)> {
-    let text = file_text(params).ok()?;
-    let read = format::read(&text).ok()?;
-    if !read.problems.is_empty() || read.file.kind != format::Kind::Team {
-        return None;
-    }
-    let names = read.file.bots.iter().map(|bot| bot.name.clone()).collect();
-    Some((read.file.name, names, digest(&text)))
 }

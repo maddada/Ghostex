@@ -17,4 +17,4 @@ mod reply;
 pub(crate) use chat::{is_api_chat, is_api_chat_session, write_api_files};
 pub(crate) use inbound::{serve as serve_bot_api, ROUTE_PREFIX as BOT_API_ROUTE_PREFIX};
 pub(crate) use keys::{bots_with_api, key_by_id, BotKey};
-pub(crate) use ops::{approval_subject, handles, opens_api, run};
+pub(crate) use ops::{handles, run};

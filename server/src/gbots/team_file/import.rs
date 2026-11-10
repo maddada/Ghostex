@@ -11,7 +11,6 @@
 
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 
 use super::format::{read, FileBot, Kind, ReadFile, NOTES_TOPIC_MAX_BYTES};
 use crate::coordinators::now_iso;
@@ -49,11 +48,6 @@ pub(crate) fn file_text(params: &Map<String, Value>) -> Result<String, DomainSta
 /// The file read, or the sentence saying why it can't be.
 pub(crate) fn read_params(params: &Map<String, Value>) -> Result<ReadFile, DomainStateError> {
     read(&file_text(params)?).map_err(DomainStateError::bad_request)
-}
-
-/// A digest of the file, so an approval is spent only on the file it was given for.
-pub(crate) fn digest(text: &str) -> String {
-    hex::encode(Sha256::digest(text.as_bytes()))
 }
 
 /// `name`, or `name 2`, `name 3`, … whichever no one in `taken` (lowercase) has.

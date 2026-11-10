@@ -1,30 +1,44 @@
-# Security: capability tokens, the owner key, signed approvals (GitHub #495, 11.0.1)
+# Security: the door, plain approvals, tokens (GitHub #495, option B since 10 Nov)
 
-Read this before you touch a route that lets someone in from outside, or build on the pairing,
-Collab or audit-log work of 11.0.1. The user's decisions are in
-`~/.local/share/agent-work/Ghostex/issue-495/decisions.md`; this file is the contract in code.
+Read this before you touch a route that lets someone in from outside, or build on pairing, Collab
+or the security log. The user's decisions are in `~/.local/share/agent-work/Ghostex/issue-495/decisions.md`
+(11.0.1) and the option B brief `~/.local/share/agent-work/Ghostex/security-b/brief.md`; this file
+is the contract in code.
 
 Code:
 
-- gxserver: `server/src/security/` (principals, capabilities, approvals, keys, session and owner
-  tokens, persistence), `server/src/server/security_http.rs` (the approval and owner-key API, the
-  `require_owner_presence` helper, the live events), `server/src/server/security_gates.rs` (where
-  each sensitive route asks), the `ghostex` CLI's wait-and-retry (`ghostex_cli/rpc.rs`).
-- Shared: `packages/gx-protocol/src/approval.rs` (wire types, the two signed payloads), the
-  `approvalRequestsChanged` event frame in `event.rs`.
-- Desktop: `packages/owner-keys` (the keys in the OS key store and the presence prompt, per
-  platform), `apps/desktop/src/app/owner_security/` (owner sessions, approving, the approval card).
-- Phone (phone repo branch `approvals-495`): `src/security/`, `src/screens/ApprovalsScreen.tsx`,
-  the native approver key in `modules/ghostex-native` (`GhostexApproverKey.swift` / `.kt`).
+- gxserver: `server/src/security/` (principals and capabilities in `capability.rs`, the one rule of
+  what asks in `policy.rs`, the request store, keys, session and owner tokens, persistence),
+  `server/src/server/security_http.rs` (the approval API, `require_owner_presence`, the live
+  events), `server/src/server/security_gates.rs` (where a route asks or refuses before its
+  handler), the `ghostex` CLI's wait-and-retry (`ghostex_cli/rpc.rs`).
+- Shared: `packages/gx-protocol/src/approval.rs` (wire types; the signed payloads stay for older
+  apps), the `approvalRequestsChanged` event frame in `event.rs`.
+- Desktop: `apps/desktop/src/app/owner_security/` (`plain.rs` for a gxserver that approves plainly,
+  `mod.rs` for an older one, `ui.rs` for the card), `packages/owner-keys` (the keys and the system
+  prompt).
+- Phone (phone repo): `src/security/approvals.ts`, `src/screens/ApprovalsScreen.tsx`,
+  `src/machines/sshPairing.ts`.
 
-## The rule
+## The rule (option B, 10 Nov)
 
-An agent can only **ask** for a sensitive action. The call turns into an approval request that
-shows on the computer and the phone, and the action happens only after the owner approves it
-with a signature from a key that Touch ID, Windows Hello, polkit or the phone's biometric prompt
-unlocks. A plain Allow button is never enough (agents can drive the GUI). The owner's own desktop
-session needs the signature too. Turning things off, stopping a share, removing a viewer and
-revoking a device never need one.
+The user (Q2140 = B): "thinking of removing all these dumb blocks because they're adding friction
+and a lot of bugs … i dont know why we want to ban agents from doing everything with ghostex", and
+"add a toggle to require touch id/pin etc for access but disabled by default, add it to security".
+
+1. **The door stays.** Nothing from the network gets in without a token it got from pairing; an
+   empty Easy Connect allow-list lets nobody in; a Collab link needs its code and, in Approve mode,
+   each guest message waits for your click.
+2. **Only what lets someone new in asks**, with one plain Approve / Deny card: no Touch ID, no
+   signature, no owner or approver key.
+3. **Everything else just works** for you, your devices and your agents: settings, connected
+   computers, GBots, Autopilot, Cloud Boxes, teams, extensions, secret providers, full access and
+   steering other sessions never ask and are never refused because the caller is an agent.
+4. **One switch, off by default:** Settings > Security, "Require Touch ID or your password to
+   approve" (`approvalsRequirePresence`, per platform; the phone's "Require Face ID to approve" on
+   the computer's page under Machines). It is a check the approving device makes itself before it
+   sends the same plain approval; gxserver keeps it per computer and reports it as
+   `requirePresence` in `/api/securityStatus`, so every device approving for that computer follows it.
 
 ## Who is calling: `Principal`
 
@@ -36,8 +50,8 @@ every route as `RouteHttpRequest::caller`.
 | `Owner { device_id }` | `gxo_…`, in the desktop app's memory only | Opened with the owner key (`/api/openOwnerSession`). gxserver keeps only its hash (newest four per device), so it survives a gxserver restart. |
 | `Device { device_id }` | `gxd_…`, bound to the phone's device key | A paired phone; `device_id` is its row in Paired devices (pairing v2, see below). |
 | `Session { project_id, session_id, role }` | `gxs_…`, in the session's `GHOSTEX_SESSION_TOKEN` | Issued when an agent or terminal starts (zmx and wmx), the same token again when that session starts again, revoked when the session is deleted (and by a 5-minute sweep for sessions deleted another way). `role` from the coordinator markers: `agent`, `coordinator`, `thread`; `head` is never stored (see "Chief's head role" below). The `ghostex` CLI inside a session sends it. |
-| `LocalAgent` | the token file `gxserver/auth/token` | Agent level plus thread management (user decision 3A). Hooks, plugins, older sessions and the CLI in the user's own terminal use it. |
-| `Peer { server_id, name }` | a connected computer's grant | Keeps `PEER_ALLOWED_ENDPOINTS`. May ask (answering a prompt or typing into a session here go through the same gate as an agent here). |
+| `LocalAgent` | the token file `gxserver/auth/token` | You: the desktop app (it opens no owner session on a gxserver that approves plainly), the GPUI web build, the CLI in your own terminal, a phone on its SSH login, and another computer's app through its SSH tunnel. Hooks, plugins and older sessions use it too. |
+| `Peer { server_id, name }` | a connected computer's grant | Keeps `PEER_ALLOWED_ENDPOINTS`. |
 | `Guest { share_id }` | `gxshare_…` | Keeps `GUEST_ENDPOINTS`. |
 | `Extension { extension_id }` | an extension's API token | Keeps the extension registry's scope. |
 | `Anonymous` | none | Public routes only. |
@@ -56,92 +70,20 @@ box's own token file, peers and extensions open no socket. Test:
 
 ## What they may do: `Capability`
 
-`Principal::has(capability)`. Owner and Device have every capability. Peers have only
-`RequestSensitiveAction`; guests, extensions and anonymous callers have none of these (all of them
-keep their own endpoint allow-lists).
+`Principal::has(capability)`: the owner session, the token file and a paired phone (`is_owner_device`,
+"you") hold every capability. An agent's session token holds every one except the two that keep
+the door: `DecideApprovals` (list, approve and deny requests) and `OwnerSecrets` (answer a secret
+request, have gxserver read a secret provider reference, the phone's Cloud Box kit). Coordinators
+manage only their own threads (`ManageOwnThreads`; `ManageAnyThreads` is the token file's), which
+is how threads are organised, not a security rule. Peers hold only `RequestSensitiveAction` and
+keep `PEER_ALLOWED_ENDPOINTS`; guests, extensions and anonymous callers hold none and keep their
+own allow-lists.
 
-| Capability | Session agent/thread | Coordinator | Chief (head) | LocalAgent |
-| --- | --- | --- | --- | --- |
-| `OwnSession`, `ProjectSessions`, `AgentWritableSettings` | yes | yes | yes | yes |
-| `ManageOwnThreads` | no | yes | yes | yes |
-| `ManageAnyThreads` | no | no | no | yes |
-| `OwnerSettings` | no | no | no | no |
-| `RequestSensitiveAction` (may ask) | yes | yes | yes | yes |
-| `DecideApprovals` (list, approve, deny, approver keys) | no | no | no | no |
-| `OwnerSecrets` (answer a secret request, have gxserver read a secret provider reference) | no | no | no | no |
-| `OwnerSetup` (install extensions, secret providers, teams; see "Settings only") | no | no | no | no |
-
-Secret requests are answered only by the owner: `/api/answerSecretRequest` and
-`/api/checkSecretReference` need `OwnerSecrets`; `/api/setVoiceAgentKey` needs it when the key
-is an `op://` reference, and `/api/cloudBoxes` `cloudKit` (the provider keys and box logins the
-phone keeps) always (`security_gates.rs`). The answer handler checks it again before it reads
-a reference. Agents, the token file (so also the GPUI web build), connected computers, guests and
-extensions are refused; there is no approval to ask for. The other way round, only the asking
-session itself (its own `gxs_` token) may create a secret request for its chat
-(`/api/createSecretRequest`) and wait for the answer (`/api/waitSecretRequest`).
-
-`SecurityState::skips_approval(caller, action)` (`server/src/security/policy.rs`) is the one rule
-for which sensitive actions a caller skips; both gates read it (the route gate in
-`security_gates.rs` and `require_owner_presence` for handlers that ask themselves). A skipped call
-gets a `PresenceGrant` with `by_policy: true` and a stand-in approval (id `allowed`, status
-`consumed`) that names the change and was never a request. The user's answers of 2026-11-10
-(Q2098 to Q2105):
-
-| Action(s) | Skipped for | Still asks |
-| --- | --- | --- |
-| `answerOtherSessionPrompt`, `typeIntoOtherSession`, `interruptOtherSession` | everyone (11.1.2; only Chief's are logged, as `allowed`) | nobody |
-| `computerGrant`, `computerRegister`, `computerChangeAccess` | the owner's devices and the token file (your app's owner session, or the token file its SSH login reads on the other computer) | a session's own token, once per computer for 30 days |
-| `easyConnectAllowList`, `easyConnectPorts`, `easyConnectRelay` | everyone | nobody |
-| `easyConnectEnable` | everyone once it was approved (remembered for good, `rememberedApprovals.easyConnectEnable`), or when the allow-list already holds a device (an earlier setup counts) | the first time |
-| `forceFullAccess`, `autopilotAnswerApprovals`, `autopilotLiftLimits`, `cloudBoxShareLogins`, `teamSyncConnect` | everyone; written to the security log as `allowed` | nobody |
-| `gbotsEnable`, `gbotsAddBot`, `gbotsApiKey`, `gbotsSetComputer` | the owner's devices | the token file and agents (where `/api/gbots` doesn't refuse them) |
-| `collabEnableSendMode`, `collabChangeShare`, `collabShareChat` showing an existing share's link again | the owner's devices | agents; a new share always asks |
-| `pairingApproveDevice`, `addApproverKey`, `settingsWeakenSecurity` (narrowed, see Settings below), `installExtensionComponent`, `collabApproveGuestMessage` | nobody | as before |
-
-Q2100 settled as the user's option C (Q2109, Q2110): a phone that signs in over SSH works at once
-with everything the token file allows (`LocalAgent`: reading, replying, Stop, typing, starting
-sessions), and only its owner powers (approving and denying requests, enrolling its approver key,
-answering secret requests, installing extensions, secret providers and the rest of
-`DecideApprovals`, `OwnerSecrets`, `OwnerSetup`) wait for the one-time `pairingApproveDevice`
-with the three words. `ghostex server endpoint` says `sshPhoneWorksUnpaired`, and a phone that
-sees it shows the waiting request as one small line it can hide instead of a card. Pairing gives a
-token-file holder nothing until the owner approves, so an agent posing as a phone gains nothing. Q2099 is the desktop's: it asks a
-connected computer that has its own owner once, at connect (`owner_security::cached_token`).
-
-### Settings only: `OwnerSetup` (11.1.1, #495 follow-up)
-
-The user's rule: agents explain owner-only things and point to Settings, but can't turn them on.
-These calls are the owner's devices' alone; agents, coordinators, threads, Chief, the token file
-(so also the ghostex CLI in the user's own terminal and the GPUI web build) and connected
-computers are refused with a message naming the Settings page
-(`server/src/server/security_owner_only.rs`). There is no approval to ask for.
-
-| Route | Owner-only when | Settings page |
-| --- | --- | --- |
-| `/api/installExtension` | always: a local folder, a catalog id, a zip URL | Extensions |
-| `/api/updateExtensionState` | it turns an extension on, or grants a permission it doesn't hold | Extensions |
-| `/api/saveSecretProvider`, `/api/removeSecretProvider` | always | Secrets |
-| `/api/joinTeamSync`, `/api/createTeamSyncInvite`, `/api/setTeamLinearKey`, `/api/setOwnLinearKey`, `/api/setSlackFlowSettings` | always (leaving a team, and linking your Slack user with the one-time code Slack sends you, stay open) | Workspaces |
-| `/api/updateAgentSettings` | it turns `agentAcceptAllEnabled` on | Agents |
-| `updateSettingsPatch` | a key the catalog doesn't mark `agentWritable` (`settings_agent_writable.rs`) | the key's page |
-
-The settings keys that loosen security are off the agent-writable list
-(`USER_ONLY_KEYS` in `packages/settings-catalog/src/help/mod.rs`): `agentAcceptAllEnabled`,
-`workspacesHidden`, `cloudBoxesPhoneStartEnabled`, `trustProjectFoldersAutomatically`,
-`connectorsHidden`, `customSessionTitleGenerationCommand`, `globalWorktreeCommand`,
-`customDefaultEditorCommand`, `terminalClipboardPasteProtection`, `botAutomationsHidden`.
-GBots and Sync keys stay writable and ask (`settingsWeakenSecurity`, `gbotsEnable`).
-
-The owner installs an extension from a folder with Settings > Extensions > **Install from
-folder…** (`tabs/extensions/folder_install.rs`): a folder picker, the extension's name and the
-permissions it asks for, each a tick box starting unticked. An approval grants only the
-permissions it lists (a left-out one is not granted, not refused); a background process, a
-remote website or another version it didn't show is still refused (`check_install_approval`).
-
-Extensions besides the routes: an install without the consent dialog's approval gets no
-permissions (`store_entry_for_install`), and a payload that wasn't installed through Ghostex (no
-store entry) is never started, served or given state; it lists as off and can only be
-uninstalled (`extensions/registry.rs`).
+Refusals that stay because they keep the door: an agent's session token can't approve or deny,
+list requests, answer or read a secret, enroll an owner key, get a pairing code (it gets the
+connection details with an empty code), or ask to pair over SSH (`/api/pairOverSsh` takes only the
+token file); a request is never approved by the caller that asked (`ApprovalStore::approve_plain`).
+A GBot API chat takes input only from you (`api_chat_refused`): its text comes from outside Ghostex.
 
 ### Chief's head role
 
@@ -169,8 +111,8 @@ device, session and token-file callers before any route handler runs:
 - `Presence(SensitiveAction)`: the whole call is one sensitive action; the gate asks with the
   call's params.
 
-A route that is only partly sensitive is gated in `security_gates.rs` for that part, or from its
-handler with `require_owner_presence` (that is how the pairing and Collab routes do it).
+A route that is only partly sensitive is gated in `security_gates.rs` for that part (Easy Connect), or
+from its handler with `require_owner_presence` (pairing and Collab).
 
 Routes answered before the token gate (`route_http/dispatch.rs`), each trusting only its own
 check: the Composio sign-in redirect (its OAuth `state`), visual pages, file links, and the GBot
@@ -188,162 +130,98 @@ read-only profile writing only its folder, Claude's deny rules), never write mem
 (`api_chat_refused`, checked before every other gate). `/api/updateSession` keeps the `gbot` and
 `gbotHome` marks and an API chat's folder as stored (`gbots/markers.rs`).
 
-## Sensitive actions: `SensitiveAction`
+## What asks: `SecurityState::skips_approval` (`security/policy.rs`)
 
-Defined once in `ghostex_gx_protocol::approval::SensitiveAction` (wire names in camelCase). "Asks
-when" says when the request is made; whether the caller is asked at all is the policy above:
+| Action | Asks when | Who can approve |
+| --- | --- | --- |
+| `pairingApproveDevice` | a phone or computer asks to pair (three matching words) | you |
+| `collabApproveGuestMessage` | each guest message in Approve mode | you |
+| `easyConnectEnable` | an agent's session token turns Easy Connect on, the first time (remembered for good in `security.json` `rememberedApprovals`; an allow-list that already holds a device counts) | you |
+| `easyConnectAllowList` | an agent's session token adds a device to the allow-list (emptying it closes it, so never asks) | you |
+| `collabShareChat`, `collabEnableSendMode` | an agent's session token makes a share, asks for its link again, or turns on Send mode | you |
+| every other action | never | |
 
-| Group | Actions | Wired by | Asks when |
-| --- | --- | --- | --- |
-| Collab | `collabShareChat`, `collabChangeShare`, `collabEnableSendMode`, `collabApproveGuestMessage` | The Collab component asks (server/collab/src/owner.rs), gxserver gates (`collab_shim/http.rs`) | `/api/collab` `op: share` (also to see a link again), `setMode` to Send or from View only, `resolve` with `send`. `collabEnable` and `collabChangeRelay` are no longer asked: Collab is on while installed, and the relay is never settable. |
-| Extensions | `installExtensionComponent` (target: the component, `collab` today) | `collab_shim/http.rs` | `/api/extensionComponents` `op: install`: a component that opens a way into this computer. Updating it, turning it off and uninstalling never ask. |
-| Pairing | `pairingShowCode`, `pairingApproveDevice` | Pairing thread | |
-| Easy Connect | `easyConnectEnable`, `easyConnectAllowList`, `easyConnectPorts`, `easyConnectRelay` | `security_gates.rs` | `/api/updateTailcatState`: turning it on, a new port, new devices on (or emptying) the allow-list (empty lets any device in), a relay change. Turning it off never asks. |
-| Connected computers | `computerGrant` (`computerRegister`, `computerChangeAccess` are no longer asked) | `security_gates.rs` | `/api/registerConnectedComputer`, `/api/issueComputerGrant` with Agent access on, for a computer not approved in the last 30 days: both routes ask one shared request per computer (any caller reuses and may spend it; it waits a day), and a call that meets it already waiting is answered `approvalPending` instead of `approvalRequired`, so no app prompts for it again. Renewals of an approved computer pass; either route with `agentAccess: false` never asks, nor does registering a computer with `waitingOn: "here" | "there"` (the desktop's note that the pair still waits: no address, no token; `listConnectedComputers` answers `waitingForApproval` with what to approve and where, and the relay, `ghostex computers` and every `--computer` verb say it). The desktop's renewal never prompts: it shows one card and waits on the request (`remote_conn/connected_computers.rs`). |
-| Autopilot | `autopilotAnswerApprovals`, `autopilotLiftLimits` | `security_gates.rs` | `/api/autopilot` `op: "set"` with `answerApprovals: true`, or `limits`. |
-| GBots | `gbotsEnable`, `gbotsAddBot` | `security_gates.rs` | `updateSettingsPatch` turning `gbotsEnabled` on; `/api/gbots` `op: "create"`. |
-| GBot API | `gbotsApiKey` (target: the GBot's id) | `security_gates.rs` `gbots_api_key_action` | `/api/gbots` `op: "apiOn"`, `"apiNewKey"`, and `"apiShareMemory"` with `on: true`, from the owner's devices and the token file only (every agent, Chief included, is refused by `/api/gbots` without being asked). The detail names what the key reaches: messaging the GBot, its replies, what it knows (its memory only when shared) and its routines by name. The params bind the label and the SHA-256 of the caller's one-time `keyNonce`, so the key goes only to the call that asked: another program reading the pending request can't repeat it. `apiOff` and sharing off never ask. Each change is a security-log entry (`gbots.apiOn`, `gbots.apiNewKey`, `gbots.apiOff`, `gbots.apiShareMemory`). |
-| GBot Cloud Box chats | `cloudBoxShareLogins` (target: the box) | `security_gates.rs` `gbots_cloud_box_action` | `/api/gbots` `op: "newChat"` or `"ask"` for a GBot that works on a Cloud Box, by anyone but the owner's devices: the box gets the agent logins and project files set up for boxes, and the GBot's instructions and memory. |
-| Settings | `settingsWeakenSecurity` (target: the keys) | `security_gates.rs`, desktop `owner_security/settings.rs` | One rule, `ghostex_settings_catalog::security_relaxing::needs_owner_presence`: a key on the Accounts, Secrets or Connectors page, one of the Remote page's ways in (`sshAccess`, `easyConnectEnabled`, `pairingCode`, `pairedDevices`, `pairedDevicesOnly`, `tailscaleEnabled`, `remoteTailscaleEnabled`), `homeSecretFolders`, or a key holding a token, password, secret, API key or credential (Q2102, 2026-11-10: Sync and the other Remote rows no longer ask). The desktop's Settings window uses `own_save_needs_presence`, the same rule without `gbotsEnabled` (Q2105). Through the API (`updateSettingsPatch`), a key the API may not write at all is refused by `settings_agent_writable.rs` before any approval; the rest (Sync's, GBots') ask. The desktop's own Settings window shows the system prompt (Touch ID / Windows Hello / polkit) before it saves such a change, and shows the saved values again when the prompt is declined. Collab's keys are left to the Collab routes. |
-| Approvers | `addApproverKey` | `security_http.rs` | A second owner key, or any approver key after the first. |
-| Full access | `forceFullAccess` | `security_full_access.rs` | A create with `launchSettings.acceptAllMode: "enabled"` when neither "Agent approvals: accept all" nor the agent's own launcher setting is on, in any project, whoever but the owner's devices calls (Chief included). Every time. The same for `/api/updateSession` turning a session's `acceptAllMode` on (a resume reads it); leaving it on or turning it off never asks. |
-| Teams | `teamSyncConnect` (target: the backend's address) | `security_gates.rs` | `/api/connectTeamSync` by anyone but the owner's devices. It is `ghostex team deploy`'s last step, which Settings > Workspaces sends the owner to a terminal for, so it asks instead of being refused; the rest of team setup is Settings only. |
-| Cloud Boxes | `cloudBoxShareLogins` | `security_gates.rs` | `/api/cloudBoxes` `create`, `setAgentLogin` with `allowed: true`, `projectSettings` with `settings`, by anyone but the owner's devices: they put the owner's agent logins and a project's secret files onto a box. Turning a login off and reading never ask. `connectInfo` is unchanged. |
+Your own click in Ghostex is the approval for your own action, so it never makes a card. A
+skipped call gets a `PresenceGrant` with `by_policy: true` and a stand-in approval (id `allowed`,
+status `consumed`) that names the change and was never a request. Chief's steering of other
+sessions is still written to the security log as `allowed`.
 
-Add a new action here, in the enum, and in the phone's TypeScript port together.
+Settings: no setting asks or is refused for agents any more. The API and `ghostex settings set`
+write the ten formerly owner-only keys (`help::api_may_write`); the committed Help keeps marking
+them "not agent-writable" until the release that ships option B empties `USER_ONLY_KEYS` and
+regenerates it (`~/.local/share/agent-work/Ghostex/security-b/release-steps.md`). Keys on the
+Accounts and Remote pages, and keys holding a secret, stay out of the API as before: they are
+account or pairing state, not preferences.
 
 ## The gate: `require_owner_presence`
 
 In a route handler (`crate::server::require_owner_presence`):
 
 ```rust
-let action = ActionRequest::new(SensitiveAction::CollabEnableSendMode, "Let guests send messages to Fix login without your approval")
+let action = ActionRequest::new(SensitiveAction::CollabShareChat, "Share “Fix login” through a link")
     .target(session_id.clone())
     .params(Value::Object(params.clone()));      // the call's exact params; approvalId is dropped
-let grant = match require_owner_presence(&state, &caller, action, &body_json, &endpoint.path, &request_id) {
-    Ok(grant) => grant,
+let grant = match require_owner_presence(&state, &caller, action, &body_json, &path, &request_id) {
+    Ok(grant) => grant,                         // asked nobody (`by_policy`) or spent an approval
     Err(response) => return response,           // 403 approvalRequired / approvalDenied / forbidden
 };
 // …make the change…
-state.security.record_performed(grant.approval.action, grant.approval.target, &caller, true);
 ```
 
-- The summary and detail are written by gxserver from the action and params, in the card
-  wording rules (what happens, in plain words). Never copy text from the caller into them: an
-  agent must not write what the owner approves. Never put a secret in them.
-- `params` must be the exact parameters the handler acts on. The approval is bound to their
-  digest (SHA-256 of canonical JSON, keys sorted), the action and the target.
-- The error body is the usual RPC error plus `approval` (an `ApprovalRequest`):
-  `{ ok: false, error: "approvalRequired", message: "Waiting for your approval… repeat this call with approvalId \"apr_…\".", approval: {…} }`.
-  The message names the id too, for clients whose transport keeps only code and message (the
-  phone's).
-- The caller repeats the same call with `params.approvalId = approval.id` once it is approved.
-  Only the caller that asked (or the owner's devices) can spend it, once, within 2 minutes of the
-  approval. A pending request lapses after 10 minutes. An identical pending request from the same
-  caller is reused.
-- Clients: the desktop app, getting `approvalRequired` for a call of its own (local, or a remote
-  computer's through the tunnel), shows the system prompt at once with the summary, approves and
-  sends the call again (never on the main thread). The `ghostex` CLI prints what it waits for on
-  stderr, polls `/api/readApprovalRequest` and repeats the call (`--no-wait` returns at once).
-- A person's own action in a chat (Stop, answering a prompt, typing into a session) sends
-  `params.finishWhenApproved: true` (desktop and web `native_chat/rpc.rs`) for a connected
-  computer still on gxserver 11.1.0 or 11.1.1, which asked about these; a later gxserver never
-  asks for them and ignores the flag.
-- The desktop's Stop, prompt answers and typing on a connected computer's sessions go as its owner
-  session there, which skips these approvals. Until it has one (another owner is enrolled there and
-  has not approved this app's owner key: one `addApproverKey` request that waits a day), the
-  desktop doesn't send them and the chat says what to approve and where
-  (`owner_security::steer_needs_owner`, code `ownerApprovalNeeded`): never a request per action.
+- The summary and detail are written by gxserver (or the Collab component), never copied from the
+  caller: an agent must not write what you approve. Never put a secret in them.
+- The approval is bound to the action, target and the params' digest (SHA-256 of canonical JSON).
+- The error body is the usual RPC error plus `approval` (an `ApprovalRequest`), and its message
+  names the id. The caller repeats the same call with `params.approvalId` once it is approved; only
+  the caller that asked (or you) can spend it, once, within 2 minutes. A pending request lapses
+  after 10 minutes; an identical pending request from the same caller is reused.
+- Clients: the `ghostex` CLI prints what it waits for on stderr, polls `/api/readApprovalRequest`
+  and repeats the call (`--no-wait` returns at once). The desktop and the phone show the card.
 
-## The approval and owner-key API
+## The approval API
 
 | Endpoint | Params | Who | Result |
 | --- | --- | --- | --- |
-| `/api/listApprovalRequests` | none | owner's devices | `{ requests }`, pending, oldest first |
-| `/api/readApprovalRequest` | `{ id }` | its requester, owner's devices | `{ request }` |
-| `/api/approveApprovalRequest` | `{ id, keyId, signature }` | owner's devices | `{ request }` (status `approved`) |
-| `/api/denyApprovalRequest` | `{ id }` | owner's devices | `{ request }` (`denied`; no signature) |
-| `/api/listApproverKeys` | none | owner's devices | `{ keys }` |
-| `/api/enrollApproverKey` | `{ key }` | owner's devices | `{ key }`: the first from the owner session, later ones after an approved `addApproverKey` |
-| `/api/removeApproverKey` | `{ keyId }` | owner's devices | `{ key }` |
-| `/api/enrollOwnerKey` | `{ key, approverKey?, askOwner? }` | any local caller (loopback only); the first key only from the token file (the Ghostex app here, or another computer's app through its SSH tunnel), never a session's token | `{ key }`: the first is trusted on first use (user decision 1A), the same again is a no-op, another needs `addApproverKey`. Any program running as this OS user can read the token file, so it can still enroll first. |
-| `/api/ownerChallenge` | none | any local caller (loopback only) | `{ challenge, expiresAtMs }`, single use, 60 s |
-| `/api/openOwnerSession` | `{ keyId, challenge, signature }` | any local caller (loopback only) | `{ token, deviceId }` |
-| `/api/securityStatus` | none | any but guests | `{ serverId, caller, ownerKeys, approverKeys, pendingApprovals }` |
+| `/api/listApprovalRequests` | none | you | `{ requests }`, pending, oldest first |
+| `/api/readApprovalRequest` | `{ id }` | its requester, you | `{ request }` |
+| `/api/approveApprovalRequest` | `{ id }` (older apps add `keyId` and `signature`, accepted and not checked) | you, never the requester | `{ request }` (status `approved`) |
+| `/api/denyApprovalRequest` | `{ id }` | you | `{ request }` (`denied`) |
+| `/api/securityStatus` | none | any but guests | `{ serverId, caller, plainApprovals: true, requirePresence, ownerKeys, approverKeys, pendingApprovals }` |
+| `/api/listApproverKeys`, `/api/enrollApproverKey`, `/api/removeApproverKey` | as before | you | kept for older apps: an approver key enrolls at once and is listed, but approving checks no signature |
+| `/api/enrollOwnerKey`, `/api/ownerChallenge`, `/api/openOwnerSession` | as before (`askOwner`, `approverKey` accepted) | the token file or an owner session (an agent's session token can't add an owner key) | kept for desktops from before plain approvals: a key enrolls at once, no "act as the owner" card (#532) |
 
 Statuses: `pending`, `approved`, `denied`, `expired`, `consumed`. Requests live in memory; a
-gxserver restart drops them and the agent asks again. `/api/events` carries
+gxserver restart drops them and the asker asks again. `/api/events` carries
 `{ type: "approvalRequestsChanged", change: "requested"|"approved"|"denied"|"expired", request }`.
 
-## What is signed
+## Older apps and older gxservers
 
-`approval_signing_payload(server_id, &request)`: UTF-8, one field per line, `\n` line ends, no
-trailing newline; a field containing a line break is refused.
-
-```text
-ghostex-approval-v1
-<server id of the gxserver that made the request>
-<approval id>
-<nonce: 32 random bytes, base64url>
-<action wire name>
-<target, or an empty line>
-<params digest, lowercase hex SHA-256>
-<expiresAtMs of the pending request, decimal>
-approve
-```
-
-`owner_session_signing_payload(server_id, challenge, key_id)`:
-`ghostex-owner-session-v1\n<server id>\n<challenge>\n<key id>`.
-
-The pinned examples are the tests in `approval.rs`; the phone's TypeScript port
-(`src/security/approvalPayload.ts`) is tested against the same text.
-
-## Keys
-
-| Device | Approver key | Unlocked by | Owner key |
-| --- | --- | --- | --- |
-| macOS desktop | P-256 in the login Keychain (another program reads it only with the user's keychain password) | LocalAuthentication: Touch ID or the Mac password, before each signature | P-256 in the login Keychain, no prompt |
-| Windows desktop | P-256 in Credential Manager | Windows Hello (`UserConsentVerifier`) before each signature; where Windows Hello isn't set up, the Windows sign-in prompt for the signed-in account, accepted only with that account's correct password (`LogonUserW`, same SID as Ghostex), presence `windowsPassword` (GitHub #520) | Credential Manager |
-| Linux desktop | P-256 in the Secret Service | polkit password prompt (`pkcheck`, a fresh subject each time so the "keep" cache never applies) | Secret Service |
-| iPhone | Secure Enclave P-256, `.userPresence` | Face ID / Touch ID / passcode, per signature | (pairing's device key) |
-| Android | Android Keystore P-256 (StrongBox when present), user authentication per use | BiometricPrompt: strong biometric or screen lock | (pairing's device key) |
-
-All `ecdsaP256Sha256`: public key = 65-byte uncompressed point, signature = ASN.1 DER, both base64
-standard (`rsaPkcs1Sha256` is accepted too, for a later Windows Hello `KeyCredentialManager` key).
-`keyId` = hex of the first 16 bytes of SHA-256 over the public key bytes; gxserver computes it.
-
-The macOS approver key is not in the Secure Enclave: a persistent Secure Enclave key needs a
-`keychain-access-groups` entitlement with a provisioning profile that the Developer ID app doesn't
-ship. On Windows and Linux any program running as the user can read these key stores (Help says
-so, user decision 1A).
-
-Enrollment: the desktop enrolls its owner key on each gxserver it talks to the first time (this
-computer's, and each connected remote computer's through its tunnel), opens an owner session,
-and enrolls its approver key under that session the first time it approves something there.
-It sends its approver key with its owner key (`approverKey`): with the first owner key it
-goes in at once while no approver key is enrolled; on a computer that already has an owner, the
-one `addApproverKey` request ("Let <computer> (Ghostex app) act as the owner of Ghostex on this
-computer and answer its requests") enrolls both. A key the owner approves goes in the moment it
-is approved (`security::ApprovalEffect`), so the asking call coming back with `approvalId` (the
-desktop's, or the 11.2.1 phone's `ensureEnrolled`) finds it enrolled and gets it back; the
-request stays `approved` until it lapses, as before.
-
-The desktop shows a connected computer's request with Approve only where it can answer it (an
-owner session there and its approver key enrolled, or none enrolled yet,
-`owner_security::answerer`); elsewhere it shows a notice naming the devices that can approve it
-there, and asks that computer once to let it act as the owner there. A request made by another
-computer's app through its owner session (`requestedBy.kind: "owner"` with another `deviceId`)
-shows as a card; only the app's own requests don't. A
-phone's approver key (and any later key) needs an approved `addApproverKey` from a key already
-enrolled; the phone asks, the desktop's card approves it.
+- gxserver says `plainApprovals` in `/api/securityStatus` and in `ghostex server endpoint`'s
+  capabilities. A desktop (`owner_security/plain.rs`) or phone (`security/approvals.ts`) that sees
+  it approves with `{ id }` (the system prompt first only with `requirePresence`); one that doesn't
+  (a gxserver from 11.2.2 or earlier) keeps the signed approval, the owner session and the approver
+  key. That client code is marked with a dated note: delete it once computers older than this
+  release no longer matter.
+- Phones and desktops from 11.1.0 to 11.2.2 against a new gxserver: their owner and approver keys
+  enroll at once, their signed approvals count as plain ones, their pairing flow is unchanged, and
+  calls that used to wait for an approval now just go through. An 11.2.2 desktop still hides a
+  request its owner session made by device id; under option B your own devices make no requests,
+  so nothing it hides goes unanswered.
+- The desktop hides a card only for a request it got back from its own calls
+  (`owner_security::plain::note_own_request`), never by device id: two Macs share an owner key
+  after Migration Assistant (Gregg's report, 10 Nov).
+- The payload an older app signs (`approval_signing_payload`) and the owner session's
+  (`owner_session_signing_payload`) are unchanged in `approval.rs`; owner sessions still verify
+  their signature, because an owner session is one of your devices.
 
 ## Persistence
 
 `gxserver/auth/security.json` (0600, written whole through a rename): `ownerKeys`,
 `approverKeys`, `sessionTokens` (whole tokens, so a restarted session gets the same one; the file
 is as readable to a same-user program as the token file), `ownerSessions` (hashes only),
-`approvedComputers` (server id → when), `rememberedApprovals` (key → when: approvals asked once
-and kept for good, today `easyConnectEnable`; older gxservers ignore it), `approvedProjectReach` (`{ caller, target }`: an agent session and a project it may reach). An unreadable file is moved aside and gxserver starts with
+`approvedComputers` (server id → when; read by nothing since option B, kept so the file
+round-trips), `rememberedApprovals` (key → when: approvals asked once and kept for good, today
+`easyConnectEnable`; older gxservers ignore it), `approvedProjectReach` (`{ caller, target }`: an agent session and a project it may reach). An unreadable file is moved aside and gxserver starts with
 none; the desktop then enrolls again on first use.
 
 ## The security log (`crate::audit`)

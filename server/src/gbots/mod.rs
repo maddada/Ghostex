@@ -70,10 +70,7 @@ mod sweep;
 mod team_file;
 mod trash;
 
-pub(crate) use api::{
-    approval_subject as api_approval_subject, is_api_chat_session, opens_api, serve_bot_api,
-    BOT_API_ROUTE_PREFIX,
-};
+pub(crate) use api::{is_api_chat_session, serve_bot_api, BOT_API_ROUTE_PREFIX};
 pub(crate) use apps_access::{project_reads_apps_only, read_only_refusal};
 pub(crate) use assign::{
     report_heading as assignment_report_heading, settle_report as settle_assignment_report,
@@ -82,15 +79,10 @@ pub(crate) use call::{
     call_chat as gbot_call_chat, call_refusal as gbot_call_refusal, log_call as log_gbot_call,
     CallBot, CallRefusal,
 };
-pub(crate) use computer::{
-    cloud_box_chat_approval as gbots_cloud_box_chat_approval, handle_gbots_remote_http,
-    widening_approval as gbots_computer_widening_approval, GBOTS_REMOTE_ENDPOINT,
-};
-pub(crate) use day_watch::{
-    adds_bot as day_watch_adds_bot, brief_turn_alerts as day_brief_turn_alerts,
-};
+pub(crate) use computer::{handle_gbots_remote_http, GBOTS_REMOTE_ENDPOINT};
+pub(crate) use day_watch::brief_turn_alerts as day_brief_turn_alerts;
 pub(crate) use endpoint::{handle_gbots_http, GBOTS_ENDPOINT};
-pub(crate) use feature::{chief_adds_on_its_own, gbots_off_message, gbots_on, gbots_shown};
+pub(crate) use feature::{gbots_off_message, gbots_on, gbots_shown};
 pub(crate) use folder::gbots_dir as gbots_folder;
 pub(crate) use markers::keep_gbot_marks;
 pub(crate) use memory::{
@@ -103,7 +95,6 @@ pub(crate) use problems::start_gbots_problem_watch;
 pub(crate) use project::{
     add_create_project_path, gbots_bot_id as gbots_project_bot_id, refuse_bot_project_create,
 };
-pub(crate) use record::name_problem;
 pub(crate) use retire::retire_previous_gbots;
 pub(crate) use routine_runs::{
     routine_folder, routine_gate, routine_run_settled, start_routine_run, RoutineGate,
@@ -111,4 +102,3 @@ pub(crate) use routine_runs::{
 };
 pub(crate) use skill::install_for_visiting_chat as install_gbots_skill_for_visiting_chat;
 pub(crate) use sweep::start_gbots_sweep;
-pub(crate) use team_file::import_approval_summary as team_import_approval_summary;

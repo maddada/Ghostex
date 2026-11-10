@@ -39,20 +39,7 @@ impl SecurityState {
         }
     }
 
-    /// The Q2104 actions, which the security log keeps as `allowed` since they no longer ask.
-    pub fn logs_when_skipped(action: &SensitiveAction) -> bool {
-        use SensitiveAction::*;
-        matches!(
-            action,
-            ForceFullAccess
-                | AutopilotAnswerApprovals
-                | AutopilotLiftLimits
-                | CloudBoxShareLogins
-                | TeamSyncConnect
-        )
-    }
-
-    /// Keeps an approval that is asked once and remembered (Q2101: turning Easy Connect on).
+    /// Keeps an approval that is asked once and remembered (turning Easy Connect on, when an agent asks).
     pub fn remember_approved(&self, request: &ApprovalRequest, now_ms: u64) {
         if let Some(key) = remember_key(request) {
             self.remember(key, now_ms);

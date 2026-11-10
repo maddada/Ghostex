@@ -265,40 +265,6 @@ fn widens(before: &BotComputer, next: &BotComputer) -> bool {
         || (next.place != Place::This && next.folder != before.folder)
 }
 
-/*
-CDXC:GBots 2026-11-09 WHY:
-The security review of M12 (finding 8): an owner device's click alone gave a GBot another computer, a Cloud Box or computer use, but agents can drive the GUI ("a plain Allow button is never enough", ai/security-tokens-and-approvals.md), and an agent with computer use could click it. So a change that lets a GBot do more asks for the owner's signed approval (Touch ID on the Mac, the phone's lock) even from the owner's own window (security_gates.rs `gbots_computer_action`); giving it this computer back or turning computer use off never asks.
-*/
-/// The approval a `computerSet` needs: its summary and the GBot's id, or `None` when it lets the
-/// GBot do no more than now (or would be refused anyway, which the handler says).
-pub(crate) fn widening_approval(
-    state: &AppState,
-    params: &Map<String, Value>,
-) -> Option<(String, String)> {
-    let db = crate::storage::open_gxserver_database(&state.paths).ok()?;
-    let repository = DomainRepository::new(&db, &state.metadata.server_id);
-    let bot = super::super::record::find_bot(&db, text(params, "bot")?).ok()??;
-    let (before, next) = plan(state, &db, &repository, &bot, params).ok()?;
-    if !widens(&before, &next) {
-        return None;
-    }
-    let mut parts = Vec::new();
-    if next.place != Place::This && (next.place != before.place || next.folder != before.folder) {
-        parts.push(match (&next.place, &next.folder) {
-            (Place::CloudBox(_), _) => format!("run its chats on the Cloud Box {}", next.label()),
-            (_, Some(folder)) => format!("run its chats on {} in {folder}", next.label()),
-            _ => format!("run its chats on {}", next.label()),
-        });
-    }
-    if next.computer_use && !before.computer_use {
-        parts.push("use the screen and apps of the computer it works on".to_string());
-    }
-    Some((
-        format!("Let {} {}", bot.name, parts.join(" and ")),
-        bot.bot_id,
-    ))
-}
-
 /// The computer or Cloud Box `wanted` names (`computer:<id>`, `cloudbox:<id>`, or a name).
 fn pick(
     state: &AppState,

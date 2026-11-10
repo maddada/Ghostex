@@ -24,8 +24,7 @@ mod presence;
 mod session_tokens;
 
 pub use approvals::{
-    params_digest, ActionRequest, ApprovalEffect, ApprovalError, ApprovalStore, APPROVED_TTL_MS,
-    PENDING_TTL_MS,
+    params_digest, ActionRequest, ApprovalError, ApprovalStore, APPROVED_TTL_MS, PENDING_TTL_MS,
 };
 pub use approver_keys::{
     approver_key_id, key_id_of, verify_approval_signature, ApproverKeyError, ApproverKeys,
@@ -96,8 +95,8 @@ pub struct SecurityState {
     pub owner_keys: ApproverKeys,
     pub owner_challenges: OwnerChallenges,
     pub session_tokens: SessionTokens,
-    /// Connected computers the owner approved (server id → when, ms); see
-    /// [`SecurityState::computer_approved`].
+    /// Connected computers the owner approved before option B (server id → when, ms): nothing
+    /// reads them now; kept so `security.json` round-trips for an older gxserver started on it.
     approved_computers: Arc<std::sync::Mutex<std::collections::BTreeMap<String, u64>>>,
     /// Approvals remembered for good (`policy::remember_key`), key → when (ms).
     remembered: Arc<std::sync::Mutex<std::collections::BTreeMap<String, u64>>>,
@@ -263,28 +262,6 @@ impl SecurityState {
         }
     }
 
-    /*
-    CDXC:Security 2026-11-08 WHY:
-    The desktop renews a connected computer's registration and grant every few minutes (connected_computers/registry.rs keeps them 3 minutes), so asking for an approval on each renewal would prompt all day. The owner approves a computer once; renewals for it pass for 30 days (the design's longest grant), and a new computer, or one whose approval lapsed, asks again. Registering a computer, or renewing it, with Agent access off never asks (`security_gates.rs`; until 11.1.1 only the grant route skipped it, so turning Agent access off still asked on every registration).
-    */
-    /// Whether the owner approved computer `server_id` within the last 30 days.
-    pub fn computer_approved(&self, server_id: &str, now_ms: u64) -> bool {
-        self.approved_computers
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .get(server_id)
-            .is_some_and(|approved| now_ms.saturating_sub(*approved) < COMPUTER_APPROVAL_MS)
-    }
-
-    /// Remembers that the owner approved computer `server_id` now.
-    pub fn approve_computer(&self, server_id: &str, now_ms: u64) {
-        self.approved_computers
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .insert(server_id.to_string(), now_ms);
-        let _ = self.save();
-    }
-
     /// Adds an approver key: the first one directly (it is the owner's call, checked by the
     /// route), later ones only after the route spent an `addApproverKey` approval.
     pub fn add_approver_key(
@@ -300,9 +277,6 @@ impl SecurityState {
         Ok(key)
     }
 }
-
-/// How long an approved connected computer's renewals pass without asking again.
-pub const COMPUTER_APPROVAL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 
 static INSTALLED: std::sync::OnceLock<SecurityState> = std::sync::OnceLock::new();
 

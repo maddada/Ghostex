@@ -19,4 +19,4 @@ mod text;
 
 pub(crate) use deliver::{brief_turn_alerts, deliver};
 pub(crate) use offer::start_day_watch_offer;
-pub(crate) use ops::{adds_bot, handles, run};
+pub(crate) use ops::{handles, run};
