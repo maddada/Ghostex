@@ -480,9 +480,14 @@ pub fn project(state: &ChatState, context: &ChatContext) -> (Value, Vec<OpenAsk>
     )
 }
 
-/// The "Moving · 7" row under the newest reply: every line of work still running (Moving or
-/// Waiting) that has no card of its own there, which opens to a list; a row of the list goes to
-/// the item's newest card.
+/// The "Moving · 7" row under the newest reply: every line of work really moving that has no card
+/// of its own there, which opens to a list; a row of the list goes to the item's newest card.
+/// Waiting and Later items stay out of the reply unless its turn changed them (they have their
+/// card then); the Work panel lists them.
+///
+/// CDXC:Coordinators 2026-11-10 DECISION:
+/// User, on "Moving · 18 … 12 waiting": "why 12 waiting here??". The row counts and lists only
+/// Moving items, with no "N waiting" tail.
 ///
 /// CDXC:Coordinators 2026-11-10 DECISION:
 /// User (Q2166 "A. A card per item that changed, news on top"): the reply is a few sentences of
@@ -506,7 +511,7 @@ fn moving_row(
     for item in items.iter().filter(|item| item["kind"] == "item") {
         let status = text(item, "status");
         let reference = text(item, "ref");
-        if !matches!(status, "moving" | "waiting") || shown.contains(&reference) {
+        if status != "moving" || shown.contains(&reference) {
             continue;
         }
         let at = at_ms(text(item, "at")).unwrap_or(0);
@@ -520,7 +525,7 @@ fn moving_row(
             "ref": reference,
             "title": text(item, "title"),
             "status": status,
-            "line": if status == "waiting" { waits_line(item) } else { text(item, "now").to_string() },
+            "line": text(item, "now"),
             "age": crate::transcript::message_time::age_label(now_ms, at),
         });
         if let Some(target) = target {
@@ -536,10 +541,6 @@ fn moving_row(
         return None;
     }
     rows.sort_by(|left, right| right.0.cmp(&left.0));
-    let waiting = rows
-        .iter()
-        .filter(|(_, row)| row["status"] == "waiting")
-        .count();
     let titles: Vec<&str> = rows.iter().map(|(_, row)| text(row, "title")).collect();
     Some((
         turn.start_ms,
@@ -552,7 +553,6 @@ fn moving_row(
             "turnId": turn.id,
             "title": format!("Moving \u{b7} {}", rows.len()),
             "summary": titles.join(", "),
-            "waiting": if waiting > 0 { format!("{waiting} waiting") } else { String::new() },
             "rows": rows.into_iter().map(|(_, row)| row).collect::<Vec<_>>(),
         }),
     ))

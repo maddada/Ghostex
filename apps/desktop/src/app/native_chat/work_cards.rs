@@ -4,9 +4,19 @@
 //! ask with its answer buttons; an item's earlier cards and settled asks fold to one quiet line.
 //! The phone draws the same cards in apps/mobile/app/src/chat/native/cards/WorkCards.tsx.
 //!
+//! Titles are the chat's body text (its prose size and Text strength); second lines, folds and the
+//! Moving row's names are its muted text at the same size, so the cards read as the chat does and
+//! follow Chat zoom and Text strength live.
+//!
+//! CDXC:Coordinators 2026-11-10 DECISION:
+//! User, on the opened Moving list: "the font size must match the font size of the chat here please
+//! and same text strength should apply". Chips and the status and age labels stay small: they
+//! are labels, not text to read.
+//!
 //! The buttons are neutral fills, never the dark primary fill, because the card sits on the chat's
 //! glass (the user's standing rule: no black fills on glass).
 
+use super::chat_text_look::{PROSE_LINE_HEIGHT, PROSE_SIZE};
 use super::tone_card::ToneButton;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -109,13 +119,14 @@ impl NativeChatView {
         let status = text(card, "statusLabel");
         let age = text(card, "age");
         let line = text(card, "line");
+        let body = p.strengthened(p.prose);
         // On a narrow chat the status and age wrap under the title rather than squeeze it.
         let mut top = div()
             .flex()
             .flex_wrap()
             .items_center()
             .gap(px(8.0 * s))
-            .min_h(px(20.0 * s))
+            .min_h(px(PROSE_LINE_HEIGHT * s))
             .child(
                 svg()
                     .path(icon)
@@ -128,9 +139,10 @@ impl NativeChatView {
                     .flex_1()
                     .min_w(px(140.0 * s))
                     .whitespace_normal()
-                    .text_size(px(14.0 * s))
+                    .text_size(px(PROSE_SIZE * s))
+                    .line_height(px(PROSE_LINE_HEIGHT * s))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(p.foreground)
+                    .text_color(body)
                     .child(text(card, "title")),
             );
         let right = [status.as_str(), age.as_str()]
@@ -169,7 +181,8 @@ impl NativeChatView {
                     .pl(px(22.0 * s))
                     .min_w_0()
                     .whitespace_normal()
-                    .text_size(px(13.0 * s))
+                    .text_size(px(PROSE_SIZE * s))
+                    .line_height(px(PROSE_LINE_HEIGHT * s))
                     .text_color(p.card_muted)
                     .child(line),
             );
@@ -298,7 +311,7 @@ impl NativeChatView {
         let open = self.expanded.contains(&key);
         let (icon, color) = status_look("moving", p);
         let toggle_key = key.clone();
-        let waiting = text(card, "waiting");
+        let body = p.strengthened(p.prose);
         let head = div()
             .id(gpui::SharedString::from(format!("work-moving:{key}")))
             .role(gpui::Role::Button)
@@ -312,9 +325,9 @@ impl NativeChatView {
             .flex()
             .items_center()
             .gap(px(8.0 * s))
-            .h(px(30.0 * s))
+            .h(px(34.0 * s))
             .px(px(12.0 * s))
-            .text_size(px(12.5 * s))
+            .text_size(px(PROSE_SIZE * s))
             .chat_cursor_pointer()
             .hover(|style| style.bg(p.foreground.opacity(0.04)))
             .child(
@@ -339,7 +352,7 @@ impl NativeChatView {
                 div()
                     .flex_shrink_0()
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(p.card_muted)
+                    .text_color(body)
                     .child(text(card, "title")),
             )
             .child(
@@ -347,17 +360,9 @@ impl NativeChatView {
                     .flex_1()
                     .min_w_0()
                     .truncate()
-                    .text_color(p.muted)
+                    .text_color(p.card_muted)
                     .when(!open, |summary| summary.child(text(card, "summary"))),
             )
-            .when(!waiting.is_empty(), |head| {
-                head.child(
-                    div()
-                        .flex_shrink_0()
-                        .text_color(p.muted)
-                        .child(waiting.clone()),
-                )
-            })
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 if !this.expanded.remove(&toggle_key) {
@@ -396,10 +401,10 @@ impl NativeChatView {
                         .py(px(6.0 * s))
                         .border_t_1()
                         .border_color(p.input_border.opacity(0.5))
-                        .text_size(px(12.5 * s))
+                        .text_size(px(PROSE_SIZE * s))
                         .child(
                             div()
-                                .h(px(18.0 * s))
+                                .h(px(PROSE_LINE_HEIGHT * s))
                                 .flex()
                                 .items_center()
                                 .pl(px(20.0 * s))
@@ -421,8 +426,8 @@ impl NativeChatView {
                                     div()
                                         .min_w_0()
                                         .truncate()
-                                        .line_height(px(18.0 * s))
-                                        .text_color(p.foreground)
+                                        .line_height(px(PROSE_LINE_HEIGHT * s))
+                                        .text_color(body)
                                         .child(text(row, "title")),
                                 )
                                 .when(!line.is_empty(), |cell| {
@@ -430,8 +435,8 @@ impl NativeChatView {
                                         div()
                                             .min_w_0()
                                             .truncate()
-                                            .line_height(px(17.0 * s))
-                                            .text_color(p.muted)
+                                            .line_height(px(PROSE_LINE_HEIGHT * s))
+                                            .text_color(p.card_muted)
                                             .child(line.clone()),
                                     )
                                 }),
@@ -439,7 +444,8 @@ impl NativeChatView {
                         .child(
                             div()
                                 .flex_shrink_0()
-                                .line_height(px(18.0 * s))
+                                .line_height(px(PROSE_LINE_HEIGHT * s))
+                                .text_size(px(12.5 * s))
                                 .text_color(p.muted)
                                 .child(text(row, "age")),
                         )
@@ -478,12 +484,12 @@ impl NativeChatView {
             .flex()
             .items_center()
             .gap(px(8.0 * s))
-            .h(px(28.0 * s))
+            .h(px(34.0 * s))
             .px(px(12.0 * s))
             .rounded(px(8.0 * s))
             .border_1()
             .border_color(p.input_border.opacity(0.7))
-            .text_size(px(12.5 * s))
+            .text_size(px(PROSE_SIZE * s))
             .tooltip(move |window, cx| {
                 gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
             })
@@ -499,12 +505,13 @@ impl NativeChatView {
                     .flex_1()
                     .min_w_0()
                     .truncate()
-                    .text_color(p.muted)
+                    .text_color(p.card_muted)
                     .child(words),
             )
             .child(
                 div()
                     .flex_shrink_0()
+                    .text_size(px(12.5 * s))
                     .text_color(p.muted)
                     .child(text(card, "time")),
             )
