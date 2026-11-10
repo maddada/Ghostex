@@ -274,6 +274,10 @@ pub(crate) struct NativeChatView {
         std::collections::HashMap<String, super::question_form::FormInput>,
     /// The modal is being drawn, so a form's boxes are looked up in `modal_form_inputs`.
     pub(super) form_in_modal: std::cell::Cell<bool>,
+    /// Dictations the core wrote into a form box's draft, by the box (modal's copy or not, and
+    /// its key), until that box's next draw shows them (`show_dictated` in dictation.rs).
+    pub(super) dictated_boxes:
+        std::collections::HashMap<(bool, String), super::dictation::Dictated>,
     /// The modal's window was asked for and not yet open, or the reader closed it and the core has
     /// not yet been told.
     pub(super) resource_modal_pending: bool,
@@ -347,6 +351,8 @@ pub(crate) struct NativeChatView {
     pub(super) code_expanded: HashSet<String>,
     /// The composer's dictation session, made the first time the reader presses Dictate.
     pub(crate) dictation: super::dictation::Dictation,
+    /// The microphone was pressed and the pointer has not left it since (`hover_dictation`).
+    pub(super) dictate_pressed: std::rc::Rc<std::cell::Cell<bool>>,
     pub(crate) list: gpui::ListState,
     /// Set while a transcript field has focus: whether tail following resumes when it leaves (scroll_bottom.rs).
     pub(super) transcript_focus_follow: std::cell::Cell<Option<bool>>,
@@ -601,6 +607,7 @@ impl NativeChatView {
             files_links_menu_pending: false,
             modal_form_inputs: Default::default(),
             form_in_modal: Default::default(),
+            dictated_boxes: Default::default(),
             resource_modal_pending: false,
             resource_modal_closing: false,
             session_details: Default::default(),
@@ -634,6 +641,7 @@ impl NativeChatView {
             code_wrap_default: false,
             code_expanded: HashSet::new(),
             dictation: None,
+            dictate_pressed: Default::default(),
             list,
             transcript_host: None,
             composer_host: None,
@@ -1144,6 +1152,7 @@ impl NativeChatView {
                         cx.emit(NativeChatEvent::Host(json!({"type": "toast", "level": level, "title": message})));
                     }
                 }
+                Some("dictationInserted") => self.dictation_inserted(&request["params"], cx),
                 Some("actionError") => { cx.notify(); }
                 Some("composer") => {
                     self.paste_tiles.inserted();

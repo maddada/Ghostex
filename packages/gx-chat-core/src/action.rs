@@ -189,6 +189,7 @@ action_kinds! {
     FormSend => "formSend",
     FormSkipAll => "formSkipAll",
     FormToggle => "formToggle",
+    InsertDictation => "insertDictation",
     InlineAnswer => "inlineAnswer",
     InlineAnswerChange => "inlineAnswerChange",
     InlineAnswerText => "inlineAnswerText",

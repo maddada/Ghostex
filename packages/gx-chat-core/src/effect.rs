@@ -274,6 +274,8 @@ request_kinds! {
     SubmissionFailed => "submissionFailed",
     /// A draft arrived from another client.
     DraftReceived => "draftReceived",
+    /// Dictate's words are in a draft: the chat box's or a question form box's.
+    DictationInserted => "dictationInserted",
     /// An action finished.
     ActionComplete => "actionComplete",
     /// An action failed.

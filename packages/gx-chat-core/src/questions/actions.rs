@@ -65,14 +65,11 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                         .and_then(Value::as_u64)
                         .unwrap_or(u64::MAX) as usize,
                 ),
-                ActionKind::FormText => crate::questions::forms::write(
+                ActionKind::FormText => crate::questions::dictation::edited(
                     state,
                     &id,
-                    question,
-                    action
-                        .param("text")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default(),
+                    crate::questions::forms::FormBox::Question(question),
+                    action,
                 ),
                 ActionKind::FormSkipAll => crate::questions::forms::skip_all(state, context, &id),
                 _ => crate::questions::forms::send(state, context, &id),
@@ -185,11 +182,11 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .param("form")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            let text = action
-                .param("text")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            effects.extend(crate::questions::forms::write_notes(state, id, text));
+            let slot = crate::questions::forms::FormBox::Notes;
+            effects.extend(crate::questions::dictation::edited(state, id, slot, action));
+        }
+        ActionKind::InsertDictation => {
+            effects.extend(crate::questions::dictation::insert(state, action));
         }
         ActionKind::FormToggle => {
             let id = action

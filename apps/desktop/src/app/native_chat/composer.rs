@@ -305,11 +305,37 @@ impl NativeChatView {
             )
             // Resting on the microphone offers Transcribe previous; right-click always opens its menu.
             .when(action == "dictate", |this| {
+                let pressed = self.dictate_pressed.clone();
                 // The press must not move focus to the chat surface: the chat box keeps its caret
-                // where the dictated text will land (dictation.rs).
-                this.on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
-                    window.prevent_default()
-                })
+                // where the dictated text will land (dictation.rs). It is also not a pointer that
+                // came to rest: the hover menu waits until the pointer has left (`hover_dictation`).
+                this.on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this, _: &gpui::MouseDownEvent, window, _| {
+                        window.prevent_default();
+                        this.press_dictation();
+                    }),
+                )
+                .child(
+                    gpui::canvas(
+                        |_, _, _| {},
+                        move |bounds, _, window, _| {
+                            // The pointer has left the button: it moved outside it, or it left
+                            // the window, which comes without a last movement.
+                            let moved = pressed.clone();
+                            window.on_mouse_event(move |event: &gpui::MouseMoveEvent, _, _, _| {
+                                if moved.get() && !bounds.contains(&event.position) {
+                                    moved.set(false);
+                                }
+                            });
+                            window.on_mouse_event(move |_: &gpui::MouseExitEvent, _, _, _| {
+                                pressed.set(false);
+                            });
+                        },
+                    )
+                    .absolute()
+                    .inset(px(0.0)),
+                )
                 .on_hover(cx.listener(|this, hovered: &bool, window, cx| {
                     this.hover_dictation(*hovered, window, cx);
                 }))

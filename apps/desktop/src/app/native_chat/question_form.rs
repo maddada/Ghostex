@@ -40,6 +40,14 @@ pub(super) struct FormInput {
     placeholder: String,
     /// It holds the reader's text: typed into, or filled from the saved draft once.
     pub(super) settled: bool,
+    /// The draft the text it shows is: the core that holds it and how many dictations it has (the
+    /// form's `core` and `dictated` in the document, or a `dictationInserted` answer's), sent
+    /// with each of the reader's edits.
+    pub(super) core: String,
+    pub(super) rev: u64,
+    /// The text the core just handed it (`show_dictated` in dictation.rs), until the input has
+    /// reported it: that report is not the reader's edit.
+    pub(super) adopted: Option<String>,
     /// Its height when it was last painted, for `form_input_reveal_sync`.
     painted_height: Rc<Cell<f32>>,
     /// Pasted images still being saved, and why the last paste failed (form_attachments.rs).
@@ -129,6 +137,16 @@ impl NativeChatView {
             }
         }
         self.form_inputs.retain(|key, _| wanted.contains(key));
+        if !self.dictated_boxes.is_empty() {
+            let modal_inputs = &self.modal_form_inputs;
+            self.dictated_boxes.retain(|(modal, key), _| {
+                if *modal {
+                    modal_inputs.contains_key(key)
+                } else {
+                    wanted.contains(key)
+                }
+            });
+        }
         self.sync_form_references(false, cx);
     }
 
@@ -157,6 +175,16 @@ impl NativeChatView {
         } else {
             self.form_inputs.get(key)
         }
+    }
+
+    /// The transcript's form box that has the keyboard, by its key: where a dictation started now
+    /// types its words (`aim_dictation` in dictation.rs). The Resources modal's boxes are in a
+    /// window of their own, which has no microphone.
+    pub(super) fn focused_form_box(&self, window: &Window, cx: &gpui::App) -> Option<String> {
+        self.form_inputs
+            .iter()
+            .find(|(_, entry)| entry.input.read(cx).focus_handle(cx).is_focused(window))
+            .map(|(key, _)| key.clone())
     }
 
     /// Gives the Resources modal's form its text boxes (made with the modal's `window`), and drops
@@ -235,6 +263,19 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // The core that holds the box's draft and how many dictations the draft has, as of the
+        // document this text is from.
+        let form = &self.snapshot["questionForms"][form_id];
+        let core = form["core"].as_str().unwrap_or_default().to_string();
+        let rev = key
+            .rsplit_once(':')
+            .and_then(|(_, slot)| form["dictated"][slot].as_u64())
+            .unwrap_or(0);
+        // Before the saved draft below: the document that carries a dictation's words must not
+        // fill a box nobody has typed in as if it were one (`show_dictated`).
+        if self.inputs_mut(modal).contains_key(&key) {
+            self.show_dictated(modal, &key, window, cx);
+        }
         if let Some(entry) = self.inputs_mut(modal).get_mut(&key) {
             if entry.placeholder != hint {
                 entry.placeholder = hint.clone();
@@ -246,6 +287,8 @@ impl NativeChatView {
             // box was made; it fills the box once, never over what the reader typed.
             if !entry.settled && !value.is_empty() {
                 entry.settled = true;
+                entry.core = core;
+                entry.rev = rev;
                 entry
                     .input
                     .update(cx, |state, cx| state.set_value(value, window, cx));
@@ -267,10 +310,31 @@ impl NativeChatView {
             window,
             move |this, input, event: &InputEvent, window, cx| match event {
                 InputEvent::Change => {
-                    if let Some(entry) = this.inputs_mut(modal).get_mut(&typed_key) {
-                        entry.settled = true;
+                    let (value, caret) = {
+                        let input = input.read(cx);
+                        let value = input.value().to_string();
+                        let caret = value
+                            .get(..input.selected_range().end)
+                            .unwrap_or(&value)
+                            .encode_utf16()
+                            .count();
+                        (value, caret)
+                    };
+                    let Some(entry) = this.inputs_mut(modal).get_mut(&typed_key) else {
+                        return;
+                    };
+                    entry.settled = true;
+                    // The text the core handed the box (`show_dictated`) is not the reader's edit.
+                    if entry.adopted.take().is_some_and(|adopted| adopted == value) {
+                        return;
                     }
-                    this.invoke(change(input.read(cx).value().to_string()), cx)
+                    // `core`, `rev` and `caret` let the core keep a dictation this copy has not
+                    // shown yet (`edited` in gx-chat-core's questions/dictation.rs).
+                    let mut action = change(value);
+                    action["core"] = json!(entry.core);
+                    action["rev"] = json!(entry.rev);
+                    action["caret"] = json!(caret);
+                    this.invoke(action, cx)
                 }
                 // Ctrl+Shift+Enter (Cmd+Shift+Enter on macOS) skips the rest and sends; Ctrl+Enter
                 // (Cmd+Enter) sends the form from its note or text box.
@@ -289,12 +353,15 @@ impl NativeChatView {
             },
         );
         self.inputs_mut(modal).insert(
-            key,
+            key.clone(),
             FormInput {
                 input,
                 _subscription: subscription,
                 placeholder: hint,
                 settled,
+                core,
+                rev,
+                adopted: None,
                 painted_height: Rc::new(Cell::new(0.0)),
                 pending: 0,
                 paste_error: None,
@@ -302,6 +369,8 @@ impl NativeChatView {
                 reference_draft: None,
             },
         );
+        // Words that arrived while this box had no input (`dictation_inserted`).
+        self.show_dictated(modal, &key, window, cx);
     }
 
     /// Paints nothing; placed after the transcript list so its paint reads the bounds the form's
@@ -941,23 +1010,63 @@ fn skip_all_chord() -> String {
     }
 }
 
+/// What the microphone in a box says while a dictation will type there; the phone
+/// (QuestionForm.tsx) says the same.
+const DICTATED_INTO: &str = "Your dictation goes here";
+
+/// The size of that microphone, unscaled, and the room kept between it and the box's text.
+const DICTATED_INTO_GLYPH: f32 = 13.0;
+const DICTATED_INTO_GAP: f32 = 6.0;
+
 /// A question's note box, and the form's notes box: one look. `paste` takes a pasted image
-/// (form_attachments.rs).
+/// (form_attachments.rs). `dictated_into` marks the box a running dictation will type into: the
+/// chat box's focus colour on its border and a small microphone at its right end, inside the
+/// box, in room the box keeps free at all times.
+///
+/// CDXC:Dictate 2026-11-10 WHY: a line of words under the box was tried first; it made the form a line taller while a dictation ran, the transcript moved under the pointer, and the first press on the form's buttons was lost. Room made for the microphone only while it shows did the same to a long note, whose last word wrapped to a new line as the recording started and back as it ended. The box keeps that room whether the microphone shows or not, so only the border's colour and the microphone change.
 pub(super) fn note_box(
     input: &Entity<TextareaState>,
     label: &'static str,
     paste: impl Fn(&gpui::ClipboardItem, &mut Window, &mut gpui::App) -> bool + 'static,
+    dictated_into: bool,
     p: &ChatAppearance,
 ) -> AnyElement {
     let s = p.scale;
     div()
+        .relative()
         .w_full()
-        .px(px(10.0 * s))
+        .pl(px(10.0 * s))
+        .pr(px((10.0 + DICTATED_INTO_GLYPH + DICTATED_INTO_GAP) * s))
         .py(px(6.0 * s))
         .rounded(px(9.0 * s))
         .border_1()
-        .border_color(p.input_border)
+        .border_color(if dictated_into {
+            p.ring
+        } else {
+            p.input_border
+        })
         .bg(if p.light { p.background } else { p.card_row })
+        .when(dictated_into, |this| {
+            this.child(
+                div()
+                    .id("dictated-into")
+                    .role(gpui::Role::Status)
+                    .aria_label(DICTATED_INTO)
+                    .absolute()
+                    // Centred on the first line (a 20px line in 6px of padding).
+                    .top(px((6.0 + (20.0 - DICTATED_INTO_GLYPH) / 2.0) * s))
+                    .right(px(10.0 * s))
+                    .tooltip(|window, cx| {
+                        gpui_component::tooltip::Tooltip::new(DICTATED_INTO).build(window, cx)
+                    })
+                    .child(
+                        gpui::svg()
+                            .path("titlebar/microphone.svg")
+                            .size(px(DICTATED_INTO_GLYPH * s))
+                            .text_color(p.muted),
+                    ),
+            )
+        })
         .child(
             Textarea::new(input)
                 .on_paste(paste)
