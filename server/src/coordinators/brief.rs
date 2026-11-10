@@ -140,7 +140,7 @@ pub fn strip_agent_message_header(text: &str) -> &str {
 /// A thread's final message goes to its orchestrator, not to the user, and threads always mark their handovers, so the brief says that report is a handover too and gets the markers, which the orchestrator can keep when it passes the report on.
 /// CDXC:Coordinators 2026-11-07 DECISION:
 /// The brief no longer appends the coordinator's memory notes ("Notes to keep in mind:"). Every note went to every thread, about 5,500 characters for 26 notes, most of them about the coordinator's own job. User (gx page "Thread briefs: which coordinator notes threads get"): "no need for this kind of system [audiences per note]. let the coordinator pick what it sends to the worker threads" and "we need to just tell the coordinator to manage this, we shouldn't inject notes ourselves automatically like we're doing now". The coordinator words what it adds, after the task, with no size limit; project rules belong in the project's AGENTS.md. The goal, the standing instructions (the user's explicit settings for threads) and the rules below stay.
-/// SEE-ALSO: skills/ghostex-orchestrator/SKILL.md "Starting a thread" (the coordinator picks the notes a thread needs).
+/// SEE-ALSO: skills/ghostex-orchestrator/SKILL.md "Briefing a thread" (the coordinator picks the notes a thread needs).
 pub fn thread_brief(coordinator: &BriefContext<'_>, task: &str) -> String {
     let mut brief = task.trim().to_string();
     brief.push_str("\n\n---\n");

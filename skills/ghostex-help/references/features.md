@@ -3632,8 +3632,8 @@ version of the Projects features in Cursor and Claude Code.
   thread on another computer nests under its coordinator when both the
   coordinator's computer and the thread's computer run 11.3.0 or later;
   otherwise the thread shows as its own card.
-- **Finished threads are closed**: once the coordinator has checked and
-  committed a thread's work and expects nothing more from it, it marks the
+- **Finished threads are closed**: once the coordinator has committed a
+  thread's work and expects nothing more from it, it marks the
   thread done and closes its session, so the sidebar keeps only work in flight
   (it never closes a thread that is still working or waiting on you). A closed
   thread is not lost: when a follow-up comes, the coordinator reopens it or
@@ -3737,9 +3737,9 @@ version of the Projects features in Cursor and Claude Code.
   sends its final message to the coordinator (a "Message from" card in its
   chat); when a thread waits on a question, an approval, or a screen such as
   folder trust or an expired login, the coordinator is told what it is asking.
-  The coordinator then checks the work, commits it (only that thread's files,
-  and it never pushes unless you ask), starts the next step, and tells you
-  what needs you. Nobody has to poll. A thread reports only this way: Ghostex
+  The coordinator then reads the report, commits the work (only that thread's
+  files, and it never pushes unless you ask), starts the next step, and tells
+  you what needs you. Nobody has to poll. A thread reports only this way: Ghostex
   refuses a thread's messages to its own coordinator in the middle of a turn
   and tells it to end its turn with its report.
 - **Threads on another computer**: a coordinator can start a thread on a
