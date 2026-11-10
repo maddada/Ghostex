@@ -635,7 +635,7 @@ pub fn catalog_json() -> String {
 ///
 /// CDXC:Security 2026-11-09 DECISION:
 /// Security logs (Extensions > Experimental) is held the same way; its help, and the help that names Settings > Security, wait in the held help patch.
-pub const HELD_FROM_HELP_FILES: &[&str] = &["approvalsRequirePresence"];
+pub const HELD_FROM_HELP_FILES: &[&str] = &["approvalsRequirePresence", "stillAsks"];
 
 /// Whether gxserver's API (and `ghostex settings set`) may write `key`: the catalog's
 /// `agentWritable`, or one of the keys Help still marks until option B's release
@@ -662,10 +662,46 @@ pub const HELD_ROW_WORDING: &[(&str, &str, &str, bool)] = &[(
     true,
 )];
 
+/// Rows that moved to another page, held at their old place in the committed Help files until a
+/// release ships the move: the key, the tab id and title, the section id and title, the title and
+/// subtitle the Help files keep, and the key of the row they followed there.
+///
+/// CDXC:Security 2026-11-10 DECISION:
+/// User (Q2173): the Security logs switch moves from Settings > Extensions > Experimental to Settings > Security; installed copies keep reading it where they have it until the release that ships the move empties this list and regenerates (security-b/release-steps.md).
+pub const HELD_ROW_PLACEMENT: &[(&str, (&str, &str), (&str, &str), &str, &str, &str)] = &[(
+    "securityLogsEnabled",
+    ("extensions", "Extensions"),
+    ("official", "Experimental"),
+    "Security logs",
+    "Shows the Security page in Settings: the log of every sensitive action on this computer. The log is kept and its alerts arrive whether this is on or off. Experimental, off by default.",
+    "chatToolCallLines",
+)];
+
 /// The catalog the committed Help files describe: [`catalog`] without [`HELD_FROM_HELP_FILES`],
-/// and with [`HELD_ROW_WORDING`]'s rows as they read before.
+/// with [`HELD_ROW_WORDING`]'s rows as they read before, and [`HELD_ROW_PLACEMENT`]'s rows back
+/// where they were.
 pub fn published_catalog() -> Catalog {
     let mut catalog = catalog();
+    for (key, (tab, tab_title), (section, section_title), title, subtitle, after) in
+        HELD_ROW_PLACEMENT
+    {
+        let Some(at) = catalog.settings.iter().position(|entry| entry.key == *key) else {
+            continue;
+        };
+        let mut entry = catalog.settings.remove(at);
+        entry.tab = (*tab).to_string();
+        entry.tab_title = (*tab_title).to_string();
+        entry.section = (*section).to_string();
+        entry.section_title = (*section_title).to_string();
+        entry.title = (*title).to_string();
+        entry.subtitle = (*subtitle).to_string();
+        let to = catalog
+            .settings
+            .iter()
+            .position(|entry| entry.key == *after)
+            .map_or(catalog.settings.len(), |found| found + 1);
+        catalog.settings.insert(to, entry);
+    }
     catalog
         .settings
         .retain(|entry| !HELD_FROM_HELP_FILES.contains(&entry.key.as_str()));

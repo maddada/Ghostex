@@ -23,6 +23,7 @@ const INTEGRATIONS: Tab = ("integrations", "Integrations");
 pub(crate) const ABOUT: Tab = ("about", "About");
 const ACCOUNTS: Tab = ("accounts", "Accounts");
 const REMOTE: Tab = ("remote", "Remote");
+const SECURITY: Tab = ("security", "Security");
 
 pub(crate) struct Supplemental {
     pub(crate) key: &'static str,
@@ -588,14 +589,17 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         options: &[],
         user_only: false,
     },
+    // CDXC:Security 2026-11-10 DECISION: User (Q2173): the Security logs switch moves from
+    // Settings > Extensions > Experimental to Settings > Security, with Open log beside it; same key
+    // and behaviour (the log shows on that page only while it is on).
     Supplemental {
         key: "securityLogsEnabled",
-        tab: EXTENSIONS,
+        tab: SECURITY,
         group: None,
-        section: "official",
-        section_title: "Experimental",
-        title: "Security logs",
-        subtitle: "Shows the Security page in Settings: the log of every sensitive action on this computer. The log is kept and its alerts arrive whether this is on or off. Experimental, off by default.",
+        section: "log",
+        section_title: "Security log",
+        title: "Show the security log",
+        subtitle: "Shows this computer's security log below: pairing phones and computers, Easy Connect changes, Collab shares, approvals and who asked for each. The log is kept and its alerts arrive whether this is on or off. Off by default.",
         options: &[],
         user_only: false,
     },

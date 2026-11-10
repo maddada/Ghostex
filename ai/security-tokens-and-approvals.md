@@ -132,6 +132,9 @@ read-only profile writing only its folder, Claude's deny rules), never write mem
 
 ## What asks: `SecurityState::skips_approval` (`security/policy.rs`)
 
+The list is `ghostex_gx_protocol::approval::STILL_ASKS` (action, when it asks, and the line Settings >
+Security's "What still asks" shows): `skips_approval` reads it, so the page and the rule can't drift.
+
 | Action | Asks when | Who can approve |
 | --- | --- | --- |
 | `pairingApproveDevice` | a phone or computer asks to pair (three matching words) | you |

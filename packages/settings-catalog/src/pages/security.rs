@@ -6,7 +6,7 @@ pub(crate) fn page() -> Page {
     Page {
         id: "security",
         title: "Security",
-        sections: vec![approvals(), log()],
+        sections: vec![approvals(), still_asks(), log()],
     }
 }
 
@@ -21,6 +21,15 @@ fn approvals() -> Section {
         vec![
             row("approvalsRequirePresence", "Require Touch ID or your password to approve", "Off: Approve on a card (a new phone or computer, a guest's message in Collab, an agent turning on Easy Connect) goes through with one click. On: your computer asks for Touch ID, Windows Hello or your password first, and your phone for Face ID or your fingerprint. It applies to every device that approves for this computer."),
         ],
+    )
+}
+
+/// "What still asks" (Q2173): the read-only list drawn from `ghostex_gx_protocol::approval::STILL_ASKS`.
+fn still_asks() -> Section {
+    section(
+        "stillAsks",
+        "What still asks",
+        vec![row("stillAsks", "What still asks", "What asks for an Approve on this computer: a phone or computer asking to pair, a Collab guest's message in Approve mode, and, when an agent asks, turning on Easy Connect, letting a device connect through it, sharing a chat or turning on Send mode. Everything else works without asking, and your own clicks never ask.")],
     )
 }
 

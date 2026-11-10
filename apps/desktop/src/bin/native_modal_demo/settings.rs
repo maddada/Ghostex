@@ -299,6 +299,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             json!({ "initialSection": "chat" })
         }
         "terminal" | "pick-color" => json!({ "initialSection": "terminal" }),
+        // Settings > Security scrolled to its log (with `{"securityLogsEnabled":true}`).
+        "security-log" => json!({ "initialTab": "security", "initialSection": "log" }),
         // `page-<id>`: that rail page (`page-connectors`, `page-tools`), for pages with no state of their own.
         state if state.starts_with("page-") => json!({ "initialTab": &state["page-".len()..] }),
         "tags" => {
