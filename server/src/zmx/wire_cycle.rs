@@ -1178,7 +1178,19 @@ mod verified_daemon_tests {
         if let Some(token_file) = token_file {
             command.env(ZMX_DAEMON_AUTH_TOKEN_FILE_ENV, token_file);
         }
-        let child = command.spawn().unwrap();
+        // Linux refuses to run a file another thread's fork still holds open for writing (the
+        // copy above, in a test running beside this one) with "text file busy": try again.
+        let mut tries = 0;
+        let child = loop {
+            match command.spawn() {
+                Ok(child) => break child,
+                Err(error) if error.raw_os_error() == Some(libc::ETXTBSY) && tries < 50 => {
+                    tries += 1;
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(error) => panic!("spawn the fake daemon: {error}"),
+            }
+        };
         // Until the kernel has the arguments and the environment of the new image.
         let deadline = Instant::now() + Duration::from_secs(5);
         while zmx_process_command(i64::from(child.id()))
@@ -1253,6 +1265,7 @@ mod verified_daemon_tests {
         fs::write(&own, "a").unwrap();
         let mut live = fake_daemon(folder.path(), "S1b-P1-G4", Some(&own));
         let pid = i64::from(live.id());
+        let (exited_tx, exited) = std::sync::mpsc::channel();
         let ZmxDaemonOwnership::Ours { started } = zmx_daemon_ownership(pid, "S1b-P1-G4", &own) else {
             panic!("the fake daemon should be ours");
         };
@@ -1267,6 +1280,12 @@ mod verified_daemon_tests {
             vec![Ok("exited".to_string())]
         );
         assert!(live.try_wait().unwrap().is_none(), "a reused pid must not be signalled");
+        // A real daemon is no child of gxserver, so it is reaped the moment it ends; this one is
+        // the test's own, so it is reaped beside the signals (a zombie keeps its start time).
+        std::thread::spawn(move || {
+            let _ = live.wait();
+            let _ = exited_tx.send(());
+        });
         let verified = VerifiedZmxDaemon {
             name: "S1b-P1-G4".into(),
             pid,
@@ -1276,6 +1295,8 @@ mod verified_daemon_tests {
             terminate_verified_zmx_session_daemons(std::slice::from_ref(&verified)),
             vec![Ok("terminated".to_string())]
         );
-        let _ = live.wait();
+        exited
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the fake daemon ended");
     }
 }
