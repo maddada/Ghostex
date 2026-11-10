@@ -132,11 +132,26 @@ pub(in crate::server) async fn route_http(
         CDXC:SessionLinks 2026-11-08 FIX:
         GitHub #497. Inside a session the CLI sends that session's own `gxs_` token, not the token file, so the relay's front gate turned every agent away once sessions had tokens ("Only this computer's own agents can reach its connected computers"), and a coordinator could not relay anything. The token file (agent level), a session's token and the owner's own session now pass, as the caller they are: the relay judges the calls that depend on it (connected_computers/thread_scope.rs).
         */
+        /*
+        CDXC:VoiceMode 2026-11-10 WHY:
+        The user's Android voice call from the Sessions list, on his PC, could not see or reach his Mac ("only this computer's sessions are readable"): the voice agent's tools act with the phone's own device token (`voice_agent/loopback.rs`), and this gate let only the token file, session tokens and the owner's session through, so every relayed read answered 401 and the failure hid the Mac from that call for 15 seconds. A paired phone is the owner's device and may do everything (CDXC:Security 2026-11-10 DECISION, option B), so its token passes as that device; the relay judges it like the owner's session (`thread_scope.rs`).
+        */
         let relay_caller = if is_authorized_headers(&parts.headers, &state.auth_token) {
             Some(Principal::LocalAgent)
         } else {
-            bearer_token(&parts.headers)
-                .and_then(|token| state.security.session_tokens.resolve(token))
+            bearer_token(&parts.headers).and_then(|token| {
+                state.security.session_tokens.resolve(token).or_else(|| {
+                    state
+                        .device_api_tokens
+                        .entry_for(token)
+                        .map(|entry| Principal::Device {
+                            device_id: entry.device_id.unwrap_or_else(|| {
+                                let hash = hash_device_api_token(token);
+                                format!("token:{}", &hash[..hash.len().min(12)])
+                            }),
+                        })
+                })
+            })
         };
         let Some(relay_caller) = relay_caller else {
             return routed_json(
