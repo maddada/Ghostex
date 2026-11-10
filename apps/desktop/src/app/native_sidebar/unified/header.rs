@@ -1,5 +1,5 @@
-//! The Unified sidebar's header: the filter bar and the filter. Add project and New session are
-//! the New session row above it (native_sidebar/new_session_row.rs).
+//! The Unified sidebar's header: the filter bar and the filter, in a row of their own under the
+//! New session row (native_sidebar/new_session_row.rs); Add project is in the top row.
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -14,10 +14,11 @@ use super::model::UnifiedSidebarSnapshot;
 use crate::GhostexGpuiApp;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
 
-/// The header's side padding, its one button (the filter) and the gap before it, before the zoom.
-const HEADER_PADDING: f32 = 8.0;
-const HEADER_BUTTON: f32 = 26.0;
-const HEADER_GAP: f32 = 2.0;
+/// The header's side padding, its one button (the filter) and the gap before it, before the zoom:
+/// the top rows' shared edge and button size (native_sidebar/navigation.rs).
+const HEADER_PADDING: f32 = crate::app::native_sidebar::navigation::SIDEBAR_TOP_EDGE_INSET;
+const HEADER_BUTTON: f32 = crate::app::native_sidebar::navigation::SIDEBAR_TOP_ROW_BUTTON_HEIGHT;
+const HEADER_GAP: f32 = 4.0;
 const HEADER_BUTTONS: f32 = 1.0;
 
 /// The filter menu: projects (by repository), machines and Spaces, each a pick that narrows the
@@ -229,12 +230,14 @@ impl GhostexGpuiApp {
                 .id(id)
                 .role(gpui::Role::Button)
                 .aria_label(label)
-                .size(px(26.0 * scale))
+                .size(px(HEADER_BUTTON * scale))
                 .flex_shrink_0()
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded(px(5.0 * scale))
+                .rounded(px(
+                    crate::app::native_sidebar::navigation::SIDEBAR_TOP_ROW_BUTTON_RADIUS * scale,
+                ))
                 .hover(|button| button.bg(appearance.hover))
                 .child(
                     gpui::svg()
@@ -267,7 +270,7 @@ impl GhostexGpuiApp {
         h_flex()
             .w_full()
             .flex_shrink_0()
-            .h(px(36.0 * scale))
+            .h(px(HEADER_BUTTON * scale))
             .px(px(HEADER_PADDING * scale))
             .gap(px(HEADER_GAP * scale))
             .child(bar)

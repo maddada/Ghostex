@@ -30,6 +30,24 @@ enum TabWidth {
     Fixed(f32),
 }
 
+/// Where a tab sits in the control: after a divider, and at either rounded end.
+#[derive(Clone, Copy)]
+struct TabPlace {
+    divided: bool,
+    first: bool,
+    last: bool,
+}
+
+impl TabPlace {
+    fn new(index: usize, last: usize) -> Self {
+        Self {
+            divided: index > 0,
+            first: index == 0,
+            last: index == last,
+        }
+    }
+}
+
 impl TabWidth {
     fn px(self) -> f32 {
         match self {
@@ -54,21 +72,38 @@ impl GhostexGpuiApp {
             return None;
         }
         let scale = appearance.scale;
-        let row = h_flex()
-            .w_full()
-            .h(px(28.0 * scale))
-            .border_y_1()
-            .border_color(appearance.foreground.opacity(0.12));
+        /*
+        CDXC:RemoteMachines 2026-11-11 DECISION:
+        User (sidebar top page, Q2423 B): the computers are one rounded control, a joined segmented control 28 high with corner 7 between the top rows' 8pt edges, not flat tabs across the sidebar's full width. The open computer's segment is filled like a selected Space tile; another computer's status dots still hang below its segment.
+        */
+        let edge = super::navigation::SIDEBAR_TOP_EDGE_INSET * scale;
+        let radius = super::navigation::SIDEBAR_TOP_ROW_BUTTON_RADIUS * scale;
+        // The control's width inside its outline, which its segments share.
+        let inner_width = (self.sidebar_width - edge * 2.0 - 2.0).max(0.0);
+        let control = h_flex()
+            .size_full()
+            .rounded(px(radius))
+            .border_1()
+            .border_color(appearance.foreground.opacity(0.08));
+        let wrap = |control: gpui::Div| {
+            div()
+                .w_full()
+                .h(px(super::navigation::SIDEBAR_TOP_ROW_BUTTON_HEIGHT * scale))
+                .px(px(edge))
+                .child(control)
+                .into_any_element()
+        };
+        let last = count - 1;
         let MachineTabLayout::Pinned {
             pinned_width,
             viewport,
             tab_width,
             scrolls,
-        } = machine_tab_layout(count, self.sidebar_width, scale)
+        } = machine_tab_layout(count, inner_width, scale)
         else {
-            let share = self.sidebar_width / count as f32;
-            return Some(
-                row.children(
+            let share = inner_width / count as f32;
+            return Some(wrap(
+                control.children(
                     snapshot
                         .machines
                         .iter()
@@ -77,16 +112,15 @@ impl GhostexGpuiApp {
                             self.render_native_machine_tab(
                                 snapshot,
                                 machine,
-                                index > 0,
+                                TabPlace::new(index, last),
                                 TabWidth::Share(share),
                                 appearance,
                                 window,
                                 cx,
                             )
                         }),
-                )
-                .into_any_element(),
-            );
+                ),
+            ));
         };
         // This computer stays at the left whatever the others do.
         let pinned_index = snapshot
@@ -162,76 +196,81 @@ impl GhostexGpuiApp {
                 ))
         };
         let glass = appearance.glass;
-        // The row's height inside its top and bottom borders.
-        let tab_height = 28.0 * scale - 2.0;
-        Some(
-            row.child(self.render_native_machine_tab(
-                snapshot,
-                &snapshot.machines[pinned_index],
-                false,
-                TabWidth::Fixed(pinned_width),
-                appearance,
-                window,
-                cx,
-            ))
-            .child(
-                div()
-                    .relative()
-                    .flex_shrink_0()
-                    .w(px(viewport))
-                    .h_full()
-                    .child(
-                        h_flex()
-                            .id("native-sidebar-machine-scroll")
-                            .role(gpui::Role::TabList)
-                            .w_full()
-                            // Taller than the row: a scroller clips both ways, and a tab's status
-                            // dots hang just below it.
-                            .h(px(tab_height + MACHINE_TAB_DOTS_ROOM * scale))
-                            .items_start()
-                            .overflow_x_scroll()
-                            .track_scroll(&handle)
-                            .children(others.iter().map(|machine| {
-                                div().flex_shrink_0().h(px(tab_height)).child(
-                                    self.render_native_machine_tab(
-                                        snapshot,
-                                        machine,
-                                        true,
-                                        TabWidth::Fixed(tab_width),
-                                        appearance,
-                                        window,
-                                        cx,
-                                    ),
-                                )
-                            })),
-                    )
-                    // A fade can only ramp into a solid colour, so window glass goes without, as
-                    // the list's own does (scroll_fade.rs); the peeking tab still says it scrolls.
-                    .when(scrolls && !glass && offset > 0.5, |clip| {
-                        clip.child(fade(false).left_0())
-                    })
-                    .when(
-                        scrolls && !glass && offset < content - viewport - 0.5,
-                        |clip| clip.child(fade(true).right_0()),
-                    )
-                    // What the tabs out of view have to say shows on the edge they are past.
-                    .children(dots_before.map(|dots| {
-                        div()
-                            .absolute()
-                            .left(px(3.0 * scale))
-                            .bottom(px(-4.0 * scale))
-                            .child(dots)
-                    }))
-                    .children(dots_after.map(|dots| {
-                        div()
-                            .absolute()
-                            .right(px(3.0 * scale))
-                            .bottom(px(-4.0 * scale))
-                            .child(dots)
-                    })),
-            )
-            .into_any_element(),
-        )
+        // The control's height inside its outline.
+        let tab_height = super::navigation::SIDEBAR_TOP_ROW_BUTTON_HEIGHT * scale - 2.0;
+        let others_last = others.len().saturating_sub(1);
+        Some(wrap(
+            control
+                .child(self.render_native_machine_tab(
+                    snapshot,
+                    &snapshot.machines[pinned_index],
+                    TabPlace::new(0, count),
+                    TabWidth::Fixed(pinned_width),
+                    appearance,
+                    window,
+                    cx,
+                ))
+                .child(
+                    div()
+                        .relative()
+                        .flex_shrink_0()
+                        .w(px(viewport))
+                        .h_full()
+                        .child(
+                            h_flex()
+                                .id("native-sidebar-machine-scroll")
+                                .role(gpui::Role::TabList)
+                                .w_full()
+                                // Taller than the row: a scroller clips both ways, and a tab's status
+                                // dots hang just below it.
+                                .h(px(tab_height + MACHINE_TAB_DOTS_ROOM * scale))
+                                .items_start()
+                                .overflow_x_scroll()
+                                .track_scroll(&handle)
+                                .children(others.iter().enumerate().map(|(index, machine)| {
+                                    div().flex_shrink_0().h(px(tab_height)).child(
+                                        self.render_native_machine_tab(
+                                            snapshot,
+                                            machine,
+                                            TabPlace {
+                                                divided: true,
+                                                first: false,
+                                                last: index == others_last,
+                                            },
+                                            TabWidth::Fixed(tab_width),
+                                            appearance,
+                                            window,
+                                            cx,
+                                        ),
+                                    )
+                                })),
+                        )
+                        // A fade can only ramp into a solid colour, so window glass goes without, as
+                        // the list's own does (scroll_fade.rs); the peeking tab still says it scrolls.
+                        .when(scrolls && !glass && offset > 0.5, |clip| {
+                            clip.child(fade(false).left_0())
+                        })
+                        .when(
+                            scrolls && !glass && offset < content - viewport - 0.5,
+                            |clip| clip.child(fade(true).right_0()),
+                        )
+                        // What the tabs out of view have to say shows on the edge they are past.
+                        .children(dots_before.map(|dots| {
+                            div()
+                                .absolute()
+                                .left(px(3.0 * scale))
+                                .bottom(px(-4.0 * scale))
+                                .child(dots)
+                        }))
+                        .children(dots_after.map(|dots| {
+                            div()
+                                .absolute()
+                                .right(px(3.0 * scale))
+                                .bottom(px(-4.0 * scale))
+                                .child(dots)
+                        })),
+                ),
+        ))
     }
 
     /// One machine's tab.
@@ -240,7 +279,7 @@ impl GhostexGpuiApp {
         &self,
         snapshot: &NativeSidebarSnapshot,
         machine: &NativeSidebarMachine,
-        divided: bool,
+        place: TabPlace,
         width: TabWidth,
         appearance: &SidebarAppearance,
         window: &gpui::Window,
@@ -354,11 +393,24 @@ impl GhostexGpuiApp {
             .text_size(px(12.0 * scale))
             .text_color(appearance.chrome_label)
             .on_prepaint(super::menus::record_menu_owner(&owner))
-            .when(divided, |row| {
+            .when(place.divided, |row| {
                 row.border_l_1()
-                    .border_color(appearance.foreground.opacity(0.12))
+                    .border_color(appearance.foreground.opacity(0.08))
             })
-            .when(selected, |row| row.bg(appearance.selected))
+            // Inside the control's corner 7 and its 1pt outline.
+            .when(place.first, |row| {
+                row.rounded_l(px(
+                    (super::navigation::SIDEBAR_TOP_ROW_BUTTON_RADIUS - 1.0) * scale
+                ))
+            })
+            .when(place.last, |row| {
+                row.rounded_r(px(
+                    (super::navigation::SIDEBAR_TOP_ROW_BUTTON_RADIUS - 1.0) * scale
+                ))
+            })
+            .when(selected, |row| {
+                row.bg(super::selectors::space_tile_selected_colors(appearance).0)
+            })
             .hover(|row| row.bg(appearance.hover))
             .child(
                 div()
