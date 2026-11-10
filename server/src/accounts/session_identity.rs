@@ -46,6 +46,34 @@ pub(crate) fn login_identity(provider: Provider, root: &Path, home: &Path) -> Op
         }
         Provider::Claude => root.join(".claude.json"),
     };
+    let stamp = std::fs::metadata(&path)
+        .ok()
+        .map(|meta| (meta.modified().ok(), meta.len()));
+    let memo = || LOGIN_MEMO.get_or_init(Default::default);
+    if let (Some(stamp), Ok(memo)) = (stamp, memo().lock()) {
+        if let Some((_, identity)) = memo.get(&path).filter(|(known, _)| *known == stamp) {
+            return identity.clone();
+        }
+    }
+    let identity = read_login_identity(provider, &path);
+    if let (Some(stamp), Ok(mut memo)) = (stamp, memo().lock()) {
+        memo.insert(path, (stamp, identity.clone()));
+    }
+    identity
+}
+
+/// The login each account file named when it had this modification time and size.
+///
+/// CDXC:AgentProviders 2026-11-10 WHY: the status probe of every working chat asked for its login
+/// each second, and each ask parsed a whole `.claude.json` (136 to 420 KB here) for two fields:
+/// 179 of 3,605 busy samples of gxserver. The file changes only on a login or a settings write, so
+/// its login is remembered until its modification time or size changes.
+type LoginStamp = (Option<std::time::SystemTime>, u64);
+static LOGIN_MEMO: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<PathBuf, (LoginStamp, Option<String>)>>,
+> = std::sync::OnceLock::new();
+
+fn read_login_identity(provider: Provider, path: &Path) -> Option<String> {
     let data: Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
     match provider {
         Provider::Codex => super::codex_identity::codex_auth_identity(&data),

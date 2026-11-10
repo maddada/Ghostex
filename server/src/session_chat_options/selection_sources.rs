@@ -280,24 +280,33 @@ fn read_session_chat_statusline_selection(
     hook_state_directory: &Path,
     agent_session_id: Option<&str>,
 ) -> Option<SessionChatDetectedSelection> {
-    read_claude_statusline_reading(hook_state_directory, agent_session_id?)
+    read_claude_statusline_reading(hook_state_directory, agent_session_id?, true)
         .map(|(selection, _)| selection)
 }
 
 /// Claude's last statusline payload as a selection, with the time Ghostex stored it.
+/// `login_limits` takes the 5h / 7d windows from the newest reading on the session's login.
+///
+/// CDXC:AgentProviders 2026-11-10 WHY: `agent_model_pins::session_choice` reads only the model,
+/// effort and write time, never the limits, yet each status probe paid for the login lookup twice
+/// (260 of 3,605 busy samples of gxserver wasted), so that caller passes false. The adoption touches
+/// only `rate_limits`, so the model, effort and write time it reads are the same either way.
 pub(crate) fn read_claude_statusline_reading(
     hook_state_directory: &Path,
     agent_session_id: &str,
+    login_limits: bool,
 ) -> Option<(SessionChatDetectedSelection, String)> {
     let mut stored = crate::agent_hooks::statusline::read_claude_statusline_payload(
         hook_state_directory,
         agent_session_id,
     )?;
     // GitHub #514: the limits belong to the login, so a session that has been idle takes the newest reading any session on its login stored.
-    crate::agent_hooks::statusline_shared_limits::adopt_same_login_rate_limits(
-        hook_state_directory,
-        &mut stored,
-    );
+    if login_limits {
+        crate::agent_hooks::statusline_shared_limits::adopt_same_login_rate_limits(
+            hook_state_directory,
+            &mut stored,
+        );
+    }
     let payload = &stored.payload;
     let choice = |value: &str, label: &str| SessionChatDetectedChoice {
         value: value.to_string(),

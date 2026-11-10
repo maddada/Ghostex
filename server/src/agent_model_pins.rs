@@ -245,6 +245,7 @@ pub(crate) fn session_choice(
             crate::session_chat_options::read_claude_statusline_reading(
                 &directory,
                 agent_session_id,
+                false,
             )
         })
         .filter(|(_, written_at)| {
