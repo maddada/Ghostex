@@ -16,7 +16,7 @@ use crate::app::model::TitlebarMode;
 
 /// A typed or pasted absolute path (`/…`, `~/…`, `file://…`, `C:\…`), quotes and `file://`
 /// removed and `~` expanded; `None` for anything else.
-fn typed_absolute_path(text: &str) -> Option<PathBuf> {
+pub(super) fn typed_absolute_path(text: &str) -> Option<PathBuf> {
     let text = text.trim().trim_matches(|c| c == '"' || c == '\'');
     let text = match text.strip_prefix("file://") {
         Some(url) => percent_encoding::percent_decode_str(url)

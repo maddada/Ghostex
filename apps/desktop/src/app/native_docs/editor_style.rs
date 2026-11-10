@@ -69,7 +69,7 @@ pub(crate) fn syntax_style(p: &DocsPalette) -> zorite_editor::SyntaxStyle {
         heading: Some(pick(0x27272a, 0xededed)),
         quote_bar: pick(0x27272a, 0xe5e5e5),
         code_border: Some(ink(0.12)),
-        links_need_modifier: true,
+        revealed_links_need_modifier: true,
     }
 }
 

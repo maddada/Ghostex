@@ -3708,21 +3708,20 @@ impl EditorState {
         // double-click still selects the word, shift still extends the
         // selection, and the caret goes anywhere else as usual (to edit a
         // link's own text, click beside it and arrow in — reveal-on-caret).
-        // Local change (Ghostex Docs): with `links_need_modifier` a link opens on Cmd-click
-        // (Ctrl-click off macOS) and a plain click places the caret.
-        let link_click = match self.markdown_style.as_ref() {
-            Some(st) if st.links_need_modifier => {
-                event.modifiers.secondary(cx) && !event.modifiers.shift
-            }
-            Some(_) => !event.modifiers.shift && !event.modifiers.control,
-            None => false,
-        };
+        // Local change (Ghostex Docs): Cmd-click (Ctrl-click off macOS) always opens a link, and
+        // with `revealed_links_need_modifier` a plain click on the link the caret is in (its raw
+        // `[text](url)` showing for editing) places the caret instead (`caret_link_at`).
+        let secondary = event.modifiers.secondary(cx);
+        let link_click = self.markdown_style.is_some()
+            && !event.modifiers.shift
+            && (secondary || !event.modifiers.control);
         if event.click_count == 1 && link_click {
             let offset = self.index_for_mouse_position(event.position);
             let (row, _) = self.row_col(offset);
             let start = self.line_starts()[row];
             let line = &self.content[start..self.line_end(row)];
-            match markdown_syntax::link_at(line, offset - start) {
+            let editing_link = !secondary && self.caret_link_at(row, offset - start).is_some();
+            match markdown_syntax::link_at(line, offset - start).filter(|_| !editing_link) {
                 Some(markdown_syntax::LinkHit::Page(title)) => {
                     cx.emit(EditorEvent::OpenWikiLink(title.into()));
                     return;
@@ -4632,6 +4631,31 @@ impl EditorState {
             self.folded_headings.insert(key);
         }
         cx.notify();
+    }
+
+    /// Local change (Ghostex Docs): the link at byte `col` of `row` when the caret or selection
+    /// is in it, so its raw `[text](url)` shows for editing, and the style asks such a link to
+    /// open on Cmd-click only (`revealed_links_need_modifier`). The range is the line's own.
+    pub(crate) fn caret_link_at(&self, row: usize, col: usize) -> Option<std::ops::Range<usize>> {
+        if !self
+            .markdown_style
+            .as_ref()
+            .is_some_and(|st| st.revealed_links_need_modifier)
+        {
+            return None;
+        }
+        let start = *self.line_starts().get(row)?;
+        let line = &self.content[start..self.line_end(row)];
+        let caret = &self.selected_range;
+        zorite_markdown::syntax::links(line)
+            .into_iter()
+            .map(|(range, _)| range)
+            .find(|range| {
+                let (from, to) = (start + range.start, start + range.end);
+                (range.contains(&col) || col == range.end)
+                    && caret.start <= to
+                    && caret.end >= from
+            })
     }
 
     /// Local change (Ghostex Docs): where a click on a rendered footnote number at `position`

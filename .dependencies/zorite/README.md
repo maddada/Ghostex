@@ -14,7 +14,8 @@ The Files view's parity pass with the Docs page it replaced (2026-09-28) added m
 `Local change`: frontmatter, merge-conflict and `<details>` blocks (`local_block_line` in
 `element.rs`, with room above a conflict for the host's buttons); numbered footnotes that jump
 between reference and definition; `<kbd>` keycaps, `:shortcode:` emoji (`emoji.rs`), hidden
-autolink brackets, underlined links that open on Cmd/Ctrl-click (`links_need_modifier`) and
+autolink brackets, underlined links that open on a click, or on Cmd/Ctrl-click while the caret is in one
+(`revealed_links_need_modifier`), and
 empty-text image links; `[~]`/`[-]` task states and the Docs checkbox; the Docs heading scale,
 quote bar, uppercase alert labels with a tinted body, and code cards whose fence rows carry the
 language and copy chips; a host view per Mermaid block (`set_mermaid_view_provider`) and
