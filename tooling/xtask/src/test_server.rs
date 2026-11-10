@@ -200,8 +200,9 @@ impl Server {
             .is_some_and(|record| record["zmxDir"].is_string())
     }
 
+    /// The server's token, read only through a home that is a real private directory of this user at the moment of reading; a missing home (a /tmp home lost in a restart) or a link there means "not running" and nothing is read, so the token is never sent anywhere through it.
     fn token(&self) -> Option<String> {
-        let token = fs::read_to_string(self.token_file()).ok()?;
+        let token = read_private_token(&self.home, "state/gxserver/auth/token")?;
         let token = token.trim();
         (!token.is_empty()).then(|| token.to_string())
     }
@@ -509,6 +510,51 @@ fn is_private_directory(path: &Path) -> Res<bool> {
     use std::os::unix::fs::MetadataExt;
     let meta = fs::symlink_metadata(path)?;
     Ok(meta.is_dir() && meta.uid() == unsafe { libc::getuid() } && meta.mode() & 0o077 == 0)
+}
+
+/// Reads `relative` inside `home` through one directory handle: the home is opened without following a link, checked (owner and permissions) on that handle, and the file is then opened relative to it, so a link put at the home path after a check cannot redirect the read (CDXC:Build 2026-11-09 WHY: another account can create `/tmp/gxts-<uid>-<name>` as a link to a running server's home while this server's record survives a restart, and the token read through it would be sent to whoever listens on this server's port).
+#[cfg(unix)]
+fn read_private_token(home: &Path, relative: &str) -> Option<String> {
+    use std::ffi::CString;
+    use std::io::Read;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::io::FromRawFd;
+    let home = CString::new(home.as_os_str().as_bytes()).ok()?;
+    let relative = CString::new(relative).ok()?;
+    let directory = unsafe {
+        libc::open(
+            home.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
+    };
+    if directory < 0 {
+        return None;
+    }
+    // Closed on every path out of this function, by the File that owns it.
+    let directory = unsafe { fs::File::from_raw_fd(directory) };
+    let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+    use std::os::unix::io::AsRawFd;
+    if unsafe { libc::fstat(directory.as_raw_fd(), &mut stat) } != 0
+        || stat.st_uid != unsafe { libc::getuid() }
+        || u32::from(stat.st_mode) & 0o077 != 0
+    {
+        return None;
+    }
+    let file = unsafe {
+        libc::openat(
+            directory.as_raw_fd(),
+            relative.as_ptr(),
+            libc::O_RDONLY | libc::O_CLOEXEC,
+        )
+    };
+    if file < 0 {
+        return None;
+    }
+    let mut text = String::new();
+    unsafe { fs::File::from_raw_fd(file) }
+        .read_to_string(&mut text)
+        .ok()?;
+    Some(text)
 }
 
 /// Deletes a home outside the server's folder, only when it is still the private directory this command made.
