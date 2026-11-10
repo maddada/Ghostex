@@ -620,6 +620,8 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         chiefs: Vec::new(),
         home_headers: Vec::new(),
         machines_with_home: Vec::new(),
+        // Filled by the caller from the merge (`merged.rs`).
+        project_copies: Default::default(),
         show_all_projects_row: (empty_projects > 0).then_some(ShowAllProjectsRow {
             empty_projects,
             showing: input.ui.show_all_projects,

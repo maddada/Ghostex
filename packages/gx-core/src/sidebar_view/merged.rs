@@ -32,7 +32,7 @@ use super::membership::{project_members, ProjectMembers};
 use super::model::SidebarUpdateWork;
 use super::projects::{build_project_meta, ProjectMeta};
 use super::rows::{session_row, side_chat_needs, RowContext};
-use super::view::{MachineChip, RemoteMachineView};
+use super::view::{MachineChip, ProjectCopy, RemoteMachineView};
 use super::worktree_fold::{mark_row, row_worktree, MarkedRows};
 use super::{CollectionsState, SpacesState};
 
@@ -69,6 +69,9 @@ pub(super) struct MergeOutcome {
     /// The group ids no longer drawn (another machine's copy, a second clone, and their session
     /// groups), each with the entry that now lists its sessions: the focus follows them there.
     pub(super) merged_into: BTreeMap<String, String>,
+    /// Every copy of each entry that holds more than one, keyed by each copy's group id
+    /// (`SidebarView::project_copies`).
+    pub(super) copies: BTreeMap<String, Arc<Vec<ProjectCopy>>>,
 }
 
 /// One copy of a project an entry lists.
@@ -78,6 +81,10 @@ struct Copy {
     group_id: String,
     project: Arc<ProjectContextInput>,
     remote_machine: Option<RemoteMachineView>,
+    /// Its machine's name as the sidebar's chips spell it.
+    machine_label: String,
+    /// Its machine's stream is live (always, for this computer).
+    connected: bool,
 }
 
 /// One machine besides this computer whose projects join the list.
@@ -215,6 +222,8 @@ pub(super) fn merge_machines(
             group_id: plans[index].group_id.clone(),
             project,
             remote_machine: None,
+            machine_label: local_chip.name.clone(),
+            connected: true,
         };
         let joined = entry_of_key
             .get(&key)
@@ -401,6 +410,8 @@ pub(super) fn merge_machines(
                 group_id: group_id.clone(),
                 project: project.clone(),
                 remote_machine: Some(remote_machine.clone()),
+                machine_label: guest.label.clone(),
+                connected: !guest.is_stale,
             };
             if let Some(entry) = entry {
                 let entry_id = plans[entry].group_id.clone();
@@ -514,6 +525,10 @@ pub(super) fn merge_machines(
     for (entry, entry_copies) in &copies {
         if entry_copies.len() > 1 {
             plans[*entry].action_target = last_used_copy(&plans[*entry], entry_copies);
+            let listed = Arc::new(project_copies(entry_copies));
+            for copy in entry_copies {
+                outcome.copies.insert(copy.group_id.clone(), listed.clone());
+            }
         }
     }
     if !dropped.is_empty() {
@@ -717,6 +732,64 @@ fn folder_name(path: &str) -> &str {
         .rsplit(['/', '\\'])
         .next()
         .unwrap_or_default()
+}
+
+/// An entry's copies as the New Coordinator dialog lists them, in the entry's order: each named
+/// by its computer, and by the end of its folder's path when that computer has more than one.
+fn project_copies(copies: &[Copy]) -> Vec<ProjectCopy> {
+    copies
+        .iter()
+        .enumerate()
+        .map(|(index, copy)| {
+            let siblings: Vec<&str> = copies
+                .iter()
+                .enumerate()
+                .filter(|(other, sibling)| *other != index && sibling.machine == copy.machine)
+                .map(|(_, sibling)| sibling.project.path.as_str())
+                .collect();
+            let label = if siblings.is_empty() {
+                copy.machine_label.clone()
+            } else {
+                format!(
+                    "{} · {}",
+                    copy.machine_label,
+                    distinguishing_path(&copy.project.path, &siblings)
+                )
+            };
+            ProjectCopy {
+                group_id: copy.group_id.clone(),
+                label,
+                computer: copy.machine_label.clone(),
+                machine_id: copy
+                    .machine
+                    .remote_id()
+                    .unwrap_or(LOCAL_MACHINE_ID)
+                    .to_string(),
+                project_id: copy.project_id.clone(),
+                connected: copy.connected,
+            }
+        })
+        .collect()
+}
+
+/// The shortest end of `path` (whole folder names) that none of `others` ends with: the folder's
+/// name, or `customer-a/repo` beside `customer-b/repo`.
+fn distinguishing_path(path: &str, others: &[&str]) -> String {
+    let parts = path_parts(path);
+    let others: Vec<Vec<&str>> = others.iter().map(|other| path_parts(other)).collect();
+    for take in 1..=parts.len() {
+        let tail = &parts[parts.len() - take..];
+        if others.iter().all(|other| !other.ends_with(tail)) {
+            return tail.join("/");
+        }
+    }
+    parts.join("/")
+}
+
+fn path_parts(path: &str) -> Vec<&str> {
+    path.split(['/', '\\'])
+        .filter(|part| !part.is_empty())
+        .collect()
 }
 
 /// The session groups drawn right after the project plan at `index`, as indices.
