@@ -98,19 +98,32 @@ impl GhostexGpuiApp {
                                 cx,
                             );
                         }
-                        if mask.size.width <= px(0.0) || mask.size.height <= px(0.0) {
-                            return Vec::new();
+                        let built = if mask.size.width <= px(0.0) || mask.size.height <= px(0.0) {
+                            0..0
+                        } else {
+                            let mask_top = f32::from(mask.top() - bounds.top()) / scale;
+                            let mask_bottom = f32::from(mask.bottom() - bounds.top()) / scale;
+                            let row_tops = &tops[..sessions.len()];
+                            // The last row starting at or above the mask's top, and every row that
+                            // starts above its bottom.
+                            let first = row_tops
+                                .partition_point(|top| *top <= mask_top)
+                                .saturating_sub(1);
+                            let end = row_tops.partition_point(|top| *top < mask_bottom);
+                            first..end
+                        };
+                        // The rows left unbuilt are still in the sidebar's focus order: Tab and
+                        // Shift+Tab scroll to them (focus_order.rs).
+                        for index in (0..sessions.len()).filter(|index| !built.contains(index)) {
+                            app.native_sidebar.focus_stops.record_unbuilt_row(
+                                super::focus_order::session_stop_key(&sessions[index].session_id),
+                                Bounds::new(
+                                    bounds.origin + point(px(0.0), top_of(index)),
+                                    size(bounds.size.width, card_of(index)),
+                                ),
+                            );
                         }
-                        let mask_top = f32::from(mask.top() - bounds.top()) / scale;
-                        let mask_bottom = f32::from(mask.bottom() - bounds.top()) / scale;
-                        let row_tops = &tops[..sessions.len()];
-                        // The last row starting at or above the mask's top, and every row that starts
-                        // above its bottom.
-                        let first = row_tops
-                            .partition_point(|top| *top <= mask_top)
-                            .saturating_sub(1);
-                        let end = row_tops.partition_point(|top| *top < mask_bottom);
-                        (first..end)
+                        built
                             .map(|index| {
                                 (
                                     index,

@@ -16,6 +16,7 @@ use gpui::{
 use gpui_component::ElementExt as _;
 
 use super::appearance::SidebarAppearance;
+use super::scroll::reveal_delta;
 use crate::GhostexGpuiApp;
 
 /// Where a stop is drawn, which decides whether focusing it may scroll the list.
@@ -28,18 +29,36 @@ pub(crate) enum SidebarStopPlace {
     Fixed,
 }
 
-/// The focused `List` stop's key and where it was drawn.
-type FocusedStopBounds = Rc<RefCell<Option<(SharedString, Bounds<Pixels>)>>>;
+/// The focused stop: its key, where it was drawn and where that is.
+#[derive(Clone, Debug, PartialEq)]
+struct FocusedStop {
+    key: SharedString,
+    bounds: Bounds<Pixels>,
+    place: SidebarStopPlace,
+}
+
+/// How many frames a stop picked by Tab may take to be built before the move is dropped.
+const PENDING_FOCUS_FRAMES: u8 = 3;
 
 /// One focus handle per logical sidebar control, kept while the control is drawn.
 #[derive(Default)]
 pub(crate) struct SidebarFocusStops {
     handles: RefCell<HashMap<SharedString, (FocusHandle, u64)>>,
     frame: Cell<u64>,
-    /// The focused `List` stop and where it was drawn this frame, written during prepaint.
-    focused_bounds: FocusedStopBounds,
+    /// The focused stop and where it was drawn this frame, written during prepaint.
+    focused: Rc<RefCell<Option<FocusedStop>>>,
     /// The stop the list was last scrolled to, so it is revealed once per visit.
     revealed: RefCell<Option<SharedString>>,
+    /// The Project list's session rows it did not build this frame (they are out of view), with
+    /// where they would be drawn (session_list.rs).
+    unbuilt_rows: RefCell<Vec<(SharedString, Bounds<Pixels>)>>,
+    /// The stop focused in the last frame, to tell which rows a Tab or Shift+Tab stepped over.
+    last_focused: RefCell<Option<FocusedStop>>,
+    /// The direction of the last Tab (`true`) or Shift+Tab (`false`), until a frame reads it.
+    traversal: Rc<Cell<Option<bool>>>,
+    /// A row Tab picked that is not built yet: focused once the scroll to it builds it.
+    pending: RefCell<Option<(SharedString, u8)>>,
+    keystrokes: RefCell<Option<gpui::Subscription>>,
 }
 
 impl SidebarFocusStops {
@@ -53,7 +72,45 @@ impl SidebarFocusStops {
             .borrow_mut()
             .retain(|_, (_, drawn)| *drawn == frame);
         self.frame.set(frame.wrapping_add(1));
-        self.focused_bounds.borrow_mut().take();
+        self.focused.borrow_mut().take();
+        self.unbuilt_rows.borrow_mut().clear();
+    }
+
+    /// A Project list row out of view this frame, at the bounds it would be drawn at.
+    pub(crate) fn record_unbuilt_row(&self, key: SharedString, bounds: Bounds<Pixels>) {
+        self.unbuilt_rows.borrow_mut().push((key, bounds));
+    }
+
+    /// The handle of `key` when the current frame built that control.
+    fn built(&self, key: &SharedString) -> Option<FocusHandle> {
+        let frame = self.frame.get();
+        self.handles
+            .borrow()
+            .get(key)
+            .filter(|(_, drawn)| *drawn == frame)
+            .map(|(handle, _)| handle.clone())
+    }
+
+    /// Notes the direction of every plain Tab and Shift+Tab, which GPUI's root handles as an
+    /// action no element sees.
+    fn observe_traversal(&self, cx: &mut App) {
+        if self.keystrokes.borrow().is_some() {
+            return;
+        }
+        let traversal = self.traversal.clone();
+        let subscription = cx.observe_keystrokes(move |event, _, _| {
+            let key = &event.keystroke;
+            let modifiers = key.modifiers;
+            if key.key == "tab"
+                && !modifiers.control
+                && !modifiers.alt
+                && !modifiers.platform
+                && !modifiers.function
+            {
+                traversal.set(Some(!modifiers.shift));
+            }
+        });
+        *self.keystrokes.borrow_mut() = Some(subscription);
     }
 
     /// The handle of the control `key` names, the same one on every frame it is drawn.
@@ -109,6 +166,7 @@ impl GhostexGpuiApp {
     ) -> Stateful<Div> {
         let key = key.into();
         let stops = &self.native_sidebar.focus_stops;
+        stops.observe_traversal(cx);
         let handle = stops.handle(&key, cx);
         // Inset: GPUI paints an outer shadow as a filled shape under the element, which shows
         // through a control with no fill of its own as a grey slab instead of a ring.
@@ -135,17 +193,12 @@ impl GhostexGpuiApp {
                     window.prevent_default();
                 },
             ));
-        match place {
-            SidebarStopPlace::Fixed => element,
-            SidebarStopPlace::List => {
-                let bounds = stops.focused_bounds.clone();
-                element.on_prepaint(move |painted, window, _| {
-                    if handle.is_focused(window) {
-                        *bounds.borrow_mut() = Some((key, painted));
-                    }
-                })
+        let focused = stops.focused.clone();
+        element.on_prepaint(move |bounds, window, _| {
+            if handle.is_focused(window) {
+                *focused.borrow_mut() = Some(FocusedStop { key, bounds, place });
             }
-        }
+        })
     }
 
     /// The pinned copy of a project header (sticky.rs): not a stop of its own, the header in the
@@ -188,8 +241,15 @@ impl GhostexGpuiApp {
         self.native_sidebar.focus_stops.any_focused(window)
     }
 
-    /// After the list's children prepainted: scroll the focused `List` stop into view, once per
-    /// visit, unless it is a project header whose pinned copy is showing.
+    /// After the whole sidebar prepainted. A Tab or Shift+Tab that stepped over Project list
+    /// rows left unbuilt (out of view) goes to the nearest of them instead: the list scrolls to it
+    /// and it takes focus once built. Otherwise the focused `List` stop is scrolled into view, once
+    /// per visit, unless it is a project header whose pinned copy is showing.
+    ///
+    /// CDXC:FocusRouting 2026-11-10 WHY:
+    /// The Project list builds only the session rows in view (session_list.rs), and GPUI's Tab
+    /// walks only what the last frame built, so Shift+Tab from the bottom bar landed on the last
+    /// row in view and Tab from a project header skipped its rows below the fold.
     pub(crate) fn reveal_focused_native_sidebar_stop(
         &mut self,
         scale: f32,
@@ -197,23 +257,64 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let stops = &self.native_sidebar.focus_stops;
+        let traversal = stops.traversal.take();
+        let pending = stops.pending.borrow_mut().take();
+        if let Some((key, frames)) = pending {
+            if let Some(handle) = stops.built(&key) {
+                cx.defer_in(window, move |_, window, cx| window.focus(&handle, cx));
+                return;
+            }
+            if frames > 0 {
+                // Still scrolling to it: the stop Tab reached meanwhile is not revealed.
+                *stops.pending.borrow_mut() = Some((key, frames - 1));
+                window.request_animation_frame();
+                return;
+            }
+        }
         if self.native_sidebar.pending_scroll_offset.is_some() {
             return;
         }
-        let stops = &self.native_sidebar.focus_stops;
-        let Some((key, bounds)) = stops.focused_bounds.borrow().clone() else {
+        let viewport = self.native_sidebar.scroll.bounds();
+        let current = stops.focused.borrow().clone();
+        let last = stops.last_focused.replace(current.clone());
+        let stepped_over = match (traversal, last, current.as_ref()) {
+            (Some(forward), Some(last), Some(current)) if last.key != current.key => {
+                stepped_over_row(
+                    &stops.unbuilt_rows.borrow(),
+                    stop_order(&last, viewport),
+                    stop_order(current, viewport),
+                    forward,
+                )
+            }
+            _ => None,
+        };
+        if let Some((key, bounds)) = stepped_over {
+            *stops.pending.borrow_mut() = Some((key, PENDING_FOCUS_FRAMES));
+            self.scroll_native_sidebar_list_by(reveal_delta(viewport, bounds, scale), window, cx);
+            return;
+        }
+        let Some(current) = current.filter(|stop| stop.place == SidebarStopPlace::List) else {
             stops.revealed.borrow_mut().take();
             return;
         };
-        if stops.revealed.borrow().as_ref() == Some(&key) {
+        if stops.revealed.borrow().as_ref() == Some(&current.key) {
             return;
         }
-        *stops.revealed.borrow_mut() = Some(key.clone());
-        if pinned_header.is_some_and(|group| key == project_header_stop_key(group)) {
+        *stops.revealed.borrow_mut() = Some(current.key.clone());
+        if pinned_header.is_some_and(|group| current.key == project_header_stop_key(group)) {
             return;
         }
-        let viewport = self.native_sidebar.scroll.bounds();
-        let delta = super::scroll::reveal_delta(viewport, bounds, scale);
+        let delta = reveal_delta(viewport, current.bounds, scale);
+        self.scroll_native_sidebar_list_by(delta, window, cx);
+    }
+
+    fn scroll_native_sidebar_list_by(
+        &mut self,
+        delta: Pixels,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if delta.abs() < px(1.0) {
             return;
         }
@@ -225,6 +326,49 @@ impl GhostexGpuiApp {
         window.request_animation_frame();
         cx.notify();
     }
+}
+
+/// Where a stop sits in the sidebar's order: a list stop by its top, the chrome above the list
+/// before all of it and the bottom bar after all of it.
+fn stop_order(stop: &FocusedStop, viewport: Bounds<Pixels>) -> f32 {
+    match stop.place {
+        SidebarStopPlace::List => f32::from(stop.bounds.top()),
+        SidebarStopPlace::Fixed if stop.bounds.center().y < viewport.top() => f32::NEG_INFINITY,
+        SidebarStopPlace::Fixed => f32::INFINITY,
+    }
+}
+
+/// The unbuilt row a step from `from` to `to` passed over that comes first in its direction, if
+/// any. A step that wrapped around (Tab from the last stop to the first) passes over nothing.
+fn stepped_over_row(
+    rows: &[(SharedString, Bounds<Pixels>)],
+    from: f32,
+    to: f32,
+    forward: bool,
+) -> Option<(SharedString, Bounds<Pixels>)> {
+    let between = |row: &&(SharedString, Bounds<Pixels>)| {
+        let top = f32::from(row.1.top());
+        if forward {
+            from < top && top < to
+        } else {
+            to < top && top < from
+        }
+    };
+    let by_top = |a: &&(SharedString, Bounds<Pixels>), b: &&(SharedString, Bounds<Pixels>)| {
+        f32::from(a.1.top()).total_cmp(&f32::from(b.1.top()))
+    };
+    let passed = rows.iter().filter(between);
+    if forward {
+        passed.min_by(by_top)
+    } else {
+        passed.max_by(by_top)
+    }
+    .cloned()
+}
+
+/// The stop key of a Project sidebar session row, built or not.
+pub(crate) fn session_stop_key(session_id: &str) -> SharedString {
+    format!("session:{session_id}").into()
 }
 
 /// The stop key of a project header, shared by its row in the list and its pinned copy.

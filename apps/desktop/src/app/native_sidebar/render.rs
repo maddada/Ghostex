@@ -119,6 +119,15 @@ impl GhostexGpuiApp {
                         super::pointer::track_bounds(app.native_sidebar.bounds, window);
                     });
                 }
+                // After every part of the sidebar prepainted, the bottom bar's stops included.
+                bounds_view.update(cx, |app, cx| {
+                    app.reveal_focused_native_sidebar_stop(
+                        reveal_scale,
+                        pinned_header.as_deref(),
+                        window,
+                        cx,
+                    );
+                });
             })
             .id("native-sidebar-root")
             // CDXC:Accessibility 2026-09-22 DECISION:
@@ -214,12 +223,6 @@ impl GhostexGpuiApp {
                             .on_children_prepainted(move |_, window, cx| {
                                 view.update(cx, |app, cx| {
                                     app.update_native_sidebar_scroll(window, cx);
-                                    app.reveal_focused_native_sidebar_stop(
-                                        reveal_scale,
-                                        pinned_header.as_deref(),
-                                        window,
-                                        cx,
-                                    );
                                     app.update_native_space_transition(window, cx);
                                     // The store's own request wins over the publish's.
                                     //

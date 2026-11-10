@@ -330,7 +330,7 @@ impl GhostexGpuiApp {
                     let menu = app.native_sidebar_session_menu_with_chief(&context_session, context_session.details.get("menu").unwrap_or(&Value::Null));
                     Self::show_native_sidebar_context_menu(&menu, app.native_sidebar.session_card_bounds.get(&context_id).copied(), event.position, scale, window, cx);
                 }))
-                .map(|row| self.sidebar_focus_stop(row, format!("session:{}", session.session_id), super::focus_order::SidebarStopPlace::List, appearance, cx)))
+                .map(|row| self.sidebar_focus_stop(row, super::focus_order::session_stop_key(&session.session_id), super::focus_order::SidebarStopPlace::List, appearance, cx)))
             .into_any_element()
     }
 }

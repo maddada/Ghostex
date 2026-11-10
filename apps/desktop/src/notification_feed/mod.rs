@@ -28,8 +28,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use gpui::{
     AnyElement, Bounds, FontWeight, InteractiveElement as _, IntoElement, MouseButton,
-    MouseDownEvent, ParentElement as _, Pixels, Styled as _, Window, div,
-    prelude::FluentBuilder as _, px, rgb,
+    MouseDownEvent, ParentElement as _, Pixels, StatefulInteractiveElement as _, Styled as _,
+    Window, div, prelude::FluentBuilder as _, px, rgb,
 };
 use gpui_component::ElementExt as _;
 use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement};
@@ -599,6 +599,23 @@ impl GhostexGpuiApp {
                     this.toggle_gpui_titlebar_notifications_popup(window, cx);
                 }),
             )
+            // The popup opens on the press; Enter and Space reach it as a click.
+            .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
+                if event.is_keyboard() {
+                    cx.stop_propagation();
+                    this.toggle_gpui_titlebar_notifications_popup(window, cx);
+                }
+            }))
+            // A stop of the sidebar's focus order (it sits in the sidebar's top row).
+            .map(|bell| {
+                self.sidebar_focus_stop(
+                    bell,
+                    "navigation:notifications",
+                    crate::app::native_sidebar::focus_order::SidebarStopPlace::Fixed,
+                    appearance,
+                    cx,
+                )
+            })
             .when(!open, |this| {
                 this.managed_tooltip_with_placement(
                     ManagedTooltipPlacement::Right,

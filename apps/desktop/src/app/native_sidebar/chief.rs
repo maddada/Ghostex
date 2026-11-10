@@ -417,10 +417,11 @@ impl GhostexGpuiApp {
                     );
                 }))
                 .map(|row| {
+                    // Main Hub's placeholder row sits in the list, under its project header (rows.rs).
                     self.sidebar_focus_stop(
                         row,
                         "chief:pick-agent",
-                        SidebarStopPlace::Fixed,
+                        SidebarStopPlace::List,
                         appearance,
                         cx,
                     )

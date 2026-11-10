@@ -159,15 +159,16 @@ impl GpuiNewThreadPickerWindow {
             .collect()
     }
 
-    /// The "Start <agent> in" rows for what is typed (gx-core).
-    fn start_row_places(&self) -> Vec<NewThreadStartRow> {
+    /// The "Start <agent> in" rows for what is typed (gx-core); `render_list` draws them all from
+    /// one search.
+    pub(super) fn start_row_places(&self) -> Vec<NewThreadStartRow> {
         self.place
             .as_ref()
             .map(|place| new_thread_start_rows(&place.projects, &self.query))
             .unwrap_or_default()
     }
 
-    /// The gx-core row a `PickerRow::StartIn(index)` draws and launches.
+    /// The gx-core row a `PickerRow::StartIn(index)` launches.
     fn start_row_place(&self, index: usize) -> Option<NewThreadStartRow> {
         self.start_row_places()
             .into_iter()
@@ -215,9 +216,11 @@ impl GpuiNewThreadPickerWindow {
     }
 
     /// `[G] Ghostex  Windows` with the agent at the right: a project the search found.
+    /// `start` is the gx-core row for `index` from the list's one search (`start_row_places`).
     pub(super) fn render_start_row(
         &self,
         index: usize,
+        start: Option<&NewThreadStartRow>,
         selected: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -229,7 +232,7 @@ impl GpuiNewThreadPickerWindow {
         else {
             return div().into_any_element();
         };
-        let machine_label = self.start_row_place(index).and_then(|row| row.place);
+        let machine_label = start.and_then(|row| row.place.clone());
         let agent = self.agents.first().cloned();
         self.row_shell(
             ElementId::Name(format!("new-thread-start-{index}").into()),
