@@ -179,7 +179,21 @@ impl UnifiedSidebarHost {
         action: Option<HoverAction>,
         now_ms: u64,
     ) -> Option<Vec<Value>> {
-        self.lanes.values().find_map(|lane| {
+        // A thread on another computer is also held, borrowed, in its coordinator's lane, inside the
+        // coordinator's project: its own computer's lane comes first, so its project actions (Delete
+        // Worktree) are its own project's.
+        let borrowed_here = |lane: &MachineLane| {
+            lane.model
+                .view()
+                .groups
+                .iter()
+                .flat_map(|group| group.core.sessions.iter())
+                .any(|session| {
+                    session.row.sidebar_session_id == sidebar_session_id
+                        && session.row.is_borrowed_thread()
+                })
+        };
+        let menu_from = |lane: &MachineLane| {
             let menus = SidebarMenus::new(core, lane.model.view(), &lane.inputs, menu_host, now_ms);
             let items = match action {
                 // A card's Snooze button opens the submenu whatever the hover strip shows.
@@ -187,7 +201,12 @@ impl UnifiedSidebarHost {
                 None => menus.unified_row_menu(sidebar_session_id),
             }?;
             (!items.is_empty()).then(|| items.iter().map(MenuItem::to_json).collect())
-        })
+        };
+        self.lanes
+            .values()
+            .filter(|lane| !borrowed_here(lane))
+            .find_map(menu_from)
+            .or_else(|| self.lanes.values().find_map(menu_from))
     }
 
     /// A project's menu as its Project sidebar header shows it, from the machine list that holds
@@ -395,7 +414,7 @@ impl UnifiedSidebarHost {
                 continue;
             }
             let icon = groups
-                .get(&(row.lane.clone(), row.group.core.group_id.clone()))
+                .get(&(row.machine.clone(), row.group.core.group_id.clone()))
                 .and_then(|group| project_icon(group.project_context.as_ref()));
             if let Some(icon) = icon {
                 icons.insert(row.repo.key.clone(), icon);
@@ -1011,13 +1030,20 @@ impl GhostexGpuiApp {
         session: &SessionKey,
         cx: &mut gpui::Context<Self>,
     ) {
+        let unified = self
+            .gx_store
+            .sidebar_list
+            .last_inputs
+            .settings
+            .unified_sidebar;
         let host = &mut self.gx_store.unified_sidebar;
         match host.row_for_session_key(session) {
             Some(row_id) => {
                 host.pending_reveal_key = None;
                 self.gx_store_unified_reveal(&row_id, cx);
             }
-            None => host.pending_reveal_key = Some(session.clone()),
+            // Kept only while the Unified sidebar is on.
+            None => host.pending_reveal_key = unified.then(|| session.clone()),
         }
     }
 
@@ -1030,7 +1056,17 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let Some(snapshot) = self.native_sidebar.unified.clone() else {
-            self.gx_store.unified_sidebar.pending_reveal = Some(sidebar_session_id.to_string());
+            // Kept for the first build only while the Unified sidebar is on; the Project sidebar
+            // reveals its own rows.
+            if self
+                .gx_store
+                .sidebar_list
+                .last_inputs
+                .settings
+                .unified_sidebar
+            {
+                self.gx_store.unified_sidebar.pending_reveal = Some(sidebar_session_id.to_string());
+            }
             return;
         };
         self.gx_store.unified_sidebar.pending_reveal = None;
