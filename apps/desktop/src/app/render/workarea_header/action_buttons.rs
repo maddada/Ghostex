@@ -353,6 +353,10 @@ impl GhostexGpuiApp {
             })
             // A clone or other long job in progress (CDXC:BackgroundJobs in window/jobs_popover_view.rs).
             .children(self.render_workarea_header_jobs_button(cx))
+            // Claude and Grok Bot, directly left of Voice (CDXC:Extensions 2026-11-10 in claude_web/header_buttons.rs).
+            .when(shown(HeaderControl::WebBots), |this| {
+                this.children(self.render_workarea_header_web_bot_buttons(cx))
+            })
             // The Voice button leads the split buttons (CDXC:VoiceMode in voice_agent/header_button.rs).
             .when(
                 crate::app::voice_agent::voice_agent_on() && shown(HeaderControl::Voice),

@@ -11512,7 +11512,7 @@
     {
       "key": "claudeWebHidden",
       "title": "Turn off Claude",
-      "subtitle": "Turn off Claude: the Claude button in the sidebar's top row and the Claude view, which shows claude.ai with a bar to switch between your saved Claude accounts. Off by default; each account's claude.ai sign-in is kept.",
+      "subtitle": "Turn off Claude: the Claude button in the header and the Claude view, which shows claude.ai with a bar to switch between your saved Claude accounts. Off by default; each account's claude.ai sign-in is kept.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -11524,7 +11524,7 @@
     {
       "key": "grokWebHidden",
       "title": "Turn off Grok Bot",
-      "subtitle": "Turn off Grok Bot: the Grok Bot button in the sidebar and the Grok Bot view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.",
+      "subtitle": "Turn off Grok Bot: the Grok Bot button in the header and the Grok Bot view, which shows grok.com with a bar to switch between your Grok logins, each signed in on its own. Off by default; every login's sign-in is kept. Its start page and logins are on Settings > Files & Links > Browser.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
