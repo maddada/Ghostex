@@ -58,11 +58,12 @@ fn held_omp_chat() -> ChatCore {
     }))
     .expect("the start config parses");
     core.handle(Event::Start(Box::new(start)), ChatContext::at(NOW_MS));
+    // Outranks the bundled catalog whatever its date (the later `updatedAt` wins at a boot read).
     let boot: ComposerBootRead = serde_json::from_value(json!({
         "sessionKey": "billing-service:s-rate-limit",
         "clientId": "client-1",
         "modelCatalog": {
-            "schemaVersion": 1, "updatedAt": "2026-10-30", "effortLabels": {},
+            "schemaVersion": 1, "updatedAt": "9999-12-31", "effortLabels": {},
             "agents": { "omp": { "name": "OMP", "efforts": ["low", "high"], "models": [
                 { "value": "openrouter/qwen3.8-max", "label": "qwen3.8-max", "efforts": ["low", "high"] },
             ] } },
