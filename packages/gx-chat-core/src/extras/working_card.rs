@@ -172,32 +172,31 @@ fn default_shows_running_call(state: &ChatState) -> bool {
             .unwrap_or_default()
     };
     // The newest row running a call, and the item that draws it.
-    let Some((item, row, calls)) = view
-        .items
-        .iter()
-        .filter_map(|item| {
-            let rows: Vec<&Value> = match item {
-                TranscriptItem::Message { message } => vec![&**message],
-                // Newest first below: `work` holds the rows in the order they came, `cards` the
-                // copies drawn outside its fold.
-                TranscriptItem::Summary { work, cards, .. } => {
-                    cards.iter().chain(work.iter()).map(|row| &**row).collect()
-                }
-                _ => Vec::new(),
-            };
-            rows.into_iter().rev().find_map(|row| {
-                let calls = running(row);
-                (!calls.is_empty()).then(|| {
-                    (
-                        item,
-                        row["id"].as_str().unwrap_or_default().to_string(),
-                        calls,
-                    )
-                })
+    // Newest item first, stopping at the first one running a call (the list has no reverse iterator).
+    let mut newest_first = (0..view.items.len())
+        .rev()
+        .filter_map(|index| view.items.get(index));
+    let Some((item, row, calls)) = newest_first.find_map(|item| {
+        let rows: Vec<&Value> = match item {
+            TranscriptItem::Message { message } => vec![&**message],
+            // Newest first below: `work` holds the rows in the order they came, `cards` the
+            // copies drawn outside its fold.
+            TranscriptItem::Summary { work, cards, .. } => {
+                cards.iter().chain(work.iter()).map(|row| &**row).collect()
+            }
+            _ => Vec::new(),
+        };
+        rows.into_iter().rev().find_map(|row| {
+            let calls = running(row);
+            (!calls.is_empty()).then(|| {
+                (
+                    item,
+                    row["id"].as_str().unwrap_or_default().to_string(),
+                    calls,
+                )
             })
         })
-        .last()
-    else {
+    }) else {
         return false;
     };
     let Ok(item) = serde_json::to_value(item) else {
