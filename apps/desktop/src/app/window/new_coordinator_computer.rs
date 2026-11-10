@@ -276,10 +276,11 @@ impl GpuiNewCoordinatorModalWindow {
         {
             self.model_index = index;
         }
+        // The effort is checked against the model finally chosen, never the default one.
         if self.intended_effort.is_some() {
             self.effort = self.intended_effort.clone();
-            self.reset_effort();
         }
+        self.reset_effort();
     }
 
     /// The host's fresh list of copies (opening the Computer menu, a refused Create): what is

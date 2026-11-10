@@ -33,6 +33,9 @@ struct CopiesState {
     /// Each other computer's catalog, once read in this dialog (`None` inside: it serves none).
     /// A read that did not reach the computer is not kept, so the next pick reads again.
     catalogs: RefCell<BTreeMap<String, Option<AgentModelCatalog>>>,
+    /// The latest catalog read started for each computer: an earlier read that finishes later is
+    /// dropped, so it never overwrites a newer answer.
+    catalog_reads: RefCell<BTreeMap<String, u64>>,
 }
 
 /// The machine a sidebar group id names: [`LOCAL_MACHINE_ID`] or the remote machine's id.
@@ -532,15 +535,27 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        let generation = {
+            let mut reads = state.catalog_reads.borrow_mut();
+            let generation = reads.get(&machine_id).copied().unwrap_or(0) + 1;
+            reads.insert(machine_id.clone(), generation);
+            generation
+        };
         let read = self.gpui_remote_model_catalog(&machine_id, cx);
         let (dialog, state, group_id) = (dialog.clone(), state.clone(), group_id.to_string());
         cx.spawn(async move |this, cx| {
             let read = read.await;
+            if state.catalog_reads.borrow().get(&machine_id) != Some(&generation) {
+                return;
+            }
             let _ = this.update(cx, |app, cx| {
                 let catalog = match read {
                     RemoteModelCatalog::Served(catalog) => Some(Some(catalog)),
                     RemoteModelCatalog::NoneServed => Some(None),
-                    RemoteModelCatalog::Unreachable => None,
+                    // Not reached this time: an answer already held stays.
+                    RemoteModelCatalog::Unreachable => {
+                        state.catalogs.borrow().get(&machine_id).cloned()
+                    }
                 };
                 let lineup = match &catalog {
                     Some(Some(_)) => CopyLineup::Held,

@@ -271,7 +271,9 @@ impl GhostexGpuiApp {
                                 cx,
                             );
                         }
-                        Err(reason) => done(this, Err(NewCoordinatorRefusal::plain(reason)), cx),
+                        Err(reason) => {
+                            done(this, Err(NewCoordinatorRefusal::from_computer(reason)), cx)
+                        }
                     }
                 });
             })
