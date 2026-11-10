@@ -20,10 +20,11 @@ use tungstenite::http::Uri;
 use tungstenite::protocol::WebSocketConfig;
 use tungstenite::{ClientRequestBuilder, Error as SocketError, Message, WebSocket};
 
+use crate::backlog::InboundBacklog;
 use crate::wire::{self, Endpoint, Followers, Inbound, StreamKey};
 
-/// Where the thread hands what it read. Called on the socket thread: it must only queue the value
-/// for the host's own thread and return.
+/// Where the thread hands what it read. Called on the socket thread, under the backlog's lock: it
+/// must only queue the value for the host's own thread and return.
 pub type InboundSink = Arc<dyn Fn(Inbound) + Send + Sync>;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -55,13 +56,17 @@ enum Command {
 /// Every machine's chat socket. Dropping it stops every thread.
 pub struct ChatStreams {
     sink: InboundSink,
+    backlog: Arc<InboundBacklog>,
     machines: BTreeMap<String, Sender<Command>>,
 }
 
 impl ChatStreams {
-    pub fn new(sink: InboundSink) -> Self {
+    /// Every frame waits at `backlog` until the host has room for it, and the host calls
+    /// [`InboundBacklog::handled`] once for each one it takes.
+    pub fn new(sink: InboundSink, backlog: Arc<InboundBacklog>) -> Self {
         Self {
             sink,
+            backlog,
             machines: BTreeMap::new(),
         }
     }
@@ -98,10 +103,11 @@ impl ChatStreams {
 
     fn send(&mut self, machine_id: &str, command: Command) {
         let sink = self.sink.clone();
+        let backlog = self.backlog.clone();
         let commands = self
             .machines
             .entry(machine_id.to_string())
-            .or_insert_with(|| spawn(machine_id.to_string(), sink));
+            .or_insert_with(|| spawn(machine_id.to_string(), sink, backlog));
         let _ = commands.send(command);
     }
 }
@@ -114,12 +120,13 @@ impl Drop for ChatStreams {
     }
 }
 
-fn spawn(machine_id: String, sink: InboundSink) -> Sender<Command> {
+fn spawn(machine_id: String, sink: InboundSink, backlog: Arc<InboundBacklog>) -> Sender<Command> {
     let (commands, receiver) = mpsc::channel();
     let link = Link {
         machine_id,
         commands: receiver,
         sink,
+        backlog,
         followers: Followers::new(),
         endpoint: Endpoint::default(),
         attempts: 0,
@@ -148,6 +155,7 @@ struct Link {
     machine_id: String,
     commands: Receiver<Command>,
     sink: InboundSink,
+    backlog: Arc<InboundBacklog>,
     followers: Followers,
     endpoint: Endpoint,
     /// Failed or dropped connections in a row, reset on every successful open.
@@ -304,7 +312,9 @@ impl Link {
                 Err(_) => return End::Lost,
             };
             if let Some(inbound) = wire::route(&self.machine_id, text.as_str(), &self.followers) {
-                (self.sink)(inbound);
+                // Waits while the host is behind (`backlog.rs`). The commands that arrive meanwhile
+                // stay queued for the next pass of the loop above, in order.
+                self.backlog.admit(text.len(), || (self.sink)(inbound));
             }
         }
     }

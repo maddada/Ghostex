@@ -14,7 +14,7 @@ use std::sync::{Arc, OnceLock, mpsc};
 use std::thread;
 use std::time::Duration;
 
-use ghostex_gx_chat_client::{ChatStreams, Endpoint};
+use ghostex_gx_chat_client::{ChatStreams, Endpoint, InboundBacklog};
 use serde_json::Value;
 use web_time::Instant;
 
@@ -34,6 +34,15 @@ pub(crate) struct ChatHostHandle {
 static COMMANDS: OnceLock<mpsc::Sender<HostCommand>> = OnceLock::new();
 static IDLE: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 static NEXT_SINK: AtomicU64 = AtomicU64::new(1);
+
+/// How much wire text the socket threads may have handed the host that it has not handled yet,
+/// beyond the one frame always let in (`packages/gx-chat-client/src/backlog.rs`).
+///
+/// CDXC:SessionChat 2026-11-10 WHY: four of a coordinator chat's 3.4 MB state frames, or thousands
+/// of the few-kilobyte frames a streaming reply sends. The queue had no limit (one suspect for the
+/// app's 2.8 GB peaks); it now holds at most this much wire text, a few times that once parsed (an
+/// estimate, not measured), and a socket thread past it waits while the kernel buffers the rest.
+const INBOUND_BACKLOG_BYTES: usize = 16 * 1024 * 1024;
 
 /// Where a machine's gxserver is, for every chat on it. The app calls this whenever the local
 /// daemon's bootstrap or a remote machine's forward changes; the same value again does nothing.
@@ -185,23 +194,43 @@ fn spawn() -> mpsc::Sender<HostCommand> {
         .get_or_init(|| Arc::new(AtomicBool::new(false)))
         .clone();
     let inbound = commands.clone();
+    let backlog = InboundBacklog::new(INBOUND_BACKLOG_BYTES);
     thread::Builder::new()
         .name("ghostex-gx-chat-host".into())
         .spawn(move || {
+            // However this thread ends, even by a panic outside `turn`'s guard, no socket thread
+            // is left waiting for room it would never get.
+            let _open_on_exit = OpenOnExit(backlog.clone());
             let mut world = World::default();
-            // The socket threads queue what they read behind the views' own commands.
-            world
-                .transport
-                .install(ChatStreams::new(Arc::new(move |value| {
+            // The socket threads queue what they read behind the views' own commands, on the same
+            // channel, once the backlog has room; the views' commands never wait for it.
+            world.transport.install(ChatStreams::new(
+                Arc::new(move |value| {
                     let _ = inbound.send(HostCommand::Inbound(value));
-                })));
-            run(&mut world, receiver, idle);
+                }),
+                backlog.clone(),
+            ));
+            run(&mut world, receiver, idle, &backlog);
         })
         .expect("spawn the chat host thread");
     commands
 }
 
-fn run(world: &mut World, commands: mpsc::Receiver<HostCommand>, idle: Arc<AtomicBool>) {
+/// Opens the backlog for good when the host thread ends.
+struct OpenOnExit(Arc<InboundBacklog>);
+
+impl Drop for OpenOnExit {
+    fn drop(&mut self) {
+        self.0.close();
+    }
+}
+
+fn run(
+    world: &mut World,
+    commands: mpsc::Receiver<HostCommand>,
+    idle: Arc<AtomicBool>,
+    backlog: &InboundBacklog,
+) {
     loop {
         idle.store(true, Ordering::Release);
         let wait = world::next_wake(world).map(|at| at.saturating_duration_since(Instant::now()));
@@ -217,6 +246,11 @@ fn run(world: &mut World, commands: mpsc::Receiver<HostCommand>, idle: Arc<Atomi
             },
         };
         idle.store(false, Ordering::Release);
+        // Released after the turn, so the frame being folded still counts against the backlog.
+        let inbound = matches!(command, Some(HostCommand::Inbound(_)));
         world::turn(world, command);
+        if inbound {
+            backlog.handled();
+        }
     }
 }

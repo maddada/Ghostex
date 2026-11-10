@@ -17,6 +17,9 @@
 //! - Chunking. The 96 KiB pieces the QuickJS broker cut a message into were a cost of crossing
 //!   into QuickJS; a socket message arrives whole.
 //!
+//! On a native target the socket threads wait at an `InboundBacklog` while the host is behind
+//! (`backlog.rs`); the web build has one thread and no such wait.
+//!
 //! The rules (routing, the messages, the ladder) are in `wire.rs` for both targets. The socket is
 //! `native.rs` (one tungstenite thread per machine) or `web.rs` (a browser `WebSocket` on the
 //! page's one thread).
@@ -24,12 +27,16 @@
 mod wire;
 
 #[cfg(not(target_family = "wasm"))]
+mod backlog;
+#[cfg(not(target_family = "wasm"))]
 mod native;
 #[cfg(not(target_family = "wasm"))]
 pub mod voice;
 #[cfg(target_family = "wasm")]
 mod web;
 
+#[cfg(not(target_family = "wasm"))]
+pub use backlog::InboundBacklog;
 #[cfg(not(target_family = "wasm"))]
 pub use native::{ChatStreams, InboundSink};
 #[cfg(target_family = "wasm")]
