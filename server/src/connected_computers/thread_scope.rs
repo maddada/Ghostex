@@ -5,7 +5,7 @@
 use rusqlite::Connection;
 use serde_json::Value;
 
-use crate::security::{Capability, Principal, SessionRole};
+use crate::security::{Capability, Principal};
 
 /// The endpoints [`refusal`] judges. Both are peer endpoints (scope.rs).
 pub(crate) const THREAD_LINK_ENDPOINTS: &[&str] =
@@ -47,10 +47,13 @@ pub(crate) fn refusal(
         );
     };
     match caller {
+        // Its coordinator by the thread's own record, not by the token's role: a session promoted
+        // to coordinator (Make Coordinator) keeps the role it started with until it restarts, and
+        // was refused here on its own threads (GitHub #554).
         Principal::Session {
             project_id,
             session_id,
-            role: SessionRole::Coordinator,
+            ..
         } if thread.coordinator_key() == (project_id.clone(), session_id.clone()) => None,
         Principal::Session { .. } => Some("A session can only manage its own threads."),
         other if other.has(Capability::ManageAnyThreads) => None,

@@ -472,7 +472,7 @@ fn input_action(
     if let Principal::Session {
         project_id: own_project,
         session_id: own_session,
-        role,
+        ..
     } = caller
     {
         if own_session == session_id && (project_id.is_empty() || own_project == project_id) {
@@ -482,8 +482,9 @@ fn input_action(
             .get("text")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        if *role == security::SessionRole::Coordinator
-            && endpoint_path == "/api/sendSessionText"
+        // Its own thread is judged by the thread's record, not the token's start-time role: a
+        // session promoted to coordinator keeps the role it started with (GitHub #554).
+        if endpoint_path == "/api/sendSessionText"
             && is_interrupt(typed)
             && is_own_thread(state, own_project, own_session, project_id, session_id)
         {
@@ -530,15 +531,14 @@ fn interrupt_action(
     if let Principal::Session {
         project_id: own_project,
         session_id: own_session,
-        role,
+        ..
     } = caller
     {
         if own_session == session_id && (project_id.is_empty() || own_project == project_id) {
             return None;
         }
-        if *role == security::SessionRole::Coordinator
-            && is_own_thread(state, own_project, own_session, project_id, session_id)
-        {
+        // By the thread's record, not the token's start-time role (GitHub #554).
+        if is_own_thread(state, own_project, own_session, project_id, session_id) {
             return None;
         }
     }
