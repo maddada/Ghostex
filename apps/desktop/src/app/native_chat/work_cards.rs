@@ -16,7 +16,6 @@
 //! The buttons are neutral fills, never the dark primary fill, because the card sits on the chat's
 //! glass (the user's standing rule: no black fills on glass).
 
-use super::appearance::ChatFilledButton as _;
 use super::chat_text_look::{PROSE_LINE_HEIGHT, PROSE_SIZE};
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -594,7 +593,14 @@ impl NativeChatView {
             .flex_shrink_0()
             .rounded(px(7.0 * s))
             .chat_cursor_pointer()
-            .chat_filled(fills, true)
+            // A plain button, as the chevron beside it: no fill at rest, the usual fills on hover
+            // and press, and pressed while the list it opens is shown.
+            //
+            // CDXC:Coordinators 2026-11-11 DECISION:
+            // User: "make the button on the right Work items not have bg behind it when not
+            // hovered so it's plain button".
+            .hover(move |style| style.bg(fills.hover))
+            .active(move |style| style.bg(fills.pressed))
             .when(shown, |button| button.bg(fills.pressed))
             .tooltip(|window, cx| {
                 gpui_component::tooltip::Tooltip::new("Work items").build(window, cx)
