@@ -193,7 +193,13 @@ const SUB_LOG: [LogLine; 3] = [
     (5, "ok", "6 of 6 pass"),
 ];
 
-const TRANSCRIPT: [((&str, &str), Option<(&str, &str)>); 6] = [
+/// A transcript row: what the terminal shows, and the chat bubble it becomes when there is one.
+type TranscriptLine = (
+    (&'static str, &'static str),
+    Option<(&'static str, &'static str)>,
+);
+
+const TRANSCRIPT: [TranscriptLine; 6] = [
     (("cmd", "$ claude"), None),
     (
         ("me", "> Fix the flaky refresh test"),
