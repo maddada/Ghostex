@@ -199,7 +199,7 @@ impl GhostexGpuiApp {
     }
 
     /// `createAppToastRequest(level, title, description)` on the app modal host.
-    pub(super) fn gx_store_create_toast(
+    pub(crate) fn gx_store_create_toast(
         &mut self,
         level: &str,
         title: &str,

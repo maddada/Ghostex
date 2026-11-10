@@ -3467,7 +3467,14 @@ version of the Projects features in Cursor and Claude Code.
   arrow beside its agent button) and choose **New Coordinator…**, the first
   item of that menu; hover the (i) beside it for why it is worth it. On the
   phone, open the same menu from the project's agent button and pick **New
-  Coordinator…** at its top (tap its (i) for the same). Name it, pick its agent
+  Coordinator…** at its top (tap its (i) for the same). When the sidebar shows a
+  project that is on more than one computer (or cloned twice on one) as one
+  entry, the desktop dialog has a **Computer** field that picks where it runs:
+  it starts on the copy you picked in the New Thread picker, else the one you
+  last used, greys a computer that isn't connected, and lists that computer's
+  own agents and models. A project with one copy, or one Separate by machine
+  keeps apart, has no such field. On the phone, a project whose clones its
+  list shows as one gets a **Folder** row that picks between them. Name it, pick its agent
   from the Agent dropdown (Claude, Codex, ZCode, Cursor, Grok, Copilot,
   Antigravity, Pi, OMP, OpenCode or DeepSeek Harness, whichever you have set up), its model where the agent
   lets Ghostex choose one (Opus 5.5 on Claude; otherwise each agent starts on its

@@ -22,6 +22,25 @@ pub(crate) struct ModalSelect {
     scroll: ScrollHandle,
 }
 
+/// A row of [`modal_select_menu_rows`]. A disabled row is greyed, takes no click, and the
+/// keyboard skips it ([`ModalSelect::handle_key_rows`]); its suffix ("Not connected") is drawn
+/// muted after the label.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ModalSelectRow {
+    pub(crate) label: String,
+    pub(crate) suffix: Option<String>,
+    pub(crate) disabled: bool,
+}
+
+impl ModalSelectRow {
+    pub(crate) fn plain(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            ..Self::default()
+        }
+    }
+}
+
 pub(crate) enum ModalSelectKey {
     /// The key moved the highlight or closed the menu.
     Consumed,
@@ -51,6 +70,57 @@ impl ModalSelect {
 
     pub(crate) fn close(&mut self) {
         self.open = false;
+    }
+
+    /// [`Self::toggle`] for a list with disabled rows: the highlight starts on the selected row
+    /// when it can be chosen, else on the first that can, else on none.
+    pub(crate) fn toggle_rows(&mut self, selected: Option<usize>, rows: &[ModalSelectRow]) {
+        self.open = !self.open;
+        let enabled = |index: &usize| rows.get(*index).is_some_and(|row| !row.disabled);
+        self.highlight = self
+            .open
+            .then(|| {
+                selected
+                    .filter(enabled)
+                    .or_else(|| (0..rows.len()).find(enabled))
+            })
+            .flatten();
+        if let Some(index) = self.highlight {
+            self.scroll.scroll_to_item(index);
+        }
+    }
+
+    /// [`Self::handle_key`] for a list with disabled rows: the arrows step over them, Enter on one
+    /// chooses nothing, and a list with none to choose highlights nothing.
+    pub(crate) fn handle_key_rows(&mut self, key: &str, rows: &[ModalSelectRow]) -> ModalSelectKey {
+        if !self.open {
+            return ModalSelectKey::Ignored;
+        }
+        let enabled = |index: usize| rows.get(index).is_some_and(|row| !row.disabled);
+        match key {
+            "up" | "down" => {
+                let count = rows.len() as isize;
+                let delta: isize = if key == "up" { -1 } else { 1 };
+                let start = self
+                    .highlight
+                    .map_or(if delta > 0 { -1 } else { count }, |index| index as isize);
+                self.highlight = (1..=count)
+                    .map(|step| (start + delta * step).rem_euclid(count.max(1)) as usize)
+                    .find(|index| enabled(*index));
+                if let Some(index) = self.highlight {
+                    self.scroll.scroll_to_item(index);
+                }
+                ModalSelectKey::Consumed
+            }
+            "enter" => match self.highlight.filter(|index| enabled(*index)) {
+                Some(index) => {
+                    self.open = false;
+                    ModalSelectKey::Choose(index)
+                }
+                None => ModalSelectKey::Consumed,
+            },
+            _ => self.handle_key(key, rows.len()),
+        }
     }
 
     pub(crate) fn handle_key(&mut self, key: &str, count: usize) -> ModalSelectKey {
@@ -152,11 +222,31 @@ pub(crate) fn hosted_modal_select_menu<V: 'static>(
     window: &Window,
     cx: &mut Context<V>,
 ) -> Option<AnyElement> {
+    let rows: Vec<ModalSelectRow> = items.iter().map(ModalSelectRow::plain).collect();
+    hosted_modal_select_menu_rows(
+        p, select, id, &rows, selected, trigger, on_choose, on_dismiss, window, cx,
+    )
+}
+
+/// [`hosted_modal_select_menu`] with rows that can be disabled ([`ModalSelectRow`]).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn hosted_modal_select_menu_rows<V: 'static>(
+    p: &ModalPalette,
+    select: &ModalSelect,
+    id: &'static str,
+    rows: &[ModalSelectRow],
+    selected: Option<usize>,
+    trigger: Bounds<Pixels>,
+    on_choose: impl Fn(&mut V, usize, &mut Window, &mut Context<V>) + Clone + 'static,
+    on_dismiss: impl Fn(&mut V, &mut Window, &mut Context<V>) + 'static,
+    window: &Window,
+    cx: &mut Context<V>,
+) -> Option<AnyElement> {
     modal_popover_host(p)?;
     let p = *p;
     let highlight = select.highlight;
     let scroll = select.scroll.clone();
-    let items: Rc<Vec<String>> = Rc::new(items.to_vec());
+    let items: Rc<Vec<ModalSelectRow>> = Rc::new(rows.to_vec());
     // 28px rows inside 4px padding and a 1px border, bounded like the in-window list.
     let list_height = (items.len() as f32 * 28.0 + 10.0).min(288.0);
     let top = if select_menu_opens_upward(trigger, px(list_height), window) {
@@ -174,6 +264,7 @@ pub(crate) fn hosted_modal_select_menu<V: 'static>(
         let rows = items.iter().enumerate().map(|(index, item)| {
             let is_selected = selected == Some(index);
             let highlighted = highlight == Some(index);
+            let disabled = item.disabled;
             h_flex()
                 .id((id, index))
                 .w_full()
@@ -187,19 +278,24 @@ pub(crate) fn hosted_modal_select_menu<V: 'static>(
                 .line_height(px(20.0))
                 .text_color(hsla(p.foreground))
                 .cursor_default()
+                .when(disabled, |this| this.opacity(0.5))
                 .when(is_selected, |this| {
                     this.bg(hsla(p.menu_selected_background()))
                 })
-                .when(!is_selected && highlighted, |this| this.bg(hsla(p.accent)))
-                .when(!is_selected, |this| {
+                .when(!is_selected && highlighted && !disabled, |this| {
+                    this.bg(hsla(p.accent))
+                })
+                .when(!is_selected && !disabled, |this| {
                     this.hover(move |this| this.bg(hsla(p.accent)))
                 })
-                .on_click(hosted_row_click(
-                    entity.clone(),
-                    owner,
-                    index,
-                    on_choose.clone(),
-                ))
+                .when(!disabled, |this| {
+                    this.on_click(hosted_row_click(
+                        entity.clone(),
+                        owner,
+                        index,
+                        on_choose.clone(),
+                    ))
+                })
                 .child(
                     div()
                         .flex_1()
@@ -207,8 +303,17 @@ pub(crate) fn hosted_modal_select_menu<V: 'static>(
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_ellipsis()
-                        .child(item.clone()),
+                        .child(item.label.clone()),
                 )
+                .when_some(item.suffix.clone(), |this, suffix| {
+                    this.child(
+                        div()
+                            .flex_shrink_0()
+                            .text_size(px(12.0))
+                            .text_color(hsla(p.muted))
+                            .child(suffix),
+                    )
+                })
         });
         v_flex()
             .id(id)
@@ -239,6 +344,26 @@ pub(crate) fn modal_select_menu<V: 'static>(
     window: &Window,
     cx: &mut Context<V>,
 ) -> Option<AnyElement> {
+    let rows: Vec<ModalSelectRow> = items.iter().map(ModalSelectRow::plain).collect();
+    modal_select_menu_rows(
+        p, select, id, &rows, selected, on_choose, on_dismiss, window, cx,
+    )
+}
+
+/// [`modal_select_menu`] with rows that can be disabled ([`ModalSelectRow`]); pair it with
+/// [`ModalSelect::toggle_rows`] and [`ModalSelect::handle_key_rows`].
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn modal_select_menu_rows<V: 'static>(
+    p: &ModalPalette,
+    select: &ModalSelect,
+    id: &'static str,
+    items: &[ModalSelectRow],
+    selected: Option<usize>,
+    on_choose: impl Fn(&mut V, usize, &mut Window, &mut Context<V>) + Clone + 'static,
+    on_dismiss: impl Fn(&mut V, &mut Window, &mut Context<V>) + 'static,
+    window: &Window,
+    cx: &mut Context<V>,
+) -> Option<AnyElement> {
     if !select.open {
         hide_hosted_modal_popover(id, window, cx);
         return None;
@@ -247,7 +372,7 @@ pub(crate) fn modal_select_menu<V: 'static>(
     let p = *p;
     let highlight = select.highlight;
     let on_dismiss = Rc::new(on_dismiss);
-    if let Some(element) = hosted_modal_select_menu(
+    if let Some(element) = hosted_modal_select_menu_rows(
         &p,
         select,
         id,
@@ -283,6 +408,7 @@ pub(crate) fn modal_select_menu<V: 'static>(
     let rows = items.iter().enumerate().map(|(index, item)| {
         let is_selected = selected == Some(index);
         let highlighted = highlight == Some(index);
+        let disabled = item.disabled;
         let on_choose = on_choose.clone();
         h_flex()
             .id((id, index))
@@ -298,16 +424,21 @@ pub(crate) fn modal_select_menu<V: 'static>(
             .line_height(px(20.0))
             .text_color(hsla(p.foreground))
             .cursor_default()
+            .when(disabled, |this| this.opacity(0.5))
             .when(is_selected, |this| {
                 this.bg(hsla(p.menu_selected_background()))
             })
-            .when(!is_selected && highlighted, |this| this.bg(hsla(p.accent)))
-            .when(!is_selected, |this| {
+            .when(!is_selected && highlighted && !disabled, |this| {
+                this.bg(hsla(p.accent))
+            })
+            .when(!is_selected && !disabled, |this| {
                 this.hover(move |this| this.bg(hsla(p.accent)))
             })
-            .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-                on_choose(this, index, window, cx);
-            }))
+            .when(!disabled, |this| {
+                this.on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                    on_choose(this, index, window, cx);
+                }))
+            })
             .child(
                 div()
                     .flex_1()
@@ -315,8 +446,17 @@ pub(crate) fn modal_select_menu<V: 'static>(
                     .overflow_hidden()
                     .whitespace_nowrap()
                     .text_ellipsis()
-                    .child(item.clone()),
+                    .child(item.label.clone()),
             )
+            .when_some(item.suffix.clone(), |this, suffix| {
+                this.child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(12.0))
+                        .text_color(hsla(p.muted))
+                        .child(suffix),
+                )
+            })
     });
     Some(
         deferred(

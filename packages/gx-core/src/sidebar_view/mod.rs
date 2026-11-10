@@ -123,9 +123,9 @@ pub use view::{
     rename_shake_key, CollectionView, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendView,
     EmptyState, FoldedStatus, FoldedWorktree, GroupActionTarget, GroupCore, GroupSummary,
     GroupView, LabelDeadline, MachineChip, MachineNotice, MachineSummary, MachineTabView, NeedsYou,
-    OrderItem, OrderKind, ProjectContextView, RemoteMachineView, RowNesting, RowWorktree,
-    SectionView, SessionMenuFacts, SessionRow, SessionTiming, SessionView, ShowAllProjectsRow,
-    SidebarView, SpaceView, ThreadTally, WorktreeView, RENAME_SHAKE_FRESH_MS,
+    OrderItem, OrderKind, ProjectContextView, ProjectCopy, RemoteMachineView, RowNesting,
+    RowWorktree, SectionView, SessionMenuFacts, SessionRow, SessionTiming, SessionView,
+    ShowAllProjectsRow, SidebarView, SpaceView, ThreadTally, WorktreeView, RENAME_SHAKE_FRESH_MS,
 };
 pub use work::{SessionWork, WorkGithubIssue, WorkLinearIssue, WorkLinearProject, WorkPullRequest};
 pub use workspaces::{
