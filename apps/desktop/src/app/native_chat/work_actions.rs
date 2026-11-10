@@ -170,6 +170,90 @@ impl NativeChatView {
         row.into_any_element()
     }
 
+    /// The Snooze lengths of a Work panel card, open: a small menu at the press, in the sidebar
+    /// menu's colours (the board card menu's), drawn by the window the card is in so the floating
+    /// Work card stays open; a pick snoozes and closes it, a click outside closes it.
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// The Work panel is one of the chat's menus, and the chat shows one menu at a time, so opening
+    /// the app's dropdown from a card in the floating Work card closed the card. The card's own
+    /// small menu keeps it open; the dock, outside the panel, keeps the app's dropdown, and no other
+    /// menu changes.
+    fn work_snooze_popover(
+        &self,
+        key: &str,
+        snooze: &[Value],
+        cx: &Context<Self>,
+    ) -> Option<AnyElement> {
+        use crate::app::helpers::{
+            titlebar_popup_menu_background, titlebar_popup_menu_border_color,
+            titlebar_popup_menu_foreground, titlebar_popup_menu_hover_color,
+        };
+        let (open, at) = self.board.snooze_popover.as_ref()?;
+        if open != key || snooze.is_empty() {
+            return None;
+        }
+        let s = ChatAppearance::current(&self.snapshot).scale;
+        let hover = titlebar_popup_menu_hover_color();
+        let mut panel = div()
+            .id("work-snooze-menu")
+            .w(px(160.0 * s))
+            .p(px(6.0 * s))
+            .flex()
+            .flex_col()
+            .rounded(px(8.0 * s))
+            .border_1()
+            .border_color(titlebar_popup_menu_border_color())
+            .bg(titlebar_popup_menu_background())
+            .text_size(px(13.0 * s))
+            .text_color(titlebar_popup_menu_foreground())
+            .shadow(vec![gpui::BoxShadow {
+                color: gpui::black().opacity(0.25),
+                offset: gpui::point(px(0.0), px(6.0 * s)),
+                blur_radius: px(18.0 * s),
+                spread_radius: px(0.0),
+                inset: false,
+            }])
+            .on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                if this.board.snooze_popover.take().is_some() {
+                    cx.notify();
+                }
+            }));
+        for (index, choice) in snooze.iter().enumerate() {
+            let command = choice["command"].clone();
+            panel = panel.child(
+                div()
+                    .id(gpui::SharedString::from(format!(
+                        "work-snooze-pick:{key}:{index}"
+                    )))
+                    .role(gpui::Role::MenuItem)
+                    .h(px(30.0 * s))
+                    .px(px(8.0 * s))
+                    .flex()
+                    .items_center()
+                    .rounded(px(5.0 * s))
+                    .chat_cursor_pointer()
+                    .hover(move |style| style.bg(hover))
+                    .child(text(choice, "label"))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.board.snooze_popover = None;
+                        this.invoke(command.clone(), cx);
+                    })),
+            );
+        }
+        Some(
+            gpui::deferred(
+                gpui::anchored()
+                    .position(*at + gpui::point(px(0.0), px(10.0 * s)))
+                    .snap_to_window()
+                    .child(panel),
+            )
+            .with_priority(3)
+            .into_any_element(),
+        )
+    }
+
     /// One quiet icon button: the icon in the muted colour, brighter with a soft fill on hover, its
     /// name in the tooltip and to a screen reader.
     fn work_icon_button(
@@ -211,12 +295,15 @@ impl NativeChatView {
     /// The actions an item repeats, as one row of icon buttons: Reply (`actions.reply`, the reply
     /// bubble), Open, Show in chat, Dismiss, Snooze (a dropdown of its three lengths) and
     /// Mention (`mention`, the item's reference for the chat box). Only those it offers show;
-    /// `None` when it offers none.
+    /// `None` when it offers none. `own_menu`: the item sits in the Work panel (docked, floating or
+    /// in columns), which is itself one of the chat's menus, so its Snooze lengths open as a small
+    /// menu the card's window draws over the card instead of a second chat menu that would close it.
     pub(super) fn work_action_icons(
         &self,
         key: &str,
         actions: &Value,
         mention: &str,
+        own_menu: bool,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
@@ -278,6 +365,7 @@ impl NativeChatView {
                 .iter()
                 .map(|choice| json!({ "label": text(choice, "label"), "command": choice["command"] }))
                 .collect();
+            let popover_key = key.to_string();
             row = row.child(
                 self.work_icon_button(
                     format!("work-snooze:{key}"),
@@ -290,6 +378,15 @@ impl NativeChatView {
                     move |this, event: &gpui::ClickEvent, window, cx| {
                         cx.stop_propagation();
                         let at = event.position();
+                        if own_menu {
+                            // Over the card, in the card's own window (`work_snooze_popover`).
+                            this.board.snooze_popover = match this.board.snooze_popover.take() {
+                                Some((open, _)) if open == popover_key => None,
+                                _ => Some((popover_key.clone(), at)),
+                            };
+                            cx.notify();
+                            return;
+                        }
                         // A card in one of the chat's own windows (the floating Work card) keeps
                         // its menu inside that window.
                         let in_main = this
@@ -320,6 +417,11 @@ impl NativeChatView {
                     this.insert_board_reference(&mention, cx);
                 })),
             );
+        }
+        if own_menu {
+            if let Some(popover) = self.work_snooze_popover(key, &snooze, cx) {
+                row = row.child(popover);
+            }
         }
         any.then(|| row.into_any_element())
     }

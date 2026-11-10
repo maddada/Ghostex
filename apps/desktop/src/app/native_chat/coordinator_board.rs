@@ -330,6 +330,9 @@ pub(crate) struct CoordinatorBoardView {
     /// Where a count on the dock's status line was clicked: the next focus opens the panel as its
     /// floating card there, over the chat, even where it could dock (work_cards.rs).
     pub(super) float_at: Option<gpui::Bounds<gpui::Pixels>>,
+    /// A card's Snooze lengths open over the card (its key and the window point of the press), drawn
+    /// by the card's own window so the floating Work card stays open (work_actions.rs).
+    pub(super) snooze_popover: Option<(String, gpui::Point<gpui::Pixels>)>,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, and the
@@ -1533,7 +1536,7 @@ impl NativeChatView {
         // (work_actions.rs): its answers as the dock's filled buttons, then the actions every item
         // repeats as icon buttons (Reply, Open, Show in chat, Dismiss, Snooze, Mention).
         let answers: Vec<Value> = row["answers"].as_array().cloned().unwrap_or_default();
-        let icons = self.work_action_icons(&key, &row["actions"], &reference, p, cx);
+        let icons = self.work_action_icons(&key, &row["actions"], &reference, true, p, cx);
         let mut column = div().w_full().min_w_0().flex().flex_col().gap(px(6.0 * s));
         if !answers.is_empty() {
             column = column.child(

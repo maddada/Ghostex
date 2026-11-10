@@ -388,7 +388,9 @@ impl NativeChatView {
             "dismiss": row["dismiss"],
             "snooze": row["snooze"],
         });
-        if let Some(icons) = self.work_action_icons(&key, &actions, &text(row, "mention"), p, cx) {
+        if let Some(icons) =
+            self.work_action_icons(&key, &actions, &text(row, "mention"), false, p, cx)
+        {
             detail = detail.child(div().pt(px(2.0 * s)).child(icons));
         }
         div()
@@ -576,7 +578,7 @@ impl NativeChatView {
         }
         // Dismiss and Snooze as the icon buttons every place shares (work_actions.rs).
         let actions = json!({ "dismiss": card["cancel"], "snooze": card["snooze"] });
-        if let Some(icons) = self.work_action_icons(&key, &actions, "", p, cx) {
+        if let Some(icons) = self.work_action_icons(&key, &actions, "", false, p, cx) {
             column = column.child(div().pl(px(22.0 * s)).child(icons));
         }
         column.into_any_element()
