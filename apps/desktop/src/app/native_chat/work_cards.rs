@@ -16,6 +16,7 @@
 //! The buttons are neutral fills, never the dark primary fill, because the card sits on the chat's
 //! glass (the user's standing rule: no black fills on glass).
 
+use super::appearance::ChatFilledButton as _;
 use super::chat_text_look::{PROSE_LINE_HEIGHT, PROSE_SIZE};
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -167,21 +168,36 @@ impl NativeChatView {
     }
 
     /// The dock directly on the chat box (gx-chat-core work_cards.rs `dock`, which holds the user's
-    /// decisions): one surface of compact rows, what needs him first, then blocked work and what
-    /// the newest turn finished; at most `limit` rows, then "N more need you". A row shows its
-    /// answer buttons (the recommended one starred); a click on it expands it in place to its full
-    /// text, its links and its actions (Reply, Open, Mention, Show in chat, Dismiss, Snooze), and
-    /// a click again folds it. Its x hides the whole dock; the Work pill brings it back. Nothing
-    /// when there are no rows, while a long message is typed, or while the Work panel is docked
-    /// beside the chat (it lists the same things).
+    /// decisions): a header, then one surface of compact rows, what needs him first, then blocked
+    /// work and what the newest turn finished; at most `limit` rows, then "N more need you". A row
+    /// shows its answer buttons (the recommended one starred); a click on it expands it in place to
+    /// its full text, its links and its actions (Reply, Open, Mention, Show in chat, Dismiss,
+    /// Snooze), and a click again folds it.
+    ///
+    /// The header carries the counts (need you, blocked, in progress, as their marks and numbers),
+    /// the button that opens the work items list, and the chevron; a click anywhere on it collapses
+    /// the dock to that one bar or opens it again. With no rows (work still in progress, nothing to
+    /// answer) the bar stays as one quiet line with no chevron. Nothing while a long message is
+    /// typed, or while the Work panel is docked beside the chat (it lists the same things).
+    ///
+    /// CDXC:Coordinators 2026-11-10 DECISION:
+    /// User, picking on the dock header page: layout "A. Header on the dock, pills row stays
+    /// below" (collapsed, the dock is only its header, in the same place); "C. Marks and numbers
+    /// only" for the summary, each mark's tooltip saying what it counts; "B. Icon only" for the
+    /// list button, its name in its tooltip; "A. The bar stays, one quiet line" when nothing needs
+    /// him; and a collapsed dock "opens by itself" when something new needs him. The round x that
+    /// hid the dock is gone, replaced by the chevron. The Work pill and the red Blocked pill leave
+    /// the desktop's pills row (pills_strip.rs). The phone keeps its own dock and pills.
     pub(super) fn render_work_dock(
         &self,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        self.board.dock_top.set(None);
         let dock = &self.snapshot["workDock"];
+        let board = &self.snapshot["coordinatorBoard"];
         let rows: Vec<Value> = dock["rows"].as_array().cloned().unwrap_or_default();
-        if rows.is_empty() || dock["hidden"] == true {
+        if rows.is_empty() && !board.is_object() {
             return None;
         }
         let long_draft = self
@@ -192,89 +208,262 @@ impl NativeChatView {
             return None;
         }
         let s = p.scale;
-        let limit = dock["limit"].as_u64().unwrap_or(4) as usize;
-        let hidden = rows.len().saturating_sub(limit);
-        let mut list = div()
-            .id("work-dock-rows")
+        // The core's `hidden` (hideWorkDock) is the collapsed bar here; it opens by itself when a
+        // row that was not there when it collapsed arrives.
+        let collapsible = !rows.is_empty();
+        let open = collapsible && dock["hidden"] != true;
+        let header = self.work_dock_header(&rows, collapsible, open, p, cx);
+        let mut surface = div()
+            .relative()
             .w_full()
             .min_w_0()
-            .max_h(px(DOCK_MAX_HEIGHT * s))
-            .overflow_y_scroll()
-            .flex()
-            .flex_col()
-            .p(px(4.0 * s));
-        for row in rows.iter().take(limit) {
-            list = list.child(self.dock_row(row, p, cx));
-        }
-        if hidden > 0 {
-            let more = dock["more"].clone();
-            list = list.child(
-                div()
-                    .id("work-dock-more")
-                    .role(gpui::Role::Button)
-                    .pl(px(31.0 * s))
-                    .pr(px(8.0 * s))
-                    .pt(px(2.0 * s))
-                    .pb(px(6.0 * s))
-                    .text_color(p.muted)
-                    .chat_cursor_pointer()
-                    .hover(|style| style.text_color(p.foreground))
-                    .child(format!("{hidden} more need you"))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.invoke(more.clone(), cx);
-                    })),
-            );
-        }
-        Some(
-            div()
-                .relative()
+            .rounded(px(12.0 * s))
+            .border_1()
+            .border_color(p.input_border)
+            .bg(p.card_panel)
+            .text_size(px(PROSE_SIZE * s))
+            .line_height(px(PROSE_LINE_HEIGHT * s))
+            .child(header);
+        if open {
+            let limit = dock["limit"].as_u64().unwrap_or(4) as usize;
+            let hidden = rows.len().saturating_sub(limit);
+            let mut list = div()
+                .id("work-dock-rows")
                 .w_full()
                 .min_w_0()
-                .rounded(px(12.0 * s))
-                .border_1()
-                .border_color(p.input_border)
-                .bg(p.card_panel)
-                .text_size(px(PROSE_SIZE * s))
-                .line_height(px(PROSE_LINE_HEIGHT * s))
-                .child(list)
-                // The x hides the whole dock until the Work pill or something new brings it back.
-                .child(
+                .max_h(px(DOCK_MAX_HEIGHT * s))
+                .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .p(px(4.0 * s));
+            for row in rows.iter().take(limit) {
+                list = list.child(self.dock_row(row, p, cx));
+            }
+            if hidden > 0 {
+                let more = dock["more"].clone();
+                list = list.child(
                     div()
-                        .id("work-dock-hide")
+                        .id("work-dock-more")
                         .role(gpui::Role::Button)
-                        .aria_label("Hide")
-                        .absolute()
-                        .top(px(-9.0 * s))
-                        .right(px(-9.0 * s))
-                        .size(px(18.0 * s))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded_full()
-                        .border_1()
-                        .border_color(p.input_border)
-                        .bg(p.card_panel)
+                        .pl(px(31.0 * s))
+                        .pr(px(8.0 * s))
+                        .pt(px(2.0 * s))
+                        .pb(px(6.0 * s))
+                        .text_color(p.muted)
                         .chat_cursor_pointer()
-                        .hover(|style| style.bg(p.foreground.opacity(0.12)))
-                        .tooltip(|window, cx| {
-                            gpui_component::tooltip::Tooltip::new(
-                                "Hide until something new needs you (the Work pill shows it again)",
-                            )
-                            .build(window, cx)
-                        })
-                        .child(
-                            svg()
-                                .path("titlebar/x.svg")
-                                .size(px(10.0 * s))
-                                .text_color(p.muted),
-                        )
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            cx.stop_propagation();
-                            this.invoke(json!({"type": "hideWorkDock"}), cx);
+                        .hover(|style| style.text_color(p.foreground))
+                        .child(format!("{hidden} more need you"))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.invoke(more.clone(), cx);
                         })),
+                );
+            }
+            surface = surface.child(list);
+        }
+        // Its top edge, which the work items list opens above (chat_pills.rs `toggle_pill_menu`),
+        // so the list never covers the button that opened it.
+        let top = self.board.dock_top.clone();
+        Some(
+            surface
+                .child(
+                    gpui::canvas(
+                        move |bounds, _, _| top.set(Some(bounds.top())),
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .inset(px(-1.0)),
                 )
                 .into_any_element(),
         )
+    }
+
+    /// The dock's header: the counts as marks and numbers, then the work items button and, while
+    /// there are rows to show, the chevron (down while open, up while collapsed, as the question
+    /// card on the chat box). A click anywhere on it collapses or opens the dock.
+    fn work_dock_header(
+        &self,
+        rows: &[Value],
+        collapsible: bool,
+        open: bool,
+        p: &ChatAppearance,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let board = &self.snapshot["coordinatorBoard"];
+        // The Work panel's own counts when the chat has one (the same numbers its groups show),
+        // else the rows' own: questions from replies need him, a stuck line of work is blocked.
+        let counts: Vec<(&str, u64)> = if board.is_object() {
+            let count_of = |id: &str| {
+                board["pillCounts"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|pair| pair[0] == id)
+                    .and_then(|pair| pair[1].as_u64())
+                    .unwrap_or(0)
+            };
+            ["needs", "blocked", "moving"]
+                .into_iter()
+                .map(|id| (id, count_of(id)))
+                .collect()
+        } else {
+            let needs = rows.iter().filter(|row| row["needs"] == true).count() as u64;
+            let blocked = rows.iter().filter(|row| row["kind"] == "blocked").count() as u64;
+            vec![("needs", needs), ("blocked", blocked)]
+        };
+        let marks: Vec<AnyElement> = counts
+            .into_iter()
+            .filter(|(_, count)| *count > 0)
+            .map(|(group, count)| {
+                let (icon, color) = super::coordinator_board::group_look(group);
+                let color = color.map_or(p.muted, |color| gpui::rgb(color).into());
+                let tip = match group {
+                    "needs" => "Need you",
+                    "blocked" => "Blocked",
+                    _ => "In progress",
+                };
+                div()
+                    .id(gpui::SharedString::from(format!("work-dock-count:{group}")))
+                    .flex()
+                    .items_center()
+                    .gap(px(5.0 * s))
+                    .flex_shrink_0()
+                    .tooltip(move |window, cx| {
+                        gpui_component::tooltip::Tooltip::new(tip).build(window, cx)
+                    })
+                    .child(
+                        svg()
+                            .path(icon)
+                            .size(px(13.0 * s))
+                            .mr(px(s))
+                            .flex_shrink_0()
+                            .text_color(color),
+                    )
+                    .child(
+                        div()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(p.foreground)
+                            .font_features(gpui::FontFeatures(vec![("tnum".into(), 1)].into()))
+                            .child(count.to_string()),
+                    )
+                    .into_any_element()
+            })
+            .collect();
+        let quiet = marks.is_empty();
+        let mut head = div()
+            .id("work-dock-head")
+            .w_full()
+            .min_w_0()
+            .flex()
+            .items_center()
+            .gap(px(6.0 * s))
+            .pl(px(12.0 * s))
+            .pr(px(5.0 * s))
+            .text_size(px(13.0 * s))
+            .line_height(px(19.0 * s))
+            .whitespace_nowrap()
+            .text_color(p.card_muted)
+            .map(|head| {
+                if open {
+                    // The open header is the band over the rows, as the pills row on the chat box.
+                    head.h(px(34.0 * s + 1.0))
+                        .border_b_1()
+                        .border_color(p.input_border)
+                        .bg(p.foreground.opacity(0.035))
+                        .rounded_t(px(11.0 * s))
+                } else {
+                    head.h(px(34.0 * s)).rounded(px(11.0 * s))
+                }
+            })
+            .child(
+                div()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap(px(12.0 * s))
+                    .overflow_hidden()
+                    .children(marks)
+                    // Nothing counted and nothing to show: one quiet word, so the bar is not blank.
+                    .when(quiet && !collapsible, |summary| {
+                        summary.child(div().text_color(p.muted).child("Nothing in progress"))
+                    }),
+            )
+            .child(div().flex_1().min_w(px(8.0 * s)));
+        if board.is_object() {
+            head = head.child(self.work_dock_list_button(p, cx));
+        }
+        if collapsible {
+            head = head
+                .role(gpui::Role::Button)
+                .aria_label(if open { "Collapse" } else { "Expand" })
+                .aria_expanded(open)
+                .chat_cursor_pointer()
+                .hover(|style| style.bg(p.foreground.opacity(0.055)))
+                .child(
+                    div()
+                        .size(px(24.0 * s))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .flex_shrink_0()
+                        .rounded(px(6.0 * s))
+                        .child(super::ask_card::chevron(open, p)),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    let kind = if open { "hideWorkDock" } else { "showWorkDock" };
+                    this.invoke(json!({ "type": kind }), cx);
+                }));
+        }
+        head.into_any_element()
+    }
+
+    /// The header's icon button that opens the work items list, the way the Work pill did: the
+    /// docked list or its floating card, or the columns. Its name is its tooltip.
+    fn work_dock_list_button(&self, p: &ChatAppearance, cx: &mut Context<Self>) -> AnyElement {
+        let s = p.scale;
+        let trigger = super::coordinator_board::BOARD_TRIGGER;
+        let shown = self.chat_menu_is_open(trigger)
+            || self.coordinator_board_docked()
+            || self.chat_menu_is_open(super::coordinator_board::BOARD_COLUMNS_TRIGGER);
+        let fills = p.neutral_button_fills();
+        let bounds = self.pill_bounds.cell(super::coordinator_board::BOARD_MENU);
+        let measured = bounds.clone();
+        div()
+            .id(trigger)
+            .relative()
+            .role(gpui::Role::Button)
+            .aria_label("Work items")
+            .aria_expanded(shown)
+            .w(px(26.0 * s))
+            .h(px(24.0 * s))
+            .flex()
+            .items_center()
+            .justify_center()
+            .flex_shrink_0()
+            .rounded(px(7.0 * s))
+            .chat_cursor_pointer()
+            .chat_filled(fills, true)
+            .when(shown, |button| button.bg(fills.pressed))
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("Work items").build(window, cx)
+            })
+            .child(
+                svg()
+                    .path("titlebar/layout-board-split.svg")
+                    .size(px(13.0 * s))
+                    .flex_shrink_0()
+                    .text_color(p.card_muted),
+            )
+            .on_click(cx.listener(move |this, _, window, cx| {
+                cx.stop_propagation();
+                this.toggle_coordinator_board(bounds.get(), window, cx);
+            }))
+            .child(
+                gpui::canvas(move |bounds, _, _| measured.set(bounds), |_, _, _, _| {})
+                    .absolute()
+                    .inset_0(),
+            )
+            .into_any_element()
     }
 
     /// One dock row: its status glyph, title, answer buttons and age; open, its full text, links

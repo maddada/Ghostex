@@ -507,12 +507,16 @@ pub fn dock(state: &ChatState, context: &ChatContext) -> Value {
     if rows.is_empty() {
         return Value::Null;
     }
-    // Hidden whole by the reader: it stays hidden until shown again (the Work pill) or a row that
-    // was not there when it was hidden arrives, since that is news he has not seen.
+    // Hidden by the reader: it stays hidden until shown again or a row that was not there when it
+    // was hidden arrives, since that is news he has not seen. The phone hides the whole dock with
+    // its x and its Work pill brings it back; the computer draws `hidden` as the dock collapsed to
+    // its header, whose chevron opens it again (native_chat/work_cards.rs).
     //
     // CDXC:Coordinators 2026-11-10 DECISION:
     // User: "please let's allow fully collapsing the needs u row". One click hides the dock
-    // completely; the Work pill keeps its "N need you" and brings it back.
+    // completely; the Work pill keeps its "N need you" and brings it back. On the computer the
+    // user later picked a header that collapses the dock to one bar instead (its renderer has the
+    // picks), and a collapsed dock opens by itself when something new needs him.
     let hidden = state
         .extras
         .panels

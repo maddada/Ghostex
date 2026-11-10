@@ -216,11 +216,11 @@ WORK ITEMS
   A coordinator tracks each line of work as one work item, named the way the
   user would name it ("iPhone voice calls"), as W<number> (never reused). A
   thread, a rebuild, a release step or a question is never an item: attach it
-  to one (--thread, item step, item ask). The Work panel (the Work pill,
-  which carries the counts) lists every item by who has the ball; what needs
-  the user sits as rows above their chat box, where they answer, Reply in
-  their own words, Dismiss or Snooze; under the reply one line says what the
-  turn changed. An answer or Reply arrives as "W7 Q12: <answer>" and is
+  to one (--thread, item step, item ask). The Work panel lists every item by
+  who has the ball; what needs the user sits as rows above their chat box,
+  under a header with the counts and the button that opens the panel, where
+  they answer, Reply in their own words, Dismiss or Snooze; under the reply
+  one line says what the turn changed. An answer or Reply arrives as "W7 Q12: <answer>" and is
   already recorded; a Dismiss withdraws the ask for good.
   Statuses, in the order the Work panel lists them:
     Needs you  the user has something to do or decide (an open ask)

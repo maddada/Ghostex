@@ -330,6 +330,9 @@ pub(crate) struct CoordinatorBoardView {
     /// Where a count on the dock's status line was clicked: the next focus opens the panel as its
     /// floating card there, over the chat, even where it could dock (work_cards.rs).
     pub(super) float_at: Option<gpui::Bounds<gpui::Pixels>>,
+    /// The dock's top edge at its last paint, `None` while it is not drawn: the work items list
+    /// its header's button opens sits above the dock instead of over it (work_cards.rs).
+    pub(super) dock_top: std::rc::Rc<std::cell::Cell<Option<gpui::Pixels>>>,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only
@@ -455,19 +458,15 @@ impl NativeChatView {
         }
     }
 
-    /// The Board pill was clicked: in the list view the docked column comes or goes where there is
-    /// room, else the floating card opens or shuts; in the columns view the overlay does.
+    /// The dock header's work items button (work_cards.rs) was clicked: in the list view the
+    /// docked column comes or goes where there is room, else the floating card opens or shuts; in
+    /// the columns view the overlay does.
     pub(super) fn toggle_coordinator_board(
         &mut self,
         pill: gpui::Bounds<gpui::Pixels>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // The dock hidden by its x comes back with the Work pill.
-        if self.snapshot["workDock"]["hidden"] == true {
-            self.invoke(json!({"type": "showWorkDock"}), cx);
-            return;
-        }
         if self.board_view() == COLUMNS_VIEW {
             if !self.chat_menu_toggled_shut(BOARD_COLUMNS_TRIGGER, cx) {
                 self.open_board_columns_after_dock(window, cx);

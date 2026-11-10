@@ -213,6 +213,22 @@ pub(super) fn strip_menu_left(
 }
 
 impl NativeChatView {
+    /// The panel pills the core lists for the strip, less the Work pill and the red Blocked pill:
+    /// on the computer the dock's header has their counts and the button that opens the list
+    /// (work_cards.rs `render_work_dock` has the user's words). The phone keeps both pills.
+    fn strip_pill_ids(&self) -> Vec<&str> {
+        self.snapshot["workingCard"]["pills"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter(|id| {
+                *id != super::coordinator_board::BOARD_MENU
+                    && *id != ghostex_gx_chat_core::extras::coordinator_board::BLOCKED_PILL
+            })
+            .collect()
+    }
+
     /// The panel pills, the ? and the armed timers that call for the strip; the ↓ only joins them.
     /// A panel pill the row has no room for drops its label, or goes into the "+N" pill
     /// (`StripPlan`).
@@ -221,12 +237,7 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> Vec<(StripItem, AnyElement)> {
-        let ids: Vec<&str> = self.snapshot["workingCard"]["pills"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .collect();
+        let ids = self.strip_pill_ids();
         let panel: Vec<Value> = ids
             .iter()
             .filter_map(|id| {
@@ -386,9 +397,7 @@ impl NativeChatView {
             && (armed
                 || chips
                 || self.links_pill.is_some()
-                || self.snapshot["workingCard"]["pills"]
-                    .as_array()
-                    .is_some_and(|pills| !pills.is_empty())
+                || !self.strip_pill_ids().is_empty()
                 || self.open_question_pill_text().is_some())
     }
 
