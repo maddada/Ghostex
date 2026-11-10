@@ -299,6 +299,31 @@ impl GhostexGpuiApp {
             .map(|landing| (command.clone(), landing))
     }
 
+    /// Whether a `moveToSpace` drop would change which Space holds the project or folder, from the
+    /// same plan the drop performs. A drop on the Space that already holds it only moves it to the
+    /// front of the order, so that Space is no target worth lighting up.
+    pub(crate) fn gx_store_move_to_space_changes_space(&mut self, command: &Value) -> bool {
+        if !self.gx_store_sidebar_list_ready() {
+            return false;
+        }
+        let remote_machine_id = self.gx_store_selected_remote_machine_id();
+        let (collections, spaces) = self.gx_store_project_documents(remote_machine_id.as_deref());
+        let store = &self.gx_store;
+        let Some(plan) = plan_project_move(
+            &store.core,
+            &store.sidebar_list.last_inputs,
+            &collections,
+            spaces.as_ref(),
+            command,
+            super::host::now_ms() as i64,
+        ) else {
+            return false;
+        };
+        plan.writes.iter().any(|write| {
+            matches!(write, ProjectWrite::EditSpaces { document } if Some(document) != spaces.as_ref())
+        })
+    }
+
     /// The two documents a gesture is computed against: this app's own for this computer, and the
     /// machine's held copies for a remote tab.
     pub(super) fn gx_store_project_documents(

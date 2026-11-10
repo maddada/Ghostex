@@ -249,6 +249,9 @@ impl GhostexGpuiApp {
                     .when(appearance.light && !appearance.glass, |row| row.shadow_sm())
             })
             .hover(|row| row.bg(appearance.hover))
+            .when(self.native_sidebar_space_drop_target(&id), |row| {
+                super::sections::section_drop_highlight(row, scale)
+            })
             .child(icon)
             .children(
                 drop_position.map(|position| super::space_drag::insertion_line(position, scale)),
