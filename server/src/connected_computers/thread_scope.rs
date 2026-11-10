@@ -62,7 +62,7 @@ pub(crate) fn refusal(
 }
 
 /// The project and session a request names (`params.projectId`, `params.sessionId`).
-fn session_ids(body: &[u8]) -> Option<(String, String)> {
+pub(super) fn session_ids(body: &[u8]) -> Option<(String, String)> {
     let body: Value = serde_json::from_slice(body).ok()?;
     let params = body.get("params")?;
     let text = |key: &str| {
