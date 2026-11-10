@@ -195,7 +195,9 @@ pub(super) fn session_pill_icon(
         rgb(0xffffff).into()
     };
     if coordinator {
-        return ("titlebar/coordinator-captain-hat.svg", plain);
+        // A pill's logo is about 13 px: the picture's thicker-lined copy for small sizes
+        // (native_sidebar/threads.rs `captain_hat_asset`).
+        return ("titlebar/coordinator-captain-hat-small.svg", plain);
     }
     match crate::app::helpers::workspace_tab_agent_icon_path(agent_icon) {
         Some(path) => (

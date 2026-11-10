@@ -623,7 +623,12 @@ impl NativeChatView {
         let logo = match workspace_tab_agent_icon_path(&agent) {
             // The sidebar's coordinator captain's hat and colours (`coordinator_icon` in native_sidebar/threads.rs).
             _ if card["coordinator"] == true => icon(
-                "titlebar/coordinator-captain-hat.svg",
+                // The thicker-lined copy at 17 px and below (native_sidebar/threads.rs `captain_hat_asset`).
+                if mark <= 17.0 {
+                    "titlebar/coordinator-captain-hat-small.svg"
+                } else {
+                    "titlebar/coordinator-captain-hat.svg"
+                },
                 mark,
                 if p.light {
                     rgb(0x000000).into()
