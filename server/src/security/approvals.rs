@@ -189,6 +189,9 @@ struct StoredRequest {
     /// ([`ApprovalStore::attach`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     resume: Option<Resume>,
+    /// Why it was withdrawn before anyone answered ([`ApprovalStore::withdraw_by`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ended: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -233,6 +236,8 @@ impl StoredRequest {
 pub struct ApprovalStore {
     requests: Arc<Mutex<HashMap<String, StoredRequest>>>,
     path: Option<Arc<PathBuf>>,
+    /// Requests that lapsed and are not announced yet ([`ApprovalStore::expire`]).
+    lapsed: Arc<Mutex<Vec<ApprovalRequest>>>,
 }
 
 impl ApprovalStore {
@@ -261,10 +266,11 @@ impl ApprovalStore {
                     .collect(),
             )),
             path: Some(Arc::new(path)),
+            lapsed: Arc::default(),
         };
         {
             let mut requests = store.lock();
-            sweep(&mut requests, now_ms);
+            store.sweep_and_save(&mut requests, now_ms);
             store.save(&requests);
         }
         store
@@ -303,9 +309,7 @@ impl ApprovalStore {
         let digest = action.params_digest();
         let replace_key = action.replace_key();
         let mut requests = self.lock();
-        if sweep(&mut requests, now_ms).1 {
-            self.save(&requests);
-        }
+        self.sweep_and_save(&mut requests, now_ms);
         let same_asker = |stored: &StoredRequest| {
             stored.request.status == ApprovalStatus::Pending
                 && (stored.requester == *requester || (action.shared && stored.shared))
@@ -358,6 +362,7 @@ impl ApprovalStore {
                 shared: action.shared,
                 replace_key,
                 resume: None,
+                ended: None,
             },
         );
         self.save(&requests);
@@ -384,9 +389,7 @@ impl ApprovalStore {
     /// The requests still waiting or approved (not yet spent) that keep data of `kind`, with it.
     pub fn resumable(&self, kind: &str, now_ms: u64) -> Vec<(ApprovalRequest, Value)> {
         let mut requests = self.lock();
-        if sweep(&mut requests, now_ms).1 {
-            self.save(&requests);
-        }
+        self.sweep_and_save(&mut requests, now_ms);
         requests
             .values()
             .filter(|stored| {
@@ -428,9 +431,7 @@ impl ApprovalStore {
     /// Every pending request, oldest first.
     pub fn list_pending(&self, now_ms: u64) -> Vec<ApprovalRequest> {
         let mut requests = self.lock();
-        if sweep(&mut requests, now_ms).1 {
-            self.save(&requests);
-        }
+        self.sweep_and_save(&mut requests, now_ms);
         let mut pending: Vec<_> = requests
             .values()
             .filter(|stored| stored.request.status == ApprovalStatus::Pending)
@@ -443,9 +444,7 @@ impl ApprovalStore {
     /// The request, for its requester or the owner's devices only.
     pub fn read(&self, id: &str, caller: &Principal, now_ms: u64) -> Option<ApprovalRequest> {
         let mut requests = self.lock();
-        if sweep(&mut requests, now_ms).1 {
-            self.save(&requests);
-        }
+        self.sweep_and_save(&mut requests, now_ms);
         requests
             .get(id)
             .filter(|stored| stored.open_to(caller))
@@ -461,13 +460,11 @@ impl ApprovalStore {
         now_ms: u64,
     ) -> Result<ApprovalRequest, ApprovalError> {
         let mut requests = self.lock();
-        if sweep(&mut requests, now_ms).1 {
-            self.save(&requests);
-        }
+        self.sweep_and_save(&mut requests, now_ms);
         let stored = requests.get_mut(id).ok_or(ApprovalError::NotFound)?;
         match &stored.request.status {
             ApprovalStatus::Pending => {}
-            ApprovalStatus::Expired => return Err(lapsed(&stored.request)),
+            ApprovalStatus::Expired => return Err(lapsed(stored)),
             other => return Err(ApprovalError::NotPending(other.clone())),
         }
         if stored.requester == *by {
@@ -493,13 +490,11 @@ impl ApprovalStore {
         now_ms: u64,
     ) -> Result<ApprovalRequest, ApprovalError> {
         let mut requests = self.lock();
-        if sweep(&mut requests, now_ms).1 {
-            self.save(&requests);
-        }
+        self.sweep_and_save(&mut requests, now_ms);
         let stored = requests.get_mut(id).ok_or(ApprovalError::NotFound)?;
         match &stored.request.status {
             ApprovalStatus::Pending | ApprovalStatus::Approved => {}
-            ApprovalStatus::Expired => return Err(lapsed(&stored.request)),
+            ApprovalStatus::Expired => return Err(lapsed(stored)),
             other => return Err(ApprovalError::NotPending(other.clone())),
         }
         stored.request.status = ApprovalStatus::Denied;
@@ -524,14 +519,12 @@ impl ApprovalStore {
         now_ms: u64,
     ) -> Result<ApprovalRequest, ApprovalError> {
         let mut requests = self.lock();
-        if sweep(&mut requests, now_ms).1 {
-            self.save(&requests);
-        }
+        self.sweep_and_save(&mut requests, now_ms);
         let stored = requests
             .get_mut(id)
             .filter(|stored| stored.open_to(caller))
             .ok_or(ApprovalError::NotFound)?;
-        let lapsed_error = lapsed(&stored.request);
+        let lapsed_error = lapsed(stored);
         let request = &mut stored.request;
         if request.action != action.action
             || request.target != action.target
@@ -556,11 +549,55 @@ impl ApprovalStore {
     /// Marks lapsed requests expired and returns them (for [`super::SecurityEvent::ApprovalExpired`]).
     pub fn expire(&self, now_ms: u64) -> Vec<ApprovalRequest> {
         let mut requests = self.lock();
-        let (expired, changed) = sweep(&mut requests, now_ms);
+        self.sweep_and_save(&mut requests, now_ms);
+        drop(requests);
+        std::mem::take(
+            &mut *self
+                .lapsed
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        )
+    }
+
+    /// Sweeps: the newly expired wait for [`ApprovalStore::expire`] to be announced (a request that
+    /// lapsed while a read or a list swept used to go unannounced, so its card and the security log
+    /// never heard), and the file is written when anything changed.
+    fn sweep_and_save(&self, requests: &mut HashMap<String, StoredRequest>, now_ms: u64) {
+        let (expired, changed) = sweep(requests, now_ms);
+        if !expired.is_empty() {
+            self.lapsed
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .extend(expired);
+        }
         if changed {
+            self.save(requests);
+        }
+    }
+
+    /// Withdraws `requester`'s requests still waiting, because what asked went away (`why`, as
+    /// in "the session that asked was closed"); returns them, now `expired`.
+    pub fn withdraw_by(
+        &self,
+        requester: &Principal,
+        why: &str,
+        now_ms: u64,
+    ) -> Vec<ApprovalRequest> {
+        let mut requests = self.lock();
+        let mut withdrawn = Vec::new();
+        for stored in requests.values_mut() {
+            if stored.requester == *requester && stored.request.status == ApprovalStatus::Pending {
+                stored.request.status = ApprovalStatus::Expired;
+                stored.request.decided_at_ms = Some(now_ms);
+                stored.ended = Some(why.to_string());
+                stored.resume = None;
+                withdrawn.push(stored.request.clone());
+            }
+        }
+        if !withdrawn.is_empty() {
             self.save(&requests);
         }
-        expired
+        withdrawn
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, StoredRequest>> {
@@ -570,11 +607,12 @@ impl ApprovalStore {
     }
 }
 
-/// Why a request that is `expired` can't be used: replaced by a newer one, or lapsed.
-fn lapsed(request: &ApprovalRequest) -> ApprovalError {
-    match &request.replaced_by {
-        Some(newer) => ApprovalError::Replaced(newer.clone()),
-        None => ApprovalError::Expired(expired_message(request)),
+/// Why a request that is `expired` can't be used: replaced by a newer one, withdrawn, or lapsed.
+fn lapsed(stored: &StoredRequest) -> ApprovalError {
+    match (&stored.request.replaced_by, &stored.ended) {
+        (Some(newer), _) => ApprovalError::Replaced(newer.clone()),
+        (None, Some(why)) => ApprovalError::Expired(format!("This request was withdrawn: {why}.")),
+        (None, None) => ApprovalError::Expired(expired_message(&stored.request)),
     }
 }
 

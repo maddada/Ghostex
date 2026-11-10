@@ -403,12 +403,24 @@ fn handle(
             // A replaced request points at the newest one (`current`), so a card holding the
             // old id moves there (CDXC:Security 2026-11-10 in security/approvals.rs).
             let ReadApprovalParams { id } = parse(params)?;
-            let request = security
-                .approvals
-                .read(&id, caller, now)
-                .ok_or(("notFound", security::GONE_MESSAGE.to_string()))?;
+            let Some(request) = security.approvals.read(&id, caller, now) else {
+                log_read_when_changed(state, caller, &id, "notFound");
+                return Err(("notFound", security::GONE_MESSAGE.to_string()));
+            };
             let mut answer = json!({ "request": request });
-            if let Some(current) = security.approvals.replacement(&request, caller, now) {
+            let current = security.approvals.replacement(&request, caller, now);
+            log_read_when_changed(
+                state,
+                caller,
+                &id,
+                &match &current {
+                    Some(current) => {
+                        format!("{} (current {})", request.status.as_str(), current.id)
+                    }
+                    None => request.status.as_str().to_string(),
+                },
+            );
+            if let Some(current) = current {
                 answer["current"] = json!(current);
             }
             Ok(answer)
@@ -429,6 +441,18 @@ fn handle(
             };
             // Asked once, kept for good (CDXC:Security 2026-11-10 in security/policy.rs).
             security.remember_approved(&request, now);
+            // The request's outcome against its id, by the device that approved it.
+            let mut logged =
+                crate::audit::Action::new("approval.approved", request.summary.clone());
+            if let Some(target) = &request.target {
+                logged = logged.target(target.clone());
+            }
+            crate::audit::record(
+                logged,
+                crate::audit::Actor::from(caller),
+                crate::audit::Outcome::ApprovedBy(approved_on(caller)),
+                Some(crate::audit::ApprovalRef::from(&request)),
+            );
             security.publish(security::SecurityEvent::ApprovalApproved {
                 request: request.clone(),
                 key_id,
@@ -585,11 +609,13 @@ pub(crate) fn start_security_events(state: std::sync::Arc<AppState>) {
                         Err(_) => return,
                     };
                     let Some(state) = weak.upgrade() else { return };
+                    note_request_event(&state, &event);
                     let (change, request) = match &event {
                         security::SecurityEvent::ApprovalRequested { request } => ("requested", request),
                         security::SecurityEvent::ApprovalApproved { request, .. } => ("approved", request),
                         security::SecurityEvent::ApprovalDenied { request, .. } => ("denied", request),
-                        security::SecurityEvent::ApprovalExpired { request } => ("expired", request),
+                        security::SecurityEvent::ApprovalExpired { request }
+                        | security::SecurityEvent::ApprovalWithdrawn { request, .. } => ("expired", request),
                         _ => continue,
                     };
                     state.event_hub.broadcast(json!({
@@ -603,6 +629,172 @@ pub(crate) fn start_security_events(state: std::sync::Arc<AppState>) {
             }
         }
     });
+}
+
+/*
+CDXC:Security 2026-11-10 WHY:
+Gregg's report (gregg-approval-bug, Analysis point 5): nothing recorded how an approval request ended, and gxserver.jsonl logged only failed calls, so a path that kept failing could not be read from either log. The user (task 3): the security log records each request's outcome against its id: approved (and on what kind of device), denied, expired, replaced by a newer request (named), and withdrawn with what asked; gxserver.jsonl keeps an info line for each request made, approved, denied, ended and spent, and for a read whose answer changed, with the request id, so the next report like his reads in minutes. Neither log carries a secret or key material: ids, actions, outcomes and device kinds only. A connected computer's once-a-minute renewal makes no request and so writes nothing here.
+The request's own outcomes are logged as `approval.*` entries, which never ring the bell: the change an approval allowed notifies as before, and a request lapsing is not news. A request that lapses is announced whichever call found it lapsed (`ApprovalStore::expire`), so its card closes and its line is written.
+*/
+/// The security log line and the gxserver.jsonl line for how a request ended, and the
+/// gxserver.jsonl line for a request made, approved, denied or spent.
+fn note_request_event(state: &AppState, event: &security::SecurityEvent) {
+    use security::SecurityEvent as E;
+    let (name, request, extra) = match event {
+        E::ApprovalRequested { request } => (
+            "approvalRequested",
+            request,
+            json!({ "askedBy": request.requested_by.kind }),
+        ),
+        E::ApprovalApproved { request, .. } => ("approvalApproved", request, json!({})),
+        E::ApprovalDenied { request, by } => {
+            ("approvalDenied", request, json!({ "by": by.kind() }))
+        }
+        E::ApprovalExpired { request } => {
+            let (kind, outcome) = match &request.replaced_by {
+                Some(newer) => (
+                    "approval.replaced",
+                    crate::audit::Outcome::Replaced(format!(
+                        "Replaced by the newer request {newer}"
+                    )),
+                ),
+                None if request.decided_by.is_some() => (
+                    "approval.expired",
+                    crate::audit::Outcome::Expired(
+                        "Approved, but the change wasn't made within 2 minutes".to_string(),
+                    ),
+                ),
+                None => {
+                    let minutes = request
+                        .expires_at_ms
+                        .saturating_sub(request.created_at_ms)
+                        .div_ceil(60_000);
+                    (
+                        "approval.expired",
+                        crate::audit::Outcome::Expired(format!(
+                            "Nobody answered within {minutes} minute{}",
+                            if minutes == 1 { "" } else { "s" }
+                        )),
+                    )
+                }
+            };
+            record_request_outcome(request, kind, outcome);
+            (
+                "approvalEnded",
+                request,
+                json!({
+                    "outcome": if request.replaced_by.is_some() { "replaced" } else { "expired" },
+                    "replacedBy": request.replaced_by,
+                }),
+            )
+        }
+        E::ApprovalWithdrawn { request, why } => {
+            record_request_outcome(
+                request,
+                "approval.withdrawn",
+                crate::audit::Outcome::Withdrawn(format!("Withdrawn: {why}")),
+            );
+            (
+                "approvalEnded",
+                request,
+                json!({ "outcome": "withdrawn", "why": why }),
+            )
+        }
+        E::SensitiveActionAuthorized {
+            action,
+            approval_id,
+            caller,
+            ..
+        } => {
+            log_approval_line(
+                state,
+                "approvalSpent",
+                json!({ "approvalId": approval_id, "action": action.as_str(), "caller": caller.kind() }),
+            );
+            return;
+        }
+        _ => return,
+    };
+    let mut details = json!({
+        "approvalId": request.id,
+        "action": request.action.as_str(),
+        "status": request.status.as_str(),
+    });
+    if let (Some(details), Some(extra)) = (details.as_object_mut(), extra.as_object()) {
+        for (key, value) in extra {
+            if !value.is_null() {
+                details.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    log_approval_line(state, name, details);
+}
+
+/// One security log line for how `request` ended, by gxserver itself, against its id.
+fn record_request_outcome(
+    request: &security::ApprovalRequest,
+    kind: &str,
+    outcome: crate::audit::Outcome,
+) {
+    let mut action = crate::audit::Action::new(kind, request.summary.clone());
+    if let Some(target) = &request.target {
+        action = action.target(target.clone());
+    }
+    crate::audit::record(
+        action,
+        crate::audit::Actor::Ghostex,
+        outcome,
+        Some(crate::audit::ApprovalRef::from(request)),
+    );
+}
+
+/// An info line in gxserver.jsonl about an approval request: ids, actions, outcomes and kinds only.
+fn log_approval_line(state: &AppState, event: &str, details: Value) {
+    let _ = state.logger.log_record(crate::logging::GxserverLogInput {
+        level: crate::logging::LogLevel::Info,
+        event: event.to_string(),
+        server_id: Some(state.metadata.server_id.clone()),
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: None,
+        details: Some(details),
+    });
+}
+
+/// A read of request `id` is logged when its answer changed since the last read logged (a
+/// waiting client reads every two seconds; the first read and each change are what tell).
+fn log_read_when_changed(state: &AppState, caller: &Principal, id: &str, answer: &str) {
+    static LAST: std::sync::Mutex<Option<std::collections::HashMap<String, String>>> =
+        std::sync::Mutex::new(None);
+    let changed = {
+        let mut last = LAST.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let last = last.get_or_insert_with(Default::default);
+        if last.len() > 2_000 {
+            last.clear();
+        }
+        last.insert(id.to_string(), answer.to_string()).as_deref() != Some(answer)
+    };
+    if changed {
+        log_approval_line(
+            state,
+            "approvalRead",
+            json!({ "approvalId": id, "answer": answer, "caller": caller.kind() }),
+        );
+    }
+}
+
+/// How a click that approved is named in the security log: what kind of device it came from.
+fn approved_on(caller: &Principal) -> String {
+    match caller {
+        Principal::Owner { .. } => "Approved in the Ghostex app (its owner session)".to_string(),
+        Principal::Device { .. } => "Approved on a paired phone".to_string(),
+        Principal::LocalAgent => {
+            "Approved with this computer's token file (the Ghostex app, the web build or the CLI)"
+                .to_string()
+        }
+        other => format!("Approved by a {}", other.kind()),
+    }
 }
 
 /// Every session's `(project id, session id)`, or `None` when the database can't be read (then

@@ -397,7 +397,10 @@ pub(crate) async fn handle_remote_access_http(
                         Ok(_) => crate::audit::Outcome::Pending,
                         Err(error) => pair_device_error_outcome(error),
                     },
-                    None,
+                    // The request's id, so how it ended reads against it (`approval.*` lines).
+                    started.as_ref().ok().and_then(|started| {
+                        pairing_request_ref(&pairing_runtime, &started.pending_id)
+                    }),
                 );
                 let started = started?;
                 // The phone waits through the tunnel; keep a locked Easy Connect open to it.
@@ -451,7 +454,9 @@ pub(crate) async fn handle_remote_access_http(
                             Ok(_) => crate::audit::Outcome::Pending,
                             Err(error) => pair_device_error_outcome(error),
                         },
-                        None,
+                        started.as_ref().ok().and_then(|started| {
+                            pairing_request_ref(&pairing_runtime, &started.started.pending_id)
+                        }),
                     );
                 }
                 let SshPairingStarted { started, nonce, .. } = started?;
@@ -794,4 +799,17 @@ fn log_failed_dial(logger: &crate::logging::GxserverLogger, details: Value, erro
         error: (!error.is_empty()).then_some(error),
         details: Some(details),
     });
+}
+
+/// The approval request a waiting pairing waits on, for its `pairing.request` log line.
+fn pairing_request_ref(
+    runtime: &super::RemotePairingRuntime,
+    pending_id: &str,
+) -> Option<crate::audit::ApprovalRef> {
+    runtime
+        .pending(pending_id, crate::security::now_ms())
+        .map(|pending| crate::audit::ApprovalRef {
+            id: pending.approval_id,
+            signer: None,
+        })
 }

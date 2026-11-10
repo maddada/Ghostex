@@ -134,6 +134,14 @@ pub enum Outcome {
     /// Chief's head role let it through without an approval (typing into, interrupting or
     /// answering the prompt of another session). Kept in the log, never in the bell.
     Allowed,
+    /// An approval request was approved, with how (`approval.approved`: on what kind of device).
+    ApprovedBy(String),
+    /// An approval request lapsed unanswered, or approved and unused, with which.
+    Expired(String),
+    /// An approval request was replaced by a newer one from the same asker, named in the reason.
+    Replaced(String),
+    /// An approval request was withdrawn because what asked went away, with what.
+    Withdrawn(String),
 }
 
 impl Outcome {
@@ -146,6 +154,10 @@ impl Outcome {
             Self::Refused(reason) => ("refused", Some(reason.clone())),
             Self::Failed(reason) => ("failed", Some(reason.clone())),
             Self::Allowed => ("allowed", None),
+            Self::ApprovedBy(how) => ("approved", Some(how.clone())),
+            Self::Expired(why) => ("expired", Some(why.clone())),
+            Self::Replaced(by) => ("replaced", Some(by.clone())),
+            Self::Withdrawn(why) => ("withdrawn", Some(why.clone())),
         }
     }
 

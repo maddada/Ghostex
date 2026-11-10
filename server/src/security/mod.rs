@@ -286,7 +286,19 @@ impl SecurityState {
             return;
         }
         let _ = self.save();
+        let now = now_ms();
         for principal in removed {
+            // Its requests still waiting go with it (CDXC:Security 2026-11-10 in
+            // server/security_http.rs `note_request_event`).
+            for request in self
+                .approvals
+                .withdraw_by(&principal, WITHDRAWN_SESSION_CLOSED, now)
+            {
+                self.publish(SecurityEvent::ApprovalWithdrawn {
+                    request,
+                    why: WITHDRAWN_SESSION_CLOSED.to_string(),
+                });
+            }
             self.publish(SecurityEvent::SessionTokenRevoked { principal });
         }
     }
@@ -351,6 +363,9 @@ pub fn revoke_tokens_of_deleted_sessions(
         }
     }
 }
+
+/// Why a session's waiting requests are withdrawn when it ends.
+pub const WITHDRAWN_SESSION_CLOSED: &str = "the session that asked was closed";
 
 /// Milliseconds since the Unix epoch, the clock every approval timestamp uses.
 pub fn now_ms() -> u64 {
