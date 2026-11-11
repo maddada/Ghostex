@@ -11,8 +11,8 @@ use gpui::{AnyWindowHandle, App, Context, FocusHandle, KeyDownEvent, SharedStrin
 use web_time::{Duration, Instant};
 
 use super::focus_order::{
-    ENTRY_FOCUS_FRAMES, PENDING_FOCUS_FRAMES, PendingFocus, PendingTarget, session_row_id,
-    stop_order,
+    ENTRY_FOCUS_FRAMES, EntryWait, PENDING_FOCUS_FRAMES, PendingFocus, PendingTarget,
+    session_row_id, stop_order,
 };
 use super::scroll::reveal_delta;
 use crate::GhostexGpuiApp;
@@ -31,6 +31,9 @@ pub(crate) enum SidebarKeyboardReturn {
 
 gpui::actions!(native_sidebar_keyboard, [DrawnProbe]);
 
+/// How long the hotkey's entry may wait for its row.
+const ENTRY_WAIT: Duration = Duration::from_millis(1500);
+
 thread_local! {
     static PROBE_LISTENING: Cell<bool> = const { Cell::new(false) };
     static PROBE_REACHED: Cell<bool> = const { Cell::new(false) };
@@ -39,7 +42,7 @@ thread_local! {
 /// Whether the control `handle` belongs to is in `window`'s last drawn frame.
 ///
 /// CDXC:FocusRouting 2026-11-11 WHY:
-/// `Window::focus` takes a handle whose control is no longer drawn (a composer whose session closed while the sidebar had the keyboard) and leaves typing going nowhere, and GPUI's focus-lost report only fires when a focus that was drawn stops being drawn, so it misses a handle that was already gone. GPUI has no public "is this handle drawn" question, but it dispatches an action on a handle only when the handle's control is in the drawn frame (`FocusHandle::dispatch_action`), and a global listener sees every dispatched action first; a no-op probe action answers it directly, before the focus moves.
+/// `Window::focus` takes a handle whose control is no longer drawn (a composer whose session closed while the sidebar had the keyboard) and leaves typing going nowhere, and GPUI's focus-lost report only fires when a focus that was drawn stops being drawn, so it misses a handle that was already gone. GPUI has no public "is this handle drawn" question, but it dispatches an action on a handle only when the handle's control is in the drawn frame (`FocusHandle::dispatch_action`), and a no-op probe action answers it directly, before the focus moves. The global listener (`App::on_action`) runs at the end of the bubble phase, so it hears the probe only because nothing on the way handles `DrawnProbe`: never give an element a listener for it.
 fn focus_handle_drawn(handle: &FocusHandle, window: &mut Window, cx: &mut App) -> bool {
     if !PROBE_LISTENING.with(|listening| listening.replace(true)) {
         cx.on_action(|_: &DrawnProbe, _| PROBE_REACHED.with(|reached| reached.set(true)));
@@ -162,21 +165,92 @@ impl GhostexGpuiApp {
 
     /// Starts the Focus Sidebar hotkey's entry: the sidebar, once drawn in `window`, focuses its
     /// active session's row (`native_sidebar_landing`). `origin` is the focus the entry waits from,
-    /// when the hotkey was pressed in that window.
+    /// and `from` the window the hotkey was pressed in.
+    ///
+    /// CDXC:FocusRouting 2026-11-11 WHY:
+    /// The entry used to end only in the sidebar's own prepaint, so a sidebar that stopped being drawn while it waited (the floating panel dismissed, the docked sidebar collapsed) left the keyboard parked on the sidebar's handle with nothing to give it back. A timer ends it after its wait whether or not the sidebar draws again, and each host's render ends it at once when the window it waits in no longer draws the sidebar (`check_native_sidebar_keyboard_entry`).
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn start_native_sidebar_keyboard_entry(
         &mut self,
         window: AnyWindowHandle,
+        from: AnyWindowHandle,
         origin: Option<Option<FocusHandle>>,
+        cx: &mut Context<Self>,
     ) {
-        *self.native_sidebar.focus_stops.pending.borrow_mut() = Some(PendingFocus {
+        let stops = &self.native_sidebar.focus_stops;
+        let id = stops.next_entry_id();
+        *stops.pending.borrow_mut() = Some(PendingFocus {
             target: PendingTarget::Landing,
             frames: ENTRY_FOCUS_FRAMES,
             window,
             origin_known: origin.is_some(),
             origin: origin.flatten(),
-            entry: Some(Instant::now() + Duration::from_millis(1500)),
+            entry: Some(EntryWait {
+                until: Instant::now() + ENTRY_WAIT,
+                id,
+                from,
+            }),
         });
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(ENTRY_WAIT + Duration::from_millis(100))
+                .await;
+            let _ = this.update(cx, |app, cx| app.end_native_sidebar_keyboard_entry(id, cx));
+        })
+        .detach();
+    }
+
+    /// Ends the hotkey's entry `id` if it still waits: the keyboard goes back from the window the
+    /// hotkey was pressed in, else from the sidebar's window; with both gone it is only forgotten.
+    fn end_native_sidebar_keyboard_entry(&mut self, id: u64, cx: &mut Context<Self>) {
+        let Some((entry, owner)) = self.native_sidebar.focus_stops.pending_entry() else {
+            return;
+        };
+        if entry.id != id {
+            return;
+        }
+        let app = cx.entity();
+        cx.defer(move |cx| {
+            for target in [entry.from, owner] {
+                let ended = target.update(cx, |_, window, cx| {
+                    app.update(cx, |app, cx| {
+                        app.cancel_native_sidebar_keyboard_entry(id, window, cx)
+                    })
+                });
+                if ended.is_ok() {
+                    return;
+                }
+            }
+            app.update(cx, |app, _| {
+                app.native_sidebar.focus_stops.pending.borrow_mut().take();
+                app.native_sidebar.keyboard.forget_return();
+            });
+        });
+    }
+
+    fn cancel_native_sidebar_keyboard_entry(
+        &mut self,
+        id: u64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self
+            .native_sidebar
+            .focus_stops
+            .pending_entry()
+            .is_some_and(|(entry, _)| entry.id == id)
+        {
+            self.sidebar_keyboard_give_back(window, cx);
+        }
+    }
+
+    /// Each host's render: an entry whose window no longer draws the sidebar ends now.
+    pub(crate) fn check_native_sidebar_keyboard_entry(&mut self, cx: &mut Context<Self>) {
+        if let Some((entry, owner)) = self.native_sidebar.focus_stops.pending_entry()
+            && !self.sidebar_keyboard_draws_sidebar_in(owner)
+        {
+            self.end_native_sidebar_keyboard_entry(entry.id, cx);
+        }
     }
 
     /// Where the hotkey's entry lands, with the bounds of a row still to be scrolled to (`None`

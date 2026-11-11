@@ -191,6 +191,8 @@ impl Render for GhostexGpuiApp {
         self.note_voice_agent_space_free(window, cx);
         self.sync_read_aloud_on_screen(window, cx);
         self.main_window_handle = Some(gpui::Window::window_handle(window));
+        // The Focus Sidebar hotkey's entry ends at once when its sidebar is no longer drawn.
+        self.check_native_sidebar_keyboard_entry(cx);
         crate::app::workspace_windows::sync_workspace_window_title(window, &self.project_name, cx);
         self.sync_main_window_glass(window, cx);
         crate::app::window::frosted_host::sync_frosted_tooltip_presenter(window, cx);

@@ -117,9 +117,18 @@ pub(super) struct PendingFocus {
     /// False until the window the stop is drawn in has drawn once (the hotkey pressed in another
     /// window): the origin is read there then.
     pub(super) origin_known: bool,
-    /// The Focus Sidebar hotkey's entry: until when it may wait. The keyboard belongs to it
-    /// meanwhile (render/root.rs forwards nothing).
-    pub(super) entry: Option<Instant>,
+    /// The Focus Sidebar hotkey's entry (`None` for a Tab or arrow move). The keyboard belongs to
+    /// it meanwhile (render/root.rs forwards nothing).
+    pub(super) entry: Option<EntryWait>,
+}
+
+/// How long the hotkey's entry may wait, which entry it is, and the window the hotkey was pressed
+/// in (where the keyboard goes back when the entry ends without landing).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct EntryWait {
+    pub(super) until: Instant,
+    pub(super) id: u64,
+    pub(super) from: AnyWindowHandle,
 }
 
 /// How many frames a stop picked by Tab or an arrow may take to be built before the move is
@@ -157,6 +166,7 @@ pub(crate) struct SidebarFocusStops {
     /// The Focus Sidebar hotkey's entry holds the keyboard here while it waits for its row
     /// (render.rs draws it on a zero-size child of the sidebar).
     entry: RefCell<Option<FocusHandle>>,
+    entry_ids: Cell<u64>,
 }
 
 impl SidebarFocusStops {
@@ -283,7 +293,20 @@ impl SidebarFocusStops {
             .borrow()
             .as_ref()
             .and_then(|pending| pending.entry)
-            .is_some_and(|until| Instant::now() < until)
+            .is_some_and(|entry| Instant::now() < entry.until)
+    }
+
+    /// The hotkey's entry still waiting, whatever its time, and the window its sidebar is in.
+    pub(super) fn pending_entry(&self) -> Option<(EntryWait, AnyWindowHandle)> {
+        let pending = self.pending.borrow();
+        let pending = pending.as_ref()?;
+        Some((pending.entry?, pending.window))
+    }
+
+    pub(super) fn next_entry_id(&self) -> u64 {
+        let id = self.entry_ids.get().wrapping_add(1);
+        self.entry_ids.set(id);
+        id
     }
 
     /// Every session row of this frame, drawn or not, top to bottom.

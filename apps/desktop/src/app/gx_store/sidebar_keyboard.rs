@@ -12,14 +12,20 @@ use crate::app::native_sidebar::keyboard::SidebarKeyboardReturn;
 
 impl GhostexGpuiApp {
     /// The window the sidebar is drawn in: the floating panel while it shows the sidebar, else
-    /// the main window.
+    /// the main window unless the sidebar is collapsed.
     fn sidebar_keyboard_window(&self) -> Option<AnyWindowHandle> {
         self.floating_reveal
             .panel
             .as_ref()
             .filter(|panel| panel.content.sidebar)
             .map(|panel| panel.window.into())
-            .or(self.main_window_handle)
+            .or(self.main_window_handle.filter(|_| !self.sidebar_collapsed))
+    }
+
+    /// Whether `window` draws the sidebar now (native_sidebar/keyboard.rs ends an entry waiting in
+    /// a window that no longer does).
+    pub(crate) fn sidebar_keyboard_draws_sidebar_in(&self, window: AnyWindowHandle) -> bool {
+        self.sidebar_keyboard_window() == Some(window)
     }
 
     /// The Focus Sidebar hotkey, pressed in `window`: in, or back out when the sidebar already
@@ -73,7 +79,7 @@ impl GhostexGpuiApp {
         // nothing the hotkey took it from (a composer, whose capture listener runs first, or a
         // terminal) sees a key meanwhile, and Escape reaches the sidebar to cancel it.
         let entry = self.native_sidebar.focus_stops.entry_handle(cx);
-        self.start_native_sidebar_keyboard_entry(owner, Some(Some(entry.clone())));
+        self.start_native_sidebar_keyboard_entry(owner, here, Some(Some(entry.clone())), cx);
         cx.notify();
         if owner == here {
             window.focus(&entry, cx);

@@ -36,6 +36,11 @@ impl GhostexGpuiApp {
         false
     }
 
+    /// The page has one window, which draws the sidebar unless it is hidden.
+    pub(crate) fn sidebar_keyboard_draws_sidebar_in(&self, _window: gpui::AnyWindowHandle) -> bool {
+        !self.sidebar_collapsed
+    }
+
     /// Whether `session_id` is the session the work area shows.
     pub(crate) fn sidebar_keyboard_row_is_active(&self, session_id: &str) -> bool {
         self.open_session
