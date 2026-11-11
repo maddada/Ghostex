@@ -110,6 +110,25 @@ impl NativeChatView {
             .py(px(12.0 * s))
             .border_b_1()
             .border_color(card_border);
+        // The X hangs from the header's top as far in as it sits from the side, and leads the
+        // header on macOS (CDXC:AppModal 2026-11-10 in window/round_close_button.rs;
+        // CDXC:SessionChat 2026-11-11 in window/visual_page_modal/band_geometry.rs).
+        let close_on_left = crate::app::window::round_close_button::close_buttons_on_left();
+        let close = div()
+            .self_start()
+            .mt(px(4.0 * s))
+            .child(self.subagent_icon_button(
+                "subagent-close",
+                "titlebar/x.svg",
+                "Close subagent transcript",
+                json!({"type":"subagentClose"}),
+                p,
+                cx,
+            ));
+        let mut close = Some(close);
+        if close_on_left {
+            header = header.children(close.take());
+        }
         if state["canBack"] == true {
             header = header.child(self.subagent_icon_button(
                 "subagent-back",
@@ -156,14 +175,7 @@ impl NativeChatView {
                             .child(text(&state, "description")),
                     ),
             )
-            .child(self.subagent_icon_button(
-                "subagent-close",
-                "titlebar/x.svg",
-                "Close subagent transcript",
-                json!({"type":"subagentClose"}),
-                p,
-                cx,
-            ));
+            .children(close);
         let mut card = div()
             .id("subagent-card")
             .occlude()

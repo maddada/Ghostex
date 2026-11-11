@@ -173,7 +173,12 @@ fn close_reveal_tracker(reveal: gpui::Entity<CloseReveal>) -> impl IntoElement {
         |_, _, _| (),
         move |bounds: Bounds<Pixels>, _, window, _| {
             let half = MODAL_CORNER_CLOSE_SIZE / 2.0;
-            let corner = bounds.top_right();
+            // The corner the X sits on (CDXC:AppModal 2026-11-10 in window/round_close_button.rs).
+            let corner = if crate::app::window::round_close_button::close_buttons_on_left() {
+                bounds.origin
+            } else {
+                bounds.top_right()
+            };
             let button = Bounds::new(
                 point(corner.x - px(half), corner.y - px(half)),
                 size(px(MODAL_CORNER_CLOSE_SIZE), px(MODAL_CORNER_CLOSE_SIZE)),
