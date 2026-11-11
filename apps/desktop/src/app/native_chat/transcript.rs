@@ -578,11 +578,6 @@ impl NativeChatView {
                     row.track_focus(&focus).tab_stop(false)
                 }
             });
-        // Message spacing Compact: the footer's buttons are built only while the pointer is on the
-        // message (message_spacing.rs).
-        if p.compact() && (self.has_reply_actions(message) || Self::has_user_bar(message)) {
-            row = self.track_message_hover(row, &id, cx);
-        }
         if message["role"] == "user" && message["interAgentMessage"].is_object() {
             return row
                 .child(self.inter_agent_message_card(&id, message, p, cx))
