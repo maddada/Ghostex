@@ -100,6 +100,11 @@ pub enum Event {
     /// for a project with none, or not a git repository): where its `#123` links go
     /// (`transcript/issue_links.rs`). A host that never sends this draws them as text.
     ProjectOriginChanged { origin: Option<String> },
+    /// The chat's view pick as its computer keeps it, pushed when a device changed it
+    /// (`sessionChatViewChanged`, `transcript/view_sync.rs`), so an open chat follows at once.
+    ChatViewChanged {
+        chat_view: ghostex_gx_protocol::ChatViewPick,
+    },
 }
 
 /// One session the host's session list knows (the sidebar on the desktop and the web build, the

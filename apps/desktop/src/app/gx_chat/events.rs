@@ -97,6 +97,12 @@ pub(super) fn frame(value: Value) -> Option<Event> {
         Some("sessionChatState") => serde_json::from_value::<ChatStateFrame>(value)
             .ok()
             .map(|frame| ChatFrame::State(Box::new(frame))),
+        // Not a frame: the chat's view pick, pushed when another device changed it.
+        Some("sessionChatViewChanged") => {
+            return serde_json::from_value(value.get("chatView")?.clone())
+                .ok()
+                .map(|chat_view| Event::ChatViewChanged { chat_view });
+        }
         _ => None,
     };
     frame.map(|frame| Event::Frame(Box::new(frame)))

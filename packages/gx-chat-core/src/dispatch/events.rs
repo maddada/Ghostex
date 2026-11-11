@@ -118,6 +118,10 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
             }
             Vec::new()
         }
+        Event::ChatViewChanged { chat_view } => {
+            crate::transcript::view_sync::read_carried(state, Some(chat_view));
+            Vec::new()
+        }
         Event::ComputerChanged(computer) => {
             crate::session::computer::changed(state, context, computer.clone())
         }

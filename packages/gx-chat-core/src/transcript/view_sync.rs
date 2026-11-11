@@ -21,7 +21,7 @@
 
 use std::collections::BTreeMap;
 
-use ghostex_gx_protocol::{ChatViewField, ChatViewPick};
+pub use ghostex_gx_protocol::{ChatViewField, ChatViewPick};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 

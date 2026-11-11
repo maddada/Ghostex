@@ -423,6 +423,7 @@ fn chat_event_matches(filter: &RwLock<HashSet<(String, String)>>, event: &Value)
                 | "sessionChatReplaced"
                 | "sessionChatAppended"
                 | "sessionChatState"
+                | crate::session_chat_view::CHAT_VIEW_CHANGED_EVENT_TYPE
         )
     ) {
         return false;

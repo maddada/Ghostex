@@ -28,6 +28,10 @@ const FRAME_TYPES: [&str; 4] = [
 /// The frame gxserver pushes when the published model lineup changes, and once as a socket opens.
 const MODEL_CATALOG_CHANGED: &str = "agentModelCatalogChanged";
 
+/// gxserver's push when a chat's view pick changed (server/src/session_chat_view.rs): no stream
+/// position, delivered like a frame to the chat that follows the conversation.
+const CHAT_VIEW_CHANGED: &str = "sessionChatViewChanged";
+
 /// Where one machine's gxserver is: `http://<host>:<port>` and its bearer token.
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Endpoint {
@@ -133,6 +137,19 @@ pub(crate) fn route(machine_id: &str, text: &str, followers: &Followers) -> Opti
         return Some(Inbound::ModelCatalog {
             machine_id: machine_id.to_string(),
             catalog,
+        });
+    }
+    if kind == CHAT_VIEW_CHANGED {
+        let project_id = object.get("projectId")?.as_str()?.to_string();
+        let session_id = object.get("sessionId")?.as_str()?.to_string();
+        if !followers.contains_key(&(project_id.clone(), session_id.clone())) {
+            return None;
+        }
+        return Some(Inbound::Frame {
+            machine_id: machine_id.to_string(),
+            project_id,
+            session_id,
+            frame,
         });
     }
     if !FRAME_TYPES.contains(&kind)

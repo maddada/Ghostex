@@ -2,7 +2,7 @@
 //! computer that owns the session so every device opens the chat the same way.
 //!
 //! CDXC:SessionChat 2026-11-11 DECISION:
-//! User: "btw we need to track the chat view the user set on each chat accross all devices so it's the same (doesn't need to sync instantly, some slight delay is ok)". The chat core keeps its four view records per device as before (`summary`, `simple`, `verbose`, `quietView`) and also hands each pick to this computer (`/api/setSessionChatView`), which keeps the newest pick of each record by the time it was made. Every chat read carries the kept pick (`chatView`), so a device takes it when it opens the chat, and the phone's long poll within a few seconds (the pick's times are in the read's fingerprint); nothing is pushed to clients. A device that could not reach the computer keeps its own pick and hands it over on its next read, and the newest pick wins.
+//! User: "btw we need to track the chat view the user set on each chat accross all devices so it's the same (doesn't need to sync instantly, some slight delay is ok)". The chat core keeps its four view records per device as before (`summary`, `simple`, `verbose`, `quietView`) and also hands each pick to this computer (`/api/setSessionChatView`), which keeps the newest pick of each record by the time it was made. Every chat read carries the kept pick (`chatView`), so a device takes it when it opens the chat; a chat open on another device takes it from the `sessionChatViewChanged` socket event sent when a pick changes, or, on a phone that reads over SSH, from its long poll within a few seconds (the pick's times are in the read's fingerprint). A device that could not reach the computer keeps its own pick and hands it over on its next read, and the newest pick wins.
 //!
 //! CDXC:SessionChat 2026-11-11 SEE-ALSO:
 //! packages/gx-chat-core/src/transcript/view_sync.rs (what a client sends and takes),
@@ -113,13 +113,14 @@ pub(crate) fn read_pick(
     })
 }
 
-/// Keeps each record of `incoming` that is newer than the one kept; answers the kept pick.
+/// Keeps each record of `incoming` that is newer than the one kept; answers the kept pick and
+/// whether it moved.
 fn merge(
     paths: &crate::paths::GxserverPaths,
     project_id: &str,
     session_id: &str,
     incoming: ChatViewPick,
-) -> ChatViewPick {
+) -> (ChatViewPick, bool) {
     with_store(paths, |loaded| {
         let pick = loaded
             .store
@@ -142,7 +143,30 @@ fn merge(
         if changed {
             save(loaded);
         }
-        answer
+        (answer, changed)
+    })
+}
+
+/// The socket event an open chat takes a new pick from.
+pub(crate) const CHAT_VIEW_CHANGED_EVENT_TYPE: &str = "sessionChatViewChanged";
+
+/// `sessionChatViewChanged`: the pick as kept after a device changed it, sent to the sockets that
+/// follow the chat, so an open chat on another device takes it at once. Clients that predate it
+/// drop a socket message of a type they do not know (gx-chat-client `wire.rs` `route`, the
+/// phone's `machine-link.ts` `receive`), as they do the model catalog push.
+fn changed_event(
+    server_id: &str,
+    project_id: &str,
+    session_id: &str,
+    pick: &ChatViewPick,
+) -> Value {
+    json!({
+        "type": CHAT_VIEW_CHANGED_EVENT_TYPE,
+        "protocolVersion": crate::constants::GXSERVER_PROTOCOL_VERSION,
+        "serverId": server_id,
+        "projectId": project_id,
+        "sessionId": session_id,
+        "chatView": pick,
     })
 }
 
@@ -212,7 +236,15 @@ pub(crate) fn handle_set_session_chat_view_http(
             },
         );
     };
-    let kept = merge(&state.paths, &project_id, &session_id, incoming);
+    let (kept, changed) = merge(&state.paths, &project_id, &session_id, incoming);
+    if changed {
+        state.event_hub.broadcast(changed_event(
+            state.metadata.server_id.as_str(),
+            &project_id,
+            &session_id,
+            &kept,
+        ));
+    }
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,
