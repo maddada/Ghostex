@@ -10,7 +10,9 @@ use crate::{
     storage::open_gxserver_database,
 };
 
-use super::store::{PushKinds, PushRegistration, PushRegistrationStore, PushStoreError};
+use super::store::{
+    AlertChoices, PushKinds, PushRegistration, PushRegistrationStore, PushStoreError,
+};
 
 pub(crate) const REGISTER_PUSH_TOKEN_ENDPOINT: &str = "/api/registerPushToken";
 pub(crate) const MACHINE_ID_MAX: usize = 64;
@@ -25,6 +27,7 @@ const REGISTER_FIELDS: &[&str] = &[
     "kinds",
     "deviceId",
     "sessionNames",
+    "alerts",
 ];
 const UNREGISTER_FIELDS: &[&str] = &["action", "machineId"];
 
@@ -35,6 +38,7 @@ enum PushTokenRequest {
         kinds: PushKinds,
         device_id: Option<String>,
         session_names: bool,
+        alerts: Option<AlertChoices>,
     },
     Unregister {
         machine_id: String,
@@ -141,12 +145,24 @@ fn parse_push_token_request(body: &Value) -> Result<PushTokenRequest, PushTokenE
                     PushTokenError::bad_request("sessionNames must be a boolean.")
                 })?,
             };
+            // The phone's Sound, Silent or Off for each kind; a phone that sends none keeps `kinds`.
+            let alerts = match params.get("alerts") {
+                None => None,
+                Some(value) => Some(
+                    serde_json::from_value::<AlertChoices>(value.clone()).map_err(|_| {
+                        PushTokenError::bad_request(
+                            "alerts must hold exactly needsYou, finished, errors and threadReports, each sound, silent or off.",
+                        )
+                    })?,
+                ),
+            };
             Ok(PushTokenRequest::Register {
                 token: token.to_string(),
                 machine_id,
                 kinds,
                 device_id,
                 session_names,
+                alerts,
             })
         }
         Some("unregister") => {
@@ -226,6 +242,7 @@ fn apply_push_token_request(
             kinds,
             device_id,
             session_names,
+            alerts,
         } => {
             let device_id = match (caller_device, device_id) {
                 (Some(caller), Some(sent)) if sent != caller => {
@@ -277,6 +294,7 @@ fn apply_push_token_request(
                 kinds,
                 device_id,
                 session_names,
+                alerts,
                 registered_at: chrono::Utc::now()
                     .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             };

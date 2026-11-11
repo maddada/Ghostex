@@ -182,15 +182,6 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("title", J::Str("Terminal")),
     ]),
     J::Obj(&[
-        ("appWide", J::Bool(true)),
-        ("description", J::Str("A panel of short tips for getting more out of Ghostex, opened from Help in the sidebar's menu.")),
-        ("category", J::Str("menus-and-panels")),
-        ("id", J::Str("tips")),
-        ("placement", J::Str("titlebar-button")),
-        ("settingsKey", J::Str("tipsAndTricksTitlebarButtonHidden")),
-        ("title", J::Str("Tips & Tricks")),
-    ]),
-    J::Obj(&[
         ("description", J::Str("A bell in the sidebar's top row that lists what your agents finished or need from you.")),
         ("category", J::Str("header-buttons")),
         ("id", J::Str("notifications")),

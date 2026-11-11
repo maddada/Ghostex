@@ -271,7 +271,6 @@ impl GhostexGpuiApp {
             let payload = background.spawn(async move { task() }).await;
             let _ = this.update(cx, |this, cx| {
                 this.dispatch_open_gpui_app_modal_sidebar_state_payload(payload.clone(), cx);
-                this.dispatch_gpui_titlebar_tips_sidebar_state_payload(&payload, cx);
             });
         })
         .detach();
@@ -347,7 +346,6 @@ impl GhostexGpuiApp {
                 next["complete"] = serde_json::Value::Bool(is_error || index == last_index);
                 let dispatched = this.update(cx, |this, cx| {
                     this.dispatch_open_gpui_app_modal_sidebar_state_payload(next.clone(), cx);
-                    this.dispatch_gpui_titlebar_tips_sidebar_state_payload(&next, cx);
                 });
                 if dispatched.is_err() {
                     return;

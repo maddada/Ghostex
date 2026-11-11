@@ -516,18 +516,6 @@ pub(crate) struct RunGpuiTitlebarGitRemoteSync;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
-pub(crate) struct RunGpuiTitlebarTipsHeaderAction {
-    pub(crate) action_index: u64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
-#[action(namespace = ghostex_gpui, no_json)]
-pub(crate) struct RunGpuiTitlebarTip {
-    pub(crate) tip_index: u64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
-#[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunGpuiTitlebarHelpQuestion {
     pub(crate) question_index: u64,
 }

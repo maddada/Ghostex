@@ -66,85 +66,6 @@ pub(crate) const WORKAREA_VIEW_TAB_PINNED_WIDTH: f32 = 32.0;
 
 pub(crate) const PROJECT_EDITOR_AUTO_SLEEP_POLICY_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
-pub(crate) const GPUI_NATIVE_TITLEBAR_TIPS: &[GpuiNativeTitlebarTip] = &[
-    GpuiNativeTitlebarTip {
-        body: "Search for project actions, pane splits and moves, session controls, settings shortcuts, and other Ghostex actions.",
-        icon_path: COMMAND_ICON_COMMAND,
-        id: "command-palette-all-actions",
-        title: if cfg!(target_os = "macos") {
-            "Press ⌘⇧P anywhere to open Ghostex Quick Access"
-        } else {
-            "Press Ctrl+Shift+P anywhere to open Ghostex Quick Access"
-        },
-    },
-    GpuiNativeTitlebarTip {
-        body: "Open Settings to customize sidebar presets, visible details, agents, actions, project tools, and workspace open targets.",
-        icon_path: TITLEBAR_ICON_LAYOUT_SIDEBAR_LEFT_EXPAND,
-        id: "customize-sidebar-layout-and-tools",
-        title: "Customize the sidebar",
-    },
-    GpuiNativeTitlebarTip {
-        body: "The Resources menu can sleep inactive terminal sessions while keeping them restorable in the sidebar.",
-        icon_path: COMMAND_ICON_MOON,
-        id: "sleep-idle-sessions-from-resources",
-        title: "Sleep idle sessions from Resources",
-    },
-    GpuiNativeTitlebarTip {
-        body: "Click Add Worktree on a project header so a second agent can work on a branch without touching the main checkout.",
-        icon_path: TITLEBAR_ICON_LAYOUT_SIDEBAR_LEFT_EXPAND,
-        id: "run-same-project-in-a-worktree",
-        title: "Run the same project in a worktree",
-    },
-    GpuiNativeTitlebarTip {
-        body: "Configure Ghostex Computer Use in Settings, then ask agents to use /ghostex-computer-use for desktop app control.",
-        icon_path: TITLEBAR_ICON_DEVICE_DESKTOP,
-        id: "use-ghostex-computer-use-skill",
-        title: "Use /ghostex-computer-use for desktop control",
-    },
-    GpuiNativeTitlebarTip {
-        body: "Configure Ghostex Browser Use in Settings, then ask agents to use /ghostex-browser-use for supported external browser pages through Cua Driver.",
-        icon_path: BROWSER_ICON_WORLD,
-        id: "use-ghostex-browser-use-skill",
-        title: "Use /ghostex-browser-use for browser pages",
-    },
-    GpuiNativeTitlebarTip {
-        body: "Configure Ghostex Embedded Browser Use in Settings, then ask agents to use /ghostex-embedded-browser-use for page inspection, console logs, screenshots, and clicks in Ghostex panes.",
-        icon_path: BROWSER_ICON_WORLD,
-        id: "use-ghostex-embedded-browser-use-skill",
-        title: "Use /ghostex-embedded-browser-use for Ghostex panes",
-    },
-    GpuiNativeTitlebarTip {
-        body: "Open the Automate tab to run agents on a schedule without sitting in the session.",
-        icon_path: COMMAND_ICON_COMMAND,
-        id: "schedule-recurring-agent-work",
-        title: "Schedule recurring agent work",
-    },
-    GpuiNativeTitlebarTip {
-        body: "Open More Options in the top right of the sidebar, click \"Mobile\", then attach the Mobile app to a running agent session.",
-        icon_path: TITLEBAR_ICON_DEVICE_DESKTOP,
-        id: "continue-session-from-mobile-app",
-        title: "Continue a session from the Mobile app",
-    },
-    GpuiNativeTitlebarTip {
-        body: "Open More Options in the top right of the sidebar, click \"Search by Prompt\", then type any words you remember from the prompt.",
-        icon_path: BROWSER_ICON_SEARCH,
-        id: "find-session-by-prompt-text",
-        title: "Find any session from prompt text",
-    },
-    GpuiNativeTitlebarTip {
-        body: "In Search by Prompt, favorite a prompt so it stays at the top the next time you search.",
-        icon_path: BROWSER_ICON_SEARCH,
-        id: "star-prompts-you-want-again",
-        title: "Star prompts you want again",
-    },
-    GpuiNativeTitlebarTip {
-        body: "Then you can easily ask agents to \"work on beads with high priority from the kanban board\"",
-        icon_path: COMMAND_ICON_COMMAND,
-        id: "add-todos-to-kanban-page",
-        title: "Add all your Todos in the Kanban page",
-    },
-];
-
 /*
 CDXC:Navigation 2026-07-29:
 Rapid sidebar clicking across projects used to stack one complete project
@@ -219,9 +140,6 @@ pub(crate) const DOCS_VIEW_TAB_HIDDEN_SETTINGS_KEY: &str = "docsViewTabHidden";
 pub(crate) const CHANGES_VIEW_TAB_HIDDEN_SETTINGS_KEY: &str = "changesViewTabHidden";
 
 pub(crate) const TERMINAL_VIEW_TAB_HIDDEN_SETTINGS_KEY: &str = "terminalViewTabHidden";
-
-pub(crate) const TIPS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
-    "tipsAndTricksTitlebarButtonHidden";
 
 pub(crate) const NOTIFICATIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
     "notificationsTitlebarButtonHidden";

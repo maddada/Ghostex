@@ -29,6 +29,30 @@ pub(crate) struct PushKinds {
     pub(crate) error: bool,
 }
 
+/// How the phone wants a kind of notice: with its sound, shown without a sound, or not at all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum AlertChoice {
+    Sound,
+    Silent,
+    Off,
+}
+
+/// The phone's Sound, Silent or Off choice for each kind (`alerts` in its registration; CDXC:Notifications
+/// 2026-11-11 in apps/mobile/app/src/notifications/settings.ts).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct AlertChoices {
+    /// A question, an approval, a wait: the needs-input rows (and the security notice's sound).
+    pub(crate) needs_you: AlertChoice,
+    /// A finished turn the alert rule lets notify.
+    pub(crate) finished: AlertChoice,
+    /// An error that ended a turn, a stuck or a blocked session.
+    pub(crate) errors: AlertChoice,
+    /// A thread under a coordinator finished a turn (the alert rule keeps it quiet otherwise).
+    pub(crate) thread_reports: AlertChoice,
+}
+
 /// One phone's registration on this computer, keyed by the id the phone uses for this computer.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -41,6 +65,9 @@ pub(crate) struct PushRegistration {
     /// The phone's "Show session names" switch: on, an alert's title leads with the session's title.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub(crate) session_names: bool,
+    /// The phone's choice for each kind; none from a phone older than the choices, which keeps `kinds`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) alerts: Option<AlertChoices>,
     pub(crate) registered_at: String,
 }
 
@@ -54,6 +81,7 @@ impl fmt::Debug for PushRegistration {
             .field("kinds", &self.kinds)
             .field("device_id", &self.device_id)
             .field("session_names", &self.session_names)
+            .field("alerts", &self.alerts)
             .field("registered_at", &self.registered_at)
             .finish()
     }

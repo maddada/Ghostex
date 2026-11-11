@@ -35,7 +35,6 @@ pub const ADD_PROJECT_ACTION: &str = "addProject";
 /// (`MenuHost::menu_panels`).
 pub const MENU_PANEL_MESSAGE_TYPE: &str = "openSidebarMenuPanel";
 pub const MENU_PANEL_HELP: &str = "help";
-pub const MENU_PANEL_TIPS: &str = "tips";
 pub const MENU_PANEL_RESOURCES: &str = "resources";
 pub const MENU_PANEL_DEV_SERVERS: &str = "devServers";
 pub const MENU_PANEL_EXTENSIONS: &str = "extensions";
@@ -218,8 +217,9 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     }
     /*
     CDXC:Sidebar 2026-11-11 DECISION:
-    User (main menu page, Q2500 B, Q2501 C, Q2502 and its notes): the sidebar's menu and the three dots above the chat are one menu, "the shortest: three doors at the end". Sort & Filter and Collapse All come first; then Agents Hub, All Automations, Connect a Device and Keep Awake; then three submenus: Tools (Search by Prompt, Import Sessions, and the Extensions, Dev servers and Resources panels the three dots held), Help (Ask Ghostex, Tips & Tricks, Join Discord, Send Bug / Feedback) and Ghostex (New Window, Check for Updates, Restart and the two Quits, where the host is the desktop app); and last, alone in its own group, Settings ("also let's move settings to a new item by itself bottom of menu"). Sessions leaves (the Search button beside the menu opens the same window), Import Sessions stays, and Add Project is the first row only while the top row is too narrow for its button, which the host decides when the menu opens. Customize has no row: Settings and the Extensions panel's "Browse extensions…" open the same page. The Ghostex row wears the app's mark in one colour ("the ghostex icon but as svg", the phone's status bar shape).
+    User (main menu page, Q2500 B, Q2501 C, Q2502 and its notes): the sidebar's menu and the three dots above the chat are one menu, "the shortest: three doors at the end". Sort & Filter and Collapse All come first; then Agents Hub, All Automations, Connect a Device and Keep Awake; then three submenus: Tools (Search by Prompt, Import Sessions, and the Extensions, Dev servers and Resources panels the three dots held), Help (Ask Ghostex, Join Discord, Send Bug / Feedback; Tips & Tricks left it on 2026-11-11, see below) and Ghostex (New Window, Check for Updates, Restart and the two Quits, where the host is the desktop app); and last, alone in its own group, Settings ("also let's move settings to a new item by itself bottom of menu"). Sessions leaves (the Search button beside the menu opens the same window), Import Sessions stays, and Add Project is the first row only while the top row is too narrow for its button, which the host decides when the menu opens. Customize has no row: Settings and the Extensions panel's "Browse extensions…" open the same page. The Ghostex row wears the app's mark in one colour ("the ghostex icon but as svg", the phone's status bar shape).
     This supersedes the 2026-09-21 rule that the menu has no Settings entry (the gear left the sidebar's bottom the same day: CDXC:Sidebar 2026-11-11 DECISION in apps/desktop/src/app/native_sidebar/usage.rs), the 2026-09-30 rule that the app rows end the menu flat below Join Discord (they are the Ghostex submenu; Windows and Linux, which have no menu bar, find them there), and the 2026-10-16 rule that Send Bug / Feedback is the top-level row under Join Discord (both are in Help, in that order). About and the Hide rows stay in the macOS menu bar only.
+    CDXC:Onboarding 2026-11-11 DECISION: User (first-run page, step 19): "let's remove tips and tricks modal from the whole app, we should the help on new chats instead". Help keeps Ask Ghostex, Join Discord and Send Bug / Feedback; the tips are a card on new chats (packages/gx-chat-core/src/extras/new_chat_tips.rs).
     Tools, Help and Ghostex open beside the menu, to its right, as the page drew them (confirmed for Q2503), so an open submenu covers nothing; Keep Awake opens the same way, so every submenu of this menu behaves alike, and Sort & Filter stays a page inside the menu. Where the host has no room beside the menu on either side, the submenu opens under its row as the sidebar's other submenus do (apps/desktop/src/app/native_sidebar/menu_state.rs `SidebarMenuPlacement::Beside`).
     SEE-ALSO: packages/gx-core/src/app_lifecycle.rs (the app rows, shared with Quick Access's Commands tab), apps/desktop/src/app/titlebar/menu_panels.rs (the panels, and which of them a project is offered), apps/desktop/src/app/native_sidebar/menus.rs `native_sidebar_more_menu_now` (what the host takes out when the menu opens).
     */
@@ -347,7 +347,6 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     let mut help = Vec::new();
     if input.host.menu_panels {
         help.push(panel("Ask Ghostex", "help-circle", MENU_PANEL_HELP));
-        help.push(panel("Tips & Tricks", "info-circle", MENU_PANEL_TIPS));
     }
     help.push(MenuItem::row(
         "Join Discord",

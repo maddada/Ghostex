@@ -65,6 +65,7 @@ mod menu_toggle;
 mod minimap;
 mod model_hold_card;
 mod nested_scroll;
+pub(crate) mod new_chat_tips;
 mod new_session_welcome;
 mod note;
 mod notice;

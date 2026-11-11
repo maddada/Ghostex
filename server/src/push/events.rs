@@ -25,6 +25,17 @@ pub(crate) fn announce_feed_row(
     enqueue_row_alert(state, repository, session, row, kind);
 }
 
+/// A thread's finished turn under a coordinator, which the alert rule keeps quiet: it goes only to
+/// the phones whose Thread reports choice is not Off (`AlertKind::ThreadReport`).
+pub(crate) fn announce_thread_report(
+    state: &AppState,
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    row: &Value,
+) {
+    enqueue_row_alert(state, repository, session, row, AlertKind::ThreadReport);
+}
+
 /// Why a red-dot row goes to the phones (`announce_red_dot`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BlockedWhy {

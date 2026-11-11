@@ -50,31 +50,6 @@ impl GhostexGpuiApp {
         self.receive_native_settings_modal_payload(&payload, cx);
     }
 
-    pub(crate) fn dispatch_gpui_titlebar_tips_sidebar_state_payload(
-        &mut self,
-        payload: &serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        match payload.get("type").and_then(serde_json::Value::as_str) {
-            Some("ghostexCliStatus") => {
-                self.titlebar_tips_cli_status = Some(payload.clone());
-            }
-            Some("agentHookStatus") => {
-                self.titlebar_tips_agent_hook_status = Some(payload.clone());
-            }
-            _ => {}
-        }
-        if self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Tips)
-            && let Some(handle) = self.titlebar_popup_window
-        {
-            let payload = payload.clone();
-            let _ = handle.update(cx, |popup, window, cx| {
-                popup.update_tips_runtime_status(payload, cx);
-                window.refresh();
-            });
-        }
-    }
-
     pub(crate) fn dispatch_open_gpui_app_modal_message(
         &mut self,
         message: serde_json::Value,

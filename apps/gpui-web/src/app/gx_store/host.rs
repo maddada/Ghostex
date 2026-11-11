@@ -419,7 +419,7 @@ impl GhostexGpuiApp {
             open_targets: Vec::new(),
             // A page cannot update, restart or quit the app.
             app_lifecycle: false,
-            // Nor does it have the app's panels (Ask Ghostex, Tips & Tricks, Resources, Dev
+            // Nor does it have the app's panels (Ask Ghostex, Resources, Dev
             // servers, Extensions): they are the desktop's own windows.
             menu_panels: false,
             agentbox_locations: store.agentbox_locations.clone(),
