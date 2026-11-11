@@ -151,6 +151,7 @@ pub(crate) struct NativeKanbanState {
     /// The project's computer can write a title for a bead created without one; `None` until it
     /// answered, which counts as no.
     pub(crate) title_generation: Option<bool>,
+    pub(crate) title_generation_probing: bool,
     /// The project name the board's title shows.
     pub(crate) display_name: String,
     pub(crate) display_key: String,

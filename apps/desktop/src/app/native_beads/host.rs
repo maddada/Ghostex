@@ -240,12 +240,19 @@ impl GhostexGpuiApp {
         {
             return;
         }
-        let kanban_tab_saved =
-            self.view_strip_layout
+        // Any saved trace of an open Kanban tab counts: the open views (older saved states have
+        // no view strip), the strip, and every project's own saved views.
+        let kanban = crate::app::model::TitlebarMode::Kanban;
+        let in_strip = |layout: &crate::app::model::GpuiViewStripLayout| {
+            layout
                 .order
-                .contains(&crate::app::model::ViewStripTabKey::View(
-                    crate::app::model::TitlebarMode::Kanban,
-                ));
+                .contains(&crate::app::model::ViewStripTabKey::View(kanban))
+        };
+        let kanban_tab_saved = self.open_views.contains(&kanban)
+            || in_strip(&self.view_strip_layout)
+            || self.project_view_states_by_project.values().any(|state| {
+                state.open_views.contains(&kanban) || in_strip(&state.view_strip_layout)
+            });
         self.save_beads_layout(if kanban_tab_saved {
             BeadsLayout::Board
         } else {

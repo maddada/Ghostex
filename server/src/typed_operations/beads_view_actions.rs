@@ -107,7 +107,15 @@ fn normalize_beads_blocked_by(input: Option<&Value>) -> Result<Vec<String>, Type
         None | Some(Value::Null) => Ok(Vec::new()),
         Some(Value::Array(ids)) => ids
             .iter()
-            .map(|id| Ok(format!("blocked-by:{}", normalize_issue_id(Some(id))?)))
+            .map(|id| {
+                // CDXC:ProjectBoard 2026-11-11 WHY: a bare id means "this bead depends on id" in every bd release, while older bd (0.51) reads `blocked-by:<id>` as a custom, non-blocking dependency and `blocks:<id>` points the other way in current bd. The `blocked-by:` prefix is used only for an id that itself contains `:`, which a bare id would split at.
+                let id = normalize_issue_id(Some(id))?;
+                Ok(if id.contains(':') {
+                    format!("blocked-by:{id}")
+                } else {
+                    id
+                })
+            })
             .collect(),
         Some(_) => Err(TypedOperationError::bad_request(
             "blockedBy must be an array of bead ids.",

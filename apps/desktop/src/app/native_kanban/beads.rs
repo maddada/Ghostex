@@ -147,26 +147,36 @@ pub(crate) async fn beads_call(
 }
 
 /// Whether the computer that owns the project can write a title for a bead created without one
-/// (its gxserver lists `generateTitle` in `/api/beadsView`); an older one cannot.
-pub(crate) async fn title_generation_available(context: &ProjectBoardBridgeRuntimeContext) -> bool {
-    let Ok(remote) = gxserver_target(context) else {
-        return false;
-    };
+/// (its gxserver lists `generateTitle` in `/api/beadsView`). `Some(false)` only when that
+/// gxserver answered and predates it; `None` when it could not be asked (not connected yet), so
+/// the board asks again later instead of keeping a transient failure.
+pub(crate) async fn title_generation_available(
+    context: &ProjectBoardBridgeRuntimeContext,
+) -> Option<bool> {
+    let remote = gxserver_target(context).ok()?;
     let params = serde_json::json!({ "projectId": context.project_id });
-    gx_rpc(remote, "/api/beadsView", params)
-        .await
-        .ok()
-        .and_then(|answer| {
+    match gx_rpc(remote.clone(), "/api/beadsView", params).await {
+        Ok(answer) => Some(
             answer
                 .get("capabilities")
                 .and_then(Value::as_array)
-                .cloned()
-        })
-        .is_some_and(|capabilities| {
-            capabilities
-                .iter()
-                .any(|capability| capability.as_str() == Some("generateTitle"))
-        })
+                .is_some_and(|capabilities| {
+                    capabilities
+                        .iter()
+                        .any(|capability| capability.as_str() == Some("generateTitle"))
+                }),
+        ),
+        Err(error) if error.code.as_deref() == Some("notFound") => Some(false),
+        // A page's fetch of a path an older gxserver does not know fails before any answer; if a
+        // call every gxserver answers works, that gxserver predates the Beads view.
+        Err(error) if error.code.is_none() => {
+            gx_rpc(remote, "/api/listProjects", serde_json::json!({}))
+                .await
+                .ok()
+                .map(|_| false)
+        }
+        Err(_) => None,
+    }
 }
 
 /// `normalizeBeadsPayload`: bd's `{ data }` envelope, unwrapped.

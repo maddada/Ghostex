@@ -167,6 +167,7 @@ pub(crate) fn start_sync(
             state.sync.saved.last_result = Some(result);
             state.reads.clear();
             state.written = true;
+            state.snapshot_stale = true;
             state.remote = None;
             state.sync.saved.clone()
         };

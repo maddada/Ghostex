@@ -40,6 +40,9 @@ pub(crate) struct CreateForm {
     pub(crate) priority: i64,
     pub(crate) epic: Option<String>,
     pub(crate) labels: Vec<String>,
+    /// The labels the chosen epic put on the form (and the user has not since removed or typed
+    /// again): picking another epic takes them back off.
+    pub(crate) inherited_labels: Vec<String>,
     pub(crate) blocked_by: Vec<String>,
     /// Opened from the Board: the estimate and Create & Start show, and `status` is the lane.
     pub(crate) from_board: bool,
@@ -77,6 +80,9 @@ impl BeadsView {
                     if let InputEvent::PressEnter { .. } = event {
                         let label = input.read(cx).value().trim().to_string();
                         if let Some(form) = this.create.as_mut() {
+                            // Typed by the user: it stays when the epic changes.
+                            form.inherited_labels
+                                .retain(|inherited| *inherited != label);
                             if !label.is_empty() && !form.labels.contains(&label) {
                                 form.labels.push(label);
                             }
@@ -97,6 +103,7 @@ impl BeadsView {
             priority: 2,
             epic: None,
             labels: Vec::new(),
+            inherited_labels: Vec::new(),
             blocked_by: Vec::new(),
             from_board: board_status.is_some(),
             status: board_status,
@@ -128,9 +135,12 @@ impl BeadsView {
             })
             .unwrap_or_default();
         if let Some(form) = self.create.as_mut() {
+            let previous = std::mem::take(&mut form.inherited_labels);
+            form.labels.retain(|label| !previous.contains(label));
             for label in epic_labels {
                 if !form.labels.contains(&label) {
-                    form.labels.push(label);
+                    form.labels.push(label.clone());
+                    form.inherited_labels.push(label);
                 }
             }
             form.epic = epic;
@@ -193,13 +203,15 @@ impl BeadsView {
             params["estimate"] = json!(minutes);
         }
         let status = form.status.clone().filter(|status| status != "open");
-        self.create = None;
+        // The form stays open (its Create buttons wait on the write) until bd has created the
+        // bead, so a refused create keeps everything typed.
         self.run_action(
             params,
             "Couldn't create the bead",
             window,
             cx,
             move |this, reply, window, cx| {
+                this.create = None;
                 let Some(issue) = created_issue(reply) else {
                     return;
                 };
@@ -429,6 +441,7 @@ impl BeadsView {
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if let Some(form) = this.create.as_mut() {
                                         form.labels.retain(|label| *label != remove);
+                                        form.inherited_labels.retain(|label| *label != remove);
                                     }
                                     cx.notify();
                                 })),

@@ -59,14 +59,8 @@ impl GhostexGpuiApp {
         if project_changed {
             self.native_kanban.reset_for_project(project.key.clone());
             self.native_kanban.title_generation = None;
-            self.native_kanban_spawn(
-                |context| async move { super::beads::title_generation_available(&context).await },
-                |this, available, cx| {
-                    this.native_kanban.title_generation = Some(available);
-                    this.native_kanban_notify(cx);
-                },
-                cx,
-            );
+            self.native_kanban.title_generation_probing = false;
+            self.native_kanban_probe_title_generation(cx);
             self.native_kanban.display_key = normalize_display_issue_key(&project.display_name);
             let prefix_source = if project.display_name.trim().is_empty() {
                 project
@@ -146,11 +140,33 @@ impl GhostexGpuiApp {
 
     /// `loadTickets`: one refresh at a time; a refresh asked for meanwhile runs after it, and a
     /// background poll during one is simply skipped.
+    /// Asks the project's computer whether it can write titles, until it has answered.
+    pub(crate) fn native_kanban_probe_title_generation(&mut self, cx: &mut Context<Self>) {
+        if self.native_kanban.title_generation.is_some()
+            || self.native_kanban.title_generation_probing
+        {
+            return;
+        }
+        self.native_kanban.title_generation_probing = self.native_kanban_spawn(
+            |context| async move { super::beads::title_generation_available(&context).await },
+            |this, available, cx| {
+                this.native_kanban.title_generation_probing = false;
+                if available.is_some() {
+                    this.native_kanban.title_generation = available;
+                    this.native_kanban_notify(cx);
+                }
+            },
+            cx,
+        );
+    }
+
     pub(crate) fn native_kanban_refresh(
         &mut self,
         mode: KanbanRefreshMode,
         cx: &mut Context<Self>,
     ) {
+        // A probe that could not reach the computer is asked again with the board's next read.
+        self.native_kanban_probe_title_generation(cx);
         let state = &mut self.native_kanban;
         if state.refreshing {
             if mode != KanbanRefreshMode::Background {

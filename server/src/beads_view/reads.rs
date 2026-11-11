@@ -121,6 +121,8 @@ async fn cached_read(
     let reply = finish_beads_action(action, &command, output.clone());
     if ok {
         let mut state = entry.state();
+        // The cached reads are current again; the published snapshot keeps its own staleness
+        // (`snapshot_stale`), which only a refresh clears.
         state.written = false;
         let names: &[&str] = if LIST_READS.contains(&action) {
             &LIST_READS

@@ -42,6 +42,12 @@ pub(crate) struct EntryState {
     pub(crate) settling: bool,
     /// A Ghostex write ran; a server-mode workspace re-reads on the next poll.
     pub(crate) written: bool,
+    /// A Ghostex write ran and the published snapshot has not been read since. Apart from
+    /// `written`, which a cached read clears, so a Board read never hides a write from the Tree.
+    pub(crate) snapshot_stale: bool,
+    /// When the last refresh failed and the change token it saw, so a failing bd is asked again
+    /// on a pause, not on every poll.
+    pub(crate) refresh_failed: Option<(Instant, Option<ChangeToken>)>,
     pub(crate) actor: Option<Option<String>>,
     pub(crate) remote: Option<Option<BeadsSyncRemote>>,
     /// When reading the remotes last failed, so a failure is retried, but not on every poll.
@@ -93,6 +99,7 @@ impl WorkspaceEntry {
         let mut state = self.state();
         state.reads.clear();
         state.force = true;
+        state.refresh_failed = None;
         state.remote = None;
         state.remote_failed_at = None;
         state.actor = None;
@@ -103,6 +110,7 @@ impl WorkspaceEntry {
         let mut state = self.state();
         state.reads.clear();
         state.written = true;
+        state.snapshot_stale = true;
     }
 }
 

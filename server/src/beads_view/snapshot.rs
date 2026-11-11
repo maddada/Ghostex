@@ -120,10 +120,18 @@ fn side_facts_missing(entry: &WorkspaceEntry) -> bool {
 
 fn needs_refresh(entry: &WorkspaceEntry, token: &Option<ChangeToken>) -> bool {
     let state = entry.state();
+    // A refresh that just failed is not repeated on every poll: it waits out the readiness pause
+    // unless the workspace changed since (a new token) or the user pressed Refresh (which clears
+    // the failure).
+    if let Some((failed_at, failed_token)) = &state.refresh_failed {
+        if failed_at.elapsed() < READINESS_RETRY && failed_token == token {
+            return false;
+        }
+    }
     let Some(published) = state.published.as_ref() else {
         return true;
     };
-    if state.force || !still_current(&published.token, published.at, token, state.written) {
+    if state.force || !still_current(&published.token, published.at, token, state.snapshot_stale) {
         return true;
     }
     if published.readiness != BeadsReadiness::Ok && published.at.elapsed() >= READINESS_RETRY {
@@ -166,15 +174,24 @@ async fn refresh(
         let after = current_token(info);
         let list = match list {
             Ok(output) if output.exit_code == 0 && output.error.is_none() => output,
-            Ok(output) => return Some(command_failure(&output)),
-            Err(error) => return Some(error.message),
+            Ok(output) => {
+                entry.state().refresh_failed = Some((Instant::now(), current_token(info)));
+                return Some(command_failure(&output));
+            }
+            Err(error) => {
+                entry.state().refresh_failed = Some((Instant::now(), current_token(info)));
+                return Some(error.message);
+            }
         };
         if embedded && !(before == middle && middle == after) {
             continue;
         }
         let rows = match parse_rows(&list.stdout) {
             Ok(rows) => rows,
-            Err(message) => return Some(message),
+            Err(message) => {
+                entry.state().refresh_failed = Some((Instant::now(), current_token(info)));
+                return Some(message);
+            }
         };
         let readiness = match ready {
             Ok(output) if output.exit_code == 0 && output.error.is_none() => {
@@ -443,6 +460,8 @@ fn publish(
     }
     let revision = format!("{:x}.{}", entry.epoch, state.counter);
     state.written = false;
+    state.snapshot_stale = false;
+    state.refresh_failed = None;
     state.published = Some(Published {
         token: token.clone(),
         at: Instant::now(),
