@@ -12204,8 +12204,8 @@
       "subtitle": "A Linear key for this project only, used instead of its workspace's or the shared key. Issues Workflow shows Linear tickets once a key applies to the project.",
       "tab": "projects",
       "tabTitle": "Projects",
-      "section": "issuesWorkflow",
-      "sectionTitle": "Issues Workflow",
+      "section": "projectSettings",
+      "sectionTitle": "Project settings",
       "type": "ui",
       "agentWritable": false
     },
@@ -12215,8 +12215,8 @@
       "subtitle": "Which provider and machine size a new Cloud Box for this project starts on.",
       "tab": "projects",
       "tabTitle": "Projects",
-      "section": "projectCloudBox",
-      "sectionTitle": "Cloud box",
+      "section": "projectSettings",
+      "sectionTitle": "Project settings",
       "type": "ui",
       "agentWritable": false
     },
@@ -12226,8 +12226,8 @@
       "subtitle": "This project's saved snapshots: what a new Cloud Box starts from. Make one the Default (★), update the Default from a running box, or delete one.",
       "tab": "projects",
       "tabTitle": "Projects",
-      "section": "projectCloudBox",
-      "sectionTitle": "Cloud box",
+      "section": "projectSettings",
+      "sectionTitle": "Project settings",
       "type": "ui",
       "agentWritable": false
     },
@@ -12237,8 +12237,8 @@
       "subtitle": "Tick the project's .env files and name the variables a Cloud Box gets at start. Their values are read from this computer each time and never saved in a snapshot.",
       "tab": "projects",
       "tabTitle": "Projects",
-      "section": "projectCloudBox",
-      "sectionTitle": "Cloud box",
+      "section": "projectSettings",
+      "sectionTitle": "Project settings",
       "type": "ui",
       "agentWritable": false
     },

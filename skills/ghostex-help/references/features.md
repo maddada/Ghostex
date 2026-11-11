@@ -815,8 +815,8 @@ the one with its folder's name. The phone's project list follows the same
 switch.
 To put a project on a computer that doesn't have it yet, right-click it and
 pick Clone on… and the computer: Ghostex clones its git remote into that
-computer's usual projects folder (Settings > Projects > Global settings > Default
-projects folder on this computer, the home folder on another one), using `<name>-2` and so on
+computer's usual projects folder (Settings > Projects > Default projects folder
+on this computer, the home folder on another one), using `<name>-2` and so on
 when the folder name is taken, shows the clone in the header's jobs button, and
 adds the project there. Computers that aren't connected are listed greyed, and
 a project with no git remote can't be cloned this way.
@@ -1043,7 +1043,7 @@ Space and Group start where you are: the Space open in the sidebar and the
 project group of the selected project. A project put in a group joins that
 group's Spaces. Start remembers what you picked last. If the name is already a
 project there, Create opens that project instead.
-The folder is made in Settings > Projects > Global settings > Default projects folder
+The folder is made in Settings > Projects > Default projects folder
 (`defaultProjectsFolder`, for example `~/dev`). With that setting blank, Add
 Project suggests the folder that holds the selected project's folder (else
 `~/dev`), lets you pick any other, and saves the folder your first new project
@@ -5770,8 +5770,7 @@ get it (on by default). With **Title sessions by their branch** on (same page, o
 by default), a session on a branch other than main is titled by that branch,
 without your name and the ticket ID, until you rename it. Linear status needs a
 Linear API key: set one per workspace in Settings > Workspaces, or for one
-project in Settings > Projects: pick it in the **Project** dropdown, then set
-**Issues Workflow > Linear API key** (the line under it says
+project under **Linear API key** in Settings > Projects (the line under it says
 whether the project uses its own key, its workspace's or the shared one, and
 Remove goes back to the workspace's). Or run `ghostex issues linear-key`
 and paste it (that sets the Personal workspace's key, which a workspace without
@@ -6024,10 +6023,8 @@ team's Convex admins can technically read stored keys. Ghostex also fills in you
 Linear user from your workspace's Linear key, so tickets created from your Slack
 requests are assigned to you.
 
-Related settings: Settings > Projects > Global settings (a fold at the top of the
-page, closed by default with a summary of what is set) > Global Defaults (worktree
-command, docs directory), Settings > Projects > Issues Workflow > Linear API key (for
-the project picked in the page's Project dropdown), `hideProjectHeaderDiffStats`,
+Related settings: Settings > Projects > Global Defaults (worktree command,
+docs directory), Settings > Projects > Linear API key, `hideProjectHeaderDiffStats`,
 `showProjectEditorDiffFileCount`,
 `showUntrackedProjectDiffWhenNoTrackedChanges`. Issues Workflow:
 `titleSessionsByBranch`, `offerCleanupWhenPrMerges`, `ghostex issues
