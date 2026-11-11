@@ -18,6 +18,8 @@ mod agentbox;
 pub mod alert_rule;
 mod app_lifecycle;
 mod attention;
+/// The Beads view's rules; used module-qualified (`beads_view::build_tree`).
+pub mod beads_view;
 pub mod bot_feed;
 mod change;
 mod claude_cloud;

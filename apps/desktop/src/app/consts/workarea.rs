@@ -138,10 +138,10 @@ pub(crate) const GPUI_NATIVE_TITLEBAR_TIPS: &[GpuiNativeTitlebarTip] = &[
         title: "Star prompts you want again",
     },
     GpuiNativeTitlebarTip {
-        body: "Then you can easily ask agents to \"work on beads with high priority from the kanban board\"",
+        body: "Then you can easily ask agents to \"work on the ready beads with high priority\"",
         icon_path: COMMAND_ICON_COMMAND,
         id: "add-todos-to-kanban-page",
-        title: "Add all your Todos in the Kanban page",
+        title: "Add all your Todos in the Beads view",
     },
 ];
 

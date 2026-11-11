@@ -495,8 +495,8 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     },
     HotkeyDefinition {
         id: "switchKanbanView",
-        title: "Switch to Kanban",
-        description: "Switch to Kanban view.",
+        title: "Switch to Beads",
+        description: "Switch to the Beads view.",
         default_key: "",
         windows_linux_default_key: None,
         alternate_default_keys: &[],

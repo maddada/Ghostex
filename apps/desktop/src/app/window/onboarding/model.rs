@@ -60,7 +60,7 @@ impl ViewKey {
             ViewKey::Browser => "Browser",
             ViewKey::Docs => "Files",
             ViewKey::Code => "VS Code",
-            ViewKey::Kanban => "Kanban",
+            ViewKey::Kanban => "Beads",
             ViewKey::Automate => "Automate",
         }
     }

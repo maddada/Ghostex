@@ -1,5 +1,6 @@
 //! The browser's answers to the app-level services the desktop's shared executor files call: toasts, app modals, and the workspace a created or focused session opens in. The desktop performs these with native child windows, CEF pages and its pane workspace; here they are the page's own canvas. Per-concern files; this barrel stays thin.
 mod app_modal_commands;
+mod beads;
 mod bot_feed;
 mod changes;
 mod create;
@@ -8,6 +9,7 @@ mod extension_buttons;
 mod find_prompts;
 mod git_menu;
 mod host_messages;
+pub(crate) mod kanban;
 mod main_hub_card;
 mod modals;
 mod new_thread_picker;

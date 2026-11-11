@@ -70,8 +70,8 @@ const VIEW_ROWS: [(ViewKey, &str, &str, &str, f32); 4] = [
     (
         ViewKey::Kanban,
         "kanban",
-        "Kanban",
-        "Split work into cards and hand each one to an agent.",
+        "Beads",
+        "See what's ready, who's on what and what's blocked, as a tree or a board.",
         600.0,
     ),
     (
@@ -101,7 +101,7 @@ fn tab_meta(tab: WsTab) -> (&'static str, &'static str) {
         WsTab::Agents => ("users", "Agents"),
         WsTab::View(ViewKey::Code) => ("code", "VS Code"),
         WsTab::View(ViewKey::Browser) => ("target", "Browser"),
-        WsTab::View(ViewKey::Kanban) => ("kanban", "Kanban"),
+        WsTab::View(ViewKey::Kanban) => ("kanban", "Beads"),
         WsTab::View(ViewKey::Automate) => ("bolt", "Automate"),
         WsTab::View(ViewKey::Docs) => ("list", "Files"),
     }

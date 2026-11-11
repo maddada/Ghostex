@@ -186,7 +186,7 @@ fn sidebar_section(
             g.spec(
                 "sidebarVisibilityMemory",
                 "Remember sidebar per view",
-                "Off: hiding the sidebar hides it everywhere. On: Agents and the wide views (Browser, Code, Files, Kanban, Automate) each keep their own open or hidden sidebar; the Commands pane follows the same split.",
+                "Off: hiding the sidebar hides it everywhere. On: Agents and the wide views (Browser, Code, Files, Beads, Automate) each keep their own open or hidden sidebar; the Commands pane follows the same split.",
             ),
             per_view,
             Some(reset_key::<GeneralTab>("sidebarVisibilityMemory")),

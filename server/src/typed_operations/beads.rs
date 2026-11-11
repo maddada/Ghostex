@@ -100,7 +100,7 @@ pub(crate) fn finish_beads_action(
     }
     if matches!(action, "board" | "listAllLabels") {
         if output.exit_code != 0 {
-            let mut result = typed_result(&action, &command, output);
+            let mut result = typed_result(action, command, output);
             if action == "board" {
                 result
                     .as_object_mut()
@@ -132,7 +132,7 @@ pub(crate) fn finish_beads_action(
             "stdout": stdout,
         }));
     }
-    Ok(typed_result(&action, &command, output))
+    Ok(typed_result(action, command, output))
 }
 
 fn build_beads_command(

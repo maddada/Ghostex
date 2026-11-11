@@ -110,8 +110,8 @@ impl ProjectEditorSleepingPlaceholderSignature {
                 "Browser shell state is retained. Activate this surface to restore it.",
             ),
             TitlebarMode::Kanban => (
-                "Kanban is sleeping",
-                "Kanban shell state is retained. Activate this surface to restore it.",
+                "Beads is sleeping",
+                "Beads keeps its place. Open the tab to wake it.",
             ),
             TitlebarMode::Automate => (
                 "Automate is sleeping",

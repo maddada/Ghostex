@@ -71,17 +71,15 @@ fn read_saved_file() -> HashMap<String, SavedSync> {
         .unwrap_or_default()
 }
 
-/// Loads the saved times the first time a workspace is seen, so "Synced 4 min ago" survives a
-/// gxserver restart.
+/// CDXC:ProjectBoard 2026-11-11 DECISION:
+/// User (settled with the Beads view plan): the last push and pull times are saved, so the header's "Synced 4 min ago" survives a gxserver restart instead of starting over at "Not synced yet".
 pub(crate) fn load_saved(entry: &WorkspaceEntry) {
     let mut state = entry.state();
     if state.sync.loaded {
         return;
     }
     let _file = file_lock().lock().expect("beads sync file");
-    state.sync.saved = read_saved_file()
-        .remove(&entry.path)
-        .unwrap_or_default();
+    state.sync.saved = read_saved_file().remove(&entry.path).unwrap_or_default();
     state.sync.loaded = true;
 }
 
@@ -117,7 +115,9 @@ pub(crate) fn start_sync(
     {
         let mut state = entry.state();
         if state.sync.running.is_some() {
-            return Ok(json!({ "action": action, "alreadyRunning": true, "exitCode": 0, "stderr": "", "stdout": "" }));
+            return Ok(
+                json!({ "action": action, "alreadyRunning": true, "exitCode": 0, "stderr": "", "stdout": "" }),
+            );
         }
         state.sync.running = Some(BeadsSyncRunning {
             kind: kind.to_string(),
@@ -135,7 +135,13 @@ pub(crate) fn start_sync(
                 let output = run_process_command_with_timeout(&command, &context, left).await;
                 drop(guard);
                 match output {
-                    Ok(output) => classify(&kind, output.exit_code, &output.stdout, &output.stderr, output.error.as_ref()),
+                    Ok(output) => classify(
+                        &kind,
+                        output.exit_code,
+                        &output.stdout,
+                        &output.stderr,
+                        output.error.as_ref(),
+                    ),
                     Err(error) => BeadsSyncResult {
                         kind: kind.clone(),
                         ok: false,
@@ -245,7 +251,12 @@ fn classify(
         code: code.to_string(),
         message: [stderr, stdout]
             .into_iter()
-            .find_map(|text| text.lines().rev().map(str::trim).find(|line| !line.is_empty()))
+            .find_map(|text| {
+                text.lines()
+                    .rev()
+                    .map(str::trim)
+                    .find(|line| !line.is_empty())
+            })
             .unwrap_or_default()
             .to_string(),
         output,

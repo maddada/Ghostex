@@ -43,7 +43,7 @@ pub(crate) fn official(platform: Platform) -> Section {
         row("storybook", "Storybook", "Build, browse, and annotate your project’s components without a persistent development server. Appears only in projects with Storybook."),
         row("code", "VS Code", "Explore, edit, and search your project in a familiar, full-featured workspace without ever leaving Ghostex."),
         row("browser", "Browser", "Open websites alongside your project and keep useful pages organized without leaving Ghostex."),
-        row("kanban", "Kanban", "Plan upcoming work and track task progress at a glance."),
+        row("kanban", "Beads", "See what's ready, who's on what and what's blocked, as a tree or a board."),
         row("automate", "Automate", "Turn repeatable project routines into simple workflows you can run whenever you need them."),
         row("bots", "Bots", "Swap the sidebar to your Hermes agents: one row each, with a new session one click away. Needs the Hermes CLI."),
         row("botAutomations", "Bot automations", "A feed of every Hermes cron run, one channel per job, opened from the Bots sidebar. Needs Bots."),

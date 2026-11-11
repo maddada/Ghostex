@@ -543,6 +543,7 @@ impl GhostexGpuiApp {
                 native_sidebar: Default::default(),
                 native_docs: Default::default(),
                 native_kanban: Default::default(),
+                native_beads: None,
                 floating_reveal: Default::default(),
                 ghostex_capture: Default::default(),
                 panel_motion: Default::default(),

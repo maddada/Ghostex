@@ -111,7 +111,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
         ("id", J::Str("kanban")),
         ("placement", J::Str("view")),
         ("settingsKey", J::Str("kanbanViewTabHidden")),
-        ("title", J::Str("Kanban")),
+        ("title", J::Str("Beads")),
     ]),
     J::Obj(&[
         ("description", J::Str("Turn repeatable project routines into simple workflows you can run whenever you need them.")),

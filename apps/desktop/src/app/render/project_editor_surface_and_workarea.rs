@@ -281,8 +281,8 @@ impl GhostexGpuiApp {
         if self.native_kanban_detached() {
             return self.render_native_kanban_detached_card(cx);
         }
-        if let Some(board) = self.render_native_kanban(window, cx) {
-            return board;
+        if let Some(beads) = self.render_beads_view(window, cx) {
+            return beads;
         }
         let signature = ProjectEditorPlaceholderSignature::for_mode(TitlebarMode::Kanban)
             .expect("Kanban placeholder signature must exist");
