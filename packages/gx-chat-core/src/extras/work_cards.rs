@@ -26,6 +26,9 @@ use crate::state::{ChatContext, ChatState};
 
 /// The changes that are the coordinator's own and so make a card in its turn. The user's answer
 /// on a card (`answer`) and the move from the board (`moved`) do not.
+/// A turn that changed more items than this shows one card for them all.
+const TURN_CARDS_MAX: usize = 3;
+
 const TURN_KINDS: [&str; 12] = [
     "add", "now", "step", "ask", "wait", "done", "drop", "restore", "status", "edit", "thread",
     "settle",
@@ -1194,6 +1197,92 @@ struct TurnLine {
     finished: bool,
     at: i64,
     item_key: String,
+    /// What the turn did to each item it touched, in the order it touched them (`turn_change`).
+    changes: Vec<TurnChange>,
+}
+
+/// One item a turn changed, said plainly for its card: "Work item updated", the item's title set
+/// apart, the one line that changed, and the item's state after it as the card's pill.
+#[derive(Default)]
+struct TurnChange {
+    /// "Work item updated", "added", "finished", "dropped", "needs you", "asked you", "now waiting".
+    lead: String,
+    title: String,
+    /// The line that changed: its new status line, the question asked, what it waits on.
+    detail: String,
+    /// The state the pill names (`status_label`), empty for none.
+    status: String,
+    key: String,
+    at: i64,
+}
+
+/// What a turn's events did to one item, for its card (`TurnChange`). The strongest change names
+/// it (finished, dropped, a question still open, added, waiting, then any other change), and its
+/// own event's words are the line that changed. The pill is the item's state now when this turn
+/// changed it last, else the state that change left it in.
+fn turn_change(item: &Value, events: &[&Value], latest: bool) -> TurnChange {
+    let last_text = |kinds: &[&str]| {
+        events
+            .iter()
+            .rev()
+            .find(|event| kinds.contains(&text(event, "kind")))
+            .map(|event| text(event, "text").to_string())
+            .unwrap_or_default()
+    };
+    let has = |kind: &str| events.iter().any(|event| text(event, "kind") == kind);
+    // A question asked in this turn that is still open.
+    let open_ask = events
+        .iter()
+        .rev()
+        .filter(|event| text(event, "kind") == "ask")
+        .find(|event| {
+            let tag = text(event, "text").split(':').next().unwrap_or_default();
+            item["asks"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|ask| text(ask, "tag") == tag && ask["open"] == true)
+        })
+        .map(|event| text(event, "text").to_string());
+    let (lead, detail, status) = if has("done") {
+        ("finished", last_text(&["done"]), "finished")
+    } else if has("drop") {
+        ("dropped", String::new(), "dropped")
+    } else if let Some(question) = open_ask {
+        ("needs you", question, "needs")
+    } else if has("add") {
+        ("added", last_text(&["now", "step", "status"]), "")
+    } else if has("wait") {
+        ("now waiting", last_text(&["wait"]), "waiting")
+    } else if has("ask") {
+        ("asked you", last_text(&["ask"]), "")
+    } else {
+        (
+            "updated",
+            last_text(&[
+                "now", "step", "status", "edit", "thread", "settle", "restore",
+            ]),
+            "",
+        )
+    };
+    let current = text(item, "status");
+    let status = if latest && !current.is_empty() {
+        current.to_string()
+    } else {
+        status.to_string()
+    };
+    TurnChange {
+        lead: format!("Work item {lead}"),
+        title: text(item, "title").to_string(),
+        detail,
+        status,
+        key: text(item, "key").to_string(),
+        at: events
+            .iter()
+            .filter_map(|event| at_ms(text(event, "at")))
+            .max()
+            .unwrap_or_default(),
+    }
 }
 
 /// The cards, in transcript order: `[{ key, kind ("item" | "ask"), anchorId, turnId, folded,
@@ -1280,6 +1369,9 @@ pub fn project_with(
                 .max()
                 .unwrap_or(first_at);
             summary.at = summary.at.max(last_at);
+            // What the turn did to the item, for its own card (`turn_change`).
+            let latest = by_turn.keys().next_back() == Some(turn_index);
+            summary.changes.push(turn_change(item, events, latest));
             // What the turn did to the item, in a word, unless it only asked.
             let kinds: Vec<&str> = events.iter().map(|event| text(event, "kind")).collect();
             if kinds.iter().all(|kind| *kind == "ask") {
@@ -1323,34 +1415,74 @@ pub fn project_with(
         if Some(turn_index) == merged {
             continue;
         }
-        let mut words: Vec<String> = summary.parts.iter().take(3).cloned().collect();
-        if summary.parts.len() > 3 {
-            words.push(format!("{} more", summary.parts.len() - 3));
-        }
-        let outcome = match summary.asks {
-            0 => String::new(),
-            1 => "1 ask".to_string(),
-            asks => format!("{asks} asks"),
+        // One card per item the turn changed, said plainly: "Work item updated", the item's
+        // title, the line that changed and its state now as the pill. A turn that changed more
+        // than `TURN_CARDS_MAX` items is one card naming how many, its titles as the line.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, of the thin line "Usage meters: a click must not make the main window flicker
+        // updated" above a "Message from" card: "make this one look like the other card please"
+        // and "please make it clearer, i dont get what this card means". The title with "updated"
+        // on its end read as part of the title. Each card now leads with what happened to a work
+        // item, sets the item's title apart, and opens it in the Work panel (`jumpToWorkCard`).
+        // Supersedes the one line per turn joining "<title> updated" parts.
+        let base = |key: String, status: &str, at: i64| {
+            json!({
+                "key": key,
+                "kind": "turnLine",
+                "anchorId": anchor,
+                "turnId": turn.id,
+                "folded": true,
+                "foldStatus": if status.is_empty() { "moving" } else { status },
+                "time": clock(at, context),
+            })
         };
-        if words.is_empty() && outcome.is_empty() {
+        if summary.changes.len() > TURN_CARDS_MAX {
+            let titles: Vec<&str> = summary
+                .changes
+                .iter()
+                .map(|change| change.title.as_str())
+                .collect();
+            let lead = format!("{} work items changed", titles.len());
+            let mut line = base(format!("work-turn:{}", turn.id), "moving", summary.at);
+            line["lead"] = json!(lead);
+            line["title"] = json!("");
+            line["detail"] = json!(titles.join(" \u{b7} "));
+            line["foldText"] = json!(format!("{lead}: {}", titles.join(" \u{b7} ")));
+            line["foldOutcome"] = json!("");
+            if let Some(first) = summary
+                .changes
+                .first()
+                .filter(|change| !change.key.is_empty())
+            {
+                line["command"] = json!({ "type": "jumpToWorkCard", "key": first.key });
+            }
+            cards.push((turn.start_ms, 5, summary.at, line));
             continue;
         }
-        let mut line = json!({
-            "key": format!("work-turn:{}", turn.id),
-            "kind": "turnLine",
-            "anchorId": anchor,
-            "turnId": turn.id,
-            "folded": true,
-            "foldStatus": if summary.finished { "finished" } else if summary.asks > 0 && words.is_empty() { "needs" } else { "moving" },
-            // A turn that only asked says so as its words ("2 asks"), never an empty line.
-            "foldText": if words.is_empty() { outcome.clone() } else { words.join(" \u{b7} ") },
-            "foldOutcome": if words.is_empty() { String::new() } else { outcome },
-            "time": clock(summary.at, context),
-        });
-        if !summary.item_key.is_empty() {
-            line["command"] = json!({ "type": "jumpToWorkCard", "key": summary.item_key });
+        for (index, change) in summary.changes.iter().enumerate() {
+            let mut line = base(
+                format!("work-turn:{}:{index}", turn.id),
+                &change.status,
+                change.at.max(turn.start_ms),
+            );
+            line["lead"] = json!(change.lead);
+            line["title"] = json!(change.title);
+            line["detail"] = json!(change.detail);
+            line["status"] = json!(change.status);
+            line["statusLabel"] = json!(if change.status.is_empty() {
+                ""
+            } else {
+                status_label(&change.status)
+            });
+            // The words the phone's line shows until it draws the card's parts.
+            line["foldText"] = json!(format!("{}: {}", change.lead, change.title));
+            line["foldOutcome"] = json!("");
+            if !change.key.is_empty() {
+                line["command"] = json!({ "type": "jumpToWorkCard", "key": change.key });
+            }
+            cards.push((turn.start_ms, 5, change.at, line));
         }
-        cards.push((turn.start_ms, 5, summary.at, line));
     }
     cards.sort_by_key(|(turn, priority, at, _)| (*turn, *priority, *at));
     open_asks.sort_by_key(|ask| ask.at);

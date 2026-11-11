@@ -1591,16 +1591,24 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
+        // A stack of work item update cards is spaced as the chat's other one-line cards are.
+        let gap = if cards.iter().all(|card| card["lead"].is_string()) {
+            super::cards::SINGLE_LINE_CARD.stack_gap(p)
+        } else {
+            6.0 * p.scale
+        };
         (!cards.is_empty()).then(|| {
             div()
                 .flex()
                 .flex_col()
                 .w_full()
                 .min_w_0()
-                .gap(px(6.0 * p.scale))
+                .gap(px(gap))
                 .children(cards.iter().map(|card| {
                     let drawn = if card["kind"] == "moving" {
                         self.work_moving_row(card, p, cx)
+                    } else if card["lead"].is_string() {
+                        self.work_turn_card(card, p, cx)
                     } else if card["folded"] == true {
                         self.work_fold_line(card, p, cx)
                     } else {
@@ -2131,6 +2139,132 @@ impl NativeChatView {
             }));
         }
         list.into_any_element()
+    }
+
+    /// What a coordinator's turn did to one of its work items, as the chat's other one-line cards
+    /// look (the "Message from" card's shape, cards.rs `SINGLE_LINE_CARD`): the work items icon in
+    /// the tile with the item's state mark as its badge, "Work item updated" then the item's title
+    /// set apart and the line that changed, the time, and the state it is in as a pill. A click
+    /// opens the item in the Work panel (`jumpToWorkCard`).
+    fn work_turn_card(&self, card: &Value, p: &ChatAppearance, cx: &Context<Self>) -> AnyElement {
+        let s = p.scale;
+        let shape = &*super::cards::SINGLE_LINE_CARD;
+        let status = match text(card, "status").as_str() {
+            "" => text(card, "foldStatus"),
+            status => status.to_string(),
+        };
+        let (mark, color) = status_look(&status, p);
+        let lead = text(card, "lead");
+        let title = text(card, "title");
+        let detail = text(card, "detail");
+        let label = text(card, "statusLabel");
+        let time = text(card, "time");
+        let command = card["command"].clone();
+        // The whole of it on hover, and what a click does.
+        let mut said = if title.is_empty() {
+            lead.clone()
+        } else {
+            format!("{lead}: {title}")
+        };
+        if !detail.is_empty() {
+            said = format!("{said}\n{detail}");
+        }
+        if command.is_object() {
+            said = format!("{said}\nClick to open it in the Work panel.");
+        }
+        let tip = said.clone();
+        let row = div()
+            .h(px(shape.header_height(s)))
+            .px(px(shape.padding_x * s))
+            .flex()
+            .items_center()
+            .gap(px(10.0 * s))
+            .min_w_0()
+            .child(
+                shape
+                    .tile("titlebar/layout-board-split.svg", p)
+                    .child(shape.mark_badge(mark, color, p)),
+            )
+            .child(
+                shape
+                    .title(div().flex_1().min_w_0().flex().items_center(), p)
+                    .gap(px(6.0 * s))
+                    .overflow_hidden()
+                    // The lead-in is quieter than the item's title it names; alone (a turn that
+                    // changed many items) it is the title.
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .whitespace_nowrap()
+                            .text_color(if title.is_empty() {
+                                p.foreground
+                            } else {
+                                p.card_muted
+                            })
+                            .child(lead),
+                    )
+                    .when(!title.is_empty(), |line| {
+                        line.child(
+                            div()
+                                .flex_shrink(1.0)
+                                .min_w(px(80.0 * s))
+                                .truncate()
+                                .text_color(p.foreground)
+                                .child(title),
+                        )
+                    })
+                    // The line that changed gives way first.
+                    .when(!detail.is_empty(), |line| {
+                        line.child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .font_weight(FontWeight::NORMAL)
+                                .text_size(px(13.0 * s))
+                                .text_color(p.muted)
+                                .child(detail.replace('\n', " ")),
+                        )
+                    }),
+            )
+            .when(!time.is_empty(), |row| {
+                row.child(
+                    div()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .text_size(px(12.0 * s))
+                        .text_color(p.muted)
+                        .child(time),
+                )
+            })
+            .when(!label.is_empty(), |row| {
+                row.child(shape.pill(None, Some(label), color, p))
+            });
+        let hover = super::cards::card_hover_fill(p);
+        shape
+            .shell(div(), p)
+            .id(gpui::SharedString::from(format!(
+                "work-turn-card:{}",
+                text(card, "key")
+            )))
+            .w_full()
+            .min_w_0()
+            .overflow_hidden()
+            .role(gpui::Role::Button)
+            .aria_label(said)
+            .tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+            })
+            .child(row)
+            .when(command.is_object(), |card| {
+                card.chat_cursor_pointer()
+                    .hover(move |style| style.bg(hover))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(command.clone(), cx);
+                    }))
+            })
+            .into_any_element()
     }
 
     /// An item's earlier card, or a settled ask: one quiet line, its status's glyph, what that turn
