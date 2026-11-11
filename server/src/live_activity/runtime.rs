@@ -873,10 +873,19 @@ fn phone_pass(
         return Some(ready_at);
     }
     let stale = active.then_some(now + timings.stale_after_ms);
-    let body = request(token, phone, "update", now, Some(&content), stale);
+    let mut body = request(token, phone, "update", now, Some(&content), stale);
+    // A keep-alive (nothing the banner shows changed) goes at Apple's low priority, which iOS does not count
+    // against the activity's update budget; a change goes at once (priority 10, the relay's default).
+    if !changed {
+        body["priority"] = json!(5);
+    }
     let outcome = shared.client.send(&body);
-    if outcome == RelayOutcome::Sent {
+    let refused_for_good = matches!(outcome, RelayOutcome::Failed { retry: false, .. });
+    if outcome == RelayOutcome::Sent || refused_for_good {
+        // A content the relay refused for good is not sent again; the next change is.
         state.sent_shape = Some(shape);
+    }
+    if outcome == RelayOutcome::Sent {
         // From the answer, not the decision: a slow request must not bring the next one closer.
         state.sent_at = shared.clock.now_ms();
         state.pushed_active |= active;
@@ -983,7 +992,7 @@ fn settle(
         RelayOutcome::Failed { code, retry } => {
             state.not_before = now + shared.timings.failure_backoff_ms;
             if !retry {
-                // The relay refused this content; wait for the next change rather than resend it.
+                // The relay refused this content: the next change is sent (phone_pass keeps its shape), not this.
                 if event == "update" {
                     state.sent_at = now;
                 }

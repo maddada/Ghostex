@@ -318,11 +318,15 @@ fn apply(
     let mut phones = store
         .read()
         .map_err(|error| RegistrationError::internal(error.to_string()))?;
+    // An entry a phone registered with its own token belongs to that phone: no other phone, and no caller with the
+    // computer's main token (an agent's CLI), may replace or clear it. An entry registered with the main token
+    // belongs to no phone, so a phone calling with its own token may take it over (it moved to its own token).
     let owned_by_another = |phones: &[LiveActivityPhone], machine_id: &str| {
-        caller.is_some()
-            && phones
-                .iter()
-                .any(|phone| phone.machine_id == machine_id && phone.device_id.as_deref() != caller)
+        phones.iter().any(|phone| {
+            phone.machine_id == machine_id
+                && phone.device_id.is_some()
+                && phone.device_id.as_deref() != caller
+        })
     };
     match request {
         Request::Status { machine_id } => Ok(phones.iter().any(|phone| {
