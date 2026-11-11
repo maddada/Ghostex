@@ -19,6 +19,7 @@
 //! CDXC:SessionChat 2026-11-04 WHY:
 //! The controls can't float over the page itself: the page is a windowed CEF browser, a native view nothing drawn in the window can sit above, and a press the page passed back through the page bridge would arrive after its mouse-down, too late to start a window move (`start_window_move` drags with the event being handled). So the band is the window's own, and the page starts under it.
 //! SEE-ALSO: apps/desktop/src/app/visual_page_modal_lifecycle.rs (open and close), apps/desktop/src/app/native_chat/visual.rs (the card), packages/gx-visual (the `open` mark).
+mod band_geometry;
 pub(crate) mod frame;
 mod glass;
 pub(crate) mod open_timing;
@@ -42,12 +43,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// The band over the page's top edge that holds the floating controls and moves the window
-/// (CDXC:SessionChat 2026-11-04 DECISION above).
-pub(crate) const TOP_BAND_HEIGHT: f32 = 36.0;
-/// The floating controls' diameter, and how far they sit from the window's right edge.
-const CONTROL_SIZE: f32 = 26.0;
-const CONTROL_INSET: f32 = 10.0;
+pub(crate) use band_geometry::TOP_BAND_HEIGHT;
+use band_geometry::{CONTROL_INSET, CONTROL_SIZE};
 const ICON_CLOSE: &str = "titlebar/x.svg";
 const ICON_OPEN_IN_BROWSER: &str = "titlebar/external-link.svg";
 const ICON_REFRESH: &str = "titlebar/refresh.svg";
@@ -665,7 +662,14 @@ impl GpuiVisualPageModalWindow {
             .w_full()
             .items_center()
             .when_some(leading_close, |band, close| {
-                band.child(div().flex_shrink_0().pl(px(CONTROL_INSET)).child(close))
+                band.child(
+                    div()
+                        .flex_shrink_0()
+                        .self_start()
+                        .pt(px(CONTROL_INSET))
+                        .pl(px(CONTROL_INSET))
+                        .child(close),
+                )
             })
             .child(
                 crate::app::render::window_drag_region::window_drag_region(
@@ -679,7 +683,9 @@ impl GpuiVisualPageModalWindow {
             .child(
                 h_flex()
                     .flex_shrink_0()
+                    .self_start()
                     .gap(px(6.0))
+                    .pt(px(CONTROL_INSET))
                     .pr(px(CONTROL_INSET))
                     .items_center()
                     .when(self.source_changed || self.refreshing, |this| {
@@ -830,7 +836,7 @@ mod tests {
 
     #[test]
     fn the_floating_controls_fit_inside_the_band_over_the_page() {
-        assert!(CONTROL_SIZE + 2.0 * 4.0 <= TOP_BAND_HEIGHT);
+        assert!(CONTROL_INSET + CONTROL_SIZE <= TOP_BAND_HEIGHT);
     }
 
     /// A floating page starts under the band, so its template drops the band's height from its

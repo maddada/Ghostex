@@ -121,6 +121,10 @@ mod notice_modal_demo;
 mod onboarding;
 #[path = "native_modal_demo/onboarding.rs"]
 mod onboarding_demo;
+#[path = "../app/window/visual_page_modal/band_geometry.rs"]
+mod page_band_geometry;
+#[path = "native_modal_demo/page_window_band.rs"]
+mod page_window_band_demo;
 #[path = "native_modal_demo/permission_guide.rs"]
 mod permission_guide_demo;
 #[path = "../app/os_integration/permission_guide/tag.rs"]
@@ -748,6 +752,7 @@ fn main() {
                 "gbot-team" => gbot_team_demo::open(&demo, cx),
                 "new-gbot" => new_gbot_demo::open(&demo, cx),
                 "close-buttons" => close_buttons_demo::open(&demo, cx),
+                "page-window-band" => page_window_band_demo::open(&demo, cx),
                 "session-note" => session_note_demo::open(&demo, cx),
                 "chief-row" => chief_row_demo::open(&demo, cx),
                 "extension-menu" => extension_menu_demo::open(&demo, cx),
