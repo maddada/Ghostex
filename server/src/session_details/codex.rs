@@ -348,28 +348,17 @@ fn run_value(run: &Run) -> Value {
     })
 }
 
-/// The program that runs Codex for this session: the live process's (with its script for a
-/// `node codex.js` install), else the `codex` on this computer.
+/// The program that runs Codex for this session: the live process's while it is still on disk
+/// (with its script for a `node codex.js` install), else the `codex` on this computer.
 fn codex_program(
     live: Option<&(Vec<String>, Vec<(String, String)>)>,
     home: &Path,
 ) -> Option<Vec<String>> {
-    if let Some((arguments, _)) = live {
-        let first = arguments.first()?;
-        let stem = Path::new(first)
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .unwrap_or_default();
-        if matches!(stem, "node" | "bun") {
-            if let Some(script) = arguments.get(1).filter(|script| !script.starts_with('-')) {
-                return Some(vec![first.clone(), script.clone()]);
-            }
-        } else if Path::new(first).is_absolute() {
-            return Some(vec![first.clone()]);
-        }
-    }
-    crate::accounts::helpers::probe_executable(home, "codex")
-        .map(|path| vec![path.to_string_lossy().into_owned()])
+    super::agents::agent_program(
+        live.map(|(arguments, _)| arguments.as_slice()),
+        "codex",
+        home,
+    )
 }
 
 /// `codex mcp list --json` for a session in `folder`, run with the live session's environment.

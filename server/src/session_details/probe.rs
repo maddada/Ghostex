@@ -270,15 +270,14 @@ fn build_command(target: &ProbeTarget) -> Result<Command, String> {
         .as_ref()
         .map(|live| split_live_arguments(&live.arguments))
         .unwrap_or_default();
-    let program = match program.first() {
-        Some(executable) if Path::new(executable).is_absolute() => program,
-        _ => vec![
-            crate::accounts::helpers::probe_executable(&target.home, "claude")
-                .ok_or_else(|| "Claude Code isn't installed on this computer.".to_string())?
-                .to_string_lossy()
-                .into_owned(),
-        ],
-    };
+    // The live program can be gone from disk while it runs (mise removes an older Claude when it
+    // installs a newer one), so it is found again by name then (`agents::agent_program`).
+    let program = super::agents::agent_program(
+        (!program.is_empty()).then_some(program.as_slice()),
+        "claude",
+        &target.home,
+    )
+    .ok_or_else(|| "Claude Code isn't installed on this computer.".to_string())?;
     if !flags.iter().any(|flag| flag == "--model") {
         if let Some(model) = target.model.as_deref().filter(|model| !model.is_empty()) {
             flags.push("--model".to_string());
@@ -328,7 +327,7 @@ fn run_probe(target: &ProbeTarget) -> Result<(Value, Option<Value>), String> {
     let mut command = build_command(target)?;
     let mut child = command
         .spawn()
-        .map_err(|error| format!("Claude Code couldn't start: {error}"))?;
+        .map_err(|error| super::agents::start_error("Claude Code", &error))?;
     // Claude says why it stopped on stderr ("No conversation found with session ID: …"); its last
     // line goes into the error the panel shows.
     let (stderr_sender, stderr_last) = mpsc::channel::<String>();
