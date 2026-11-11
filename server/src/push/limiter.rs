@@ -45,6 +45,11 @@ impl PhoneBudget {
             .is_none_or(|admitted| *admitted <= now - SESSION_GAP_MS)
     }
 
+    /// Whether an alert went to this phone within the last `span_ms`.
+    pub(crate) fn alerted_within(&self, now: i64, span_ms: i64) -> bool {
+        self.alert_sends.iter().any(|sent| *sent > now - span_ms)
+    }
+
     pub(crate) fn record_alert(&mut self, now: i64, admitted_session: Option<&str>) {
         self.prune(now);
         self.alert_sends.push(now);

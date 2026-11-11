@@ -87,6 +87,7 @@ impl Harness {
             },
             device_id: None,
             session_names: false,
+            alerts: None,
             registered_at: "2026-10-31T10:00:00.000Z".to_string(),
         });
         store.write(&data).expect("write store");
@@ -237,6 +238,8 @@ async fn push_send_finished_alert_carries_only_event_and_names() {
             },
             "contentAvailable": true,
             "sound": "default",
+            "threadId": "computer-P:s1",
+            "tag": "computer-P:s1",
             "ttl": 3600,
             "priority": "high",
         }])
