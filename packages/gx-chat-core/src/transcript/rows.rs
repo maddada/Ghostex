@@ -107,6 +107,7 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
         approval_wait: crate::transcript::approval_wait::approval_wait(state),
         session_directory_revision: state.transcript_view.session_directory_revision,
         agent_message_deliveries: state.session.agent_message_deliveries.clone(),
+        worked_line_shown: worked_line_shown(state, context),
     };
     if state.transcript_view.projection_inputs.as_ref() == Some(&inputs) {
         return;
@@ -148,11 +149,16 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
     let mut items = projection.items;
     // Status line in the chat keeps the time on the turn's own fold and leaves the card above the
     // chat box without a worked line (`transcript/chat_look.rs`).
+    let shown = inputs.worked_line_shown;
     view.worked_line = if view.chat_look.status_in_transcript {
         None
     } else {
         projection.worked_turn.map(|(id, label)| {
-            // A grouped line's time spans the whole reply, so the card says that one.
+            // A grouped line's time spans the whole reply, so the card says that one. Once the
+            // bar's minute is up the fold keeps its own time (`worked_line_shown`).
+            if !shown {
+                return label;
+            }
             without_worked_time(&mut items, &id)
                 .filter(|group| group != "Worked")
                 .unwrap_or(label)
@@ -175,6 +181,7 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
     // revision the frame's identity test reads.
     view.projection_rebuilt = true;
     state.transcript_view.row_details = row_details(state, context);
+    arm_worked_line_timer(state, context);
     // `this.scheduleBackfill()` at the end of `update`: the zero-delay timer is armed by the
     // publish that queued the placeholders, so the very next `tick` promotes them. Arming it
     // from the settle instead waited for the NEXT event's settle, so on every real chat the first
@@ -256,4 +263,54 @@ fn without_worked_time(items: &mut [TranscriptItem], turn_id: &str) -> Option<St
         *button = crate::transcript::grouped_work::without_time(button, time);
     }
     Some(previous)
+}
+
+/// How long the bar above the chat box shows a finished turn's "Worked for" line, in ms.
+///
+/// CDXC:SessionChat 2026-11-11 SEE-ALSO: apps/desktop/src/app/native_chat/working_card.rs
+/// (`WORKED_LINE_MS`, the bar's own minute, from the user's chat box bars decision); the two must
+/// stay equal.
+pub const WORKED_LINE_MS: f64 = 60_000.0;
+
+/// The timer that rebuilds the list when the bar's "Worked for" minute is up.
+pub const WORKED_LINE_TIMER: &str = "b:worked-line";
+
+/// Whether the bar above the chat box still shows the newest finished turn's "Worked for": until a
+/// minute after the newest row, as the bar times it (`workingCard.workedAtMs`). A row without a
+/// time keeps it shown.
+///
+/// CDXC:SessionChat 2026-11-11 WHY: the 2026-10-18 decision (`without_worked_time`) takes the time off the turn's own fold only while the bar shows it, so it is on screen once. Since the bar lets it go a minute after the turn, the fold read "Previous turn" with its time shown nowhere; now the fold gets "Worked for 28s" back when the bar's minute is up, and the timer below rebuilds the list then.
+fn worked_line_shown(state: &ChatState, context: &ChatContext) -> bool {
+    let Some(at) = state
+        .messages
+        .composed
+        .iter()
+        .rev()
+        .find_map(|message| message.timestamp)
+    else {
+        return true;
+    };
+    (context.now_ms as i64) < at + WORKED_LINE_MS as i64
+}
+
+/// Arms [`WORKED_LINE_TIMER`] for the moment the bar's minute is up, while it is not.
+pub(crate) fn arm_worked_line_timer(state: &mut ChatState, context: &ChatContext) {
+    let at = state
+        .messages
+        .composed
+        .iter()
+        .rev()
+        .find_map(|message| message.timestamp);
+    match at {
+        Some(at) if (context.now_ms as i64) < at + WORKED_LINE_MS as i64 => {
+            let left = (at as f64 + WORKED_LINE_MS - context.now_ms).max(0.0) + 50.0;
+            state
+                .core
+                .timers
+                .arm(WORKED_LINE_TIMER, context.now_ms, left);
+        }
+        _ => {
+            state.core.timers.cancel(WORKED_LINE_TIMER);
+        }
+    }
 }
