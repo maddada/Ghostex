@@ -81,6 +81,7 @@ pub struct Relay {
     global: Limiter<()>,
     in_flight: Semaphore,
     gone: Mutex<HashMap<(Environment, [u8; 32]), Instant>>,
+    max_gone: usize,
     counters: Counters,
 }
 
@@ -141,6 +142,7 @@ impl Relay {
             global: Limiter::new(limits.global),
             in_flight: Semaphore::new(limits.in_flight),
             gone: Mutex::new(HashMap::new()),
+            max_gone: limits.max_gone_tokens.max(1),
             counters: Counters::default(),
         })
     }
@@ -170,6 +172,25 @@ impl Relay {
             .retain(|_, since| now.duration_since(*since) < GONE_TOKEN_MEMORY);
     }
 
+    /// Remembers a token Apple dropped. Full, it forgets expired ones first, then the oldest.
+    fn remember_gone(&self, key: (Environment, [u8; 32])) {
+        let now = Instant::now();
+        let mut gone = self.gone.lock().expect("gone lock");
+        if !gone.contains_key(&key) && gone.len() >= self.max_gone {
+            gone.retain(|_, since| now.duration_since(*since) < GONE_TOKEN_MEMORY);
+            if gone.len() >= self.max_gone {
+                if let Some(oldest) = gone
+                    .iter()
+                    .min_by_key(|(_, since)| **since)
+                    .map(|(key, _)| *key)
+                {
+                    gone.remove(&oldest);
+                }
+            }
+        }
+        gone.insert(key, now);
+    }
+
     fn caller(&self, peer: SocketAddr, headers: &HeaderMap) -> IpAddr {
         if self.behind_proxy {
             let forwarded = headers
@@ -187,8 +208,34 @@ impl Relay {
     }
 }
 
+/// The key a caller's address is counted under: an IPv4 address as it is, an IPv6 address by its /64, since anyone
+/// given a /64 has more addresses than any limit could count one by one (an IPv4 address mapped into IPv6 counts
+/// as that IPv4 address).
+pub fn caller_key(address: IpAddr) -> IpAddr {
+    match address {
+        IpAddr::V4(_) => address,
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => IpAddr::V4(v4),
+            None => {
+                let segments = v6.segments();
+                IpAddr::V6(std::net::Ipv6Addr::new(
+                    segments[0],
+                    segments[1],
+                    segments[2],
+                    segments[3],
+                    0,
+                    0,
+                    0,
+                    0,
+                ))
+            }
+        },
+    }
+}
+
 async fn health(State(relay): State<Arc<Relay>>) -> Response {
     let counters = &relay.counters;
+    let gone_tokens = relay.gone.lock().expect("gone lock").len();
     answer(
         200,
         json!({
@@ -198,6 +245,7 @@ async fn health(State(relay): State<Arc<Relay>>) -> Response {
             "refused": counters.refused.load(Ordering::Relaxed),
             "rateLimited": counters.rate_limited.load(Ordering::Relaxed),
             "appleErrors": counters.apple_errors.load(Ordering::Relaxed),
+            "goneTokens": gone_tokens,
         }),
     )
 }
@@ -209,14 +257,11 @@ async fn send(
     body: Bytes,
 ) -> Response {
     let counters = &relay.counters;
-    let caller = relay.caller(peer, &headers);
+    let caller = caller_key(relay.caller(peer, &headers));
     let now = Instant::now();
-    // The caller's own bucket first, so one noisy address does not spend the relay's.
-    if let Err(wait) = relay
-        .per_address
-        .take(&caller, now)
-        .and_then(|()| relay.global.take(&(), now))
-    {
+    // Every request spends its caller's bucket; only one that will go to Apple spends the relay's (below), so junk
+    // from many addresses cannot use up the budget real pushes need.
+    if let Err(wait) = relay.per_address.take(&caller, now) {
         counters.rate_limited.fetch_add(1, Ordering::Relaxed);
         relay.log("refused reason=rate-limited scope=address");
         return rate_limited(wait);
@@ -279,6 +324,13 @@ async fn send(
         ));
         return rate_limited(wait);
     }
+    if let Err(wait) = relay.global.take(&(), now) {
+        counters.rate_limited.fetch_add(1, Ordering::Relaxed);
+        relay.log(&format!(
+            "refused reason=rate-limited scope=global event={event}"
+        ));
+        return rate_limited(wait);
+    }
     let Ok(_permit) = tokio::time::timeout(Duration::from_secs(5), relay.in_flight.acquire()).await
     else {
         counters.rate_limited.fetch_add(1, Ordering::Relaxed);
@@ -307,11 +359,7 @@ async fn send(
                     "BadDeviceToken" | "DeviceTokenNotForTopic" | "Unregistered"
                 );
             if gone {
-                relay
-                    .gone
-                    .lock()
-                    .expect("gone lock")
-                    .insert((push.environment, digest), Instant::now());
+                relay.remember_gone((push.environment, digest));
                 return answer(
                     410,
                     json!({ "ok": false, "error": "token-gone", "detail": "Apple no longer takes this token.",

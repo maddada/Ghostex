@@ -1,6 +1,6 @@
 [package]
 name = "ghostex-push-relay"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Ghostex's Live Activity push relay: holds the Apple push key and sends Live Activity pushes for the Ghostex iPhone app, nothing else."
 publish = false

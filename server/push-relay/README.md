@@ -55,7 +55,7 @@ Answers (JSON, `ok` true or false):
 | 502 | `apple`, `apple-unreachable` | Apple refused it otherwise (`appleStatus`, `appleReason`) or did not answer. |
 | 503 | `not-configured` | The relay has no key yet. |
 
-`GET /live-activity/healthz` answers `{"ok":true,"configured":true|false,"sent":N,"refused":N,"rateLimited":N,"appleErrors":N}`.
+`GET /live-activity/healthz` answers `{"ok":true,"configured":true|false,"sent":N,"refused":N,"rateLimited":N,"appleErrors":N,"goneTokens":N}`.
 
 ## Limits, and why these numbers
 
@@ -65,14 +65,17 @@ Answers (JSON, `ok` true or false):
   inside that.
 - Per push-to-start token: 2, then one every 10 minutes. A start is needed only when no banner runs; Apple
   limits starts tightly.
-- Per caller address (the last `X-Forwarded-For` entry, which Caddy sets): 60, refilled 60 a minute, for
-  every request, refused ones included. Enough for a home with several computers and phones, and it stops
+- Per caller address (the last `X-Forwarded-For` entry, which Caddy sets; an IPv6 address counts by its /64,
+  since anyone given a /64 has more addresses than a limit could count one by one): 60, refilled 60 a minute,
+  for every request, refused ones included. Enough for a home with several computers and phones, and it stops
   one address from probing tokens quickly.
-- Whole relay: 300, refilled 3000 a minute (50 a second), and 64 requests to Apple in flight. Apple takes
+- Whole relay: 300, refilled 3000 a minute (50 a second), and 64 requests to Apple in flight. Only a request
+  that is about to go to Apple spends it, so junk from many addresses cannot use up what real pushes need. Apple takes
   far more than that from one key; the cap is what keeps a flood from many addresses from reaching Apple
   as a flood, so Apple never has a reason to throttle the key itself.
 - A token Apple called gone (410, `BadDeviceToken`, `Unregistered`, `DeviceTokenNotForTopic`) is refused
-  here for 24 hours.
+  here for 24 hours. At most 100,000 are remembered (the oldest goes first), so random tokens cannot grow the
+  relay's memory without end; the health check reports the count (`goneTokens`).
 - One provider token (the signed JWT) is reused for 40 minutes: Apple refuses one older than an hour and
   answers `TooManyProviderTokenUpdates` to one renewed more often than every 20 minutes.
 

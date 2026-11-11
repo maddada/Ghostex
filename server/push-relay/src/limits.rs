@@ -22,6 +22,9 @@ pub struct LimitConfig {
     pub global: Rate,
     /// Requests to Apple in flight at once.
     pub in_flight: usize,
+    /// Tokens Apple dropped that the relay remembers (refusing them without asking Apple); past this the oldest is
+    /// forgotten, so random tokens cannot grow the relay's memory without end.
+    pub max_gone_tokens: usize,
 }
 
 impl Default for LimitConfig {
@@ -44,6 +47,7 @@ impl Default for LimitConfig {
                 per_minute: 3000.0,
             },
             in_flight: 64,
+            max_gone_tokens: 100_000,
         }
     }
 }
