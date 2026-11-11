@@ -58,15 +58,22 @@ jobs:
       # The NDK compiler cache (ccache) and the gomobile bridge cache are keyed
       # on this pin, so a bump invalidates both.
       ANDROID_NDK_VERSION: 29.0.14206865
-      # CDXC:Release 2026-10-15 DECISION: the APK ships arm64-v8a only (user
-      # choice after the 229 MB four-ABI APK; an arm64-only build is 77 MB
-      # before compression). Every native library is packaged once per ABI, x86
-      # and x86_64 only run on emulators (debug builds), and 32-bit ARM phones
-      # are no longer supported. `tooling/release-mobile/android.sh` hands this
-      # list to Gradle as `reactNativeArchitectures` (the RN plugin turns it into
+      # CDXC:Release 2026-11-11 DECISION: the GitHub APK ships arm64-v8a only
+      # (user choice on 2026-10-15 after the 229 MB four-ABI APK; an arm64-only
+      # build is 77 MB before compression, and every native library is packaged
+      # once per ABI), and the Play bundle ships arm64-v8a and x86_64 (user,
+      # 2026-11-11: "Play bundle only"). This supersedes the 2026-10-15 rule that
+      # every release ships arm64-v8a only. Play splits a bundle per ABI, so
+      # phones download only their own libraries, and x86_64 Chromebooks and
+      # emulators get native libraries instead of the ARM translator, which
+      # dies with SIGILL in the tailcat bridge (golang.org/x/sys/cpu reads
+      # ID_AA64ISAR0_EL1 directly, which only an arm64 kernel emulates).
+      # 32-bit ARM and x86 are not supported.
+      # `tooling/release-mobile/android.sh` hands this list to Gradle as
+      # `reactNativeArchitectures` (the RN plugin turns it into
       # `ndk.abiFilters`, which also filters the prebuilt jniLibs below).
       # Compression and R8: apps/mobile/app/plugins/withAndroidReleaseSize.js.
-      GHOSTEX_ANDROID_ABIS: arm64-v8a
+      GHOSTEX_ANDROID_ABIS: ${{ inputs.distribution == 'play' && 'arm64-v8a x86_64' || 'arm64-v8a' }}
       # tooling/release-mobile/android.sh: `github` builds ghostex-android.apk into
       # build/release-gpui/<version>/android, `play` builds ghostex-android-play.aab into
       # build/release-gpui/<version>/android-play. Artifact names follow the folder, so the
