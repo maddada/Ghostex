@@ -361,6 +361,10 @@ pub(crate) struct CoordinatorBoardView {
     /// `refresh_page_counts`), by page id.
     pub(super) page_counts_asked:
         std::cell::RefCell<std::collections::HashMap<String, web_time::Instant>>,
+    /// The dock row whose ⋯ menu was opened last, and that menu: the row's ⋯ stays shown over its
+    /// age while that menu is open, the pointer being on the menu and off the row (work_cards.rs
+    /// `row_age_menu`).
+    pub(super) dock_menu_row: Option<(String, gpui::EntityId)>,
 }
 
 /// An open card menu: its card, the window point it opened at, whether it shows its Tags, or only

@@ -99,6 +99,8 @@ const DOCK_LIST_PAD: f32 = 4.0;
 const DOCK_ROW_PAD_X: f32 = 8.0;
 const DOCK_GAP: f32 = 10.0;
 const DOCK_LEAD: f32 = 23.0;
+/// A dock row's age slot is at least the ⋯ that takes its place under the pointer (`row_age_menu`).
+const AGE_SLOT_MIN: f32 = 26.0;
 /// The rows' width before the dock has painted once (the chat box's own width).
 const DOCK_ROW_WIDTH_GUESS: f32 = 736.0;
 
@@ -837,11 +839,9 @@ impl NativeChatView {
             _ => DOCK_ROW_WIDTH_GUESS,
         } - 2.0 * DOCK_LIST_PAD
             - 2.0 * DOCK_ROW_PAD_X;
-        let age_width = if age.is_empty() {
-            0.0
-        } else {
-            dock_text_width(&age, PROSE_SIZE, p, cx) + DOCK_GAP
-        };
+        // The age's slot, which the ⋯ takes under the pointer (`row_age_menu`): never narrower
+        // than the ⋯, so the two swap without anything moving.
+        let age_width = dock_text_width(&age, PROSE_SIZE, p, cx).max(AGE_SLOT_MIN) + DOCK_GAP;
         let beside_room = row_width - DOCK_LEAD - age_width - row_width / 2.0;
         let widths: Vec<f32> = match &action {
             Some(label) => vec![dock_button_width(label, true, false, p, cx)],
@@ -1080,35 +1080,36 @@ impl NativeChatView {
                     .child(svg().path(icon).size(px(13.0 * s)).text_color(color)),
             )
             .child(question);
-        // Opened, the row's other actions (Show in chat, Dismiss, Snooze, Mention) are one ⋯ menu
-        // at the right end of its answers.
-        let menu = (open && !page_row).then(|| self.row_menu_button(&key, row, p, cx));
         let mut under_answers = Vec::new();
-        let mut menu_under = None;
         if beside {
-            if !buttons.is_empty() || menu.is_some() {
+            if !buttons.is_empty() {
                 head = head.child(
                     div()
                         .flex_shrink_0()
                         .flex()
                         .items_center()
                         .gap(px(6.0 * s))
-                        .children(buttons)
-                        .children(menu),
+                        .children(buttons),
                 );
             }
         } else {
             under_answers = buttons;
-            menu_under = menu;
         }
+        // The row's other actions (Show in chat, Dismiss, Snooze, Mention) are one ⋯ menu that
+        // takes the age's place while the pointer is over the row, closed or opened.
+        //
+        // CDXC:Coordinators 2026-11-11 DECISION:
+        // User, of the ⋯ at the right end of an opened row's answers: "please move this button to
+        // be over the time in the card but only when i hover over the card (whether collapsed or
+        // expanded)". The answers and Reply get its room.
+        let hover = gpui::SharedString::from(format!("dock-row-hover:{key}"));
+        let age_menu = self.row_age_menu(&key, &age, &hover, row, p, cx);
         if page_row {
-            let hover = gpui::SharedString::from(format!("dock-page-row:{key}"));
             let page = row["open"].clone();
-            let menu = page_row_menu(row);
-            let right_menu = menu.clone();
+            let right_menu = page_row_menu(row);
             head = head
                 .group(hover.clone())
-                .child(self.page_row_age(&key, &age, &hover, menu, p, cx))
+                .child(age_menu)
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.invoke(page.clone(), cx);
                 }))
@@ -1125,12 +1126,7 @@ impl NativeChatView {
             return div().w_full().child(head).into_any_element();
         }
         head = head
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .text_color(p.muted)
-                    .child(age.to_string()),
-            )
+            .child(age_menu)
             .on_click(cx.listener(move |this, _, _, cx| {
                 // One row open at a time: opening this one shuts the one that was open.
                 if !this.expanded.remove(&toggle) {
@@ -1140,7 +1136,7 @@ impl NativeChatView {
                 cx.notify();
             }));
         if !open {
-            return div().w_full().child(head).into_any_element();
+            return div().w_full().group(hover).child(head).into_any_element();
         }
         // Opened: its own card, a little lighter than the dock, with the answers that did not fit
         // beside the title on a line under it and the ⋯ at that line's right end.
@@ -1154,6 +1150,7 @@ impl NativeChatView {
         // own card with only one open at a time.
         let mut card = div()
             .w_full()
+            .group(hover)
             .my(px(4.0 * s))
             .rounded(px(10.0 * s))
             .border_1()
@@ -1164,7 +1161,7 @@ impl NativeChatView {
                 p.foreground.opacity(0.055)
             })
             .child(head);
-        if !under_answers.is_empty() || menu_under.is_some() {
+        if !under_answers.is_empty() {
             card = card.child(
                 div()
                     .w_full()
@@ -1184,54 +1181,10 @@ impl NativeChatView {
                             .items_center()
                             .gap(px(6.0 * s))
                             .children(under_answers),
-                    )
-                    .children(menu_under),
+                    ),
             );
         }
         card.into_any_element()
-    }
-
-    /// The opened row's ⋯: its menu (`row_menu`) in the app's dropdown, inside the window it was
-    /// pressed in.
-    fn row_menu_button(
-        &self,
-        key: &str,
-        row: &Value,
-        p: &ChatAppearance,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let s = p.scale;
-        let row = row.clone();
-        div()
-            .id(gpui::SharedString::from(format!("dock-row-menu:{key}")))
-            .role(gpui::Role::Button)
-            .aria_label("More actions")
-            .flex_shrink_0()
-            .w(px(28.0 * s))
-            .h(px(28.0 * s))
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(px(7.0 * s))
-            .chat_cursor_pointer()
-            .hover(|style| style.bg(p.foreground.opacity(0.08)))
-            .tooltip(|window, cx| {
-                gpui_component::tooltip::Tooltip::new("More actions").build(window, cx)
-            })
-            .child(
-                svg()
-                    .path("titlebar/dots.svg")
-                    .size(px(16.0 * s))
-                    .text_color(p.muted),
-            )
-            .on_click(
-                cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
-                    cx.stop_propagation();
-                    let rows = this.row_menu(&row, cx);
-                    this.show_dock_row_menu(rows, event.position(), window, cx);
-                }),
-            )
-            .into_any_element()
     }
 
     /// An opened row's menu: Show in chat, Dismiss and Snooze (`page_row_menu`), then Mention,
@@ -1514,22 +1467,37 @@ impl NativeChatView {
         )
     }
 
-    /// A page row's right end: its age, and over it while the row is hovered the ⋯ that opens its
-    /// menu (`page_row_menu`), as a board card's age and ⋯ (coordinator_board.rs `age_slot`).
-    fn page_row_age(
+    /// A dock row's right end: its age, and over it while the row (`hover`, closed or opened) is
+    /// hovered the ⋯ that opens its menu (`row_menu`), as a board card's age and ⋯
+    /// (coordinator_board.rs `age_slot`). The ⋯ stays while its menu is open. The slot keeps one
+    /// width and height either way, so nothing moves when they swap.
+    fn row_age_menu(
         &self,
         key: &str,
         age: &str,
         hover: &gpui::SharedString,
-        menu: Vec<Value>,
+        row: &Value,
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
+        let pinned = self
+            .board
+            .dock_menu_row
+            .as_ref()
+            .is_some_and(|(row, menu)| {
+                row == key
+                    && self
+                        .option_menu
+                        .as_ref()
+                        .is_some_and(|open| open.entity_id() == *menu)
+            });
+        let row = row.clone();
+        let menu_key = key.to_owned();
         div()
             .relative()
             .flex_shrink_0()
-            .min_w(px(26.0 * s))
+            .min_w(px(AGE_SLOT_MIN * s))
             .h(px(PROSE_LINE_HEIGHT * s))
             .flex()
             .items_center()
@@ -1537,24 +1505,26 @@ impl NativeChatView {
             .child(
                 div()
                     .text_color(p.muted)
+                    .when(pinned, |age| age.opacity(0.0))
                     .group_hover(hover.clone(), |style| style.opacity(0.0))
                     .child(age.to_string()),
             )
             .child(
                 div()
-                    .id(gpui::SharedString::from(format!("dock-page-menu:{key}")))
+                    .id(gpui::SharedString::from(format!("dock-row-menu:{key}")))
                     .role(gpui::Role::Button)
                     .aria_label("More actions")
                     .absolute()
                     .right(px(-2.0 * s))
                     .top(px((PROSE_LINE_HEIGHT - 22.0) / 2.0 * s))
-                    .w(px(26.0 * s))
+                    .w(px(AGE_SLOT_MIN * s))
                     .h(px(22.0 * s))
                     .flex()
                     .items_center()
                     .justify_center()
                     .rounded(px(6.0 * s))
-                    .opacity(0.0)
+                    .when(!pinned, |dots| dots.opacity(0.0))
+                    .when(pinned, |dots| dots.bg(p.foreground.opacity(0.08)))
                     .group_hover(hover.clone(), |style| style.opacity(1.0))
                     .chat_cursor_pointer()
                     .hover(|style| style.bg(p.foreground.opacity(0.08)))
@@ -1570,7 +1540,13 @@ impl NativeChatView {
                     .on_click(
                         cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                             cx.stop_propagation();
-                            this.show_dock_row_menu(menu.clone(), event.position(), window, cx);
+                            let rows = this.row_menu(&row, cx);
+                            this.show_dock_row_menu(rows, event.position(), window, cx);
+                            this.board.dock_menu_row = this
+                                .option_menu
+                                .as_ref()
+                                .map(|menu| (menu_key.clone(), menu.entity_id()));
+                            cx.notify();
                         }),
                     ),
             )
