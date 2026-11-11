@@ -338,8 +338,9 @@ MEMORY AND INSTRUCTIONS
   a coordinator's sidebar menu save.
 
 COORDINATOR PLAYBOOK
-  The coordinator playbook is the ghostex-coordinator skill's text: how every
-  coordinator works. Ghostex's playbook is never edited, so its updates keep
+  The coordinator playbook is how every coordinator works. It ships inside
+  Ghostex and `guide` prints it; the ghostex-coordinator skill only sends a
+  coordinator to `guide`. Ghostex's playbook is never edited, so its updates keep
   arriving. The user changes how coordinators work with playbook overrides:
   one plain text for every coordinator ("Never push without asking", "Ignore
   the board rules"). `guide` prints the playbook, the reply format, and then
