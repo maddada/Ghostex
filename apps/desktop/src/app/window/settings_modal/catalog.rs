@@ -157,7 +157,15 @@ fn section_def(section: &catalog::Section) -> SearchSectionDef {
                         value: option.value.clone(),
                     })
                     .collect(),
-                keywords: row.keywords.iter().map(|word| word.to_string()).collect(),
+                // A renamed group's old name finds each of its rows (`section_search_keywords`).
+                keywords: row
+                    .keywords
+                    .iter()
+                    .chain(ghostex_settings_catalog::section_search_keywords(
+                        section.id,
+                    ))
+                    .map(|word| word.to_string())
+                    .collect(),
                 advanced: row.advanced,
             })
             .collect(),

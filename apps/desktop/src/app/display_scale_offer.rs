@@ -1,4 +1,4 @@
-//! The one-time offer, on Linux, to set Interface scale back to 100% once Ghostex follows the
+//! The one-time offer, on Linux, to set UI Scale back to 100% once Ghostex follows the
 //! desktop's display scale (CDXC:PlatformSupport 2026-11-08 DECISION in the settings catalog's
 //! `interface_scale.rs`).
 
@@ -14,7 +14,7 @@ const OFFER_DELAY: std::time::Duration = std::time::Duration::from_secs(2);
 
 impl GhostexGpuiApp {
     /// CDXC:PlatformSupport 2026-11-08 DECISION:
-    /// User (issue #503, "offer a one-time reset"): before this release COSMIC users drew at 1.0 and raised Interface scale to make up for it; once Ghostex takes COSMIC's scale from XSETTINGS, that raise doubles everything again. The first launch that finds a display scale above 100% in XSETTINGS (and no fixed Display scale) offers once to set Interface scale back to 100%; closing the note keeps it. The marker is written on that launch whether or not the note shows, so someone who raises Interface scale later is never asked.
+    /// User (issue #503, "offer a one-time reset"): before this release COSMIC users drew at 1.0 and raised UI Scale to make up for it; once Ghostex takes COSMIC's scale from XSETTINGS, that raise doubles everything again. The first launch that finds a display scale above 100% in XSETTINGS (and no fixed Display scale) offers once to set UI Scale back to 100%; closing the note keeps it. The marker is written on that launch whether or not the note shows, so someone who raises UI Scale later is never asked.
     #[cfg(target_os = "linux")]
     pub(crate) fn offer_interface_scale_reset_for_display_scale(
         &mut self,
@@ -46,7 +46,7 @@ impl GhostexGpuiApp {
             .and_then(|()| std::fs::write(&marker, b""))
         {
             // Without the marker the offer would come back every launch.
-            log::warn!("Could not note the Interface scale offer: {error}");
+            log::warn!("Could not note the UI Scale offer: {error}");
             return;
         }
         let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
@@ -64,7 +64,7 @@ impl GhostexGpuiApp {
                         level: GpuiAppToastLevel::Info,
                         title: "Ghostex follows your display scale".to_string(),
                         description: Some(format!(
-                            "It now draws at your desktop's {percent}%, so your raised Interface scale makes everything extra large. Set Interface scale to 100%, or close this to keep it."
+                            "It now draws at your desktop's {percent}%, so your raised UI Scale makes everything extra large. Set UI Scale to 100%, or close this to keep it."
                         )),
                         action: Some(GpuiAppToastAction::ResetInterfaceScale),
                         loading: false,

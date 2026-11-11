@@ -185,7 +185,7 @@ impl CloudBoxesTab {
                 }
             }
         }
-        settings_section(p, "Your boxes", None, Some(refresh), rows)
+        settings_section(p, "Your agentbox boxes", None, Some(refresh), rows)
             .map(IntoElement::into_any_element)
     }
 

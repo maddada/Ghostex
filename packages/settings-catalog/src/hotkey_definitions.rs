@@ -1487,7 +1487,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "zoomInFocusedView",
         title: "Zoom In",
-        description: "Make everything Interface scale sizes bigger (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
+        description: "Make everything UI Scale sizes bigger (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
         default_key: "cmd+=",
         windows_linux_default_key: None,
         alternate_default_keys: &[],
@@ -1497,7 +1497,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "zoomOutFocusedView",
         title: "Zoom Out",
-        description: "Make everything Interface scale sizes smaller (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
+        description: "Make everything UI Scale sizes smaller (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
         default_key: "cmd+-",
         windows_linux_default_key: None,
         alternate_default_keys: &[],
@@ -1507,7 +1507,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "resetFocusedViewZoom",
         title: "Reset Zoom",
-        description: "Set Interface scale back to 100%, or with Scale areas separately on, return the focused area to its normal size. A browser page or picture resets by itself.",
+        description: "Set UI Scale back to 100%, or with Scale areas separately on, return the focused area to its normal size. A browser page or picture resets by itself.",
         default_key: "cmd+0",
         windows_linux_default_key: None,
         alternate_default_keys: &[],

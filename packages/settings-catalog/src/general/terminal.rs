@@ -57,7 +57,7 @@ pub(crate) fn terminal(platform: Platform) -> Section {
 pub(crate) fn terminal_behavior(platform: Platform) -> Section {
     section(
         "terminalBehavior",
-        "Terminal Behavior",
+        "Behavior",
         vec![
             row(
                 "terminalScrollbackLimitMb",
@@ -109,7 +109,7 @@ pub(crate) fn terminal_behavior(platform: Platform) -> Section {
 pub(crate) fn terminal_scrolling() -> Section {
     section(
         "terminalScrolling",
-        "Terminal Scrolling",
+        "Scrolling",
         vec![
             row(
                 "terminalMouseScrollMultiplierPrecision",

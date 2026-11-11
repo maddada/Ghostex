@@ -135,7 +135,8 @@ impl AgentsTab {
         }
         settings_section(
             p,
-            format!("Agents on {machine}"),
+            // No heading, as on this computer (Q2607); the Machine picker above names the machine.
+            "",
             Some(
                 "Install or update each agent's CLI there. Turning agents on, their order and defaults are set with This computer picked."
                     .into(),

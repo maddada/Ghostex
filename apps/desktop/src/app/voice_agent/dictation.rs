@@ -529,7 +529,7 @@ fn outcome_of(answer: Result<Value, String>, kept: Kept) -> Outcome {
                 .to_string();
             if text.is_empty() {
                 Outcome::Nothing(
-                    "No words were heard in the recording. It is kept in Settings > Dictation > Dictation history."
+                    "No words were heard in the recording. It is kept in Settings > Dictation > Past recordings."
                         .to_string(),
                 )
             } else {

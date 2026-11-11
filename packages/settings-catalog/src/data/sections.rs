@@ -1108,7 +1108,7 @@ pub const MAIN_SETTINGS_SUBSECTION_NAVIGATION: J = J::Obj(&[
             ]),
             J::Obj(&[
                 ("id", J::Str("sidebarTags")),
-                ("title", J::Str("Sidebar Tags")),
+                ("title", J::Str("Session Tags")),
             ]),
             J::Obj(&[
                 ("id", J::Str("sleepingSessions")),
@@ -1133,11 +1133,11 @@ pub const MAIN_SETTINGS_SUBSECTION_NAVIGATION: J = J::Obj(&[
             J::Obj(&[("id", J::Str("terminal")), ("title", J::Str("Terminal"))]),
             J::Obj(&[
                 ("id", J::Str("terminalBehavior")),
-                ("title", J::Str("Terminal Behavior")),
+                ("title", J::Str("Behavior")),
             ]),
             J::Obj(&[
                 ("id", J::Str("terminalScrolling")),
-                ("title", J::Str("Terminal Scrolling")),
+                ("title", J::Str("Scrolling")),
             ]),
         ]),
     ),

@@ -129,7 +129,7 @@ impl GhostexGpuiApp {
                 DictateEvent::Failure { title, message } => {
                     let message = if title == "Transcription failed" {
                         format!(
-                            "{message} Right-click the microphone to transcribe it again, or find it in Settings > Dictation > Dictation history."
+                            "{message} Right-click the microphone to transcribe it again, or find it in Settings > Dictation > Past recordings."
                         )
                     } else {
                         message.clone()

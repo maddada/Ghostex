@@ -1265,7 +1265,7 @@
       "tab": "sidebar",
       "tabTitle": "Sidebar & Sessions",
       "section": "sidebarTags",
-      "sectionTitle": "Sidebar Tags",
+      "sectionTitle": "Session Tags",
       "type": "json",
       "default": [
         {
@@ -1986,7 +1986,7 @@
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminalBehavior",
-      "sectionTitle": "Terminal Behavior",
+      "sectionTitle": "Behavior",
       "type": "number",
       "default": 15,
       "advanced": true,
@@ -1999,7 +1999,7 @@
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminalBehavior",
-      "sectionTitle": "Terminal Behavior",
+      "sectionTitle": "Behavior",
       "type": "enum",
       "default": "false",
       "options": [
@@ -2026,7 +2026,7 @@
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminalBehavior",
-      "sectionTitle": "Terminal Behavior",
+      "sectionTitle": "Behavior",
       "type": "enum",
       "default": "true",
       "options": [
@@ -2053,7 +2053,7 @@
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminalBehavior",
-      "sectionTitle": "Terminal Behavior",
+      "sectionTitle": "Behavior",
       "type": "boolean",
       "default": true,
       "advanced": true,
@@ -2066,7 +2066,7 @@
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminalBehavior",
-      "sectionTitle": "Terminal Behavior",
+      "sectionTitle": "Behavior",
       "type": "boolean",
       "default": true,
       "advanced": true,
@@ -2079,7 +2079,7 @@
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminalBehavior",
-      "sectionTitle": "Terminal Behavior",
+      "sectionTitle": "Behavior",
       "type": "boolean",
       "default": true,
       "advanced": true,
@@ -2092,7 +2092,7 @@
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminalBehavior",
-      "sectionTitle": "Terminal Behavior",
+      "sectionTitle": "Behavior",
       "type": "boolean",
       "default": false,
       "advanced": true,
@@ -2105,7 +2105,7 @@
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminalBehavior",
-      "sectionTitle": "Terminal Behavior",
+      "sectionTitle": "Behavior",
       "type": "enum",
       "default": "system",
       "options": [
@@ -2128,7 +2128,7 @@
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminalScrolling",
-      "sectionTitle": "Terminal Scrolling",
+      "sectionTitle": "Scrolling",
       "type": "number",
       "default": 1,
       "advanced": true,
@@ -2141,7 +2141,7 @@
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminalScrolling",
-      "sectionTitle": "Terminal Scrolling",
+      "sectionTitle": "Scrolling",
       "type": "number",
       "default": 1,
       "advanced": true,
@@ -2154,7 +2154,7 @@
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminalScrolling",
-      "sectionTitle": "Terminal Scrolling",
+      "sectionTitle": "Scrolling",
       "type": "boolean",
       "default": true,
       "advanced": true,
@@ -8707,7 +8707,7 @@
     {
       "key": "linuxDisplayScale",
       "title": "Display scale",
-      "subtitle": "Linux only. How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. Interface scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.",
+      "subtitle": "Linux only. How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. UI Scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.",
       "tab": "theme",
       "tabTitle": "Interface",
       "group": "appearance",
@@ -9414,7 +9414,7 @@
       "tab": "accounts",
       "tabTitle": "Accounts",
       "section": "accounts",
-      "sectionTitle": "Accounts",
+      "sectionTitle": "Configuration",
       "type": "ui",
       "agentWritable": false
     },
@@ -9425,7 +9425,7 @@
       "tab": "accounts",
       "tabTitle": "Accounts",
       "section": "accounts",
-      "sectionTitle": "Accounts",
+      "sectionTitle": "Configuration",
       "type": "ui",
       "agentWritable": false
     },
@@ -9436,7 +9436,7 @@
       "tab": "accounts",
       "tabTitle": "Accounts",
       "section": "accounts",
-      "sectionTitle": "Accounts",
+      "sectionTitle": "Configuration",
       "type": "boolean",
       "default": false,
       "agentWritable": false
@@ -9448,7 +9448,7 @@
       "tab": "accounts",
       "tabTitle": "Accounts",
       "section": "accounts",
-      "sectionTitle": "Accounts",
+      "sectionTitle": "Configuration",
       "type": "boolean",
       "default": false,
       "agentWritable": false
@@ -9460,7 +9460,7 @@
       "tab": "accounts",
       "tabTitle": "Accounts",
       "section": "accounts",
-      "sectionTitle": "Accounts",
+      "sectionTitle": "Configuration",
       "type": "boolean",
       "default": false,
       "agentWritable": false
@@ -9472,7 +9472,7 @@
       "tab": "accounts",
       "tabTitle": "Accounts",
       "section": "accounts",
-      "sectionTitle": "Accounts",
+      "sectionTitle": "Configuration",
       "type": "boolean",
       "default": false,
       "agentWritable": false
@@ -9484,7 +9484,7 @@
       "tab": "accounts",
       "tabTitle": "Accounts",
       "section": "accounts",
-      "sectionTitle": "Accounts",
+      "sectionTitle": "Configuration",
       "type": "boolean",
       "default": false,
       "agentWritable": false
@@ -10749,12 +10749,12 @@
     },
     {
       "key": "agentboxBoxes",
-      "title": "Your boxes",
+      "title": "Your agentbox boxes",
       "subtitle": "See every box, open a box's web app, stop a box, or destroy it to delete it for good.",
       "tab": "cloudBoxes",
       "tabTitle": "Cloud Boxes",
       "section": "boxes",
-      "sectionTitle": "Your boxes",
+      "sectionTitle": "Your agentbox boxes",
       "type": "ui",
       "agentWritable": false,
       "availability": "Only on macOS and Linux."
@@ -12756,8 +12756,8 @@
       "subtitle": "Reads an op://vault/item/field reference once to see that it works. Ghostex says only whether it could read it and never shows the value.",
       "tab": "secrets",
       "tabTitle": "Secrets",
-      "section": "check",
-      "sectionTitle": "Check a reference",
+      "section": "providers",
+      "sectionTitle": "Secret providers",
       "type": "ui",
       "agentWritable": false
     },
@@ -12802,7 +12802,7 @@
       "tab": "security",
       "tabTitle": "Security",
       "section": "log",
-      "sectionTitle": "Security log",
+      "sectionTitle": "Log",
       "type": "ui",
       "agentWritable": false
     },
@@ -12813,7 +12813,7 @@
       "tab": "security",
       "tabTitle": "Security",
       "section": "log",
-      "sectionTitle": "Security log",
+      "sectionTitle": "Log",
       "type": "ui",
       "agentWritable": false
     },
@@ -12824,7 +12824,7 @@
       "tab": "security",
       "tabTitle": "Security",
       "section": "log",
-      "sectionTitle": "Security log",
+      "sectionTitle": "Log",
       "type": "boolean",
       "default": false,
       "agentWritable": true
@@ -13282,7 +13282,7 @@
       "tab": "dictation",
       "tabTitle": "Dictation",
       "section": "dictations",
-      "sectionTitle": "Dictation history",
+      "sectionTitle": "Past recordings",
       "type": "ui",
       "agentWritable": false
     },
@@ -14708,21 +14708,21 @@
     {
       "id": "zoomInFocusedView",
       "title": "Zoom In",
-      "description": "Make everything Interface scale sizes bigger (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
+      "description": "Make everything UI Scale sizes bigger (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
       "defaultKey": "cmd+=",
       "terminalDefaultKey": "cmd+="
     },
     {
       "id": "zoomOutFocusedView",
       "title": "Zoom Out",
-      "description": "Make everything Interface scale sizes smaller (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
+      "description": "Make everything UI Scale sizes smaller (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself.",
       "defaultKey": "cmd+-",
       "terminalDefaultKey": "cmd+-"
     },
     {
       "id": "resetFocusedViewZoom",
       "title": "Reset Zoom",
-      "description": "Set Interface scale back to 100%, or with Scale areas separately on, return the focused area to its normal size. A browser page or picture resets by itself.",
+      "description": "Set UI Scale back to 100%, or with Scale areas separately on, return the focused area to its normal size. A browser page or picture resets by itself.",
       "defaultKey": "cmd+0",
       "terminalDefaultKey": "cmd+0"
     },

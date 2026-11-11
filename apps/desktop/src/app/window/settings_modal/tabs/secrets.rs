@@ -509,10 +509,21 @@ impl Render for SecretsTab {
             )
         };
         let mut blocks = Vec::new();
-        if search.row_visible("providers", PROVIDERS)
+        // The 1Password group: its accounts, then Check a 1Password reference under them
+        // (CDXC:Settings 2026-11-11 DECISION in packages/settings-catalog/src/pages/secrets.rs).
+        let show_providers = search.row_visible("providers", PROVIDERS);
+        let show_check = search.row_visible("providers", CHECK);
+        if (show_providers || show_check)
             && let Some((_, subtitle)) = Self::catalog_row(PROVIDERS)
         {
-            let rows = self.provider_rows(&p, window, cx);
+            let mut rows = if show_providers {
+                self.provider_rows(&p, window, cx)
+            } else {
+                Vec::new()
+            };
+            if show_check {
+                rows.extend(self.check_row(&p, window, cx));
+            }
             if let Some(section) =
                 settings_section(&p, "1Password", Some(subtitle.into()), None, rows)
             {
@@ -520,16 +531,6 @@ impl Render for SecretsTab {
                 block.margin_top += PAGE_TOP_PADDING;
                 blocks.push(block);
             }
-        }
-        if search.row_visible("check", CHECK)
-            && let Some(row) = self.check_row(&p, window, cx)
-            && let Some(section) = settings_section(&p, "Check a reference", None, None, vec![row])
-        {
-            let mut block = PageBlock::section("check", section);
-            if blocks.is_empty() {
-                block.margin_top += PAGE_TOP_PADDING;
-            }
-            blocks.push(block);
         }
         if search.row_visible("requests", REQUESTS)
             && let Some((title, subtitle)) = Self::catalog_row(REQUESTS)

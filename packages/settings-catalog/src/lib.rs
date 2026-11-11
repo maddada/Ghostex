@@ -33,7 +33,7 @@ pub mod platform_text;
 pub mod rows;
 mod search_keywords;
 pub mod spaces;
-pub use search_keywords::search_keywords;
+pub use search_keywords::{search_keywords, section_search_keywords};
 
 pub use hotkey_chords::{
     customized_normal_hotkey, hotkey_keystroke, platform_hotkey, terminal_hotkey,

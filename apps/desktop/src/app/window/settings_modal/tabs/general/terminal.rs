@@ -144,7 +144,7 @@ fn font_size_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> AnyEleme
         p,
         "terminal-font-size-link-row",
         RowSpec::new("Font size").description(
-            "The terminal's text size is set on the Interface page, under Interface scale, with the sidebar, chat and Files sizes.",
+            "The terminal's text size is set on the Interface page, under UI Scale, with the sidebar, chat and Files sizes.",
         ),
         None,
         button,
@@ -828,7 +828,7 @@ fn behavior_section(
     ));
     settings_section(
         &g.p,
-        g.section_title("terminalBehavior", "Terminal Behavior"),
+        g.section_title("terminalBehavior", "Behavior"),
         None,
         None,
         rows,
@@ -883,7 +883,7 @@ fn scrolling_section(
     ));
     settings_section(
         &g.p,
-        g.section_title("terminalScrolling", "Terminal Scrolling"),
+        g.section_title("terminalScrolling", "Scrolling"),
         None,
         None,
         rows,

@@ -11,7 +11,7 @@ pub(crate) fn page() -> Page {
 pub(crate) fn accounts() -> Section {
     section(
         "accounts",
-        "Accounts",
+        "Configuration",
         vec![
             row("accounts", "Accounts, usage stats and automatic continuation", "Current CLI login, Claude cswap, Codex xswap, add account, Cursor, Gemini and Copilot usage, reconnect, sign in again, use this account automatically, only when I pick it, or paused, update, reinstall or uninstall Claude Swap and Codex Swap, show usage in the sidebar, status lines, usage limits and resets (5h, 7d, Mo), session badges, account numbers, auto-switch, new sessions start on, when an account hits its limit, hide emails, privacy, error recovery and retry settings."),
             row("accountTitlebarUsage", "Account usage in the sidebar", "Show or hide usage stats for saved Claude, Codex, Cursor, Gemini and Copilot accounts at the bottom of the desktop sidebar. Adding an account pins the usage there."),

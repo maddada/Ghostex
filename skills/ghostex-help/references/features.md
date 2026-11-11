@@ -684,7 +684,7 @@ view from the strip.
   picture opens at its opening size; the zoom isn't kept for the next one.
   To make the text of a Markdown, text or code file bigger, press Cmd+= and
   Cmd+- (Ctrl on Windows and Linux) with the file open in Files; Cmd+0 goes
-  back to 100%. Normally this steps Interface scale's Scale, so the sidebar,
+  back to 100%. Normally this steps UI Scale's Scale, so the sidebar,
   chats and terminals grow with it (see Appearance and app). With Scale areas
   separately on, it steps only Files zoom (%) (70% to 200%, 5% steps): every
   open file and the Changes diff change size together, the line numbers grow
@@ -1368,7 +1368,7 @@ where they are while you open, change and close views.
   so Windows is WN), never the same as another computer's.
 
 Related settings: everything under Sidebar & Sessions > Sidebar, `interfaceScalePercent`
-and `agentManagerZoomPercent` (the sidebar's size, Settings > Interface > Interface scale), `sidebarSpacesEnabled`,
+and `agentManagerZoomPercent` (the sidebar's size, Settings > Interface > UI Scale), `sidebarSpacesEnabled`,
 `sidebarSpaceSwitchBehavior`, `sidebarSpaceFollowActiveSession`.
 
 ## Commands pane
@@ -1405,7 +1405,7 @@ between panes and groups. Selecting a session shows it in the focused pane;
 dragging its row onto a pane's edge opens it in a new split beside that pane. A session carries one tag at a time, chosen from the
 Tag As menu (right-click the session): the built-in Priority, Progress, and
 Type tags, plus any custom tags you define. Custom tags are created in one
-place, Settings > Sidebar & Sessions > Sidebar Tags: choose Add tag, then give
+place, Settings > Sidebar & Sessions > Session Tags: choose Add tag, then give
 it a name, an icon from the shared icon list, and a color from the preset list.
 New Tag at the bottom of the Tag As menu opens that same place with the form
 ready. Custom tags then appear in the same drag list as the built-in ones: drag
@@ -1796,8 +1796,8 @@ Toggle or Hold) and
 Microphone (System default or one input device; a device that is unplugged
 falls back to the default) and Insert with spacing (adds a space before or after
 the text when the characters next to the caret need one, so text dictated
-mid-sentence is spaced on both sides but never before a comma), then the
-Dictation history. With a remote machine saved, a Machine picker at the top
+mid-sentence is spaced on both sides but never before a comma), then
+Past recordings. With a remote machine saved, a Machine picker at the top
 switches Dictate's engine and language to that computer, which transcribes its
 sessions; it lists this computer and the remote machines connected right now
 ("Only connected machines shown" at the bottom of its list), and goes back to this
@@ -1820,7 +1820,7 @@ kept: rest the pointer on the microphone (or right-click it) and choose
 Transcribe previous to type the newest recording that has no text yet into the
 chat box. On the terminal bar, press the microphone again while it transcribes
 to cancel, and right-click it for Transcribe previous. Every recording is listed
-in Settings > Dictation > Dictation history. On the phone (Android or iPhone), Dictate is the microphone right next to Send in
+in Settings > Dictation > Past recordings. On the phone (Android or iPhone), Dictate is the microphone right next to Send in
 the chat box, which stays there even when other buttons move into More actions; it
 uses the engine (and key) of the computer the chat lives on, keeps the recording on the phone
 until that computer has it, shows Recording, Transcribing and Transcribe again
@@ -2505,7 +2505,7 @@ to read the notes. On the phone the card shows the most serious note's severity 
 other notes there are.
 Chat follows the app theme by default. In Settings > Interface > Advanced, set Chat theme to Light, Dark, or System for a separate appearance, or choose Follow app to use the main Appearance (`sessionChatTheme`, `sidebarTheme`).
 
-The chat's size follows Interface scale in Settings > Interface (see Appearance and app): Scale sizes the chat together with the sidebar, Files and the terminal text, and with Scale areas separately on, Chat zoom (%) sizes it alone, including messages, controls, and the prompt composer, from 70% to 200% in 5% steps (`sessionChatZoomPercent`). With a chat focused, Cmd+= and Cmd+- (Ctrl on Windows and Linux) step whichever of the two applies, so every chat changes size together and the new level is saved; Cmd+0 sets it back to 100%.
+The chat's size follows UI Scale in Settings > Interface (see Appearance and app): Scale sizes the chat together with the sidebar, Files and the terminal text, and with Scale areas separately on, Chat zoom (%) sizes it alone, including messages, controls, and the prompt composer, from 70% to 200% in 5% steps (`sessionChatZoomPercent`). With a chat focused, Cmd+= and Cmd+- (Ctrl on Windows and Linux) step whichever of the two applies, so every chat changes size together and the new level is saved; Cmd+0 sets it back to 100%.
 
 To search a chat, press Cmd+F (Ctrl+F on Windows and Linux) with the chat focused, including while typing in the chat box. Only what you can see is searched: text inside a folded turn, tool group, thinking or collapsed card, or the hidden part of a long message behind Show more, is skipped until you open it. Every matching word is highlighted, the current one more strongly, and the counter shows which match you are on. The search starts at the newest match, the one nearest the bottom of the chat, and counts from there (1/42 is the newest; a + after the total means older messages aren't loaded yet): Shift+Enter or the up arrow goes to the previous, older match (loading older messages when it needs them), Enter or the down arrow back toward the newest, and the chat scrolls to it. Escape or the close button ends the search and returns you to the chat box. On the phone, Search Conversation in the session's menu opens the same search.
 
@@ -3345,7 +3345,7 @@ follows Text strength and Show thinking in grey. Terminals on remote machines
 follow it, because this computer draws them. The phone keeps its own fonts.
 
 Related settings: `terminalFontFamily`, `terminalFontSize` (with `interfaceScalePercent`,
-Settings > Interface > Interface scale), `terminalGhosttyTheme`, `terminalColorScheme`, `terminalGhosttyLightTheme`,
+Settings > Interface > UI Scale), `terminalGhosttyTheme`, `terminalColorScheme`, `terminalGhosttyLightTheme`,
 `terminalBackgroundMode`, `workspaceBackgroundColor`, `terminalBackgroundOpacity`,
 `windowGlass`, `windowGlassBlurRadius`, `windowGlassWindowsBlur`, `terminalCursorStyle`, `terminalPane*PaddingPx`,
 `terminalScrollbackLimitMb`, `terminalCopyOnSelect`, `promptEditorBackend`,
@@ -4692,7 +4692,7 @@ conversation is open. When the provider refuses a conversation (for example
 xAI answering "payment required" because an X subscription's included usage
 is used up for the moment), the panel shows the provider's own reason.
 
-Settings > Dictation > Dictation history lists every recording you made with
+Settings > Dictation > Past recordings lists every recording you made with
 Dictate, on the computer or the phone, newest first and grouped by day, with
 its text, "This transcription was dismissed" with Recover for one you
 cancelled, or why it failed with Try again. Hover a row to Play it, Download
@@ -4747,7 +4747,7 @@ of the window, the voice agent hotkeys stop working and leave Settings >
 Hotkeys, a call that is running ends, and the phone app hides its headset,
 Voice call about this chat and Voice Call for that computer, and Settings >
 Voice Agent leaves the sidebar. Dictate keeps working: Settings > Dictation
-still shows the key its engine needs and the Dictation history. Turn it back on and everything returns, with your voice
+still shows the key its engine needs and Past recordings. Turn it back on and everything returns, with your voice
 settings as you left them.
 
 Settings: `voiceAgentHidden` (off by default, which keeps the voice agent on), `voiceAgentProvider`, `voiceAgentXaiVoice`, `voiceAgentOpenaiVoice`, `voiceAgentSpeed`, `voiceAgentCallMode`; the Memory row (`voiceAgentMemory`) forgets the remembered conversation. Hotkeys: Toggle Voice Agent, Voice Call About This Session, Hold to Talk (`holdToTalk`).
@@ -5483,7 +5483,7 @@ The link's traffic goes through Ghostex's share relay, locked end to end with th
 
 Ghostex keeps a security log of every sensitive action on your computer: pairing a phone (and failed pairing attempts), showing a pairing code, Easy Connect changes (on or off, its allow-list, ports and relay), sharing a chat in Collab or changing how a share works, letting a connected computer's agents in, Autopilot answering an approval or being allowed to do more, adding a GBot, turning a GBot's Bot API on or off or giving it a new key, and a playbook, skill or agent command arriving by settings sync. Each entry says what happened, who asked (this computer's app or an agent, naming the session it says it runs in, a paired phone, another computer, Autopilot), when, and how it ended. An approval request also gets a line for how it ended: approved (and whether in the Ghostex app, on a paired phone or with the CLI), expired, replaced by a newer request, or withdrawn because the session that asked was closed; these lines stay in the log and don't ring the bell. Each one also shows in the notification bell and as a notification on your paired phones, so you see it when it happens; clicking it opens Settings > Security.
 
-Settings > Security has three parts. Approvals: "Require Touch ID or your password to approve" (see Approvals below). What still asks: the short list of what asks for an Approve on this computer, with the line that everything else works without asking and your own clicks never ask. Security log: "Show the security log" (it was under Settings > Extensions > Experimental as Security logs) with Open log beside it; while it is on, the log shows under it, newest first, and the log is kept and its alerts arrive either way. Every entry is chained to the one before it, so if something edits or removes an entry after Ghostex wrote it, the page says "The security log was changed" and where. `ghostex security log` shows the same list in a terminal (`--last <n>`, `--json`) and exits with code 2 when the log was changed.
+Settings > Security has three parts. Approvals: "Require Touch ID or your password to approve" (see Approvals below). What still asks: the short list of what asks for an Approve on this computer, with the line that everything else works without asking and your own clicks never ask. Log: "Show the security log" (it was under Settings > Extensions > Experimental as Security logs) with Open log beside it; while it is on, the log shows under it, newest first, and the log is kept and its alerts arrive either way. Every entry is chained to the one before it, so if something edits or removes an entry after Ghostex wrote it, the page says "The security log was changed" and where. `ghostex security log` shows the same list in a terminal (`--last <n>`, `--json`) and exits with code 2 when the log was changed.
 
 Settings that are account or pairing state, or hold a key or token (the Remote and Accounts pages), aren't written through `ghostex settings` or `ghostex actions`: change them in Settings. Easy Connect serves only SSH and Ghostex itself, never other ports. Private file links never open keys (such as `~/.ssh`), Ghostex's own data, or a project's hidden files like `.env`.
 
@@ -5520,13 +5520,13 @@ can paste a 1Password reference (`op://vault/item/field`, from an item field's
 Copy Secret Reference) instead of a key: in a secret request card, and in the
 voice agent's xAI and OpenAI key fields, where the key is then read from
 1Password each time it is used. 1Password may ask you to unlock when a key is
-read. "Check a reference" on the same page tries a reference and says only
+read. "Check a 1Password reference", under the 1Password accounts, tries a reference and says only
 whether it worked.
 
 Only you answer a secret request, and only you can have Ghostex read a
 1Password reference: from Ghostex on your computer or your paired phone. An
 agent, a script using the token file, the browser version (`ghostex web`) and
-another computer's agents are refused, for the card, for "Check a reference"
+another computer's agents are refused, for the card, for "Check a 1Password reference"
 and for a reference pasted into a voice key.
 
 Settings page: Secrets (`ghostex settings open --tab secrets`). CLI:
@@ -6859,7 +6859,7 @@ Settings > Updates.
 
 Theme colours, colourfulness, the work area frame, window glass, and active pane outline live on the
 Interface page in Settings, right below General (`ghostex settings open --tab theme`).
-It has Text, Interface scale, Presets, Colours and Transparency sections, with Advanced controls and links
+It has Text, UI Scale, Presets, Colours and Transparency sections, with Advanced controls and links
 to related settings on General; a search for a row inside More opens it.
 Text: App font lists the fonts installed on this computer, with a search field and
 each name drawn in its own font; monospaced fonts sit at the end of the list. The
@@ -6872,7 +6872,7 @@ chat text stronger, use Settings > Interface > Text strength, from the standard 
 (0%, the default) up to full white in dark mode or full black in light mode, on the
 computer and the phone; muted text, links, code blocks and status colours stay as they are.
 Settings: `sessionChatFontFamily`, `terminalFontFamily`, `sessionChatTextStrengthPercent`.
-Interface scale, under Text, sets how big things are. Scale (70% to 200%, 100% by
+UI Scale, under Text, sets how big things are. Scale (70% to 200%, 100% by
 default) sizes the sidebar, every chat, files open in Files (with the Changes diff)
 and the terminal text together; the header, tabs, menus and dialogs keep their size.
 Cmd+= and Cmd+- (Ctrl on Windows and Linux) step Scale from anywhere except a web
@@ -6881,15 +6881,15 @@ to give each area its own slider instead: Sidebar zoom (50% to 200%), Chat zoom 
 Files zoom (70% to 200%) and Terminal font size (8 to 32 points). Each starts at the
 size Scale gave it, Scale no longer applies, and the keys change only the area you
 are in (in a terminal, only that terminal until it restarts). If you had changed one
-of those sizes before Interface scale existed, the switch starts on, so nothing
+of those sizes before UI Scale existed, the switch starts on, so nothing
 changes size. The Terminal page's Font size row links here.
 On Linux, the whole app first takes its size from your desktop's display scale
 (GNOME, KDE, Hyprland and COSMIC included), so the header, menus, dialogs and web
-pages match your other apps, and Interface scale applies on top. Display scale,
+pages match your other apps, and UI Scale applies on top. Display scale,
 under Scale areas separately (Linux only), shows the scale Ghostex found and lets
 you pick a fixed one from 100% to 300% if it gets it wrong; it takes effect when
 Ghostex restarts. The first time Ghostex finds a display scale above 100% on
-COSMIC while Interface scale is raised, it offers once to set Interface scale back
+COSMIC while UI Scale is raised, it offers once to set UI Scale back
 to 100%.
 Settings: `interfaceScalePercent`, `interfaceScaleAreasSeparately`, `linuxDisplayScale`, `agentManagerZoomPercent`, `sessionChatZoomPercent`, `filesZoomPercent`, `terminalFontSize`.
 Presets, right above Colours, are twenty theme cards in one row that scrolls

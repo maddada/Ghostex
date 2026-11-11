@@ -92,7 +92,7 @@ pub(crate) fn sidebar() -> Section {
 pub(crate) fn sidebar_tags() -> Section {
     section(
         "sidebarTags",
-        "Sidebar Tags",
+        "Session Tags",
         vec![
             row("sidebarSessionTagListItems", "Tag filter list", "Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu.").option_list(tag_list_item_options()).options(&[opt("Hide tag", "hide"), opt("Disable tag", "disable"), opt("Reorder tags", "reorder")]),
         ],

@@ -671,7 +671,7 @@ impl VoiceAgentTab {
             && let Some(history) = self.history.clone()
             && let Some(section) = settings_section(
                 p,
-                "Dictation history",
+                "Past recordings",
                 None,
                 None,
                 vec![history.into_any_element()],

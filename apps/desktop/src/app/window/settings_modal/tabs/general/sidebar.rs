@@ -690,7 +690,7 @@ fn sidebar_tags_section(
     }
     settings_section(
         &g.p,
-        g.section_title("sidebarTags", "Sidebar Tags"),
+        g.section_title("sidebarTags", "Session Tags"),
         None,
         None,
         rows,

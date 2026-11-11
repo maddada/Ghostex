@@ -153,7 +153,7 @@ fn case(state: &str) -> NoticeModalItem {
             "display-scale",
             Info,
             "Ghostex follows your display scale",
-            "It now draws at your desktop's 150%, so your raised Interface scale makes everything extra large. Set Interface scale to 100%, or close this to keep it.",
+            "It now draws at your desktop's 150%, so your raised UI Scale makes everything extra large. Set UI Scale to 100%, or close this to keep it.",
             Some("Set to 100%"),
             None,
         ),

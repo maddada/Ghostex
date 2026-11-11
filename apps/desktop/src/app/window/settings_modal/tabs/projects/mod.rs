@@ -1001,7 +1001,8 @@ impl ProjectsTab {
             cx,
         ));
 
-        settings_section(p, "Project settings", None, None, rows).map(IntoElement::into_any_element)
+        // No heading: the "Project" picker above names it (CDXC:Settings 2026-11-11 at fields/row.rs).
+        settings_section(p, "", None, None, rows).map(IntoElement::into_any_element)
     }
 
     /// One section per custom view, with this project's binding.

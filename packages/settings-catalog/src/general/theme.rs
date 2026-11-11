@@ -66,7 +66,7 @@ pub(crate) fn theming(platform: Platform) -> Section {
             .map_or(rows.len(), |index| index + 1);
         rows.insert(
             after,
-            row("linuxDisplayScale", "Display scale", "How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. Interface scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.").options(crate::interface_scale::LINUX_DISPLAY_SCALE_OPTIONS),
+            row("linuxDisplayScale", "Display scale", "How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. UI Scale applies on top. Takes effect when Ghostex restarts. Default: Automatic.").options(crate::interface_scale::LINUX_DISPLAY_SCALE_OPTIONS),
         );
     }
     section("theming", "Interface", rows)

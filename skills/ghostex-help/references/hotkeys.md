@@ -139,9 +139,9 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Find | `cmd+f` |  | `cmd+f` | `cmd+shift+f` | Find text in the focused terminal, browser page, chat or file. On Windows and Linux, Ctrl+F also finds anywhere but in a terminal. | `findInFocusedView` |
 | Find Next | `cmd+g` |  | none |  | Go to the next match of Find in a browser page. | `findNextInBrowser` |
 | Find Previous | `cmd+shift+g` |  | none |  | Go to the previous match of Find in a browser page. | `findPreviousInBrowser` |
-| Zoom In | `cmd+=` |  | `cmd+=` |  | Make everything Interface scale sizes bigger (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself. | `zoomInFocusedView` |
-| Zoom Out | `cmd+-` |  | `cmd+-` |  | Make everything Interface scale sizes smaller (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself. | `zoomOutFocusedView` |
-| Reset Zoom | `cmd+0` |  | `cmd+0` |  | Set Interface scale back to 100%, or with Scale areas separately on, return the focused area to its normal size. A browser page or picture resets by itself. | `resetFocusedViewZoom` |
+| Zoom In | `cmd+=` |  | `cmd+=` |  | Make everything UI Scale sizes bigger (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself. | `zoomInFocusedView` |
+| Zoom Out | `cmd+-` |  | `cmd+-` |  | Make everything UI Scale sizes smaller (the sidebar, chats, Files and terminal text), or with Scale areas separately on, just the focused one. A browser page or picture zooms by itself. | `zoomOutFocusedView` |
+| Reset Zoom | `cmd+0` |  | `cmd+0` |  | Set UI Scale back to 100%, or with Scale areas separately on, return the focused area to its normal size. A browser page or picture resets by itself. | `resetFocusedViewZoom` |
 | Close Tab | `cmd+w` |  | `cmd+w` | `cmd+shift+w` | Close the focused terminal tab, browser tab or view tab. | `closeFocusedSurface` |
 | New Window | `cmd+shift+n` |  | `cmd+shift+n` |  | Open another Ghostex window. | `openNewWindow` |
 | Focus Mode | `cmd+ctrl+f` |  | `cmd+ctrl+f` |  | Show only the focused pane of the Agents view, or bring the other panes back. | `toggleAgentsFocusMode` |

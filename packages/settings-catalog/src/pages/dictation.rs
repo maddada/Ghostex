@@ -42,7 +42,7 @@ pub(crate) fn dictate() -> Section {
 pub(crate) fn dictations() -> Section {
     section(
         "dictations",
-        "Dictation history",
+        "Past recordings",
         vec![
             row("voiceAgentDictationHistory", "Dictation history", "Every recording you made with the dictation microphone, newest first, with its text and the engine that made it. Play, download or delete a recording, copy its text, recover one you cancelled, or transcribe one that failed (the text is copied to your clipboard too). Recordings stay on this computer until you delete them."),
         ],

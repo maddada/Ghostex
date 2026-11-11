@@ -239,7 +239,7 @@ impl SecurityTab {
         let Some(view) = self.view.as_ref().filter(|_| self.logs_on) else {
             return settings_section(
                 p,
-                "Security log",
+                "Log",
                 Some(LOG_DESCRIPTION.into()),
                 None,
                 vec![switch_row],
@@ -305,7 +305,7 @@ impl SecurityTab {
                 None,
             ));
         }
-        settings_section(p, "Security log", Some(LOG_DESCRIPTION.into()), None, rows)
+        settings_section(p, "Log", Some(LOG_DESCRIPTION.into()), None, rows)
     }
 
     /*

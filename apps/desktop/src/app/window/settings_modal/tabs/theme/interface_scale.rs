@@ -154,7 +154,7 @@ impl ThemeTab {
         }
         settings_section(
             &p,
-            "Interface scale",
+            "UI Scale",
             Some("How big the sidebar, chats, files and terminal text are.".into()),
             None,
             rows,
@@ -206,7 +206,7 @@ fn display_scale_field(
         )
     };
     description.push_str(
-        " This sizes the whole app, including the header, menus, dialogs and web pages; Interface scale applies on top. Takes effect when Ghostex restarts.",
+        " This sizes the whole app, including the header, menus, dialogs and web pages; UI Scale applies on top. Takes effect when Ghostex restarts.",
     );
     let options: Vec<SettingOption> = LINUX_DISPLAY_SCALE_OPTIONS
         .iter()

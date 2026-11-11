@@ -150,10 +150,10 @@ pub(crate) fn new_threads() -> Section {
 pub(crate) fn boxes() -> Section {
     section(
         "boxes",
-        "Your boxes",
+        "Your agentbox boxes",
         vec![row(
             "agentboxBoxes",
-            "Your boxes",
+            "Your agentbox boxes",
             "See every box, open a box's web app, stop a box, or destroy it to delete it for good.",
         )],
     )

@@ -98,7 +98,7 @@ How to use this file:
 - **Offer Clean up when a PR merges** `offerCleanupWhenPrMerges` (boolean, default true): When a session's pull request is merged, its card asks once whether to clean up (remove the session's worktree and park the session; a worktree with uncommitted changes is kept) or keep it.
 - **Hover buttons also in context menu** `showSessionCardHoverButtonsInContextMenu` (boolean, default true) [advanced]: Also list the enabled hover buttons in the session right-click menu, in their usual place in the menu. Close is never listed while it is on the card. Turn off to leave every button out of the menu once it is on the card.
 - **Session tooltips** `showSidebarSessionTooltips` (boolean, default true) [advanced]: Show a tooltip with the full session name when you hover a session in the sidebar. Turn off to show none; other sidebar tooltips stay.
-### Sidebar Tags
+### Session Tags
 
 - **Tag filter list** `sidebarSessionTagListItems` (structured value; change it in Settings, not with `ghostex settings set`): Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu.
 ### Sleeping Sessions
@@ -137,7 +137,7 @@ How to use this file:
 - **Editor for ⌃G and $EDITOR prompts** `promptEditorBackend` (one of monaco | inherit; default monaco) [advanced]: Choose which editor ⌃G uses when a terminal prompt asks for $EDITOR. Option labels: monaco = Ghostex editor, inherit = Use default from this machine.
 - **Windows Environment** `windowsTerminalBackend` (one of powershell | wsl; default powershell): Windows only. PowerShell (default) runs native Windows projects and agents. WSL runs Linux projects. Changing environments prompts you to restart Ghostex. Option labels: powershell = PowerShell (Native), wsl = WSL (Linux).
 - **WSL distribution** `windowsWslDistribution` (text, default (empty)): Windows only. Exact distro name from `wsl.exe --list --verbose`; blank uses automatic WSL2 discovery.
-### Terminal Behavior
+### Behavior
 
 - **Scrollback limit** `terminalScrollbackLimitMb` (number default 15) [advanced]: Set scrollback memory per terminal surface.
 - **Copy on select** `terminalCopyOnSelect` (one of false | true | clipboard; default false) [advanced]: Copy selected terminal text automatically. On macOS both options also copy to the system clipboard. Option labels: false = Off, true = Copy to clipboard, clipboard = System and selection clipboard.
@@ -147,7 +147,7 @@ How to use this file:
 - **Paste images as preview links** `terminalPastePreviewableImages` (boolean, default true) [advanced]: Paste clipboard images as previewable Markdown links with ⌘V. Hold ⌘ over the linked path to preview it in the terminal, and see the same image preview in the ⌃G Rich Prompt Editor.
 - **Hide mouse while typing** `terminalMouseHideWhileTyping` (boolean, default false) [advanced]: Hide the pointer while typing in the terminal.
 - **Scrollbar** `terminalScrollbar` (one of system | never; default system) [advanced]: Control whether Ghostty shows its native scrollback scrollbar. Option labels: system = System, never = Never.
-### Terminal Scrolling
+### Scrolling
 
 - **Trackpad scroll speed** `terminalMouseScrollMultiplierPrecision` (number default 1) [advanced]: Trackpads and high-resolution scroll wheels. Ghostty default is 1.
 - **Mouse wheel scroll speed** `terminalMouseScrollMultiplierDiscrete` (number default 1) [advanced]: Traditional notched mouse wheels. Ghostty default is 3.
@@ -279,7 +279,7 @@ How to use this file:
 - **Frame the work area** `workAreaFrame` (boolean, default true) [advanced]: Show the work area as a card inside the window, with a thin margin all around, a hairline border and a light shadow. Off keeps the work area edge to edge. Only on macOS.
 - **Show the window buttons when the sidebar is collapsed** `showWindowButtonsWhenSidebarCollapsed` (boolean, default true) [advanced]: Keep the red, yellow and green window buttons in the window's top left while the sidebar is collapsed. Off hides them until you open the floating sidebar, which carries them in its top row. Full screen keeps its own title bar either way. Only on macOS.
 - **Close buttons on the right** `closeButtonsOnRight` (boolean, default false) [advanced]: Put the X that closes dialogs and pop-up messages at their top right. Off keeps it at their top left, where macOS puts a window's close button. Only on macOS.
-- **Display scale** `linuxDisplayScale` (one of auto | 100 | 125 | 150 | 175 | 200 | 250 | 300; default auto): Linux only. How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. Interface scale applies on top. Takes effect when Ghostex restarts. Default: Automatic. Option labels: auto = Automatic, 100 = 100%, 125 = 125%, 150 = 150%, 175 = 175%, 200 = 200%, 250 = 250%, 300 = 300%.
+- **Display scale** `linuxDisplayScale` (one of auto | 100 | 125 | 150 | 175 | 200 | 250 | 300; default auto): Linux only. How big the whole app is drawn: the header, menus, dialogs and web pages too. Automatic follows your desktop's display scale; pick a fixed one if Ghostex gets it wrong. UI Scale applies on top. Takes effect when Ghostex restarts. Default: Automatic. Option labels: auto = Automatic, 100 = 100%, 125 = 125%, 150 = 150%, 175 = 175%, 200 = 200%, 250 = 250%, 300 = 300%.
 - **Pane gap** `workspacePaneGap` (number default 0): Gap in pixels between split panes in the Agents view.
 - **Custom dark mode depth (set by Colourfulness)** `customSidebarTitlebarBackgroundDarknessPercent` (number 85 to 100 default 96): How deep the custom dark mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.
 - **Custom light mode depth (set by Colourfulness)** `customSidebarTitlebarLightBackgroundLightnessPercent` (number default 96): How deep the custom light mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.
@@ -342,7 +342,7 @@ How to use this file:
 - **Global Actions** `globalActions` (Settings UI row without a settings key; use `ghostex settings open`): Global actions apply to every project, are stored by the Ghostex daemon, and appear under Global in every project's Start menu.
 ## Accounts (tab `accounts`)
 
-### Accounts
+### Configuration
 
 - **Accounts, usage stats and automatic continuation** `accounts` (Settings UI row without a settings key; use `ghostex settings open`): Current CLI login, Claude cswap, Codex xswap, add account, Cursor, Gemini and Copilot usage, reconnect, sign in again, use this account automatically, only when I pick it, or paused, update, reinstall or uninstall Claude Swap and Codex Swap, show usage in the sidebar, status lines, usage limits and resets (5h, 7d, Mo), session badges, account numbers, auto-switch, new sessions start on, when an account hits its limit, hide emails, privacy, error recovery and retry settings.
 - **Account usage in the sidebar** `accountTitlebarUsage` (Settings UI row without a settings key; use `ghostex settings open`): Show or hide usage stats for saved Claude, Codex, Cursor, Gemini and Copilot accounts at the bottom of the desktop sidebar. Adding an account pins the usage there.
@@ -472,9 +472,9 @@ How to use this file:
 ### New threads
 
 - **Default location** `agentboxDefaultLocation` (one of local | agentbox:docker | agentbox:hetzner | agentbox:vercel | agentbox:daytona | agentbox:e2b | agentbox:digitalocean; default local): Where new threads run unless you pick another location. Option labels: local = This computer, agentbox:docker = Docker on this computer, agentbox:hetzner = Hetzner, agentbox:vercel = Vercel, agentbox:daytona = Daytona, agentbox:e2b = E2B, agentbox:digitalocean = DigitalOcean. Only on macOS and Linux.
-### Your boxes
+### Your agentbox boxes
 
-- **Your boxes** `agentboxBoxes` (Settings UI row without a settings key; use `ghostex settings open`): See every box, open a box's web app, stop a box, or destroy it to delete it for good. Only on macOS and Linux.
+- **Your agentbox boxes** `agentboxBoxes` (Settings UI row without a settings key; use `ghostex settings open`): See every box, open a box's web app, stop a box, or destroy it to delete it for good. Only on macOS and Linux.
 ### How it works
 
 - **Start a thread in an agentbox box** `agentboxStartThread` (Settings UI row without a settings key; use `ghostex settings open`): Open New Thread and pick where it runs under Run on. Boxes open in the terminal view. Only on macOS and Linux.
@@ -712,8 +712,6 @@ How to use this file:
 ### Secret providers
 
 - **1Password accounts** `secretProviders` (Settings UI row without a settings key; use `ghostex settings open`): The 1Password accounts Ghostex reads keys and tokens from, so you can paste an op://vault/item/field reference instead of the key itself. Needs the 1Password CLI (op) with "Integrate with 1Password CLI" turned on in 1Password. Ghostex keeps only the account name; 1Password may ask you to unlock when a key is read.
-### Check a reference
-
 - **Check a 1Password reference** `secretReferenceCheck` (Settings UI row without a settings key; use `ghostex settings open`): Reads an op://vault/item/field reference once to see that it works. Ghostex says only whether it could read it and never shows the value.
 ### Secrets agents ask for
 
@@ -726,7 +724,7 @@ How to use this file:
 ### What still asks
 
 - **What still asks** `stillAsks` (Settings UI row without a settings key; use `ghostex settings open`): What asks for an Approve on this computer: a phone or computer asking to pair, a Collab guest's message in Approve mode, and, when an agent asks, turning on Easy Connect, letting a device connect through it, sharing a chat or turning on Send mode. Everything else works without asking, and your own clicks never ask.
-### Security log
+### Log
 
 - **Security log check** `securityLogCheck` (Settings UI row without a settings key; use `ghostex settings open`): Whether the security log is intact. Each entry is chained to the one before it, so an entry that was changed or removed after it was written shows here.
 - **Security log** `securityLog` (Settings UI row without a settings key; use `ghostex settings open`): Every sensitive action on this computer, newest first: pairing a phone, Easy Connect changes, sharing a chat in Collab, letting a connected computer's agents in, Autopilot answering an approval, and attempts to change settings only you can change. Each says who asked, when and how it ended. The important ones also show in the notification bell and on your paired phones: anything that opens this computer to other people or devices (turning on Collab, sharing a chat, pairing a phone, turning on or widening Easy Connect, letting a computer in), a new owner or approver key, a protection turned off, anything an agent, a phone, another computer or a Collab guest did, the same request refused three times, and an edited log. `ghostex security log` reads the same list.
@@ -792,7 +790,7 @@ How to use this file:
 - **Hotkey mode** `dictateHotkeyMode` (one of auto | toggle | hold; default auto): Auto: tap to start and tap again to stop, or hold for 300 ms or more and it stops when you let go. Toggle: every press starts or stops. Hold: it records only while you hold the keys. Escape cancels. Option labels: auto = Auto, toggle = Toggle, hold = Hold.
 - **Microphone** `dictateMicrophone` (text, default (empty)): The microphone this computer records dictation from. System default follows the input device chosen in your sound settings.
 - **Insert with spacing** `dictateInsertSpacing` (boolean, default true): Adds a space before or after the text when the characters next to the caret need one.
-### Dictation history
+### Past recordings
 
 - **Dictation history** `voiceAgentDictationHistory` (Settings UI row without a settings key; use `ghostex settings open`): Every recording you made with the dictation microphone, newest first, with its text and the engine that made it. Play, download or delete a recording, copy its text, recover one you cancelled, or transcribe one that failed (the text is copied to your clipboard too). Recordings stay on this computer until you delete them.
 ## Voice Agent (tab `voiceAgent`)

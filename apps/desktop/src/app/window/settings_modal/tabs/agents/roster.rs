@@ -225,7 +225,8 @@ impl AgentsTab {
         } else {
             rows.push(self.render_add_custom_row(p, cx));
         }
-        settings_section(p, "Agents", None, None, rows)
+        // No heading (Q2607): it would repeat the page title (CDXC:Settings 2026-11-11 at fields/row.rs).
+        settings_section(p, "", None, None, rows)
     }
 
     fn render_add_custom_row(&mut self, p: &SettingsPalette, cx: &mut Context<Self>) -> AnyElement {
