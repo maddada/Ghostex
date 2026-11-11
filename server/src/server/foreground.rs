@@ -131,6 +131,25 @@ pub async fn run_gxserver_foreground(
             details: Some(json!({ "removed": removed_retired_skills })),
         });
     }
+    // A renamed bundled skill (`ghostex-orchestrator`, now `ghostex-coordinator`) moves to its new
+    // name before the refresh from the signed skill list runs (agent_skills_renamed.rs).
+    if let Some(moved) = crate::agent_skills_renamed::migrate_renamed_ghostex_agent_skills(&paths) {
+        let changed = ["installed", "linked", "removed", "failed"]
+            .iter()
+            .any(|key| moved[*key].as_array().is_some_and(|list| !list.is_empty()));
+        if changed {
+            let _ = logger.log(GxserverLogInput {
+                level: crate::logging::LogLevel::Warn,
+                event: "renamedAgentSkillsMoved".to_string(),
+                server_id: None,
+                request_id: None,
+                client: None,
+                duration_ms: None,
+                error: None,
+                details: Some(moved),
+            });
+        }
+    }
     #[cfg(windows)]
     if let Some(details) = crate::platform::launch_context::launch_context_warning_details() {
         let _ = logger.log(GxserverLogInput {

@@ -33,7 +33,7 @@ pub(crate) fn claim_first_user_input_draft(
         return None;
     }
     let session = repository.get_session(project_id, session_id).ok()??;
-    // An orchestrator always opens in Chat and starts by running `/ghostex-orchestrator` in its
+    // An orchestrator always opens in Chat and starts by running `/ghostex-coordinator` in its
     // terminal, so its staged handoff draft stays pending for `/api/claimSessionChatLaunchDraft`
     // instead of being typed into the terminal on top of the skill send.
     if crate::coordinators::coordinator_role_is_skill(&session) {

@@ -20,7 +20,7 @@ use crate::app::remote_conn::sidebar_rpc::{
     GpuiRemoteSidebarRpcMode, gpui_remote_sidebar_rpc_failure_reason,
 };
 use crate::app::window::{NewCoordinatorAgent, NewCoordinatorModel, NewCoordinatorRefusal};
-use ghostex_gx_chat_core::composer::skill_invocation::orchestrator_skill_line;
+use ghostex_gx_chat_core::composer::skill_invocation::coordinator_skill_line;
 use ghostex_gx_chat_core::protocol::{
     COORDINATOR_AGENT_FAMILIES, coordinator_default_model_label, coordinator_launch_takes_effort,
     coordinator_launch_takes_model, coordinator_model_label,
@@ -142,7 +142,7 @@ pub(crate) fn coordinator_agents(
                         .to_string(),
                     family: family.to_string(),
                     models: coordinator_models(family, catalog),
-                    skill_line: orchestrator_skill_line(Some(family)),
+                    skill_line: coordinator_skill_line(Some(family)),
                 },
             ))
         })

@@ -3526,9 +3526,9 @@ version of the Projects features in Cursor and Claude Code.
   model: the coordinator
   is the agent you talk to all day, and the main way Ghostex itself is built.
   Its first message is always "Read and adhere to this skill:
-  /ghostex-orchestrator" (`$ghostex-orchestrator` on agents other than Claude
+  /ghostex-coordinator" (`$ghostex-coordinator` on agents other than Claude
   Code and Copilot), shown locked in the dialog: Ghostex installs the
-  ghostex-orchestrator skill for that agent, and the skill is the coordinator's
+  ghostex-coordinator skill for that agent, and the skill is the coordinator's
   playbook. Then it opens in chat, where you write your first request. The name
   is what its sidebar row shows, and the coordinator keeps it: unlike other
   sessions it is not renamed from your first message (Rename in the sidebar
@@ -3544,7 +3544,7 @@ version of the Projects features in Cursor and Claude Code.
   Coordinator** (optionally with a goal); on the phone it is in the session's
   menu too. The session keeps its conversation and is never restarted or
   interrupted: it gets the captain's hat right away, Ghostex installs the
-  ghostex-orchestrator skill for its agent, and a message telling it to read
+  ghostex-coordinator skill for its agent, and a message telling it to read
   the skill waits in its chat queue until its current turn is over. Sessions
   it started before are not its threads yet; ask it to adopt them. A thread of
   another coordinator, a session in a box, or a draft cannot be made an

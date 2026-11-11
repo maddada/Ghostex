@@ -1,5 +1,5 @@
 ---
-name: ghostex-orchestrator
+name: ghostex-coordinator
 description: >-
   The Ghostex coordinator playbook. Use it only in a Ghostex coordinator
   session: when your first message tells you to read and adhere to this
