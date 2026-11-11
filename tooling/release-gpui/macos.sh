@@ -355,6 +355,7 @@ process.stdout.write(version);
 	[[ "$(plutil -extract CFBundleShortVersionString raw "$INFO_PLIST")" == "$VERSION" ]]
 	[[ "$(plutil -extract CFBundleVersion raw "$INFO_PLIST")" == "$BUILD_NUMBER" ]]
 	[[ "$(plutil -extract SUFeedURL raw "$INFO_PLIST")" == "https://raw.githubusercontent.com/maddada/Ghostex/main/appcast.xml" ]]
+	[[ "$(plutil -extract SUEnableAutomaticChecks raw "$INFO_PLIST")" == "true" ]]
 	codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 	node --input-type=module -e \
 		'import { validateMacosAppBundle } from "./tooling/validate-macos-app-bundle.mjs"; await validateMacosAppBundle({ appName: "Ghostex", appPath: process.argv[1], arch: "arm64" });' \

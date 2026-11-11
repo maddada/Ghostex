@@ -18,9 +18,16 @@ pub const DAEMON_RETRY_INTERVAL_MS: u64 = 2_000;
 pub const SESSIONS_LOADING_TITLE: &str = "Loading sessions\u{2026}";
 pub const SESSIONS_LOADING_DETAIL: &str = "They\u{2019}ll appear in a moment.";
 
-/// How long a first connection may take before the skeleton gives way to "Loading sessions…".
-/// A cold start on Windows can take this long without anything being wrong.
+/// How long a reconnect shows the skeleton before "Loading sessions…".
 const CONNECTING_AFTER_MS: u64 = 10_000;
+/// How long the app's own start shows the skeleton before "Starting Ghostex…", so a start that
+/// is up at once never flashes the line.
+const STARTING_AFTER_MS: u64 = 1_200;
+
+/// CDXC:Onboarding 2026-11-11 DECISION:
+/// User, on the first-run page (step 2, first launch), picked "Say it is starting": while Ghostex's own start has not answered yet (the service never answered in this window), the empty sidebar says "Starting Ghostex…" instead of "Loading sessions…" on a brand-new install that has no sessions, with no Try now button, since nothing is wrong. This is about the app starting, not "connecting to Ghostex" (the 2026-10-08 rejection above still holds); a sidebar that had loaded and lost the service keeps "Loading sessions…", and a start that runs long still suggests a restart.
+pub const STARTING_TITLE: &str = "Starting Ghostex\u{2026}";
+pub const STARTING_DETAIL: &str = "This takes a few seconds.";
 /// How long the wait runs before the sidebar suggests restarting Ghostex.
 const STILL_WAITING_AFTER_MS: u64 = 30_000;
 
@@ -29,6 +36,8 @@ const STILL_WAITING_AFTER_MS: u64 = 30_000;
 pub(crate) enum DaemonWait {
     /// The first moments of a start: the skeleton, no copy.
     Skeleton,
+    /// The app's own start, past its first moment: "Starting Ghostex…", no button.
+    Starting,
     /// "Loading sessions…", with Try now.
     Connecting,
     /// The wait has run long: "taking longer than usual", suggest a restart, with Try now.
@@ -45,10 +54,14 @@ impl DaemonWait {
             .unwrap_or(0);
         if waited >= STILL_WAITING_AFTER_MS {
             Self::StillWaiting
-        } else if unavailable.observed_available || waited >= CONNECTING_AFTER_MS {
-            Self::Connecting
+        } else if !unavailable.observed_available {
+            if waited >= STARTING_AFTER_MS {
+                Self::Starting
+            } else {
+                Self::Skeleton
+            }
         } else {
-            Self::Skeleton
+            Self::Connecting
         }
     }
 
@@ -56,6 +69,7 @@ impl DaemonWait {
     pub(crate) fn copy(self) -> (&'static str, &'static str) {
         match self {
             Self::Skeleton => ("", ""),
+            Self::Starting => (STARTING_TITLE, STARTING_DETAIL),
             Self::Connecting => (SESSIONS_LOADING_TITLE, SESSIONS_LOADING_DETAIL),
             Self::StillWaiting => (
                 "Sessions are taking longer than usual to load.",
@@ -67,10 +81,14 @@ impl DaemonWait {
     /// The next host time the phase moves on its own, so the list is rebuilt then.
     pub(crate) fn next_change_ms(unavailable: UnavailableState, now_ms: u64) -> Option<u64> {
         let since = unavailable.since_ms?;
-        [CONNECTING_AFTER_MS, STILL_WAITING_AFTER_MS]
-            .into_iter()
-            .map(|after| since.saturating_add(after))
-            .find(|at| *at > now_ms)
+        [
+            STARTING_AFTER_MS,
+            CONNECTING_AFTER_MS,
+            STILL_WAITING_AFTER_MS,
+        ]
+        .into_iter()
+        .map(|after| since.saturating_add(after))
+        .find(|at| *at > now_ms)
     }
 }
 

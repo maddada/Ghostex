@@ -192,7 +192,8 @@ impl GhostexGpuiApp {
                     })),
                 )
             })
-            .when(error || add, |column| {
+            // An empty label is the wait that needs no retry ("Starting Ghostex…").
+            .when((error && !action_label.is_empty()) || add, |column| {
                 column.child(
                     empty_action_button(
                         "native-sidebar-empty-action",

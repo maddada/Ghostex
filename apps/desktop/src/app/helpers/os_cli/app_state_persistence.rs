@@ -242,6 +242,9 @@ pub(crate) struct GpuiFirstRunOnboardingState {
     /// Agents whose "Connect Ghostex to …" dialog was answered Not now: it no longer asks at their
     /// start (CDXC:Onboarding 2026-11-11 in window/onboarding/agents.rs).
     pub(crate) agent_hooks_declined: Vec<String>,
+    /// Setup's "Pair my phone after setup" was on: Connect a Device opens once the first agent
+    /// reply has arrived (os_integration/first_run_onboarding.rs).
+    pub(crate) connect_device_after_first_reply: bool,
 }
 
 /// CDXC:Onboarding 2026-08-18: the markers whose surfaces are
@@ -303,6 +306,10 @@ pub(crate) fn load_gpui_first_run_onboarding_state() -> GpuiFirstRunOnboardingSt
                     .collect()
             })
             .unwrap_or_default(),
+        connect_device_after_first_reply: value
+            .get("connectDeviceAfterFirstReply")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
     }
 }
 
@@ -320,6 +327,7 @@ pub(crate) fn persist_gpui_first_run_onboarding_state(state: &GpuiFirstRunOnboar
         "windowsTerminalSetupComplete": state.windows_terminal_setup_complete,
         "introVideoSeen": state.intro_video_seen,
         "agentHooksDeclined": state.agent_hooks_declined,
+        "connectDeviceAfterFirstReply": state.connect_device_after_first_reply,
     });
     let _ = fs::write(path, payload.to_string());
 }

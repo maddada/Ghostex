@@ -697,7 +697,12 @@ fn empty_state(
             can_add_project,
             copy: copy.to_string(),
             detail: detail.to_string(),
-            action_label: TRY_NOW_LABEL.to_string(),
+            // Nothing is wrong while Ghostex is still starting, so there is nothing to retry.
+            action_label: if wait == DaemonWait::Starting {
+                String::new()
+            } else {
+                TRY_NOW_LABEL.to_string()
+            },
             ..EmptyState::default()
         };
     }

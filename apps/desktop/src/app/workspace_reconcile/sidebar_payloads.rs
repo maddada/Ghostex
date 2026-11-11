@@ -60,6 +60,7 @@ impl GhostexGpuiApp {
         } else {
             Vec::new()
         };
+        self.open_queued_connect_device_after_reply(attention_notifications.len(), cx);
         // Alert me for: Needs you only drops the banners of attention that does not wait on the
         // user (gx_store/attention/host.rs); the not-moving banner is not filtered.
         attention_notifications.retain(|candidate| {

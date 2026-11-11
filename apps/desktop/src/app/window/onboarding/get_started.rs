@@ -443,12 +443,20 @@ impl GpuiOnboardingWindow {
                     div()
                         .w_full()
                         .flex()
-                        .justify_center()
+                        .flex_col()
+                        .items_center()
+                        .gap(s.px(8.0))
                         .font_family(super::fonts::dm_sans())
                         .text_size(s.px(15.0))
                         .line_height(s.px(15.0 * 1.45))
                         .text_color(hex(0xb2b9c6))
-                        .child(note),
+                        .child(note)
+                        // CDXC:Onboarding 2026-11-11 DECISION: User, on the first-run page (step 2), picked "Say it is starting, and mention usage data once": analytics are on by default, so setup says so once, here, with where to turn them off (Settings > About > Privacy, `analyticsEnabled`).
+                        .child(
+                            sans(s, 13.0, 400.0, hex(0x8e97a8)).child(
+                                "Ghostex sends anonymous usage analytics to get better. Turn them off in Settings > About.",
+                            ),
+                        ),
                 )
                 .into_any_element(),
         );

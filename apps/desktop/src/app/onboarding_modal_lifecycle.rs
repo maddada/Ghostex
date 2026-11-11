@@ -385,14 +385,6 @@ impl GhostexGpuiApp {
                 self.complete_first_launch_setup();
                 self.close_gpui_onboarding_window(cx);
                 match target {
-                    // CDXC:Onboarding 2026-11-11 WHY: setup no longer asks for a folder (DECISION in window/onboarding/get_started.rs), so it can end with no project; Add Project opens then, so the app is never an empty shell.
-                    FinishTarget::None if !has_projects => {
-                        self.open_app_modal_from_bridge(
-                            GpuiAppModalKind::AddProject.open_message(),
-                            cx,
-                        );
-                    }
-                    FinishTarget::None => {}
                     FinishTarget::Settings(tab) => {
                         let mut message =
                             serde_json::json!({ "modal": "settings", "type": "open" });
@@ -401,13 +393,19 @@ impl GhostexGpuiApp {
                         }
                         self.open_app_modal_from_bridge(message, cx);
                     }
-                    // The sidebar menu's Connect a phone window, where that menu now leads
-                    // (CDXC:RemotePairing 2026-11-10 in window/connect_device_modal.rs).
-                    FinishTarget::RemoteSettings => {
-                        self.open_app_modal_from_bridge(
-                            serde_json::json!({ "modal": "remoteSetup", "type": "open" }),
-                            cx,
-                        );
+                    FinishTarget::None | FinishTarget::RemoteSettings => {
+                        // "Pair my phone after setup": the Connect a Device window (CDXC:RemotePairing
+                        // 2026-11-10 in window/connect_device_modal.rs) waits for the first reply.
+                        if target == FinishTarget::RemoteSettings {
+                            self.queue_connect_device_after_first_reply();
+                        }
+                        // CDXC:Onboarding 2026-11-11 WHY: setup no longer asks for a folder (DECISION in window/onboarding/get_started.rs), so it can end with no project; Add Project opens then, so the app is never an empty shell.
+                        if !has_projects {
+                            self.open_app_modal_from_bridge(
+                                GpuiAppModalKind::AddProject.open_message(),
+                                cx,
+                            );
+                        }
                     }
                 }
             }
