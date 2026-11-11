@@ -1016,6 +1016,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         }
         // The hook-free activity comparison (`ghostex hookless-activity`), a local debugging read.
         "/api/readHooklessActivityComparison"
+        // First-run setup's agent sign-in check and browser sign-in (agent_sign_in.rs): it runs
+        // the agent's own login on this computer, so it is never reachable from another one.
+        | "/api/agentSignIn"
         /*
         CDXC:ServerDaemon 2026-06-24-13:30:
         Pinned Prompts can carry user-authored bodies, so their shared gxserver

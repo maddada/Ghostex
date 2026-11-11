@@ -151,14 +151,14 @@ impl GpuiOnboardingWindow {
         let mounted = self.agents_panel.right_tab_since;
         let cycle = cycle(mounted, now, 4, 1300, 3);
         let frame = cycle.frame;
-        let on = self.flow.integration_on;
         let status = |id: &str| match id {
             "claude" if frame >= 2 => (PillKind::Done, "Done"),
             "codex" if frame == 1 || frame == 2 => (PillKind::Need, "Needs you"),
             _ => (PillKind::Run, "Working"),
         };
         let column = |with: bool| {
-            let lit = with == on;
+            // Setup always connects, so the column with the helper is the one lit.
+            let lit = with;
             let alert: AnyElement = if !with {
                 div()
                     .h(s.px(44.0))

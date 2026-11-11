@@ -411,6 +411,31 @@ impl GhostexGpuiApp {
                     }
                 }
             }
+            OnboardingCommand::AgentSignIn {
+                agent_id,
+                operation,
+            } => {
+                let params = serde_json::json!({ "agentId": agent_id, "operation": operation });
+                let background = cx.background_executor().clone();
+                cx.spawn(async move |this, cx| {
+                    let answer = background
+                        .spawn(async move {
+                            gpui_gxserver_rpc_result(
+                                "/api/agentSignIn",
+                                &params,
+                                Duration::from_secs(30),
+                            )
+                            .ok()
+                        })
+                        .await;
+                    let _ = this.update(cx, |app, cx| {
+                        app.update_gpui_onboarding(cx, |view, cx| {
+                            view.receive_agent_sign_in(&agent_id, answer, cx)
+                        });
+                    });
+                })
+                .detach();
+            }
             OnboardingCommand::AgentCli {
                 request_id,
                 agent_id,

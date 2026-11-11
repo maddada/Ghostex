@@ -21,6 +21,7 @@ mod mobile;
 pub(crate) mod model;
 mod primitives;
 mod scan_log;
+mod sign_in;
 mod stage;
 mod text;
 mod welcome;
@@ -124,6 +125,11 @@ pub(crate) enum OnboardingCommand {
     Leave,
     /// The user left the intro video page: it is not shown again.
     IntroVideoSeen,
+    /// `/api/agentSignIn` for the chosen agent: `status`, `start` (its own browser sign-in) or `cancel`.
+    AgentSignIn {
+        agent_id: String,
+        operation: &'static str,
+    },
     /// `/api/agentCliMaintenance` for one agent.
     AgentCli {
         request_id: u64,
@@ -261,6 +267,8 @@ pub(crate) struct GpuiOnboardingWindow {
     guide_scroll: gpui::ScrollHandle,
     /// The intro video page, while it is the page shown (intro_video.rs).
     intro: Option<intro_video::IntroVideo>,
+    /// The chosen agent's sign-in, read on the Agents panel (sign_in.rs).
+    sign_in: sign_in::SignInState,
 }
 
 impl GpuiOnboardingWindow {
@@ -333,6 +341,7 @@ impl GpuiOnboardingWindow {
             focus: interact::FocusState::default(),
             guide_scroll: gpui::ScrollHandle::new(),
             intro: None,
+            sign_in: sign_in::SignInState::default(),
         };
         this.get_started.reset(&this.settings, this.system_light);
         // CDXC:Onboarding 2026-09-11 DECISION:
@@ -707,6 +716,7 @@ impl GpuiOnboardingWindow {
         self.tick_intro_video(cx);
         if self.panel == 2 {
             self.tick_agents(now, cx);
+            self.tick_sign_in(now, cx);
         }
     }
 

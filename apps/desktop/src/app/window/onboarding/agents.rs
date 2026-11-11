@@ -292,7 +292,7 @@ impl GpuiOnboardingWindow {
     }
 
     fn agents_connected(&self) -> bool {
-        self.flow.integration_on && all_installed_have_hooks(&self.agents)
+        all_installed_have_hooks(&self.agents)
     }
 
     pub(super) fn tick_agents(&mut self, now: Instant, cx: &mut Context<Self>) {
@@ -334,7 +334,7 @@ impl GpuiOnboardingWindow {
             .into_iter()
             .map(|agent| agent.agent_id.clone())
             .collect();
-        if !self.flow.integration_on || self.agents_connected() || installed.is_empty() {
+        if self.agents_connected() || installed.is_empty() {
             self.go(3, cx);
             return;
         }
@@ -389,7 +389,6 @@ impl GpuiOnboardingWindow {
         }
         let default_agent = default_agent_id(&self.settings, &self.agents);
         let connected = self.agents_connected();
-        let integration_on = self.flow.integration_on;
         let scanning = self.agents_loading;
         let connecting = self.agents_panel.connecting;
         let other_missing: Vec<_> = self
@@ -440,7 +439,7 @@ impl GpuiOnboardingWindow {
             let selected = default_agent.as_deref() == Some(agent.agent_id.as_str());
             let (pill_tone, pill_text) = if scanning {
                 (DetTone::Wait, "Scanning…")
-            } else if integration_on && agent.hooks_installed {
+            } else if agent.hooks_installed {
                 (DetTone::On, "Connected")
             } else {
                 (DetTone::Detected, "Detected")
@@ -578,27 +577,8 @@ impl GpuiOnboardingWindow {
             )
             .into_any_element(),
         );
-        let integration_toggle = self.control(
-            s,
-            toggle(
-                s,
-                "agents-integration-toggle",
-                integration_on,
-                self.thumb("integration", integration_on, now),
-                ToggleSize::Lg,
-                false,
-            ),
-            "agents-integration-toggle",
-            interact::Ring::new(17.0, 1.0),
-            interact::Keys::EnterSpace,
-            cx,
-            |this, _, cx| {
-                cx.stop_propagation();
-                this.flow.integration_on = !this.flow.integration_on;
-                this.set_right_tab(RightTab::Integration);
-                cx.notify();
-            },
-        );
+        // CDXC:Onboarding 2026-11-11 DECISION:
+        // User, on the first-run page (step 13, Connect Ghostex to the agent), picked "Install in setup; ask here only for agents added later". Setup connects every installed agent when the user goes on (no switch, no Skip for now), so the Connect dialog at an agent's start is left for an agent installed after setup, and its Not now is remembered for that agent (gx_store/create/agent.rs).
         let integration_row = switch_row(s, "agents-integration", 576.0, 72.0, (20.0, 30.0), 26.0, None)
                 .child(icon(s, "pulse", 22.0, 1.6, hex(0xd6dbe5)))
                 .child(
@@ -607,10 +587,12 @@ impl GpuiOnboardingWindow {
                         .min_w_0()
                         .child(nm(s, 17.0, 500.0).child("Ghostex integration"))
                         .child(ss(s, 12.5).child(
-                            "Adds a small Ghostex helper to each agent's own settings, so you see its live status and can resume it.",
+                            "Connect & continue adds a small Ghostex helper to each agent's own settings, so you see its live status and can resume it.",
                         )),
                 )
-                .child(integration_toggle);
+                .when(connected, |this| {
+                    this.child(detpill(s, "Connected", DetTone::On, DETPILL_DEFAULT))
+                });
         out.push(
             self.control(
                 s,
@@ -626,29 +608,16 @@ impl GpuiOnboardingWindow {
             )
             .into_any_element(),
         );
-        let next_label = if !integration_on || connected || installed.is_empty() {
+        let next_label = if connected || installed.is_empty() {
             "Next"
         } else if connecting {
             "Connecting…"
         } else {
             "Connect & continue"
         };
+        out.extend(self.render_sign_in_line(s, now, cx));
         out.push(
             foot_actions(s, 2)
-                .when(
-                    integration_on && !connected && !installed.is_empty(),
-                    |this| {
-                        this.child(self.control(
-                            s,
-                            ghost(s, "agents-skip", "Skip for now", 16.0, false),
-                            "agents-skip",
-                            interact::Ring::new(0.0, 0.0),
-                            interact::Keys::EnterSpace,
-                            cx,
-                            |this, _, cx| this.go(3, cx),
-                        ))
-                    },
-                )
                 .child({
                     let next = cta(
                         s,

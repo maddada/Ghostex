@@ -3,6 +3,8 @@
 //! `welcome-coordinators`, `welcome-mobile`, `agents`, `agents-scanning`, `agents-already-connected`,
 //! `agents-none-installed`, `agents-install-available`, `agents-install-partial`,
 //! `agents-installing`, `agents-install-failed`, `agents-integration`, `agents-guide`,
+//! `agents-signed-out` (the chosen agent is not signed in), `agents-signing-in` (presses Sign in
+//! after 1.5s; the browser sign-in finishes 4s later),
 //! `workspace`, `workspace-no-browser-skill`, `workspace-agents`, `workspace-docs`,
 //! `workspace-code`, `workspace-kanban`, `workspace-automate`, the Workspace panel's Fast Computer &
 //! Browser use preview `computer-use` (off), `computer-use-installing`, `computer-use-permissions`,
@@ -185,6 +187,9 @@ struct DemoHost {
     installed_now: HashSet<String>,
     jobs: HashMap<String, Value>,
     cli_status: Value,
+    /// The chosen agent's simulated sign-in: signed in, and whether a browser sign-in runs.
+    signed_in: bool,
+    signing_in: bool,
 }
 
 fn with_view(
@@ -248,7 +253,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     ) = {
         let three: &[&str] = &["claude", "codex", "cursor"];
         match state {
-            "agents" | "agents-guide" | "agents-integration" => (
+            "agents" | "agents-guide" | "agents-integration" | "agents-signed-out"
+            | "agents-signing-in" => (
                 InitialPanel::Panel(2),
                 three,
                 false,
@@ -474,6 +480,8 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         installed_now: HashSet::new(),
         jobs,
         cli_status,
+        signed_in: !matches!(state, "agents-signed-out" | "agents-signing-in"),
+        signing_in: false,
     }));
     let host_for_commands = host_state.clone();
     let host: OnboardingHost = Rc::new(move |command, cx: &mut App| {
@@ -594,6 +602,41 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             OnboardingCommand::Finish(target) => {
                 eprintln!("finish -> {target:?}");
                 cx.quit();
+            }
+            // Sign-in starts finish 4s later; a status answers at once.
+            OnboardingCommand::AgentSignIn {
+                agent_id,
+                operation,
+            } => {
+                let answer = {
+                    let mut state = host.borrow_mut();
+                    match operation {
+                        "start" => state.signing_in = true,
+                        "cancel" => state.signing_in = false,
+                        _ => {}
+                    }
+                    json!({
+                        "agentId": agent_id,
+                        "signedIn": state.signed_in,
+                        "signingIn": state.signing_in,
+                        "signInUrl": "https://claude.ai/oauth/authorize?code=true",
+                        "signInFailed": false,
+                    })
+                };
+                if operation == "start" {
+                    let host = host.clone();
+                    later(cx, Duration::from_secs(4), move |_| {
+                        let mut state = host.borrow_mut();
+                        state.signing_in = false;
+                        state.signed_in = true;
+                    });
+                }
+                let id = agent_id.clone();
+                later(cx, Duration::from_millis(400), move |cx| {
+                    with_view(&host, cx, move |view, cx| {
+                        view.receive_agent_sign_in(&id, Some(answer), cx)
+                    })
+                });
             }
             OnboardingCommand::Leave => {
                 eprintln!("leave -> addProject");
@@ -770,6 +813,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         }
         "intro-video-no-web-view" => with_view(&host, cx, |view, cx| {
             view.preview_intro_video_no_web_view(cx)
+        }),
+        "agents-signing-in" => later(cx, Duration::from_millis(1500), move |cx| {
+            with_view(&host, cx, |view, cx| view.preview_start_sign_in(cx))
         }),
         "intro-video-play" => later(cx, Duration::from_secs(1), move |cx| {
             let (window, view) = {

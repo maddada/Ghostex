@@ -452,8 +452,6 @@ pub(crate) fn views_patch(changes: &[(ViewKey, bool)]) -> Map<String, Value> {
 /// Choices that live only for the length of the flow (everything else is read from and written to settings).
 #[derive(Clone, Debug)]
 pub(crate) struct FlowState {
-    /// The "Ghostex integration" switch on the Agents panel.
-    pub(crate) integration_on: bool,
     /// Set once "Connect & continue" asked the host to install the agent helper.
     pub(crate) hooks_requested: bool,
     /// CDXC:Onboarding 2026-09-11 WHY:
@@ -464,7 +462,6 @@ pub(crate) struct FlowState {
 impl Default for FlowState {
     fn default() -> Self {
         Self {
-            integration_on: true,
             hooks_requested: false,
             phone_queued: false,
         }

@@ -7,6 +7,7 @@ pub mod agent_model_catalog;
 pub(crate) mod agent_model_lineups;
 pub mod agent_model_pins;
 pub mod agent_prompt_search;
+pub(crate) mod agent_sign_in;
 pub mod agent_skills;
 pub mod agent_skills_remote;
 pub mod agent_skills_renamed;
